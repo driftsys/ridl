@@ -214,6 +214,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -429,6 +430,7 @@ impl ::core::convert::From<Temperature> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0.0)
@@ -644,6 +646,7 @@ impl ::core::convert::From<RPM> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for RPM {
     fn default() -> Self {
         RPM::new_unchecked(0.0)
@@ -859,6 +862,7 @@ impl ::core::convert::From<Ratio> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Ratio {
     fn default() -> Self {
         Ratio::new_unchecked(0.0)
@@ -922,6 +926,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new_unchecked(0)
@@ -1134,6 +1139,7 @@ impl ::core::convert::From<Gain> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Gain {
     fn default() -> Self {
         Gain::new_unchecked(0.0)
@@ -1175,6 +1181,7 @@ impl ::core::convert::From<GearPosition> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for GearPosition {
     fn default() -> Self {
         GearPosition::Park
@@ -1212,6 +1219,7 @@ impl ::core::convert::From<Warning> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning::LowFuel
@@ -1246,6 +1254,7 @@ impl ::core::convert::From<WarningFlags> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for WarningFlags {
     fn default() -> Self {
         WarningFlags(0)
@@ -1266,6 +1275,7 @@ pub struct SpeedLimitPayload {
     /// - unit km/h
     pub actual: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SpeedLimitPayload {
     fn default() -> Self {
         SpeedLimitPayload {
@@ -1315,6 +1325,7 @@ pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorResult {
     fn default() -> Self {
         SensorResult::Ok(<SensorReading as ::core::default::Default>::default())
@@ -1330,6 +1341,7 @@ pub struct SensorReading {
     pub value: Speed,
     pub timestamp: crate::ridl::std::Timestamp,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorReading {
     fn default() -> Self {
         SensorReading {
@@ -1363,6 +1375,7 @@ pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorBoundsRange {
     fn default() -> Self {
         SensorBoundsRange {
@@ -2934,6 +2947,7 @@ pub struct DoorPayload {
     pub sensor_id: ::core::primitive::i64,
     pub is_open: ::core::primitive::bool,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for DoorPayload {
     fn default() -> Self {
         DoorPayload {
@@ -2950,6 +2964,7 @@ pub struct DiagFilter {
     pub severity: ::core::primitive::i64,
     pub category: ::core::option::Option<crate::ridl::std::Label>,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for DiagFilter {
     fn default() -> Self {
         DiagFilter {
@@ -2997,6 +3012,7 @@ impl ::core::convert::From<DiagError> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for DiagError {
     fn default() -> Self {
         DiagError::FilterInvalid
@@ -3009,6 +3025,7 @@ pub struct FaultPage {
     /// - count 0 ..= 14
     pub faults: ::std::vec::Vec<FaultEvent>,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for FaultPage {
     fn default() -> Self {
         FaultPage {
@@ -3083,6 +3100,7 @@ impl ::core::convert::From<RawTickCount> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for RawTickCount {
     fn default() -> Self {
@@ -3099,6 +3117,7 @@ pub(crate) struct RawWheelSpan {
     /// - count 2
     pub bursts: [RawWheelSpanBurstsElement; 2],
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for RawWheelSpan {
     fn default() -> Self {
@@ -3166,6 +3185,7 @@ impl ::core::convert::From<FanLevel> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for FanLevel {
     fn default() -> Self {
         FanLevel::new_unchecked(0)
@@ -3179,6 +3199,7 @@ pub struct FilterState {
     pub hours_run: ::core::primitive::i64,
     pub clogged: ::core::primitive::bool,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for FilterState {
     fn default() -> Self {
         FilterState {
@@ -3196,6 +3217,7 @@ pub struct ClimateReport {
     /// - range 0 ..= 7
     pub fan: FanLevel,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for ClimateReport {
     fn default() -> Self {
         ClimateReport {
@@ -3233,6 +3255,7 @@ impl ::core::convert::From<HvacError> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for HvacError {
     fn default() -> Self {
         HvacError::CompressorOff
@@ -3308,6 +3331,7 @@ impl ::core::convert::From<FanTag> for ::std::string::String {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for FanTag {
     fn default() -> Self {
         FanTag::new_unchecked(::std::string::String::from("unset"))
@@ -3323,6 +3347,7 @@ pub(crate) struct RawWheelSpanSpan {
     pub first: RawTickCount,
     pub latest: RawTickCount,
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for RawWheelSpanSpan {
     fn default() -> Self {
@@ -3338,6 +3363,7 @@ pub(crate) struct RawWheelSpanBurstsElement {
     pub first: RawTickCount,
     pub latest: RawTickCount,
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for RawWheelSpanBurstsElement {
     fn default() -> Self {
@@ -3350,6 +3376,7 @@ impl ::core::default::Default for RawWheelSpanBurstsElement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct WheelDiagnosticsReadTicksParams {}
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for WheelDiagnosticsReadTicksParams {
     fn default() -> Self {
@@ -3359,6 +3386,7 @@ impl ::core::default::Default for WheelDiagnosticsReadTicksParams {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct WheelDiagnosticsReadSpanParams {}
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for WheelDiagnosticsReadSpanParams {
     fn default() -> Self {
@@ -3371,6 +3399,7 @@ pub(crate) struct WheelDiagnosticsReadSpanReply {
     pub min: RawTickCount,
     pub max: RawTickCount,
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for WheelDiagnosticsReadSpanReply {
     fn default() -> Self {
@@ -3386,6 +3415,7 @@ pub(crate) struct WheelDiagnosticsTickBoundsElement {
     pub low: RawTickCount,
     pub high: RawTickCount,
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
     fn default() -> Self {
@@ -3397,6 +3427,7 @@ impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VehHvacCabinGetBoundsParams {}
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for VehHvacCabinGetBoundsParams {
     fn default() -> Self {
         VehHvacCabinGetBoundsParams {}
@@ -3409,6 +3440,7 @@ pub struct VehHvacCabinGetBoundsReply {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VehHvacCabinGetClimateParams {}
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for VehHvacCabinGetClimateParams {
     fn default() -> Self {
         VehHvacCabinGetClimateParams {}
@@ -3416,6 +3448,7 @@ impl ::core::default::Default for VehHvacCabinGetClimateParams {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VehHvacCabinGetCabinTempParams {}
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for VehHvacCabinGetCabinTempParams {
     fn default() -> Self {
         VehHvacCabinGetCabinTempParams {}
@@ -3423,6 +3456,7 @@ impl ::core::default::Default for VehHvacCabinGetCabinTempParams {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VehHvacCabinScaledFanParams {}
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for VehHvacCabinScaledFanParams {
     fn default() -> Self {
         VehHvacCabinScaledFanParams {}
@@ -5892,6 +5926,7 @@ impl ::ridl_rt::contract::Signal for WheelHistoryWheelSlipRate {
 /// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
 ///
 ///The generated interaction face of interface `WheelHistory`.
+#[allow(clippy::module_inception)]
 pub mod wheel_history {
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
@@ -6445,6 +6480,7 @@ impl ::ridl_rt::contract::Signal for WheelSummaryWheelHealth {
 /// side and the difference is readable in one snapshot.
 ///
 ///The generated interaction face of interface `WheelSummary`.
+#[allow(clippy::module_inception)]
 pub mod wheel_summary {
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {

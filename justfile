@@ -815,29 +815,23 @@ _cabin-generate:
 # `lib.rs` itself is not formatted, or when a module loses the attribute and
 # rustfmt reaches a generated file.
 #
-# The generated crate is linted as well, under a closed list. Without any
-# allowance it draws one `clippy::module_inception`, for the module a package
-# named `veh.cabin` and an interface named `Cabin` give (`veh::cabin::cabin`),
-# and two `clippy::derivable_impls`, for a `Default` the emitter writes out
-# rather than derives. Both are the emitter's own shape, so the emitted
-# `lib.rs` allows exactly those two lints. This recipe turns each `allow` in
-# that list into an `expect` on a temporary edit of `lib.rs`, restored on exit.
-# A lint that is not on the list then fails the run as a new defect in the
-# emitter, and a listed lint that no longer fires fails through
-# `unfulfilled_lint_expectations`, so the list cannot go stale.
+# The generated crate is linted as well, under `-D warnings` with no
+# allowance at the crate root or on the command line. The emitter puts each
+# allow it needs on the item that needs it: `clippy::derivable_impls` on a
+# `Default` it writes out rather than derives, `clippy::module_inception` on
+# the face module (`veh::cabin::cabin` for a package `veh.cabin` and an
+# interface `Cabin`), and `clippy::collapsible_if` on the functions that walk
+# a proto3 message. Any warning is a defect in the emitter.
 #
 # Both generated crates are linted as the edition their emitted manifest
-# declares, 2021; no gate runs clippy on them as edition 2024, which a user
-# reaches only by copying the emitted source into an edition 2024 crate.
+# declares, 2021, and again as edition 2024, which a user reaches by copying
+# the emitted source into an edition 2024 crate. The edition 2024 run edits
+# both manifests, and a trap restores them on exit.
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line
 # allowance. No diagnostic passes, `dead_code` included: the emitter marks the
-# items it writes for an `internal` declaration with `#[allow(dead_code)]`; the
-# lints the emitted `lib.rs` allows stay allowed. Unlike the run
-# above, this one keeps `allow`: `clippy::module_inception` does not fire on
-# the corpus crate, so a stale entry there does not fail, but the run above
-# fires it and holds it. Any warning is a defect in the emitter.
+# items it writes for an `internal` declaration with `#[allow(dead_code)]`.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
@@ -858,11 +852,11 @@ _cabin-generate:
 # not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
 # the lock being out of date; the consumer or either generated crate being
 # unformatted; the consumer drawing a clippy warning; the generated crate
-# drawing a clippy warning that its `lib.rs` does not allow, or an allow that
-# no longer fires; a `lib.rs`
-# with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
-# corpus drawing a clippy diagnostic, with default features or without them, or
-# cargo finishing no build there; `cargo doc` on either generated crate drawing
+# drawing a clippy warning; the crate emitted for the veh-cluster corpus
+# drawing a clippy diagnostic, with default features or without them, or
+# cargo finishing no build there; either generated crate drawing a clippy
+# warning as edition 2024, or an emitted manifest with no
+# `edition = "2021"` line to rewrite; `cargo doc` on either generated crate drawing
 # a broken or private intra-doc link; a planus or a prost crate in the
 # resolved graph of `examples/cabin`; the planus and prost checks running other
 # than exactly two tests, which is what a renamed test or a changed filter
@@ -902,17 +896,7 @@ demo: _cabin-generate
         echo "demo: the generated crate's planus and prost checks did not run exactly two tests" >&2
         exit 1
     fi
-    # The emitted `lib.rs` allows the emitter's own lints; `expect` makes both a
-    # missing and a stale entry fail. The trap restores the file on any exit.
-    trap 'mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs' EXIT
-    sed -i.bak 's/^#!\[allow(/#![expect(/' examples/cabin/generated/lib.rs
-    if ! grep -q '^#!\[expect(' examples/cabin/generated/lib.rs; then
-        echo "demo: examples/cabin/generated/lib.rs has no #![allow( line to rewrite to #![expect(" >&2
-        exit 1
-    fi
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
-    mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
-    trap - EXIT
     # The rustdoc of both generated crates, with a broken or private intra-doc
     # link denied: the backend renders a doc link as a rustdoc path, and only
     # rustdoc can say whether that path resolves.
@@ -974,6 +958,22 @@ demo: _cabin-generate
     }
     corpus_lint
     corpus_lint --no-default-features --target thumbv7em-none-eabihf
+    # Both generated crates are linted as edition 2024 too, which a user
+    # reaches by copying the emitted source into an edition 2024 crate: the
+    # emitted manifests say 2021, and the trap restores them on any exit.
+    trap 'for c in generated generated-corpus; do if [ -f "examples/cabin/$c/Cargo.toml.bak" ]; then mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"; fi; done' EXIT
+    for c in generated generated-corpus; do
+        sed -i.bak 's/^edition = "2021"$/edition = "2024"/' "examples/cabin/$c/Cargo.toml"
+        if ! grep -q '^edition = "2024"$' "examples/cabin/$c/Cargo.toml"; then
+            echo "demo: examples/cabin/$c/Cargo.toml has no edition = \"2021\" line to rewrite" >&2
+            exit 1
+        fi
+    done
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin -p ridl_generated --locked --no-deps -- -D warnings
+    for c in generated generated-corpus; do
+        mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"
+    done
+    trap - EXIT
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo fmt --manifest-path examples/cabin/generated/Cargo.toml --check
     cargo fmt --manifest-path examples/cabin/generated-corpus/Cargo.toml --check

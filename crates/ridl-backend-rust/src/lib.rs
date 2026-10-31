@@ -1255,8 +1255,13 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
             } else {
                 quote! {}
             };
+            // The body is written out rather than derived (`derives`,
+            // design decision 8), so clippy reads a body that equals the
+            // derive as `derivable_impls`; the allow is on the item so that a
+            // generated file included into another crate draws no lint.
             quote! {
                 #allow_deprecated
+                #[allow(clippy::derivable_impls)]
                 impl ::core::default::Default for #name {
                     fn default() -> Self { #expr }
                 }
@@ -2173,6 +2178,7 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
     let default_impl = defaults::tuple_default_expr(ctx, induced)
         .map(|expr| {
             quote! {
+                #[allow(clippy::derivable_impls)]
                 impl ::core::default::Default for #name_id {
                     fn default() -> Self { #expr }
                 }

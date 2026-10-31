@@ -300,6 +300,12 @@ under a condition declares it under the same condition: where the alias is
 declared, `::std` names `alloc`, so a path that only the standard library has,
 such as `::std::sync::LazyLock`, no longer resolves.
 
+The generated file tests `feature = "std"` and `feature = "validate-pattern"`
+with `#[cfg]`, so a crate that includes it declares both features in its own
+`Cargo.toml`, with `std` forwarding to `ridl-rt/std` and `validate-pattern`
+enabling its `regex` dependency. Without the declarations, rustc reports
+`unexpected_cfgs` for each test, and the code under it is left out.
+
 A target where `regex` is too large, or one that does not need the blocking
 face, turns the defaults off and selects what it needs. This `Cargo.toml`
 fragment is an illustration and is not compiled:

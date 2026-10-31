@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -240,6 +241,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new(0)
@@ -268,6 +270,7 @@ impl ::core::convert::From<Enabled> for ::core::primitive::bool {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Enabled {
     fn default() -> Self {
         Enabled::new(false)
@@ -327,6 +330,7 @@ impl ::core::convert::From<Label> for ::std::string::String {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Label {
     fn default() -> Self {
         Label::new_unchecked(::std::string::String::new())
@@ -386,6 +390,7 @@ impl ::core::convert::From<Blob> for ::std::vec::Vec<::core::primitive::u8> {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Blob {
     fn default() -> Self {
         Blob::new_unchecked(::std::vec::Vec::new())

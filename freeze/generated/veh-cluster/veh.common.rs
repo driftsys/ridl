@@ -210,6 +210,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -425,6 +426,7 @@ impl ::core::convert::From<Temperature> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0.0)
@@ -640,6 +642,7 @@ impl ::core::convert::From<RPM> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for RPM {
     fn default() -> Self {
         RPM::new_unchecked(0.0)
@@ -855,6 +858,7 @@ impl ::core::convert::From<Ratio> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Ratio {
     fn default() -> Self {
         Ratio::new_unchecked(0.0)
@@ -918,6 +922,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new_unchecked(0)
@@ -1130,6 +1135,7 @@ impl ::core::convert::From<Gain> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Gain {
     fn default() -> Self {
         Gain::new_unchecked(0.0)
@@ -1171,6 +1177,7 @@ impl ::core::convert::From<GearPosition> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for GearPosition {
     fn default() -> Self {
         GearPosition::Park
@@ -1208,6 +1215,7 @@ impl ::core::convert::From<Warning> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning::LowFuel
@@ -1242,6 +1250,7 @@ impl ::core::convert::From<WarningFlags> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for WarningFlags {
     fn default() -> Self {
         WarningFlags(0)
@@ -1262,6 +1271,7 @@ pub struct SpeedLimitPayload {
     /// - unit km/h
     pub actual: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SpeedLimitPayload {
     fn default() -> Self {
         SpeedLimitPayload {
@@ -1315,6 +1325,7 @@ pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorResult {
     fn default() -> Self {
         SensorResult::Ok(<SensorReading as ::core::default::Default>::default())
@@ -1333,6 +1344,7 @@ pub struct SensorReading {
     /// - range 0 ..= 9223372036854775807
     pub timestamp: crate::ridl::std::Timestamp,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorReading {
     fn default() -> Self {
         SensorReading {
@@ -1370,6 +1382,7 @@ pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorBoundsRange {
     fn default() -> Self {
         SensorBoundsRange {
@@ -4454,7 +4467,7 @@ pub(crate) fn __ridl_pb_encode_Speed(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Speed(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4491,7 +4504,7 @@ pub(crate) fn __ridl_pb_verify_Speed(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Speed(buf: &[::core::primitive::u8]) -> Speed {
     let mut __f0 = Speed::new_unchecked(0.0f64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4543,6 +4556,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Speed {
         __ridl_pb_verify_Speed(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4578,7 +4592,7 @@ pub(crate) fn __ridl_pb_encode_Temperature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Temperature(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4615,7 +4629,7 @@ pub(crate) fn __ridl_pb_verify_Temperature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Temperature(
     buf: &[::core::primitive::u8],
 ) -> Temperature {
@@ -4669,6 +4683,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Temperature {
         __ridl_pb_verify_Temperature(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4702,7 +4717,7 @@ pub(crate) fn __ridl_pb_encode_RPM(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_RPM(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4738,7 +4753,7 @@ pub(crate) fn __ridl_pb_verify_RPM(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_RPM(buf: &[::core::primitive::u8]) -> RPM {
     let mut __f0 = RPM::new_unchecked(0.0f64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4790,6 +4805,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for RPM {
         __ridl_pb_verify_RPM(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4823,7 +4839,7 @@ pub(crate) fn __ridl_pb_encode_Ratio(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Ratio(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4860,7 +4876,7 @@ pub(crate) fn __ridl_pb_verify_Ratio(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Ratio(buf: &[::core::primitive::u8]) -> Ratio {
     let mut __f0 = Ratio::new_unchecked(0.0f64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4912,6 +4928,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Ratio {
         __ridl_pb_verify_Ratio(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4945,7 +4962,7 @@ pub(crate) fn __ridl_pb_encode_Counter(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Counter(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4983,7 +5000,7 @@ pub(crate) fn __ridl_pb_verify_Counter(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Counter(buf: &[::core::primitive::u8]) -> Counter {
     let mut __f0 = Counter::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5035,6 +5052,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Counter {
         __ridl_pb_verify_Counter(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5068,7 +5086,7 @@ pub(crate) fn __ridl_pb_encode_Gain(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Gain(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5105,7 +5123,7 @@ pub(crate) fn __ridl_pb_verify_Gain(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Gain(buf: &[::core::primitive::u8]) -> Gain {
     let mut __f0 = Gain::new_unchecked(0.0f64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5157,6 +5175,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Gain {
         __ridl_pb_verify_Gain(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5192,7 +5211,7 @@ pub(crate) fn __ridl_pb_encode_GearPosition(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_GearPosition(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5232,7 +5251,7 @@ pub(crate) fn __ridl_pb_verify_GearPosition(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_GearPosition(
     buf: &[::core::primitive::u8],
 ) -> GearPosition {
@@ -5289,6 +5308,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for GearPosition {
         __ridl_pb_verify_GearPosition(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5322,7 +5342,7 @@ pub(crate) fn __ridl_pb_encode_Warning(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Warning(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5362,7 +5382,7 @@ pub(crate) fn __ridl_pb_verify_Warning(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Warning(buf: &[::core::primitive::u8]) -> Warning {
     let mut __f0 = Warning::LowFuel;
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5417,6 +5437,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Warning {
         __ridl_pb_verify_Warning(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5452,7 +5473,7 @@ pub(crate) fn __ridl_pb_encode_WarningFlags(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_WarningFlags(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5492,7 +5513,7 @@ pub(crate) fn __ridl_pb_verify_WarningFlags(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_WarningFlags(
     buf: &[::core::primitive::u8],
 ) -> WarningFlags {
@@ -5549,6 +5570,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for WarningFlags {
         __ridl_pb_verify_WarningFlags(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5599,7 +5621,7 @@ pub(crate) fn __ridl_pb_encode_SpeedLimitPayload(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_SpeedLimitPayload(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5665,7 +5687,7 @@ pub(crate) fn __ridl_pb_verify_SpeedLimitPayload(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_SpeedLimitPayload(
     buf: &[::core::primitive::u8],
 ) -> SpeedLimitPayload {
@@ -5735,6 +5757,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SpeedLimitPayl
         __ridl_pb_verify_SpeedLimitPayload(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5815,7 +5838,7 @@ pub(crate) fn __ridl_pb_encode_DriverProfile(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_DriverProfile(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5955,7 +5978,7 @@ pub(crate) fn __ridl_pb_verify_DriverProfile(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_DriverProfile(
     buf: &[::core::primitive::u8],
 ) -> DriverProfile {
@@ -6047,6 +6070,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for DriverProfile 
         __ridl_pb_verify_DriverProfile(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6248,7 +6272,7 @@ pub(crate) fn __ridl_pb_encode_SensorBounds(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_SensorBounds(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6545,7 +6569,7 @@ pub(crate) fn __ridl_pb_verify_SensorBounds(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_SensorBounds(
     buf: &[::core::primitive::u8],
 ) -> SensorBounds {
@@ -6688,6 +6712,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorBounds {
         __ridl_pb_verify_SensorBounds(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6742,7 +6767,7 @@ pub(crate) fn __ridl_pb_encode_SensorResult(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_SensorResult(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6807,7 +6832,7 @@ pub(crate) fn __ridl_pb_verify_SensorResult(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_SensorResult(
     buf: &[::core::primitive::u8],
 ) -> SensorResult {
@@ -6865,6 +6890,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorResult {
         __ridl_pb_verify_SensorResult(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6915,7 +6941,7 @@ pub(crate) fn __ridl_pb_encode_SensorReading(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_SensorReading(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6979,7 +7005,7 @@ pub(crate) fn __ridl_pb_verify_SensorReading(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_SensorReading(
     buf: &[::core::primitive::u8],
 ) -> SensorReading {
@@ -7047,6 +7073,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorReading 
         __ridl_pb_verify_SensorReading(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -7097,7 +7124,7 @@ pub(crate) fn __ridl_pb_encode_SensorFault(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_SensorFault(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -7170,7 +7197,7 @@ pub(crate) fn __ridl_pb_verify_SensorFault(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_SensorFault(
     buf: &[::core::primitive::u8],
 ) -> SensorFault {
@@ -7242,6 +7269,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorFault {
         __ridl_pb_verify_SensorFault(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -7302,7 +7330,7 @@ pub(crate) fn __ridl_pb_encode_RawWheelFrame(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_pb_verify_RawWheelFrame(
     buf: &[::core::primitive::u8],
@@ -7389,7 +7417,7 @@ pub(crate) fn __ridl_pb_verify_RawWheelFrame(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_pb_decode_RawWheelFrame(
     buf: &[::core::primitive::u8],
@@ -7457,6 +7485,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for RawWheelFrame 
         __ridl_pb_verify_RawWheelFrame(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -7507,7 +7536,7 @@ pub(crate) fn __ridl_pb_encode_SensorBoundsRange(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_SensorBoundsRange(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -7573,7 +7602,7 @@ pub(crate) fn __ridl_pb_verify_SensorBoundsRange(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_SensorBoundsRange(
     buf: &[::core::primitive::u8],
 ) -> SensorBoundsRange {
