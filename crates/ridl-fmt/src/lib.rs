@@ -457,6 +457,16 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                 };
                 if let Some(index) = trails {
                     blocks[index].trailing.push(text);
+                } else if nl_run == 0
+                    && token.kind() == SyntaxKind::LineComment
+                    && is_lint_directive(&text)
+                    && let Some(last) = pending.last_mut()
+                {
+                    // A directive on the line of a pending comment names
+                    // nothing; on its own line it would name the next
+                    // member, so it stays on that comment's line.
+                    last.text.push(' ');
+                    last.text.push_str(&text);
                 } else {
                     pending.push(PendingComment {
                         blank_before: nl_run >= 2,
@@ -3669,6 +3679,13 @@ mod tests {
         assert_width_format(
             "package p\nstruct S {\n  a: A /* x\n  y */ // lint: allow missing-docs -- s\n  b: B\n}\n",
             "package p\n\nstruct S {\n  a: A /* x\n  y */ // lint: allow missing-docs -- s\n  b: B\n}\n",
+            &FormatOptions::default(),
+        );
+        // The same on the line of a block comment that leads the next
+        // member: the directive stays on that comment's line.
+        assert_width_format(
+            "package p\nstruct S {\n  a: A\n  /* c */ // lint: allow missing-docs -- s\n  b: B\n}\n",
+            "package p\n\nstruct S {\n  a: A\n  /* c */ // lint: allow missing-docs -- s\n  b: B\n}\n",
             &FormatOptions::default(),
         );
         // A plain comment there leads the next member, as before.
