@@ -382,7 +382,9 @@ a field is appended.
    (`<pkg>_<wire name under snake_case>_head`, the name the declaring header
    gives it), so the two headers define one head under one guard with one text.
    The codegen model carries the identity on `NestedTuple.package` and
-   `NestedTuple.wire`.
+   `NestedTuple.wire`. A (package, wire) key reached with two different layouts
+   is refused; [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) has
+   the detail.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:
