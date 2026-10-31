@@ -861,7 +861,7 @@ stated in the decision above; this list is the index.
    `<pkg>_<type>_value` and `<pkg>_<type>_value_at` for each named scalar, enum
    and enum set that can be laid out (decision 7). The text below is the
    question as it was asked. The header has no reader for a payload root that is
-   a named scalar, an enum or an enum set (the box). It is listed in the known
+   a named scalar, an enum or an enum set (the box). It was listed in the known
    gaps of `docs/design/podbuf-codec.md`, as driftsys/ridl#1096.
 5. **Quantized floats.** The typl reference defines a quantized wire form, a
    float with a range and a step sent as a scaled integer (typl §4.3); the spike
