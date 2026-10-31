@@ -1526,3 +1526,84 @@ interface Tank {
         "MAX_BUFFER_SIZE counts no fixed: {claim}"
     );
 }
+
+/// A member's row lists its streams: the reply stream is number 0 and each
+/// stream parameter follows in declaration order. A member with no stream
+/// has an empty list, and a stream call has an induced argument struct.
+#[test]
+fn a_member_row_lists_its_streams() {
+    let package = ir::compile_fixture("streams.ridl");
+    let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+    let source = dense(&face);
+
+    // The `streams:` list of the row named `name`, up to its closing bracket.
+    // No element name holds a bracket.
+    let row = |name: &str| -> String {
+        let at = source
+            .find(&format!("name:\"{name}\","))
+            .unwrap_or_else(|| panic!("a row named {name}:\n{face}"));
+        let rest = &source[at..];
+        let from = rest.find("streams:").expect("the row has streams");
+        let end = from + rest[from..].find(']').expect("the list closes");
+        rest[from..=end].to_string()
+    };
+    let info = |no: u8, form: &str, element: &str| {
+        format!(
+            "::ridl_rt::contract::StreamInfo{{no:::ridl_rt::contract::StreamNo({no}),\
+             form:::ridl_rt::contract::StreamForm::{form},element:\"{element}\",}}"
+        )
+    };
+
+    assert_eq!(
+        row("rebalance"),
+        format!(
+            "streams:&[{},{},]",
+            info(0, "Elements", "veh.hvac.ClimateReport"),
+            info(1, "Elements", "veh.hvac.FilterState"),
+        )
+    );
+    assert_eq!(
+        row("replayTrace"),
+        format!(
+            "streams:&[{},]",
+            info(1, "Elements", "veh.hvac.FilterState")
+        )
+    );
+    assert_eq!(
+        row("streamFilterHistory"),
+        format!(
+            "streams:&[{},]",
+            info(0, "Elements", "veh.hvac.FilterState")
+        )
+    );
+    assert_eq!(
+        row("putBlob"),
+        format!("streams:&[{},]", info(1, "Bytes", ""))
+    );
+    assert_eq!(
+        row("readNotes"),
+        format!("streams:&[{},]", info(0, "Text", ""))
+    );
+    assert_eq!(row("cabinTemp"), "streams:&[]");
+
+    assert!(
+        source.contains("structCabinReplayTraceParams{}"),
+        "the induced struct of replayTrace:\n{face}"
+    );
+    assert!(source.contains("structCabinRebalanceParams{}"), "{face}");
+
+    // The emitted source compiles, and the descriptor of a stream call reads
+    // its streams through `Interaction::MEMBER`.
+    let program = format!(
+        "#![allow(dead_code)]\n{face}\n\
+         fn main() {{\n\
+             use ::ridl_rt::contract::Interaction;\n\
+             assert_eq!(CabinRebalance::MEMBER.streams.len(), 2);\n\
+             assert_eq!(CabinStreamFilterHistory::MEMBER.streams.len(), 1);\n\
+             assert!(CabinCabinTemp::MEMBER.streams.is_empty());\n\
+         }}\n"
+    );
+    rustc::run_program("stream_rows", &program);
+}

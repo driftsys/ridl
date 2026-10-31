@@ -179,10 +179,11 @@ induce a reply struct. The rule is held by
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md).
 `descriptors::single_param_type`, `query_param_type` and `query_reply_type` are
 the one place the backend asks what a call sends. They read the name the
-lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
-untyped position and a stream are still refused (driftsys/ridl#943). An induced
-payload with no finite bound in an encoding `encodings` names is also refused
-before its descriptor is accepted, because that encoding's codec cannot
+lowering wrote, and the backend never builds one. A fallible `T | E` reply and
+an untyped position are still refused (driftsys/ridl#943). A call with a stream
+gets its descriptor, whose row lists its streams, but no method on the face. An
+induced payload with no finite bound in an encoding `encodings` names is also
+refused before its descriptor is accepted, because that encoding's codec cannot
 implement `Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers
 root has no finite bound; under `proto3`, a tuple whose proto3 size state is not
 bounded — no finite bound, a bound that does not fit, or a member proto3 cannot

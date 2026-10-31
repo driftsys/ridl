@@ -1,0 +1,44 @@
+// A fixture for the stream entries of a member's descriptor row.
+//
+// `replayTrace` has a stream parameter and no other, `streamFilterHistory`
+// replies with a stream and `rebalance` does both. `blobs` and `notes` use the
+// two forms that name no element, and `cabinTemp` has no stream.
+
+package veh.hvac
+
+/// A temperature, in degrees Celsius.
+type Temperature : integer [-40..85]
+
+/// A fan level.
+type FanLevel : integer [0..10]
+
+/// A filter state.
+struct FilterState {
+  level: FanLevel
+}
+
+/// A climate report.
+struct ClimateReport {
+  temperature: Temperature
+}
+
+/// The cabin climate.
+interface Cabin {
+  /// The cabin temperature.
+  signal cabinTemp : Temperature @1s
+
+  /// A stream parameter and no other.
+  command replayTrace(samples: <FilterState>) @[..50ms]
+
+  /// A stream reply.
+  query streamFilterHistory(limit: FanLevel): <FilterState> @[..50ms]
+
+  /// A stream in both positions.
+  query rebalance(samples: <FilterState>): <ClimateReport> @[..50ms]
+
+  /// A stream of bytes beside a named parameter.
+  command putBlob(level: FanLevel, data: <bytes>) @[..50ms]
+
+  /// A stream of text in return position.
+  query readNotes(): <string> @[..50ms]
+}

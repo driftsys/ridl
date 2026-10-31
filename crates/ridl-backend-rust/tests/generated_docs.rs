@@ -357,8 +357,10 @@ package docs.shape
 
 type Level : integer [0..100]
 
+type Fault : integer [0..10]
+
 interface Wide {
-  command set(samples: <Level>) @[..50ms]
+  query read(first: Level): Level | Fault @[..50ms]
 }
 "#,
         ),
@@ -449,10 +451,10 @@ fn pipeline_source(label: &str, text: &str) -> String {
 }
 
 /// A link to an interface whose face module the output does not hold
-/// renders as a code span: `Wide` is skipped, because its call takes a
-/// stream, which has no payload type, and `Provisioned` declares only a
-/// `fixed` member, which the face carries no method for. A link to `Panel`, which has a face module,
-/// is a link.
+/// renders as a code span: `Wide` has no face module, because its only call
+/// takes a stream, which the face carries no method for, and `Provisioned`
+/// declares only a `fixed` member, which the face carries no method for
+/// either. A link to `Panel`, which has a face module, is a link.
 #[test]
 fn links_to_an_interface_with_no_face_module_render_as_code_spans() {
     let source = pipeline_source(
@@ -463,7 +465,7 @@ package veh.faces
 /// A level, in percent.
 type Level: integer [0..100]
 
-/// Skipped: a call with a stream parameter has no face.
+/// No face module: a call with a stream parameter has no face method.
 interface Wide {
   command set(samples: <Level>) @[..50ms]
 }
@@ -487,8 +489,8 @@ struct Links {
 "#,
     );
     assert!(
-        source.contains("const __RIDL_NO_FACE_"),
-        "`Wide` must be skipped, or this test proves nothing:\n{source}"
+        !source.contains("pub mod wide"),
+        "`Wide` must have no face module, or this test proves nothing:\n{source}"
     );
     assert!(
         !source.contains("pub mod provisioned"),

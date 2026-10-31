@@ -384,8 +384,8 @@ fn skipped_interface_note(
         // translator of driftsys/ridl#704 removes the clause gap.
         FaceGap::CallShape => {
             " A call the face cannot carry — a parameter with no declared type, \
-             a stream in either position, or a query whose reply is a fallible \
-             `T | E`. Give each parameter a declared, non-stream type, and give \
+             or a query whose reply is a fallible `T | E`. Give each parameter \
+             a declared type, and give \
              each query a reply that is a named type or a tuple, to get a face."
         }
         FaceGap::Clause => {
