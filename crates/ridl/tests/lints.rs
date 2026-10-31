@@ -1850,6 +1850,10 @@ fn a_sibling_members_unused_directive_fails_a_member_build_at_deny() {
     ]);
 
     assert_eq!(code, 1, "{stderr}");
+    assert!(
+        !stderr.contains("speed.typl"),
+        "the sibling is not printed:\n{stderr}"
+    );
 }
 
 #[test]
@@ -1893,4 +1897,48 @@ fn unused_directive_on_ordinal_changed_is_reported_when_the_desk_check_ran() {
         .unwrap_or_else(|err| panic!("stdout is JSON ({err}):\n{stdout}\n{stderr}"));
     let diagnostics = value.as_array().expect("a JSON array");
     assert_eq!(count_code(diagnostics, "TYPL-411"), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn directive_on_podbuf_padding_order_is_not_unused_when_podbuf_is_off() {
+    let dir = TempDir::new("directive-padding-podbuf-off");
+    let root = podbuf_workspace(
+        &dir,
+        &format!("// lint: allow podbuf-padding-order -- the order is intended\n{PADDED}"),
+        FLATBUFFERS_MANIFEST,
+        "",
+    );
+
+    let (_, diagnostics) = check_json(&root);
+
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+}
+
+/// An error in another member stops the padding check, which runs only when
+/// the compile raised nothing but RIDL-409, although a member entry does not
+/// report that error. The directive is not unused.
+#[test]
+fn directive_on_podbuf_padding_order_is_not_unused_when_the_padding_check_is_skipped() {
+    let dir = TempDir::new("directive-padding-skipped");
+    podbuf_workspace(
+        &dir,
+        &format!("// lint: allow podbuf-padding-order -- the order is intended\n{PADDED}"),
+        PODBUF_MANIFEST,
+        "",
+    );
+    dir.write(
+        "ridl.toml",
+        &format!("[workspace]\nmembers = [\"demo\", \"other\"]\n{PODBUF_MANIFEST}"),
+    );
+    dir.write(
+        "other/ridl.toml",
+        "[package]\nname = \"other\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("other/broken.typl", "package other\ntype Broken: Missing\n");
+
+    let (code, diagnostics) = check_json(&dir.path().join("demo"));
+
+    assert_eq!(code, 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "RIDL-156"), 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
 }
