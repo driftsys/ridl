@@ -695,6 +695,40 @@ fn diff_judges_a_podbuf_inline_append_whose_head_reaches_a_remote_type() {
     );
 }
 
+/// A snapshot side carries no remote package, so when the new side is read
+/// from snapshots the remote packages the old side compiled are the diff's
+/// context: a pad-fit append to the struct whose head reaches the remote type
+/// is compatible, where with no context the old head would have no size and
+/// the append would be read as a break.
+#[test]
+fn diff_resolves_the_old_sides_remotes_when_the_new_side_is_a_snapshot() {
+    let dir = TempDir::new("podbuf-diff-snapshot");
+    let new = TempDir::new("podbuf-diff-snapshot-new");
+    let out = TempDir::new("podbuf-diff-snapshot-out");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let (old, new_root) = inline_pair(&dir, &new, &stub, "  quality: Level\n");
+    let (code, _, stderr) = ridl(
+        &new_root,
+        dir.path(),
+        &[
+            "build",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+            "--emit",
+            "ir-json",
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(out.path().join("app.ir.json").is_file());
+    let (code, report) = podbuf_diff(dir.path(), &old, out.path());
+    assert_eq!(code, 0, "the pad-fit append is compatible: {report}");
+    assert_eq!(report["verdict"], "compatible", "{report}");
+    assert!(
+        !categories(&report).contains(&"podbuf_inline_append"),
+        "{report}"
+    );
+}
+
 /// A field appended with a remote type that holds 0 is judged by that type's
 /// declaration, as a field of a `ridl.std` type is: compatible, not breaking
 /// as unresolved.

@@ -1790,8 +1790,11 @@ async fn mcp_reports_no_directive_for_a_remote_unit() {
 
 /// `ridl_diff` with `encodings: ["podbuf"]` lays out a struct held inline
 /// whose head reaches a remote type from the cached unit, as the CLI does:
-/// the two reports are equal, and both judge the growing append a podbuf
-/// break.
+/// for a growing append and for a pad-fit append, the two reports are equal,
+/// the first a podbuf break and the second compatible. The second half is
+/// what pins the remote packages as the tool's context: with `ridl.std`
+/// alone, the old head has no size and the pad-fit append is read as a
+/// break too.
 #[tokio::test]
 async fn mcp_diff_judges_a_podbuf_inline_append_whose_head_reaches_a_remote_type() {
     use remote_support::{COMMON_UNIT, Stub, inline_consumer, ridl, unit_tar};
@@ -1799,43 +1802,51 @@ async fn mcp_diff_judges_a_podbuf_inline_append_whose_head_reaches_a_remote_type
     let new = remote_support::TempDir::new("mcp-podbuf-diff-new");
     let stub = Stub::serving(unit_tar(COMMON_UNIT));
     let old = inline_consumer(&dir, stub.url(), "");
-    let new_root = inline_consumer(&new, stub.url(), "  quality: Wide\n");
-    for root in [&old, &new_root] {
-        let (code, _, stderr) = ridl(root, dir.path(), &["check"]);
-        assert_eq!(code, 0, "{stderr}");
+    for (appended, exit_code, verdict) in [
+        ("  quality: Wide\n", 1, "breaking"),
+        ("  quality: Level\n", 0, "compatible"),
+    ] {
+        let new_root = inline_consumer(&new, stub.url(), appended);
+        for root in [&old, &new_root] {
+            let (code, _, stderr) = ridl(root, dir.path(), &["check"]);
+            assert_eq!(code, 0, "{stderr}");
+        }
+        let (code, stdout, stderr) = ridl(
+            &old,
+            dir.path(),
+            &[
+                "diff",
+                "--format",
+                "json",
+                "--encoding",
+                "podbuf",
+                old.to_str().unwrap(),
+                new_root.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(code, exit_code, "{stderr}");
+        let expected: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(expected["verdict"], verdict, "{expected}");
+        stub.reset_hits();
+        let old = old.clone();
+        tokio::time::timeout(TIMEOUT, async {
+            let client = connect_with_home(Some(dir.path())).await;
+            let result = call_workspace_tool(
+                &client,
+                "ridl_diff",
+                json!({"old": old, "new": new_root, "encodings": ["podbuf"]}),
+            )
+            .await;
+            assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+            let found = result.structured_content.unwrap();
+            assert_eq!(found["verdict"], verdict, "{found}");
+            assert_eq!(found, expected);
+            client.cancel().await.unwrap();
+        })
+        .await
+        .expect("mcp podbuf diff timeout");
+        assert_eq!(stub.hits(), 0, "the MCP server never fetches");
     }
-    let (code, stdout, stderr) = ridl(
-        &old,
-        dir.path(),
-        &[
-            "diff",
-            "--format",
-            "json",
-            "--encoding",
-            "podbuf",
-            old.to_str().unwrap(),
-            new_root.to_str().unwrap(),
-        ],
-    );
-    assert_eq!(code, 1, "{stderr}");
-    let expected: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(expected["verdict"], "breaking", "{expected}");
-    stub.reset_hits();
-    tokio::time::timeout(TIMEOUT, async {
-        let client = connect_with_home(Some(dir.path())).await;
-        let result = call_workspace_tool(
-            &client,
-            "ridl_diff",
-            json!({"old": old, "new": new_root, "encodings": ["podbuf"]}),
-        )
-        .await;
-        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
-        assert_eq!(result.structured_content.unwrap(), expected);
-        client.cancel().await.unwrap();
-    })
-    .await
-    .expect("mcp podbuf diff timeout");
-    assert_eq!(stub.hits(), 0, "the MCP server never fetches");
 }
 
 /// The consumer's `[lints]` do not apply to the remote unit in the language

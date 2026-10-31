@@ -3028,6 +3028,41 @@ mod podbuf {
         );
     }
 
+    /// Two packages declare a `SensorReading` whose head cannot be laid out,
+    /// and the holder names the other package's: the shape walk reads the
+    /// declaring package as well as the name, so the append to `veh.common`'s
+    /// struct has no use and draws no line.
+    #[test]
+    fn a_holder_naming_another_packages_struct_of_the_same_name_is_not_a_use() {
+        let other = package(
+            "veh.other",
+            vec![struct_decl(
+                "SensorReading",
+                vec![field("value", 1, named("veh.remote.Level"))],
+            )],
+        );
+        let old = [
+            held_unresolved(vec![], named("veh.other.SensorReading")),
+            other.clone(),
+        ];
+        let new = [
+            held_unresolved(
+                vec![field("quality", 2, wide())],
+                named("veh.other.SensorReading"),
+            ),
+            other,
+        ];
+        let old: Vec<&v2::Package> = old.iter().collect();
+        let new: Vec<&v2::Package> = new.iter().collect();
+        let report = diff_refs_with(&old, &new, &[], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
     /// `held_unresolved` with no holder field (`range` is a `Level`) and the
     /// interface `Ctl` holding `interactions`.
     fn interface_unresolved(

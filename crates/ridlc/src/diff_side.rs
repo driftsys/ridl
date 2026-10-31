@@ -510,6 +510,62 @@ mod tests {
     use ridl_core::{Overlay, RidlDatabase, Severity};
     use std::fs;
 
+    /// A side with no compared package and the remote packages named, each
+    /// carrying `unit` so that two sides' copies of one name can be told
+    /// apart.
+    fn side_with_remotes(remotes: &[(&str, &str)]) -> DiffSide {
+        DiffSide {
+            packages: Vec::new(),
+            system: None,
+            remotes: remotes
+                .iter()
+                .map(|(name, unit)| ridl_ir::v2::Package {
+                    name: name.to_string(),
+                    unit: unit.to_string(),
+                    ..Default::default()
+                })
+                .collect(),
+        }
+    }
+
+    /// `ridl.std` first, then the new side's remotes, then the old side's
+    /// remotes whose name the new side does not hold: a package both sides
+    /// name is read from the new side, and one the old side alone names is
+    /// kept.
+    #[test]
+    fn diff_context_is_std_then_the_new_remotes_then_the_old_remotes_not_named_by_new() {
+        let old = side_with_remotes(&[("veh.common", "old"), ("veh.legacy", "old")]);
+        let new = side_with_remotes(&[("veh.common", "new"), ("veh.fresh", "new")]);
+        let context: Vec<(String, String)> = diff_context(&old, &new)
+            .into_iter()
+            .map(|package| (package.name, package.unit))
+            .collect();
+        assert_eq!(
+            context,
+            [
+                ("ridl.std".to_string(), crate::std_ir().unit),
+                ("veh.common".to_string(), "new".to_string()),
+                ("veh.fresh".to_string(), "new".to_string()),
+                ("veh.legacy".to_string(), "old".to_string()),
+            ]
+        );
+    }
+
+    /// A snapshot side carries no remote package: the context is then
+    /// `ridl.std` and the other side's remotes.
+    #[test]
+    fn diff_context_of_a_snapshot_side_is_the_other_sides_remotes() {
+        let source = side_with_remotes(&[("veh.common", "src")]);
+        let snapshot = side_with_remotes(&[]);
+        for (old, new) in [(&source, &snapshot), (&snapshot, &source)] {
+            let names: Vec<String> = diff_context(old, new)
+                .into_iter()
+                .map(|package| package.name)
+                .collect();
+            assert_eq!(names, ["ridl.std", "veh.common"]);
+        }
+    }
+
     fn is_txt(path: &Path) -> bool {
         path.extension().is_some_and(|extension| extension == "txt")
     }

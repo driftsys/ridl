@@ -334,7 +334,11 @@ pub fn field_form(packages: Packages<'_>, ty: &v2::FieldType) -> Result<Form, Pr
 /// [`Form::Inline`] of the declaration, an [`Form::InlineArray`] of one, or an
 /// inline tuple holding one. A bounded array, a map, a stream and a reference
 /// to another declaration hold nothing at a fixed offset here, whatever is
-/// inside them.
+/// inside them. The shape also accepts a few forms the law refuses for a
+/// reason of their own — a tuple with a refused sibling member, an
+/// exact-length array of more than `u32::MAX` elements, a struct that reaches
+/// itself — which `ridl check` rejects under podbuf, so no published head
+/// holds one.
 #[must_use]
 pub fn shape_holds_inline(
     packages: Packages<'_>,
