@@ -1680,6 +1680,9 @@ fn build_applies_directives() {
     assert!(written > 0, "the build wrote its artifacts");
 }
 
+/// `ridl diff` applies no levels (ADR-0024 decision 8), so it reads no
+/// directive: a lint that a directive allows is still shown beside the
+/// compile error that makes the diff print diagnostics.
 #[test]
 fn diff_ignores_directives() {
     let old = TempDir::new("directive-diff-old");
@@ -1688,15 +1691,206 @@ fn diff_ignores_directives() {
     let new_root = member_workspace(&new, "");
     new.write(
         "sensor/sensor.ridl",
-        &directive_source("// lint: allow missing-timing -- timing comes later"),
+        &format!(
+            "{}type Broken: Missing\n",
+            directive_source("// lint: allow missing-timing -- timing comes later")
+        ),
     );
 
     let (code, stdout, stderr) =
         ridl(&["diff".as_ref(), old_root.as_os_str(), new_root.as_os_str()]);
 
-    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert_eq!(code, 2, "stdout:\n{stdout}\nstderr:\n{stderr}");
     assert!(
-        !stdout.contains("TYPL-411") && !stderr.contains("TYPL-411"),
-        "diff reports no directive:\n{stdout}\n{stderr}"
+        stderr.contains("RIDL-100"),
+        "the allowed lint is still reported by diff:\n{stderr}"
     );
+    assert!(
+        !stderr.contains("TYPL-411"),
+        "diff reports no directive:\n{stderr}"
+    );
+}
+
+#[test]
+fn directive_on_ordinal_changed_is_used_after_the_desk_check() {
+    let dir = TempDir::new("directive-ordinal-used");
+    let (root, baseline) = published_package(&dir, "", BASE);
+    dir.write(
+        "cluster.ridl",
+        &REORDERED.replacen(
+            "interface VehicleStatus",
+            "// lint: allow ordinal-changed -- the order is intended\ninterface VehicleStatus",
+            1,
+        ),
+    );
+
+    let (_, stdout, stderr) = ridl(&[
+        "check".as_ref(),
+        "--format".as_ref(),
+        "json".as_ref(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+        root.as_os_str(),
+    ]);
+
+    let value: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|err| panic!("stdout is JSON ({err}):\n{stdout}\n{stderr}"));
+    let diagnostics = value.as_array().expect("a JSON array");
+    assert_eq!(count_code(diagnostics, "RIDL-407"), 0, "{diagnostics:?}");
+    assert_eq!(count_code(diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+}
+
+#[test]
+fn directive_on_ordinal_changed_is_not_unused_without_a_baseline() {
+    let dir = TempDir::new("directive-ordinal-no-baseline");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "cluster.ridl",
+        &REORDERED.replacen(
+            "interface VehicleStatus",
+            "// lint: allow ordinal-changed -- the order is intended\ninterface VehicleStatus",
+            1,
+        ),
+    );
+
+    let (_, diagnostics) = check_json(dir.path());
+
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+}
+
+#[test]
+fn directive_on_podbuf_padding_order_is_used_by_check() {
+    let dir = TempDir::new("directive-padding-used");
+    let root = podbuf_workspace(
+        &dir,
+        &format!("// lint: allow podbuf-padding-order -- the order is intended\n{PADDED}"),
+        PODBUF_MANIFEST,
+        "",
+    );
+
+    let (code, diagnostics) = check_json(&root);
+
+    assert_eq!(code, 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "RIDL-156"), 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+}
+
+#[test]
+fn directive_on_podbuf_padding_order_is_not_unused_in_build() {
+    let dir = TempDir::new("directive-padding-build");
+    let root = podbuf_workspace(
+        &dir,
+        &format!("// lint: allow podbuf-padding-order -- the order is intended\n{PADDED}"),
+        &format!("{PODBUF_MANIFEST}\n[lints]\nunused-lint-directive = \"deny\"\n"),
+        "",
+    );
+    let out = TempDir::new("directive-padding-build-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.as_os_str(),
+    ]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("TYPL-411"), "{stderr}");
+}
+
+#[test]
+fn build_reports_an_unused_directive() {
+    let dir = TempDir::new("directive-build-unused");
+    let root = member_workspace(&dir, "");
+    dir.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow unbounded-float -- nothing to allow"),
+    );
+    let out = TempDir::new("directive-build-unused-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.as_os_str(),
+    ]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stderr.matches("[TYPL-411]").count(), 1, "{stderr}");
+}
+
+#[test]
+fn a_sibling_members_unused_directive_fails_a_member_build_at_deny() {
+    let dir = TempDir::new("directive-sibling-build");
+    let root = sibling_workspace(&dir);
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"a\", \"b\"]\n\n[lints]\nunused-lint-directive = \"deny\"\n",
+    );
+    std::fs::remove_file(dir.path().join("b/broken.typl")).expect("the broken file is removed");
+    dir.write(
+        "b/speed.typl",
+        "package b\n// lint: allow unbounded-float -- nothing to allow\ntype Speed: integer [0..300]\n",
+    );
+    let out = TempDir::new("directive-sibling-build-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.join("a").as_os_str(),
+    ]);
+
+    assert_eq!(code, 1, "{stderr}");
+}
+
+#[test]
+fn unused_directive_on_podbuf_padding_order_is_reported_when_the_check_ran() {
+    let dir = TempDir::new("directive-padding-unused");
+    let root = podbuf_workspace(
+        &dir,
+        &format!("// lint: allow podbuf-padding-order -- nothing to allow\n{FAULT_EVENT}"),
+        PODBUF_MANIFEST,
+        "",
+    );
+
+    let (_, diagnostics) = check_json(&root);
+
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn unused_directive_on_ordinal_changed_is_reported_when_the_desk_check_ran() {
+    let dir = TempDir::new("directive-ordinal-unused");
+    let (root, baseline) = published_package(&dir, "", BASE);
+    dir.write(
+        "cluster.ridl",
+        &BASE.replacen(
+            "interface VehicleStatus",
+            "// lint: allow ordinal-changed -- nothing moved\ninterface VehicleStatus",
+            1,
+        ),
+    );
+
+    let (_, stdout, stderr) = ridl(&[
+        "check".as_ref(),
+        "--format".as_ref(),
+        "json".as_ref(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+        root.as_os_str(),
+    ]);
+
+    let value: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|err| panic!("stdout is JSON ({err}):\n{stdout}\n{stderr}"));
+    let diagnostics = value.as_array().expect("a JSON array");
+    assert_eq!(count_code(diagnostics, "TYPL-411"), 1, "{diagnostics:?}");
 }

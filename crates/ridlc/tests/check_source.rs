@@ -112,3 +112,17 @@ fn a_query_range_with_a_fractional_bound_is_form_102_alone() {
         .collect();
     assert_eq!(reported, ["FORM-102"], "{:?}", run.diagnostics);
 }
+
+#[test]
+fn an_unused_directive_is_reported_once() {
+    let run = ridlc::check_source(
+        "unused.typl",
+        "package p\n// lint: allow unbounded-float -- nothing to allow\ntype T: integer [0..1]\n",
+    );
+    let found = run
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code.as_str() == "TYPL-411")
+        .count();
+    assert_eq!(found, 1, "{:?}", run.diagnostics);
+}

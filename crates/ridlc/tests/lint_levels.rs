@@ -317,3 +317,25 @@ fn a_member_entry_reports_the_root_manifest_diagnostics() {
     let files = written(out.path());
     assert!(files.is_empty(), "the build wrote: {files:?}");
 }
+
+/// `run_check` reports an unused directive once, and a directive that names
+/// the lint a diagnostic of its scope raises is used.
+#[test]
+fn run_check_reports_an_unused_directive_once() {
+    let fixture = Fixture::new("");
+    std::fs::write(
+        fixture.source_path(),
+        SOURCE.replace(
+            "  signal speed",
+            "  // lint: allow unbounded-float -- nothing to allow\n  signal speed",
+        ),
+    )
+    .expect("the source is written");
+    let run = ridlc::run_check(fixture.root(), Frozen::No).expect("the check runs");
+    let found = run
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code.as_str() == "TYPL-411")
+        .count();
+    assert_eq!(found, 1, "{:?}", run.diagnostics);
+}

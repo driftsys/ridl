@@ -727,6 +727,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         .iter()
         .filter(|diagnostic| lint_of(diagnostic.code).is_none());
     let mut desk_checked = false;
+    let mut padding_checked = false;
     if lock::only_lock_orphans(compile_diagnostics) {
         let location = match baseline_location(path, baseline) {
             Ok(location) => location,
@@ -738,22 +739,23 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
             }
             desk_checked = true;
         }
-        if let Err(code) =
-            padding_check(path, location.as_deref(), baseline.is_some(), &ir, &mut run)
-        {
-            return code;
+        match padding_check(path, location.as_deref(), baseline.is_some(), &ir, &mut run) {
+            Ok(ran) => padding_checked = ran,
+            Err(code) => return code,
         }
     }
 
     // The report and the levels apply once, after the last diagnostic is
     // raised (ADR-0024 decision 19). RIDL-407 is raised only when the desk
-    // check ran.
-    let not_raised: &[DiagCode] = if desk_checked {
-        &[]
-    } else {
-        &[DiagCode::RIDL_407]
-    };
-    ridlc::report_directives(&mut run, &ir, not_raised);
+    // check ran, and RIDL-156 only when the padding check ran.
+    let mut not_raised = Vec::new();
+    if !desk_checked {
+        not_raised.push(DiagCode::RIDL_407);
+    }
+    if !padding_checked {
+        not_raised.push(DiagCode::RIDL_156);
+    }
+    ridlc::report_directives(&mut run, &ir, &not_raised);
     apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
     finish_check(run, format)
@@ -1639,19 +1641,19 @@ pub(crate) fn root_manifest_encodings(entry: &Path) -> Vec<String> {
 /// only ever adds diagnostics. A struct is released when a snapshot under
 /// `location` declares it; with no baseline every struct is unreleased.
 /// `ridlc` reads no baseline (ADR-0008 decisions 9 and 14), so the lint
-/// belongs to `ridl check`.
+/// belongs to `ridl check`. Returns whether the lint ran.
 fn padding_check(
     entry: &Path,
     location: Option<&Path>,
     explicit: bool,
     ir: &ridlc::CheckedIr,
     run: &mut CliRun,
-) -> Result<(), ExitCode> {
+) -> Result<bool, ExitCode> {
     if !root_manifest_encodings(entry)
         .iter()
         .any(|encoding| encoding == "podbuf")
     {
-        return Ok(());
+        return Ok(false);
     }
     let released: BTreeSet<(String, String)> = match location {
         Some(location) => load_baseline(location, explicit)?
@@ -1672,7 +1674,7 @@ fn padding_check(
         None => BTreeSet::new(),
     };
     if !lock::only_lock_orphans(&ir.diagnostics) {
-        return Ok(());
+        return Ok(false);
     }
     let all: Vec<&ridl_ir::v2::Package> = ir.checked.iter().map(|checked| &checked.ir).collect();
     // A remote unit is its owner's contract, so it is a target of references
@@ -1694,7 +1696,7 @@ fn padding_check(
     );
     ridlc::retain_in_report_scope(&mut findings, &run.sources, ir.report_scope.as_deref(), &[]);
     run.diagnostics.extend(findings);
-    Ok(())
+    Ok(true)
 }
 
 /// The rename hint (lock design §4; plan decision PD-5). For every RIDL-409

@@ -198,7 +198,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
     report_lint_directives(
         &mut compiled.diagnostics,
         &compiled.sources,
-        &[DiagCode::RIDL_407],
+        NOT_RAISED_BY_COMPILE,
     );
     apply_lint_levels(
         &mut compiled.diagnostics,
@@ -908,10 +908,15 @@ impl CliRun {
 /// ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
     let (mut run, ir) = run_check_unlevelled(entry, frozen)?;
-    report_directives(&mut run, &ir, &[DiagCode::RIDL_407]);
+    report_directives(&mut run, &ir, NOT_RAISED_BY_COMPILE);
     apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
     Ok(run)
 }
+
+/// The lint codes the compile entry points never raise: RIDL-407 is the
+/// baseline desk check and RIDL-156 is the podbuf padding check, both run by
+/// `ridl check` only. A directive that names one of them is not unused there.
+pub const NOT_RAISED_BY_COMPILE: &[DiagCode] = &[DiagCode::RIDL_407, DiagCode::RIDL_156];
 
 /// Reports the lint directives of `run` ([`report_lint_directives`]) over the
 /// diagnostics of the whole workspace, so that a directive in a file outside
@@ -1386,11 +1391,20 @@ fn run_build_inner<E: From<std::io::Error>>(
     if apply_lints == ApplyLints::Yes {
         // Both lists are the report's: the directives of a file outside the
         // scope are checked against the diagnostics of that file.
+        // The reports go to the list their file belongs to; every other
+        // diagnostic stays in the list it was in.
+        let (in_len, out_len) = (diagnostics.len(), outside_scope.len());
         diagnostics.append(&mut outside_scope);
-        report_lint_directives(&mut diagnostics, &sources, &[DiagCode::RIDL_407]);
-        (diagnostics, outside_scope) = diagnostics.into_iter().partition(|diagnostic| {
-            in_report_scope(diagnostic, &sources, report_scope.as_deref(), &remote_dirs)
-        });
+        report_lint_directives(&mut diagnostics, &sources, NOT_RAISED_BY_COMPILE);
+        let reports = diagnostics.split_off(in_len + out_len);
+        outside_scope = diagnostics.split_off(in_len);
+        for report in reports {
+            if in_report_scope(&report, &sources, report_scope.as_deref(), &remote_dirs) {
+                diagnostics.push(report);
+            } else {
+                outside_scope.push(report);
+            }
+        }
         apply_lint_levels(&mut diagnostics, &sources, &lints);
         apply_lint_levels(&mut outside_scope, &sources, &lints);
     } else {
