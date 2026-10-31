@@ -80,6 +80,11 @@ after the checks when a `[limits]` entry of the manifest applies
 unit holds it, so the catalog hash covers it. A unit with no applicable entry
 hashes as before. Decisions 1 to 14 are unchanged.
 
+**Amended 2026-10-31 — decision 15, the verdict and the encodings.** The unit's
+verdict is judged for the root manifest's encodings, as
+[ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 states, from
+driftsys/ridl#1095. The hash is unchanged. Decisions 1 to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -673,7 +678,11 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       is one of the unit's source packages on either side, or whose top-level
       declaration one of the unit's interfaces reaches on either side
       (`reachable_decls`): the closure the hash covers. `ridl diff`'s own report
-      and exit code are unchanged.
+      and exit code are unchanged, and `ridl diff` judges the encodings its
+      `--encoding` flags name only. The catalog history verdict of
+      `ridl baseline` and `ridl build` reads the root manifest's encodings
+      instead ([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13;
+      amended 2026-10-31).
     - **Where the list lives.** The descriptor's `Catalog` gains `compatible`, a
       vector of `EarlierCatalog { hash }` tables appended at the end of the
       table and not required, under the schema's append-only rule;

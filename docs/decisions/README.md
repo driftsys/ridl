@@ -590,7 +590,10 @@ other entry below is Accepted.
   which is archived, and carries five open items. Amends ADR-0020 decision 4 and
   closes its open item 1. Amended 2026-10-30 by ADR-0030: `verify` no longer
   refuses a buffer longer than its own `MAX_SIZE`, which closes open item 2, and
-  RIDL-157 replaces RIDL-150; built 2026-10-30 (driftsys/ridl#1128).
+  RIDL-157 replaces RIDL-150; built 2026-10-30 (driftsys/ridl#1128). Amended
+  2026-10-31, decision 13: `ridl build` and `ridl baseline` judge the catalog
+  history for the root manifest's encodings, which closes open item 3
+  (driftsys/ridl#1095).
 
 - **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
   file or document of unknown size, downloaded or uploaded and read or written

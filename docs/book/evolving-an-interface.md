@@ -227,7 +227,12 @@ hash that `ridl build --emit catalog` computes. The hashes after it are copied
 from the replaced file when the change is compatible or the hash is unchanged,
 and a breaking change that changes the hash restarts the file with the new hash
 alone; the rules are in the
-[`ridl baseline` reference](cli-reference.md#ridl-baseline).
+[`ridl baseline` reference](cli-reference.md#ridl-baseline). `ridl baseline`
+and `ridl build` judge the change for the encodings the root manifest's
+`[backend.<name>]` tables list, so when one lists `podbuf`, a podbuf break
+restarts the file ([ADR-0031][adr-0031] decision 13), except when the inline
+head reaches a type from a remote package
+([driftsys/ridl#1141](https://github.com/driftsys/ridl/issues/1141)).
 
 For a unit with a published snapshot, a file that cannot be read, or that has a
 line that is neither a comment nor a hash, or that lists a hash twice, stops

@@ -901,7 +901,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     // The histories are written into the staging directory only once both
     // gates passed, so a refused run leaves every published history as it was.
     if let Err(code) =
-        catalogs::write_catalog_histories(&staging, &out_dir, &sets.published, &sets.fresh)
+        catalogs::write_catalog_histories(&staging, &out_dir, &sets.published, &sets.fresh, path)
     {
         let _ = std::fs::remove_dir_all(&staging);
         return code;
@@ -1593,28 +1593,36 @@ fn desk_check(
     Ok(())
 }
 
-/// Whether the manifest at the root of the workspace around `entry` lists
-/// `podbuf` in the `encodings` of a `[backend.<name>]` table. A manifest that
-/// cannot be read or parsed counts as not listing it: the compile reports it.
-fn manifest_enables_podbuf(entry: &Path) -> bool {
+/// The encodings the root manifest of the workspace around `entry` lists: the
+/// union of `encodings` over every `[backend.<name>]` table, sorted and
+/// deduplicated. Only the root `ridl.toml` is read, as a member cannot carry a
+/// backend table (MANI-016), and the manifest parser has already dropped a
+/// name it does not know (MANI-015). A manifest that cannot be read or parsed
+/// lists none: the compile reports it.
+///
+/// The padding lint runs when the list holds `podbuf`, and the catalog
+/// history verdicts of `ridl build` and `ridl baseline` are judged for the
+/// list, so the two commands give one verdict. `ridlc`'s private
+/// `enabled_encodings` computes the same list from the compiled backend
+/// tables; a change to one is made to the other.
+pub(crate) fn root_manifest_encodings(entry: &Path) -> Vec<String> {
     let Some(root) = ridl_core::find_root(&index_root(entry)) else {
-        return false;
+        return Vec::new();
     };
     let Ok(text) = std::fs::read_to_string(root.join("ridl.toml")) else {
-        return false;
+        return Vec::new();
     };
     let mut scratch = SourceMap::default();
     let file = scratch.file_id("ridl.toml", &text);
-    ridl_core::manifest::parse_manifest(file, &text)
-        .0
-        .is_some_and(|manifest| {
-            manifest.backends.values().any(|table| {
-                table
-                    .encodings
-                    .iter()
-                    .any(|(encoding, _)| encoding == "podbuf")
-            })
-        })
+    let Some(manifest) = ridl_core::manifest::parse_manifest(file, &text).0 else {
+        return Vec::new();
+    };
+    let names: BTreeSet<String> = manifest
+        .backends
+        .into_values()
+        .flat_map(|table| table.encodings.into_iter().map(|(name, _)| name))
+        .collect();
+    names.into_iter().collect()
 }
 
 /// RIDL-156 (`podbuf-padding-order`) over the checked workspace `ir`,
@@ -1631,7 +1639,10 @@ fn padding_check(
     ir: &ridlc::CheckedIr,
     run: &mut CliRun,
 ) -> Result<(), ExitCode> {
-    if !manifest_enables_podbuf(entry) {
+    if !root_manifest_encodings(entry)
+        .iter()
+        .any(|encoding| encoding == "podbuf")
+    {
         return Ok(());
     }
     let released: BTreeSet<(String, String)> = match location {

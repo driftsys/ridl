@@ -1459,3 +1459,383 @@ fn a_build_with_imports_and_an_empty_list_still_gets_the_note() {
         "the empty list is explained: {stderr}"
     );
 }
+
+// ==========================================================================
+// The root manifest's encodings judge the history (driftsys/ridl#1095)
+// ==========================================================================
+
+/// `MANIFEST` with a `rust` backend table that lists `podbuf`.
+const PODBUF_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                               [backend.rust]\nencodings = [\"podbuf\"]\n";
+
+/// `Reading` held inline by `Bounds`, the payload of the interface's signal.
+const INLINE_BASE: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+}
+";
+
+/// `INLINE_BASE` with an eight-byte field appended to `Reading`: the field
+/// does not fit inside the old head, so it is a podbuf break
+/// (`podbuf_inline_append`) and compatible under every other encoding.
+const INLINE_GROWN: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Wide
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+}
+";
+
+/// `INLINE_BASE` with a one-byte field appended to `Reading`: the field fits
+/// in the pad bytes of the old head, so it is compatible under podbuf too.
+const INLINE_IN_PADS: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+}
+";
+
+/// Writes `manifest` and `source` as the workspace and records its interface
+/// numbers with plain `ridl lock`.
+fn set_workspace(dir: &TempDir, manifest: &str, source: &str) -> PathBuf {
+    dir.write("ridl.toml", manifest);
+    dir.write("cluster.ridl", source);
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    root
+}
+
+/// Publishes `INLINE_BASE` under `manifest`, changes the source to `edited`,
+/// and returns `(baseline_hash, built_compatible, published_history,
+/// new_hash)`: the hash published first, the `compatible` list `ridl build`
+/// writes for the edit, the history `ridl baseline` then publishes, and the
+/// hash of the edit.
+fn judge_edit(
+    label: &str,
+    manifest: &str,
+    edited: &str,
+) -> (String, Vec<String>, Vec<String>, String) {
+    let dir = TempDir::new(label);
+    let first = TempDir::new(&format!("{label}-first"));
+    let out = TempDir::new(&format!("{label}-out"));
+    let root = set_workspace(&dir, manifest, INLINE_BASE);
+    publish(&root);
+    let baseline_hash = describe_hash(&root, first.path(), UNIT);
+    set_workspace(&dir, manifest, edited);
+    build_catalog(&root, out.path());
+    let built = compatible_of(out.path(), UNIT);
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(new_hash, baseline_hash, "the edit changes the catalog");
+    publish(&root);
+    (baseline_hash, built, history_lines(&root), new_hash)
+}
+
+/// Under `[backend.rust] encodings = ["podbuf"]`, a field appended to a struct
+/// held inline that does not fit inside the old head is a podbuf break, so
+/// `ridl build` lists no earlier catalog and `ridl baseline` restarts the
+/// chain.
+#[test]
+fn a_podbuf_break_ends_the_history_when_the_manifest_lists_podbuf() {
+    let (_, built, history, new_hash) = judge_edit("podbuf-break", PODBUF_MANIFEST, INLINE_GROWN);
+    assert_eq!(built, Vec::<String>::new(), "ridl build lists nothing");
+    assert_eq!(history, vec![new_hash], "ridl baseline restarts the chain");
+}
+
+/// The same append with no backend table listing `podbuf` is compatible, so
+/// both commands carry the chain.
+#[test]
+fn the_same_append_carries_the_history_without_podbuf() {
+    let (baseline_hash, built, history, new_hash) = judge_edit("no-podbuf", MANIFEST, INLINE_GROWN);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}
+
+/// Under podbuf, an appended field that fits in the pad bytes of the old head
+/// is not a podbuf break, so both commands carry the chain.
+#[test]
+fn an_append_that_fits_in_the_pads_carries_the_history_under_podbuf() {
+    let (baseline_hash, built, history, new_hash) =
+        judge_edit("podbuf-pads", PODBUF_MANIFEST, INLINE_IN_PADS);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}
+
+/// `MANIFEST` with three backend tables, `podbuf` listed only in the middle
+/// one in name order (`a`, `c`, `rust`), so the encodings are the union over
+/// every table: not the first table's list, not the last one's, and not the
+/// `rust` table's.
+const PODBUF_IN_MIDDLE_TABLE_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                                               [backend.a]\nencodings = [\"proto3\"]\n\n\
+                                               [backend.c]\nencodings = [\"podbuf\"]\n\n\
+                                               [backend.rust]\nencodings = [\"flatbuffers\"]\n";
+
+/// `MANIFEST` with one backend table that lists `flatbuffers` only.
+const FLATBUFFERS_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                                    [backend.rust]\nencodings = [\"flatbuffers\"]\n";
+
+/// The encodings are the union over every backend table: `podbuf` listed in
+/// the middle table only still ends the history at a podbuf break.
+#[test]
+fn podbuf_in_any_backend_table_ends_the_history() {
+    let (_, built, history, new_hash) = judge_edit(
+        "podbuf-middle-table",
+        PODBUF_IN_MIDDLE_TABLE_MANIFEST,
+        INLINE_GROWN,
+    );
+    assert_eq!(built, Vec::<String>::new(), "ridl build lists nothing");
+    assert_eq!(history, vec![new_hash], "ridl baseline restarts the chain");
+}
+
+/// A backend table that lists an encoding other than `podbuf` adds no podbuf
+/// rule, so the same append carries the chain.
+#[test]
+fn a_table_without_podbuf_carries_the_history() {
+    let (baseline_hash, built, history, new_hash) =
+        judge_edit("flatbuffers-only", FLATBUFFERS_MANIFEST, INLINE_GROWN);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}
+
+/// A snapshot does not record encodings. The step from a baseline published
+/// before `podbuf` was listed to the tree is judged by the podbuf rules once
+/// it is, so a podbuf break ends the history.
+#[test]
+fn the_step_from_a_baseline_published_before_podbuf_is_judged_under_podbuf() {
+    let dir = TempDir::new("before-podbuf");
+    let out = TempDir::new("before-podbuf-out");
+    let root = set_workspace(&dir, MANIFEST, INLINE_BASE);
+    publish(&root);
+    set_workspace(&dir, PODBUF_MANIFEST, INLINE_GROWN);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "ridl build lists nothing"
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    publish(&root);
+    assert_eq!(
+        history_lines(&root),
+        vec![new_hash],
+        "ridl baseline restarts the chain"
+    );
+}
+
+/// `INLINE_GROWN` with one event appended to the interface: compatible under
+/// every encoding.
+const INLINE_GROWN_APPENDED: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Wide
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+  event alarm: Level @[100ms..1s]
+}
+";
+
+/// Only the step from the latest published snapshots is judged for the
+/// current encodings. A podbuf break published before `podbuf` was listed was
+/// judged without the podbuf rules, so the hashes carried across it stay in
+/// the history once `podbuf` is listed.
+#[test]
+fn hashes_carried_before_podbuf_was_listed_stay_in_the_history() {
+    let dir = TempDir::new("carried-before-podbuf");
+    let first = TempDir::new("carried-before-podbuf-first");
+    let second = TempDir::new("carried-before-podbuf-second");
+    let out = TempDir::new("carried-before-podbuf-out");
+    let root = set_workspace(&dir, MANIFEST, INLINE_BASE);
+    publish(&root);
+    let base_hash = describe_hash(&root, first.path(), UNIT);
+    set_workspace(&dir, MANIFEST, INLINE_GROWN);
+    publish(&root);
+    let grown_hash = describe_hash(&root, second.path(), UNIT);
+    set_workspace(&dir, PODBUF_MANIFEST, INLINE_GROWN_APPENDED);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        vec![grown_hash.clone(), base_hash.clone()],
+        "the hash carried before podbuf was listed stays"
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    publish(&root);
+    assert_eq!(history_lines(&root), vec![new_hash, grown_hash, base_hash]);
+}
+
+/// A two-unit workspace whose root manifest lists `podbuf`: `veh.cluster`
+/// with `cluster_source` and `veh.body` with `body_source`.
+fn write_two_units_podbuf(dir: &TempDir, cluster_source: &str, body_source: &str) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\", \"body\"]\n\n\
+         [backend.rust]\nencodings = [\"podbuf\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", cluster_source);
+    dir.write(
+        "body/ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("body/body.ridl", body_source);
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    root
+}
+
+/// A podbuf break is attributed to its unit: it ends the history of
+/// `veh.cluster` and leaves the chain of `veh.body`, changed compatibly,
+/// carried, at build time and at publication.
+#[test]
+fn a_podbuf_break_in_one_unit_leaves_the_other_chain_carried() {
+    let dir = TempDir::new("podbuf-two-units");
+    let before = TempDir::new("podbuf-two-units-before");
+    let out = TempDir::new("podbuf-two-units-out");
+    let root = write_two_units_podbuf(&dir, INLINE_BASE, BODY);
+    publish(&root);
+    let body_hash = describe_hash(&root, before.path(), "veh.body");
+    write_two_units_podbuf(&dir, INLINE_GROWN, BODY_APPENDED);
+    build_catalog(&root, out.path());
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+    assert_eq!(
+        compatible_of(out.path(), "veh.body"),
+        vec![body_hash.clone()]
+    );
+    let cluster_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    let new_body_hash = hex_of_bytes(&describe(out.path(), "veh.body")["hash"]);
+    publish(&root);
+    assert_eq!(
+        history_lines_of(&root, UNIT),
+        vec![cluster_hash],
+        "the chain restarts from the new hash"
+    );
+    assert_eq!(
+        history_lines_of(&root, "veh.body"),
+        vec![new_body_hash, body_hash]
+    );
+}
+
+/// A `.ridl` file given as the entry reads the encodings of the root manifest
+/// around the file.
+#[test]
+fn a_file_entry_is_judged_for_the_root_manifest_encodings() {
+    let dir = TempDir::new("podbuf-file-entry");
+    let out = TempDir::new("podbuf-file-entry-out");
+    let root = set_workspace(&dir, PODBUF_MANIFEST, INLINE_BASE);
+    publish(&root);
+    set_workspace(&dir, PODBUF_MANIFEST, INLINE_GROWN);
+    let file = root.join("cluster.ridl");
+    build_catalog(&file, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "ridl build <file> lists nothing"
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    publish(&file);
+    assert_eq!(
+        history_lines(&root),
+        vec![new_hash],
+        "ridl baseline <file> restarts the chain"
+    );
+}
+
+/// A workspace whose root manifest lists `podbuf` and whose one member,
+/// `cluster`, holds `source`. A member's manifest cannot hold a backend table
+/// (MANI-016), so the encodings come from the root manifest only.
+fn write_podbuf_workspace(dir: &TempDir, source: &str) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\"]\n\n[backend.rust]\nencodings = [\"podbuf\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", source);
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    root
+}
+
+/// `ridl build <member>` and `ridl baseline <member>` read the encodings from
+/// the root manifest of the workspace around the member, so a podbuf break
+/// ends the history when the entry is the member.
+#[test]
+fn a_member_entry_is_judged_for_the_root_manifest_encodings() {
+    let dir = TempDir::new("podbuf-member");
+    let first = TempDir::new("podbuf-member-first");
+    let out = TempDir::new("podbuf-member-out");
+    let root = write_podbuf_workspace(&dir, INLINE_BASE);
+    let member = root.join("cluster");
+    publish(&member);
+    let baseline_hash = describe_hash(&member, first.path(), UNIT);
+    write_podbuf_workspace(&dir, INLINE_GROWN);
+    build_catalog(&member, out.path());
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(new_hash, baseline_hash, "the edit changes the catalog");
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "ridl build <member> lists nothing"
+    );
+    publish(&member);
+    assert_eq!(
+        history_lines(&root),
+        vec![new_hash],
+        "ridl baseline <member> restarts the chain"
+    );
+}

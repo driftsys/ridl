@@ -59,6 +59,14 @@ which replaces the retired lint RIDL-150. Built 2026-10-30: the generated
 `verify` checks structure only, and RIDL-157 replaces RIDL-150
 (driftsys/ridl#1108, driftsys/ridl#1128).
 
+**Amended 2026-10-31 — decision 13, the catalog history and the encodings, from
+driftsys/ridl#1095.** `ridl build` and `ridl baseline` judge the catalog history
+for the root manifest's encodings, and `ridl check --baseline` is stated to be
+the ordinal desk check, not a diff gate; the known gap of decision 13 goes, and
+open item 3 is closed. [ADR-0014](ADR-0014-ir-encodings.md) decision 15 and
+`docs/design/catalog-descriptor.md` say the per-unit verdict is judged for those
+encodings.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a
@@ -631,10 +639,24 @@ a field is appended.
       strictly smaller; `FaultEvent` is the negative case, since it holds 18
       data bytes and every order rounds to 24 (builder's call; the design named
       it as a positive example).
-    - **Known gap.** `ridl build` and `ridl check --baseline` do not pass the
-      manifest's `[backend.<name>] encodings` to the diff, so a workspace that
-      builds podbuf and gates on its baseline accepts an inline-append break
-      until the follow-up lands. It is tracked as driftsys/ridl#1095.
+    - `ridl build` and `ridl baseline` judge the catalog history for the root
+      manifest's encodings: the union of `encodings` over every
+      `[backend.<name>]` table of the root `ridl.toml`. Under `podbuf`, a podbuf
+      break ends the unit's compatible history as any other break does, so
+      `ridl build` lists no earlier catalog for the unit and `ridl baseline`
+      restarts its chain. Only the step from the latest published snapshots to
+      the tree is judged for the current encodings. A snapshot does not record
+      encodings, so the step from a baseline published before `podbuf` was
+      listed is judged by the podbuf rules; the hashes the history carried
+      before then were judged without them and stay in it. An inline append
+      whose head reaches a type from a remote package (an `[imports]` unit) is
+      not reported as a podbuf break, so it does not end the history; a type
+      from another member of the workspace resolves (driftsys/ridl#1141).
+      `ridl check --baseline` is the ordinal desk check (RIDL-407), not a diff
+      gate, and it does not judge podbuf breaks; a workspace that builds podbuf
+      catches them in CI with `ridl diff --encoding podbuf` against its
+      baseline. Amended 2026-10-31, from driftsys/ridl#1095: this replaces the
+      known gap the decision recorded.
 
 14. **What podbuf generates, and what it exposes (Sebastien).** Per type:
     - the head struct with its pad fields and assertions, and the preamble
@@ -788,8 +810,11 @@ stated in the decision above; this list is the index.
    `Payload<Podbuf>::verify` (decision 8 already bounds the work by the maxima
    the type declares), or state that an append that raises `max_size` is a
    break. Tracked as driftsys/ridl#1099.
-3. **`ridl build` and `ridl check --baseline` and the encodings** (decision 13):
-   tracked as driftsys/ridl#1095.
+3. **`ridl build` and `ridl check --baseline` and the encodings** (decision 13).
+   Closed 2026-10-31 by driftsys/ridl#1095: `ridl build` and `ridl baseline`
+   judge the catalog history for the root manifest's encodings, and
+   `ridl check --baseline` stays the ordinal desk check, so a podbuf break is
+   caught by `ridl diff --encoding podbuf` in CI.
 4. **A C reader for a boxed root.** The header has no reader for a payload root
    that is a named scalar, an enum or an enum set (the box). It is listed in the
    known gaps of `docs/design/podbuf-codec.md`, as driftsys/ridl#1096.
@@ -805,6 +830,9 @@ stated in the decision above; this list is the index.
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                              |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                             |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                               |
+| [ADR-0014](ADR-0014-ir-encodings.md)                                                     | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                        |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                   | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                     |
 | [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
 

@@ -245,13 +245,13 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 ## Known gaps
 
-| Gap                                                                                                          | Issue                         |
-| ------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| `ridl build` and `ridl check --baseline` do not pass the manifest's `[backend.<name>] encodings` to the diff | driftsys/ridl#1095            |
-| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                        | the typl change it depends on |
-| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                 | driftsys/ridl#1096            |
-| A string that holds U+0000 cannot be encoded                                                                 | a limit of the encoding       |
-| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                  | ADR-0020 decision 2           |
+| Gap                                                                                                                                                                                            | Issue                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| An inline append whose head reaches a type from a remote package (an `[imports]` unit, not another workspace member) is not reported as a podbuf break, so it does not end the catalog history | driftsys/ridl#1141            |
+| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                                                                          | the typl change it depends on |
+| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                                                                                   | driftsys/ridl#1096            |
+| A string that holds U+0000 cannot be encoded                                                                                                                                                   | a limit of the encoding       |
+| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                    | ADR-0020 decision 2           |
 
 ## Trace
 

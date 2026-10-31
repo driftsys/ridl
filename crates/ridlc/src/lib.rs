@@ -2524,7 +2524,8 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
 }
 
 /// The encoding names that every `[backend.<name>]` table enables, as one
-/// sorted set.
+/// sorted set. The `ridl` facade's `root_manifest_encodings` computes the same
+/// list from the root manifest; a change to one is made to the other.
 fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Vec<String> {
     let mut encodings: Vec<String> = backends
         .values()
