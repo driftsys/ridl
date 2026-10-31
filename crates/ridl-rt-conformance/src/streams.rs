@@ -8,7 +8,8 @@
 //! non-empty chunk the full window did not take; an empty chunk is always
 //! taken and is pulled as `Pull::Chunk(0)`; the reply stream ends with the
 //! call's settlement; a stop on purpose is an abort, and a forget stops every
-//! stream of the call with `Transport::Interrupted`.
+//! stream of the call that its producer has not ended with
+//! `Transport::Interrupted`, and keeps the ended ones.
 //!
 //! Every test asks for `StreamCaller`, `StreamHandler` and `Wakeable` on
 //! `F::Runtime`, so these tests are in their own arm of
@@ -435,31 +436,29 @@ where
     rt.wake_on(Interest::Stream(c, REPLY_STREAM), &reply_waker);
     rt.wake_on(Interest::Stream(c, PARAM_1), &param_waker);
     rt.wake_on(Interest::ClaimStream(claim, PARAM_1), &provider_waker);
-    assert_eq!(
-        (wakes(&reply), wakes(&param), wakes(&provider)),
-        (0, 0, 0),
-        "nothing changed since the registrations"
-    );
+    // The parameter window is empty, so the producer's key already holds and
+    // a runtime may wake that waker at once: each count is measured from
+    // what it is before the forget.
+    let before = (wakes(&reply), wakes(&param), wakes(&provider));
     rt.forget(c);
-    assert_eq!(
-        wakes(&reply),
-        1,
+    assert!(
+        wakes(&reply) > before.0,
         "the forget wakes the caller's waker on the reply stream"
     );
-    assert_eq!(
-        wakes(&param),
-        1,
+    assert!(
+        wakes(&param) > before.1,
         "the forget wakes the caller's waker on a parameter stream"
     );
-    assert_eq!(
-        wakes(&provider),
-        1,
+    assert!(
+        wakes(&provider) > before.2,
         "the forget wakes the provider's waker on the claim's stream"
     );
 }
 
 /// After the caller forgets a claimed call, the provider's pull answers
 /// `Failed(Transport(Interrupted))` and its push fails with the same outcome.
+/// Its `end_claim` on the reply stream fails the same way and still settles
+/// the claim, so a `settle` after it finds no claim.
 pub fn forget_fails_the_providers_pull_and_push_with_interrupted<F>()
 where
     F: Factory,
@@ -476,6 +475,16 @@ where
     assert_eq!(
         rt.push_claim(claim, REPLY_STREAM, &[1]),
         Err(PushError::Failed(interrupted))
+    );
+    assert_eq!(
+        rt.end_claim(claim, REPLY_STREAM),
+        Err(PushError::Failed(interrupted)),
+        "the end of the reply stream after the forget is interrupted"
+    );
+    assert_eq!(
+        rt.settle(claim, Ok(&[])),
+        Err(SettleError::UnknownClaim),
+        "the end settled the claim all the same"
     );
 }
 
@@ -620,7 +629,7 @@ where
 }
 
 /// A chunk longer than the member's limit is refused with the limit, and
-/// nothing is pushed. The suite attaches to a catalog with no descriptor, so
+/// nothing is pushed, on the reply stream and on a parameter stream. The suite attaches to a catalog with no descriptor, so
 /// the limit of the query is the default ceiling of its kind (ADR-0030
 /// decision 16); a chunk of exactly that length is taken.
 pub fn a_chunk_longer_than_the_limit_is_too_large_and_not_sent<F>()
@@ -647,6 +656,28 @@ where
         "a chunk of exactly the limit is taken"
     );
     assert_eq!(rt.pull(c, REPLY_STREAM, &mut out), Ok(Pull::Chunk(cap)));
+
+    // The limit bounds every chunk in both directions: the caller's chunk to
+    // a parameter stream too.
+    assert_eq!(
+        rt.push(c, PARAM_1, &vec![0u8; cap + 1]),
+        Err(PushError::TooLarge { cap }),
+        "one byte above the limit is refused on a parameter stream"
+    );
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_1, &mut out),
+        Ok(Pull::Pending),
+        "the refused parameter chunk was not pushed"
+    );
+    assert_eq!(
+        rt.push(c, PARAM_1, &vec![7u8; cap]),
+        Ok(cap),
+        "a parameter chunk of exactly the limit is taken"
+    );
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_1, &mut out),
+        Ok(Pull::Chunk(cap))
+    );
 }
 
 /// Two stream parameters of one call are two streams: each holds its own
@@ -757,8 +788,9 @@ where
 /// A forget after a command's acknowledgment keeps a stream its producer
 /// ended, which the provider still reads to its end, and interrupts a stream
 /// that was not ended, which the provider reads to `Failed(Interrupted)`
-/// after the chunk pushed before the forget. The provider's push to the reply
-/// stream after the forget fails with `Interrupted`.
+/// after the chunk pushed before the forget. A command has no reply stream,
+/// so the provider's push to the reply stream after a forget is checked on a
+/// query, by `forget_fails_the_providers_pull_and_push_with_interrupted`.
 pub fn a_forget_after_a_commands_acknowledgment_keeps_an_ended_stream_and_interrupts_an_open_one<
     F,
 >()
@@ -777,11 +809,6 @@ where
     rt.forget(c);
 
     let interrupted = CallError::Transport(Transport::Interrupted);
-    assert_eq!(
-        rt.push_claim(claim, REPLY_STREAM, &[1]),
-        Err(PushError::Failed(interrupted)),
-        "the provider's push after the forget is interrupted"
-    );
     let mut out = [0u8; 8];
     assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
     assert_eq!(&out[..1], &[7]);
@@ -796,5 +823,209 @@ where
         rt.pull_claim(claim, PARAM_2, &mut out),
         Ok(Pull::Failed(interrupted)),
         "a stream that was not ended is interrupted after its chunks"
+    );
+}
+
+/// The caller's abort of a parameter stream it produces reaches the provider
+/// after the chunk pushed before it: the provider pulls the chunk, then
+/// `Failed` with the abort's outcome. After its own abort, the caller's push
+/// and end answer `Ended`.
+pub fn a_callers_abort_of_a_parameter_stream_fails_the_providers_pull_after_the_chunks_before_it<
+    F,
+>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let interrupted = CallError::Transport(Transport::Interrupted);
+    assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+    rt.abort(c, PARAM_1, interrupted).expect("abort");
+    let mut out = [0u8; 8];
+    assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+    assert_eq!(&out[..1], &[1]);
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_1, &mut out),
+        Ok(Pull::Failed(interrupted))
+    );
+    assert_eq!(
+        rt.push(c, PARAM_1, &[2]),
+        Err(PushError::Ended),
+        "a push after the producer's own abort is Ended"
+    );
+    assert_eq!(
+        rt.end(c, PARAM_1),
+        Err(PushError::Ended),
+        "an end after the producer's own abort is Ended"
+    );
+}
+
+/// The caller's refusal of a query's reply stream: the caller reads none of
+/// what it refused, the provider's next push and its `end_claim` answer
+/// `Failed` with the refusal, `end_claim` settles the claim with the
+/// refusal, and a second abort by the caller answers `Ended`.
+pub fn a_callers_refusal_of_the_reply_stream_fails_the_providers_push_and_end<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+    assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[1]), Ok(1));
+    rt.abort(c, REPLY_STREAM, refusal)
+        .expect("the caller refuses");
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.pull(c, REPLY_STREAM, &mut out),
+        Ok(Pull::Failed(refusal)),
+        "the refusing side reads none of what it refused"
+    );
+    assert_eq!(
+        rt.push_claim(claim, REPLY_STREAM, &[2]),
+        Err(PushError::Failed(refusal))
+    );
+    assert_eq!(
+        rt.end_claim(claim, REPLY_STREAM),
+        Err(PushError::Failed(refusal))
+    );
+    assert_eq!(
+        rt.reply(c, &mut out),
+        Ok(Some(Err(refusal))),
+        "the end after the refusal settles the claim with the refusal"
+    );
+    assert_eq!(
+        rt.abort(c, REPLY_STREAM, refusal),
+        Err(PushError::Ended),
+        "an abort of a stream already stopped is Ended"
+    );
+}
+
+/// After the provider refused a parameter stream, the caller's end answers
+/// `Failed` with the refusal, and its abort answers `Ended`.
+pub fn after_the_receivers_refusal_the_producers_end_fails_and_its_abort_is_ended<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, refusal) = refused_parameter_stream::<F>();
+    assert_eq!(rt.end(c, PARAM_1), Err(PushError::Failed(refusal)));
+    assert_eq!(
+        rt.abort(c, PARAM_1, CallError::Transport(Transport::Interrupted)),
+        Err(PushError::Ended)
+    );
+}
+
+/// The provider's abort of a stream parameter its producer already ended
+/// answers `Ended`, and the provider is done with the stream all the same:
+/// after the forget of the acknowledged command, its slot comes back. The
+/// abort comes before the forget in one round and after it in the next, so
+/// a call whose slot stayed taken makes a later send answer `Busy`.
+pub fn a_providers_abort_of_an_ended_parameter_stream_lets_the_forget_free_the_slot<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+    let mut out = [0u8; 8];
+    for round in 0..F::SLOTS * 2 {
+        let c = rt
+            .command(IFACE, ORD, &[1], None)
+            .unwrap_or_else(|e| panic!("round {round}: the send answered {e:?}"));
+        let claim = claim_next(&mut rt);
+        rt.settle(claim, Ok(&[])).expect("the acknowledgment");
+        assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+        rt.end(c, PARAM_1).expect("end");
+        if round % 2 == 0 {
+            assert_eq!(
+                rt.abort_claim(claim, PARAM_1, refusal),
+                Err(PushError::Ended),
+                "an abort of an ended stream is Ended"
+            );
+            rt.forget(c);
+        } else {
+            rt.forget(c);
+            assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+            assert_eq!(
+                rt.abort_claim(claim, PARAM_1, refusal),
+                Err(PushError::Ended),
+                "an abort of an ended stream is Ended"
+            );
+        }
+    }
+}
+
+/// The settlement of a query releases its stream parameters, with `Ok` and
+/// with an error, and so does a command's settlement with an error, which
+/// refuses the whole call: the caller's next push and end on a stream
+/// parameter answer `Failed(Interrupted)`, and the call's outcome carries the
+/// settlement.
+pub fn a_querys_settlement_and_a_commands_refusal_release_the_parameter_streams<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let interrupted = PushError::Failed(CallError::Transport(Transport::Interrupted));
+    let error = CallError::Contract(Contract::PreconditionFailed);
+    let mut out = [0u8; 8];
+
+    for outcome in [Ok(&[][..]), Err(error)] {
+        let (mut rt, c, claim) = claimed_query::<F>();
+        assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+        rt.settle(claim, outcome).expect("settle");
+        assert_eq!(rt.push(c, PARAM_1, &[2]), Err(interrupted), "{outcome:?}");
+        assert_eq!(rt.end(c, PARAM_1), Err(interrupted), "{outcome:?}");
+        assert_eq!(
+            rt.reply(c, &mut out),
+            Ok(Some(outcome.map(<[u8]>::len))),
+            "the reply carries the settlement"
+        );
+    }
+
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let c = rt.command(IFACE, ORD, &[1], None).expect("command sent");
+    assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+    let claim = claim_next(&mut rt);
+    rt.settle(claim, Err(error)).expect("the refusal");
+    assert_eq!(rt.push(c, PARAM_1, &[2]), Err(interrupted));
+    assert_eq!(rt.end(c, PARAM_1), Err(interrupted));
+    assert_eq!(rt.ack(c), Some(Err(error)), "the ack carries the refusal");
+}
+
+/// Each stream has one producer and one receiver: a pull by the producer,
+/// and a push or an end by the receiver, are unknown interactions, on the
+/// reply stream and on a parameter stream alike.
+pub fn a_pull_by_the_producer_and_a_push_by_the_receiver_are_unknown<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let unknown = Contract::UnknownInteraction;
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.pull(c, PARAM_1, &mut out),
+        Err(ReadError::Contract(unknown)),
+        "the caller produces a parameter stream"
+    );
+    assert_eq!(
+        rt.pull_claim(claim, REPLY_STREAM, &mut out),
+        Err(ReadError::Contract(unknown)),
+        "the provider produces the reply stream"
+    );
+    assert_eq!(
+        rt.push(c, REPLY_STREAM, &[1]),
+        Err(PushError::Contract(unknown))
+    );
+    assert_eq!(rt.end(c, REPLY_STREAM), Err(PushError::Contract(unknown)));
+    assert_eq!(
+        rt.push_claim(claim, PARAM_1, &[1]),
+        Err(PushError::Contract(unknown))
+    );
+    assert_eq!(
+        rt.end_claim(claim, PARAM_1),
+        Err(PushError::Contract(unknown))
     );
 }

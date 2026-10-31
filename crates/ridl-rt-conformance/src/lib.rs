@@ -137,8 +137,9 @@ pub trait Factory {
     /// handle, one the runtime offers or one its test crate writes over the
     /// role handles.
     ///
-    /// The three extensions — the two signal extensions and `Wakeable` — are
-    /// not in this bound, because a runtime may omit them; the tests of each
+    /// The extensions — the two signal extensions, `Wakeable`, and the two
+    /// stream extensions — are not in this bound, because a runtime may omit
+    /// them; the tests of each
     /// ask for it where they need it, on this type and on the role handles
     /// below.
     type Runtime: Attached
@@ -167,7 +168,10 @@ pub trait Factory {
     /// the runtime's and not a caller's. A call holds its slot from its send
     /// until it is reclaimed by [`Caller::forget`], at once for a settled
     /// call and at the settlement for a call in flight (ADR-0021 decision
-    /// 15), and a send with every slot held is refused with
+    /// 15). A call with a stream parameter that its provider is not done with
+    /// keeps its slot after the forget, until the provider is done with it or
+    /// its handler is gone, as `ridl_rt::port::StreamHandler` states. A send
+    /// with every slot held is refused with
     /// [`SendError::Busy`](ridl_rt::port::SendError::Busy). At least 1.
     ///
     /// The tests fill the table by sending this many calls, so a runtime
@@ -363,6 +367,12 @@ macro_rules! suite {
             streams::a_bidirectional_call_carries_both_streams,
             streams::a_reclaimed_slots_stream_answers_unknown,
             streams::a_forget_after_a_commands_acknowledgment_keeps_an_ended_stream_and_interrupts_an_open_one,
+            streams::a_callers_abort_of_a_parameter_stream_fails_the_providers_pull_after_the_chunks_before_it,
+            streams::a_callers_refusal_of_the_reply_stream_fails_the_providers_push_and_end,
+            streams::after_the_receivers_refusal_the_producers_end_fails_and_its_abort_is_ended,
+            streams::a_providers_abort_of_an_ended_parameter_stream_lets_the_forget_free_the_slot,
+            streams::a_querys_settlement_and_a_commands_refusal_release_the_parameter_streams,
+            streams::a_pull_by_the_producer_and_a_push_by_the_receiver_are_unknown,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
