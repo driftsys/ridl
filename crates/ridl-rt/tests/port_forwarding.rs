@@ -15,13 +15,14 @@
 
 #![forbid(unsafe_code)]
 
+use ridl_rt::contract::StreamNo;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
-use ridl_rt::error::{CallError, Contract};
+use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, RaiseError, RawOccurrence, RawSample, ReadError,
-    ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Watermark, WriteError,
+    EventSource, FixedReader, Handler, Pull, PushError, RaiseError, RawOccurrence, RawSample,
+    ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
+    StreamCaller, StreamHandler, SubscribeError, Watermark, WriteError, REPLY_STREAM,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
 use ridl_rt::trace::TraceContext;
@@ -59,6 +60,8 @@ struct Stub {
     raised: Option<TraceContext>,
     commanded: Option<TraceContext>,
     queried: Option<TraceContext>,
+    /// The stream number of every stream call, in the order received.
+    streams: Vec<StreamNo>,
 }
 
 impl Attached for Stub {
@@ -166,6 +169,68 @@ impl Handler for Stub {
     }
     fn settle(&mut self, _: ClaimId, _: Result<&[u8], CallError>) -> Result<(), SettleError> {
         Err(SettleError::UnknownClaim)
+    }
+}
+
+const INTERRUPTED: CallError = CallError::Transport(Transport::Interrupted);
+
+/// Each stream method answers from its arguments, so a forwarding impl that
+/// passed another argument, or called another method, fails an assertion.
+impl StreamCaller for Stub {
+    fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError> {
+        self.streams.push(s);
+        assert_eq!(c, Correlation(1));
+        Ok(Pull::Chunk(out.len()))
+    }
+    fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError> {
+        self.streams.push(s);
+        assert_eq!(c, Correlation(1));
+        Ok(chunk.len())
+    }
+    fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError> {
+        self.streams.push(s);
+        assert_eq!(c, Correlation(1));
+        Err(PushError::Ended)
+    }
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        self.streams.push(s);
+        assert_eq!(c, Correlation(1));
+        Err(PushError::Failed(e))
+    }
+}
+
+impl StreamHandler for Stub {
+    fn pull_claim(
+        &mut self,
+        claim: ClaimId,
+        s: StreamNo,
+        out: &mut [u8],
+    ) -> Result<Pull, ReadError> {
+        self.streams.push(s);
+        assert_eq!(claim, ClaimId(9));
+        Err(ReadError::Short {
+            needed: out.len() + 1,
+        })
+    }
+    fn push_claim(
+        &mut self,
+        claim: ClaimId,
+        s: StreamNo,
+        chunk: &[u8],
+    ) -> Result<usize, PushError> {
+        self.streams.push(s);
+        assert_eq!(claim, ClaimId(9));
+        Err(PushError::TooLarge { cap: chunk.len() })
+    }
+    fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError> {
+        self.streams.push(s);
+        assert_eq!(claim, ClaimId(9));
+        Err(PushError::Detached)
+    }
+    fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        self.streams.push(s);
+        assert_eq!(claim, ClaimId(9));
+        Err(PushError::Failed(e))
     }
 }
 
@@ -359,4 +424,52 @@ fn coherent_signals_is_reached_through_a_borrow() {
     let mut stub = Stub::default();
     assert_eq!(over(&stub), Ok(0));
     assert_eq!(over(&mut stub), Ok(0));
+}
+
+#[test]
+fn stream_caller_and_stream_handler_forward_through_mut_ref() {
+    fn caller<P: StreamCaller>(mut port: P) {
+        assert_eq!(port.ack(Correlation(1)), Some(Ok(())), "a `Caller` too");
+        assert_eq!(
+            port.pull(Correlation(1), REPLY_STREAM, &mut [0u8; 5]),
+            Ok(Pull::Chunk(5))
+        );
+        assert_eq!(port.push(Correlation(1), StreamNo(1), &[0u8; 3]), Ok(3));
+        assert_eq!(port.end(Correlation(1), StreamNo(2)), Err(PushError::Ended));
+        assert_eq!(
+            port.abort(Correlation(1), StreamNo(3), INTERRUPTED),
+            Err(PushError::Failed(INTERRUPTED))
+        );
+    }
+    fn handler<P: StreamHandler>(mut port: P) {
+        assert_eq!(
+            port.settle(ClaimId(9), Ok(&[])),
+            Err(SettleError::UnknownClaim),
+            "a `Handler` too"
+        );
+        assert_eq!(
+            port.pull_claim(ClaimId(9), StreamNo(4), &mut [0u8; 2]),
+            Err(ReadError::Short { needed: 3 })
+        );
+        assert_eq!(
+            port.push_claim(ClaimId(9), StreamNo(5), &[0u8; 7]),
+            Err(PushError::TooLarge { cap: 7 })
+        );
+        assert_eq!(
+            port.end_claim(ClaimId(9), REPLY_STREAM),
+            Err(PushError::Detached)
+        );
+        assert_eq!(
+            port.abort_claim(ClaimId(9), StreamNo(6), INTERRUPTED),
+            Err(PushError::Failed(INTERRUPTED))
+        );
+    }
+    let mut stub = Stub::default();
+    caller(&mut stub);
+    handler(&mut stub);
+    assert_eq!(
+        stub.streams,
+        [0, 1, 2, 3, 4, 5, 0, 6].map(StreamNo),
+        "every stream number arrives unchanged"
+    );
 }

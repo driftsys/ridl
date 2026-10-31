@@ -718,8 +718,46 @@ pub trait CoherentSignals: SignalReader {
 pub trait Wakeable {
     fn wake_on(&self, what: Interest, waker: &core::task::Waker);
 }
-pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
+pub enum Interest {
+    Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo),
+    Stream(Correlation, StreamNo),    // kept with the call, one waker per stream
+    ClaimStream(ClaimId, StreamNo),   // kept with the claim, one waker per stream
+}
+
+/// Extension: the streams of a call (ridl §12). A runtime may omit both.
+pub const REPLY_STREAM: StreamNo = StreamNo(0);   // StreamNo(k), k >= 1: the k-th stream parameter
+pub trait StreamCaller: Caller {
+    fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
+    fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>; // chunk.len() or 0
+    fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError>;
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError>;
+}
+pub trait StreamHandler: Handler {
+    fn pull_claim(&mut self, claim: ClaimId, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
+    fn push_claim(&mut self, claim: ClaimId, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>;
+    fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError>; // REPLY_STREAM: settles Ok(&[])
+    fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError>;
+}
+#[must_use] pub enum Pull { Chunk(usize), End, Pending, Failed(CallError) }
 ```
+
+`StreamCaller` and `StreamHandler` are extensions, as `Wakeable`,
+`ScannableSignals` and `CoherentSignals` are: no other port names them as a
+bound, so a runtime without streams stays a complete runtime. A stream is keyed
+by its call — the `Correlation` on the calling side, the `ClaimId` on the
+providing side — and a `StreamNo`. The unit is the chunk: a port never splits or
+merges one, so a pull copies one chunk, `ReadError::Short` does not consume it,
+and a push takes the whole chunk or nothing, answering `chunk.len()` or 0 when
+the stream's window is full. `end_claim` on `REPLY_STREAM` is the claim's
+settlement, `Ok(&[])`, and `settle(claim, Err(e))` ends the reply stream with
+`e` after the chunks already pushed. A side stops a stream on purpose with
+`abort` or `abort_claim`; a producer interrupts with
+`CallError::Transport(Transport::Interrupted)`, and a caller's `forget` stops
+every stream of the call with it. The errors have two layers, as
+`Caller::reply`'s do: `ReadError`, and `PushError::Contract` and
+`PushError::Detached`, are the port call itself; `Pull::Failed` and
+`PushError::Failed` are the other side's verdict on the stream. Both traits are
+implemented for `&mut P`. No runtime in this workspace implements them yet.
 
 `Watermark` has no sequence number; see
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10's
@@ -939,8 +977,12 @@ impl<const N: usize> Table<N> {
     pub fn outcome(&self, c: Correlation) -> Option<Result<(), CallError>>;
     pub fn forget(&mut self, c: Correlation) -> Forgotten;
     pub fn wake_on(&mut self, c: Correlation, waker: &Waker) -> Option<Waker>;
+    pub fn wake_on_stream(&mut self, c: Correlation, s: StreamNo, waker: &Waker) -> Option<Waker>;
+    pub fn take_stream(&mut self, c: Correlation, s: StreamNo) -> Option<Waker>;
+    pub fn take_streams(&mut self, slot: usize) -> impl Iterator<Item = Waker> + use<N>;
     pub fn slot(c: Correlation) -> usize;
 }
+pub const STREAM_WAKERS: usize = 4;                       // stream wakers per slot
 #[must_use] pub enum Settled   { Recorded(Option<Waker>), Reclaimed, Unknown }
 #[must_use] pub enum Forgotten { Reclaimed, Marked(Option<Waker>), Unknown }
 
@@ -1003,20 +1045,42 @@ stored waker under a settled or forgotten call would never be woken. A settled
 slot never holds a waker, because its settlement took it, so the three cases
 never need two wakers at once.
 
+**A slot holds one `Stream` waker for each of up to `STREAM_WAKERS` (4) streams
+of its call**: the reply stream and up to three stream parameters, inline,
+because the table allocates nothing. `wake_on_stream` follows `wake_on`'s rule
+for one stream — the displaced waker of another task, nothing on a refresh,
+`waker` itself for a forgotten call or an unknown correlation — with two
+differences. A settled call still stores the waker, because a command is settled
+at its acknowledgment and its parameter streams go on after it. A registration
+on a fifth stream of one call is handed back unstored, which is a spurious wake:
+the task reads again and registers again, and polls rather than sleeps while
+every cell holds another stream's waker. `take_stream` takes one stream's waker,
+for a chunk, an end or a freed window. A settlement, a forget and a reclaim stop
+or change every stream of the call, so after each `settle` and each `forget` the
+runtime calls `take_streams(Table::slot(c))` under the same lock and wakes what
+it returns after releasing the lock. The hand-back is an accessor keyed by the
+slot index, not a payload of `Settled` or `Forgotten`, so that those two enums
+keep their shape, and so that it reaches the wakers of a reclaimed slot whose
+correlation already answers as unknown; a reclaim keeps the stream wakers for
+`take_streams`, and the slot's next `insert` drops any left.
+
 **`Waiters` holds one waker per kind of key** — `Slot`, `Event`, `Claim` —
 whatever interface an `Event` or `Claim` key names, so any key of the kind takes
 it (ADR-0021 decision 13). `register` returns the displaced waker of another
 task, nothing on a refresh, and, for `Interest::Outcome`, which a `Table` holds,
-`waker` itself, not stored: a registration there could never be taken. Whether a
-key's change has already happened is the runtime's to know, so a runtime
-registers and then `take`s the waker back when the change is already visible.
-`take_all` is for a runtime with one unkeyed "something changed" source; it
-clears every kind when it is called, whether or not the iterator is consumed,
-and the iterator does not borrow the registry (`+ use<>`, precise capturing,
-stable since Rust 1.82 and so within the crate's 1.88 floor), so a runtime can
-register again while it still holds the iterator. `Waiters` implements `Default`
-beside `new`, as `EventSeqTracker` does, because Clippy's `new_without_default`
-lint fails the gate on a public `new` with no argument and no `Default`.
+`waker` itself, not stored: a registration there could never be taken. The same
+holds for `Interest::Stream`, which a `Table` holds, and
+`Interest::ClaimStream`, which the providing runtime keeps with its claim.
+Whether a key's change has already happened is the runtime's to know, so a
+runtime registers and then `take`s the waker back when the change is already
+visible. `take_all` is for a runtime with one unkeyed "something changed"
+source; it clears every kind when it is called, whether or not the iterator is
+consumed, and the iterator does not borrow the registry (`+ use<>`, precise
+capturing, stable since Rust 1.82 and so within the crate's 1.88 floor), so a
+runtime can register again while it still holds the iterator. `Waiters`
+implements `Default` beside `new`, as `EventSeqTracker` does, because Clippy's
+`new_without_default` lint fails the gate on a public `new` with no argument and
+no `Default`.
 
 **What a `Slot` waiter is woken by is the runtime's**: on a reclaim it wakes
 every `Slot` waiter it holds, one per handle, and the first to send again takes
@@ -1031,7 +1095,7 @@ correlation").
 ```rust
 // error::
 pub enum Contract  { InvalidValue(Violation), PreconditionFailed, ContractBroken, UnknownInteraction }
-#[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt, Busy }
+#[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt, Busy, Interrupted }
 pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum ClientError   { Send(SendError), Call(CallError), Read(ReadError) }
 #[non_exhaustive] pub enum ProviderError { Serve(ServeError), Claim(ReadError) }
@@ -1044,6 +1108,7 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum SubscribeError { Contract(Contract), Detached }
 #[non_exhaustive] pub enum ServeError     { Contract(Contract), NotOwner, Detached }
 #[non_exhaustive] pub enum SettleError    { UnknownClaim, TooLarge { cap: usize }, Detached }
+#[non_exhaustive] pub enum PushError      { TooLarge { cap: usize }, Ended, Failed(CallError), Contract(Contract), Detached }
 ```
 
 `Contract` is ridl §10.2's four categories; `Transport` is §10.3's detected
@@ -1053,8 +1118,10 @@ call at admission — no slot, no budget, or a call faster than the member's `mi
 the second `Transport` variant to cross after `Corrupt`
 ([frame specification](../specification/frame-specification.md) §9.6, ADR-0021
 decision 14). `SendError::Busy` is the local case, a refusal before anything is
-sent. The `TooLarge { cap }` of `WriteError`, `RaiseError`, `SendError` and
-`SettleError` is the one refusal of a payload's size on send (ADR-0030 decision
+sent. `Transport::Interrupted` is a stream stopped without its end, on purpose
+or because the call was forgotten; no frame carries it yet. The
+`TooLarge { cap }` of `WriteError`, `RaiseError`, `SendError`, `SettleError` and
+`PushError` is the one refusal of a payload's size on send (ADR-0030 decision
 19): the port compares the payload's length with the member's limit — the limit
 a `[limits]` entry of the manifest gives it (its `[limits.interaction]` entry,
 else the entry of its kind in `[limits.kind]`, else `default` clamped to the
@@ -1062,7 +1129,7 @@ default ceiling of its kind), else the default ceiling of its kind
 (`contract::default_ceiling`) — and refuses a longer one with that limit as
 `cap`, staging, raising, sending or recording nothing. `Detached` — the runtime
 behind the port is gone — is local to the port, not a stratum. Why `Contract`
-and `CallError` stay exhaustive while `Transport` and the seven port error enums
+and `CallError` stay exhaustive while `Transport` and the eight port error enums
 stay `#[non_exhaustive]` is ADR-0021 decision 9. Every error type here is `Copy`
 and owns nothing.
 

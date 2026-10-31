@@ -574,13 +574,19 @@ impl<E: Encoding> Handler for Loopback<E> {
 }
 
 /// Each key goes to the handle that observes it: `Outcome` and `Slot` to the
-/// caller, `Event` to the source, and `Claim` to the handler.
+/// caller, `Event` to the source, and `Claim` to the handler. `Stream` goes to
+/// the caller and `ClaimStream` to the handler, each of which wakes it at once,
+/// because the loopback carries no stream yet.
 impl<E: Encoding> Wakeable for Loopback<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
-            Interest::Outcome(_) | Interest::Slot => self.handles.caller.wake_on(what, waker),
+            Interest::Outcome(_) | Interest::Slot | Interest::Stream(..) => {
+                self.handles.caller.wake_on(what, waker)
+            }
             Interest::Event(_) => self.handles.source.wake_on(what, waker),
-            Interest::Claim(_) => self.handles.handler.wake_on(what, waker),
+            Interest::Claim(_) | Interest::ClaimStream(..) => {
+                self.handles.handler.wake_on(what, waker)
+            }
         }
     }
 }

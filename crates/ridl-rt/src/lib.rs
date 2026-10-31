@@ -143,7 +143,8 @@ pub mod trace;
 
 /// Pins which enums stay `#[non_exhaustive]` under R-11: `Transport`,
 /// `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`,
-/// `ServeError`, `SettleError`, `ClientError` and `ProviderError`. Each
+/// `ServeError`, `SettleError`, `PushError`, `ClientError` and
+/// `ProviderError`. Each
 /// `compile_fail` block below matches every variant of one such enum, with
 /// no `_` arm. Matching a
 /// `#[non_exhaustive]` enum from outside its crate with no `_` arm does not
@@ -158,6 +159,7 @@ pub mod trace;
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
 ///         ridl_rt::error::Transport::Busy => {}
+///         ridl_rt::error::Transport::Interrupted => {}
 ///     }
 /// }
 /// ```
@@ -238,6 +240,18 @@ pub mod trace;
 /// ```
 ///
 /// ```compile_fail
+/// fn f(x: ridl_rt::port::PushError) {
+///     match x {
+///         ridl_rt::port::PushError::TooLarge { .. } => {}
+///         ridl_rt::port::PushError::Ended => {}
+///         ridl_rt::port::PushError::Failed(_) => {}
+///         ridl_rt::port::PushError::Contract(_) => {}
+///         ridl_rt::port::PushError::Detached => {}
+///     }
+/// }
+/// ```
+///
+/// ```compile_fail
 /// fn f(x: ridl_rt::error::ClientError) {
 ///     match x {
 ///         ridl_rt::error::ClientError::Send(_) => {}
@@ -256,7 +270,7 @@ pub mod trace;
 /// }
 /// ```
 ///
-/// The same ten matches, each with a `_` arm, compile: every path and every
+/// The same eleven matches, each with a `_` arm, compile: every path and every
 /// variant name above resolves, so a block above fails only because it names
 /// no `_` arm against a `#[non_exhaustive]` enum.
 ///
@@ -322,6 +336,16 @@ pub mod trace;
 ///         _ => {}
 ///     }
 /// }
+/// fn push_error(x: ridl_rt::port::PushError) {
+///     match x {
+///         ridl_rt::port::PushError::TooLarge { .. } => {}
+///         ridl_rt::port::PushError::Ended => {}
+///         ridl_rt::port::PushError::Failed(_) => {}
+///         ridl_rt::port::PushError::Contract(_) => {}
+///         ridl_rt::port::PushError::Detached => {}
+///         _ => {}
+///     }
+/// }
 /// fn transport(x: ridl_rt::error::Transport) {
 ///     match x {
 ///         ridl_rt::error::Transport::Timeout => {}
@@ -329,6 +353,7 @@ pub mod trace;
 ///         ridl_rt::error::Transport::Down => {}
 ///         ridl_rt::error::Transport::Corrupt => {}
 ///         ridl_rt::error::Transport::Busy => {}
+///         ridl_rt::error::Transport::Interrupted => {}
 ///         _ => {}
 ///     }
 /// }
@@ -379,6 +404,8 @@ pub mod trace;
 ///         ridl_rt::port::Interest::Slot => {}
 ///         ridl_rt::port::Interest::Event(_) => {}
 ///         ridl_rt::port::Interest::Claim(_) => {}
+///         ridl_rt::port::Interest::Stream(_, _) => {}
+///         ridl_rt::port::Interest::ClaimStream(_, _) => {}
 ///     }
 /// }
 /// ```

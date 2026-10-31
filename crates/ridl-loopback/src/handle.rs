@@ -353,7 +353,11 @@ impl<E: Encoding> Wakeable for SourceHandle<E> {
             Interest::Event(_) => locked(&self.shared, |store, wake| {
                 store.wait_event(self.id, what, waker, wake);
             }),
-            Interest::Outcome(_) | Interest::Slot | Interest::Claim(_) => wake_at_once(waker),
+            Interest::Outcome(_)
+            | Interest::Slot
+            | Interest::Claim(_)
+            | Interest::Stream(..)
+            | Interest::ClaimStream(..) => wake_at_once(waker),
         }
     }
 }
@@ -523,7 +527,12 @@ impl<E: Encoding> Wakeable for CallerHandle<E> {
             Interest::Slot => locked(&self.shared, |store, wake| {
                 store.wait_slot(self.id, waker, wake);
             }),
-            Interest::Event(_) | Interest::Claim(_) => wake_at_once(waker),
+            // The loopback carries no stream yet, so this handle observes no
+            // `Stream` key.
+            Interest::Event(_)
+            | Interest::Claim(_)
+            | Interest::Stream(..)
+            | Interest::ClaimStream(..) => wake_at_once(waker),
         }
     }
 }
@@ -678,7 +687,13 @@ impl<E: Encoding> Wakeable for HandlerHandle<E> {
             Interest::Claim(_) => locked(&self.shared, |store, wake| {
                 store.wait_claim(self.id, what, waker, wake);
             }),
-            Interest::Outcome(_) | Interest::Slot | Interest::Event(_) => wake_at_once(waker),
+            // The loopback carries no stream yet, so this handle observes no
+            // `ClaimStream` key.
+            Interest::Outcome(_)
+            | Interest::Slot
+            | Interest::Event(_)
+            | Interest::Stream(..)
+            | Interest::ClaimStream(..) => wake_at_once(waker),
         }
     }
 }

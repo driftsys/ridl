@@ -40,6 +40,13 @@ pub enum Transport {
     /// retry later. Crosses the frame as a `response` outcome (frame
     /// specification §9.6).
     Busy,
+    /// A stream stopped without its end, on purpose or because the call was
+    /// forgotten. A producer stops its stream with this outcome through
+    /// [`StreamCaller::abort`](crate::port::StreamCaller::abort) or
+    /// [`StreamHandler::abort_claim`](crate::port::StreamHandler::abort_claim),
+    /// and a caller's [`forget`](crate::port::Caller::forget) stops every
+    /// stream of the call with it.
+    Interrupted,
 }
 
 /// The outcome of a call that did not succeed.
