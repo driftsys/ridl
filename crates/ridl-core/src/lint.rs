@@ -299,6 +299,10 @@ fn malformed(
             comment_range(text, directive),
             "the lint directive names no lint".to_string(),
         ),
+        DirectiveProblem::UnknownName { name, range } if name.is_empty() => (
+            *range,
+            "the lint directive has an empty lint name".to_string(),
+        ),
         DirectiveProblem::UnknownName { name, range } => (
             *range,
             format!(
@@ -1189,6 +1193,62 @@ mod tests {
         let reports = reports_over(text, &[], |_| Vec::new());
         assert_eq!(reports.len(), 1, "{reports:?}");
         assert_eq!(reports[0].1, range_of(text, "// lint: allow missing-docs"));
+    }
+
+    /// A raised diagnostic counts whatever its severity: an Info-row lint
+    /// inside the scope uses the directive.
+    #[test]
+    fn info_diagnostic_in_scope_counts_as_used() {
+        let text = "package p\n\n\
+            // lint: allow podbuf-padding-order -- r\n\
+            struct A {}\n";
+        let inside = range_of(text, "struct A");
+        let reports = reports_over(text, &[], |file| {
+            vec![diagnostic_at(
+                DiagCode::RIDL_156,
+                Severity::Info,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(reports, vec![]);
+    }
+
+    /// A directive with two problems reports both, in source order, each on
+    /// its own name.
+    #[test]
+    fn two_problems_draw_two_typl_412() {
+        let text = "package p\n\n// lint: allow TYPL-406, bogus -- r\ninterface A {}\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        let spans: Vec<(DiagCode, TextRange)> = reports.iter().map(|r| (r.0, r.1)).collect();
+        assert_eq!(
+            spans,
+            vec![
+                (DiagCode::TYPL_412, range_of(text, "TYPL-406")),
+                (DiagCode::TYPL_412, range_of(text, "bogus")),
+            ],
+            "{reports:?}"
+        );
+    }
+
+    /// An empty item is an unknown name with an empty string; its message
+    /// says so instead of quoting the empty name.
+    #[test]
+    fn empty_name_draws_typl_412_with_its_own_message() {
+        let text =
+            "package p\n\n// lint: allow missing-docs,, missing-timing -- r\ninterface A {}\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        let empty = text.find(",,").expect("the empty item is in the text") + 1;
+        let at = TextSize::from(empty as u32);
+        assert_eq!(reports.len(), 3, "{reports:?}");
+        assert_eq!(
+            reports[0],
+            (
+                DiagCode::TYPL_412,
+                TextRange::empty(at),
+                "the lint directive has an empty lint name".to_string(),
+            ),
+        );
     }
 
     /// A directive that is still effective after a name problem reports the
