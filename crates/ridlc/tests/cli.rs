@@ -2642,6 +2642,27 @@ fn a_build_that_compares_no_backend_does_not_run_the_check() {
     );
 }
 
+/// A build whose only backend table declares `encodings = []` compares
+/// nothing, so the check does not run and a directive that names
+/// `link-encoding-not-emitted` is not unused.
+#[test]
+fn a_backend_with_no_encodings_does_not_make_the_directive_unused() {
+    let topology = topology_allowing_link_encoding();
+    let manifest = LINK_ENCODINGS_MANIFEST.replace("[\"flatbuffers\"]", "[]");
+    assert_ne!(
+        manifest, LINK_ENCODINGS_MANIFEST,
+        "the fixture declares an encodings list"
+    );
+    let dir = link_encodings_workspace("link-encoding-empty-list", &manifest, Some(&topology));
+    let out = TempDir::new("link-encoding-empty-list-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-411") && !stderr.contains("RSDL-807"),
+        "no table is compared, got:\n{stderr}"
+    );
+}
+
 /// A workspace with exactly one deployment selects it without the flag, and
 /// the lint reads that selection: the one different-machine link warns.
 #[test]

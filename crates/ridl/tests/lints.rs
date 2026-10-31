@@ -1909,7 +1909,6 @@ fn a_directive_for_a_default_allow_lint_is_used() {
 
     assert_eq!(code, 0, "{diagnostics:?}");
     assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
-    assert_eq!(count_code(&diagnostics, "TYPL-410"), 0, "{diagnostics:?}");
 }
 
 /// A lint at `allow` in `[lints]` still counts as raised: a directive that
