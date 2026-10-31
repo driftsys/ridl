@@ -158,6 +158,19 @@ fn float_invalid_at_precision(
     } else {
         quote! { __nearest / __factor / __rescale }
     };
+    // The gaps are widened to `f64` only from `f32`: a cast from `f64` to
+    // itself draws `clippy::unnecessary_cast`.
+    let (lower_gap, upper_gap) = if wire_f32 {
+        (
+            quote! { (__represented - __below) as ::core::primitive::f64 },
+            quote! { (__above - __represented) as ::core::primitive::f64 },
+        )
+    } else {
+        (
+            quote! { __represented - __below },
+            quote! { __above - __represented },
+        )
+    };
     let represented = absolute(&represented, wire_f32);
     let magnitude = absolute(value, false);
     let phase_magnitude = absolute(&quote! { __phase / __factor }, false);
@@ -187,9 +200,9 @@ fn float_invalid_at_precision(
                     #float::from_bits(__bits - 1)
                 };
                 let __above = #float::from_bits(__bits + 1);
-                let __lower_gap = (__represented - __below) as ::core::primitive::f64;
+                let __lower_gap = #lower_gap;
                 let __upper_gap = if __above.is_finite() {
-                    (__above - __represented) as ::core::primitive::f64
+                    #upper_gap
                 } else {
                     __lower_gap
                 };

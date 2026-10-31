@@ -818,11 +818,15 @@ generated/** linguist-generated=true
 **The crate root switches no lint off.** Each allow the emitter needs is on the generated item that needs it:
 `clippy::derivable_impls` on a `Default` it writes out rather than derives,
 `clippy::module_inception` on the face module of an interface named after its
-package (`veh.cabin` and `Cabin`), and `clippy::collapsible_if`, which only
-edition 2024 reports, on the functions that decode or verify a proto3 message. The
+package (`veh.cabin` and `Cabin`), `clippy::collapsible_if`, which only
+edition 2024 reports, on the functions that decode or verify a proto3 message,
+and `clippy::large_enum_variant` on the enum of a union, whose arms hold their
+payloads by value. The
 repository's `just demo` runs clippy with `-D warnings` on the generated crates
-for `examples/cabin` and the veh-cluster corpus, as edition 2021 and as edition
-2024; a shape of declaration that neither crate holds is not linted. Because
+for `examples/cabin`, the veh-cluster corpus and a fixture that holds every
+declaration and interaction shape the Rust backend emits, with every encoding,
+`transcode = true` and `wasm = true`, as edition 2021 and as edition 2024.
+Because
 the allows are on the items, a file included with `include!` carries them too,
 and single-file mode, which writes no `lib.rs`, needs none of its own. Explicit crate-root links in the
 generated docs can be unresolved when the file is included inside another

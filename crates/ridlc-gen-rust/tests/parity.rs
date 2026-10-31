@@ -17,9 +17,10 @@
 //! installation, no `PATH`, no network.
 //!
 //! The command's level compares the per-package sources only. A build with
-//! `--emit rust` also writes the crate root and the manifest, which `ridlc`
-//! writes for itself and no backend produces (ADR-0020 decision 9), and a
-//! build that names only a plugin writes neither.
+//! `--emit rust` also writes the crate root, the manifest and, for a package
+//! with `wasm = true`, the `wasm` module, which `ridlc` writes for itself and
+//! no backend produces (ADR-0020 decision 9), and a build that names only a
+//! plugin writes none of them.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -136,9 +137,11 @@ fn sources_under(dir: &Path) -> BTreeMap<String, Vec<u8>> {
                 .expect("under the root")
                 .to_string_lossy()
                 .replace('\\', "/");
-            // `lib.rs` is the crate root `ridlc` writes for itself; no
-            // backend produces it, and a plugin-only build writes none.
-            if relative == "lib.rs" {
+            // `lib.rs` is the crate root `ridlc` writes for itself, and
+            // `__ridl_wasm.rs` the `wasm` module it writes for a package
+            // with `wasm = true`; no backend produces either, and a
+            // plugin-only build writes neither.
+            if relative == "lib.rs" || relative == "__ridl_wasm.rs" {
                 continue;
             }
             out.insert(

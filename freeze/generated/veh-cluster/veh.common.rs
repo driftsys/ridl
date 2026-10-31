@@ -1321,6 +1321,7 @@ pub struct SensorBounds {
     pub meta: ::std::vec::Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
 }
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),

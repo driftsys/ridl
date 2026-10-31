@@ -1,0 +1,16 @@
+[package]
+name = "lint.shapes"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers", "proto3", "podbuf"]
+transcode = true
+wasm = true
+
+# The fixture's purpose is the generated Rust: these shapes are written on
+# purpose, and an item without a doc comment is emitted without one.
+[lints]
+unbounded-float = "allow"
+no-init-value = "allow"
+missing-docs = "allow"
+named-result-union-in-query = "allow"

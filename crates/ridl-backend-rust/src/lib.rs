@@ -2125,8 +2125,13 @@ fn emit_union(
         quote! { #vdoc #vname(#ty) }
     });
 
+    // An arm holds its payload by value, so a union with one large struct arm
+    // and a small one draws `clippy::large_enum_variant`, whose fix is a `Box`
+    // that would change the arm's type in the public API. The allow is on the
+    // item, as the other emitted allows are.
     quote! {
         #attrs
+        #[allow(clippy::large_enum_variant)]
         #vis enum #name {
             #(#variants),*
         }

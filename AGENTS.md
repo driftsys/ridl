@@ -217,8 +217,14 @@ member; rsdl is the apex.
                          crate is also linted with clippy,
                          with its default features and with them off for that
                          target, under -D warnings, so any diagnostic fails
-                         it, dead_code included; both generated crates are
-                         also linted as edition 2024 under -D warnings, and
+                         it, dead_code included; a third crate, generated
+                         from crates/ridlc/tests/corpus/rust-shapes, is linted
+                         the same way and also with only validate-pattern on,
+                         and with wasm-exports for wasm32-unknown-unknown;
+                         every generated crate is
+                         also linted as edition 2024 under -D warnings (the
+                         third in each of those configurations), checked
+                         for the 32-bit and the 64-bit target, and
                          checked with cargo fmt --check, and built with
                          cargo doc, denying
                          rustdoc::broken_intra_doc_links and

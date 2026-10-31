@@ -1,0 +1,390 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.typescript
+input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
+---
+// ===== package lint.shapes =====
+/**
+ * A bounded integer.
+ *
+ * @remarks
+ * Rules:
+ * - range 0 ..= 200
+ *
+ * @range [0..200]
+ */
+export type Count = number & { readonly __ridl: 'lint.shapes.Count' };
+
+export function initCount(): Count {
+  return 0 as Count;
+}
+
+/**
+ * An integer whose range holds negative values and 0.
+ *
+ * @remarks
+ * Rules:
+ * - range -5 ..= 10
+ *
+ * @range [-5..10]
+ */
+export type Level = number & { readonly __ridl: 'lint.shapes.Level' };
+
+export function initLevel(): Level {
+  return 0 as Level;
+}
+
+/**
+ * A float with a step and a unit.
+ *
+ * @remarks
+ * Rules:
+ * - range -40 ..= 125
+ * - step 0.5
+ * - unit Cel
+ *
+ * @unit Cel
+ * @range [-40..125 step 0.5]
+ */
+export type Heat = number & { readonly __ridl: 'lint.shapes.Heat' };
+
+export function initHeat(): Heat {
+  return 0.0 as Heat;
+}
+
+/**
+ * A float with a lower bound only and a step.
+ *
+ * @remarks
+ * Rules:
+ * - range 0 ..
+ * - step 0.25
+ *
+ * @range [0.. step 0.25]
+ */
+export type Floor = number & { readonly __ridl: 'lint.shapes.Floor' };
+
+export function initFloor(): Floor {
+  return 0.0 as Floor;
+}
+
+/**
+ * A string with a length and a pattern.
+ *
+ * @remarks
+ * Rules:
+ * - length 1 ..= 16
+ * - pattern `/^[a-z][a-z0-9-]*$/`
+ */
+export type Tag = string & { readonly __ridl: 'lint.shapes.Tag' };
+
+export function initTag(): Tag {
+  return 'unit' as Tag;
+}
+
+/**
+ * A string with a length only.
+ *
+ * @remarks
+ * Rules:
+ * - length 0 ..= 32
+ */
+export type Label = string & { readonly __ridl: 'lint.shapes.Label' };
+
+export function initLabel(): Label {
+  return '' as Label;
+}
+
+/**
+ * Bytes with a fixed length.
+ *
+ * @remarks
+ * Rules:
+ * - length 8
+ */
+export type Frame = Uint8Array & { readonly __ridl: 'lint.shapes.Frame' };
+
+/**
+ * Bytes with a length range.
+ *
+ * @remarks
+ * Rules:
+ * - length 0 ..= 64
+ */
+export type Blob = Uint8Array & { readonly __ridl: 'lint.shapes.Blob' };
+
+export function initBlob(): Blob {
+  return new Uint8Array(0) as Blob;
+}
+
+/**
+ * The upper bound of a `Count`.
+ */
+export const MAX_COUNT = 200;
+
+/**
+ * A constant that names another constant.
+ */
+export const COUNT_LIMIT = 200;
+
+/**
+ * A string constant.
+ */
+export const DEFAULT_TAG = 'unit' as const;
+
+/**
+ * A mode.
+ */
+export enum Mode {
+  /**
+   * Not running.
+   */
+  IDLE = 0,
+  /**
+   * Running.
+   */
+  ACTIVE = 1,
+  /**
+   * Stopped by a fault, with a gap in the values before it.
+   */
+  FAULT = 4,
+}
+
+export function initMode(): Mode {
+  return Mode.IDLE;
+}
+
+/**
+ * A set of modes.
+ */
+export type Modes = number & { readonly __ridl: 'lint.shapes.Modes' };
+
+export const ModesBits = {
+  IDLE: 1,
+  ACTIVE: 2,
+  FAULT: 16,
+} as const;
+
+export function initModes(): Modes {
+  return 0 as Modes;
+}
+
+/**
+ * A failure.
+ */
+export enum Failure {
+  /**
+   * The station is busy.
+   */
+  BUSY = 0,
+  /**
+   * The caller may not read.
+   */
+  DENIED = 1,
+}
+
+export function initFailure(): Failure {
+  return Failure.BUSY;
+}
+
+/**
+ * A struct that nests inside `Panel`.
+ */
+export interface Inner {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 200
+   */
+  count: Count;
+  /**
+   * @remarks
+   * Rules:
+   * - length 0 ..= 32
+   */
+  label: Label;
+}
+
+export function initInner(): Inner {
+  return {
+    count: initCount(),
+    label: initLabel(),
+  };
+}
+
+/**
+ * A failure that carries data.
+ */
+export interface Fault {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 200
+   */
+  code: Count;
+  /**
+   * @remarks
+   * Rules:
+   * - length 0 ..= 32
+   */
+  message: Label;
+}
+
+export function initFault(): Fault {
+  return {
+    code: initCount(),
+    message: initLabel(),
+  };
+}
+
+/**
+ * Every kind of field.
+ */
+export interface Panel {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 200
+   */
+  count: Count;
+  /**
+   * @remarks
+   * Rules:
+   * - range -5 ..= 10
+   */
+  level: Level;
+  /**
+   * @remarks
+   * Rules:
+   * - range -40 ..= 125
+   * - step 0.5
+   * - unit Cel
+   */
+  heat: Heat;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..
+   * - step 0.25
+   */
+  floor: Floor;
+  /**
+   * @remarks
+   * Rules:
+   * - length 1 ..= 16
+   * - pattern `/^[a-z][a-z0-9-]*$/`
+   */
+  tag: Tag;
+  /**
+   * @remarks
+   * Rules:
+   * - length 0 ..= 32
+   */
+  note?: Label;
+  /**
+   * @remarks
+   * Rules:
+   * - length 8
+   */
+  frame: Frame;
+  /**
+   * @remarks
+   * Rules:
+   * - length 0 ..= 64
+   */
+  blob?: Blob;
+  flag: boolean;
+  mode: Mode;
+  modes: Modes;
+  inner: Inner;
+  span: { low: Level; high: Level };
+  /**
+   * @remarks
+   * Rules:
+   * - count 4
+   *
+   * @bounds 4
+   */
+  fixed4: readonly Count[];
+  /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 4
+   *
+   * @bounds 0..4
+   */
+  levels: readonly Level[];
+  /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 2
+   *
+   * @bounds 0..2
+   */
+  texts: readonly string[];
+  /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 3
+   *
+   * @bounds 0..3
+   */
+  byTag: ReadonlyArray<readonly [Tag, Count]>;
+  /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 2
+   *
+   * @bounds 0..2
+   */
+  nested: readonly Inner[];
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 200
+   *
+   * @deprecated read `count`
+   */
+  legacy?: Count;
+}
+
+/**
+ * A union with data arms only.
+ */
+export type Outcome =
+  | { kind: 'number'; value: Count }
+  | { kind: 'text'; value: Label }
+  | { kind: 'panel'; value: Panel };
+
+export function initOutcome(): Outcome {
+  return { kind: 'number', value: initCount() };
+}
+
+/**
+ * A result union: one success arm and one error arm.
+ */
+export type Checked =
+  | { kind: 'ok'; value: Inner }
+  | { kind: 'err'; value: Fault };
+
+export function initChecked(): Checked {
+  return { kind: 'ok', value: initInner() };
+}
+
+/**
+ * A package-private struct.
+ */
+interface Raw {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 200
+   */
+  ticks: Count;
+  /**
+   * @remarks
+   * Rules:
+   * - length 8
+   */
+  frame: Frame;
+}

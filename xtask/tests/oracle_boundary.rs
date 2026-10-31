@@ -59,11 +59,11 @@
 //!
 //! The generated package is the second half of that rule, and this workspace
 //! cannot see it: `ridl build` writes it into `examples/cabin/generated/`,
-//! and a second crate into `examples/cabin/generated-corpus/`, neither of
-//! which is in git, and `examples/cabin` is its own cargo workspace
+//! a second crate into `examples/cabin/generated-corpus/` and a third into
+//! `examples/cabin/generated-shapes/`, none of which is in git, and `examples/cabin` is its own cargo workspace
 //! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] and
 //! [`the_generated_crate_reaches_no_prost_crate`] read that workspace's
-//! resolved graph, so they can run only after both crates are generated.
+//! resolved graph, so they can run only after the three crates are generated.
 //! They are `#[ignore]`d for a plain `cargo test`, and `just demo` runs them
 //! right after `ridl build` writes them, so `just build` and CI run them on
 //! every change.
@@ -423,21 +423,23 @@ const PLANUS_EXEMPT_MEMBER: &str = "server";
 
 /// No planus crate is in the dependency closure of any workspace member of
 /// `examples/cabin` except [`PLANUS_EXEMPT_MEMBER`]: the generated crates
-/// (`veh_cabin` and the veh-cluster corpus crate) and their consumer (lane E16
+/// (`veh_cabin`, the veh-cluster corpus crate and `lint_shapes`) and their
+/// consumer (lane E16
 /// driver, section 4, answer 8). Every member is checked by default, so a new
 /// member is covered without a change here.
 ///
-/// `examples/cabin/generated/` and `examples/cabin/generated-corpus/` are
-/// written by `just demo` and are not in git, so `cargo metadata` cannot
+/// `examples/cabin/generated/`, `examples/cabin/generated-corpus/` and
+/// `examples/cabin/generated-shapes/` are written by `just demo` and are not in
+/// git, so `cargo metadata` cannot
 /// resolve the workspace before that, and this
 /// test is ignored for a plain `cargo test`. `just demo` runs it with
-/// `--ignored` right after `ridl build` writes both crates.
+/// `--ignored` right after `ridl build` writes the three crates.
 ///
 /// The graph is resolved with `--all-features`, so a planus crate behind a
 /// feature of the generated crate or of the consumer that nothing turns on
 /// still fails this test.
 #[test]
-#[ignore = "needs examples/cabin/generated and generated-corpus, which `just demo` writes; `just demo` runs it"]
+#[ignore = "needs examples/cabin/generated, generated-corpus and generated-shapes, which `just demo` writes; `just demo` runs it"]
 fn the_generated_crate_reaches_no_planus_crate() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
     let metadata = cargo_metadata(Some(&manifest), true);
@@ -445,8 +447,9 @@ fn the_generated_crate_reaches_no_planus_crate() {
     assert!(
         names.values().any(|&name| name == "veh_cabin"),
         "the resolved graph of `examples/cabin` has no `veh_cabin` package — \
-         did `ridl build` write `examples/cabin/generated/` and \
-         `examples/cabin/generated-corpus/`?"
+         did `ridl build` write `examples/cabin/generated/`, \
+         `examples/cabin/generated-corpus/` and \
+         `examples/cabin/generated-shapes/`?"
     );
     let members: Vec<&str> = metadata["workspace_members"]
         .as_array()
@@ -484,16 +487,16 @@ fn the_generated_crate_reaches_no_planus_crate() {
 }
 
 /// No prost crate is in the resolved graph of `examples/cabin`, whose
-/// generated crates carry the proto3 codec (`examples/cabin/ridl.toml` and
-/// the veh-cluster corpus manifest name `proto3`): the codec a generated
-/// package carries is its own, over `ridl-rt`'s `proto3` module, and links no
-/// prost crate (ADR-0021 decision 8).
+/// generated crates carry the proto3 codec (`examples/cabin/ridl.toml`, the
+/// veh-cluster corpus manifest and the rust-shapes manifest name `proto3`): the
+/// codec a generated package carries is its own, over `ridl-rt`'s `proto3`
+/// module, and links no prost crate (ADR-0021 decision 8).
 ///
 /// Ignored for a plain `cargo test` for the reason
 /// [`the_generated_crate_reaches_no_planus_crate`] gives, and run by
 /// `just demo` beside it. The graph is resolved with `--all-features`.
 #[test]
-#[ignore = "needs examples/cabin/generated and generated-corpus, which `just demo` writes; `just demo` runs it"]
+#[ignore = "needs examples/cabin/generated, generated-corpus and generated-shapes, which `just demo` writes; `just demo` runs it"]
 fn the_generated_crate_reaches_no_prost_crate() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
     let metadata = cargo_metadata(Some(&manifest), true);
@@ -501,8 +504,9 @@ fn the_generated_crate_reaches_no_prost_crate() {
     assert!(
         names.values().any(|&name| name == "veh_cabin"),
         "the resolved graph of `examples/cabin` has no `veh_cabin` package — \
-         did `ridl build` write `examples/cabin/generated/` and \
-         `examples/cabin/generated-corpus/`?"
+         did `ridl build` write `examples/cabin/generated/`, \
+         `examples/cabin/generated-corpus/` and \
+         `examples/cabin/generated-shapes/`?"
     );
     for forbidden in PROST_CRATES {
         assert!(
@@ -517,7 +521,7 @@ fn the_generated_crate_reaches_no_prost_crate() {
     }
 }
 
-/// The two manifests `just demo` generates from name `proto3`, so that the
+/// The three manifests `just demo` generates from name `proto3`, so that the
 /// crates [`the_generated_crate_reaches_no_prost_crate`] walks carry the
 /// proto3 codec: dropping `proto3` from either list would leave that guard
 /// checking a crate with no proto3 codec at all.
@@ -527,6 +531,7 @@ fn the_demo_inputs_name_the_proto3_encoding() {
     for manifest in [
         "examples/cabin/ridl.toml",
         "crates/ridlc/tests/corpus/veh-cluster/ridl.toml",
+        "crates/ridlc/tests/corpus/rust-shapes/ridl.toml",
     ] {
         let text = std::fs::read_to_string(root.join(manifest))
             .unwrap_or_else(|error| panic!("read {manifest}: {error}"));

@@ -1,0 +1,1775 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.ir_json
+input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
+---
+// ===== package lint.shapes =====
+{
+  "name": "lint.shapes",
+  "decls": [
+    {
+      "name": "Count",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A bounded integer.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "200"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": "Level",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "An integer whose range holds negative values and 0.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "-5",
+          "max": "10"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_I8"
+      }
+    },
+    {
+      "name": "Heat",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A float with a step and a unit.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "unit": "Cel"
+        },
+        "constraint": {
+          "min": "-40",
+          "max": "125",
+          "step": "0.5"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": "Floor",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A float with a lower bound only and a step.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_FLOAT"
+        },
+        "constraint": {
+          "min": "0",
+          "step": "0.25"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F64"
+      }
+    },
+    {
+      "name": "Tag",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A string with a length and a pattern.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_STRING"
+        },
+        "constraint": {
+          "lenMin": "1",
+          "lenMax": "16",
+          "pattern": "/^[a-z][a-z0-9-]*$/"
+        },
+        "declaredInit": "unit",
+        "init": {
+          "derivable": true,
+          "value": "unit"
+        }
+      }
+    },
+    {
+      "name": "Label",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A string with a length only.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_STRING"
+        },
+        "constraint": {
+          "lenMin": "0",
+          "lenMax": "32"
+        },
+        "init": {
+          "derivable": true,
+          "value": ""
+        }
+      }
+    },
+    {
+      "name": "Frame",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Bytes with a fixed length.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_BYTES"
+        },
+        "constraint": {
+          "lenMin": "8",
+          "lenMax": "8"
+        },
+        "init": {
+          "derivable": false
+        }
+      }
+    },
+    {
+      "name": "Blob",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Bytes with a length range.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_BYTES"
+        },
+        "constraint": {
+          "lenMin": "0",
+          "lenMax": "64"
+        },
+        "init": {
+          "derivable": true,
+          "value": ""
+        }
+      }
+    },
+    {
+      "name": "MAX_COUNT",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The upper bound of a `Count`.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "constDef": {
+        "typeRef": "Count",
+        "value": "200"
+      }
+    },
+    {
+      "name": "COUNT_LIMIT",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A constant that names another constant.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "constDef": {
+        "typeRef": "Count",
+        "value": "200"
+      }
+    },
+    {
+      "name": "DEFAULT_TAG",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A string constant.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "constDef": {
+        "typeRef": "Tag",
+        "value": "unit"
+      }
+    },
+    {
+      "name": "Mode",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A mode.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumDef": {
+        "values": [
+          {
+            "name": "IDLE",
+            "value": "0",
+            "doc": "Not running.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "ACTIVE",
+            "value": "1",
+            "doc": "Running.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "FAULT",
+            "value": "4",
+            "doc": "Stopped by a fault, with a gap in the values before it.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "reserved": []
+      }
+    },
+    {
+      "name": "Modes",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A set of modes.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumSetDef": {
+        "backingEnum": "Mode",
+        "bits": [
+          {
+            "name": "IDLE",
+            "value": "0",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "ACTIVE",
+            "value": "1",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "FAULT",
+            "value": "4",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "width": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": "Failure",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "A failure.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumDef": {
+        "values": [
+          {
+            "name": "BUSY",
+            "value": "0",
+            "doc": "The station is busy.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "DENIED",
+            "value": "1",
+            "doc": "The caller may not read.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "reserved": []
+      }
+    },
+    {
+      "name": "Inner",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A struct that nests inside `Panel`.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "count",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Count"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "label",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Label"
+              },
+              "init": {
+                "derivable": true,
+                "value": ""
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": "Fault",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "A failure that carries data.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "code",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Count"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "message",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Label"
+              },
+              "init": {
+                "derivable": true,
+                "value": ""
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": "Panel",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Every kind of field.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "count",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Count"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "level",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Level"
+              },
+              "declaredInit": "2",
+              "init": {
+                "derivable": true,
+                "value": "2"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "heat",
+              "ordinal": 3,
+              "type": {
+                "optional": false,
+                "named": "Heat"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "floor",
+              "ordinal": 4,
+              "type": {
+                "optional": false,
+                "named": "Floor"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "tag",
+              "ordinal": 5,
+              "type": {
+                "optional": false,
+                "named": "Tag"
+              },
+              "init": {
+                "derivable": true,
+                "value": "unit"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "note",
+              "ordinal": 6,
+              "type": {
+                "optional": true,
+                "named": "Label"
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "frame",
+              "ordinal": 7,
+              "type": {
+                "optional": false,
+                "named": "Frame"
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "blob",
+              "ordinal": 8,
+              "type": {
+                "optional": true,
+                "named": "Blob"
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "flag",
+              "ordinal": 9,
+              "type": {
+                "optional": false,
+                "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+              },
+              "init": {
+                "derivable": true,
+                "value": "false"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "mode",
+              "ordinal": 10,
+              "type": {
+                "optional": false,
+                "named": "Mode"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "modes",
+              "ordinal": 11,
+              "type": {
+                "optional": false,
+                "named": "Modes"
+              },
+              "init": {
+                "derivable": true,
+                "value": ""
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "inner",
+              "ordinal": 12,
+              "type": {
+                "optional": false,
+                "named": "Inner"
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "span",
+              "ordinal": 13,
+              "type": {
+                "optional": false,
+                "tuple": {
+                  "fields": [
+                    {
+                      "name": "low",
+                      "type": {
+                        "optional": false,
+                        "named": "Level"
+                      }
+                    },
+                    {
+                      "name": "high",
+                      "type": {
+                        "optional": false,
+                        "named": "Level"
+                      }
+                    }
+                  ]
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "fixed4",
+              "ordinal": 14,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "Count"
+                  },
+                  "min": "4",
+                  "max": "4"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "levels",
+              "ordinal": 15,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "Level"
+                  },
+                  "min": "0",
+                  "max": "4"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "texts",
+              "ordinal": 16,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "inlineScalar": {
+                      "backing": {
+                        "primitive": "PRIMITIVE_TYPE_STRING"
+                      },
+                      "constraint": {
+                        "lenMin": "0",
+                        "lenMax": "8"
+                      }
+                    }
+                  },
+                  "min": "0",
+                  "max": "2"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "byTag",
+              "ordinal": 17,
+              "type": {
+                "optional": false,
+                "map": {
+                  "key": {
+                    "optional": false,
+                    "named": "Tag"
+                  },
+                  "value": {
+                    "optional": false,
+                    "named": "Count"
+                  },
+                  "min": "0",
+                  "max": "3"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "nested",
+              "ordinal": 18,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "Inner"
+                  },
+                  "min": "0",
+                  "max": "2"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "legacy",
+              "ordinal": 19,
+              "type": {
+                "optional": true,
+                "named": "Count"
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "deprecated": "read `count`",
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": "Outcome",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A union with data arms only.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "unionDef": {
+        "arms": [
+          {
+            "name": "number",
+            "ordinal": 1,
+            "typeRef": "Count",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "text",
+            "ordinal": 2,
+            "typeRef": "Label",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "panel",
+            "ordinal": 3,
+            "typeRef": "Panel",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "isResult": false,
+        "reserved": []
+      }
+    },
+    {
+      "name": "Checked",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A result union: one success arm and one error arm.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "unionDef": {
+        "arms": [
+          {
+            "name": "ok",
+            "ordinal": 1,
+            "typeRef": "Inner",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "err",
+            "ordinal": 2,
+            "typeRef": "Fault",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "isResult": true,
+        "reserved": []
+      }
+    },
+    {
+      "name": "Raw",
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
+      "doc": "A package-private struct.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "ticks",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Count"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "frame",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Frame"
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "Station",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Every interaction kind, with every timing form, in shapes the interaction\nface accepts, so the face and the descriptors are emitted for each.",
+      "labels": [],
+      "interactions": [
+        {
+          "name": "tick",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Strict periodic.",
+          "labels": [],
+          "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
+          "signalDef": {
+            "payload": "Count",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "10000",
+              "maxUs": "10000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "heat",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A range with both bounds, and an init value.",
+          "labels": [],
+          "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
+          "signalDef": {
+            "payload": "Heat",
+            "declaredInit": "20",
+            "init": {
+              "derivable": true,
+              "value": "20"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "20000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "modes",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A lower bound only.",
+          "labels": [],
+          "ordinal": 3,
+          "links": [],
+          "see": [],
+          "since": [],
+          "signalDef": {
+            "payload": "Modes",
+            "init": {
+              "derivable": true,
+              "value": ""
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "inner",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "An upper bound only.",
+          "labels": [],
+          "ordinal": 4,
+          "links": [],
+          "see": [],
+          "since": [],
+          "signalDef": {
+            "payload": "Inner",
+            "init": {
+              "derivable": true
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "2000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "changed",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "An event.",
+          "labels": [],
+          "ordinal": 5,
+          "links": [],
+          "see": [],
+          "since": [],
+          "eventDef": {
+            "payload": "Panel",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "set",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A command with two parameters, which induces its parameter struct.",
+          "labels": [],
+          "ordinal": 6,
+          "links": [],
+          "see": [],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "count",
+                "type": {
+                  "optional": false,
+                  "named": "Count"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              },
+              {
+                "name": "level",
+                "type": {
+                  "optional": false,
+                  "named": "Level"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
+          }
+        },
+        {
+          "name": "reset",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A command with a clause the face translates.",
+          "labels": [],
+          "ordinal": 7,
+          "links": [],
+          "see": [],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "count",
+                "type": {
+                  "optional": false,
+                  "named": "Count"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [
+              {
+                "kind": "CONTRACT_KIND_REQUIRE",
+                "source": "count <= 200",
+                "signalRefs": [],
+                "paramRefs": [
+                  "count"
+                ],
+                "usesResult": false,
+                "observerId": "Station.reset.require[0]"
+              }
+            ],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
+          }
+        },
+        {
+          "name": "",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "",
+          "labels": [],
+          "ordinal": 8,
+          "links": [],
+          "see": [],
+          "since": [],
+          "reservedSlot": {
+            "ordinal": 8,
+            "name": "retired"
+          }
+        },
+        {
+          "name": "read",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A query.",
+          "labels": [],
+          "ordinal": 9,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [
+              {
+                "name": "tag",
+                "type": {
+                  "optional": false,
+                  "named": "Tag"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "Panel"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "outcome",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A query that returns a union.",
+          "labels": [],
+          "ordinal": 10,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "Outcome"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "checked",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A query that returns a result union.",
+          "labels": [],
+          "ordinal": 11,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "Checked"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "bounds",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A tuple return.",
+          "labels": [],
+          "ordinal": 12,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "tuple": {
+                  "fields": [
+                    {
+                      "name": "min",
+                      "type": {
+                        "optional": false,
+                        "named": "Level"
+                      }
+                    },
+                    {
+                      "name": "max",
+                      "type": {
+                        "optional": false,
+                        "named": "Level"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "serial",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A fixed value.",
+          "labels": [],
+          "ordinal": 13,
+          "links": [],
+          "see": [],
+          "since": [],
+          "fixedDef": {
+            "payload": {
+              "optional": false,
+              "named": "Label"
+            }
+          }
+        },
+        {
+          "name": "old",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": "use `read`",
+          "ordinal": 14,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "Count"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        }
+      ],
+      "number": 3,
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
+    },
+    {
+      "name": "Archive",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The call shapes the interaction face refuses: the payload and codec items\nare still emitted for them.",
+      "labels": [],
+      "interactions": [
+        {
+          "name": "limit",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A clause that names a constant.",
+          "labels": [],
+          "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "count",
+                "type": {
+                  "optional": false,
+                  "named": "Count"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [
+              {
+                "kind": "CONTRACT_KIND_REQUIRE",
+                "source": "count <= MAX_COUNT",
+                "signalRefs": [],
+                "paramRefs": [
+                  "count"
+                ],
+                "usesResult": false,
+                "observerId": "Archive.limit.require[0]"
+              }
+            ],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
+          }
+        },
+        {
+          "name": "tryRead",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A fallible query over an error enum.",
+          "labels": [],
+          "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [
+              {
+                "name": "tag",
+                "type": {
+                  "optional": false,
+                  "named": "Tag"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "returnType": {
+              "fallible": {
+                "ok": "Inner",
+                "err": "Failure"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "bounds",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A clause over a tuple return.",
+          "labels": [],
+          "ordinal": 3,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "tuple": {
+                  "fields": [
+                    {
+                      "name": "min",
+                      "type": {
+                        "optional": false,
+                        "named": "Level"
+                      }
+                    },
+                    {
+                      "name": "max",
+                      "type": {
+                        "optional": false,
+                        "named": "Level"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "contracts": [
+              {
+                "kind": "CONTRACT_KIND_ENSURE",
+                "source": "result.min <= result.max",
+                "signalRefs": [],
+                "paramRefs": [],
+                "usesResult": true,
+                "observerId": "Archive.bounds.ensure[0]"
+              }
+            ],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "history",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A provider-produced stream.",
+          "labels": [],
+          "ordinal": 4,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [
+              {
+                "name": "limit",
+                "type": {
+                  "optional": false,
+                  "named": "Count"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "stream": {
+                  "named": "Inner"
+                }
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "replay",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A client-produced stream.",
+          "labels": [],
+          "ordinal": 5,
+          "links": [],
+          "see": [],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "samples",
+                "type": {
+                  "optional": false,
+                  "stream": {
+                    "named": "Inner"
+                  }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
+          }
+        },
+        {
+          "name": "tags",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A collection-typed fixed value.",
+          "labels": [],
+          "ordinal": 6,
+          "links": [],
+          "see": [],
+          "since": [],
+          "fixedDef": {
+            "payload": {
+              "optional": false,
+              "array": {
+                "element": {
+                  "optional": false,
+                  "named": "Tag"
+                },
+                "min": "0",
+                "max": "8"
+              }
+            }
+          }
+        }
+      ],
+      "number": 1,
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
+    },
+    {
+      "name": "Probe",
+      "visibility": "VISIBILITY_INTERNAL",
+      "doc": "A package-private interface over a package-private payload.",
+      "labels": [],
+      "interactions": [
+        {
+          "name": "raw",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A package-private payload.",
+          "labels": [],
+          "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
+          "eventDef": {
+            "payload": "Raw",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "sample",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "A package-private return.",
+          "labels": [],
+          "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "Raw"
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        }
+      ],
+      "number": 2,
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
+    }
+  ],
+  "services": [],
+  "retired": [],
+  "unit": "lint.shapes"
+}
