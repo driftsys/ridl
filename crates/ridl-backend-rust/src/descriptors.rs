@@ -835,11 +835,8 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
         .collect())
 }
 
-/// Why a call has no argument type. Every parameter list induces one, so the
-/// two causes left are a parameter the struct cannot hold.
-/// Whether a parameter is a stream. The request leaves a stream parameter
-/// out, but the face still leaves a call with one out too, so the argument
-/// type of such a call is refused here.
+/// Whether a parameter is a stream. The face does not carry a stream member
+/// yet, so the argument type of a call with a stream parameter is refused.
 fn has_stream_param(params: &[v1::Param]) -> bool {
     params.iter().any(|param| {
         matches!(
@@ -849,12 +846,16 @@ fn has_stream_param(params: &[v1::Param]) -> bool {
     })
 }
 
+/// Why a call has no argument type: a parameter the struct cannot hold, or a
+/// stream parameter, which the face does not carry yet.
 fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
     let untyped = params.iter().any(|param| param.r#type.is_none());
     let message = if untyped {
         format!("interaction `{member}` declares a parameter with no type")
     } else {
-        format!("interaction `{member}` declares a stream parameter, which has no payload type")
+        format!(
+            "interaction `{member}` declares a stream parameter, which the face does not carry yet"
+        )
     };
     GenerateError { message }
 }

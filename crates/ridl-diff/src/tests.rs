@@ -3497,6 +3497,33 @@ mod podbuf {
         );
     }
 
+    /// A stream parameter is not part of the request, so a call with one
+    /// named parameter beside it sends that named type as it is: the struct
+    /// is the root, not a member of an induced head.
+    #[test]
+    fn a_named_parameter_beside_a_stream_parameter_is_not_an_inline_use() {
+        assert_no_interaction_use(|| {
+            vec![command(
+                "put",
+                1,
+                vec![
+                    param("info", named("SensorReading")),
+                    param(
+                        "data",
+                        v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                                element: Some(v2::stream_type::Element::Primitive(
+                                    v2::PrimitiveType::Bytes as i32,
+                                )),
+                            })),
+                        },
+                    ),
+                ],
+            )]
+        });
+    }
+
     /// A tuple parameter is a tuple head inside the argument struct.
     #[test]
     fn a_tuple_parameter_holds_the_struct_inline() {

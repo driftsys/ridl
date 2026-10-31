@@ -4659,7 +4659,10 @@ fn a_member_s_limit_is_copied_from_the_ir() {
     assert_eq!(live_member(tally, "ask").limit, None);
 }
 
-/// `call_package` with four calls that carry streams: `replayTrace` takes a
+/// `call_package` with calls that carry streams: `put` takes a `Pair` and a
+/// stream of bytes, `mirror` takes a stream of `Pair` and a stream of
+/// `Tagged`, `describe` takes a `SpeedKph` and replies with a stream of text,
+/// and the four that follow: `replayTrace` takes a
 /// stream of `Tagged` and nothing else, `streamFilterHistory` takes a
 /// `SpeedKph` and replies with a stream of `Pair`, `rebalance` takes a stream
 /// of `Tagged` and replies with a stream of `Pair`, and `fetch` takes a
@@ -4685,8 +4688,44 @@ fn stream_package() -> v2::Package {
             kind: Some(v2::return_type::Kind::Value(ty)),
         })
     };
+    let text = stream_of(v2::stream_type::Element::Primitive(
+        v2::PrimitiveType::String as i32,
+    ));
     let mut package = call_package();
     let calls = calls_interface(&mut package);
+    calls.interactions.push(call_decl(
+        "put",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                param("info", named("Pair")),
+                param(
+                    "data",
+                    stream_of(v2::stream_type::Element::Primitive(
+                        v2::PrimitiveType::Bytes as i32,
+                    )),
+                ),
+            ],
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "mirror",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                param("first", of_named("Pair")),
+                param("second", of_named("Tagged")),
+            ],
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "describe",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("id", named("SpeedKph"))],
+            return_type: reply(text),
+            ..Default::default()
+        }),
+    ));
     calls.interactions.push(call_decl(
         "replayTrace",
         v2::decl::Kind::CommandDef(v2::CommandDef {
@@ -4853,4 +4892,50 @@ fn a_streamed_reply_keeps_reply_sizes_absent_and_sizes_the_request_struct() {
     let request = query.request_sizes.as_ref().expect("request sizes");
     assert!(is_bounded(&request.flatbuffers));
     assert!(is_bounded(&request.proto3));
+}
+
+/// A named parameter beside a stream parameter is the whole request: no
+/// induced struct, the named type's own sizes, and the stream is entry 1.
+#[test]
+fn a_named_parameter_beside_a_stream_is_the_request() {
+    let model = lower(&stream_package(), &[]);
+    let put = call_named(&model, "put");
+    let Some(v1::interaction::Shape::Command(command)) = put.shape.as_ref() else {
+        panic!("a command");
+    };
+    let request = command.request.as_ref().expect("a named request");
+    assert_eq!(request.r#type.as_ref().expect("a type").reference, "Pair");
+    assert!(command.request_tuple.is_none());
+    assert_eq!(command.request_sizes, request.sizes);
+    let [stream] = put.streams.as_slice() else {
+        panic!("one stream");
+    };
+    assert_eq!(stream.no, 1);
+    assert_eq!(stream.form, v1::StreamForm::Bytes as i32);
+}
+
+/// Stream parameters are numbered 1, 2, ... in declaration order.
+#[test]
+fn stream_parameters_are_numbered_from_one_in_order() {
+    let model = lower(&stream_package(), &[]);
+    let mirror = call_named(&model, "mirror");
+    let numbers: Vec<u32> = mirror.streams.iter().map(|s| s.no).collect();
+    assert_eq!(numbers, vec![1, 2]);
+    let references: Vec<&str> = mirror
+        .streams
+        .iter()
+        .map(|s| s.element.as_ref().expect("an element").reference.as_str())
+        .collect();
+    assert_eq!(references, vec!["Pair", "Tagged"]);
+}
+
+/// A stream of strings is a text stream.
+#[test]
+fn a_string_stream_is_a_text_stream() {
+    let model = lower(&stream_package(), &[]);
+    let [stream] = call_named(&model, "describe").streams.as_slice() else {
+        panic!("one stream");
+    };
+    assert_eq!(stream.form, v1::StreamForm::Text as i32);
+    assert!(stream.element.is_none());
 }
