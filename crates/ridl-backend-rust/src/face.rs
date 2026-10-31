@@ -359,8 +359,12 @@ pub(crate) fn one_interface(
     let module_doc = format!("The generated interaction face of interface `{iface_name}`.");
     let module_doc =
         DocLines::new(&DocParts::interface(interface), links).render(Some(&module_doc), &[]);
+    // The module is named after the interface, and a package named after the
+    // same word (`veh.cabin` and `Cabin`) gives `veh::cabin::cabin`, which
+    // clippy reads as `module_inception`.
     Ok(Some(quote! {
         #module_doc
+        #[allow(clippy::module_inception)]
         pub mod #module {
             #(#body)*
         }

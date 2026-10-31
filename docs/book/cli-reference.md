@@ -805,21 +805,18 @@ such as this one, adapted to your output directory:
 generated/** linguist-generated=true
 ```
 
-**The crate root allows two lints.** The emitted `lib.rs` carries
-`#![allow(clippy::derivable_impls, clippy::module_inception)]`, after the
-attribute that makes the crate `no_std` and before the line that links `alloc`
-under the name `std` ([Cargo features](generated-code.md#cargo-features)
-says when each applies, and what a single-file consumer declares). These are the
-two lints that the emitter draws on the `examples/cabin` crate under
-`cargo clippy`: `module_inception` from the package and interface naming
-(`veh.cabin` and `Cabin`), and `derivable_impls`. The list is closed for that
-crate: the repository's `just demo` replaces `allow` with `expect` and runs
-clippy with `-D warnings` on the generated crate for `examples/cabin`, so a new
-lint, or a listed lint that no longer fires on it, fails that check. Single-file
-mode writes no `lib.rs`. A consumer that includes the generated file with
-`include!` puts `#[allow(clippy::derivable_impls, clippy::module_inception)]` on
-the `mod` that wraps the `include!`. Explicit crate-root links in the generated
-docs can be unresolved when the file is included inside another module
+**The generated code is clippy-clean.** The emitted `lib.rs` switches no lint
+off. Each allow the emitter needs is on the generated item that needs it:
+`clippy::derivable_impls` on a `Default` it writes out rather than derives,
+`clippy::module_inception` on the face module of an interface named after its
+package (`veh.cabin` and `Cabin`), and `clippy::collapsible_if`, which only
+edition 2024 reports, on the functions that decode a proto3 message. The
+repository's `just demo` runs clippy with `-D warnings` on the generated crates
+for `examples/cabin` and the veh-cluster corpus, as edition 2021 and as edition
+2024. Single-file mode writes no `lib.rs`, and a consumer that includes the
+generated file with `include!` adds no allow. Explicit crate-root links in the
+generated docs can be unresolved when the file is included inside another
+module
 ([Documentation in the generated code](generated-code.md#documentation-in-the-generated-code)).
 
 **`rustfmt` skips the generated files.** The generated Rust is formatted with

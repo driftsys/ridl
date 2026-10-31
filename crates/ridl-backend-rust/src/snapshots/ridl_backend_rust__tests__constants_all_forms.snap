@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -273,6 +274,7 @@ impl ::core::convert::From<Greeting> for ::std::string::String {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Greeting {
     fn default() -> Self {
         Greeting::new_unchecked(::std::string::String::new())

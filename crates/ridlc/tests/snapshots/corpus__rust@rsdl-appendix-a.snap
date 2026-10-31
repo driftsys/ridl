@@ -149,6 +149,7 @@ impl ::ridl_rt::contract::Command for CruiseControlSetLever {
     }
 }
 ///The generated interaction face of interface `CruiseControl`.
+#[allow(clippy::module_inception)]
 pub mod cruise_control {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SetLeverCorrelation(pub ::ridl_rt::port::Correlation);
@@ -1263,6 +1264,7 @@ impl ::ridl_rt::contract::Signal for LaneAssistActive {
     }
 }
 ///The generated interaction face of interface `LaneAssist`.
+#[allow(clippy::module_inception)]
 pub mod lane_assist {
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
@@ -1692,6 +1694,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -1720,6 +1723,7 @@ impl ::core::convert::From<Engaged> for ::core::primitive::bool {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Engaged {
     fn default() -> Self {
         Engaged::new(false)
@@ -1755,6 +1759,7 @@ impl ::core::convert::From<LeverCmd> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for LeverCmd {
     fn default() -> Self {
         LeverCmd::Set
@@ -1767,6 +1772,7 @@ pub struct FaultReport {
     /// - range 0 ..= 255
     pub count: ::core::primitive::i64,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for FaultReport {
     fn default() -> Self {
         FaultReport { count: 0 }
@@ -2278,6 +2284,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultRepo
 // ===== package veh.diag =====
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VehDiagAccessReadFaultsParams {}
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for VehDiagAccessReadFaultsParams {
     fn default() -> Self {
         VehDiagAccessReadFaultsParams {}

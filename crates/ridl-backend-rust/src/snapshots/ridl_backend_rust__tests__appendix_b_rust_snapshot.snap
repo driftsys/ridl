@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -427,6 +428,7 @@ impl ::core::convert::From<Temperature> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0.0)
@@ -642,6 +644,7 @@ impl ::core::convert::From<RPM> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for RPM {
     fn default() -> Self {
         RPM::new_unchecked(0.0)
@@ -857,6 +860,7 @@ impl ::core::convert::From<Ratio> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Ratio {
     fn default() -> Self {
         Ratio::new_unchecked(0.0)
@@ -885,6 +889,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new(0)
@@ -1097,6 +1102,7 @@ impl ::core::convert::From<Gain> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Gain {
     fn default() -> Self {
         Gain::new_unchecked(0.0)
@@ -1138,6 +1144,7 @@ impl ::core::convert::From<GearPosition> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for GearPosition {
     fn default() -> Self {
         GearPosition::Park
@@ -1175,6 +1182,7 @@ impl ::core::convert::From<Warning> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning::LowFuel
@@ -1209,6 +1217,7 @@ impl ::core::convert::From<WarningFlags> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for WarningFlags {
     fn default() -> Self {
         WarningFlags(0)
@@ -1229,6 +1238,7 @@ pub struct SpeedLimitPayload {
     /// - unit km/h
     pub actual: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SpeedLimitPayload {
     fn default() -> Self {
         SpeedLimitPayload {
@@ -1278,6 +1288,7 @@ pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorResult {
     fn default() -> Self {
         SensorResult::Ok(<SensorReading as ::core::default::Default>::default())
@@ -1293,6 +1304,7 @@ pub struct SensorReading {
     pub value: Speed,
     pub timestamp: crate::ridl::std::Timestamp,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorReading {
     fn default() -> Self {
         SensorReading {
@@ -1320,6 +1332,7 @@ pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorBoundsRange {
     fn default() -> Self {
         SensorBoundsRange {

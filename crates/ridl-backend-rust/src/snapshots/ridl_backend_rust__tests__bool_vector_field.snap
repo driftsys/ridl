@@ -25,6 +25,7 @@ impl ::core::convert::From<Engaged> for ::core::primitive::bool {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Engaged {
     fn default() -> Self {
         Engaged::new(false)
@@ -41,6 +42,7 @@ pub struct Flags {
     /// - count 0 ..= 4
     pub engaged: ::std::vec::Vec<Engaged>,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Flags {
     fn default() -> Self {
         Flags {

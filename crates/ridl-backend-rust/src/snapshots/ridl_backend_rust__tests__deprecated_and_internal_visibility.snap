@@ -216,6 +216,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -248,6 +249,7 @@ impl ::core::convert::From<OldFlag> for ::core::primitive::bool {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for OldFlag {
     fn default() -> Self {
         OldFlag::new(false)
@@ -280,6 +282,7 @@ impl ::core::convert::From<RawTicks> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 #[allow(dead_code)]
 impl ::core::default::Default for RawTicks {
     fn default() -> Self {

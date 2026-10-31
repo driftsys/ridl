@@ -58,6 +58,7 @@ impl ::core::convert::From<Count> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Count {
     fn default() -> Self {
         Count::new_unchecked(0)
@@ -123,6 +124,7 @@ impl ::core::convert::From<Level> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Level {
     fn default() -> Self {
         Level::new_unchecked(0)
@@ -184,6 +186,7 @@ impl ::core::convert::From<Label> for ::std::string::String {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Label {
     fn default() -> Self {
         Label::new_unchecked(::std::string::String::new())
@@ -219,6 +222,7 @@ impl ::core::convert::From<Mode> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Mode {
     fn default() -> Self {
         Mode::Idle
@@ -245,6 +249,7 @@ pub struct Reading {
     pub ratio: ::core::primitive::f64,
     pub flag: ::core::primitive::bool,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Reading {
     fn default() -> Self {
         Reading {
@@ -331,6 +336,7 @@ pub struct Inner {
     /// - length 0 ..= 16
     pub label: Label,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Inner {
     fn default() -> Self {
         Inner {
@@ -356,6 +362,7 @@ pub struct Panel {
     pub by_key: ::std::vec::Vec<(Key, Count)>,
     pub inner: Inner,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Panel {
     fn default() -> Self {
         Panel {
@@ -373,6 +380,7 @@ pub enum Outcome {
     Mode(Mode),
     Reading(Reading),
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Outcome {
     fn default() -> Self {
         Outcome::Number(<Count as ::core::default::Default>::default())
@@ -383,6 +391,7 @@ pub struct GaugeSetParams {
     pub count: Count,
     pub level: Level,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for GaugeSetParams {
     fn default() -> Self {
         GaugeSetParams {
@@ -2577,7 +2586,7 @@ pub(crate) fn __ridl_pb_encode_Count(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Count(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2615,7 +2624,7 @@ pub(crate) fn __ridl_pb_verify_Count(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Count(buf: &[::core::primitive::u8]) -> Count {
     let mut __f0 = Count::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -2667,6 +2676,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Count {
         __ridl_pb_verify_Count(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -2704,7 +2714,7 @@ pub(crate) fn __ridl_pb_encode_Level(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Level(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2742,7 +2752,7 @@ pub(crate) fn __ridl_pb_verify_Level(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Level(buf: &[::core::primitive::u8]) -> Level {
     let mut __f0 = Level::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -2794,6 +2804,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Level {
         __ridl_pb_verify_Level(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -2831,7 +2842,7 @@ pub(crate) fn __ridl_pb_encode_Label(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Label(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2867,7 +2878,7 @@ pub(crate) fn __ridl_pb_verify_Label(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Label(buf: &[::core::primitive::u8]) -> Label {
     let mut __f0 = Label::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -2919,6 +2930,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Label {
         __ridl_pb_verify_Label(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -2952,7 +2964,7 @@ pub(crate) fn __ridl_pb_encode_Mode(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Mode(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2992,7 +3004,7 @@ pub(crate) fn __ridl_pb_verify_Mode(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Mode(buf: &[::core::primitive::u8]) -> Mode {
     let mut __f0 = Mode::Idle;
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -3047,6 +3059,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Mode {
         __ridl_pb_verify_Mode(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -3163,7 +3176,7 @@ pub(crate) fn __ridl_pb_encode_Reading(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Reading(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -3350,7 +3363,7 @@ pub(crate) fn __ridl_pb_verify_Reading(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Reading(buf: &[::core::primitive::u8]) -> Reading {
     let mut __f0 = Count::new_unchecked(0i64);
     let mut __f1 = Level::new_unchecked(0i64);
@@ -3457,6 +3470,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Reading {
         __ridl_pb_verify_Reading(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -3490,7 +3504,7 @@ pub(crate) fn __ridl_pb_encode_Key(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Key(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -3532,7 +3546,7 @@ pub(crate) fn __ridl_pb_verify_Key(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Key(buf: &[::core::primitive::u8]) -> Key {
     let mut __f0 = Key::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -3584,6 +3598,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Key {
         __ridl_pb_verify_Key(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -3636,7 +3651,7 @@ pub(crate) fn __ridl_pb_encode_Inner(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Inner(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -3702,7 +3717,7 @@ pub(crate) fn __ridl_pb_verify_Inner(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Inner(buf: &[::core::primitive::u8]) -> Inner {
     let mut __f0 = Count::new_unchecked(0i64);
     let mut __f1 = Label::new_unchecked(::std::string::String::new());
@@ -3767,6 +3782,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Inner {
         __ridl_pb_verify_Inner(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -3970,7 +3986,7 @@ pub(crate) fn __ridl_pb_encode_Panel(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Panel(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4236,7 +4252,7 @@ pub(crate) fn __ridl_pb_verify_Panel(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Panel(buf: &[::core::primitive::u8]) -> Panel {
     let mut __f0 = ::core::option::Option::None;
     let mut __f1 = ::std::vec::Vec::new();
@@ -4373,6 +4389,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Panel {
         __ridl_pb_verify_Panel(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4447,7 +4464,7 @@ pub(crate) fn __ridl_pb_encode_Outcome(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Outcome(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4571,7 +4588,7 @@ pub(crate) fn __ridl_pb_verify_Outcome(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Outcome(buf: &[::core::primitive::u8]) -> Outcome {
     let mut __out = Outcome::Number(Count::new_unchecked(0i64));
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4658,6 +4675,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Outcome {
         __ridl_pb_verify_Outcome(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4712,7 +4730,7 @@ pub(crate) fn __ridl_pb_encode_GaugeSetParams(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_GaugeSetParams(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4780,7 +4798,7 @@ pub(crate) fn __ridl_pb_verify_GaugeSetParams(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_GaugeSetParams(
     buf: &[::core::primitive::u8],
 ) -> GaugeSetParams {
@@ -4850,6 +4868,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for GaugeSetParams
         __ridl_pb_verify_GaugeSetParams(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -8818,6 +8837,7 @@ impl ::ridl_rt::contract::Command for GaugeSet {
 /// induced struct gets transcode functions too.
 ///
 ///The generated interaction face of interface `Gauge`.
+#[allow(clippy::module_inception)]
 pub mod gauge {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SetCorrelation(pub ::ridl_rt::port::Correlation);

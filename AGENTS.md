@@ -217,9 +217,10 @@ member; rsdl is the apex.
                          crate is also linted with clippy,
                          with its default features and with them off for that
                          target, under -D warnings, so any diagnostic fails
-                         it, dead_code included; the lints that its lib.rs
-                         allows stay allowed; both generated crates are also
-                         built with cargo doc, denying
+                         it, dead_code included; both generated crates are
+                         also linted as edition 2024 under -D warnings, and
+                         checked with cargo fmt --check, and built with
+                         cargo doc, denying
                          rustdoc::broken_intra_doc_links and
                          rustdoc::private_intra_doc_links.
                          examples/cabin is its own

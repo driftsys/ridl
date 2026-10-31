@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -240,6 +241,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new(0)
@@ -252,6 +254,7 @@ pub struct Table {
     /// - count 0 ..= 32
     pub meta: ::std::vec::Vec<(Counter, Speed)>,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Table {
     fn default() -> Self {
         Table {

@@ -851,6 +851,11 @@ fn count_ident(index: usize) -> Ident {
 /// the reader has already moved past. Two or more known fields are a
 /// `match`; one is an `if`, and none reads nothing, so the emitted code draws
 /// neither `clippy::single_match` nor `clippy::match_single_binding`.
+///
+/// The `if` holds the `if let` of the field's body. On edition 2024 clippy
+/// reads the two as `clippy::collapsible_if`, whose fix is a let chain, which
+/// edition 2021 does not have; every generated function that walks a message
+/// allows the lint.
 fn number_dispatch(arms: &[(Literal, TokenStream)]) -> TokenStream {
     match arms {
         // Defensive: every caller has at least one known field.
@@ -2077,7 +2082,7 @@ impl<'a> Codec<'a> {
         // counts, map key uniqueness, and the absence rule. Pattern checks
         // require `validate-pattern`. An internal: no doc.
         Ok(quote! {
-            #[allow(deprecated, non_snake_case)]
+            #[allow(deprecated, non_snake_case, clippy::collapsible_if)]
             pub(crate) fn #name(
                 buf: &[::core::primitive::u8],
             ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -2623,7 +2628,7 @@ impl<'a> Codec<'a> {
         // those branches unreachable. A named scalar is built with its
         // unchecked constructor over a value `verify` has already checked.
         Ok(quote! {
-            #[allow(deprecated, non_snake_case)]
+            #[allow(deprecated, non_snake_case, clippy::collapsible_if)]
             pub(crate) fn #name(#buf: &[::core::primitive::u8]) -> #ty {
                 #(#inits)*
                 #walk
@@ -2654,7 +2659,7 @@ impl<'a> Codec<'a> {
         }
         let dispatch = number_dispatch(&arms);
         quote! {
-            #[allow(deprecated, non_snake_case)]
+            #[allow(deprecated, non_snake_case, clippy::collapsible_if)]
             pub(crate) fn #name(buf: &[::core::primitive::u8]) -> #ty {
                 let mut __out = #ty::#first_variant(#first_default);
                 let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -2883,6 +2888,7 @@ impl<'a> Codec<'a> {
                     ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
                 }
 
+                #[allow(clippy::collapsible_if)]
                 fn decode(
                     r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
                 ) -> Self {
