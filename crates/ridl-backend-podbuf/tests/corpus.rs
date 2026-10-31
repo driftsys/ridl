@@ -138,8 +138,11 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
 /// Every head the two headers both define is defined by the same text: the
 /// guarded `typedef` and the `_Static_assert` lines after it, byte for byte.
 /// The nested tuple heads are the ones the two headers once spelled apart
-/// (driftsys/ridl#1112): a tuple at a tuple position, a tuple as an array
-/// element, and the two same-shape tuples of `Pair`.
+/// (driftsys/ridl#1112): a tuple at a tuple position, a tuple as the element
+/// of a fixed-count array, the two same-shape tuples of `Pair`, and the two
+/// positions of `Twin` that share one entry. The element head of a
+/// variable-count array is a tail head, which the importing header does not
+/// define.
 #[test]
 fn a_head_both_headers_define_has_one_text() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
@@ -149,9 +152,13 @@ fn a_head_both_headers_define_has_one_text() {
     for guard in [
         "POD_PARTS_HUB_SIZE_FIELD3_HEAD_DEFINED",
         "POD_PARTS_HUB_SIZE_HEAD_DEFINED",
+        "POD_PARTS_HUB_GRID_ELEMENT_HEAD_DEFINED",
         "POD_PARTS_PAIR_A_HEAD_DEFINED",
         "POD_PARTS_PAIR_B_HEAD_DEFINED",
         "POD_PARTS_PAIR_HEAD_DEFINED",
+        "POD_PARTS_ABC_HEAD_DEFINED",
+        "POD_PARTS_A_HEAD_DEFINED",
+        "POD_PARTS_AB_HEAD_DEFINED",
     ] {
         assert!(parts.contains_key(guard), "pod.parts has no {guard}");
         assert!(vehicle.contains_key(guard), "pod.vehicle has no {guard}");
@@ -172,7 +179,92 @@ fn a_head_both_headers_define_has_one_text() {
         shared += 1;
         assert_eq!(text, other, "{guard} differs between the two headers");
     }
-    assert!(shared >= 5, "{shared} shared guards");
+    assert!(shared >= 9, "{shared} shared guards");
+}
+
+/// Two positions whose induced Rust names are one share one entry in the
+/// declaring package (`A.bC` and `AB.c`, both `ABC`), so both headers type
+/// the two members with `pod_parts_abc_head`, the head of the position
+/// reached first, and neither spells a second head.
+#[test]
+fn two_positions_that_share_one_entry_share_one_head_in_both_headers() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
+    let packages = support::workspace(&path);
+    for name in ["pod.parts", "pod.vehicle"] {
+        let header = support::header(&packages, name);
+        let a = head_body(&header, "pod_parts_a_head");
+        assert!(a.contains("pod_parts_abc_head b_c;"), "{name}: {a}");
+        let ab = head_body(&header, "pod_parts_ab_head");
+        assert!(ab.contains("pod_parts_abc_head c;"), "{name}: {ab}");
+        assert_eq!(
+            header
+                .matches("typedef struct pod_parts_abc_head {")
+                .count(),
+            1,
+            "{name}: one definition of the shared head"
+        );
+    }
+}
+
+/// Two tuples of one package that induce one wire name are refused by the
+/// declaring header, through its C name claim, whatever their layouts.
+#[test]
+fn the_declaring_header_refuses_two_tuples_under_one_wire_name() {
+    for (shape, source) in [
+        (
+            "two layouts",
+            "package w.a\n\nstruct Hub {\n  \
+             size       : (w: integer [0..255], inner: (p: integer [0..255], q: integer [0..255]))\n  \
+             sizeField2 : (a: integer [0..255], b: integer [0..255], c: integer [0..255])\n}\n",
+        ),
+        (
+            "one layout",
+            "package w.a\n\nstruct Hub {\n  \
+             sizeField2 : (a: integer [0..255], b: integer [0..255])\n  \
+             size       : (x: integer [0..255], inner: (a: integer [0..255], b: integer [0..255]))\n}\n",
+        ),
+    ] {
+        let packages = workspace_from(&[("a", "w.a", source)]);
+        let package = packages.iter().find(|p| p.name == "w.a").unwrap();
+        let others: Vec<&ridl_ir::v2::Package> = packages.iter().collect();
+        let error = ridl_backend_podbuf::generate_with(package, &others)
+            .err()
+            .unwrap_or_else(|| panic!("{shape}: the declaring header was not refused"));
+        assert!(
+            error
+                .message
+                .contains("`w_a_hub_size_field2_head` is claimed by"),
+            "{shape}: {}",
+            error.message
+        );
+    }
+}
+
+/// The packages of a workspace written from `members` (directory, package
+/// name, source), followed by the standard package.
+fn workspace_from(members: &[(&str, &str, &str)]) -> Vec<ridl_ir::v2::Package> {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let list = members
+        .iter()
+        .map(|(d, _, _)| format!("\"{d}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    std::fs::write(
+        dir.path().join("ridl.toml"),
+        format!("[workspace]\nmembers = [{list}]\n"),
+    )
+    .expect("write");
+    for (d, name, text) in members {
+        let member = dir.path().join(d);
+        std::fs::create_dir_all(&member).expect("mkdir");
+        std::fs::write(
+            member.join("ridl.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        )
+        .expect("write");
+        std::fs::write(member.join(format!("{d}.typl")), text).expect("write");
+    }
+    support::workspace(dir.path())
 }
 
 /// A tuple head names the tuple's own head, not a head of the same shape:

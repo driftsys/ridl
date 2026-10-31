@@ -7,6 +7,9 @@ import pod.parts.Gauge
 import pod.parts.Clash
 import pod.parts.Pair
 import pod.parts.Mount
+import pod.parts.A
+import pod.parts.AB
+import pod.parts.Table
 
 struct Axle {
   note  : integer [0..255]
@@ -17,6 +20,10 @@ struct Axle {
   clash : Clash
   pair  : Pair
   mount : Mount
+  // `a` before `ab`: the order the declaring package lowers them in.
+  a     : A
+  ab    : AB
+  table : Table
   // The shape of `Pair.a`, local to this package: no foreign head uses it.
   own   : (x: integer [0..10], y: integer [0..10])
 }

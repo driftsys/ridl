@@ -108,10 +108,20 @@ const PODBUF_WORKSPACE: [(&str, &str, &str); 2] = [
     ("holder", "pod.holder", "podbuf_cross_holder.ridl"),
 ];
 
+/// The two members of the podbuf nested-union fixture, read the same way.
+const PODBUF_NESTED_UNION_WORKSPACE: [(&str, &str, &str); 2] = [
+    ("parts", "pod.parts", "podbuf_nested_union_parts.ridl"),
+    ("holder", "pod.holder", "podbuf_nested_union_holder.ridl"),
+];
+
 /// Whether `name` is a member of a workspace fixture, which a single-file
 /// compile cannot read.
 fn is_workspace_member(name: &str) -> bool {
-    PROTO3_WORKSPACE.contains(&name) || PODBUF_WORKSPACE.iter().any(|(_, _, file)| *file == name)
+    PROTO3_WORKSPACE.contains(&name)
+        || PODBUF_WORKSPACE
+            .iter()
+            .chain(&PODBUF_NESTED_UNION_WORKSPACE)
+            .any(|(_, _, file)| *file == name)
 }
 
 /// The fixtures the FlatBuffers codec refuses by design, each with the text
@@ -297,24 +307,26 @@ fn generate_over_the_conformance_workspace_cites_no_issue() {
     }
 }
 
-/// `generate_pipeline` with podbuf over each member of the podbuf
-/// cross-package fixture, each resolved against the other.
+/// `generate_pipeline` with podbuf over each member of the two podbuf
+/// cross-package fixtures, each resolved against the other.
 #[test]
 fn generate_over_the_podbuf_workspace_cites_no_issue() {
-    let packages = podbuf::compile_fixture_workspace(&PODBUF_WORKSPACE);
-    assert_eq!(packages.len(), PODBUF_WORKSPACE.len());
-    for (at, package) in packages.iter().enumerate() {
-        let others: Vec<&ridl_ir::v2::Package> = packages
-            .iter()
-            .enumerate()
-            .filter(|(other, _)| *other != at)
-            .map(|(_, other)| other)
-            .collect();
-        let source = podbuf::generated(package, &others);
-        assert_clean(
-            &format!("generate_pipeline({}, Podbuf)", package.name),
-            &source,
-        );
+    for workspace in [&PODBUF_WORKSPACE, &PODBUF_NESTED_UNION_WORKSPACE] {
+        let packages = podbuf::compile_fixture_workspace(workspace);
+        assert_eq!(packages.len(), workspace.len());
+        for (at, package) in packages.iter().enumerate() {
+            let others: Vec<&ridl_ir::v2::Package> = packages
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, other)| other)
+                .collect();
+            let source = podbuf::generated(package, &others);
+            assert_clean(
+                &format!("generate_pipeline({}, Podbuf)", package.name),
+                &source,
+            );
+        }
     }
 }
 

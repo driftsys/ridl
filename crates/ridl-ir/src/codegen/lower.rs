@@ -124,8 +124,14 @@ pub fn lower_with(
             if entry.named {
                 keys.local.insert(key.clone(), index as u32);
             } else {
-                keys.foreign
-                    .insert(key.clone(), (entry.home.name.clone(), entry.wire.clone()));
+                keys.foreign.insert(
+                    key.clone(),
+                    super::podbuf::ForeignTuple {
+                        package: entry.home.name.clone(),
+                        wire: entry.wire.clone(),
+                        entry: index as u32,
+                    },
+                );
             }
         }
     }
@@ -271,7 +277,9 @@ impl Path {
     }
 
     /// A positional word: `Element`, `Key`, `Value`, or an interaction's
-    /// role word. The walk path takes a map's `key` and `value` only.
+    /// role word. The walk path takes a map's `key` and `value`, and nothing
+    /// for an array element; a role word keeps the keys of one interaction's
+    /// positions distinct, which no walk path spells.
     fn step(&self, word: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(word.to_string());
@@ -279,7 +287,8 @@ impl Path {
         match word {
             "Key" => key.push("key".to_string()),
             "Value" => key.push("value".to_string()),
-            _ => {}
+            "Element" => {}
+            role => key.push(role.to_string()),
         }
         Self {
             base: self.base,
@@ -381,7 +390,11 @@ struct Lowering<'a> {
     foreign: Vec<v1::ForeignDeclaration>,
     foreign_at: HashMap<(String, String), u32>,
     tuples: Vec<TupleEntry<'a>>,
-    tuple_at: HashMap<String, usize>,
+    /// The entry each induced Rust name claims, by home package and name:
+    /// a position of the same shape that spells a claimed name reuses the
+    /// entry, in the lowered package and in a declaration of another package
+    /// alike, so that the two lowerings give one tuple one wire name.
+    tuple_at: HashMap<(String, String), usize>,
     collisions: Vec<v1::TupleCollision>,
 }
 
@@ -740,9 +753,8 @@ impl<'a> Lowering<'a> {
     /// different shape is a collision, recorded as a fact for the printer to
     /// refuse with its own message.
     fn tuple_ref(&mut self, home: &'a v2::Package, tuple: &v2::TupleType, at: &Path) -> u32 {
-        if at.named
-            && let Some(index) = self.tuple_at.get(&at.rust).copied()
-        {
+        let claim = (home.name.clone(), at.rust.clone());
+        if let Some(index) = self.tuple_at.get(&claim).copied() {
             let existing = &self.tuples[index];
             // One name is one generated type, so the claim is reused only
             // when the shape *and* the visibility match. A tuple has no
@@ -754,6 +766,12 @@ impl<'a> Lowering<'a> {
             if existing.source == *tuple && existing.path.visibility == at.visibility {
                 self.tuples[index].keys.push(at.key.clone());
                 return index as u32;
+            }
+            // A collision inside a declaration of another package is that
+            // package's to record; here the two positions get two entries,
+            // and the podbuf walk refuses the pair when it meets both.
+            if !at.named {
+                return self.lift(home, tuple, at, claim);
             }
             self.collisions.push(v1::TupleCollision {
                 name: at.rust.clone(),
@@ -770,10 +788,20 @@ impl<'a> Lowering<'a> {
                     .collect(),
             });
         }
+        self.lift(home, tuple, at, claim)
+    }
+
+    /// A new entry for the tuple at `at`, which claims `claim` unless a
+    /// colliding entry already holds it.
+    fn lift(
+        &mut self,
+        home: &'a v2::Package,
+        tuple: &v2::TupleType,
+        at: &Path,
+        claim: (String, String),
+    ) -> u32 {
         let index = self.tuples.len();
-        if at.named {
-            self.tuple_at.insert(at.rust.clone(), index);
-        }
+        self.tuple_at.entry(claim).or_insert(index);
         self.tuples.push(TupleEntry {
             source: tuple.clone(),
             home,

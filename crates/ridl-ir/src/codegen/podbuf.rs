@@ -39,9 +39,19 @@ use crate::v2;
 pub(crate) struct TupleKeys {
     /// The index in `Model.tuples` of a named tuple.
     pub local: HashMap<Vec<String>, u32>,
-    /// The home package and the induced wire name of a tuple inside a
-    /// declaration of another package, which `Model.tuples` does not hold.
-    pub foreign: HashMap<Vec<String>, (String, String)>,
+    /// A tuple inside a declaration of another package, which `Model.tuples`
+    /// does not hold.
+    pub foreign: HashMap<Vec<String>, ForeignTuple>,
+}
+
+/// One tuple of another package, as the lowering lifted it.
+pub(crate) struct ForeignTuple {
+    /// The package that declares it.
+    pub package: String,
+    /// The induced wire name that package gives it.
+    pub wire: String,
+    /// The lowering's entry: two positions with one entry are one tuple.
+    pub entry: u32,
 }
 
 /// The podbuf heads of the package. A head the projection refuses, which is
@@ -163,6 +173,7 @@ fn boxes(scope: Scope<'_>) -> Vec<v1::PodbufBox> {
         let mut walk = Walk {
             scope,
             foreign_at: &no_heads,
+            foreign_names: HashMap::new(),
             keys: &no_tuples,
             heads: vec![v1::PodbufHead::default()],
             declared: HashMap::new(),
@@ -276,6 +287,10 @@ fn attempt(
     let mut walk = Walk {
         scope,
         foreign_at,
+        foreign_names: foreign_at
+            .iter()
+            .map(|((package, name), index)| (*index, (package.as_str(), name.as_str())))
+            .collect(),
         keys,
         heads: Vec::new(),
         declared: HashMap::new(),
@@ -330,6 +345,9 @@ fn attempt(
 struct Walk<'a> {
     scope: Scope<'a>,
     foreign_at: &'a HashMap<(String, String), u32>,
+    /// `foreign_at` inverted: the package and name at each `Model.foreign`
+    /// index.
+    foreign_names: HashMap<u32, (&'a str, &'a str)>,
     /// The tuple at each position, by the path to it.
     keys: &'a TupleKeys,
     heads: Vec<v1::PodbufHead>,
@@ -338,10 +356,10 @@ struct Walk<'a> {
     /// The head of each named tuple, by its index in `Model.tuples`.
     tuples: HashMap<u32, u32>,
     /// The head of each tuple reached inside a foreign aggregate, by its home
-    /// package and its induced wire name, with its layout and the path that
-    /// reached it first: a second tuple of another layout under the same name
-    /// is refused, never merged.
-    nested: HashMap<(String, String), (u32, Head, Vec<String>)>,
+    /// package and its induced wire name, with the lowering's entry and the
+    /// path that reached it first: a second entry under the same name is
+    /// refused, never merged.
+    nested: HashMap<(String, String), (u32, u32, Vec<String>)>,
     /// The head of each union arm, by the union's owner and the arm ordinal:
     /// a union reached again as the arm of another union shares the arm heads
     /// of its own walk, so a header defines each once.
@@ -486,27 +504,32 @@ impl Walk<'_> {
                 // Unreachable for checked input: the lowering lifts a tuple
                 // at every position the projection lays one out, under the
                 // same path. A miss is a disagreement between the two walks.
-                let Some((package, wire)) = self.keys.foreign.get(key) else {
+                let Some(tuple) = self.keys.foreign.get(key) else {
                     return Err(format!(
                         "{at}: internal: no tuple was lowered at this position (the \
                          lowering's tuple keys and the podbuf walk disagree on the path)"
                     ));
                 };
+                let ForeignTuple {
+                    package,
+                    wire,
+                    entry,
+                } = tuple;
                 let identity = (package.clone(), wire.clone());
                 if let Some((index, known, first)) = self.nested.get(&identity) {
-                    if known == head {
+                    if known == entry {
                         return Ok(*index);
                     }
                     // Two tuples of one package induce one wire name from two
                     // paths (a struct field `sizeField2` next to position 2 of
-                    // the tuple at `size`), with two layouts. The declaring
-                    // header refuses the pair through its C name claim; this
-                    // package refuses it here, so neither header types one
-                    // tuple with the other's head.
+                    // the tuple at `size`), whatever their layouts. The
+                    // declaring header refuses the pair through its C name
+                    // claim; this package refuses it here, so the two headers
+                    // agree and neither types one tuple with the other's head.
                     return Err(format!(
                         "{at}: the tuple at {} and the tuple at {at} of package {package} both \
-                         induce the wire name {wire} with different layouts; rename one of \
-                         the two fields so that each tuple has a name of its own",
+                         induce the wire name {wire}; rename one of the two fields so that \
+                         each tuple has a name of its own",
                         first.join(".")
                     ));
                 }
@@ -515,8 +538,7 @@ impl Walk<'_> {
                     package: package.clone(),
                     wire: wire.clone(),
                 }));
-                self.nested
-                    .insert(identity, (index, head.clone(), path.to_vec()));
+                self.nested.insert(identity, (index, *entry, path.to_vec()));
                 self.fill(index, head, path, key, declaration)?;
                 Ok(index)
             }
@@ -664,14 +686,14 @@ impl<'a> Walk<'a> {
                 self.scope.package.decls.get(index as usize)?,
             ),
             Owner::Foreign(index) => {
-                let ((package, name), _) = self.foreign_at.iter().find(|(_, at)| **at == index)?;
+                let (package, name) = *self.foreign_names.get(&index)?;
                 let home = self
                     .scope
                     .others
                     .iter()
                     .copied()
-                    .find(|other| other.name == *package)?;
-                let decl = home.decls.iter().find(|decl| decl.name == *name)?;
+                    .find(|other| other.name == package)?;
+                let decl = home.decls.iter().find(|decl| decl.name == name)?;
                 (home, decl)
             }
         };
@@ -762,5 +784,52 @@ fn source(source: &Source) -> v1::PodbufSource {
     v1::PodbufSource {
         kind: Some(kind),
         position_name,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A named tuple whose root is excluded from the walk is a refused head:
+    /// the position that lays it out inline names it as the cause, as a
+    /// refused declaration is named, instead of getting a head of its own.
+    #[test]
+    fn an_inline_position_of_an_excluded_tuple_is_refused() {
+        let package = v2::Package {
+            name: "p.a".to_string(),
+            ..Default::default()
+        };
+        let scope = Scope {
+            package: &package,
+            others: &[],
+        };
+        let path = vec!["Holder".to_string(), "t".to_string()];
+        let mut keys = TupleKeys::default();
+        keys.local.insert(path.clone(), 3);
+        let no_heads = HashMap::new();
+        let mut walk = Walk {
+            scope,
+            foreign_at: &no_heads,
+            foreign_names: HashMap::new(),
+            keys: &keys,
+            heads: Vec::new(),
+            declared: HashMap::new(),
+            tuples: HashMap::new(),
+            nested: HashMap::new(),
+            arms: HashMap::new(),
+            foreign: HashMap::new(),
+            refused: HashSet::new(),
+        };
+        let head = Head {
+            size: 0,
+            fields: Vec::new(),
+            pads: Vec::new(),
+        };
+        let error = walk
+            .inline(&head, &Inlined::Tuple, &path, &path, Owner::None)
+            .expect_err("the excluded tuple is refused");
+        assert_eq!(error, "Holder.t: needs the refused head of tuple 3");
+        assert!(walk.heads.is_empty(), "no head was pushed");
     }
 }

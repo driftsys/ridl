@@ -146,8 +146,8 @@ pub enum Form {
 pub enum Inlined {
     /// A struct or a union: the package that declares it and its name.
     Declaration { package: String, name: String },
-    /// A tuple written at the field. A tuple has no name; its structure is its
-    /// identity.
+    /// A tuple written at the field. The projection gives it no name; the
+    /// codegen walk finds its head by the position the tuple was lowered at.
     Tuple,
 }
 

@@ -332,7 +332,9 @@ impl<'a> Header<'a> {
     }
 
     /// The C type name of head `at`: `<package>_<type>_head` for a
-    /// declaration, and a name built from the path to the head for the others.
+    /// declaration and for a tuple that has an induced wire name, in the
+    /// package that declares it and in one that lays it out inline alike, and
+    /// a name built from the path to the head for the others.
     fn type_name(&self, at: usize) -> String {
         use v1::podbuf_head::Source;
         let prefix = &self.prefix;

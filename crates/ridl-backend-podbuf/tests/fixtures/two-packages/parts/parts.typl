@@ -8,12 +8,34 @@ struct Wheel {
   grip   : integer [0..1000000]
 }
 
-// `size` holds a tuple at a tuple position and `items` a tuple as an array
-// element: each is a head of its own in both headers.
+// `size` holds a tuple at a tuple position and `grid` a tuple as the element
+// of a fixed-count array: each is a head of its own, defined in both headers.
+// `items` holds a tuple as the element of a variable-count array: its head is
+// a tail head, which only the declaring header defines.
 struct Hub {
   size  : (width: integer [0..10], height: integer [0..10], inner: (p: integer [0..10], q: integer [0..10]))
   label : string [0..16]
   items : [(left: integer [0..10], right: integer [0..10]); 0..4]
+  grid  : [(top: integer [0..10], bottom: integer [0..10]); 2]
+}
+
+// Two positions whose induced Rust names are one (`ABC`), of one shape: the
+// declaring package gives them one entry, under the wire name of the first
+// reached (`A.bC`), and an importing package that reaches `A` before `AB`
+// names that same head for both. (`A` and `AB` are the shortest pair whose
+// C accessor names stay apart: `a_b_c_at` and `ab_c_at`.)
+struct A {
+  bC : (x: integer [0..10], y: integer [0..10])
+}
+
+struct AB {
+  c : (x: integer [0..10], y: integer [0..10])
+}
+
+// A tuple as the key and as the value of a map: the entry head and both
+// tuple heads are tail heads, which only the declaring header defines.
+struct Table {
+  byPair : [(k1: integer [0..10], k2: integer [0..10]) : (v1: integer [0..10], v2: integer [0..10]); 0..4]
 }
 
 // Two tuples of one shape at two members: each member has its own head.
