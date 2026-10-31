@@ -17,8 +17,8 @@
 //! }
 //!
 //! // Every test of the ports every runtime presents, those of the four
-//! // extensions this runtime implements, and those of a runtime that
-//! // carries the trace context.
+//! // extension flags, and those of a runtime that carries the trace
+//! // context.
 //! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams);
 //! ```
 //!
@@ -62,11 +62,13 @@
 //!   ordinal, an unowned member, a freshness of `Fresh` or `Stale` measured
 //!   against a staleness bound. The suite attaches to a catalog with no
 //!   descriptor, and a runtime with none reports `Freshness::Unbounded`.
-//! - **What a runtime does with a stream its member does not declare, and
-//!   the size of a stream's window.** The suite attaches to a catalog with
-//!   no descriptor, so a runtime under test holds no member table: the
-//!   stream tests use only the reply stream of a query and the first two
-//!   stream parameters, and do not test a stream number beyond them. A test
+//! - **A stream number beyond the first two stream parameters, and the size
+//!   of a stream's window.** The suite attaches to a catalog with no
+//!   descriptor, so a runtime under test holds no member table. Such a
+//!   runtime must accept `REPLY_STREAM` on a query, and `StreamNo(1)` and
+//!   `StreamNo(2)` on any call; a stream number beyond those is not tested,
+//!   and neither is what a runtime with a member table answers for a stream
+//!   its member does not declare. A test
 //!   that needs a full window pushes until a push answers 0, at most 1,024
 //!   times, and a runtime whose window does not fill in that many pushes
 //!   skips the part of the test that needs it.
@@ -347,7 +349,8 @@ macro_rules! suite {
             streams::a_settle_err_after_chunks_fails_the_stream_after_them,
             streams::a_push_into_a_full_window_answers_zero_and_a_pull_frees_it,
             streams::a_stream_waker_is_woken_by_a_chunk_an_end_and_a_freed_window,
-            streams::forget_wakes_a_stream_waker_and_a_settlement_wakes_a_claim_stream_waker,
+            streams::a_parameter_streams_wakers_are_woken_by_a_chunk_and_a_freed_window,
+            streams::a_settlement_and_a_forget_wake_the_stream_wakers,
             streams::forget_fails_the_providers_pull_and_push_with_interrupted,
             streams::an_abort_by_the_producer_fails_the_receivers_pull_after_the_chunks_before_it,
             streams::an_abort_or_a_push_after_the_end_is_ended_and_the_end_stands,

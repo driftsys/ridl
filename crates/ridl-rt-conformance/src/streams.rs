@@ -18,10 +18,9 @@
 //!
 //! The suite attaches to a catalog with no descriptor, so a runtime under
 //! test holds no member table and does not know which streams a member
-//! declares. The tests therefore use only the stream numbers a member would
-//! declare: [`REPLY_STREAM`] on a query, and `StreamNo(1)` and `StreamNo(2)`
-//! as stream parameters. What a runtime answers for a stream number its
-//! member never declares is not tested.
+//! declares. Such a runtime must accept [`REPLY_STREAM`] on a query, and
+//! `StreamNo(1)` and `StreamNo(2)` on any call; the tests use no other
+//! stream number, and a stream number beyond those is not tested.
 //!
 //! The window is the runtime's own choice. A test that needs a full window
 //! pushes until a push answers 0, and does at most 1,024 pushes; a
@@ -106,9 +105,24 @@ fn fill_reply_window(rt: &mut impl StreamHandler, claim: ClaimId) -> Option<usiz
     None
 }
 
+/// Pushes `&[1]` to the first parameter stream of `c` until a push answers
+/// 0, at most [`MAX_PUSHES`] times, as [`fill_reply_window`] does for the
+/// reply stream.
+fn fill_parameter_window(rt: &mut impl StreamCaller, c: Correlation) -> Option<usize> {
+    for taken in 0..MAX_PUSHES {
+        match rt.push(c, PARAM_1, &[1]) {
+            Ok(1) => {}
+            Ok(0) => return Some(taken),
+            other => panic!("a push into an open stream answers 1 or 0, not {other:?}"),
+        }
+    }
+    None
+}
+
 /// The provider pushes three chunks to a query's reply stream and ends it;
 /// the caller pulls the three in the order pushed, each with its bytes, and
-/// then `End`, and `End` again on the next pull.
+/// then `End`, and `End` again on the next pull. Each chunk is pulled before
+/// the next one is pushed, so a window of one chunk is enough.
 pub fn a_reply_stream_is_pulled_in_order_then_ends<F>()
 where
     F: Factory,
@@ -116,24 +130,21 @@ where
 {
     let (mut rt, c, claim) = claimed_query::<F>();
     let chunks: [&[u8]; 3] = [&[1], &[2, 2], &[3, 3, 3]];
+    let mut out = [0u8; 8];
     for chunk in chunks {
         assert_eq!(
             rt.push_claim(claim, REPLY_STREAM, chunk),
             Ok(chunk.len()),
             "a push takes the whole chunk"
         );
-    }
-    rt.end_claim(claim, REPLY_STREAM).expect("end_claim");
-
-    let mut out = [0u8; 8];
-    for chunk in chunks {
         assert_eq!(
             rt.pull(c, REPLY_STREAM, &mut out),
             Ok(Pull::Chunk(chunk.len())),
-            "the chunks are pulled one at a time, in the order pushed"
+            "the chunk is pulled whole, with its own length"
         );
         assert_eq!(&out[..chunk.len()], chunk);
     }
+    rt.end_claim(claim, REPLY_STREAM).expect("end_claim");
     assert_eq!(rt.pull(c, REPLY_STREAM, &mut out), Ok(Pull::End));
     assert_eq!(
         rt.pull(c, REPLY_STREAM, &mut out),
@@ -251,21 +262,22 @@ where
 }
 
 /// A settlement with an error ends the reply stream with that error, after
-/// the chunks already pushed.
+/// the chunks already pushed. The first chunk is pulled before the second is
+/// pushed, so a window of one chunk is enough.
 pub fn a_settle_err_after_chunks_fails_the_stream_after_them<F>()
 where
     F: Factory,
     F::Runtime: StreamCaller + StreamHandler + Wakeable,
 {
     let (mut rt, c, claim) = claimed_query::<F>();
+    let mut out = [0u8; 8];
     assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[1]), Ok(1));
+    assert_eq!(rt.pull(c, REPLY_STREAM, &mut out), Ok(Pull::Chunk(1)));
+    assert_eq!(&out[..1], &[1]);
     assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[2, 2]), Ok(2));
     let error = CallError::Contract(Contract::PreconditionFailed);
     rt.settle(claim, Err(error)).expect("settle");
 
-    let mut out = [0u8; 8];
-    assert_eq!(rt.pull(c, REPLY_STREAM, &mut out), Ok(Pull::Chunk(1)));
-    assert_eq!(&out[..1], &[1]);
     assert_eq!(rt.pull(c, REPLY_STREAM, &mut out), Ok(Pull::Chunk(2)));
     assert_eq!(&out[..2], &[2, 2]);
     assert_eq!(
@@ -346,6 +358,43 @@ where
     assert_eq!(wakes(&end), 1, "the end wakes the receiver's waker");
 }
 
+/// The wakers of a parameter stream: a `ClaimStream` waker on the provider's
+/// side is woken by a chunk the caller pushes, and a `Stream` waker of the
+/// caller, registered while the parameter window is full, is woken by the
+/// provider's pull that frees it. A runtime whose window does not fill in
+/// 1,024 pushes checks only the first.
+pub fn a_parameter_streams_wakers_are_woken_by_a_chunk_and_a_freed_window<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let mut out = [0u8; 8];
+
+    let (chunk, chunk_waker) = task();
+    rt.wake_on(Interest::ClaimStream(claim, PARAM_1), &chunk_waker);
+    assert_eq!(wakes(&chunk), 0, "nothing changed since the registration");
+    assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+    assert_eq!(wakes(&chunk), 1, "a chunk wakes the provider's waker");
+    assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+
+    let Some(taken) = fill_parameter_window(&mut rt, c) else {
+        return;
+    };
+    let (window, window_waker) = task();
+    rt.wake_on(Interest::Stream(c, PARAM_1), &window_waker);
+    assert_eq!(wakes(&window), 0, "nothing changed since the registration");
+    assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+    assert_eq!(
+        wakes(&window),
+        1,
+        "the pull that frees a full window wakes the caller's waker"
+    );
+    for _ in 1..taken {
+        assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+    }
+}
+
 /// A `Stream` waker of a call is woken when the call is settled and when the
 /// call is forgotten, so no task waits on a stream that can no longer change.
 /// A `ClaimStream` waker of the provider is woken when the caller forgets
@@ -355,7 +404,7 @@ where
 /// The settlement is an error settlement of a query, which ends its reply
 /// stream. The forget is of a query that is claimed and not settled, so the
 /// call is in flight when it is forgotten.
-pub fn forget_wakes_a_stream_waker_and_a_settlement_wakes_a_claim_stream_waker<F>()
+pub fn a_settlement_and_a_forget_wake_the_stream_wakers<F>()
 where
     F: Factory,
     F::Runtime: StreamCaller + StreamHandler + Wakeable,
@@ -652,6 +701,9 @@ where
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
     let old = fill::<F>(&mut rt)[0];
+    // A chunk on the old call's parameter stream, which the call that takes
+    // the slot must not inherit.
+    assert_eq!(rt.push(old, PARAM_1, &[9]), Ok(1));
     rt.forget(old);
     let new = rt
         .query(IFACE, ORD, &[2], None)
@@ -677,6 +729,7 @@ where
     assert_eq!(
         rt.pull_claim(claim, PARAM_1, &mut out),
         Ok(Pull::Pending),
-        "the push on the old correlation reached no stream"
+        "the new call holds neither the old call's chunk nor the push on the \
+         old correlation"
     );
 }

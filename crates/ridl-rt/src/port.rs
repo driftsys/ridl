@@ -407,6 +407,10 @@ pub struct ClaimId(pub u64);
 /// [`forget`](Caller::forget). A task that waits registers
 /// [`Interest::Stream`] with [`Wakeable`] before it pulls or pushes.
 ///
+/// A push to a parameter stream may come before the provider takes the
+/// call's claim: the runtime holds the pushed chunks, up to its window, until
+/// the provider pulls them.
+///
 /// The rules every method follows:
 ///
 /// - **The unit is the chunk.** A port never splits or merges a chunk: a pull
@@ -453,6 +457,11 @@ pub trait StreamCaller: Caller {
     /// consume it; `ReadError::Contract(Contract::UnknownInteraction)` when the
     /// call or the stream number is unknown; [`ReadError::Detached`] when the
     /// runtime behind the port is gone.
+    ///
+    /// A runtime that holds no member table, such as one attached to a
+    /// catalog with no descriptor, does not know which streams a member
+    /// declares: it accepts [`REPLY_STREAM`] on a query, and `StreamNo(1)` and
+    /// `StreamNo(2)` on any call.
     fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
     /// Offers one chunk to stream `s` of call `c`. Answers `chunk.len()` when
     /// the chunk was taken, and 0 when the window is full and a non-empty
