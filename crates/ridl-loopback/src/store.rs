@@ -68,7 +68,10 @@ pub(crate) const SLOTS: usize = 16;
 type Calls = Table<SLOTS>;
 
 /// The number of non-empty chunks one stream holds before a push answers 0.
-/// `Loopback::STREAM_WINDOW` is this value.
+/// `Loopback::STREAM_WINDOW` is this value. An empty chunk is always taken,
+/// whatever the window, so a producer that pushes only empty chunks grows the
+/// queue without bound; that follows from the port contract's rule that an
+/// empty chunk is taken whatever the window, and is accepted.
 pub(crate) const STREAM_WINDOW: usize = 4;
 
 /// The outcome a forget records on every stream of the call.
@@ -122,7 +125,10 @@ struct StreamState {
 }
 
 impl StreamState {
-    /// Whether the window has no room for another non-empty chunk.
+    /// Whether the window has no room for another non-empty chunk. The scan
+    /// is over the whole queue, under the store's lock: the queue holds at
+    /// most `STREAM_WINDOW` non-empty chunks and the empty chunks pushed
+    /// between them.
     fn full(&self) -> bool {
         self.chunks.iter().filter(|chunk| !chunk.is_empty()).count() >= STREAM_WINDOW
     }
@@ -1066,7 +1072,12 @@ impl Store {
     /// waiting calls and its slot reclaimed now, and one a handler has
     /// claimed is marked, so its settlement reclaims the slot. No handle can
     /// read the outcome of a call whose caller is gone, and a slot kept for
-    /// it would be lost to every other caller.
+    /// it would be lost to every other caller. One exception holds the slot
+    /// longer: a call whose provider still has a stream parameter to read
+    /// keeps its slot until the provider is done with it or its handler is
+    /// dropped (`Store::forget`, the deferred case), so a settled command
+    /// whose stream parameter no provider drains holds its slot for as long
+    /// as the handler that acknowledged it lives.
     ///
     /// Returns the caller's waiters, for the handle to drop after the lock is
     /// released, as `close_source` explains.
@@ -1136,15 +1147,14 @@ impl Store {
             if holds || entry.settled_by == Some(id) {
                 if entry.settled_by == Some(id) {
                     entry.settled_by = None;
-                    // No provider is left to read or push the streams of the
-                    // settled claim: every unfinished one stops, and the
-                    // caller's waiters on them are woken.
-                    for stream in entry.streams.values_mut() {
-                        stream.drained = true;
-                        if !stream.finished() {
-                            stream.stopped = Some((INTERRUPTED, Side::Provider));
-                        }
-                    }
+                    // No provider is left to read the stream parameters of
+                    // the settled claim: they are released, as a query's
+                    // settlement releases them, so every unfinished one
+                    // stops, one first named afterwards starts stopped, and
+                    // the caller's waiters on them are woken. The reply
+                    // stream of a settled claim already ended or stopped at
+                    // the settlement.
+                    entry.release_parameters(wake);
                     wake.extend(self.table.take_streams(*slot));
                     if entry.pending_forget {
                         entry.pending_forget = false;
@@ -1213,15 +1223,17 @@ impl Store {
             .calls
             .get_mut(&Calls::slot(c))
             .expect("a held claim names a call the table holds");
-        // The settlement stops the reply stream too, as any settlement with
-        // an error does, whether or not anything named it yet.
-        let _ = entry.stream(REPLY_STREAM);
-        for stream in entry.streams.values_mut() {
-            if !stream.finished() {
-                stream.stopped = Some((INTERRUPTED, Side::Provider));
-            }
-            wake.extend(stream.claim_waker.take());
+        // The settlement with an error releases the stream parameters, as
+        // any settlement with an error does: every unfinished one stops, and
+        // one first named afterwards starts stopped.
+        entry.release_parameters(wake);
+        // It stops the reply stream too, whether or not anything named it
+        // yet.
+        let reply = entry.stream(REPLY_STREAM);
+        if !reply.finished() {
+            reply.stopped = Some((INTERRUPTED, Side::Provider));
         }
+        wake.extend(reply.claim_waker.take());
         match self.table.settle(c, Err(INTERRUPTED)) {
             Settled::Recorded(waker) => {
                 wake.extend(waker);
