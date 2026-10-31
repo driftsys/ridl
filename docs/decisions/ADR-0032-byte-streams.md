@@ -8,8 +8,7 @@ in that position, the generated surface intended for such a stream in each
 target language, and the rules every stream shares: its end, its failures, its
 response bound and the size of its chunks. It binds the ridl and typl
 references, the checkers, the backends that generate a stream, the stream port
-of `ridl-rt` when it is built, and every transport binding that carries a
-stream.
+of `ridl-rt`, and every transport binding that carries a stream.
 
 Written from the owner's decisions of 2026-10-28 (decisions 1 to 8) and of
 2026-10-31 (decisions 9 to 14, which answer the six open questions the record

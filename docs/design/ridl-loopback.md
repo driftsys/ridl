@@ -486,16 +486,21 @@ outcome it stopped with and the side that stopped it; a stream has state from
 the first operation that names it, and a pull of a stream nothing named yet
 answers `Pull::Pending`. The loopback has no member table, so it accepts every
 stream number on every call, and a stream number is unknown only when its call
-is. Each stream has one producer: the provider pushes the reply stream
-(`REPLY_STREAM`) and the caller pushes each stream parameter, and a push, an end
-or a pull from the other side answers `Contract::UnknownInteraction`; an abort
-is accepted from either side. A stream holds `Loopback::STREAM_WINDOW` — four —
-non-empty chunks; a push of a non-empty chunk into a full stream answers 0 and
-takes nothing, and an empty chunk is always taken. Because an empty chunk is
-always taken, as the contract requires, the window does not bound a producer
-that pushes empty chunks and never ends the stream: each one is stored until it
-is pulled. A chunk longer than the member's limit is refused with
-`PushError::TooLarge`, under the limit a settlement's reply has.
+is. A stream parameter that an operation named and that the provider never
+reads, such as a stream number the member does not declare, holds the call's
+slot after a forget until the handler drops. The loopback also accepts
+`REPLY_STREAM` on a command's claim, and `end_claim(REPLY_STREAM)` there
+acknowledges the command. Each stream has one producer: the provider pushes the
+reply stream (`REPLY_STREAM`) and the caller pushes each stream parameter, and a
+push, an end or a pull from the other side answers
+`Contract::UnknownInteraction`; an abort is accepted from either side. A stream
+holds `Loopback::STREAM_WINDOW` — four — non-empty chunks; a push of a non-empty
+chunk into a full stream answers 0 and takes nothing, and an empty chunk is
+always taken. Because an empty chunk is always taken, as the contract requires,
+the window does not bound a producer that pushes empty chunks and never ends the
+stream: each one is stored until it is pulled. A chunk longer than the member's
+limit is refused with `PushError::TooLarge`, under the limit a settlement's
+reply has.
 
 The caller addresses a call's streams by its correlation while the table holds
 it and the caller has not forgotten it. The provider addresses them by the claim
@@ -526,8 +531,12 @@ caller still pushing to an acknowledged command learns the provider is gone.
 After the caller refused the reply stream, `end_claim` settles the claim with
 that refusal rather than `Ok`. This holds a slot no longer than the provider's
 reading, and uses no storage beyond the slot, at the cost of a caller finding
-the table full sooner. After every settlement and every forget that the table
-does not answer `Unknown`, the store takes the slot's `Stream` wakers with
+the table full sooner. With no member table, the store counts only the stream
+parameters an operation has already named: after the forget of a settled call
+none of whose stream parameters was named, the forget completes at once, the
+claim is no longer known, and a stream operation on it answers
+`Contract::UnknownInteraction`. After every settlement and every forget that the
+table does not answer `Unknown`, the store takes the slot's `Stream` wakers with
 `Table::take_streams`, and a reclaim also takes the provider's wakers, before
 the entry, and the streams with it, are dropped. The stream cases are the
 `streams` module of the `ridl-rt-conformance` suite this runtime runs.

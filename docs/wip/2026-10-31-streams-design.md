@@ -1095,7 +1095,8 @@ Rulings taken while the port was built. The source is the rustdoc of
 `crates/ridl-rt/src/port.rs`; this note only lists them.
 
 - An empty chunk is always taken.
-- A runtime without a member table accepts stream numbers 0, 1 and 2.
+- A runtime without a member table accepts `REPLY_STREAM` on a query, and
+  `StreamNo(1)` and `StreamNo(2)` on any call.
 - A forget keeps an ended stream and interrupts an open one.
 - A query's settlement releases its parameter streams; a command's does not.
 - A dropped handler interrupts a call whose streams have moved.
