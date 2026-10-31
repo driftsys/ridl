@@ -10,7 +10,9 @@
 //!   to what they precede; an inline trailing comment stays on its line, except
 //!   after a machine block and after a separator comma that is on a line of its
 //!   own, where it leads the next member (or stays at the end of the body when
-//!   no member follows);
+//!   no member follows); a line comment on the first line of a declaration
+//!   stays on that line when the declaration is broken over several lines, so
+//!   a lint directive keeps its declaration (ADR-0024 decision 2);
 //! - **total** — every syntactically valid input formats; a file with parse
 //!   errors is never reformatted (fmt must not eat broken code, so it returns
 //!   [`FormatOutcome::ParseErrors`] untouched);
@@ -236,15 +238,26 @@ fn layout_container(
             if block.blank_before_node {
                 lines.push(String::new());
             }
+            // The node's first rendered line: a line comment on the node's
+            // first source line stays on that line (ADR-0024 decision 2), so
+            // a lint directive keeps the declaration it names when the
+            // formatter breaks the declaration over several lines.
+            let mut first_line = lines.len();
             if let Some(node) = &block.node {
                 if !block.trailing.is_empty() && has_moved_annotation_line_comment(node) {
                     lines.push(format!("{ind}{}", node.text()));
                 } else {
                     lines.extend(format_element(node, indent, options));
                 }
+                if let Some(comment) = first_line_comment(node) {
+                    pin_to_first_line(&mut lines, first_line, &comment);
+                }
+                if spans_lines(node) {
+                    first_line = lines.len().saturating_sub(1);
+                }
             }
             for comment in &block.trailing {
-                if let Some(line) = lines.last_mut() {
+                if let Some(line) = lines.get_mut(first_line) {
                     line.push(' ');
                     line.push_str(comment);
                 }
@@ -268,6 +281,71 @@ fn layout_container(
         out.extend(block.lines.iter().cloned());
     }
     out
+}
+
+/// The line comment on the first source line of `node`, with its trailing
+/// whitespace trimmed, when the node has one in its own header. A comment
+/// after the first body member, or after the first attribute of an attribute
+/// block, belongs to that member or attribute, which is laid out on a line of
+/// its own and keeps its comment.
+fn first_line_comment(node: &SyntaxNode) -> Option<String> {
+    let mut in_body = false;
+    let mut after_attribute = false;
+    for element in node.descendants_with_tokens() {
+        match element {
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::LineComment => {
+                return (!after_attribute).then(|| token.text().trim_end().to_string());
+            }
+            NodeOrToken::Token(token) if line_breaks(token.text()) > 0 => return None,
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::LBrace => {
+                in_body = token.parent().as_ref() == Some(node);
+            }
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::RBracket => {
+                after_attribute = false;
+            }
+            NodeOrToken::Token(_) => {}
+            NodeOrToken::Node(_) if in_body => return None,
+            NodeOrToken::Node(child) if child.kind() == SyntaxKind::Attribute => {
+                after_attribute = true;
+            }
+            NodeOrToken::Node(_) => {}
+        }
+    }
+    None
+}
+
+/// Whether the source text of `node` spans more than one line.
+fn spans_lines(node: &SyntaxNode) -> bool {
+    node.descendants_with_tokens()
+        .filter_map(|e| e.into_token())
+        .any(|token| line_breaks(token.text()) > 0)
+}
+
+/// Moves `comment` from a line after `lines[first]` to the end of
+/// `lines[first]`. A line that holds only the comment is removed; a line that
+/// ends with it keeps its code. The lines are unchanged when the comment is on
+/// `lines[first]` already, or on none of the later lines.
+fn pin_to_first_line(lines: &mut Vec<String>, first: usize, comment: &str) {
+    let Some(index) = lines.iter().skip(first + 1).position(|line| {
+        let line = line.trim_end();
+        line.ends_with(comment)
+            && line[..line.len() - comment.len()]
+                .chars()
+                .next_back()
+                .is_none_or(char::is_whitespace)
+    }) else {
+        return;
+    };
+    let index = first + 1 + index;
+    if lines[index].trim() == comment {
+        lines.remove(index);
+    } else {
+        let line = &mut lines[index];
+        let end = line.trim_end().len() - comment.len();
+        line.truncate(line[..end].trim_end().len());
+    }
+    lines[first].push(' ');
+    lines[first].push_str(comment);
 }
 
 /// One source container unit before its node is rendered. Attribute bodies and
@@ -3312,7 +3390,7 @@ mod tests {
         ] {
             assert_profile_format(
                 &format!("package p\n{source} // shapes\n"),
-                "package p\n\nservice veh.body.composite:\n  DoorControl,\n  MotorControl // shapes\n",
+                "package p\n\nservice veh.body.composite: // shapes\n  DoorControl,\n  MotorControl\n",
                 Profile::Ridl,
                 &FormatOptions {
                     max_line_length: Some(40),
@@ -3784,11 +3862,13 @@ mod tests {
                 if i == 127 { "" } else { "," }
             ));
         }
-        expected.push_str("  ) // tuple detail\n}\n");
+        expected.push_str("  )\n}\n");
         let input = format!(
             "package p\n// nested tuples\nstruct S {{ t: ({}) // tuple detail\n}}\n",
             fields.join(", ")
         );
+        // The trailing comment stays on the line where the field starts.
+        let expected = expected.replacen("  t: (\n", "  t: ( // tuple detail\n", 1);
         for width in [100, 60, 40] {
             assert_width_format(
                 &input,
@@ -3835,10 +3915,10 @@ mod tests {
     }
 
     #[test]
-    fn a_trailing_comment_follows_the_broken_tuple_closer() {
+    fn a_trailing_comment_stays_on_the_first_line_of_the_broken_tuple() {
         assert_width_format(
             "package p\nstruct S { pair: (a: A, b: B) // pair detail\n}\n",
-            "package p\n\nstruct S {\n  pair: (\n    a: A,\n    b: B\n  ) // pair detail\n}\n",
+            "package p\n\nstruct S {\n  pair: ( // pair detail\n    a: A,\n    b: B\n  )\n}\n",
             &FormatOptions {
                 max_line_length: Some(19),
             },
