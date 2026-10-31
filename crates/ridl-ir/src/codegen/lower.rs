@@ -1128,21 +1128,25 @@ impl<'a> Lowering<'a> {
                     (None, Some(ret)) => self.sizes(home, &PayloadShape::Return(ret), reply_named),
                     (None, None) => absent_sizes(),
                 };
-                let payloads = vec![
-                    (
-                        "request",
-                        params_text(&query.params),
-                        Some(request_sizes.clone()),
-                    ),
-                    (
+                let mut payloads = vec![(
+                    "request",
+                    params_text(&query.params),
+                    Some(request_sizes.clone()),
+                )];
+                // A streamed reply has no response payload: its chunks are not
+                // held by the call table, and the member's limit bounds each
+                // of them (ADR-0032 decision 14). So it reserves nothing, as
+                // the size table the Rust backend emits has no row for it.
+                if !query.return_type.as_ref().is_some_and(returns_stream) {
+                    payloads.push((
                         "reply",
                         query
                             .return_type
                             .as_ref()
                             .map_or_else(|| "()".to_string(), return_text),
                         Some(reply_sizes.clone()),
-                    ),
-                ];
+                    ));
+                }
                 let reply_payload = reply_named.map(|reference| self.payload(home, reference));
                 let reply_tuple = match reply_named {
                     Some(_) => None,
@@ -1932,6 +1936,11 @@ pub fn request_shape<'a>(
 /// Whether a field type is a stream.
 fn is_stream(ty: &v2::FieldType) -> bool {
     matches!(ty.kind, Some(v2::field_type::Kind::Stream(_)))
+}
+
+/// Whether a query's return type is a stream: a streamed reply.
+fn returns_stream(ret: &v2::ReturnType) -> bool {
+    matches!(&ret.kind, Some(v2::return_type::Kind::Value(ty)) if is_stream(ty))
 }
 
 /// The single declared non-stream parameter's named type — the one call shape

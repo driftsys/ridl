@@ -4101,6 +4101,52 @@ fn a_parameter_doc_reaches_the_induced_field() {
     assert_eq!(induced.fields[1].doc, "");
 }
 
+/// A stream parameter has no field in the induced argument struct, so each
+/// field takes the doc of the non-stream parameter it stands for, not the doc
+/// of the parameter at the same position in the declared list.
+#[test]
+fn a_stream_parameter_does_not_shift_the_docs_of_the_induced_fields() {
+    let mut package = call_package();
+    let documented = |name: &str, ty: v2::FieldType, doc: &str| v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+        doc: doc.to_string(),
+        ..Default::default()
+    };
+    let bytes = v2::FieldType {
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        })),
+        ..Default::default()
+    };
+    calls_interface(&mut package).interactions.push(call_decl(
+        "upload",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                documented("data", bytes, "The data."),
+                documented("info", named("Pair"), "The info."),
+                documented("size", named("Pair"), "The size."),
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsUploadParams")
+        })
+        .expect("the induced argument struct");
+    let docs: Vec<&str> = induced.fields.iter().map(|f| f.doc.as_str()).collect();
+    assert_eq!(docs, vec!["The info.", "The size."]);
+}
+
 /// The doc reaches the field of the argument struct only. A tuple written
 /// inside a parameter is a type of its own, and its fields carry no doc, as
 /// the IR has none for them.
@@ -4892,6 +4938,29 @@ fn a_streamed_reply_keeps_reply_sizes_absent_and_sizes_the_request_struct() {
     let request = query.request_sizes.as_ref().expect("request sizes");
     assert!(is_bounded(&request.flatbuffers));
     assert!(is_bounded(&request.proto3));
+}
+
+/// A streamed reply has no response payload, so a query that replies with a
+/// stream reserves its request alone, as the Rust backend's size table does,
+/// and does not make its interface's table budget unsized.
+#[test]
+fn a_streamed_reply_reserves_its_request_alone() {
+    let model = lower(&stream_package(), &[]);
+    let history = call_named(&model, "streamFilterHistory");
+    let Some(v1::interaction::Shape::Query(query)) = history.shape.as_ref() else {
+        panic!("a query");
+    };
+    for proto3 in [true, false] {
+        let request = match state(&query.request_sizes, proto3) {
+            v1::size_state::State::Bounded(size) => u64::from(*size),
+            other => panic!("a bounded request, got {other:?}"),
+        };
+        assert_eq!(
+            reserved(&history.reservation, proto3),
+            &bytes(request),
+            "proto3 {proto3}: the request alone"
+        );
+    }
 }
 
 /// A named parameter beside a stream parameter is the whole request: no

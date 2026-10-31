@@ -6526,13 +6526,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "streamFaults.reply: stream"
+                "bytes": "265"
               },
               "flatbuffers": {
-                "unsized": "streamFaults.reply: stream"
+                "bytes": "324"
               },
               "podbuf": {
-                "unsized": "streamFaults.reply: stream"
+                "bytes": "281"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6946,13 +6946,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ],
       "tableBudget": {
         "proto3": {
-          "unsized": "streamFaults"
+          "unsized": "getFaultPage"
         },
         "flatbuffers": {
-          "unsized": "streamFaults"
+          "unsized": "getFaultPage"
         },
         "podbuf": {
-          "unsized": "streamFaults"
+          "unsized": "getFaultPage"
         }
       },
       "links": [],
@@ -8884,13 +8884,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "streamFilterHistory.reply: stream"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "streamFilterHistory.reply: stream"
+                "bytes": "43"
               },
               "podbuf": {
-                "unsized": "streamFilterHistory.reply: stream"
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -9056,13 +9056,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "rebalance.reply: stream"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "unsized": "rebalance.reply: stream"
+                "bytes": "33"
               },
               "podbuf": {
-                "unsized": "rebalance.reply: stream"
+                "bytes": "8"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -10244,13 +10244,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "inlineOfService": 3,
       "tableBudget": {
         "proto3": {
-          "unsized": "streamFilterHistory"
+          "unsized": "calibrate"
         },
         "flatbuffers": {
-          "unsized": "streamFilterHistory"
+          "unsized": "calibrate"
         },
         "podbuf": {
-          "unsized": "streamFilterHistory"
+          "unsized": "calibrate"
         }
       },
       "links": [],

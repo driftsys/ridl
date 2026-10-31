@@ -552,7 +552,10 @@ message Interaction {
   // The memory a call table reserves for the member, per wire encoding: the
   // sum of the sizes of its payloads. A signal and an event have one payload,
   // a command has its request, and a query has its request and then its
-  // reply. A fixed member counts no payload and is always `bytes` 0, whatever
+  // reply. A reply that is a stream adds nothing: its chunks are not held by
+  // the call table, and the member's limit bounds each one (ADR-0032
+  // decision 14), which is the row the Rust backend's size table has for it.
+  // A fixed member counts no payload and is always `bytes` 0, whatever
   // its payload: a fixed value is provisioned and never in flight, which is
   // the same number the runtime's size table carries for it.
   Reservation reservation = 8;
@@ -588,6 +591,12 @@ message Interaction {
   // reply stream first (`no` 0) when a query replies with a stream, then
   // each stream parameter in declaration order. Empty for a member with no
   // stream.
+  //
+  // A member with a stream parameter has a `request` or a `request_tuple`
+  // made of its non-stream parameters; a model written before this field
+  // existed had neither for such a member. A plugin that does not carry
+  // streams skips every member whose `streams` is not empty: emitting it as a
+  // plain call would send the request without its streams.
   repeated StreamShape streams = 25;
 }
 
