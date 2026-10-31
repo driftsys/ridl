@@ -51,7 +51,7 @@ mod design_lints;
 mod link_encodings;
 pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod diff_side;
-pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
+pub use diff_side::{DiffSide, DiffSideError, diff_context, load_diff_side};
 pub mod plugin;
 
 /// Serializes the write of a file this test binary then executes against
@@ -1130,9 +1130,11 @@ pub fn run_build_with(
 
 /// What a build gives the function that computes the earlier catalogs each
 /// unit is compatible with: every checked package of the workspace's own
-/// units, the `ridl.std` package, and whether the workspace names any
-/// `[imports]`. The packages of a remote unit are not among the packages
-/// given.
+/// units, the `ridl.std` package, whether the workspace names any
+/// `[imports]`, and the checked packages of the remote units the compile
+/// resolved. The packages of a remote unit are not among the first list: the
+/// function compares the workspace's own units only, and reads the remote
+/// packages to resolve the types those units reach.
 ///
 /// `E` is the error the function reports, chosen by the caller; it defaults to
 /// [`std::io::Error`].
@@ -1140,6 +1142,7 @@ pub type CompatibleCatalogsFn<'a, E = std::io::Error> = dyn FnMut(
         &[&ridl_ir::v2::Package],
         &ridl_ir::v2::Package,
         bool,
+        &[&ridl_ir::v2::Package],
     ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, E>
     + 'a;
 
@@ -1147,8 +1150,9 @@ pub type CompatibleCatalogsFn<'a, E = std::io::Error> = dyn FnMut(
 /// instead of given. `compute` is called once, right after the compile — the
 /// load, which materializes the manifest's imports, and the check — and
 /// before a plugin is resolved or any lint level is applied, with the
-/// checked packages of the workspace's own units, the `ridl.std` package and
-/// whether the workspace names `[imports]`. It is not called when the
+/// checked packages of the workspace's own units, the `ridl.std` package,
+/// whether the workspace names `[imports]`, and the checked packages of the
+/// remote units. It is not called when the
 /// compile has an error diagnostic, a remote unit's or a MANI-1xx one
 /// included, whatever the build later writes. Its
 /// result is used as `run_build_with` uses its `compatible` argument, and an
@@ -1266,25 +1270,31 @@ fn run_build_inner<E: From<std::io::Error>>(
     // anything else can fail, so a history that cannot be read is reported
     // first. A compile with an error diagnostic gets no list from `compute`.
     // The list covers the workspace's own units: a remote unit's catalog is
-    // its owner's to publish, so its packages are not given.
+    // its owner's to publish, so its packages are given apart, for the types
+    // the workspace's units reach in them.
     let computed = match compute {
         Some(compute)
             if !diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.severity == Severity::Error) =>
         {
-            let packages: Vec<&ridl_ir::v2::Package> = checked
-                .iter()
-                .map(|package| &package.ir)
-                .filter(|ir| !is_remote(ir, &remote_units))
-                .collect();
+            let (remotes, packages): (Vec<&ridl_ir::v2::Package>, Vec<&ridl_ir::v2::Package>) =
+                checked
+                    .iter()
+                    .map(|package| &package.ir)
+                    .partition(|ir| is_remote(ir, &remote_units));
             let std_for_catalogs = check_package(&db, workspace, std, std).ir;
             let names_imports = !workspace.imports(&db).is_empty()
                 || workspace
                     .packages(&db)
                     .iter()
                     .any(|package| !package.imports(&db).is_empty());
-            Some(compute(&packages, &std_for_catalogs, names_imports)?)
+            Some(compute(
+                &packages,
+                &std_for_catalogs,
+                names_imports,
+                &remotes,
+            )?)
         }
         _ => None,
     };

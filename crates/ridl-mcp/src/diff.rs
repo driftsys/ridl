@@ -52,12 +52,15 @@ pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
         .collect::<Vec<_>>();
     let new = ridlc::load_diff_side(&mut db, Path::new(&input.new), &overlays)
         .map_err(|error| load_error("new", error))?;
+    // `ridl.std` and the remote packages either source side compiled are the
+    // context, as in `ridl diff`: a type a compared package reaches in one
+    // resolves.
     let report = ridl_diff::diff_workspaces_with(
         &old.packages,
         old.system.as_ref(),
         &new.packages,
         new.system.as_ref(),
-        &[ridlc::std_ir()],
+        &ridlc::diff_context(&old, &new),
         &encodings,
     );
     Ok(serde_json::from_str(&ridl_diff::render_json(&report))

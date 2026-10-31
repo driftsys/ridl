@@ -197,7 +197,8 @@ Input: `old`, `new`, optional `overlays`. Each side accepts source paths,
 `.ir.json` files or snapshot directories, using the CLI's loader. Overlays apply
 to the new source side only and are refused for snapshots. Result: the object
 `ridl diff --format json` prints, including `verdict` and `changes`, with the
-standard IR supplied as context. Load failures are tool errors with the CLI's
+standard IR and the remote packages either source side compiled supplied as
+context, as the CLI supplies them. Load failures are tool errors with the CLI's
 message. A source side that does not compile returns `isError: true` with
 structured `message` and `diagnostics`; the message identifies the old or new
 side. The diagnostics retain their full JSON shape.

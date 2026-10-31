@@ -5,6 +5,8 @@
 
 mod remote_support;
 
+use std::path::{Path, PathBuf};
+
 use remote_support::*;
 
 /// `ridl check` fetches the unit once, pins both hashes, and the import
@@ -615,4 +617,198 @@ fn the_catalog_note_names_the_owner() {
         "{stderr}"
     );
     assert!(stderr.contains("published by its owner"), "{stderr}");
+}
+
+/// Two consumers of one stub, the old one in `dir` and the new one in `new`,
+/// each checked so that the cache holds the unit: `(old_root, new_root)`.
+/// `HOME` is `dir` for both, so the two share the cache.
+fn inline_pair(dir: &TempDir, new: &TempDir, stub: &Stub, appended: &str) -> (PathBuf, PathBuf) {
+    let old = inline_consumer(dir, stub.url(), "");
+    let new_root = inline_consumer(new, stub.url(), appended);
+    for root in [&old, &new_root] {
+        let (code, _, stderr) = ridl(root, dir.path(), &["check"]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    (old, new_root)
+}
+
+/// `ridl diff --format json --encoding podbuf old new`, run with `HOME` at
+/// `home`: `(exit_code, report)`.
+fn podbuf_diff(home: &Path, old: &Path, new: &Path) -> (i32, serde_json::Value) {
+    let (code, stdout, stderr) = ridl(
+        old,
+        home,
+        &[
+            "diff",
+            "--format",
+            "json",
+            "--encoding",
+            "podbuf",
+            old.to_str().unwrap(),
+            new.to_str().unwrap(),
+        ],
+    );
+    assert_ne!(code, 2, "{stderr}");
+    (
+        code,
+        serde_json::from_str(&stdout).expect("the report is JSON"),
+    )
+}
+
+/// The categories of the report's changes, in order.
+fn categories(report: &serde_json::Value) -> Vec<&str> {
+    report["changes"]
+        .as_array()
+        .expect("the report lists its changes")
+        .iter()
+        .map(|change| change["category"].as_str().unwrap())
+        .collect()
+}
+
+/// A struct held inline whose head reaches a remote type: the remote package
+/// is laid out from the side that compiled it, so a growing append to the
+/// struct is a podbuf break and a pad-fit append is not.
+#[test]
+fn diff_judges_a_podbuf_inline_append_whose_head_reaches_a_remote_type() {
+    let dir = TempDir::new("podbuf-diff");
+    let new = TempDir::new("podbuf-diff-new");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let (old, new_root) = inline_pair(&dir, &new, &stub, "  quality: Wide\n");
+    let (code, report) = podbuf_diff(dir.path(), &old, &new_root);
+    assert_eq!(code, 1, "the growing append is a podbuf break: {report}");
+    assert_eq!(report["verdict"], "breaking", "{report}");
+    assert!(
+        categories(&report).contains(&"podbuf_inline_append"),
+        "{report}"
+    );
+
+    let (code, report) = podbuf_diff(
+        dir.path(),
+        &old,
+        &inline_consumer(&new, stub.url(), "  quality: Level\n"),
+    );
+    assert_eq!(code, 0, "the pad-fit append is compatible: {report}");
+    assert_eq!(report["verdict"], "compatible", "{report}");
+    assert!(
+        !categories(&report).contains(&"podbuf_inline_append"),
+        "{report}"
+    );
+}
+
+/// A field appended with a remote type that holds 0 is judged by that type's
+/// declaration, as a field of a `ridl.std` type is: compatible, not breaking
+/// as unresolved.
+#[test]
+fn diff_resolves_the_type_of_a_field_appended_from_a_remote_package() {
+    let dir = TempDir::new("remote-append");
+    let new = TempDir::new("remote-append-new");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let (old, new_root) = inline_pair(&dir, &new, &stub, "");
+    new.write(
+        "app/app.ridl",
+        &std::fs::read_to_string(new_root.join("app.ridl"))
+            .unwrap()
+            .replace("  limit: Level\n", "  limit: Level\n  top: Speed\n"),
+    );
+    let (code, stdout, stderr) = ridl(
+        &old,
+        dir.path(),
+        &[
+            "diff",
+            "--format",
+            "json",
+            old.to_str().unwrap(),
+            new_root.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(
+        code, 0,
+        "the appended field's type resolves: {stdout}{stderr}"
+    );
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["verdict"], "compatible", "{report}");
+}
+
+/// Publishes the base `inline_consumer` as a baseline, rewrites its source
+/// with `appended`, and returns the `compatible` list `ridl build --emit
+/// catalog` writes for `app` and the hash lines of the history `ridl
+/// baseline` then publishes.
+fn judge_remote_edit(label: &str, appended: &str) -> (Vec<serde_json::Value>, Vec<String>) {
+    let dir = TempDir::new(label);
+    let out = TempDir::new(&format!("{label}-out"));
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = inline_consumer(&dir, stub.url(), "");
+    for args in [["check"], ["lock"], ["baseline"]] {
+        let (code, _, stderr) = ridl(&root, dir.path(), &args);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    inline_consumer(&dir, stub.url(), appended);
+    let (code, _, stderr) = ridl(
+        &root,
+        dir.path(),
+        &[
+            "build",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+            "--emit",
+            "catalog",
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    let descriptor = out.path().join("app.catalog.binfb");
+    let (code, stdout, stderr) = ridl(
+        &root,
+        dir.path(),
+        &["describe", descriptor.to_str().unwrap()],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    let described: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    let compatible = described["compatible"]
+        .as_array()
+        .expect("the descriptor has a compatible array")
+        .clone();
+    let (code, _, stderr) = ridl(&root, dir.path(), &["baseline"]);
+    assert_eq!(code, 0, "{stderr}");
+    let history = std::fs::read_to_string(root.join(".ridl/baseline/app.catalogs")).unwrap();
+    let hashes = history
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_string)
+        .collect();
+    (compatible, hashes)
+}
+
+/// With `podbuf` in the root manifest, a growing append to a struct held
+/// inline whose head reaches a remote type ends the unit's history: `ridl
+/// build` lists no earlier catalog and `ridl baseline` restarts the chain.
+#[test]
+fn a_podbuf_break_through_a_remote_type_ends_the_catalog_history() {
+    let (compatible, history) = judge_remote_edit("podbuf-break", "  quality: Wide\n");
+    assert!(
+        compatible.is_empty(),
+        "ridl build lists nothing: {compatible:?}"
+    );
+    assert_eq!(
+        history.len(),
+        1,
+        "ridl baseline restarts the chain: {history:?}"
+    );
+}
+
+/// The same struct with a pad-fit append carries the history under both
+/// commands: the remote type resolves on both sides, so the old head has a
+/// size and the one-byte field fits inside it.
+#[test]
+fn a_pad_fit_append_through_a_remote_type_carries_the_catalog_history() {
+    let (compatible, history) = judge_remote_edit("podbuf-pads", "  quality: Level\n");
+    assert_eq!(
+        compatible.len(),
+        1,
+        "ridl build carries the chain: {compatible:?}"
+    );
+    assert_eq!(
+        history.len(),
+        2,
+        "ridl baseline carries the chain: {history:?}"
+    );
 }

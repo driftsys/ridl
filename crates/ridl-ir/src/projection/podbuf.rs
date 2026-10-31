@@ -321,6 +321,69 @@ pub fn field_form(packages: Packages<'_>, ty: &v2::FieldType) -> Result<Form, Pr
     Layout::new(packages).form(packages.package, ty)
 }
 
+/// Whether a field of type `ty`, its bare names resolved in
+/// `packages.package`, holds the declaration `package.name` at a fixed offset
+/// of the head that holds the field: `ty` names the declaration, optional or
+/// not, or is an exact-length array of it, or a tuple one of whose members
+/// does either, at any depth of tuples and exact-length arrays.
+///
+/// This reads the shape of the type and never lays the declaration out, so
+/// it answers for a type whose form the law refuses — a struct whose own head
+/// reaches a type `packages` does not hold — where [`field_form`] cannot. For
+/// a type the law accepts, it agrees with the form: such a field is a
+/// [`Form::Inline`] of the declaration, an [`Form::InlineArray`] of one, or an
+/// inline tuple holding one. A bounded array, a map, a stream and a reference
+/// to another declaration hold nothing at a fixed offset here, whatever is
+/// inside them.
+#[must_use]
+pub fn shape_holds_inline(
+    packages: Packages<'_>,
+    ty: &v2::FieldType,
+    package: &str,
+    name: &str,
+) -> bool {
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Named(reference)) => packages
+            .resolve(packages.package, reference)
+            .is_some_and(|(decl, declaring)| declaring.name == package && decl.name == name),
+        Some(v2::field_type::Kind::Array(array)) if array.min == array.max => array
+            .element
+            .as_ref()
+            .is_some_and(|element| shape_holds_inline(packages, element, package, name)),
+        Some(v2::field_type::Kind::Tuple(tuple)) => tuple.fields.iter().any(|field| {
+            field
+                .r#type
+                .as_ref()
+                .is_some_and(|ty| shape_holds_inline(packages, ty, package, name))
+        }),
+        _ => false,
+    }
+}
+
+/// [`shape_holds_inline`] for a root — an interaction's request, reply or
+/// fixed payload — whose type is `ty`. The encoder lays out a head for a
+/// declaration and for a tuple only, so a root holds the declaration at a
+/// fixed offset only through a tuple: a root that names the declaration is
+/// that declaration's own head, and a root that is an exact-length array of
+/// it has no head. A tuple at the root, or inside exact-length arrays at the
+/// root, is read as a field is.
+#[must_use]
+pub fn root_shape_holds_inline(
+    packages: Packages<'_>,
+    ty: &v2::FieldType,
+    package: &str,
+    name: &str,
+) -> bool {
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Named(_)) => false,
+        Some(v2::field_type::Kind::Array(array)) if array.min == array.max => array
+            .element
+            .as_ref()
+            .is_some_and(|element| root_shape_holds_inline(packages, element, package, name)),
+        _ => shape_holds_inline(packages, ty, package, name),
+    }
+}
+
 /// The bytes one value of `form` takes in a head, and the stride of an array
 /// or map whose element it is. A head's size is a multiple of 8, so an
 /// [`Form::Inline`] element's stride is too, and the element can grow by an

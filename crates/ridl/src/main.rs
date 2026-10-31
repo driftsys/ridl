@@ -600,14 +600,16 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
     // No snapshot carries `ridl.std`, so it is passed as context: a struct
     // field appended with a `ridl.std` type is then judged by that type's
     // declaration rather than reported breaking as unresolved
-    // (driftsys/ridl#598).
+    // (driftsys/ridl#598). The remote packages a source side compiled are
+    // context too, so a type a compared package reaches in one resolves, and
+    // a struct whose head reaches one is laid out for the podbuf rule.
     let encodings: Vec<&str> = encodings.iter().map(|encoding| encoding.name()).collect();
     let report = ridl_diff::diff_workspaces_with(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
-        &[ridlc::std_ir()],
+        &ridlc::diff_context(&old_side, &new_side),
         &encodings,
     );
     // `render_text` already terminates every line, so it prints as is; the JSON
@@ -789,11 +791,13 @@ fn run_build(
     // compiled once. An error the computation reports has already been
     // printed; it carries its exit code out of the build.
     let mut db = ridl_core::RidlDatabase::default();
-    let mut compute =
-        |checked: &[&ridl_ir::v2::Package], std: &ridl_ir::v2::Package, names_imports: bool| {
-            catalogs::compatible_catalogs(&mut db, path, checked, std, names_imports)
-                .map_err(BuildFailure::Exit)
-        };
+    let mut compute = |checked: &[&ridl_ir::v2::Package],
+                       std: &ridl_ir::v2::Package,
+                       names_imports: bool,
+                       remotes: &[&ridl_ir::v2::Package]| {
+        catalogs::compatible_catalogs(&mut db, path, checked, std, names_imports, remotes)
+            .map_err(BuildFailure::Exit)
+    };
     let run = ridlc::run_build_computing(
         path,
         out_dir,
@@ -851,7 +855,21 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     // baseline is not a report to a person, so no `[lints]` level applies, and
     // a lint at `deny` does not block the publication (ADR-0024
     // decision 8).
-    let mut run = match ridlc::run_build_with(
+    // The build's compute step is used to keep the remote packages this
+    // compile resolved, which the catalog histories below need as the diff's
+    // context and which no snapshot carries; the step gives no list, because
+    // a snapshot carries none — the chain is written beside it below. A
+    // second compile would read the workspace frozen and could fail where
+    // this one succeeded.
+    let mut remotes: Vec<ridl_ir::v2::Package> = Vec::new();
+    let mut keep_remotes = |_: &[&ridl_ir::v2::Package],
+                            _: &ridl_ir::v2::Package,
+                            _: bool,
+                            found: &[&ridl_ir::v2::Package]| {
+        remotes = found.iter().map(|package| (*package).clone()).collect();
+        Ok(BTreeMap::new())
+    };
+    let mut run = match ridlc::run_build_computing::<std::io::Error>(
         path,
         &staging,
         &[Emit::IrJson],
@@ -860,8 +878,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         false.into(),
         ApplyLints::No,
         None,
-        // A snapshot carries no list; the chain is written beside it below.
-        &BTreeMap::new(),
+        Some(&mut keep_remotes),
     ) {
         Ok(run) => run,
         Err(err) => {
@@ -914,9 +931,14 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 
     // The histories are written into the staging directory only once both
     // gates passed, so a refused run leaves every published history as it was.
-    if let Err(code) =
-        catalogs::write_catalog_histories(&staging, &out_dir, &sets.published, &sets.fresh, path)
-    {
+    if let Err(code) = catalogs::write_catalog_histories(
+        &staging,
+        &out_dir,
+        &sets.published,
+        &sets.fresh,
+        &remotes,
+        path,
+    ) {
         let _ = std::fs::remove_dir_all(&staging);
         return code;
     }
@@ -941,7 +963,11 @@ struct PublicationSets {
     published: Vec<ridl_ir::v2::Package>,
     fresh: Vec<ridl_ir::v2::Package>,
     /// `ridl_diff::diff_sets` of the two sets, computed once for both gates;
-    /// `None` when the published set is empty.
+    /// `None` when the published set is empty. The gates read ordinal and
+    /// interface categories only, so this diff is judged for no encoding and
+    /// with no context: a remote type is left unresolved, which no gate
+    /// reads. The catalog histories are judged by their own diff, with the
+    /// context ([`catalogs::write_catalog_histories`]).
     report: Option<ridl_diff::DiffReport>,
 }
 
@@ -1570,7 +1596,11 @@ fn desk_check(
         .collect();
 
     // `ridl.std` is context, as in `run_diff`, so the desk reads the verdict
-    // the gate gives (driftsys/ridl#598).
+    // the gate gives (driftsys/ridl#598). The remote packages are not: this
+    // desk check reads ordinal and member categories, judged for no
+    // encoding, so no podbuf rule runs here and no head is laid out; a
+    // workspace that builds podbuf judges those breaks with `ridl diff
+    // --encoding podbuf`, `ridl build` and `ridl baseline`.
     let std = [ridlc::std_ir()];
     let report = ridl_diff::diff_sets_in(&baseline, &current, &std);
     let index = DeclIndex::build(entry);

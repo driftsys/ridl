@@ -1930,23 +1930,30 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
 /// both computed by the layout law ([`projection::podbuf::struct_head`]) over
 /// their own side; every head has the alignment
 /// [`projection::podbuf::HEAD_ALIGN`], so a field past the old size is what
-/// grows the head. A new head the law refuses is read as grown, with a line
-/// per appended field, which keeps the earlier, conservative verdict.
+/// grows the head. A head the law refuses on either side is read as grown,
+/// with a line per appended field, which keeps the earlier, conservative
+/// verdict: with no old size to measure against, a pad-fit append draws the
+/// line too. The old head is refused when the struct reaches a type no
+/// package of `old` holds — a remote package the caller did not pass as
+/// context, or one no side resolves, as when both sides are snapshots.
 ///
 /// The struct's inline uses are found with the podbuf layout law
 /// ([`projection::podbuf::field_form`]), so what the rule calls inline is
-/// what the encoder lays out inline. They are computed once per struct, as
-/// are the two heads.
+/// what the encoder lays out inline. A holder whose form the law refuses
+/// because the held struct cannot be laid out is still found, by the shape
+/// of its type ([`projection::podbuf::shape_holds_inline`]): the holder's
+/// field names the struct, or holds it in an exact-length array or a tuple.
+/// The uses are computed once per struct, as are the two heads.
 pub(crate) fn podbuf_inline_appends(
     pair: &[Change],
     old: &[&v2::Package],
     new: &[&v2::Package],
 ) -> Vec<Change> {
     /// What the rule reads once per struct: the old side's inline uses, the
-    /// old head size, and the new head, `None` when the law refuses it.
+    /// old head size and the new head, each `None` when the law refuses it.
     struct Held {
         uses: String,
-        old_size: u32,
+        old_size: Option<u32>,
         new_head: Option<projection::podbuf::Head>,
     }
     // `None` for a struct no old head holds inline, or that is not a struct
@@ -1974,15 +1981,13 @@ pub(crate) fn podbuf_inline_appends(
             if uses.is_empty() {
                 return None;
             }
-            // The old head cannot be refused here: `inline_uses` found a
-            // holder whose form the law accepted, and that form holds this
-            // head.
-            let old_size = struct_def(old, package, name)
-                .and_then(|def| head(old, package, name, def))?
-                .size;
+            // The old head is refused when the struct reaches a type `old`
+            // does not hold; `inline_uses` then found the holder by the shape
+            // of its type, and the head is read as grown below.
+            let old_def = struct_def(old, package, name)?;
             Some(Held {
                 uses: uses.join(", "),
-                old_size,
+                old_size: head(old, package, name, old_def).map(|head| head.size),
                 new_head: head(new, package, name, new_def),
             })
         });
@@ -1994,12 +1999,12 @@ pub(crate) fn podbuf_inline_appends(
         else {
             continue;
         };
-        let past_old_head = match new_head {
-            Some(head) => head.fields.iter().any(|placement| {
+        let past_old_head = match (old_size, new_head) {
+            (Some(old_size), Some(head)) => head.fields.iter().any(|placement| {
                 matches!(&placement.source, projection::podbuf::Source::Field { name, .. } if name == field)
                     && placement.offset + placement.size > *old_size
             }),
-            None => true,
+            _ => true,
         };
         if !past_old_head {
             continue;
@@ -2197,11 +2202,15 @@ pub(crate) fn podbuf_strict_enum_appends(
 /// interaction's request, reply or fixed payload, as
 /// `<package>/<interface>/<interaction>` (the path the walk gives the
 /// interaction; a service's inline shape is named by the service). A form the
-/// layout law refuses — a stream, a type it cannot resolve — is skipped: the
-/// podbuf checks of `ridl check` report it.
+/// layout law refuses is read by the shape of its type instead
+/// ([`projection::podbuf::shape_holds_inline`]), so a holder is found when
+/// the struct itself cannot be laid out — its head reaches a type `scope`
+/// does not hold. A form refused for another reason — a stream, a bounded
+/// array or a map of a type that does not resolve — holds nothing by shape
+/// and is skipped: the podbuf checks of `ridl check` report it.
 fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String> {
     use ridl_ir::projection::flatbuffers::Packages;
-    use ridl_ir::projection::podbuf::field_form;
+    use ridl_ir::projection::podbuf::{field_form, root_shape_holds_inline, shape_holds_inline};
 
     let target = projection::podbuf::Inlined::Declaration {
         package: package.to_string(),
@@ -2214,8 +2223,13 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
             package: home,
             others: &others,
         };
-        let holds = |ty: &v2::FieldType, fixed: bool| {
-            field_form(packages, ty).is_ok_and(|form| holds_inline(&form, &target, fixed))
+        let holds = |ty: &v2::FieldType, fixed: bool| match field_form(packages, ty) {
+            Ok(form) => holds_inline(&form, &target, fixed),
+            Err(_) => shape_holds_inline(packages, ty, package, name),
+        };
+        let root_holds = |ty: &v2::FieldType| match field_form(packages, ty) {
+            Ok(form) => root_holds_inline(&form, &target),
+            Err(_) => root_shape_holds_inline(packages, ty, package, name),
         };
         for decl in &home.decls {
             let Some(v2::decl::Kind::StructDef(def)) = &decl.kind else {
@@ -2232,9 +2246,7 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
         }
         for shape in home.shapes() {
             for decl in &shape.interface.interactions {
-                if interaction_payloads(decl).iter().any(|ty| {
-                    field_form(packages, ty).is_ok_and(|form| root_holds_inline(&form, &target))
-                }) {
+                if interaction_payloads(decl).iter().any(root_holds) {
                     uses.push(format!("{}/{}/{}", home.name, shape.name, decl.name));
                 }
             }

@@ -7,8 +7,39 @@ use std::path::{Path, PathBuf};
 /// Resolved packages and the lowered system carried by a diff side.
 #[derive(Debug)]
 pub struct DiffSide {
+    /// The packages the side compares: the workspace's own, for a source
+    /// side; every snapshot, for a snapshot side.
     pub packages: Vec<ridl_ir::v2::Package>,
     pub system: Option<ridl_ir::v2::System>,
+    /// The packages of the remote `[imports]` units a source side's compile
+    /// resolved, which the side does not compare; empty for a snapshot side,
+    /// which carries none (`ridl baseline` publishes the consumer's packages
+    /// only). [`diff_context`] passes them to the diff so a type the compared
+    /// packages reach resolves.
+    pub remotes: Vec<ridl_ir::v2::Package>,
+}
+
+/// The context packages a diff from `old` to `new` resolves type references
+/// against without comparing them: `ridl.std` ([`crate::std_ir`]), then the
+/// remote packages of `new`, then the remote packages of `old` whose name
+/// `new` does not hold. One list stands for both sides, because a remote unit
+/// is not part of either side's contract (a change in a dependency is the
+/// dependency's diff), and because an old side read from snapshots carries no
+/// remote package: with one list, a type the old side reaches in a remote
+/// package still resolves, from the side that compiled it. When the remote
+/// pin moved between the two sides, the old side is read with the new pin's
+/// declarations.
+#[must_use]
+pub fn diff_context(old: &DiffSide, new: &DiffSide) -> Vec<ridl_ir::v2::Package> {
+    std::iter::once(crate::std_ir())
+        .chain(new.remotes.iter().cloned())
+        .chain(
+            old.remotes
+                .iter()
+                .filter(|remote| new.remotes.iter().all(|pkg| pkg.name != remote.name))
+                .cloned(),
+        )
+        .collect()
 }
 
 /// A refusal to load or compile one side of a diff.
@@ -157,6 +188,7 @@ pub fn load_diff_side(
         return Ok(DiffSide {
             packages: load_snapshots(&[entry.to_path_buf()])?,
             system: None,
+            remotes: Vec::new(),
         });
     }
     if is_non_json_ir(entry) {
@@ -169,6 +201,7 @@ pub fn load_diff_side(
             return Ok(DiffSide {
                 packages: load_snapshots(&snapshots)?,
                 system: None,
+                remotes: Vec::new(),
             });
         }
         if !is_source_dir(entry) {
@@ -210,15 +243,17 @@ pub fn load_diff_side(
     }
     // A remote unit is not part of the consumer's contract: a change in a
     // dependency is the dependency's diff, so its packages are left out of
-    // the side. They were loaded so that the consumer's imports resolve.
+    // the compared side. They were loaded so that the consumer's imports
+    // resolve, and are kept apart for the diff to resolve them too.
+    let (remotes, packages): (Vec<_>, Vec<_>) = output
+        .checked
+        .into_iter()
+        .map(|c| c.ir)
+        .partition(|ir| crate::is_remote(ir, &output.remote_units));
     Ok(DiffSide {
-        packages: output
-            .checked
-            .into_iter()
-            .filter(|c| !crate::is_remote(&c.ir, &output.remote_units))
-            .map(|c| c.ir)
-            .collect(),
+        packages,
         system: output.system,
+        remotes,
     })
 }
 
