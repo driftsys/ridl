@@ -830,7 +830,7 @@ pub fn podbuf_layout(
 /// Parses the assembled items as a bare `syn::File` (no inner attribute, so an
 /// `include!` of the output stays legal) and formats them with prettyplease.
 fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
-    let tokens = quote! { #(#items)* };
+    let tokens = split_doc_lines(quote! { #(#items)* });
     let file: syn::File = syn::parse2(tokens).map_err(|err| GenerateError {
         message: format!("generated Rust does not parse: {err}"),
     })?;
@@ -838,6 +838,79 @@ fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
     Ok(Generated {
         rust_source: prettyplease::unparse(&file),
     })
+}
+
+/// Replaces each outer `#[doc = "..."]` attribute whose string holds a line
+/// break with one attribute per line, at every depth of `tokens`.
+///
+/// prettyplease prints a doc string that holds a line break as one `/** */`
+/// block and every other doc string as one `///` line, so after this pass every
+/// generated doc comment is written with `///`. Each line that is not empty
+/// gets one leading space, which puts a space after `///` and keeps the
+/// indentation of the lines relative to each other; rustdoc removes the
+/// indentation that all lines share, so the rendered documentation does not
+/// change.
+fn split_doc_lines(tokens: TokenStream) -> TokenStream {
+    use proc_macro2::{Delimiter, Group, Literal, TokenTree};
+
+    /// The value of `doc = "..."` when `group` is that attribute body and the
+    /// value holds a line break.
+    fn multi_line_doc(group: &Group) -> Option<String> {
+        if group.delimiter() != Delimiter::Bracket {
+            return None;
+        }
+        let tokens: Vec<TokenTree> = group.stream().into_iter().collect();
+        let [
+            TokenTree::Ident(name),
+            TokenTree::Punct(eq),
+            TokenTree::Literal(lit),
+        ] = tokens.as_slice()
+        else {
+            return None;
+        };
+        if name != "doc" || eq.as_char() != '=' {
+            return None;
+        }
+        let value = syn::parse2::<syn::LitStr>(TokenTree::Literal(lit.clone()).into())
+            .ok()?
+            .value();
+        value.contains('\n').then_some(value)
+    }
+
+    let mut out = TokenStream::new();
+    let mut trees = tokens.into_iter().peekable();
+    while let Some(tree) = trees.next() {
+        match tree {
+            TokenTree::Punct(pound) if pound.as_char() == '#' => {
+                let doc = match trees.peek() {
+                    Some(TokenTree::Group(group)) => multi_line_doc(group),
+                    _ => None,
+                };
+                match doc {
+                    Some(value) => {
+                        trees.next();
+                        for line in value.split('\n') {
+                            let line = if line.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" {line}")
+                            };
+                            let line = Literal::string(&line);
+                            out.extend(quote! { #[doc = #line] });
+                        }
+                    }
+                    None => out.extend([TokenTree::Punct(pound)]),
+                }
+            }
+            TokenTree::Group(group) => {
+                let mut nested = Group::new(group.delimiter(), split_doc_lines(group.stream()));
+                nested.set_span(group.span());
+                out.extend([TokenTree::Group(nested)]);
+            }
+            other => out.extend([other]),
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------

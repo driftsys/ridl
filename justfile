@@ -809,6 +809,12 @@ _cabin-generate:
 # outside it. The consumer is linted with `--no-deps`, whose absence would lint
 # a path dependency built from source.
 #
+# Both generated crates are checked with `cargo fmt --check`. The emitted
+# `lib.rs` puts `#[rustfmt::skip]` on every module loaded from a generated
+# file, because prettyplease's layout is not rustfmt's; the check fails when
+# `lib.rs` itself is not formatted, or when a module loses the attribute and
+# rustfmt reaches a generated file.
+#
 # The generated crate is linted as well, under a closed list. Without any
 # allowance it draws one `clippy::module_inception`, for the module a package
 # named `veh.cabin` and an interface named `Cabin` give (`veh::cabin::cabin`),
@@ -850,8 +856,8 @@ _cabin-generate:
 # `i686-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`, which evaluates its
 # podbuf layout assertions for those targets; the program exiting non-zero or
 # not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
-# the lock being out of date; the consumer being unformatted or drawing a
-# clippy warning; the generated crate drawing a clippy warning that its
+# the lock being out of date; the consumer or either generated crate being
+# unformatted; the consumer drawing a clippy warning; the generated crate drawing a clippy warning that its
 # `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
@@ -968,6 +974,8 @@ demo: _cabin-generate
     corpus_lint
     corpus_lint --no-default-features --target thumbv7em-none-eabihf
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
+    cargo fmt --manifest-path examples/cabin/generated/Cargo.toml --check
+    cargo fmt --manifest-path examples/cabin/generated-corpus/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the
     # value its round trip carried rather than the bare word `ok`. So the

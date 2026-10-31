@@ -6045,9 +6045,9 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
 /// (interaction-face design rule 2).
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_VehicleStatus: () = ();
-/**Descriptor for interface `WheelHistory`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
-
-Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+/// Descriptor for interface `WheelHistory`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
 pub struct WheelHistory;
 impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -6406,11 +6406,11 @@ pub mod wheel_history {
         crate::veh::common::Ratio: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -6580,11 +6580,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         crate::veh::common::Ratio: ::ridl_rt::payload::Payload<W::Encoding>,
     {
         type Port = W;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -6660,9 +6660,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 /// (interaction-face design, "The consumer face").
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_WheelDiagnostics: () = ();
-/**Descriptor for interface `WheelSummary`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
-
-Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+/// Descriptor for interface `WheelSummary`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
 pub struct WheelSummary;
 impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -6825,11 +6825,11 @@ pub mod wheel_summary {
         super::FanLevel: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -6903,11 +6903,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
     {
         type Port = W;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));

@@ -2006,6 +2006,10 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
         for (segment, child) in &node.children {
             match &child.file {
                 Some(file) if child.children.is_empty() => {
+                    // Every module loaded from a generated file is skipped by
+                    // rustfmt: the file is formatted by prettyplease, whose
+                    // layout `cargo fmt --check` would otherwise reject.
+                    out.push_str(&format!("{pad}#[rustfmt::skip]\n"));
                     out.push_str(&format!("{pad}#[path = \"{file}\"]\n"));
                     out.push_str(&format!("{pad}pub mod {segment};\n"));
                 }
@@ -2053,6 +2057,7 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
                         // declaration name is lexed the same way, and the
                         // keyword escape only appends `_`, so neither a type
                         // of `veh` nor a child package spells this module.
+                        out.push_str(&format!("{pad}    #[rustfmt::skip]\n"));
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
                         out.push_str(&format!("{pad}    #[doc(hidden)]\n"));
                         out.push_str(&format!("{pad}    pub mod __ridl_package;\n"));
@@ -2092,7 +2097,9 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
         // (`wasm_module_source`). A package whose first segment is `wasm`
         // would claim the same
         // module name, and `wasm_module_source` refuses that build.
-        out.push_str(&format!("#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"));
+        out.push_str(&format!(
+            "#[rustfmt::skip]\n#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"
+        ));
     }
     out
 }
@@ -3291,6 +3298,41 @@ fn manifest_root_of(entry: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod render_lib_rs_tests {
     use super::render_lib_rs;
+
+    /// Every module whose code is in a generated file carries
+    /// `#[rustfmt::skip]`, so that `cargo fmt` over a crate that contains the
+    /// generated crate leaves the generated files as they are. The inline
+    /// modules anchored at `.` hold no generated code and carry none.
+    #[test]
+    fn every_module_loaded_from_a_generated_file_is_skipped_by_rustfmt() {
+        let names = [
+            "veh".to_string(),
+            "veh.common".to_string(),
+            "ridl.std".to_string(),
+        ];
+        let lib = render_lib_rs(&names, "", true);
+        let lines: Vec<&str> = lib.lines().map(str::trim).collect();
+
+        let mut files = 0;
+        for (index, line) in lines.iter().enumerate() {
+            if !line.starts_with("#[path = ") {
+                continue;
+            }
+            let skipped = index > 0 && lines[index - 1] == "#[rustfmt::skip]";
+            if *line == "#[path = \".\"]" {
+                assert!(!skipped, "an inline module is skipped, lib.rs was:\n{lib}");
+            } else {
+                files += 1;
+                assert!(
+                    skipped,
+                    "{line} has no #[rustfmt::skip], lib.rs was:\n{lib}"
+                );
+            }
+        }
+        // `veh.rs` under `__ridl_package`, `veh.common.rs`, `ridl.std.rs` and
+        // the `wasm` module's file.
+        assert_eq!(files, 4, "lib.rs was:\n{lib}");
+    }
 
     /// A package name that is a strict prefix of another (`veh` alongside
     /// `veh.common`) lands in `render_lib_rs`'s non-leaf arm, which — without
