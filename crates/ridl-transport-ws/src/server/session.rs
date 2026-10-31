@@ -265,7 +265,8 @@ impl<B: Backend> Session<B> {
             | Frame::Answer { .. }
             | Frame::Publish { .. }
             | Frame::Occurrence { .. }
-            | Frame::Response { .. } => {
+            | Frame::Response { .. }
+            | Frame::Block { .. } => {
                 self.note(Note::UnexpectedDirection);
                 Step::Close(CloseCode::PROTOCOL.0)
             }
@@ -1316,6 +1317,20 @@ mod tests {
         }
     }
 
+    /// The shared `block-last` vector: block 1 of a payload of 4,098 bytes.
+    fn block_last() -> Vec<u8> {
+        msg(Frame::Block {
+            target: FIXED,
+            envelope: Envelope {
+                stamp: Timestamp(0x0123_4567_89AB),
+                seq: 0,
+            },
+            total: 4_098,
+            index: 1,
+            payload: &[0xab, 0xcd],
+        })
+    }
+
     fn commit(provider: &mut Loopback, bytes: &[u8]) {
         provider.set(IFACE, Ordinal(1), bytes).unwrap();
         provider.commit();
@@ -1524,6 +1539,27 @@ mod tests {
                 "{frame:?}"
             );
         }
+    }
+
+    /// A `block` is a provider-to-consumer form (frame version 2): the
+    /// provider never reassembles, so a block from the client is a violation.
+    #[test]
+    fn a_block_from_the_client_closes_with_1002_and_records_unexpected_direction() {
+        let (mut s, _p, notes) = scanning();
+        open(&mut s);
+        let (step, out) = send(&mut s, &block_last());
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+        assert_eq!(*notes.lock().unwrap(), vec![Note::UnexpectedDirection]);
+    }
+
+    #[test]
+    fn a_block_before_attach_closes_with_1002_as_a_message_before_attach() {
+        let (mut s, _p, notes) = scanning();
+        let (step, out) = send(&mut s, &block_last());
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+        assert_eq!(*notes.lock().unwrap(), vec![Note::MessageBeforeAttach]);
     }
 
     /// A `publish` or a `response` with bytes after a header that carries

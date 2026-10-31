@@ -5,8 +5,8 @@ use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
-    Target,
+    decode, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, ProtocolViolation,
+    PublishState, Reason, ResponseOutcome, Target, BLOCK_BYTES,
 };
 
 fn hex(text: &str) -> Vec<u8> {
@@ -126,5 +126,110 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
     assert_eq!(
         seen, known,
         "the table and this test disagree on the vectors"
+    );
+}
+
+// -- Frame version 2 (driftsys/ridl#1129) ------------------------------------
+//
+// The version 2 vectors are test constants until the frame specification holds
+// them. Every hex string is one whole message.
+
+const BLOCK_HEADER: &str = "0b 05 01000000 05000000 ab89674523010000 0000000000000000";
+
+/// The pattern `P(n)`: byte `i` is `i mod 251`.
+fn pattern(n: usize) -> Vec<u8> {
+    (0..n).map(|i| (i % 251) as u8).collect()
+}
+
+fn fixed_block(total: u32, index: u32, payload: &[u8]) -> Frame<'_> {
+    Frame::Block {
+        target: target(Kind::Fixed, 1, 5),
+        envelope: envelope(0x0123_4567_89AB, 0),
+        total,
+        index,
+        payload,
+    }
+}
+
+/// The header of a `block` of the shared vectors followed by `payload`.
+fn block_message(total_hex: &str, index_hex: &str, payload: &[u8]) -> Vec<u8> {
+    let mut m = hex(&format!("{BLOCK_HEADER} {total_hex} {index_hex}"));
+    m.extend_from_slice(payload);
+    m
+}
+
+fn assert_round_trip(id: &str, want: Frame<'_>, bytes: &[u8]) {
+    let got = decode(bytes).unwrap_or_else(|e| panic!("vector {id} did not decode: {e:?}"));
+    assert_eq!(got, want, "vector {id}");
+    assert_eq!(want.encoded_len(), bytes.len(), "encoded_len of {id}");
+    let mut out = vec![0u8; bytes.len()];
+    let n = want.encode(&mut out).unwrap();
+    assert_eq!(&out[..n], bytes, "encoding of {id}");
+}
+
+#[test]
+fn every_version_2_vector_decodes_and_reencodes_byte_for_byte() {
+    let mut hash = [0u8; 32];
+    for (i, b) in hash.iter_mut().enumerate() {
+        *b = i as u8;
+    }
+    let attach_2 = hex(
+        "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+         09 7665682e636162696e",
+    );
+    assert_eq!(attach_2.len(), 48);
+    assert_round_trip(
+        "attach-2",
+        Frame::Attach(Attach::new(2, 1, CatalogHash(hash), "veh.cabin").unwrap()),
+        &attach_2,
+    );
+
+    let block_last =
+        hex("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd");
+    assert_eq!(block_last.len(), 36);
+    assert_round_trip(
+        "block-last",
+        fixed_block(4_098, 1, &[0xab, 0xcd]),
+        &block_last,
+    );
+
+    let block_one =
+        hex("0b 05 01000000 05000000 ab89674523010000 0000000000000000 01000000 00000000 ab");
+    assert_eq!(block_one.len(), 35);
+    assert_round_trip("block-one", fixed_block(1, 0, &[0xab]), &block_one);
+}
+
+#[test]
+fn the_first_block_of_a_4098_byte_payload_carries_4096_bytes_of_the_pattern() {
+    let payload = pattern(BLOCK_BYTES);
+    let message = block_message("02100000", "00000000", &payload);
+    assert_eq!(message.len(), 4_130);
+    assert_round_trip("block-first", fixed_block(4_098, 0, &payload), &message);
+    match decode(&message) {
+        Ok(Frame::Block { payload: got, .. }) => assert_eq!(got, &pattern(4_096)[..]),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[test]
+fn a_last_block_of_the_largest_total_decodes_without_overflow() {
+    let zeros = vec![0u8; 4_096];
+    let max_last = block_message("ffffffff", "ffff0f00", &zeros[..4_095]);
+    assert_eq!(max_last.len(), 4_129);
+    assert_round_trip(
+        "block-max-last",
+        fixed_block(u32::MAX, 1_048_575, &zeros[..4_095]),
+        &max_last,
+    );
+
+    let full = block_message("00100000", "00000000", &zeros);
+    assert_eq!(full.len(), 4_130);
+    assert_round_trip("block-full", fixed_block(4_096, 0, &zeros), &full);
+
+    let max_last_full = block_message("ffffffff", "ffff0f00", &zeros);
+    assert_eq!(max_last_full.len(), 4_130);
+    assert_eq!(
+        decode(&max_last_full),
+        Err(DecodeError::Violation(ProtocolViolation::BadBlock))
     );
 }
