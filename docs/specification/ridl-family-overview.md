@@ -292,7 +292,7 @@ profile's own reference: `TYPL-` (typl §16), `RIDL-` (ridl §16), `RMDL-` (rmdl
 the shipped toolchain; the other two are specified ahead of their layers.
 **There is no `RXDL-` family and none should be minted** — every rule a domain
 spelling can violate is a ridl rule (rxdl §10). The documentation codes TYPL-401
-and TYPL-404 to TYPL-410 (typl §16.5) are drawn in `.typl`, `.ridl` and `.rsdl`
+and TYPL-404 to TYPL-412 (typl §16.5) are drawn in `.typl`, `.ridl` and `.rsdl`
 files alike, because doc comments are typl §14 in every language of the family
 (ADR-0026).
 

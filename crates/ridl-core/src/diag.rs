@@ -616,6 +616,20 @@ diag_codes! {
         /// doc lints (`ridl_sem::doc_lint`).
         TYPL_410 = "TYPL-410", Warning,
             "doc comment written as `/** */`", lint = "doc-comment-style", default = allow;
+
+        /// A `// lint: allow …` directive names a lint that raises no
+        /// diagnostic inside the directive's scope (ADR-0024 decision 18).
+        /// Info. Emitted by `ridl_core::lint::report_lint_directives`.
+        TYPL_411 = "TYPL-411", Info,
+            "lint directive allows a lint that no diagnostic in its scope raises", lint = "unused-lint-directive";
+
+        /// A `//` comment that starts with `lint:` and is not a valid
+        /// directive (ADR-0024 decision 18): a word other than `allow`, no
+        /// lint name, a name that is not a lint name, no reason, or no
+        /// declaration to apply to. Info. Emitted by
+        /// `ridl_core::lint::report_lint_directives`.
+        TYPL_412 = "TYPL-412", Info,
+            "malformed lint directive", lint = "malformed-lint-directive";
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -2475,6 +2489,8 @@ mod tests {
             ("TYPL-408", "unknown-doc-tag"),
             ("TYPL-409", "malformed-doc-tag"),
             ("TYPL-410", "doc-comment-style"),
+            ("TYPL-411", "unused-lint-directive"),
+            ("TYPL-412", "malformed-lint-directive"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),

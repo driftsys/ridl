@@ -141,6 +141,8 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unknown-doc-tag` | TYPL-408 | warn | doc tag other than `@see`, `@since`, `@deprecated` and `@labels` |
 | `malformed-doc-tag` | TYPL-409 | warn | `@see` or `@since` with a missing or malformed value |
 | `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |
+| `unused-lint-directive` | TYPL-411 | info | lint directive allows a lint that no diagnostic in its scope raises |
+| `malformed-lint-directive` | TYPL-412 | info | malformed lint directive |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |

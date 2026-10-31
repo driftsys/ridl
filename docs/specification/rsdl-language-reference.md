@@ -841,7 +841,7 @@ retired code is kept in the table and never reused. Grouped by hundreds:
 
 An `.rsdl` file also draws the namespaces no profile owns, `FORM-` and `MANI-`,
 tabulated once in the family overview §7, and the documentation codes of typl
-§16.5 (TYPL-401 and TYPL-404 to TYPL-410), because doc comments are typl §14 in
+§16.5 (TYPL-401 and TYPL-404 to TYPL-412), because doc comments are typl §14 in
 every language of the family. The attribute-block rules FORM-106 (unknown key),
 FORM-107 (key not allowed on this declaration kind) and FORM-108 (duplicate key)
 cover the rsdl-owned keys of §5; no `RSDL-` code is minted for them. Codes not
