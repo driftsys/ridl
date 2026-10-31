@@ -317,6 +317,11 @@ bytes for a `signal` and an `event`, 16,128 for a `command` and a `query`,
 backend's codec module does, reads the limit there, so that a consumer gets
 every limit from the catalog.
 
+A member whose `Interaction.streams` is not empty has a request of its
+non-stream parameters only, and a plugin must not emit it as a plain call. The
+Rust backend leaves such a member out of the interaction face, and the
+TypeScript backend leaves it out of the codec module's interface table.
+
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:
 

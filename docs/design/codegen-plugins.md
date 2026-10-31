@@ -704,7 +704,9 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   the non-stream parameters only, so `put(info: DocInfo, data: <bytes>)` has the
   request `DocInfo`, and the stream is in `Interaction.streams`. That list holds
   one `StreamShape` per stream in ascending `no` (0 for the reply stream, `k`
-  from 1 for the `k`-th stream parameter), empty for a member with no stream.
+  from 1 for the `k`-th stream parameter), empty for a member with no stream. A
+  member whose `Interaction.streams` is not empty has a request of its
+  non-stream parameters only, and a plugin must not emit it as a plain call.
 
 ## 8. What a plugin author reads
 

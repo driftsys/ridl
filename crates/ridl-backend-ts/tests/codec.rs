@@ -1195,3 +1195,30 @@ fn a_member_entry_carries_the_recorded_limit() {
         "the entry of `warning`, which has no limit, carries none:\n{source}"
     );
 }
+
+/// A member that carries a stream is left out of the interface table, as the
+/// Rust backend leaves it out of the face: its request holds only the
+/// non-stream parameters, so a plain call would carry an incomplete request.
+/// A member of the same interface without a stream keeps its entry.
+#[test]
+fn a_stream_member_has_no_entry_in_the_interface_table() {
+    let model = codegen::lower(&rust_fixture("streams.ridl"), &[]);
+    let source = module(&model, "veh.hvac");
+    for member in [
+        "replayTrace",
+        "streamFilterHistory",
+        "rebalance",
+        "putBlob",
+        "lookup",
+        "readNotes",
+    ] {
+        assert!(
+            !source.contains(&format!("  {member}: {{")),
+            "`{member}` has an entry in:\n{source}"
+        );
+    }
+    assert!(
+        source.contains("  cabinTemp: { iface: "),
+        "`cabinTemp` has no entry in:\n{source}"
+    );
+}
