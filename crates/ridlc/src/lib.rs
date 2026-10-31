@@ -1399,7 +1399,9 @@ fn run_build_inner<E: From<std::io::Error>>(
         let (in_len, out_len) = (diagnostics.len(), outside_scope.len());
         diagnostics.append(&mut outside_scope);
         report_lint_directives(&mut diagnostics, &sources, NOT_RAISED_BY_COMPILE);
-        let reports = diagnostics.split_off(in_len + out_len);
+        let mut reports = diagnostics.split_off(in_len + out_len);
+        // No report is made for a remote unit's file, as for `run_check`.
+        drop_remote_non_errors(&mut reports, &sources, &remote_units);
         outside_scope = diagnostics.split_off(in_len);
         for report in reports {
             if in_report_scope(&report, &sources, report_scope.as_deref(), &remote_dirs) {

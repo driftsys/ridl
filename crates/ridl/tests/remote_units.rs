@@ -107,6 +107,32 @@ fn no_directive_is_reported_for_a_remote_unit() {
     assert!(!stderr.contains("common.ridl"), "{stderr}");
 }
 
+/// `ridl build` reports no lint directive for a file of a remote unit either.
+#[test]
+fn build_reports_no_directive_for_a_remote_unit() {
+    let dir = TempDir::new("build-directives");
+    let out = TempDir::new("build-directives-out");
+    let stub = Stub::serving(unit_tar(DIRECTIVE_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(
+        &root,
+        dir.path(),
+        &[
+            "build",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+            "--emit",
+            "rust",
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        !stderr.contains("TYPL-411") && !stderr.contains("TYPL-412"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("common.ridl"), "{stderr}");
+}
+
 /// The consumer's `[lints]` do not apply to the remote unit: `deny` on a
 /// lint the unit draws fails the consumer's own instance only, whether the
 /// cache lies beside the consumer's directory or inside it.
