@@ -781,13 +781,19 @@ _cabin-generate:
     # Cleared first: `--out-dir` writes over what it writes and leaves
     # everything else, so a file the emitter stops writing would survive here
     # and keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated examples/cabin/generated-corpus
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus examples/cabin/generated-shapes
     "$target/debug/ridl" build examples/cabin --emit rust --emit catalog \
         --out-dir examples/cabin/generated
     # For the `no_std` check and the clippy run in `demo`: cabin's schema has no
     # string, bytes, array, map or pattern, and this workspace has each of them.
     "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
         --out-dir examples/cabin/generated-corpus
+    # For the clippy, format and doc runs in `demo`: one package that holds
+    # every declaration and interaction shape the Rust backend emits, with
+    # every encoding, `transcode = true` and `wasm = true`, which neither crate
+    # above has together.
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/rust-shapes --emit rust \
+        --out-dir examples/cabin/generated-shapes
 
 # Generate the cabin example's crate and run the program that links it.
 #
@@ -809,7 +815,7 @@ _cabin-generate:
 # outside it. The consumer is linted with `--no-deps`, whose absence would lint
 # a path dependency built from source.
 #
-# Both generated crates are checked with `cargo fmt --check`. The emitted
+# Every generated crate is checked with `cargo fmt --check`. The emitted
 # `lib.rs` puts `#[rustfmt::skip]` on every module loaded from a generated
 # file, because prettyplease's layout is not rustfmt's; the check fails when
 # `lib.rs` itself is not formatted, or when a module loses the attribute and
@@ -823,15 +829,25 @@ _cabin-generate:
 # interface `Cabin`), and `clippy::collapsible_if` on the functions that walk
 # a proto3 message. Any warning is a defect in the emitter.
 #
-# Both generated crates are linted as the edition their emitted manifest
+# Every generated crate is linted as the edition its emitted manifest
 # declares, 2021, and again as edition 2024, which a user reaches by copying
 # the emitted source into an edition 2024 crate. The edition 2024 run edits
-# both manifests, and a trap restores them on exit.
+# every emitted manifest, and a trap restores them on exit.
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line
 # allowance. No diagnostic passes, `dead_code` included: the emitter marks the
 # items it writes for an `internal` declaration with `#[allow(dead_code)]`.
+#
+# A third crate, `lint_shapes`, is emitted from
+# `crates/ridlc/tests/corpus/rust-shapes`, a package that holds every
+# declaration and interaction shape the Rust backend emits, with the three
+# encodings, `transcode = true` and `wasm = true`. Nothing links it. It is
+# linted the same way as the corpus crate, and also with only
+# `validate-pattern` on, and with `wasm-exports` for `wasm32-unknown-unknown`;
+# it is linted as edition 2024, formatted, documented and checked for the
+# 32-bit and the 64-bit target like the other two. A shape that only it holds
+# and that draws a lint is a defect in the emitter.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
@@ -846,23 +862,25 @@ _cabin-generate:
 # failing to compile; the emitted crate failing to check with its default
 # features off for `thumbv7em-none-eabihf`; the crate emitted for the
 # veh-cluster corpus failing to check the same way, or with only
-# `validate-pattern` on; either generated crate failing to check for
+# `validate-pattern` on; any generated crate failing to check for
 # `i686-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`, which evaluates its
 # podbuf layout assertions for those targets; the program exiting non-zero or
 # not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
-# the lock being out of date; the consumer or either generated crate being
+# the lock being out of date; the consumer or any generated crate being
 # unformatted; the consumer drawing a clippy warning; the generated crate
 # drawing a clippy warning; the crate emitted for the veh-cluster corpus
 # drawing a clippy diagnostic, with default features or without them, or
-# cargo finishing no build there; either generated crate drawing a clippy
+# cargo finishing no build there; the `lint_shapes` crate drawing a clippy
+# diagnostic in any of its four configurations, or cargo finishing no build
+# there; any generated crate drawing a clippy
 # warning as edition 2024, or an emitted manifest with no
-# `edition = "2021"` line to rewrite; `cargo doc` on either generated crate drawing
+# `edition = "2021"` line to rewrite; `cargo doc` on any generated crate drawing
 # a broken or private intra-doc link; a planus or a prost crate in the
 # resolved graph of `examples/cabin`; the planus and prost checks running other
 # than exactly two tests, which is what a renamed test or a changed filter
 # does.
 #
-# The generated rustdoc of both crates is built with `cargo doc` and the flags
+# The generated rustdoc of every generated crate is built with `cargo doc` and the flags
 # denying broken intra-doc links, private intra-doc links and redundant
 # explicit links. An unresolved link, a private target or an explicit target
 # already resolved by its text fails the run.
@@ -897,10 +915,10 @@ demo: _cabin-generate
         exit 1
     fi
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
-    # The rustdoc of both generated crates, with a broken or private intra-doc
+    # The rustdoc of every generated crate, with a broken or private intra-doc
     # link denied: the backend renders a doc link as a rustdoc path, and only
     # rustdoc can say whether that path resolves.
-    for crate in veh_cabin ridl_generated; do
+    for crate in veh_cabin ridl_generated lint_shapes; do
         RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links -D rustdoc::redundant_explicit_links" \
             cargo doc --locked --no-deps --manifest-path examples/cabin/Cargo.toml -p "$crate"
     done
@@ -924,7 +942,7 @@ demo: _cabin-generate
     # podbuf layout assertions (`size_of`, `offset_of!`) are `const` items, so
     # checking evaluates them for each target without a linker.
     for target in i686-unknown-linux-gnu aarch64-unknown-linux-gnu; do
-        for crate in veh_cabin ridl_generated; do
+        for crate in veh_cabin ridl_generated lint_shapes; do
             cargo check --manifest-path examples/cabin/Cargo.toml -p "$crate" --locked \
                 --target "$target"
         done
@@ -940,11 +958,14 @@ demo: _cabin-generate
     # targeted `#[allow(dead_code)]`, so none is left to filter. The run also
     # fails when cargo reports no `build-finished` line, so a cargo failure
     # that prints no diagnostic cannot pass as an empty list.
+    # The first argument names the crate.
     corpus_lint() {
-        report="$(cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
+        crate="$1"
+        shift
+        report="$(cargo clippy --manifest-path examples/cabin/Cargo.toml -p "$crate" --locked --no-deps \
             --message-format=json "$@" -- -D warnings || true)"
         if ! printf '%s\n' "$report" | grep -q '"reason":"build-finished"'; then
-            echo "demo: cargo clippy on the corpus crate did not finish a build" >&2
+            echo "demo: cargo clippy on $crate did not finish a build" >&2
             exit 1
         fi
         stray="$(printf '%s\n' "$report" | jq -r '
@@ -952,31 +973,36 @@ demo: _cabin-generate
             | .message.rendered')"
         if [ -n "$stray" ]; then
             printf '%s\n' "$stray" >&2
-            echo "demo: the corpus crate draws a diagnostic" >&2
+            echo "demo: $crate draws a diagnostic" >&2
             exit 1
         fi
     }
-    corpus_lint
-    corpus_lint --no-default-features --target thumbv7em-none-eabihf
-    # Both generated crates are linted as edition 2024 too, which a user
+    for crate in ridl_generated lint_shapes; do
+        corpus_lint "$crate"
+        corpus_lint "$crate" --no-default-features --target thumbv7em-none-eabihf
+    done
+    corpus_lint lint_shapes --no-default-features --features validate-pattern
+    corpus_lint lint_shapes --features wasm-exports --target wasm32-unknown-unknown
+    # Every generated crate is linted as edition 2024 too, which a user
     # reaches by copying the emitted source into an edition 2024 crate: the
     # emitted manifests say 2021, and the trap restores them on any exit.
-    trap 'for c in generated generated-corpus; do if [ -f "examples/cabin/$c/Cargo.toml.bak" ]; then mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"; fi; done' EXIT
-    for c in generated generated-corpus; do
+    trap 'for c in generated generated-corpus generated-shapes; do if [ -f "examples/cabin/$c/Cargo.toml.bak" ]; then mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"; fi; done' EXIT
+    for c in generated generated-corpus generated-shapes; do
         sed -i.bak 's/^edition = "2021"$/edition = "2024"/' "examples/cabin/$c/Cargo.toml"
         if ! grep -q '^edition = "2024"$' "examples/cabin/$c/Cargo.toml"; then
             echo "demo: examples/cabin/$c/Cargo.toml has no edition = \"2021\" line to rewrite" >&2
             exit 1
         fi
     done
-    cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin -p ridl_generated --locked --no-deps -- -D warnings
-    for c in generated generated-corpus; do
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin -p ridl_generated -p lint_shapes --locked --no-deps -- -D warnings
+    for c in generated generated-corpus generated-shapes; do
         mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"
     done
     trap - EXIT
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo fmt --manifest-path examples/cabin/generated/Cargo.toml --check
     cargo fmt --manifest-path examples/cabin/generated-corpus/Cargo.toml --check
+    cargo fmt --manifest-path examples/cabin/generated-shapes/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the
     # value its round trip carried rather than the bare word `ok`. So the

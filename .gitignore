@@ -16,6 +16,10 @@
 # string, bytes, array, map or pattern.
 /examples/cabin/generated-corpus/
 
+# The crate `just demo` generates from `crates/ridlc/tests/corpus/rust-shapes`
+# for its clippy, format and doc runs over every shape the Rust backend emits.
+/examples/cabin/generated-shapes/
+
 # The schema, the TypeScript and the wasm codec that `just cabin-ws-demo`
 # writes for the cabin web program: `ridl build --emit flatbuffers` and
 # `flatc` output, and veh_cabin.wasm.

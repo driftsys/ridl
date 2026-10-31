@@ -1,0 +1,7323 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.codegen
+input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
+---
+// ===== package lint.shapes =====
+{
+  "name": {
+    "dotted": "lint.shapes",
+    "segments": [
+      "lint",
+      "shapes"
+    ],
+    "joinedCamel": "LintShapes",
+    "underscored": "lint_shapes"
+  },
+  "scope": {
+    "package": "lint.shapes",
+    "others": [
+      "lint.shapes"
+    ]
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "Count",
+        "snake": "count",
+        "camel": "Count",
+        "screaming": "COUNT",
+        "pascal": "Count"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A bounded integer.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 200",
+          "range": {
+            "min": "0",
+            "max": "200"
+          }
+        }
+      ],
+      "proto3": {
+        "bounded": 6
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "0",
+          "max": "200"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_U8"
+      }
+    },
+    {
+      "name": {
+        "declared": "Level",
+        "snake": "level",
+        "camel": "Level",
+        "screaming": "LEVEL",
+        "pascal": "Level"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "An integer whose range holds negative values and 0.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range -5 ..= 10",
+          "range": {
+            "min": "-5",
+            "max": "10"
+          }
+        }
+      ],
+      "proto3": {
+        "bounded": 6
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_INTEGER",
+        "constraint": {
+          "min": "-5",
+          "max": "10"
+        },
+        "vacuous": false,
+        "intWidth": "INT_WIDTH_I8"
+      }
+    },
+    {
+      "name": {
+        "declared": "Heat",
+        "snake": "heat",
+        "camel": "Heat",
+        "screaming": "HEAT",
+        "pascal": "Heat"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A float with a step and a unit.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range -40 ..= 125",
+          "range": {
+            "min": "-40",
+            "max": "125"
+          }
+        },
+        {
+          "text": "step 0.5",
+          "step": "0.5"
+        },
+        {
+          "text": "unit Cel",
+          "unit": "Cel"
+        }
+      ],
+      "proto3": {
+        "bounded": 5
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "unit": "Cel",
+        "constraint": {
+          "min": "-40",
+          "max": "125",
+          "step": "0.5"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": {
+        "declared": "Floor",
+        "snake": "floor",
+        "camel": "Floor",
+        "screaming": "FLOOR",
+        "pascal": "Floor"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A float with a lower bound only and a step.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "0",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..",
+          "range": {
+            "min": "0"
+          }
+        },
+        {
+          "text": "step 0.25",
+          "step": "0.25"
+        }
+      ],
+      "proto3": {
+        "bounded": 9
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_FLOAT",
+        "constraint": {
+          "min": "0",
+          "step": "0.25"
+        },
+        "vacuous": false,
+        "floatWidth": "FLOAT_WIDTH_F64"
+      }
+    },
+    {
+      "name": {
+        "declared": "Tag",
+        "snake": "tag",
+        "camel": "Tag",
+        "screaming": "TAG",
+        "pascal": "Tag"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A string with a length and a pattern.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "unit",
+        "source": "INIT_SOURCE_DECLARED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "length 1 ..= 16",
+          "length": {
+            "min": "1",
+            "max": "16"
+          }
+        },
+        {
+          "text": "pattern `/^[a-z][a-z0-9-]*$/`",
+          "pattern": "/^[a-z][a-z0-9-]*$/"
+        }
+      ],
+      "proto3": {
+        "bounded": 66
+      },
+      "podbuf": {
+        "bounded": 81
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_STRING",
+        "constraint": {
+          "lenMin": "1",
+          "lenMax": "16",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "vacuous": false,
+        "declaredInit": "unit"
+      }
+    },
+    {
+      "name": {
+        "declared": "Label",
+        "snake": "label",
+        "camel": "Label",
+        "screaming": "LABEL",
+        "pascal": "Label"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A string with a length only.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "length 0 ..= 32",
+          "length": {
+            "min": "0",
+            "max": "32"
+          }
+        }
+      ],
+      "proto3": {
+        "bounded": 131
+      },
+      "podbuf": {
+        "bounded": 145
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_STRING",
+        "constraint": {
+          "lenMin": "0",
+          "lenMax": "32"
+        },
+        "vacuous": false
+      }
+    },
+    {
+      "name": {
+        "declared": "Frame",
+        "snake": "frame",
+        "camel": "Frame",
+        "screaming": "FRAME",
+        "pascal": "Frame"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Bytes with a fixed length.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "length 8",
+          "length": {
+            "min": "8",
+            "max": "8"
+          }
+        }
+      ],
+      "proto3": {
+        "bounded": 10
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_BYTES",
+        "constraint": {
+          "lenMin": "8",
+          "lenMax": "8"
+        },
+        "vacuous": false
+      }
+    },
+    {
+      "name": {
+        "declared": "Blob",
+        "snake": "blob",
+        "camel": "Blob",
+        "screaming": "BLOB",
+        "pascal": "Blob"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Bytes with a length range.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "length 0 ..= 64",
+          "length": {
+            "min": "0",
+            "max": "64"
+          }
+        }
+      ],
+      "proto3": {
+        "bounded": 66
+      },
+      "podbuf": {
+        "bounded": 80
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_BYTES",
+        "constraint": {
+          "lenMin": "0",
+          "lenMax": "64"
+        },
+        "vacuous": false
+      }
+    },
+    {
+      "name": {
+        "declared": "MAX_COUNT",
+        "snake": "max_count",
+        "camel": "MAXCOUNT",
+        "screaming": "MAX_COUNT",
+        "pascal": "MaxCount"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "The upper bound of a `Count`.",
+      "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "constant": {
+        "value": "200",
+        "named": {
+          "reference": "Count",
+          "resolved": true,
+          "package": "lint.shapes",
+          "foreign": false,
+          "index": 0,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "COUNT_LIMIT",
+        "snake": "count_limit",
+        "camel": "COUNTLIMIT",
+        "screaming": "COUNT_LIMIT",
+        "pascal": "CountLimit"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A constant that names another constant.",
+      "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "constant": {
+        "value": "200",
+        "named": {
+          "reference": "Count",
+          "resolved": true,
+          "package": "lint.shapes",
+          "foreign": false,
+          "index": 0,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "DEFAULT_TAG",
+        "snake": "default_tag",
+        "camel": "DEFAULTTAG",
+        "screaming": "DEFAULT_TAG",
+        "pascal": "DefaultTag"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A string constant.",
+      "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "constant": {
+        "value": "unit",
+        "named": {
+          "reference": "Tag",
+          "resolved": true,
+          "package": "lint.shapes",
+          "foreign": false,
+          "index": 4,
+          "kind": "DECL_KIND_SCALAR"
+        }
+      }
+    },
+    {
+      "name": {
+        "declared": "Mode",
+        "snake": "mode",
+        "camel": "Mode",
+        "screaming": "MODE",
+        "pascal": "Mode"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A mode.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "IDLE",
+              "snake": "idle",
+              "camel": "IDLE",
+              "screaming": "IDLE",
+              "pascal": "Idle"
+            },
+            "value": "0",
+            "doc": "Not running.",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "ACTIVE",
+              "snake": "active",
+              "camel": "ACTIVE",
+              "screaming": "ACTIVE",
+              "pascal": "Active"
+            },
+            "value": "1",
+            "doc": "Running.",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "FAULT",
+              "snake": "fault",
+              "camel": "FAULT",
+              "screaming": "FAULT",
+              "pascal": "Fault"
+            },
+            "value": "4",
+            "doc": "Stopped by a fault, with a gap in the values before it.",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "Modes",
+        "snake": "modes",
+        "camel": "Modes",
+        "screaming": "MODES",
+        "pascal": "Modes"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A set of modes.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 6
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "enumSet": {
+        "backingEnum": {
+          "reference": "Mode",
+          "resolved": true,
+          "package": "lint.shapes",
+          "foreign": false,
+          "index": 11,
+          "kind": "DECL_KIND_ENUM"
+        },
+        "bits": [
+          {
+            "name": {
+              "declared": "IDLE",
+              "snake": "idle",
+              "camel": "IDLE",
+              "screaming": "IDLE",
+              "pascal": "Idle"
+            },
+            "value": "0",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "ACTIVE",
+              "snake": "active",
+              "camel": "ACTIVE",
+              "screaming": "ACTIVE",
+              "pascal": "Active"
+            },
+            "value": "1",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "FAULT",
+              "snake": "fault",
+              "camel": "FAULT",
+              "screaming": "FAULT",
+              "pascal": "Fault"
+            },
+            "value": "4",
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          }
+        ],
+        "width": "INT_WIDTH_U8",
+        "declaredMask": "19"
+      }
+    },
+    {
+      "name": {
+        "declared": "Failure",
+        "snake": "failure",
+        "camel": "Failure",
+        "screaming": "FAILURE",
+        "pascal": "Failure"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "A failure.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "enum": {
+        "values": [
+          {
+            "name": {
+              "declared": "BUSY",
+              "snake": "busy",
+              "camel": "BUSY",
+              "screaming": "BUSY",
+              "pascal": "Busy"
+            },
+            "value": "0",
+            "doc": "The station is busy.",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "DENIED",
+              "snake": "denied",
+              "camel": "DENIED",
+              "screaming": "DENIED",
+              "pascal": "Denied"
+            },
+            "value": "1",
+            "doc": "The caller may not read.",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          }
+        ],
+        "retired": [],
+        "zeroMember": 0,
+        "initMember": 0
+      }
+    },
+    {
+      "name": {
+        "declared": "Inner",
+        "snake": "inner",
+        "camel": "Inner",
+        "screaming": "INNER",
+        "pascal": "Inner"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A struct that nests inside `Panel`.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 137
+      },
+      "podbuf": {
+        "bounded": 153
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "count",
+                "snake": "count",
+                "camel": "Count",
+                "screaming": "COUNT",
+                "pascal": "Count"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 200",
+                  "range": {
+                    "min": "0",
+                    "max": "200"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "label",
+                "snake": "label",
+                "camel": "Label",
+                "screaming": "LABEL",
+                "pascal": "Label"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 0 ..= 32",
+                  "length": {
+                    "min": "0",
+                    "max": "32"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "Fault",
+        "snake": "fault",
+        "camel": "Fault",
+        "screaming": "FAULT",
+        "pascal": "Fault"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
+      "doc": "A failure that carries data.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 137
+      },
+      "podbuf": {
+        "bounded": 153
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "code",
+                "snake": "code",
+                "camel": "Code",
+                "screaming": "CODE",
+                "pascal": "Code"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 200",
+                  "range": {
+                    "min": "0",
+                    "max": "200"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "message",
+                "snake": "message",
+                "camel": "Message",
+                "screaming": "MESSAGE",
+                "pascal": "Message"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 0 ..= 32",
+                  "length": {
+                    "min": "0",
+                    "max": "32"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "Panel",
+        "snake": "panel",
+        "camel": "Panel",
+        "screaming": "PANEL",
+        "pascal": "Panel"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Every kind of field.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": true,
+        "reachesCollection": true,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 1091
+      },
+      "podbuf": {
+        "bounded": 1143
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "count",
+                "snake": "count",
+                "camel": "Count",
+                "screaming": "COUNT",
+                "pascal": "Count"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 200",
+                  "range": {
+                    "min": "0",
+                    "max": "200"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "level",
+                "snake": "level",
+                "camel": "Level",
+                "screaming": "LEVEL",
+                "pascal": "Level"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Level",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "declaredInit": "2",
+              "init": {
+                "derivable": true,
+                "value": "2",
+                "source": "INIT_SOURCE_DECLARED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range -5 ..= 10",
+                  "range": {
+                    "min": "-5",
+                    "max": "10"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 3,
+            "field": {
+              "name": {
+                "declared": "heat",
+                "snake": "heat",
+                "camel": "Heat",
+                "screaming": "HEAT",
+                "pascal": "Heat"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Heat",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 2,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range -40 ..= 125",
+                  "range": {
+                    "min": "-40",
+                    "max": "125"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit Cel",
+                  "unit": "Cel"
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 4,
+            "field": {
+              "name": {
+                "declared": "floor",
+                "snake": "floor",
+                "camel": "Floor",
+                "screaming": "FLOOR",
+                "pascal": "Floor"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Floor",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..",
+                  "range": {
+                    "min": "0"
+                  }
+                },
+                {
+                  "text": "step 0.25",
+                  "step": "0.25"
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 5,
+            "field": {
+              "name": {
+                "declared": "tag",
+                "snake": "tag",
+                "camel": "Tag",
+                "screaming": "TAG",
+                "pascal": "Tag"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Tag",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "unit",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 1 ..= 16",
+                  "length": {
+                    "min": "1",
+                    "max": "16"
+                  }
+                },
+                {
+                  "text": "pattern `/^[a-z][a-z0-9-]*$/`",
+                  "pattern": "/^[a-z][a-z0-9-]*$/"
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 6,
+            "field": {
+              "name": {
+                "declared": "note",
+                "snake": "note",
+                "camel": "Note",
+                "screaming": "NOTE",
+                "pascal": "Note"
+              },
+              "type": {
+                "optional": true,
+                "named": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 0 ..= 32",
+                  "length": {
+                    "min": "0",
+                    "max": "32"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 7,
+            "field": {
+              "name": {
+                "declared": "frame",
+                "snake": "frame",
+                "camel": "Frame",
+                "screaming": "FRAME",
+                "pascal": "Frame"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Frame",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 6,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 8",
+                  "length": {
+                    "min": "8",
+                    "max": "8"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 8,
+            "field": {
+              "name": {
+                "declared": "blob",
+                "snake": "blob",
+                "camel": "Blob",
+                "screaming": "BLOB",
+                "pascal": "Blob"
+              },
+              "type": {
+                "optional": true,
+                "named": {
+                  "reference": "Blob",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 7,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 0 ..= 64",
+                  "length": {
+                    "min": "0",
+                    "max": "64"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 9,
+            "field": {
+              "name": {
+                "declared": "flag",
+                "snake": "flag",
+                "camel": "Flag",
+                "screaming": "FLAG",
+                "pascal": "Flag"
+              },
+              "type": {
+                "optional": false,
+                "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
+            }
+          },
+          {
+            "ordinal": 10,
+            "field": {
+              "name": {
+                "declared": "mode",
+                "snake": "mode",
+                "camel": "Mode",
+                "screaming": "MODE",
+                "pascal": "Mode"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Mode",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
+            }
+          },
+          {
+            "ordinal": 11,
+            "field": {
+              "name": {
+                "declared": "modes",
+                "snake": "modes",
+                "camel": "Modes",
+                "screaming": "MODES",
+                "pascal": "Modes"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Modes",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 12,
+                  "kind": "DECL_KIND_ENUM_SET"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
+            }
+          },
+          {
+            "ordinal": 12,
+            "field": {
+              "name": {
+                "declared": "inner",
+                "snake": "inner",
+                "camel": "Inner",
+                "screaming": "INNER",
+                "pascal": "Inner"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 14,
+                  "kind": "DECL_KIND_STRUCT"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
+            }
+          },
+          {
+            "ordinal": 13,
+            "field": {
+              "name": {
+                "declared": "span",
+                "snake": "span",
+                "camel": "Span",
+                "screaming": "SPAN",
+                "pascal": "Span"
+              },
+              "type": {
+                "optional": false,
+                "tuple": {
+                  "index": 0
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
+            }
+          },
+          {
+            "ordinal": 14,
+            "field": {
+              "name": {
+                "declared": "fixed4",
+                "snake": "fixed4",
+                "camel": "Fixed4",
+                "screaming": "FIXED4",
+                "pascal": "Fixed4"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Count",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "min": "4",
+                  "max": "4"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 4",
+                  "collectionBound": {
+                    "min": "4",
+                    "max": "4"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 15,
+            "field": {
+              "name": {
+                "declared": "levels",
+                "snake": "levels",
+                "camel": "Levels",
+                "screaming": "LEVELS",
+                "pascal": "Levels"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Level",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "min": "0",
+                  "max": "4"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 0 ..= 4",
+                  "collectionBound": {
+                    "min": "0",
+                    "max": "4"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 16,
+            "field": {
+              "name": {
+                "declared": "texts",
+                "snake": "texts",
+                "camel": "Texts",
+                "screaming": "TEXTS",
+                "pascal": "Texts"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "inline": {
+                      "class": "SCALAR_CLASS_STRING",
+                      "constraint": {
+                        "lenMin": "0",
+                        "lenMax": "8"
+                      },
+                      "vacuous": false
+                    }
+                  },
+                  "min": "0",
+                  "max": "2"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 0 ..= 2",
+                  "collectionBound": {
+                    "min": "0",
+                    "max": "2"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 17,
+            "field": {
+              "name": {
+                "declared": "byTag",
+                "snake": "by_tag",
+                "camel": "ByTag",
+                "screaming": "BY_TAG",
+                "pascal": "ByTag"
+              },
+              "type": {
+                "optional": false,
+                "map": {
+                  "key": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Tag",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 4,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "value": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Count",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "min": "0",
+                  "max": "3",
+                  "flatbuffersEntryTable": 18
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 0 ..= 3",
+                  "collectionBound": {
+                    "min": "0",
+                    "max": "3"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 18,
+            "field": {
+              "name": {
+                "declared": "nested",
+                "snake": "nested",
+                "camel": "Nested",
+                "screaming": "NESTED",
+                "pascal": "Nested"
+              },
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Inner",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 14,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  },
+                  "min": "0",
+                  "max": "2"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 0 ..= 2",
+                  "collectionBound": {
+                    "min": "0",
+                    "max": "2"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 19,
+            "field": {
+              "name": {
+                "declared": "legacy",
+                "snake": "legacy",
+                "camel": "Legacy",
+                "screaming": "LEGACY",
+                "pascal": "Legacy"
+              },
+              "type": {
+                "optional": true,
+                "named": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "deprecated": "read `count`",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 200",
+                  "range": {
+                    "min": "0",
+                    "max": "200"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": {
+        "declared": "Outcome",
+        "snake": "outcome",
+        "camel": "Outcome",
+        "screaming": "OUTCOME",
+        "pascal": "Outcome"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A union with data arms only.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": true,
+        "reachesTextOrBytes": true,
+        "reachesCollection": true,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 1094
+      },
+      "podbuf": {
+        "bounded": 1159
+      },
+      "union": {
+        "arms": [
+          {
+            "name": {
+              "declared": "number",
+              "snake": "number",
+              "camel": "Number",
+              "screaming": "NUMBER",
+              "pascal": "Number"
+            },
+            "ordinal": 1,
+            "type": {
+              "reference": "Count",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 0,
+              "kind": "DECL_KIND_SCALAR"
+            },
+            "doc": "",
+            "discriminant": 1,
+            "flatbuffersBox": 19,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "text",
+              "snake": "text",
+              "camel": "Text",
+              "screaming": "TEXT",
+              "pascal": "Text"
+            },
+            "ordinal": 2,
+            "type": {
+              "reference": "Label",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 5,
+              "kind": "DECL_KIND_SCALAR"
+            },
+            "doc": "",
+            "discriminant": 2,
+            "flatbuffersBox": 20,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "panel",
+              "snake": "panel",
+              "camel": "Panel",
+              "screaming": "PANEL",
+              "pascal": "Panel"
+            },
+            "ordinal": 3,
+            "type": {
+              "reference": "Panel",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 16,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "",
+            "discriminant": 3,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          }
+        ],
+        "retired": [],
+        "isResult": false
+      }
+    },
+    {
+      "name": {
+        "declared": "Checked",
+        "snake": "checked",
+        "camel": "Checked",
+        "screaming": "CHECKED",
+        "pascal": "Checked"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A result union: one success arm and one error arm.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 140
+      },
+      "podbuf": {
+        "bounded": 169
+      },
+      "union": {
+        "arms": [
+          {
+            "name": {
+              "declared": "ok",
+              "snake": "ok",
+              "camel": "Ok",
+              "screaming": "OK",
+              "pascal": "Ok"
+            },
+            "ordinal": 1,
+            "type": {
+              "reference": "Inner",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 14,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "",
+            "discriminant": 1,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "err",
+              "snake": "err",
+              "camel": "Err",
+              "screaming": "ERR",
+              "pascal": "Err"
+            },
+            "ordinal": 2,
+            "type": {
+              "reference": "Fault",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 15,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "",
+            "discriminant": 2,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          }
+        ],
+        "retired": [],
+        "isResult": true
+      }
+    },
+    {
+      "name": {
+        "declared": "Raw",
+        "snake": "raw",
+        "camel": "Raw",
+        "screaming": "RAW",
+        "pascal": "Raw"
+      },
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
+      "doc": "A package-private struct.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 16
+      },
+      "podbuf": {
+        "bounded": 24
+      },
+      "struct": {
+        "slots": [
+          {
+            "ordinal": 1,
+            "field": {
+              "name": {
+                "declared": "ticks",
+                "snake": "ticks",
+                "camel": "Ticks",
+                "screaming": "TICKS",
+                "pascal": "Ticks"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 200",
+                  "range": {
+                    "min": "0",
+                    "max": "200"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "ordinal": 2,
+            "field": {
+              "name": {
+                "declared": "frame",
+                "snake": "frame",
+                "camel": "Frame",
+                "screaming": "FRAME",
+                "pascal": "Frame"
+              },
+              "type": {
+                "optional": false,
+                "named": {
+                  "reference": "Frame",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 6,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "init": {
+                "derivable": false,
+                "source": "INIT_SOURCE_NONE",
+                "oneLevel": false
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 8",
+                  "length": {
+                    "min": "8",
+                    "max": "8"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    }
+  ],
+  "tuples": [
+    {
+      "name": {
+        "rust": "PanelSpan",
+        "wire": "PanelSpan"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "low",
+            "snake": "low",
+            "camel": "Low",
+            "screaming": "LOW",
+            "pascal": "Low"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        },
+        {
+          "name": {
+            "declared": "high",
+            "snake": "high",
+            "camel": "High",
+            "screaming": "HIGH",
+            "pascal": "High"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        }
+      ],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 17,
+      "declaration": {
+        "declaration": 16,
+        "segments": [
+          "span"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationSetParams",
+        "wire": "StationSetParams"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "count",
+            "snake": "count",
+            "camel": "Count",
+            "screaming": "COUNT",
+            "pascal": "Count"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Count",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 0,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        },
+        {
+          "name": {
+            "declared": "level",
+            "snake": "level",
+            "camel": "Level",
+            "screaming": "LEVEL",
+            "pascal": "Level"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        }
+      ],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 21,
+      "interaction": {
+        "interface": 0,
+        "slot": 5,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationOutcomeParams",
+        "wire": "StationOutcomeParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 22,
+      "interaction": {
+        "interface": 0,
+        "slot": 9,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationCheckedParams",
+        "wire": "StationCheckedParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 23,
+      "interaction": {
+        "interface": 0,
+        "slot": 10,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationBoundsParams",
+        "wire": "StationBoundsParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 24,
+      "interaction": {
+        "interface": 0,
+        "slot": 11,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationBoundsReply",
+        "wire": "StationBoundsReply"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "min",
+            "snake": "min",
+            "camel": "Min",
+            "screaming": "MIN",
+            "pascal": "Min"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        },
+        {
+          "name": {
+            "declared": "max",
+            "snake": "max",
+            "camel": "Max",
+            "screaming": "MAX",
+            "pascal": "Max"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        }
+      ],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 25,
+      "interaction": {
+        "interface": 0,
+        "slot": 11,
+        "segments": [
+          "Reply"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationOldParams",
+        "wire": "StationOldParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 26,
+      "interaction": {
+        "interface": 0,
+        "slot": 16,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "ProbeSampleParams",
+        "wire": "ProbeSampleParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 27,
+      "interaction": {
+        "interface": 1,
+        "slot": 1,
+        "segments": [
+          "Params"
+        ]
+      }
+    }
+  ],
+  "interfaces": [
+    {
+      "number": 2,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "Every interaction kind, with every timing form.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "tick",
+              "snake": "tick",
+              "camel": "Tick",
+              "screaming": "TICK",
+              "pascal": "Tick"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "Strict periodic.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "10000",
+              "maxUs": "10000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "6"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "period 10000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_STRICT_PERIODIC",
+                  "minUs": "10000",
+                  "maxUs": "10000"
+                }
+              }
+            ],
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "heat",
+              "snake": "heat",
+              "camel": "Heat",
+              "screaming": "HEAT",
+              "pascal": "Heat"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 1,
+            "doc": "A range with both bounds, and an init value.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "20000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "5"
+              },
+              "flatbuffers": {
+                "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 20000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "20000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Heat",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 2,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 46,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 5
+                  },
+                  "flatbuffers": {
+                    "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "declaredInit": "20",
+              "init": {
+                "derivable": true,
+                "value": "20",
+                "source": "INIT_SOURCE_DECLARED",
+                "oneLevel": true
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "modes",
+              "snake": "modes",
+              "camel": "Modes",
+              "screaming": "MODES",
+              "pascal": "Modes"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 2,
+            "doc": "A lower bound only.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "6"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 50000 .. us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "50000"
+                }
+              }
+            ],
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Modes",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 12,
+                  "kind": "DECL_KIND_ENUM_SET"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
+              "declared": "inner",
+              "snake": "inner",
+              "camel": "Inner",
+              "screaming": "INNER",
+              "pascal": "Inner"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 3,
+            "doc": "An upper bound only.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "2000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "137"
+              },
+              "flatbuffers": {
+                "bytes": "196"
+              },
+              "podbuf": {
+                "bytes": "153"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval ..= 2000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "maxUs": "2000000"
+                }
+              }
+            ],
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 14,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 196,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 137
+                  },
+                  "flatbuffers": {
+                    "bounded": 196
+                  },
+                  "podbuf": {
+                    "bounded": 153
+                  }
+                }
+              },
+              "init": {
+                "derivable": true,
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 5,
+          "interaction": {
+            "name": {
+              "declared": "changed",
+              "snake": "changed",
+              "camel": "Changed",
+              "screaming": "CHANGED",
+              "pascal": "Changed"
+            },
+            "kind": "KIND_EVENT",
+            "row": 4,
+            "doc": "An event.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "1091"
+              },
+              "flatbuffers": {
+                "bytes": "1722"
+              },
+              "podbuf": {
+                "bytes": "1143"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 50000 ..= 500000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "50000",
+                  "maxUs": "500000"
+                }
+              }
+            ],
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "Panel",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 16,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 1722,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 1091
+                  },
+                  "flatbuffers": {
+                    "bounded": 1722
+                  },
+                  "podbuf": {
+                    "bounded": 1143
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 6,
+          "interaction": {
+            "name": {
+              "declared": "set",
+              "snake": "set",
+              "camel": "Set",
+              "screaming": "SET",
+              "pascal": "Set"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 5,
+            "doc": "A command with two parameters, which induces its parameter struct.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "12"
+              },
+              "flatbuffers": {
+                "bytes": "53"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "require `count <= MAX_COUNT`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "count <= MAX_COUNT"
+                }
+              }
+            ],
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "count",
+                    "snake": "count",
+                    "camel": "Count",
+                    "screaming": "COUNT",
+                    "pascal": "Count"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Count",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 200",
+                      "range": {
+                        "min": "0",
+                        "max": "200"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": {
+                    "declared": "level",
+                    "snake": "level",
+                    "camel": "Level",
+                    "screaming": "LEVEL",
+                    "pascal": "Level"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Level",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range -5 ..= 10",
+                      "range": {
+                        "min": "-5",
+                        "max": "10"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "count <= MAX_COUNT",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "count"
+                  ],
+                  "usesResult": false,
+                  "observerId": "Station.set.require[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 12
+                },
+                "flatbuffers": {
+                  "bounded": 53
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "shape": "SHAPE_NONE",
+              "requestTuple": {
+                "index": 1
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 7,
+          "retired": {
+            "name": {
+              "declared": "retired",
+              "snake": "retired",
+              "camel": "Retired",
+              "screaming": "RETIRED",
+              "pascal": "Retired"
+            }
+          }
+        },
+        {
+          "ordinal": 8,
+          "interaction": {
+            "name": {
+              "declared": "read",
+              "snake": "read",
+              "camel": "Read",
+              "screaming": "READ",
+              "pascal": "Read"
+            },
+            "kind": "KIND_QUERY",
+            "row": 6,
+            "doc": "A query.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "1157"
+              },
+              "flatbuffers": {
+                "bytes": "1844"
+              },
+              "podbuf": {
+                "bytes": "1224"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "tag",
+                    "snake": "tag",
+                    "camel": "Tag",
+                    "screaming": "TAG",
+                    "pascal": "Tag"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Tag",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 4,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "length 1 ..= 16",
+                      "length": {
+                        "min": "1",
+                        "max": "16"
+                      }
+                    },
+                    {
+                      "text": "pattern `/^[a-z][a-z0-9-]*$/`",
+                      "pattern": "/^[a-z][a-z0-9-]*$/"
+                    }
+                  ]
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "Tag",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 122,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 66
+                  },
+                  "flatbuffers": {
+                    "bounded": 122
+                  },
+                  "podbuf": {
+                    "bounded": 81
+                  }
+                }
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Panel",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 16,
+                    "kind": "DECL_KIND_STRUCT"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Panel",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 16,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 1722,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 1091
+                  },
+                  "flatbuffers": {
+                    "bounded": 1722
+                  },
+                  "podbuf": {
+                    "bounded": 1143
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 66
+                },
+                "flatbuffers": {
+                  "bounded": 122
+                },
+                "podbuf": {
+                  "bounded": 81
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 1091
+                },
+                "flatbuffers": {
+                  "bounded": 1722
+                },
+                "podbuf": {
+                  "bounded": 1143
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 9,
+          "interaction": {
+            "name": {
+              "declared": "tryRead",
+              "snake": "try_read",
+              "camel": "TryRead",
+              "screaming": "TRY_READ",
+              "pascal": "TryRead"
+            },
+            "kind": "KIND_QUERY",
+            "row": 7,
+            "doc": "A fallible query over an error enum.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "tryRead.reply: Inner | Failure"
+              },
+              "flatbuffers": {
+                "unsized": "tryRead.reply: Inner | Failure"
+              },
+              "podbuf": {
+                "unsized": "tryRead.reply: Inner | Failure"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 100000 us",
+                "responseBound": {
+                  "maxUs": "100000"
+                }
+              },
+              {
+                "text": "errors lint.shapes.Failure",
+                "errors": {
+                  "names": [
+                    "lint.shapes.Failure"
+                  ]
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "tag",
+                    "snake": "tag",
+                    "camel": "Tag",
+                    "screaming": "TAG",
+                    "pascal": "Tag"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Tag",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 4,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "length 1 ..= 16",
+                      "length": {
+                        "min": "1",
+                        "max": "16"
+                      }
+                    },
+                    {
+                      "text": "pattern `/^[a-z][a-z0-9-]*$/`",
+                      "pattern": "/^[a-z][a-z0-9-]*$/"
+                    }
+                  ]
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "Tag",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 122,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 66
+                  },
+                  "flatbuffers": {
+                    "bounded": 122
+                  },
+                  "podbuf": {
+                    "bounded": 81
+                  }
+                }
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "Inner",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 14,
+                    "kind": "DECL_KIND_STRUCT"
+                  },
+                  "err": {
+                    "reference": "Failure",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 13,
+                    "kind": "DECL_KIND_ENUM"
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 66
+                },
+                "flatbuffers": {
+                  "bounded": 122
+                },
+                "podbuf": {
+                  "bounded": 81
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 10,
+          "interaction": {
+            "name": {
+              "declared": "outcome",
+              "snake": "outcome",
+              "camel": "Outcome",
+              "screaming": "OUTCOME",
+              "pascal": "Outcome"
+            },
+            "kind": "KIND_QUERY",
+            "row": 8,
+            "doc": "A query that returns a union.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "1094"
+              },
+              "flatbuffers": {
+                "bytes": "1800"
+              },
+              "podbuf": {
+                "bytes": "1167"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 100000 us",
+                "responseBound": {
+                  "maxUs": "100000"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Outcome",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 17,
+                    "kind": "DECL_KIND_UNION"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Outcome",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_UNION"
+                },
+                "flatbuffersMaxSize": 1767,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 1094
+                  },
+                  "flatbuffers": {
+                    "bounded": 1767
+                  },
+                  "podbuf": {
+                    "bounded": 1159
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 1094
+                },
+                "flatbuffers": {
+                  "bounded": 1767
+                },
+                "podbuf": {
+                  "bounded": 1159
+                }
+              },
+              "requestTuple": {
+                "index": 2
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 11,
+          "interaction": {
+            "name": {
+              "declared": "checked",
+              "snake": "checked",
+              "camel": "Checked",
+              "screaming": "CHECKED",
+              "pascal": "Checked"
+            },
+            "kind": "KIND_QUERY",
+            "row": 9,
+            "doc": "A query that returns a result union.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "140"
+              },
+              "flatbuffers": {
+                "bytes": "274"
+              },
+              "podbuf": {
+                "bytes": "177"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 100000 us",
+                "responseBound": {
+                  "maxUs": "100000"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Checked",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 18,
+                    "kind": "DECL_KIND_UNION"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Checked",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 18,
+                  "kind": "DECL_KIND_UNION"
+                },
+                "flatbuffersMaxSize": 241,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 140
+                  },
+                  "flatbuffers": {
+                    "bounded": 241
+                  },
+                  "podbuf": {
+                    "bounded": 169
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 140
+                },
+                "flatbuffers": {
+                  "bounded": 241
+                },
+                "podbuf": {
+                  "bounded": 169
+                }
+              },
+              "requestTuple": {
+                "index": 3
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 12,
+          "interaction": {
+            "name": {
+              "declared": "bounds",
+              "snake": "bounds",
+              "camel": "Bounds",
+              "screaming": "BOUNDS",
+              "pascal": "Bounds"
+            },
+            "kind": "KIND_QUERY",
+            "row": 10,
+            "doc": "A tuple return.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "12"
+              },
+              "flatbuffers": {
+                "bytes": "86"
+              },
+              "podbuf": {
+                "bytes": "24"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "ensure `result.min <= result.max`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result.min <= result.max"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "tuple": {
+                    "index": 5
+                  }
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result.min <= result.max",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "Station.bounds.ensure[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 12
+                },
+                "flatbuffers": {
+                  "bounded": 53
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "requestTuple": {
+                "index": 4
+              },
+              "replyTuple": {
+                "index": 5
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 13,
+          "interaction": {
+            "name": {
+              "declared": "history",
+              "snake": "history",
+              "camel": "History",
+              "screaming": "HISTORY",
+              "pascal": "History"
+            },
+            "kind": "KIND_QUERY",
+            "row": 11,
+            "doc": "A provider-produced stream.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "history.reply: stream"
+              },
+              "flatbuffers": {
+                "unsized": "history.reply: stream"
+              },
+              "podbuf": {
+                "unsized": "history.reply: stream"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "limit",
+                    "snake": "limit",
+                    "camel": "Limit",
+                    "screaming": "LIMIT",
+                    "pascal": "Limit"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Count",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 200",
+                      "range": {
+                        "min": "0",
+                        "max": "200"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "Inner",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 14,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 6
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 14,
+          "interaction": {
+            "name": {
+              "declared": "replay",
+              "snake": "replay",
+              "camel": "Replay",
+              "screaming": "REPLAY",
+              "pascal": "Replay"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 12,
+            "doc": "A client-produced stream.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "replay.request: (samples)"
+              },
+              "flatbuffers": {
+                "unsized": "replay.request: (samples)"
+              },
+              "podbuf": {
+                "unsized": "replay.request: (samples)"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "samples",
+                    "snake": "samples",
+                    "camel": "Samples",
+                    "screaming": "SAMPLES",
+                    "pascal": "Samples"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": {
+                        "reference": "Inner",
+                        "resolved": true,
+                        "package": "lint.shapes",
+                        "foreign": false,
+                        "index": 14,
+                        "kind": "DECL_KIND_STRUCT"
+                      }
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
+                }
+              ],
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "shape": "SHAPE_NONE"
+            }
+          }
+        },
+        {
+          "ordinal": 15,
+          "interaction": {
+            "name": {
+              "declared": "serial",
+              "snake": "serial",
+              "camel": "Serial",
+              "screaming": "SERIAL",
+              "pascal": "Serial"
+            },
+            "kind": "KIND_FIXED",
+            "row": 13,
+            "doc": "A fixed value.",
+            "labels": [],
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
+                "bytes": "0"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "named": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "named": {
+                "type": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 186,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 131
+                  },
+                  "flatbuffers": {
+                    "bounded": 186
+                  },
+                  "podbuf": {
+                    "bounded": 145
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 16,
+          "interaction": {
+            "name": {
+              "declared": "tags",
+              "snake": "tags",
+              "camel": "Tags",
+              "screaming": "TAGS",
+              "pascal": "Tags"
+            },
+            "kind": "KIND_FIXED",
+            "row": 14,
+            "doc": "A collection-typed fixed value.",
+            "labels": [],
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
+                "bytes": "0"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Tag",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 4,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "min": "0",
+                  "max": "8"
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 17,
+          "interaction": {
+            "name": {
+              "declared": "old",
+              "snake": "old",
+              "camel": "Old",
+              "screaming": "OLD",
+              "pascal": "Old"
+            },
+            "kind": "KIND_QUERY",
+            "row": 15,
+            "doc": "",
+            "labels": [],
+            "deprecated": "use `read`",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "6"
+              },
+              "flatbuffers": {
+                "bytes": "76"
+              },
+              "podbuf": {
+                "bytes": "24"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Count",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 0,
+                    "kind": "DECL_KIND_SCALAR"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 6
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "requestTuple": {
+                "index": 6
+              }
+            }
+          }
+        }
+      ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "tryRead"
+        },
+        "flatbuffers": {
+          "unsized": "tryRead"
+        },
+        "podbuf": {
+          "unsized": "tryRead"
+        }
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "declared": {
+        "declared": "Station",
+        "snake": "station",
+        "camel": "Station",
+        "screaming": "STATION",
+        "pascal": "Station"
+      }
+    },
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_INTERNAL",
+      "doc": "A package-private interface over a package-private payload.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "raw",
+              "snake": "raw",
+              "camel": "Raw",
+              "screaming": "RAW",
+              "pascal": "Raw"
+            },
+            "kind": "KIND_EVENT",
+            "row": 0,
+            "doc": "A package-private payload.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "16"
+              },
+              "flatbuffers": {
+                "bytes": "75"
+              },
+              "podbuf": {
+                "bytes": "24"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "event": {
+              "payload": {
+                "type": {
+                  "reference": "Raw",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 19,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 75,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 16
+                  },
+                  "flatbuffers": {
+                    "bounded": 75
+                  },
+                  "podbuf": {
+                    "bounded": 24
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "sample",
+              "snake": "sample",
+              "camel": "Sample",
+              "screaming": "SAMPLE",
+              "pascal": "Sample"
+            },
+            "kind": "KIND_QUERY",
+            "row": 1,
+            "doc": "A package-private return.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "16"
+              },
+              "flatbuffers": {
+                "bytes": "108"
+              },
+              "podbuf": {
+                "bytes": "32"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Raw",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 19,
+                    "kind": "DECL_KIND_STRUCT"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Raw",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 19,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 75,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 16
+                  },
+                  "flatbuffers": {
+                    "bounded": 75
+                  },
+                  "podbuf": {
+                    "bounded": 24
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 16
+                },
+                "flatbuffers": {
+                  "bounded": 75
+                },
+                "podbuf": {
+                  "bounded": 24
+                }
+              },
+              "requestTuple": {
+                "index": 7
+              }
+            }
+          }
+        }
+      ],
+      "tableBudget": {
+        "proto3": {
+          "bytes": "32"
+        },
+        "flatbuffers": {
+          "bytes": "183"
+        },
+        "podbuf": {
+          "bytes": "56"
+        }
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "declared": {
+        "declared": "Probe",
+        "snake": "probe",
+        "camel": "Probe",
+        "screaming": "PROBE",
+        "pascal": "Probe"
+      }
+    }
+  ],
+  "services": [],
+  "catalog": {
+    "package": "lint.shapes",
+    "hash": "DYTXxgb33CNyy6jvmarCEPjFvgraEDdQYQvdHTdzvxw=",
+    "retired": [],
+    "compatible": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 1,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 2,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 46
+      },
+      {
+        "declaration": 3,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 4,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 122
+      },
+      {
+        "declaration": 5,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 186
+      },
+      {
+        "declaration": 6,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 65
+      },
+      {
+        "declaration": 7,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 121
+      },
+      {
+        "declaration": 11,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 12,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      },
+      {
+        "declaration": 13,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 50
+      },
+      {
+        "declaration": 14,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 196
+      },
+      {
+        "declaration": 15,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 196
+      },
+      {
+        "declaration": 16,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 1722
+      },
+      {
+        "declaration": 17,
+        "root": "FB_ROOT_KIND_UNION_WRAPPER",
+        "maxSize": 1767
+      },
+      {
+        "declaration": 18,
+        "root": "FB_ROOT_KIND_UNION_WRAPPER",
+        "maxSize": 241
+      },
+      {
+        "declaration": 19,
+        "root": "FB_ROOT_KIND_OWN",
+        "maxSize": 75
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 1,
+        "maxSize": 53
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 2,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 3,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 4,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 5,
+        "maxSize": 53
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 6,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 7,
+        "maxSize": 33
+      }
+    ],
+    "tables": [
+      {
+        "name": "Inner",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 14
+      },
+      {
+        "name": "Fault",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 15
+      },
+      {
+        "name": "Panel",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 1
+          },
+          {
+            "id": 2,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "field": 2
+          },
+          {
+            "id": 3,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_DOUBLE",
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "field": 3
+          },
+          {
+            "id": 4,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "field": 4
+          },
+          {
+            "id": 5,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "field": 5
+          },
+          {
+            "id": 6,
+            "wire": {
+              "bytes": true
+            },
+            "needsNullDefault": false,
+            "field": 6
+          },
+          {
+            "id": 7,
+            "wire": {
+              "bytes": true
+            },
+            "needsNullDefault": false,
+            "field": 7
+          },
+          {
+            "id": 8,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BOOL",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 8
+          },
+          {
+            "id": 9,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "Mode",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "field": 9
+          },
+          {
+            "id": 10,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 10
+          },
+          {
+            "id": 11,
+            "wire": {
+              "table": 0
+            },
+            "needsNullDefault": false,
+            "field": 11
+          },
+          {
+            "id": 12,
+            "wire": {
+              "table": 17
+            },
+            "needsNullDefault": false,
+            "field": 12
+          },
+          {
+            "id": 13,
+            "wire": {
+              "vector": {
+                "element": {
+                  "scalar": {
+                    "type": "FB_SCALAR_TYPE_UBYTE",
+                    "widthBytes": 1
+                  }
+                },
+                "min": "4",
+                "max": "4"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 13
+          },
+          {
+            "id": 14,
+            "wire": {
+              "vector": {
+                "element": {
+                  "scalar": {
+                    "type": "FB_SCALAR_TYPE_BYTE",
+                    "widthBytes": 1
+                  }
+                },
+                "min": "0",
+                "max": "4"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 14
+          },
+          {
+            "id": 15,
+            "wire": {
+              "vector": {
+                "element": {
+                  "text": true
+                },
+                "min": "0",
+                "max": "2"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 15
+          },
+          {
+            "id": 16,
+            "wire": {
+              "map": {
+                "entryTable": 18,
+                "min": "0",
+                "max": "3"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 16
+          },
+          {
+            "id": 17,
+            "wire": {
+              "vector": {
+                "element": {
+                  "table": 0
+                },
+                "min": "0",
+                "max": "2"
+              }
+            },
+            "needsNullDefault": false,
+            "field": 17
+          },
+          {
+            "id": 18,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": true,
+            "field": 18
+          }
+        ],
+        "vtableSlots": 19,
+        "structDeclaration": 16
+      },
+      {
+        "name": "Outcome",
+        "slots": [
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 2,
+        "unionWrapper": 17
+      },
+      {
+        "name": "Checked",
+        "slots": [
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 2,
+        "unionWrapper": 18
+      },
+      {
+        "name": "Raw",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "field": 0
+          },
+          {
+            "id": 1,
+            "wire": {
+              "bytes": true
+            },
+            "needsNullDefault": false,
+            "field": 1
+          }
+        ],
+        "vtableSlots": 2,
+        "structDeclaration": 19
+      },
+      {
+        "name": "CountBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      },
+      {
+        "name": "LevelBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 1
+      },
+      {
+        "name": "HeatBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 2
+      },
+      {
+        "name": "FloorBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_DOUBLE",
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 3
+      },
+      {
+        "name": "TagBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 4
+      },
+      {
+        "name": "LabelBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 5
+      },
+      {
+        "name": "FrameBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "bytes": true
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 6
+      },
+      {
+        "name": "BlobBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "bytes": true
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 7
+      },
+      {
+        "name": "ModeBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "Mode",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 11
+      },
+      {
+        "name": "ModesBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 12
+      },
+      {
+        "name": "FailureBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "enum": {
+                "type": {
+                  "reference": "Failure",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 13,
+                  "kind": "DECL_KIND_ENUM"
+                },
+                "widthBytes": 8
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 13
+      },
+      {
+        "name": "PanelSpan",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 0
+      },
+      {
+        "name": "PanelByTagEntry",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "key": true
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "value": true
+          }
+        ],
+        "vtableSlots": 2,
+        "mapEntry": {
+          "path": [
+            "PanelByTagEntry"
+          ]
+        }
+      },
+      {
+        "name": "OutcomeNumberBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "armBox": {
+          "declaration": 17,
+          "arm": 0
+        }
+      },
+      {
+        "name": "OutcomeTextBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "text": true
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "armBox": {
+          "declaration": 17,
+          "arm": 1
+        }
+      },
+      {
+        "name": "StationSetParams",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_UBYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 1
+      },
+      {
+        "name": "StationOutcomeParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 2
+      },
+      {
+        "name": "StationCheckedParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 3
+      },
+      {
+        "name": "StationBoundsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 4
+      },
+      {
+        "name": "StationBoundsReply",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 5
+      },
+      {
+        "name": "StationOldParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 6
+      },
+      {
+        "name": "ProbeSampleParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 7
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "count",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "label",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 14
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 15
+      },
+      {
+        "size": 112,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "count",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "level",
+                "ordinal": 2
+              }
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "flags": 0
+            },
+            "offset": 2,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "flag",
+                "ordinal": 9
+              }
+            },
+            "offset": 3,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "boolean": true
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "heat",
+                "ordinal": 3
+              }
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "floor",
+                "ordinal": 4
+              }
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "float": "FLOAT_WIDTH_F64"
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "tag",
+                "ordinal": 5
+              }
+            },
+            "offset": 16,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "16"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "note",
+                "ordinal": 6
+              }
+            },
+            "offset": 24,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 0
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "frame",
+                "ordinal": 7
+              }
+            },
+            "offset": 32,
+            "size": 8,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 8
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "blob",
+                "ordinal": 8
+              }
+            },
+            "offset": 40,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "bytes": {
+                  "min": "0",
+                  "max": "64"
+                }
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 1
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "mode",
+                "ordinal": 10
+              }
+            },
+            "offset": 48,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "enum": {
+                "width": "INT_WIDTH_U8",
+                "signed": false,
+                "reference": "Mode"
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "modes",
+                "ordinal": 11
+              }
+            },
+            "offset": 49,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "enumSet": {
+                "width": "INT_WIDTH_U8",
+                "reference": "Modes"
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "fixed4",
+                "ordinal": 14
+              }
+            },
+            "offset": 50,
+            "size": 4,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 4
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "legacy",
+                "ordinal": 19
+              }
+            },
+            "offset": 54,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 2
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "inner",
+                "ordinal": 12
+              }
+            },
+            "offset": 56,
+            "size": 16,
+            "align": 8,
+            "form": {
+              "inlineHead": 0
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "span",
+                "ordinal": 13
+              }
+            },
+            "offset": 72,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "inlineHead": 6
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "levels",
+                "ordinal": 15
+              }
+            },
+            "offset": 80,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "int": {
+                      "width": "INT_WIDTH_I8",
+                      "signed": true
+                    }
+                  },
+                  "elemSize": 1,
+                  "min": "0",
+                  "max": "4"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "texts",
+                "ordinal": 16
+              }
+            },
+            "offset": 88,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "descriptor": {
+                      "text": {
+                        "min": "0",
+                        "max": "8"
+                      }
+                    }
+                  },
+                  "elemSize": 8,
+                  "min": "0",
+                  "max": "2"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "byTag",
+                "ordinal": 17
+              }
+            },
+            "offset": 96,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "map": {
+                  "entryHead": 14,
+                  "elemSize": 16,
+                  "min": "0",
+                  "max": "3"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "nested",
+                "ordinal": 18
+              }
+            },
+            "offset": 104,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "inlineHead": 0
+                  },
+                  "elemSize": 16,
+                  "min": "0",
+                  "max": "2"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 55,
+            "size": 1
+          }
+        ],
+        "declaration": 16
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "tag": true
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "arm": true
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "arms": {
+                  "arms": [
+                    {
+                      "ordinal": 1,
+                      "head": 15
+                    },
+                    {
+                      "ordinal": 2,
+                      "head": 16
+                    },
+                    {
+                      "ordinal": 3,
+                      "head": 17
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 17
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "tag": true
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "arm": true
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "arms": {
+                  "arms": [
+                    {
+                      "ordinal": 1,
+                      "head": 19
+                    },
+                    {
+                      "ordinal": 2,
+                      "head": 20
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 18
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "ticks",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "frame",
+                "ordinal": 2
+              }
+            },
+            "offset": 1,
+            "size": 8,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 8
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 9,
+            "size": 7
+          }
+        ],
+        "declaration": 19
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "low",
+              "position": 1
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "high",
+              "position": 2
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 6
+          }
+        ],
+        "tuple": 0
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "count",
+              "position": 1
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "level",
+              "position": 2
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 6
+          }
+        ],
+        "tuple": 1
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 2
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 3
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 4
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "min",
+              "position": 1
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "max",
+              "position": 2
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 6
+          }
+        ],
+        "tuple": 5
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 6
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 7
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "key": true
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "16"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "value": true
+            },
+            "offset": 8,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 9,
+            "size": 7
+          }
+        ],
+        "mapEntry": {
+          "path": [
+            "Panel",
+            "byTag"
+          ]
+        }
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "arm": true
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 7
+          }
+        ],
+        "arm": {
+          "declaration": 17,
+          "arm": 1
+        }
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "arm": true
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "arm": {
+          "declaration": 17,
+          "arm": 2
+        }
+      },
+      {
+        "size": 112,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "count",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "level",
+                "ordinal": 2
+              }
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "flags": 0
+            },
+            "offset": 2,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "flag",
+                "ordinal": 9
+              }
+            },
+            "offset": 3,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "boolean": true
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "heat",
+                "ordinal": 3
+              }
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "floor",
+                "ordinal": 4
+              }
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "float": "FLOAT_WIDTH_F64"
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "tag",
+                "ordinal": 5
+              }
+            },
+            "offset": 16,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "16"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "note",
+                "ordinal": 6
+              }
+            },
+            "offset": 24,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 0
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "frame",
+                "ordinal": 7
+              }
+            },
+            "offset": 32,
+            "size": 8,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 8
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "blob",
+                "ordinal": 8
+              }
+            },
+            "offset": 40,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "bytes": {
+                  "min": "0",
+                  "max": "64"
+                }
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 1
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "mode",
+                "ordinal": 10
+              }
+            },
+            "offset": 48,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "enum": {
+                "width": "INT_WIDTH_U8",
+                "signed": false,
+                "reference": "Mode"
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "modes",
+                "ordinal": 11
+              }
+            },
+            "offset": 49,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "enumSet": {
+                "width": "INT_WIDTH_U8",
+                "reference": "Modes"
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "fixed4",
+                "ordinal": 14
+              }
+            },
+            "offset": 50,
+            "size": 4,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 4
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "legacy",
+                "ordinal": 19
+              }
+            },
+            "offset": 54,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 2
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "inner",
+                "ordinal": 12
+              }
+            },
+            "offset": 56,
+            "size": 16,
+            "align": 8,
+            "form": {
+              "inlineHead": 0
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "span",
+                "ordinal": 13
+              }
+            },
+            "offset": 72,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "inlineHead": 6
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "levels",
+                "ordinal": 15
+              }
+            },
+            "offset": 80,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "int": {
+                      "width": "INT_WIDTH_I8",
+                      "signed": true
+                    }
+                  },
+                  "elemSize": 1,
+                  "min": "0",
+                  "max": "4"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "texts",
+                "ordinal": 16
+              }
+            },
+            "offset": 88,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "descriptor": {
+                      "text": {
+                        "min": "0",
+                        "max": "8"
+                      }
+                    }
+                  },
+                  "elemSize": 8,
+                  "min": "0",
+                  "max": "2"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "byTag",
+                "ordinal": 17
+              }
+            },
+            "offset": 96,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "map": {
+                  "entryHead": 18,
+                  "elemSize": 16,
+                  "min": "0",
+                  "max": "3"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "nested",
+                "ordinal": 18
+              }
+            },
+            "offset": 104,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "inlineHead": 0
+                  },
+                  "elemSize": 16,
+                  "min": "0",
+                  "max": "2"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 55,
+            "size": 1
+          }
+        ],
+        "arm": {
+          "declaration": 17,
+          "arm": 3
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "key": true
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "16"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "value": true
+            },
+            "offset": 8,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 9,
+            "size": 7
+          }
+        ],
+        "mapEntry": {
+          "path": [
+            "Outcome",
+            "3",
+            "byTag"
+          ]
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "count",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "label",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 18,
+          "arm": 1
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 18,
+          "arm": 2
+        }
+      }
+    ],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "int": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 1,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "int": {
+                  "width": "INT_WIDTH_I8",
+                  "signed": true
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 2,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 4,
+              "align": 4,
+              "form": {
+                "float": "FLOAT_WIDTH_F32"
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 4,
+              "size": 4
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 3,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 8,
+              "align": 8,
+              "form": {
+                "float": "FLOAT_WIDTH_F64"
+              }
+            }
+          ],
+          "pads": []
+        }
+      },
+      {
+        "declaration": 4,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 8,
+              "align": 4,
+              "form": {
+                "descriptor": {
+                  "text": {
+                    "min": "1",
+                    "max": "16"
+                  }
+                }
+              }
+            }
+          ],
+          "pads": []
+        }
+      },
+      {
+        "declaration": 5,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 8,
+              "align": 4,
+              "form": {
+                "descriptor": {
+                  "text": {
+                    "min": "0",
+                    "max": "32"
+                  }
+                }
+              }
+            }
+          ],
+          "pads": []
+        }
+      },
+      {
+        "declaration": 6,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 8,
+              "align": 1,
+              "form": {
+                "inlineArray": {
+                  "element": {
+                    "int": {
+                      "width": "INT_WIDTH_U8",
+                      "signed": false
+                    }
+                  },
+                  "count": 8
+                }
+              }
+            }
+          ],
+          "pads": []
+        }
+      },
+      {
+        "declaration": 7,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 8,
+              "align": 4,
+              "form": {
+                "descriptor": {
+                  "bytes": {
+                    "min": "0",
+                    "max": "64"
+                  }
+                }
+              }
+            }
+          ],
+          "pads": []
+        }
+      },
+      {
+        "declaration": 11,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enum": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false,
+                  "reference": "Mode"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 12,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enumSet": {
+                  "width": "INT_WIDTH_U8",
+                  "reference": "Modes"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 13,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enum": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false,
+                  "reference": "Failure"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

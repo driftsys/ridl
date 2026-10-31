@@ -290,6 +290,7 @@ impl ::core::default::Default for Gear {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Measurement {
     /// A value in [Speed], see [Measurement.fault](crate::veh::common::Measurement::Fault).
     ///

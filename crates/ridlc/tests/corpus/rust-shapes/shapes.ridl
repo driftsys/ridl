@@ -1,0 +1,174 @@
+// The declaration shapes the Rust backend emits, in one package whose crate
+// `just demo` generates with every encoding, `transcode = true` and
+// `wasm = true`, and then lints, formats and documents. The veh-cluster corpus
+// holds the cross-package shapes and has neither option on.
+
+package lint.shapes
+
+// --- scalars ---
+
+/// A bounded integer.
+type Count : integer [0..200]
+
+/// An integer whose range holds negative values and 0.
+type Level : integer [-5..10]
+
+/// A float with a step and a unit.
+type Heat : Cel [-40.0..125.0 step 0.5]
+
+/// A float with a lower bound only and a step.
+type Floor : float [0.0.. step 0.25]
+
+/// A string with a length and a pattern.
+type Tag : string [1..16 match /^[a-z][a-z0-9-]*$/] = "unit"
+
+/// A string with a length only.
+type Label : string [0..32]
+
+/// Bytes with a fixed length.
+type Frame : bytes [8]
+
+/// Bytes with a length range.
+type Blob : bytes [0..64]
+
+// --- constants ---
+
+/// The upper bound of a `Count`.
+const MAX_COUNT : Count = 200
+
+/// A constant that names another constant.
+const COUNT_LIMIT : Count = MAX_COUNT
+
+/// A string constant.
+const DEFAULT_TAG : Tag = "unit"
+
+// --- enums ---
+
+/// A mode.
+enum Mode {
+  /// Not running.
+  IDLE   = 0
+  /// Running.
+  ACTIVE = 1
+  /// Stopped by a fault, with a gap in the values before it.
+  FAULT  = 4
+}
+
+/// A set of modes.
+enumset Modes : Mode
+
+/// A failure.
+error enum Failure {
+  /// The station is busy.
+  BUSY   = 0
+  /// The caller may not read.
+  DENIED = 1
+}
+
+// --- composites ---
+
+/// A struct that nests inside `Panel`.
+struct Inner {
+  count : Count
+  label : Label
+}
+
+/// A failure that carries data.
+error struct Fault {
+  code    : Count
+  message : Label
+}
+
+/// Every kind of field.
+struct Panel {
+  count  : Count
+  level  : Level = 2
+  heat   : Heat
+  floor  : Floor
+  tag    : Tag
+  note   : Label?
+  frame  : Frame
+  blob   : Blob?
+  flag   : boolean
+  mode   : Mode
+  modes  : Modes
+  inner  : Inner
+  span   : (low : Level, high : Level)
+  fixed4 : [Count; 4]
+  levels : [Level; 0..4]
+  texts  : [string [0..8]; 0..2]
+  byTag  : [Tag : Count; 0..3]
+  nested : [Inner; 0..2]
+  /// @deprecated "read `count`"
+  legacy : Count?
+}
+
+/// A union with data arms only.
+union Outcome {
+  number : Count
+  text   : Label
+  panel  : Panel
+}
+
+/// A result union: one success arm and one error arm.
+union Checked {
+  ok  : Inner
+  err : Fault
+}
+
+/// A package-private struct.
+internal struct Raw {
+  ticks : Count
+  frame : Frame
+}
+
+// --- interactions ---
+
+/// Every interaction kind, with every timing form.
+interface Station {
+  /// Strict periodic.
+  signal tick : Count @10ms
+  /// A range with both bounds, and an init value.
+  signal heat : Heat = 20.0 @[20ms..1s]
+  /// A lower bound only.
+  signal modes : Modes @[50ms..]
+  /// An upper bound only.
+  signal inner : Inner @[..2s]
+  /// An event.
+  event changed : Panel @[50ms..500ms]
+  /// A command with two parameters, which induces its parameter struct.
+  command set(count: Count, level: Level) [
+    require count <= MAX_COUNT
+  ] @[..50ms]
+  reserved retired
+  /// A query.
+  query read(tag: Tag): Panel @[..50ms]
+  /// A fallible query over an error enum.
+  query tryRead(tag: Tag): Inner | Failure @[..100ms]
+  /// A query that returns a union.
+  query outcome(): Outcome @[..100ms]
+  /// A query that returns a result union.
+  query checked(): Checked @[..100ms]
+  /// A tuple return.
+  query bounds(): (min : Level, max : Level) [
+    ensure result.min <= result.max
+  ] @[..50ms]
+  /// A provider-produced stream.
+  query history(limit: Count): <Inner> @[..1s]
+  /// A client-produced stream.
+  command replay(samples: <Inner>) @[..50ms]
+  /// A fixed value.
+  fixed serial : Label
+  /// A collection-typed fixed value.
+  fixed tags : [Tag; 0..8]
+  /// @deprecated "use `read`"
+  query old(): Count @[..50ms]
+}
+
+/// A package-private interface over a package-private payload.
+internal interface Probe {
+  /// A package-private payload.
+  event raw : Raw @[100ms..1s]
+  /// A package-private return.
+  query sample(): Raw @[..50ms]
+}

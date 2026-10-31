@@ -374,6 +374,7 @@ impl ::core::default::Default for Panel {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Outcome {
     Number(Count),
     Text(Label),

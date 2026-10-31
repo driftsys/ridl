@@ -324,11 +324,12 @@ be generated, and in what order", which is what this record answers.
    2026-10-31 Sebastien decided to move each allow onto the generated item that
    needs it (driftsys/ridl#1133), so that a generated file included into another
    crate draws no lint: `lib.rs` switches no lint off, and `just demo` runs
-   clippy with `-D warnings` on both generated crates, as edition 2021 and as
-   edition 2024. Single-file mode writes no `lib.rs`, and a consumer that uses
-   `include!` adds no allow. `ridl build` does not write a `.gitattributes`
-   file; the book recommends `generated/** linguist-generated=true`. The
-   as-built record is
+   clippy with `-D warnings` on the generated crates, as edition 2021 and as
+   edition 2024. Since driftsys/ridl#1143 one of those crates comes from a
+   fixture that holds every shape the Rust backend emits. Single-file mode
+   writes no `lib.rs`, and a consumer that uses `include!` adds no allow.
+   `ridl build` does not write a `.gitattributes` file; the book recommends
+   `generated/** linguist-generated=true`. The as-built record is
    [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md) section 2;
    the design note, with the considered options, is
    [`docs/archive/2026-10-06-generated-file-headers-design.md`](../archive/2026-10-06-generated-file-headers-design.md).
