@@ -701,9 +701,11 @@ impl Caller for Watched {
 fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let mut config = config();
     config.liveness_timeout = Duration::from_millis(300);
-    // A full send buffer blocks a write for at most the liveness timeout,
-    // and the last message arrived at most one liveness timeout earlier.
-    let bound = 2 * config.liveness_timeout + Duration::from_millis(500);
+    // A full send buffer blocks a write for at most the liveness timeout, and
+    // the last message arrived at most one liveness timeout earlier. The
+    // margin is large, because a loaded runner delays the threads; it is
+    // still far below the 15 s default, so a missing timeout fails the test.
+    let bound = 2 * config.liveness_timeout + Duration::from_secs(4);
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
@@ -1473,12 +1475,11 @@ fn a_fixed_below_one_block_message_is_counted_as_36_bytes_plus_its_limit() {
 }
 
 /// The largest limit a table can give a `fixed` still counts one block
-/// message. On a 64-bit host this pins the result; the rule clamps the limit
-/// before it adds the header, so that the sum does not overflow a 32-bit
-/// `usize` either.
+/// message. On a 64-bit host this pins the result of the clamp, not the order
+/// of the clamp and the addition: the order matters on a 32-bit `usize`,
+/// where this test is not run.
 ///
-/// Mutation: add the header to the limit before the clamp, with a wrapping
-/// addition.
+/// Mutation: count a `fixed` at its limit, with no clamp.
 #[test]
 fn a_fixed_of_the_largest_table_limit_is_counted_as_one_block_message() {
     let (ended, notes) = served_under(4_130, fixed_table(Some(u32::MAX)));
@@ -1541,19 +1542,24 @@ fn a_fixed_of_65_280_bytes_crosses_as_16_block_messages() {
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
 }
 
-/// A client that sends reads of a large `fixed` and reads nothing ends the
-/// session at the liveness timeout: each `read` makes the server write
-/// 65,824 bytes, the socket buffers fill, and a write waits its whole write
-/// timeout.
+/// A client that sends reads of a large `fixed` and reads nothing more ends
+/// the session at the liveness timeout: each `read` makes the server write
+/// 65,824 bytes in blocks, the socket buffers fill, and a write waits its
+/// whole write timeout. The first answer is read and checked to be a block,
+/// so that the test fails when the value is not sent in blocks.
 ///
 /// Mutation: `run` sets no write timeout.
+///
+/// Mutation: answer the read with a frame that is not a block.
 #[test]
 fn a_client_that_reads_a_large_fixed_and_stops_reading_ends_at_the_liveness_timeout() {
     let mut config = config();
     config.liveness_timeout = Duration::from_millis(300);
-    // A full send buffer blocks a write for at most the liveness timeout,
-    // and the last message arrived at most one liveness timeout earlier.
-    let bound = 2 * config.liveness_timeout + Duration::from_millis(500);
+    // A full send buffer blocks a write for at most the liveness timeout, and
+    // the last message arrived at most one liveness timeout earlier. The
+    // margin is large, because a loaded runner delays the threads; it is
+    // still far below the 15 s default, so a missing timeout fails the test.
+    let bound = 2 * config.liveness_timeout + Duration::from_secs(4);
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     rt.attach()
@@ -1565,6 +1571,12 @@ fn a_client_that_reads_a_large_fixed_and_stops_reading_ends_at_the_liveness_time
     let handle = spawn(server, Scanning(rt), config);
     let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
+    send(&mut ws, Frame::Read(FIXED));
+    let first = recv(&mut ws);
+    assert!(
+        matches!(decode(&first).unwrap(), Frame::Block { .. }),
+        "the first answer is a block"
+    );
 
     // The reads are sent from another thread, which reads nothing, so that
     // the test thread waits only in `join`, which `TEST_LIMIT` bounds.

@@ -523,8 +523,10 @@ fn envelope_at(msg: &[u8], at: usize) -> Envelope {
 /// for the last, and `None` when `total` is 0 or `index` is at or past
 /// `ceil(total / 4,096)`.
 ///
-/// Every step is in `u32`, which is 32 bits on every target. A computation in
-/// `usize` would overflow on a 32-bit target for the largest `total`.
+/// Every step is in `u32`, which is 32 bits on every target, so the result
+/// does not depend on the width of `usize`. A rewrite in `usize` would
+/// overflow on a 32-bit target for the largest `total`; the assertions below
+/// guard such a rewrite.
 const fn block_len(total: u32, index: u32) -> Option<u32> {
     if total == 0 {
         return None;
@@ -540,8 +542,8 @@ const fn block_len(total: u32, index: u32) -> Option<u32> {
     }
 }
 
-// The largest `total` and its last block must not overflow at the width of
-// `usize` of the target being checked.
+// The largest `total` and its last block must not overflow. The computation is
+// in `u32`, so these assertions guard a future rewrite, not a target.
 const _: () = assert!(matches!(block_len(u32::MAX, 1_048_575), Some(4_095)));
 const _: () = assert!(block_len(u32::MAX, u32::MAX).is_none());
 
@@ -785,6 +787,9 @@ impl Frame<'_> {
     /// A `contract(InvalidValue)` outcome whose `Rule` has no tag
     /// ([`rule_tag`] is `None`) is written with `detail` 0, which a receiver
     /// refuses as an unknown code; check the rule before building the frame.
+    /// A [`Frame::Block`] is written without a check of its `kind`, `total`,
+    /// `index` or payload length: a block with `total` 0 or an `index` at or
+    /// past the block count encodes, and every receiver closes with 1002.
     pub fn encode(&self, out: &mut [u8]) -> Result<usize, Short> {
         let needed = self.encoded_len();
         if out.len() < needed {

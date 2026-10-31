@@ -184,20 +184,20 @@ const LINGER: Duration = Duration::from_millis(100);
 /// backend is sent at most one poll interval after it, plus the write. Each
 /// write call has a write timeout of [`Config::liveness_timeout`]: a client
 /// that reads nothing for that long, so that a write call makes no progress,
-/// ends the session with [`Ended::LivenessTimeout`]. The liveness clock
-/// is set when a message arrives, before its answer is written, and checked
-/// after the write, so a client that takes longer than the liveness timeout
-/// to read the answer of one message ends the session with
-/// [`Ended::LivenessTimeout`] too, although each write made progress: the
-/// blocks of one `read` of a 65,280-byte `fixed` are 65,824 bytes, so at the
-/// default timeout of 15 s that is a client that reads below about 4.4 KB/s.
+/// ends the session with [`Ended::LivenessTimeout`].
+///
+/// The liveness clock is set when a message arrives, before its answer is
+/// written, and checked after the write. A client that takes longer than the
+/// liveness timeout to read the answer of one message therefore ends the
+/// session with [`Ended::LivenessTimeout`] too, although each write made
+/// progress: the blocks of one `read` of a 65,280-byte `fixed` are 65,824
+/// bytes, so at the default timeout of 15 s that is a client that reads below
+/// about 4.4 KB/s.
 ///
 /// Each `read` of a `fixed` sends the whole value again, in blocks when it
 /// does not fit one message. The frames the session writes after a message
 /// hold at most the blocks of one `read`, because `serve` writes them after
-/// each message it handles. A client that sends `read`s and stops reading
-/// ends with [`Ended::LivenessTimeout`], when a write waits its whole write
-/// timeout.
+/// each message it handles.
 ///
 /// `conn` must be in blocking mode: `serve` waits in each read for up to the
 /// read timeout it set. On a stream in non-blocking mode a read with no bytes
@@ -270,16 +270,17 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config
 /// message, 4,130 bytes, because a value that one `publish` does not carry
 /// crosses in blocks: the smaller of 36 bytes plus its limit and 4,130. The
 /// limit is clamped before the header is added, so that the sum does not
-/// overflow a 32-bit `usize` for any `u32` limit. On a tie, the first member
-/// in key order.
+/// overflow a 32-bit `usize` for any `u32` limit; the header is added with a
+/// saturating addition as well. On a tie, the first member in key order.
 fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     let header = largest_header();
+    let block_cap = block_message() - header;
     let largest = table
         .entries()
         .fold(None, |largest, (target, member_limit)| {
             let member_limit = member_limit.map_or(default_ceiling(target.kind), |l| l as usize);
             let carried = if target.kind == Kind::Fixed {
-                member_limit.min(block_message() - header)
+                member_limit.min(block_cap)
             } else {
                 member_limit
             };
@@ -314,7 +315,9 @@ fn largest_header() -> usize {
 }
 
 /// The size of one `block` message with a full block: the 34-byte header
-/// and [`BLOCK_BYTES`] bytes, 4,130 bytes.
+/// and [`BLOCK_BYTES`] bytes, 4,130 bytes. The session splits a value by this
+/// size and `serve` checks the message limit against it, so both take it
+/// from here.
 fn block_message() -> usize {
     let header = Frame::Block {
         target: Target {

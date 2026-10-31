@@ -161,13 +161,6 @@ impl<B: Backend> Session<B> {
             correlation: 0,
             outcome: ResponseOutcome::Reply(&[]),
         };
-        let empty_block = Frame::Block {
-            target,
-            envelope,
-            total: 0,
-            index: 0,
-            payload: &[],
-        };
         let limit = config.max_message_bytes();
         Session {
             backend,
@@ -176,7 +169,7 @@ impl<B: Backend> Session<B> {
             payload_cap: limit - empty_publish.encoded_len(),
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
-            block_message: empty_block.encoded_len() + BLOCK_BYTES,
+            block_message: super::block_message(),
             message_limit: limit,
             max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
@@ -3637,6 +3630,7 @@ mod tests {
         p: Loopback,
         fail: Rc<Cell<Fail>>,
         forgotten: Rc<RefCell<Vec<Correlation>>>,
+        notes: Notes,
     }
 
     fn faulty(fail: Fail) -> FaultyRig {
@@ -3649,13 +3643,17 @@ mod tests {
             fail: Rc::clone(&fail),
             forgotten: Rc::clone(&forgotten),
         });
-        let mut s = Session::new(backend, &Config::default());
+        let notes = Notes::default();
+        let n = Arc::clone(&notes);
+        let config = Config::default().with_record(move |x| n.lock().unwrap().push(*x));
+        let mut s = Session::new(backend, &config);
         open(&mut s);
         FaultyRig {
             s,
             p,
             fail,
             forgotten,
+            notes,
         }
     }
 
@@ -4431,10 +4429,17 @@ mod tests {
     /// Mutation: read a `fixed` with no cap.
     #[test]
     fn a_fixed_above_the_default_ceiling_without_a_table_is_answered_unknown_interaction() {
-        let FaultyRig { mut s, .. } = faulty(Fail::FixedOverCeiling);
+        let FaultyRig { mut s, notes, .. } = faulty(Fail::FixedOverCeiling);
         let (step, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(step, Step::Continue);
         assert_eq!(out, [msg(unknown(FIXED))]);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 65_281
+            }]
+        );
     }
 
     /// A member table may give a `fixed` any `u32` limit; the session still
@@ -4471,6 +4476,39 @@ mod tests {
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 9
+            }]
+        );
+        p.provision_fixed(IFACE, Ordinal(5), &[2; 8]).unwrap();
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(FIXED, 0, 0, PublishState::Live(&[2; 8]))
+        );
+    }
+
+    /// Below one block message, a `fixed` is read up to the smaller of what one
+    /// `publish` carries and the limit its table entry gives. At a message
+    /// limit of 1,024 bytes and a table limit of 8, a value of 9 bytes is
+    /// refused and a value of 8 bytes is sent in one `publish`.
+    ///
+    /// Mutation: clamp the read to the `publish` capacity alone, ignoring the
+    /// table limit.
+    #[test]
+    fn a_fixed_above_its_table_limit_is_refused_below_one_block_message() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, FIXED.ord, 8));
+        let (mut s, mut p, notes) = described_with(t, |c| c.with_max_message_bytes(1024).unwrap());
+        permissive(&mut p);
+        open(&mut s);
+        p.provision_fixed(IFACE, Ordinal(5), &[1; 9]).unwrap();
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out, [msg(unknown(FIXED))]);
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {

@@ -11,6 +11,9 @@ use std::io::{self, Read, Write};
 
 use crate::frame;
 
+/// The frame version that the subprotocol `ridl-ws-v1` stands for.
+const FRAME_VERSION_V1: u32 = 1;
+
 /// The most bytes the request line and the headers may take, the empty line
 /// that ends them included.
 const MAX_HEAD_BYTES: usize = 8 * 1024;
@@ -55,16 +58,18 @@ pub(crate) enum Upgrade {
 /// `Sec-WebSocket-Protocol` header (RFC 6455 §4.2.1), and when
 /// `accept_origin` accepts its `Origin` header, which is `None` when the
 /// request has none. The `101` selects `ridl-ws-v2` when it is offered, else
-/// `ridl-ws-v1`, whatever the order of the offer (frame specification
-/// §11.1: the server selects the newest version it serves). The path, the
-/// query and every other header are ignored. A request head over 8 KiB, a
-/// malformed request, a request with more than one `Origin` header, or a
-/// request that offers neither subprotocol is answered `400 Bad Request` and
-/// returns [`Upgrade::Rejected`]; when the request is well formed and its version is
+/// `ridl-ws-v1`, whatever the order of the offer. This provider serves no
+/// attach of frame version 1, but it selects `ridl-ws-v1` for a client that
+/// offers only that, so that the client receives an explicit refusal reason
+/// at the attach and not a failed handshake. The path, the query and every
+/// other header are ignored. A request head over 8 KiB, a malformed request,
+/// a request with more than one `Origin` header, or a request that offers
+/// neither subprotocol is answered `400 Bad Request` and returns
+/// [`Upgrade::Rejected`]; when the request is well formed and its version is
 /// not 13, whatever its other headers, the `400` names the version the server
 /// speaks in a `Sec-WebSocket-Version: 13` header (RFC 6455 §4.2.2 item 4).
-/// A request whose `Origin` `accept_origin` refuses is
-/// answered `403 Forbidden` and returns [`Upgrade::Forbidden`].
+/// A request whose `Origin` `accept_origin` refuses is answered
+/// `403 Forbidden` and returns [`Upgrade::Forbidden`].
 ///
 /// The head is read one byte at a time, so that no byte after the empty line
 /// that ends it is taken from the stream.
@@ -235,7 +240,7 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
     let (subprotocol, frame_version) = if offers_v2 {
         (frame::SUBPROTOCOL, frame::FRAME_VERSION)
     } else if offers_v1 {
-        (frame::SUBPROTOCOL_V1, 1)
+        (frame::SUBPROTOCOL_V1, FRAME_VERSION_V1)
     } else {
         return Err(Reject::BadRequest);
     };
