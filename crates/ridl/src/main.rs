@@ -1595,14 +1595,22 @@ fn desk_check(
         .map(|checked| checked.ir.clone())
         .collect();
 
-    // `ridl.std` is context, as in `run_diff`, so the desk reads the verdict
-    // the gate gives (driftsys/ridl#598). The remote packages are not: this
-    // desk check reads ordinal and member categories, judged for no
-    // encoding, so no podbuf rule runs here and no head is laid out; a
-    // workspace that builds podbuf judges those breaks with `ridl diff
-    // --encoding podbuf`, `ridl build` and `ridl baseline`.
-    let std = [ridlc::std_ir()];
-    let report = ridl_diff::diff_sets_in(&baseline, &current, &std);
+    // `ridl.std` and the remote packages this compile resolved are context,
+    // as in `run_diff`, so the desk reads the verdict the gate gives and
+    // judges an appended field's type as the gate does (driftsys/ridl#598,
+    // driftsys/ridl#1141). This desk check reads ordinal and member
+    // categories, judged for no encoding, so no podbuf rule runs here and no
+    // head is laid out; a workspace that builds podbuf judges those breaks
+    // with `ridl diff --encoding podbuf`, `ridl build` and `ridl baseline`.
+    let context: Vec<ridl_ir::v2::Package> = std::iter::once(ridlc::std_ir())
+        .chain(
+            ir.checked
+                .iter()
+                .filter(|checked| ridlc::is_remote(&checked.ir, &ir.remote_units))
+                .map(|checked| checked.ir.clone()),
+        )
+        .collect();
+    let report = ridl_diff::diff_sets_in(&baseline, &current, &context);
     let index = DeclIndex::build(entry);
     let mut warnings = Vec::new();
     for change in &report.changes {
@@ -1611,7 +1619,7 @@ fn desk_check(
         } else if MEMBER_CATEGORIES.contains(&change.category)
             && change.verdict == ridl_diff::Verdict::Breaking
         {
-            let Some(drift) = member_drift(change, &baseline, &current, &std) else {
+            let Some(drift) = member_drift(change, &baseline, &current, &context) else {
                 continue;
             };
             member_message(change, drift)
@@ -2053,13 +2061,14 @@ fn composite_body(
 /// is a removal whose container is no longer a struct or union in the
 /// workspace: it is reported as a bare removal. `ridl diff` does not produce
 /// that input: a container that changes kind is one `kind_changed` change and
-/// a removed container is a two-segment path, so the branch is defensive. `std` is the built-in
-/// `ridl.std`, which a field type may name ([`ridl_diff::absence_refused`]).
+/// a removed container is a two-segment path, so the branch is defensive. `context` is the built-in
+/// `ridl.std` and the remote packages, which a field type may name
+/// ([`ridl_diff::absence_refused`]).
 fn member_drift(
     change: &ridl_diff::Change,
     baseline: &[ridl_ir::v2::Package],
     current: &[ridl_ir::v2::Package],
-    std: &[ridl_ir::v2::Package],
+    context: &[ridl_ir::v2::Package],
 ) -> Option<MemberDrift> {
     let mut parts = change.path.split('/');
     let (Some(package), Some(container), Some(member), None) =
@@ -2117,7 +2126,7 @@ fn member_drift(
                         gone,
                         inserted,
                         refused_absent: ridl_diff::absence_refused(
-                            current, std, package, container, member,
+                            current, context, package, container, member,
                         ),
                     }
                 }

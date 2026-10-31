@@ -1941,11 +1941,15 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
 /// ([`projection::podbuf::field_form`]), so what the rule calls inline is
 /// what the encoder lays out inline. A holder whose form the law refuses
 /// because the held struct cannot be laid out is still found, by the shape
-/// of its type ([`projection::podbuf::shape_holds_inline`]): the holder's
-/// field names the struct, or holds it in an exact-length array or a tuple.
-/// The uses are computed once per struct, as are the two heads.
+/// of its type ([`projection::podbuf::shape_holds_inline`]), which reads the
+/// same cases as the form. The holders are the compared packages of the old
+/// side, `holders`, read over the whole old side `old` — the compared
+/// packages and the context, which a holder's type may name and which hold
+/// no consumer struct themselves. The uses are computed once per struct, as
+/// are the two heads.
 pub(crate) fn podbuf_inline_appends(
     pair: &[Change],
+    holders: &[&v2::Package],
     old: &[&v2::Package],
     new: &[&v2::Package],
 ) -> Vec<Change> {
@@ -1977,7 +1981,7 @@ pub(crate) fn podbuf_inline_appends(
             continue;
         };
         let entry = held.entry((package, name)).or_insert_with(|| {
-            let uses = inline_uses(old, package, name);
+            let uses = inline_uses(old, holders, package, name);
             if uses.is_empty() {
                 return None;
             }
@@ -2197,18 +2201,24 @@ pub(crate) fn podbuf_strict_enum_appends(
     changes
 }
 
-/// Every head of `scope` whose podbuf form holds the struct `package.name`
+/// Every head of `holders` whose podbuf form holds the struct `package.name`
 /// inline, sorted: a struct field, as `<package>/<struct>/<field>`, and an
 /// interaction's request, reply or fixed payload, as
 /// `<package>/<interface>/<interaction>` (the path the walk gives the
-/// interaction; a service's inline shape is named by the service). A form the
-/// layout law refuses is read by the shape of its type instead
+/// interaction; a service's inline shape is named by the service). The forms
+/// are laid out over `scope`, which holds every package of `holders`. A form
+/// the layout law refuses is read by the shape of its type instead
 /// ([`projection::podbuf::shape_holds_inline`]), so a holder is found when
 /// the struct itself cannot be laid out — its head reaches a type `scope`
-/// does not hold. A form refused for another reason — a stream, a bounded
-/// array or a map of a type that does not resolve — holds nothing by shape
-/// and is skipped: the podbuf checks of `ridl check` report it.
-fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String> {
+/// does not hold. A form refused for another reason — a stream, a type that
+/// does not resolve where the shape holds no struct — is skipped: the podbuf
+/// checks of `ridl check` report it.
+fn inline_uses(
+    scope: &[&v2::Package],
+    holders: &[&v2::Package],
+    package: &str,
+    name: &str,
+) -> Vec<String> {
     use ridl_ir::projection::flatbuffers::Packages;
     use ridl_ir::projection::podbuf::{field_form, root_shape_holds_inline, shape_holds_inline};
 
@@ -2217,7 +2227,11 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
         name: name.to_string(),
     };
     let mut uses = Vec::new();
-    for (index, home) in scope.iter().enumerate() {
+    for home in holders {
+        let index = scope
+            .iter()
+            .position(|pkg| pkg.name == home.name)
+            .expect("every holder is in the scope");
         let others = others_of(scope, index);
         let packages = Packages {
             package: home,
@@ -2315,7 +2329,7 @@ fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
 /// A root that is itself an exact-length array, such as a fixed payload
 /// `[S; 2..2]`, has no head — its podbuf encoding is undefined — and the
 /// struct directly inside it is not a use; a tuple inside it still is.
-fn root_holds_inline(
+pub(crate) fn root_holds_inline(
     form: &projection::podbuf::Form,
     target: &projection::podbuf::Inlined,
 ) -> bool {
@@ -2335,7 +2349,7 @@ fn root_holds_inline(
 /// walk reaches that declaration's struct, and a use is reported once, at the
 /// field that names the struct. A union arm's head is the arm type's own
 /// head, so it is not entered either.
-fn holds_inline(
+pub(crate) fn holds_inline(
     form: &projection::podbuf::Form,
     target: &projection::podbuf::Inlined,
     fixed: bool,

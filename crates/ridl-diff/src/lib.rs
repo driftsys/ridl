@@ -450,8 +450,10 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 
 /// [`diff_sets`], with `context`: packages that a type reference resolves
 /// against without being compared. The `ridl` CLI passes the built-in
-/// `ridl.std` here, so a struct field appended with a `ridl.std` type is judged
-/// by that type's declaration (driftsys/ridl#598).
+/// `ridl.std` and the packages of the remote `[imports]` units a side
+/// compiled, so a struct field appended with a `ridl.std` type or a remote
+/// type is judged by that type's declaration (driftsys/ridl#598,
+/// driftsys/ridl#1141).
 pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
     let old: Vec<&Package> = old.iter().collect();
     let new: Vec<&Package> = new.iter().collect();
@@ -530,7 +532,7 @@ pub fn diff_refs_with(
                 // The podbuf rule reads the settled verdicts of the pair and
                 // the heads of both whole sides, so it runs after the walk
                 // and the classifier of the pair.
-                let mut podbuf = walk::podbuf_inline_appends(&pair, &old_scope, &scope);
+                let mut podbuf = walk::podbuf_inline_appends(&pair, old, &old_scope, &scope);
                 let mut widths = walk::podbuf_width_changes(&pair, old_pkg, new_pkg);
                 podbuf.append(&mut walk::podbuf_strict_enum_appends(
                     &pair, old_pkg, new_pkg, &widths,

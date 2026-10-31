@@ -622,8 +622,10 @@ a field is appended.
     ordinary `decl_added` line alone; a field that starts in the pads and ends
     past the old size does not fit, and is a break. When several fields are
     appended at once, `ridl diff` draws `podbuf_inline_append` for each field
-    that does not fit and for none that does. A new declaration the law refuses
-    is read as grown, which keeps the conservative verdict.
+    that does not fit and for none that does. A head the law refuses on either
+    side — the new declaration, or the old one, when the struct reaches a type
+    the old side does not hold — is read as grown, which keeps the conservative
+    verdict (decision 13, the 2026-10-31 amendment from driftsys/ridl#1141).
 
     _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
     to a struct held inline was a break, on holders of the new side. The two
@@ -946,6 +948,7 @@ stated in the decision above; this list is the index.
 | [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                         | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                           |
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
 | [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
 

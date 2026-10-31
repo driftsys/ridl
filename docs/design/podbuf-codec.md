@@ -321,12 +321,13 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 ## Known gaps
 
-| Gap                                                                                                                                                        | Issue                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                                      | the typl change it depends on |
-| A string that holds U+0000 cannot be encoded                                                                                                               | a limit of the encoding       |
-| The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions | the check is per build        |
-| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                | ADR-0020 decision 2           |
+| Gap                                                                                                                                                                                                                                                                                                        | Issue                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                                                                                                                                                                                      | the typl change it depends on                                          |
+| A string that holds U+0000 cannot be encoded                                                                                                                                                                                                                                                               | a limit of the encoding                                                |
+| The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                                                                                                                                 | the check is per build                                                 |
+| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                                                                                                                                | ADR-0020 decision 2                                                    |
+| When the pin of a remote `[imports]` unit moves and a remote struct held inline changes layout in the same step as a consumer append, `ridl diff` lays the old head out with the new pin's struct, so the inline-append verdict can be wrong in either direction; the remote's change is the remote's diff | ADR-0031 decision 13, the 2026-10-31 amendment from driftsys/ridl#1141 |
 
 ## Trace
 

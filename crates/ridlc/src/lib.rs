@@ -415,8 +415,9 @@ pub struct WorkspaceOutput {
 /// on its own, the same pass [`compile_workspace`] runs for
 /// [`WorkspaceOutput::std_ir`]. A consumer that holds IR snapshots and no
 /// compiled workspace uses it to resolve a `ridl.std` reference: `ridl diff`
-/// passes it to `ridl_diff::diff_sets_in` as context, since no snapshot
-/// carries `ridl.std` (driftsys/ridl#598).
+/// passes it, with the remote packages of both sides ([`diff_context`]), to
+/// `ridl_diff::diff_workspaces_with` as context, since no snapshot carries
+/// `ridl.std` (driftsys/ridl#598).
 pub fn std_ir() -> ridl_ir::v2::Package {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);

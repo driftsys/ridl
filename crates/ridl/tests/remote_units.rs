@@ -765,9 +765,10 @@ fn diff_resolves_the_type_of_a_field_appended_from_a_remote_package() {
 
 /// Publishes the base `inline_consumer` as a baseline, rewrites its source
 /// with `appended`, and returns the `compatible` list `ridl build --emit
-/// catalog` writes for `app` and the hash lines of the history `ridl
-/// baseline` then publishes.
-fn judge_remote_edit(label: &str, appended: &str) -> (Vec<serde_json::Value>, Vec<String>) {
+/// catalog` writes for `app`, as lowercase hex, the hash lines of the history
+/// `ridl baseline` then publishes, and the one hash line the first baseline
+/// published.
+fn judge_remote_edit(label: &str, appended: &str) -> (Vec<String>, Vec<String>, String) {
     let dir = TempDir::new(label);
     let out = TempDir::new(&format!("{label}-out"));
     let stub = Stub::serving(unit_tar(COMMON_UNIT));
@@ -776,6 +777,15 @@ fn judge_remote_edit(label: &str, appended: &str) -> (Vec<serde_json::Value>, Ve
         let (code, _, stderr) = ridl(&root, dir.path(), &args);
         assert_eq!(code, 0, "{stderr}");
     }
+    let baseline_hash = {
+        let lines = history_lines(&root);
+        assert_eq!(
+            lines.len(),
+            1,
+            "the first baseline starts the chain: {lines:?}"
+        );
+        lines[0].clone()
+    };
     inline_consumer(&dir, stub.url(), appended);
     let (code, _, stderr) = ridl(
         &root,
@@ -797,27 +807,43 @@ fn judge_remote_edit(label: &str, appended: &str) -> (Vec<serde_json::Value>, Ve
     );
     assert_eq!(code, 0, "{stderr}");
     let described: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    let hex = |bytes: &serde_json::Value| -> String {
+        bytes
+            .as_array()
+            .expect("a hash is an array of bytes")
+            .iter()
+            .map(|byte| format!("{:02x}", byte.as_u64().expect("a hash byte is a number")))
+            .collect()
+    };
     let compatible = described["compatible"]
         .as_array()
         .expect("the descriptor has a compatible array")
-        .clone();
+        .iter()
+        .map(hex)
+        .collect();
     let (code, _, stderr) = ridl(&root, dir.path(), &["baseline"]);
     assert_eq!(code, 0, "{stderr}");
-    let history = std::fs::read_to_string(root.join(".ridl/baseline/app.catalogs")).unwrap();
-    let hashes = history
+    (compatible, history_lines(&root), baseline_hash)
+}
+
+/// The hash lines of the published `app.catalogs` of `root`, newest first.
+fn history_lines(root: &Path) -> Vec<String> {
+    std::fs::read_to_string(root.join(".ridl/baseline/app.catalogs"))
+        .unwrap()
         .lines()
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(str::to_string)
-        .collect();
-    (compatible, hashes)
+        .collect()
 }
 
 /// With `podbuf` in the root manifest, a growing append to a struct held
 /// inline whose head reaches a remote type ends the unit's history: `ridl
-/// build` lists no earlier catalog and `ridl baseline` restarts the chain.
+/// build` lists no earlier catalog and `ridl baseline` restarts the chain
+/// from one new hash, not the published one.
 #[test]
 fn a_podbuf_break_through_a_remote_type_ends_the_catalog_history() {
-    let (compatible, history) = judge_remote_edit("podbuf-break", "  quality: Wide\n");
+    let (compatible, history, baseline_hash) =
+        judge_remote_edit("podbuf-break", "  quality: Wide\n");
     assert!(
         compatible.is_empty(),
         "ridl build lists nothing: {compatible:?}"
@@ -827,6 +853,10 @@ fn a_podbuf_break_through_a_remote_type_ends_the_catalog_history() {
         1,
         "ridl baseline restarts the chain: {history:?}"
     );
+    assert_ne!(
+        history[0], baseline_hash,
+        "the chain starts from the new catalog's hash"
+    );
 }
 
 /// The same struct with a pad-fit append carries the history under both
@@ -834,15 +864,77 @@ fn a_podbuf_break_through_a_remote_type_ends_the_catalog_history() {
 /// size and the one-byte field fits inside it.
 #[test]
 fn a_pad_fit_append_through_a_remote_type_carries_the_catalog_history() {
-    let (compatible, history) = judge_remote_edit("podbuf-pads", "  quality: Level\n");
+    let (compatible, history, baseline_hash) =
+        judge_remote_edit("podbuf-pads", "  quality: Level\n");
     assert_eq!(
-        compatible.len(),
-        1,
-        "ridl build carries the chain: {compatible:?}"
+        compatible,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
     );
     assert_eq!(
         history.len(),
         2,
         "ridl baseline carries the chain: {history:?}"
+    );
+    assert_ne!(
+        history[0], baseline_hash,
+        "the new hash is first: {history:?}"
+    );
+    assert_eq!(
+        history[1], baseline_hash,
+        "the published hash follows: {history:?}"
+    );
+}
+
+/// With no edit, the catalog of a unit that reaches a remote type is the
+/// published one: `ridl build` lists no earlier catalog (the one hash is the
+/// current one) and `ridl baseline` keeps the one-hash history. The hash the
+/// history compares is computed over the unit's own packages; one computed
+/// over the remote package too would differ from the published one, which
+/// would then be listed as an earlier catalog.
+#[test]
+fn an_unchanged_unit_reaching_a_remote_type_keeps_its_catalog_hash() {
+    let (compatible, history, baseline_hash) = judge_remote_edit("unchanged", "");
+    assert!(
+        compatible.is_empty(),
+        "ridl build lists nothing: {compatible:?}"
+    );
+    assert_eq!(
+        history,
+        vec![baseline_hash],
+        "the history holds the one hash"
+    );
+}
+
+/// The desk check judges an appended field's type with the remote packages,
+/// as `ridl diff` does: a field of a remote type that holds 0, appended
+/// beside a moved sibling, draws the RIDL-407 warning for the sibling change
+/// and is not said to be breaking on its own.
+#[test]
+fn the_desk_check_does_not_call_a_remote_typed_append_breaking_on_its_own() {
+    let dir = TempDir::new("desk-remote-append");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = inline_consumer(&dir, stub.url(), "");
+    for args in [["check"], ["lock"], ["baseline"]] {
+        let (code, _, stderr) = ridl(&root, dir.path(), &args);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let source = std::fs::read_to_string(root.join("app.ridl")).unwrap();
+    let edited = source.replace(
+        "struct Bounds {\n  range: Reading\n  limit: Level\n}",
+        "struct Bounds {\n  limit: Level\n  range: Reading\n  top: Speed\n}",
+    );
+    assert_ne!(edited, source, "the edit applies");
+    dir.write("app/app.ridl", &edited);
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stderr.contains("warning[RIDL-407]: `top` is declared in `Bounds`")
+            && stderr.contains("changed ordinal"),
+        "the appended field's warning names the moved siblings: {stderr}"
+    );
+    assert!(
+        !stderr.contains("breaking on its own"),
+        "a remote type that holds 0 is not breaking on its own: {stderr}"
     );
 }
