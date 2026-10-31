@@ -1602,3 +1602,67 @@ fn an_append_that_fits_in_the_pads_carries_the_history_under_podbuf() {
         "ridl baseline carries the chain"
     );
 }
+
+/// `MANIFEST` with two backend tables, `podbuf` listed only in the one that
+/// comes second in name order, so the encodings are the union over every
+/// table and not the first table's list.
+const PODBUF_IN_SECOND_TABLE_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                                               [backend.c]\nencodings = [\"flatbuffers\"]\n\n\
+                                               [backend.rust]\nencodings = [\"podbuf\"]\n";
+
+/// The encodings are the union over every backend table: `podbuf` listed in
+/// the second table only still ends the history at a podbuf break.
+#[test]
+fn podbuf_in_any_backend_table_ends_the_history() {
+    let (_, built, history, new_hash) = judge_edit(
+        "podbuf-second-table",
+        PODBUF_IN_SECOND_TABLE_MANIFEST,
+        INLINE_GROWN,
+    );
+    assert_eq!(built, Vec::<String>::new(), "ridl build lists nothing");
+    assert_eq!(history, vec![new_hash], "ridl baseline restarts the chain");
+}
+
+/// A workspace whose root manifest lists `podbuf` and whose one member,
+/// `cluster`, holds `source`. A member's manifest cannot hold a backend table
+/// (MANI-016), so the encodings come from the root manifest only.
+fn write_podbuf_workspace(dir: &TempDir, source: &str) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\"]\n\n[backend.rust]\nencodings = [\"podbuf\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", source);
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    root
+}
+
+/// `ridl build <member>` and `ridl baseline <member>` read the encodings from
+/// the root manifest of the workspace around the member, so a podbuf break
+/// ends the history when the entry is the member.
+#[test]
+fn a_member_entry_is_judged_for_the_root_manifest_encodings() {
+    let dir = TempDir::new("podbuf-member");
+    let first = TempDir::new("podbuf-member-first");
+    let out = TempDir::new("podbuf-member-out");
+    let root = write_podbuf_workspace(&dir, INLINE_BASE);
+    let member = root.join("cluster");
+    publish(&member);
+    let baseline_hash = describe_hash(&member, first.path(), UNIT);
+    write_podbuf_workspace(&dir, INLINE_GROWN);
+    build_catalog(&member, out.path());
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(new_hash, baseline_hash, "the edit changes the catalog");
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "ridl build <member> lists nothing"
+    );
+    publish(&member);
+    assert_eq!(
+        history_lines(&root),
+        vec![new_hash],
+        "ridl baseline <member> restarts the chain"
+    );
+}
