@@ -99,11 +99,11 @@ prim stays the formatter of the Markdown and the JSON.
 `deno publish --dry-run` checks the package as JSR would; `just ts-check` runs
 the dry run. Nothing is uploaded to JSR. The workflow
 `.github/workflows/npm-release.yml` publishes `@driftsys/ridl-transport-ws` to
-npm on a `v*` tag, with provenance and the `NPM_TOKEN` organization secret. It
-checks that the tag version equals the `deno.json` version and that the tagged
-commit is on `main`, skips a version already on npm, and uses `--tag next` for a
-prerelease; ADR-0020's 2026-10-21 amendment records npm. The version is the
-workspace version (`Cargo.toml` `[workspace.package]`), and
+npm on a `v*` tag, with provenance and npm trusted publishing (no stored token).
+It checks that the tag version equals the `deno.json` version and that the
+tagged commit is on `main`, skips a version already on npm, and uses
+`--tag next` for a prerelease; ADR-0020's 2026-10-21 amendment records npm. The
+version is the workspace version (`Cargo.toml` `[workspace.package]`), and
 `tests/version_test.ts` fails when the two differ. The JSR publication is
 driftsys/ridl#992.
 
