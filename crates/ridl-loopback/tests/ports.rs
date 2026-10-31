@@ -2624,6 +2624,50 @@ fn a_stream_registration_on_a_forgotten_call_is_woken_at_once() {
 }
 
 #[test]
+fn a_querys_settlement_wakes_the_providers_waiter_on_a_parameter_stream() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let param = StreamNo(1);
+    let _c = rt.query(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    let (waiter, waiter_waker) = counting();
+    rt.wake_on(Interest::ClaimStream(claim, param), &waiter_waker);
+    assert_eq!(rt.pull_claim(claim, param, &mut buf), Ok(Pull::Pending));
+    assert_eq!(wakes(&waiter), 0, "nothing changed since the registration");
+    rt.settle(
+        claim,
+        Err(CallError::Contract(Contract::PreconditionFailed)),
+    )
+    .expect("settle");
+    assert_eq!(wakes(&waiter), 1, "the settlement releases the stream");
+    assert_eq!(
+        rt.pull_claim(claim, param, &mut buf),
+        Ok(Pull::Failed(CallError::Transport(Transport::Interrupted)))
+    );
+}
+
+#[test]
+fn a_claim_stream_registration_on_a_finished_stream_is_woken_at_once() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let param = StreamNo(1);
+    let c = rt.query(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    rt.end(c, param).expect("end");
+    let (waiter, waiter_waker) = counting();
+    rt.wake_on(Interest::ClaimStream(claim, param), &waiter_waker);
+    assert_eq!(wakes(&waiter), 1, "an ended stream does not change again");
+}
+
+#[test]
 fn a_stream_waker_whose_task_holds_a_handle_drops_without_deadlock() {
     let rt = runtime();
     let mut caller = rt.caller();

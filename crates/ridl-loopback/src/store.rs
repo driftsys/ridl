@@ -301,11 +301,15 @@ impl CallEntry {
     /// every unfinished one stops with `Transport::Interrupted`, by the
     /// provider's side. A stream parameter first named afterwards starts in
     /// the same state.
-    fn release_parameters(&mut self) {
+    ///
+    /// The provider's `ClaimStream` waker of each released stream is put on
+    /// `wake`, because the stream will not change again.
+    fn release_parameters(&mut self, wake: &mut Vec<Waker>) {
         self.parameters_released = true;
         for (no, stream) in self.streams.iter_mut() {
             if *no != REPLY_STREAM.0 {
                 stream.release();
+                wake.extend(stream.claim_waker.take());
             }
         }
     }
@@ -1432,7 +1436,7 @@ impl Store {
                 }
                 entry.settled_by = Some(handler);
                 if entry.kind == CallKind::Query {
-                    entry.release_parameters();
+                    entry.release_parameters(wake);
                 }
                 // The settlement ends the reply stream, or stops it with the
                 // error, after the chunks already pushed.
@@ -1739,7 +1743,14 @@ impl Store {
             wake.push(waker.clone());
             return;
         }
-        let stored = &mut entry.stream(s).claim_waker;
+        let stream = entry.stream(s);
+        // A stream that ended, stopped or was released has nothing more to
+        // wait for: the provider's next operation on it answers at once.
+        if stream.finished() {
+            wake.push(waker.clone());
+            return;
+        }
+        let stored = &mut stream.claim_waker;
         wake.extend(
             stored
                 .replace(waker.clone())
