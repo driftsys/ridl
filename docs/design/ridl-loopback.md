@@ -515,14 +515,22 @@ every stream parameter to `End` or `Failed`, the store marks the call forgotten
 on its entry and does not tell the table, so the slot stays taken; the caller's
 correlation already answers as forgotten, and its `Outcome` and `Stream` waiters
 are woken. The provider's pull that reads the last of those ends, a settlement
-after it, or the handler's drop completes the forget through `Table::forget`.
-This holds a slot no longer than the provider's reading, and uses no storage
-beyond the slot, at the cost of a caller finding the table full sooner. After
-every settlement and every forget that the table does not answer `Unknown`, the
-store takes the slot's `Stream` wakers with `Table::take_streams`, and a reclaim
-also takes the provider's wakers, before the entry, and the streams with it, are
-dropped. The stream cases are the `streams` module of the `ridl-rt-conformance`
-suite this runtime runs.
+after it, or the handler's drop completes the forget through `Table::forget`. An
+`abort_claim` of a stream parameter counts as the provider's end of it, and the
+settlement of a query releases its stream parameters (their unread chunks are
+dropped, and the caller's next push answers `Failed(Interrupted)`); the
+settlement of a command does not, because its stream parameters go on after the
+acknowledgment. The drop of a handler stops every unfinished stream of a claim
+it settled with `Interrupted` and wakes the caller's `Stream` waiters, so a
+caller still pushing to an acknowledged command learns the provider is gone.
+After the caller refused the reply stream, `end_claim` settles the claim with
+that refusal rather than `Ok`. This holds a slot no longer than the provider's
+reading, and uses no storage beyond the slot, at the cost of a caller finding
+the table full sooner. After every settlement and every forget that the table
+does not answer `Unknown`, the store takes the slot's `Stream` wakers with
+`Table::take_streams`, and a reclaim also takes the provider's wakers, before
+the entry, and the streams with it, are dropped. The stream cases are the
+`streams` module of the `ridl-rt-conformance` suite this runtime runs.
 
 **An offered claim (2026-09-28, driftsys/ridl#569).** A call whose argument
 bytes do not fit the buffer passed to `next_claim` is offered rather than taken:

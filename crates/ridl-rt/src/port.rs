@@ -514,11 +514,20 @@ pub trait StreamCaller: Caller {
 ///   `PushError::Failed(CallError::Transport(Transport::Interrupted))`; an
 ///   `end_claim` of a claim still held settles it all the same.
 /// - The runtime keeps the call, and the slot it takes in the caller's call
-///   table, until the provider has pulled every stream parameter to
-///   [`Pull::End`] or [`Pull::Failed`], or its handler is gone, so a caller may
-///   find the table full sooner. Once the call is released, its claim is no
-///   longer known, and a stream operation on it answers
-///   `Contract::UnknownInteraction`.
+///   table, until the provider is done with every stream parameter, or its
+///   handler is gone, so a caller may find the table full sooner. The
+///   provider is done with a stream parameter once it pulled
+///   [`Pull::End`] or [`Pull::Failed`] from it, or stopped it itself with
+///   [`abort_claim`](StreamHandler::abort_claim). The settlement of a query
+///   releases every stream parameter of the query: the provider is done with
+///   them, their unread chunks are dropped, and the caller's next push or end
+///   on one answers
+///   `PushError::Failed(CallError::Transport(Transport::Interrupted))`. The
+///   settlement of a command is its acknowledgment and does not release
+///   them: its stream parameters go on after it. Once a call whose claim was
+///   already settled is released, its claim is no longer known, and a stream
+///   operation on it answers `Contract::UnknownInteraction`; a claim still
+///   held stays known until its settlement.
 ///
 /// The errors have the two layers of [`StreamCaller`]'s.
 pub trait StreamHandler: Handler {
@@ -538,7 +547,10 @@ pub trait StreamHandler: Handler {
         -> Result<usize, PushError>;
     /// Ends stream `s` of the claim. For [`REPLY_STREAM`] this is the claim's
     /// settlement: it settles the claim `Ok` with no reply bytes, and no
-    /// [`Handler::settle`] follows.
+    /// [`Handler::settle`] follows. After the caller refused the reply stream
+    /// with [`StreamCaller::abort`] and outcome `e`, it answers
+    /// `PushError::Failed(e)` and settles the claim with `Err(e)`, so the
+    /// claim does not stay unsettled.
     fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError>;
     /// Stops stream `s` of the claim with outcome `e`, from either side of the
     /// stream, as [`StreamCaller::abort`] does.

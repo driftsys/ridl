@@ -142,6 +142,17 @@ impl StreamState {
     fn finished(&self) -> bool {
         self.ended || self.stopped.is_some()
     }
+
+    /// Drops the unread chunks of a stream parameter the provider is done
+    /// with, stops it with `Transport::Interrupted` by the provider's side
+    /// unless it already finished, and counts it as read.
+    fn release(&mut self) {
+        self.chunks.clear();
+        if !self.finished() {
+            self.stopped = Some((INTERRUPTED, Side::Provider));
+        }
+        self.drained = true;
+    }
 }
 
 /// A signal channel's published state.
@@ -280,9 +291,25 @@ struct CallEntry {
     /// every stream parameter to its end or its handler is dropped, so the
     /// slot is not reclaimed before then. `forgotten` is set as well.
     pending_forget: bool,
+    /// `true` once a query was settled: its stream parameters are released.
+    parameters_released: bool,
 }
 
 impl CallEntry {
+    /// Releases the stream parameters of a query at its settlement: the
+    /// provider is done with them, so their unread chunks are dropped and
+    /// every unfinished one stops with `Transport::Interrupted`, by the
+    /// provider's side. A stream parameter first named afterwards starts in
+    /// the same state.
+    fn release_parameters(&mut self) {
+        self.parameters_released = true;
+        for (no, stream) in self.streams.iter_mut() {
+            if *no != REPLY_STREAM.0 {
+                stream.release();
+            }
+        }
+    }
+
     /// Whether the provider still has a stream parameter to pull to its end.
     fn undrained(&self) -> bool {
         self.streams
@@ -296,9 +323,16 @@ impl CallEntry {
     /// call had.
     fn stream(&mut self, s: StreamNo) -> &mut StreamState {
         let forgotten = self.forgotten;
-        self.streams.entry(s.0).or_insert_with(|| StreamState {
-            stopped: forgotten.then_some((INTERRUPTED, Side::Caller)),
-            ..StreamState::default()
+        let released = self.parameters_released && s != REPLY_STREAM;
+        self.streams.entry(s.0).or_insert_with(|| {
+            let mut stream = StreamState {
+                stopped: forgotten.then_some((INTERRUPTED, Side::Caller)),
+                ..StreamState::default()
+            };
+            if released {
+                stream.release();
+            }
+            stream
         })
     }
 }
@@ -764,6 +798,7 @@ impl Store {
                 settled_by: None,
                 streams: BTreeMap::new(),
                 pending_forget: false,
+                parameters_released: false,
             },
         );
         self.pending.push_back(c);
@@ -1079,7 +1114,7 @@ impl Store {
         // The dropped handler's `ClaimStream` wakers, of the claims it holds
         // and of those it settled, are taken so that none is dropped under
         // the lock; a settled claim's streams are no longer addressable.
-        for entry in self.calls.values_mut() {
+        for (slot, entry) in self.calls.iter_mut() {
             let holds = entry
                 .claim
                 .and_then(|claim| self.claims.get(&claim))
@@ -1087,8 +1122,17 @@ impl Store {
             if holds || entry.settled_by == Some(id) {
                 if entry.settled_by == Some(id) {
                     entry.settled_by = None;
+                    // No provider is left to read or push the streams of the
+                    // settled claim: every unfinished one stops, and the
+                    // caller's waiters on them are woken.
+                    for stream in entry.streams.values_mut() {
+                        stream.drained = true;
+                        if !stream.finished() {
+                            stream.stopped = Some((INTERRUPTED, Side::Provider));
+                        }
+                    }
+                    wake.extend(self.table.take_streams(*slot));
                     if entry.pending_forget {
-                        // No provider is left to pull the streams.
                         entry.pending_forget = false;
                         released.push(entry.correlation);
                     }
@@ -1387,6 +1431,9 @@ impl Store {
                     entry.reply = bytes.to_vec();
                 }
                 entry.settled_by = Some(handler);
+                if entry.kind == CallKind::Query {
+                    entry.release_parameters();
+                }
                 // The settlement ends the reply stream, or stops it with the
                 // error, after the chunks already pushed.
                 let reply = entry.stream(REPLY_STREAM);
@@ -1578,7 +1625,14 @@ impl Store {
             return Err(PushError::Ended);
         }
         stream.stopped = Some((error, side));
+        // A stream the provider stopped itself needs no more reading by it.
+        if side == Side::Provider {
+            stream.drained = true;
+        }
         wake.extend(self.take_stream_waker(slot, s, side.other()));
+        if side == Side::Provider {
+            self.release_if_drained(slot, wake);
+        }
         Ok(())
     }
 
@@ -1605,7 +1659,13 @@ impl Store {
             } else {
                 entry.stream(s).closed(Side::Provider)
             };
-            self.settle(handler, claim, Ok(&[]), wake)
+            // After the caller refused the reply stream, the claim settles
+            // with that refusal as its outcome, not `Ok`.
+            let outcome = match verdict {
+                Some(PushError::Failed(error)) => Err(error),
+                _ => Ok(&[][..]),
+            };
+            self.settle(handler, claim, outcome, wake)
                 .map_err(push_error)?;
             return verdict.map_or(Ok(()), Err);
         }
@@ -1652,6 +1712,10 @@ impl Store {
         waker: &Waker,
         wake: &mut Vec<Waker>,
     ) {
+        if self.forgotten_pending(c) {
+            wake.push(waker.clone());
+            return;
+        }
         wake.extend(self.table.wake_on_stream(c, s, waker));
     }
 

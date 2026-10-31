@@ -2492,6 +2492,138 @@ fn a_claim_stream_registration_refreshes_the_same_task_and_displaces_another() {
 }
 
 #[test]
+fn a_parameter_stream_the_provider_refused_does_not_hold_the_slot_after_the_forget() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let param = StreamNo(1);
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+    for round in 0..Loopback::SLOTS * 2 {
+        let c = rt
+            .command(IFACE, ORD, &[1], None)
+            .unwrap_or_else(|e| panic!("round {round}: the send answered {e:?}"));
+        let claim = rt
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting")
+            .id;
+        rt.settle(claim, Ok(&[])).expect("the acknowledgment");
+        assert_eq!(rt.push(c, param, &[1]), Ok(1));
+        assert_eq!(rt.pull_claim(claim, param, &mut buf), Ok(Pull::Chunk(1)));
+        rt.abort_claim(claim, param, refusal).expect("the refusal");
+        assert_eq!(rt.push(c, param, &[2]), Err(PushError::Failed(refusal)));
+        rt.forget(c);
+    }
+}
+
+#[test]
+fn a_query_settled_with_an_unread_parameter_stream_frees_its_slot_at_the_forget() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let param = StreamNo(1);
+    let old = rt.query(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    assert_eq!(rt.push(old, param, &[1]), Ok(1));
+    let error = CallError::Contract(Contract::PreconditionFailed);
+    rt.settle(claim, Err(error)).expect("settle");
+    assert_eq!(
+        rt.push(old, param, &[2]),
+        Err(PushError::Failed(CallError::Transport(
+            Transport::Interrupted
+        ))),
+        "the settlement of a query releases its parameter streams"
+    );
+    for _ in 1..Loopback::SLOTS {
+        rt.command(IFACE, ORD, &[1], None).expect("a slot is free");
+    }
+    assert_eq!(
+        rt.command(IFACE, ORD, &[1], None),
+        Err(SendError::Busy),
+        "every other slot is taken"
+    );
+    rt.forget(old);
+    let new = rt
+        .query(IFACE, ORD, &[2], None)
+        .expect("the forget freed the old call's slot");
+    assert_ne!(new, old);
+}
+
+#[test]
+fn end_claim_after_the_callers_refusal_settles_the_claim_with_the_refusal() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let c = rt.query(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+    rt.abort(c, REPLY_STREAM, refusal)
+        .expect("the caller refuses");
+    assert_eq!(
+        rt.end_claim(claim, REPLY_STREAM),
+        Err(PushError::Failed(refusal))
+    );
+    assert_eq!(
+        rt.reply(c, &mut buf),
+        Ok(Some(Err(refusal))),
+        "the claim is settled with the refusal, not Ok"
+    );
+    assert_eq!(rt.settle(claim, Ok(&[])), Err(SettleError::UnknownClaim));
+}
+
+#[test]
+fn a_dropped_handler_stops_the_parameter_streams_of_a_command_it_acknowledged() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let param = StreamNo(1);
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    handler.settle(claim, Ok(&[])).expect("the acknowledgment");
+    assert_eq!(caller.push(c, param, &[1]), Ok(1));
+    let (waiter, waiter_waker) = counting();
+    caller.wake_on(Interest::Stream(c, param), &waiter_waker);
+    drop(handler);
+    assert_eq!(wakes(&waiter), 1, "the drop wakes the producer's waiter");
+    assert_eq!(
+        caller.push(c, param, &[2]),
+        Err(PushError::Failed(CallError::Transport(
+            Transport::Interrupted
+        )))
+    );
+    assert_eq!(caller.ack(c), Some(Ok(())), "the acknowledgment stands");
+}
+
+#[test]
+fn a_stream_registration_on_a_forgotten_call_is_woken_at_once() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let param = StreamNo(1);
+    let c = rt.command(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    rt.settle(claim, Ok(&[])).expect("the acknowledgment");
+    assert_eq!(rt.push(c, param, &[1]), Ok(1));
+    rt.forget(c);
+    let (waiter, waiter_waker) = counting();
+    rt.wake_on(Interest::Stream(c, param), &waiter_waker);
+    assert_eq!(wakes(&waiter), 1, "no stream of a forgotten call changes");
+}
+
+#[test]
 fn a_stream_waker_whose_task_holds_a_handle_drops_without_deadlock() {
     let rt = runtime();
     let mut caller = rt.caller();

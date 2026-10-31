@@ -692,19 +692,18 @@ where
 /// correlation it had before: a pull or a push on the old correlation is an
 /// unknown interaction, and does not read or write the new call's streams.
 ///
-/// The old call is a query the test claims and settles itself, so it holds
-/// the claim: after the forget the provider pulls the old call's parameter
-/// stream to its end, the chunk and then `Failed(Interrupted)`, because the
-/// slot of a forgotten call is not reclaimed while the provider has a stream
-/// to read. Every other slot then holds a settled command, so the new call
-/// can only take the slot that was reclaimed.
+/// The old call is a query the test claims itself, so it holds the claim:
+/// after the forget the provider pulls the old call's parameter stream to its
+/// end, the chunk and then `Failed(Interrupted)`, because the slot of a
+/// forgotten call is not reclaimed while the provider has a stream to read,
+/// and then settles the claim. Every other slot holds a settled command, so
+/// the new call can only take the slot that was reclaimed.
 pub fn a_reclaimed_slots_stream_answers_unknown<F>()
 where
     F: Factory,
     F::Runtime: StreamCaller + StreamHandler + Wakeable,
 {
     let (mut rt, old, old_claim) = claimed_query::<F>();
-    rt.settle(old_claim, Ok(&[])).expect("settle");
     for _ in 1..F::SLOTS {
         rt.command(IFACE, ORD, &[1], None).expect("a slot is free");
         let claim = claim_next(&mut rt);
@@ -725,6 +724,8 @@ where
         Ok(Pull::Failed(CallError::Transport(Transport::Interrupted))),
         "the stream was not ended, so the forget interrupted it"
     );
+    rt.settle(old_claim, Ok(&[]))
+        .expect("a claim is settled after its call is forgotten");
     let new = rt
         .query(IFACE, ORD, &[2], None)
         .expect("the reclaimed slot");
