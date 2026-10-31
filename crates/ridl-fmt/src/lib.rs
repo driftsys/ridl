@@ -3761,6 +3761,19 @@ mod tests {
     }
 
     #[test]
+    fn a_line_inside_a_block_comment_counts_toward_the_line_width() {
+        // The tuple type is kept verbatim because of its block comment. The
+        // comment's second line holds `//` before the comment closes, so that
+        // `//` does not start a line comment: the whole line counts toward
+        // the width, and the attribute list after it breaks. Both renderers
+        // carry the open block comment from one line to the next.
+        assert_ridl_member(
+            "signal s: (a: integer /* note\n      a block comment line // with a marker inside it */, b: integer) [seed = LIMIT, persist, history = 4]",
+            "signal s: (a: integer /* note\n      a block comment line // with a marker inside it */, b: integer) [\n        seed = LIMIT\n        persist\n        history = 4\n      ]",
+        );
+    }
+
+    #[test]
     fn a_comment_kept_verbatim_does_not_count_toward_the_line_width() {
         // The tuple with a comment is kept verbatim; the comment does not make
         // the parameter list break, so the first pass is a fixed point.
