@@ -826,7 +826,7 @@ import veh.common.ProcessedSample
 
 interface Transfer {
   query streamFaults(filter: DiagFilter): <FaultCode> @[..1s] // provider produces
-  query streamLogs(): <LogLine> @[..1s] // text stream
+  query streamLogs(): <LogLine> @[..1s] // stream of log lines (named elements)
   command uploadFirmware(data: <FwBlock>) @[..1s] // consumer produces
   query pipe(samples: <SensorSample>): <ProcessedSample> @[..1s] // bidirectional
 }
@@ -838,6 +838,50 @@ with both declares full duplex. That is a statement about the contract; nothing
 flows until a binding exists to carry it. A stream on a `signal` or an `event` is a `RIDL-201`
 error — a signal is the better stream for state, and an unbounded push of
 occurrences is an event.
+
+A stream's element is usually a named type, as above. A stream element is the
+only position where a bare `bytes` or `string` carries no bound (a bare map key
+takes the `[0..256]` default), and it means something different there: a **byte
+stream**. Use it for a file or a
+document whose size you do not know and whose chunking you have no reason to
+choose — the application reads or writes it as I/O, not as a sequence of
+messages.
+
+```ridl
+package veh.docs
+
+type DocId: string [1..64] = "-"
+
+struct DocInfo {
+  size: integer [0..4294967295]
+}
+
+error struct DocError {
+  code: integer [0..255]
+}
+
+interface Documents {
+  query describe(id: DocId): DocInfo | DocError @[..1s]
+  query fetch(id: DocId): <bytes> @[..1s] // byte stream, provider produces
+  command put(info: DocInfo, data: <bytes>) @[..1s] // byte stream, consumer produces
+}
+```
+
+The two kinds of stream differ in what the boundaries mean. `<FwBlock>` is a
+stream of blocks: each element is one `FwBlock` of 1 to 4096 bytes, and the
+boundary between two blocks is part of the contract. `<bytes>` is one ordered
+sequence of bytes: the element carries no bound (the `[0..256]` default and
+`TYPL-103` do not apply here), the transport chooses where one chunk ends and
+the next begins, and each chunk is at most the interaction's limit. `<string>`
+is the same with UTF-8 text, and a chunk never splits a code point. Anything
+about the transfer that the contract needs to say — a size, a content type, a
+digest — is an ordinary typed value, such as the reply of `describe` above.
+
+This is what the checker accepts today. Streams have no runtime yet: no stream
+port, no frame encoding and no generated reader or writer exist, so a declared
+stream compiles but nothing carries it. The specification's §12 and
+[ADR-0032](../decisions/ADR-0032-byte-streams.md) record the contract a stream
+declares, including how a stream ends and what its response bound covers.
 
 ## Contracts
 

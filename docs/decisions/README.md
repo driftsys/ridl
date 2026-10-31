@@ -595,23 +595,30 @@ other entry below is Accepted.
   history for the root manifest's encodings, which closes open item 3
   (driftsys/ridl#1095).
 
-- **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
-  file or document of unknown size, downloaded or uploaded and read or written
-  as I/O; no syntax and no kind are added: a bare `bytes` stream element
-  (`<bytes>`) is a byte stream whose chunk boundaries are not part of the
-  contract and are chosen by the transport, each chunk at most the payload
-  ceiling of the interaction's kind, and the element has no bound, so typl's
-  `[0..256]` default and TYPL-103 do not apply in that position; `<string>` is a
-  UTF-8 text stream whose chunks never split a code point; a named element type
-  keeps its meaning, a stream of bounded messages; metadata (content type, size,
-  digest) is an ordinary typed value, a size is a hint and resume is an `offset`
-  parameter; the intended generated surface is a reader and a writer per target
-  (Rust `AsyncRead`/`AsyncWrite` or `Stream`/`Sink`, TypeScript
-  `ReadableStream`/`WritableStream`, Kotlin
+- **ADR-0032 — Byte streams.** Fourteen decisions: the use case is a file or
+  document of unknown size, downloaded or uploaded and read or written as I/O;
+  no syntax and no kind are added: a bare `bytes` stream element (`<bytes>`) is
+  a byte stream whose chunk boundaries are not part of the contract and are
+  chosen by the transport, each chunk at most the interaction's limit, and the
+  element has no bound, so typl's `[0..256]` default and TYPL-103 do not apply
+  in that position; `<string>` is a UTF-8 text stream whose chunks never split a
+  code point; a named element type keeps its meaning, a stream of bounded
+  messages; metadata (content type, size, digest) is an ordinary typed value, a
+  size is a hint and resume is an `offset` parameter; the intended generated
+  surface is a reader and a writer per target (Rust `AsyncRead`/`AsyncWrite` or
+  `Stream`/`Sink`, TypeScript `ReadableStream`/`WritableStream`, Kotlin
   `Flow`/`InputStream`/`OutputStream`); framing, buffering, backpressure and
   chunk size stay transport concerns; and ADR-0030 decision 11 names both forms
-  of a stream. Six open questions, among them a target without `std`. Not built
-  (driftsys/ridl#336).
+  of a stream. Accepted 2026-10-31 with decisions 9 to 14, which settle its six
+  open questions: the stream port is a pull API over caller-supplied buffers
+  that `std` wraps in `AsyncRead`/`AsyncWrite`; a byte stream carries no in-band
+  typed error and `<bytes> | E` is not added; every stream ends explicitly and a
+  stream that stops without its end is a Stratum 3 interruption; invalid UTF-8
+  ends a `<string>` stream as `INVALID_VALUE`; `max` on a streamed reply bounds
+  its first chunk or its end, and on a query with a stream parameter is measured
+  from the end of the upload; and the interaction's limit bounds each chunk, so
+  an entry can only lower the chunk size. Not built (driftsys/ridl#336,
+  driftsys/ridl#1116).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

@@ -77,6 +77,11 @@ fixed whose payload is above its kind's default ceiling or has no finite bound,
 with no entry for it, stops compiling (see Consequences), and a `[lints]` key
 that names `payload-above-ceiling` now draws MANI-010.
 
+Amended 2026-10-31 from the acceptance of [ADR-0032](ADR-0032-byte-streams.md):
+decisions 11 and 16 are changed in place. Data larger than one transfer is a
+byte stream or a stream of bounded elements, and the interaction's limit bounds
+each chunk or element of a stream. No number changes.
+
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
@@ -500,8 +505,11 @@ When accepted, these records gain a dated note or are changed in place:
     (ridl reference §12). Until streams are built (driftsys/ridl#336) the
     platform carries no single value larger than one transfer. Amended
     2026-10-28: a value larger than 16,128 bytes, or 65,280 bytes for a fixed,
-    is a stream; no `[limits]` entry raises a member above it. A separate
-    record, ADR-0032, drafted in parallel, covers byte streams.
+    is a stream; no `[limits]` entry raises a member above it. Amended
+    2026-10-31 from [ADR-0032](ADR-0032-byte-streams.md) decision 8: such data
+    is a byte stream (`<bytes>` or `<string>`, ADR-0032 decisions 2 and 3) when
+    its chunking is not part of the contract, or a stream of bounded elements
+    (ADR-0032 decision 4) when each element carries meaning.
 
 12. **Each interaction has its own payload limit, set in the manifest** (added
     2026-10-24). Each kind of interaction may allocate and carry its payload in
@@ -728,8 +736,10 @@ When accepted, these records gain a dated note or are changed in place:
     16,128 bytes take about 40 to 80 microseconds on a Cortex-M7 class target. A
     fixed is usually memory-mapped and read in place, with no copy, so its
     ceiling is larger; 65,280 bytes is safe for the address space and fits a
-    `u16` length. A byte stream (ADR-0032, drafted in parallel) bounds one chunk
-    the same way.
+    `u16` length. Amended 2026-10-31: the interaction's limit bounds each chunk
+    or element of a stream the same way ([ADR-0032](ADR-0032-byte-streams.md)
+    decision 14); the sentence read "a byte stream (ADR-0032, drafted in
+    parallel) bounds one chunk the same way" before.
 
     The numbers come from memory pages of 4,096 bytes with 256 bytes of each
     cell reserved, once per cell: a ceiling is the cell's pages × 4,096 − 256. A
