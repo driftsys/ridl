@@ -681,13 +681,13 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   type of another package, or for a tuple written at the field that tuple's own
   head: the head of its entry in `Model.tuples`, or the one `NestedTuple` head
   of a tuple of another package, keyed by its package and wire name. Two
-  declarations with one layout have two heads, and so do two tuples of one shape
-  whose induced names differ; two positions with one induced name and one shape
-  (`A.bC` and `AB.c`, both `ABC`) share one entry and one head. A descriptor
-  form says what the tail holds: a bounded string or bytes (`min`, `max`), an
-  array (the element form, the stride `elem_size`, `min`, `max`), a map (the
-  entry head, `elem_size`, `min`, `max`) or the arms of a union (the ordinal and
-  head of each arm).
+  declarations with one layout have two heads; when two tuple positions share
+  one entry and one head is stated in
+  [ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md). A
+  descriptor form says what the tail holds: a bounded string or bytes (`min`,
+  `max`), an array (the element form, the stride `elem_size`, `min`, `max`), a
+  map (the entry head, `elem_size`, `min`, `max`) or the arms of a union (the
+  ordinal and head of each arm).
 - **Refused heads.** `Model.podbuf` is set whenever the toolchain lowers a
   package. A struct, a union or a tuple that cannot be laid out has no head; it
   is listed in `refused` with its source and a cause. A valid workspace reaches

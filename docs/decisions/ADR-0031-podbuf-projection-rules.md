@@ -376,13 +376,17 @@ a field is appended.
    leading `__`, and a view accessor is the field's own name on the view type.
 
    _Amended 2026-10-31, from driftsys/ridl#1112._ Each tuple has its own head,
-   found by the tuple's identity and never by a head of the same shape: two
-   same-shape tuples of one package have two heads when their induced names
-   differ, two positions with one induced name and one shape share one entry and
-   one head, and an importing header names a foreign tuple's head by the
-   declaring package's induced name (`<pkg>_<wire name under snake_case>_head`,
-   the name the declaring header gives it), so the two headers define one head
-   under one guard with one text. The codegen model carries the identity on
+   found by the tuple's identity and never by a head of the same shape. Two
+   positions of one package share one entry and one head when their induced Rust
+   names, their shapes and their visibilities are equal (`A.bC` and `AB.c`, both
+   `ABC`); with one induced Rust name and a different shape or visibility, the
+   pair is a tuple collision, which every backend refuses; two tuples with
+   different induced Rust names have two heads, unless their wire names are
+   equal (`sizeField2` next to position 2 of `size`), which is refused. An
+   importing header names a foreign tuple's head by the declaring package's
+   induced name (`<pkg>_<wire name under snake_case>_head`, the name the
+   declaring header gives it), so the two headers define one head under one
+   guard with one text. The codegen model carries the identity on
    `NestedTuple.package` and `NestedTuple.wire`. A (package, wire) key reached
    from two different tuples is refused, whatever their layouts;
    [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) has the detail.
