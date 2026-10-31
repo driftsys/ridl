@@ -565,6 +565,76 @@ struct Bounds {
     );
 }
 
+/// `ridl diff` judges only the encodings its `--encoding` flags name, never
+/// the manifest's: over two workspaces whose root `ridl.toml` lists `podbuf`,
+/// an inline append that does not fit inside the old head is compatible with
+/// no flag (exit 0) and breaking with `--encoding podbuf` (exit 1).
+#[test]
+fn diff_reads_only_its_encoding_flags_not_the_manifest() {
+    const PODBUF_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                                   [backend.rust]\nencodings = [\"podbuf\"]\n";
+    const INLINE_V1: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+";
+    const INLINE_V2: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Wide
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+";
+    let old = TempDir::new("manifest-podbuf-old");
+    old.write("ridl.toml", PODBUF_MANIFEST);
+    old.write("cluster.ridl", INLINE_V1);
+    let new = TempDir::new("manifest-podbuf-new");
+    new.write("ridl.toml", PODBUF_MANIFEST);
+    new.write("cluster.ridl", INLINE_V2);
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        old.path().as_os_str(),
+        new.path().as_os_str(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "with no flag the manifest's podbuf is not applied, stderr:\n{stderr}"
+    );
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains("[compatible] podbuf_inline_append veh.cluster/Reading/quality"),
+        "stdout:\n{stdout}"
+    );
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+        old.path().as_os_str(),
+        new.path().as_os_str(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "with --encoding podbuf the append is breaking, stderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("[breaking] podbuf_inline_append veh.cluster/Reading/quality"),
+        "stdout:\n{stdout}"
+    );
+}
+
 /// An enum value appended at 256 widens the enum's podbuf integer from `u8`
 /// to `u16`: `podbuf_width_change`, exit 1 under `--encoding podbuf` and exit
 /// 0 without the flag. A value appended at 255 keeps the width and draws no

@@ -1757,10 +1757,18 @@ fn a_podbuf_break_in_one_unit_leaves_the_other_chain_carried() {
         compatible_of(out.path(), "veh.body"),
         vec![body_hash.clone()]
     );
+    let cluster_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    let new_body_hash = hex_of_bytes(&describe(out.path(), "veh.body")["hash"]);
     publish(&root);
-    assert_eq!(history_lines_of(&root, UNIT).len(), 1, "the chain restarts");
-    assert_eq!(history_lines_of(&root, "veh.body").len(), 2);
-    assert_eq!(history_lines_of(&root, "veh.body")[1], body_hash);
+    assert_eq!(
+        history_lines_of(&root, UNIT),
+        vec![cluster_hash],
+        "the chain restarts from the new hash"
+    );
+    assert_eq!(
+        history_lines_of(&root, "veh.body"),
+        vec![new_body_hash, body_hash]
+    );
 }
 
 /// A `.ridl` file given as the entry reads the encodings of the root manifest
