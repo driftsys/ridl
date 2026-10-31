@@ -95,7 +95,9 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
+use ridl_core::lint::{
+    LintScopes, apply_lint_levels, drop_allowed_by_default, report_lint_directives,
+};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, MaterializedUnit, RemoteAccess, RidlDatabase,
@@ -193,6 +195,11 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
     // The callers, `check_source` and `compile`, report their diagnostics, so
     // the levels apply here, with the empty scopes: every lint gets its
     // registry default (ADR-0024 decision 6).
+    report_lint_directives(
+        &mut compiled.diagnostics,
+        &compiled.sources,
+        &[DiagCode::RIDL_407],
+    );
     apply_lint_levels(
         &mut compiled.diagnostics,
         &compiled.sources,
@@ -893,16 +900,51 @@ impl CliRun {
 
 /// Runs `check`: loads the workspace at `entry` with the remote units of its
 /// `[imports]` — materialized against `ridl.lock`, which a clean non-frozen
-/// run regenerates — then resolves and checks every package, and applies the
-/// lint levels of every `[lints]` table (ADR-0024 decision 6). Returns the
-/// diagnostics and the source map for rendering; for an entry inside a
-/// workspace member, the compile diagnostics are those of the member's files
-/// and of the remote units ([`retain_in_report_scope`]).
+/// run regenerates — then resolves and checks every package, reports the lint
+/// directives, and applies the lint levels of every `[lints]` table
+/// (ADR-0024 decisions 6 and 19). Returns the diagnostics and the source map
+/// for rendering; for an entry inside a workspace member, the compile
+/// diagnostics are those of the member's files and of the remote units
+/// ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
-    run_check_with_ir(entry, frozen).map(|(run, _)| run)
+    let (mut run, ir) = run_check_unlevelled(entry, frozen)?;
+    report_directives(&mut run, &ir, &[DiagCode::RIDL_407]);
+    apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
+    Ok(run)
 }
 
-/// What [`run_check_with_ir`] returns beside the run: the checked workspace
+/// Reports the lint directives of `run` ([`report_lint_directives`]) over the
+/// diagnostics of the whole workspace, so that a directive in a file outside
+/// the report scope is checked against that file's own diagnostics, then
+/// keeps in the run only what [`retain_in_report_scope`] keeps. `run` is the
+/// result of [`run_check_unlevelled`] for `ir`, possibly with more
+/// diagnostics added.
+pub fn report_directives(run: &mut CliRun, ir: &CheckedIr, not_raised: &[DiagCode]) {
+    let mut all = std::mem::take(&mut run.diagnostics);
+    all.extend(
+        ir.diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                !in_report_scope(
+                    diagnostic,
+                    &run.sources,
+                    ir.report_scope.as_deref(),
+                    &ir.remote_dirs,
+                )
+            })
+            .cloned(),
+    );
+    report_lint_directives(&mut all, &run.sources, not_raised);
+    retain_in_report_scope(
+        &mut all,
+        &run.sources,
+        ir.report_scope.as_deref(),
+        &ir.remote_dirs,
+    );
+    run.diagnostics = all;
+}
+
+/// What [`run_check_unlevelled`] returns beside the run: the checked workspace
 /// a caller reads after the run, so that it does not compile the workspace a
 /// second time. `ridl check` reads it for the desk check against the
 /// baseline and for the podbuf padding lint.
@@ -915,14 +957,19 @@ pub struct CheckedIr {
     /// The member directory the entry lies in, when the entry is inside a
     /// workspace member ([`retain_in_report_scope`]).
     pub report_scope: Option<PathBuf>,
+    /// The directories a remote unit is read from ([`remote_dirs`]).
+    pub remote_dirs: Vec<PathBuf>,
     /// The diagnostics of the whole workspace with the severities the emit
     /// sites chose, before the report scope and the lint levels are applied
     /// to the run's own list: the gate a whole-workspace pass reads.
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// [`run_check`], returning the checked workspace as well ([`CheckedIr`]).
-pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRun, CheckedIr)> {
+/// [`run_check`] without the directive report and without the levels: the raw
+/// list, after [`retain_in_report_scope`], and the checked workspace
+/// ([`CheckedIr`]). A caller that raises more diagnostics itself calls
+/// [`report_directives`] and `apply_lint_levels` once, after the last one.
+pub fn run_check_unlevelled(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRun, CheckedIr)> {
     let mut db = RidlDatabase::default();
     let cache = Cache::user_default();
     let Compiled {
@@ -937,14 +984,14 @@ pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRu
         .map_err(load_io_error)?;
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
+    let remote_dirs = remote_dirs(&remote_units, &cache, entry);
     let mut diagnostics = unfiltered.clone();
     retain_in_report_scope(
         &mut diagnostics,
         &sources,
         report_scope.as_deref(),
-        &remote_dirs(&remote_units, &cache, entry),
+        &remote_dirs,
     );
-    apply_lint_levels(&mut diagnostics, &sources, &lints);
     Ok((
         CliRun {
             diagnostics,
@@ -956,6 +1003,7 @@ pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRu
             checked,
             remote_units,
             report_scope,
+            remote_dirs,
             diagnostics: unfiltered,
         },
     ))
@@ -1336,6 +1384,13 @@ fn run_build_inner<E: From<std::io::Error>>(
     // lockfile is not an artifact (Task 4 of
     // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
+        // Both lists are the report's: the directives of a file outside the
+        // scope are checked against the diagnostics of that file.
+        diagnostics.append(&mut outside_scope);
+        report_lint_directives(&mut diagnostics, &sources, &[DiagCode::RIDL_407]);
+        (diagnostics, outside_scope) = diagnostics.into_iter().partition(|diagnostic| {
+            in_report_scope(diagnostic, &sources, report_scope.as_deref(), &remote_dirs)
+        });
         apply_lint_levels(&mut diagnostics, &sources, &lints);
         apply_lint_levels(&mut outside_scope, &sources, &lints);
     } else {

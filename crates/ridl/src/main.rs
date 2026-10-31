@@ -709,7 +709,7 @@ const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     // The desk check and the padding lint read the checked IR of the same
     // compile, so the workspace is compiled once.
-    let (mut run, ir) = match ridlc::run_check_with_ir(path, frozen.into()) {
+    let (mut run, ir) = match ridlc::run_check_unlevelled(path, frozen.into()) {
         Ok(run) => run,
         Err(err) => {
             eprintln!("error: {err}");
@@ -726,15 +726,17 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         .diagnostics
         .iter()
         .filter(|diagnostic| lint_of(diagnostic.code).is_none());
+    let mut desk_checked = false;
     if lock::only_lock_orphans(compile_diagnostics) {
         let location = match baseline_location(path, baseline) {
             Ok(location) => location,
             Err(code) => return code,
         };
-        if let Some(location) = &location
-            && let Err(code) = desk_check(path, location, baseline.is_some(), &ir, &mut run)
-        {
-            return code;
+        if let Some(location) = &location {
+            if let Err(code) = desk_check(path, location, baseline.is_some(), &ir, &mut run) {
+                return code;
+            }
+            desk_checked = true;
         }
         if let Err(code) =
             padding_check(path, location.as_deref(), baseline.is_some(), &ir, &mut run)
@@ -743,9 +745,15 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         }
     }
 
-    // RIDL-407 is raised here, after `ridlc` applied the levels, so they are
-    // applied once more over the whole run. The function is idempotent, so
-    // the diagnostics `ridlc` already levelled do not change.
+    // The report and the levels apply once, after the last diagnostic is
+    // raised (ADR-0024 decision 19). RIDL-407 is raised only when the desk
+    // check ran.
+    let not_raised: &[DiagCode] = if desk_checked {
+        &[]
+    } else {
+        &[DiagCode::RIDL_407]
+    };
+    ridlc::report_directives(&mut run, &ir, not_raised);
     apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
     finish_check(run, format)

@@ -1555,3 +1555,148 @@ const PADDED_BODY: &str = "type Byte: integer [0..255]\n\
     type Word: integer [0..4294967295]\n\
     type Wide: integer [-9223372036854775808..9223372036854775807]\n\n\
     struct Padded {\n  a: Byte\n  b: Wide\n  c: [Word; 3]\n}\n";
+
+/// `SOURCE` with an inline directive on the `signal` line before it.
+fn directive_source(directive: &str) -> String {
+    SOURCE.replace("  signal speed", &format!("  {directive}\n  signal speed"))
+}
+
+/// The diagnostics of `ridl check --format json` for `root`, with the exit
+/// code.
+fn check_json(root: &Path) -> (i32, Vec<serde_json::Value>) {
+    let (code, stdout, stderr) = ridl(&[
+        "check".as_ref(),
+        "--format".as_ref(),
+        "json".as_ref(),
+        root.as_os_str(),
+    ]);
+    let value: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|err| panic!("stdout is JSON ({err}):\n{stdout}\n{stderr}"));
+    (code, value.as_array().expect("a JSON array").clone())
+}
+
+fn count_code(diagnostics: &[serde_json::Value], code: &str) -> usize {
+    diagnostics.iter().filter(|d| d["code"] == code).count()
+}
+
+#[test]
+fn directive_allows_a_lint_at_deny_and_check_exits_0() {
+    let dir = TempDir::new("directive-allows-deny");
+    let root = member_workspace(&dir, DENY);
+    dir.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow missing-timing -- timing comes later"),
+    );
+
+    let (code, diagnostics) = check_json(&root);
+
+    assert_eq!(
+        code, 0,
+        "the directive allows the denied lint: {diagnostics:?}"
+    );
+    assert_eq!(count_code(&diagnostics, "RIDL-100"), 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+}
+
+#[test]
+fn unused_directive_reports_typl_411_in_check_json() {
+    let dir = TempDir::new("directive-unused");
+    let root = member_workspace(&dir, "");
+    dir.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow unbounded-float -- nothing to allow"),
+    );
+
+    let (code, diagnostics) = check_json(&root);
+
+    assert_eq!(code, 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn malformed_directive_reports_typl_412_and_allows_nothing() {
+    let dir = TempDir::new("directive-malformed");
+    let root = member_workspace(&dir, "");
+    dir.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow missing-timing"),
+    );
+
+    let (_, diagnostics) = check_json(&root);
+
+    assert_eq!(count_code(&diagnostics, "TYPL-412"), 1, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "RIDL-100"), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn baseline_desk_check_reports_a_directive_once() {
+    let dir = TempDir::new("directive-baseline-once");
+    let (root, baseline) = published_package(&dir, "", BASE);
+    dir.write(
+        "cluster.ridl",
+        &REORDERED.replacen(
+            "type Speed",
+            "// lint: allow unbounded-float -- nothing to allow\ntype Speed",
+            1,
+        ),
+    );
+
+    let (_, stderr_json, stderr) = ridl(&[
+        "check".as_ref(),
+        "--format".as_ref(),
+        "json".as_ref(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+        root.as_os_str(),
+    ]);
+
+    let value: serde_json::Value = serde_json::from_str(&stderr_json)
+        .unwrap_or_else(|err| panic!("stdout is JSON ({err}):\n{stderr_json}\n{stderr}"));
+    let diagnostics = value.as_array().expect("a JSON array");
+    assert_eq!(count_code(diagnostics, "TYPL-411"), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn build_applies_directives() {
+    let dir = TempDir::new("directive-build");
+    let root = member_workspace(&dir, DENY);
+    dir.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow missing-timing -- timing comes later"),
+    );
+    let out = TempDir::new("directive-build-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.as_os_str(),
+    ]);
+
+    assert_eq!(code, 0, "the directive lets the build run:\n{stderr}");
+    let written = std::fs::read_dir(out.path()).expect("readable").count();
+    assert!(written > 0, "the build wrote its artifacts");
+}
+
+#[test]
+fn diff_ignores_directives() {
+    let old = TempDir::new("directive-diff-old");
+    let old_root = member_workspace(&old, "");
+    let new = TempDir::new("directive-diff-new");
+    let new_root = member_workspace(&new, "");
+    new.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow missing-timing -- timing comes later"),
+    );
+
+    let (code, stdout, stderr) =
+        ridl(&["diff".as_ref(), old_root.as_os_str(), new_root.as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stdout.contains("TYPL-411") && !stderr.contains("TYPL-411"),
+        "diff reports no directive:\n{stdout}\n{stderr}"
+    );
+}
