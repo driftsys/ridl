@@ -37,19 +37,19 @@ baseline = "016167c90fe1418df512a60330e70b35a55c4a7b"
 
 [[surface]]
 name = "wire"
-baseline = "6c1d62ca1cbc6972d3e24f6b953d470b4f909f0a"
+baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "codegen-protocol"
-baseline = "6c1d62ca1cbc6972d3e24f6b953d470b4f909f0a"
+baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "generated-crate"
-baseline = "v0.10.0"
+baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "runtime-crates"
-baseline = "6c1d62ca1cbc6972d3e24f6b953d470b4f909f0a"
+baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "keywords"
@@ -57,11 +57,11 @@ baseline = "v0.10.0"
 
 [[surface]]
 name = "accepted-sources"
-baseline = "v0.10.0"
+baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "diagnostics"
-baseline = "v0.10.0"
+baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "manifest"
