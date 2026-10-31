@@ -6,9 +6,11 @@ port of `ridl-rt` and how its `std` wrapper is woken (decision 9), the stream
 fields of the catalog descriptor (catalog descriptor D-4), the frame version
 that carries a stream (decision 11), and the generated Rust and TypeScript
 surfaces (decision 6). ADR-0032 decisions 9 to 14 are binding here; every other
-choice is a ruling, numbered R-1 to R-30, each with a one-line reason, so that
+choice is a ruling, numbered R-1 to R-35, each with a one-line reason, so that
 the owner can check them while reading. "Alternatives considered" follows every
-ruling that had a credible alternative.
+ruling that had a credible alternative. The owner's rulings of the first builder
+check (2026-10-31) are recorded as R-11 (replaced), R-31 to R-35, and the
+amendments marked in R-5, R-7 to R-10 and R-14.
 
 The document defines the end state first, then states what each of the six
 stages delivers, in the order the owner fixed. Each stage is independently
@@ -92,8 +94,7 @@ method returns without waiting and copies into or out of a buffer the caller
 supplies (ADR-0032 decision 9; ADR-0018 decision 2).
 
 ```rust
-// port::
-pub struct StreamNo(pub u8);
+// port:: (`StreamNo` is declared in `contract`, R-7, and re-exported here)
 pub const REPLY_STREAM: StreamNo = StreamNo(0);
 
 /// The outcome of one pull.
@@ -117,6 +118,9 @@ pub trait StreamCaller: Caller {
     fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>;
     /// Ends stream `s` of call `c`.
     fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError>;
+    /// Stops stream `s` of call `c` with outcome `e`, from either side of it:
+    /// the producer interrupts, or the receiver refuses what it received.
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError>;
 }
 
 pub trait StreamHandler: Handler {
@@ -125,21 +129,25 @@ pub trait StreamHandler: Handler {
     /// Ends stream `s` of the claim. For `REPLY_STREAM` this is the claim's
     /// settlement: it settles `Ok(&[])` and no `settle` follows.
     fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError>;
+    fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError>;
 }
 
 #[non_exhaustive]
-pub enum PushError { TooLarge { cap: usize }, Ended, Gone, Contract(Contract), Detached }
+pub enum PushError { TooLarge { cap: usize }, Ended, Failed(CallError), Contract(Contract), Detached }
 ```
 
 `ReadError` keeps its meaning from `Caller::reply`: the outer error is the port
 call itself (`Short { needed }` when the chunk does not fit `out`, which does
 not consume it; `Contract(UnknownInteraction)` when the call or the stream
 number is unknown; `Detached`), and `Pull::Failed` is the outcome from the peer
-or the transport. `PushError::Ended` is a push or a second `end` after the
-producer ended the stream; `PushError::Gone` is a push into a stream whose other
-side is gone (the caller forgot the call, or the claim settled); `TooLarge` is a
-chunk longer than the member's limit, refused on send as `SendError::TooLarge`
-refuses arguments today.
+or the transport. `PushError` has the same two layers: `Contract(Contract)` and
+`Detached` are the port call itself; `Ended` is a push, an `end` or an `abort`
+after the stream ended; `Failed(e)` is the other side's verdict on the stream:
+`Contract(c)` when the receiver refused a chunk at its boundary (R-33),
+`Transport(Corrupt)` when it could not decode one, `Transport(Interrupted)` when
+it cancelled the stream or forgot the call; `TooLarge` is a chunk longer than
+the member's limit, refused on send as `SendError::TooLarge` refuses arguments
+today (R-11).
 
 **R-2. The port's unit is the chunk, and a port never splits or merges one.**
 Reason: a port names no payload type, so it cannot know whether a stream is a
@@ -170,12 +178,14 @@ correlation machinery is reused unchanged. _Alternative_: an `open_stream`
 method on the handler. Rejected: a stream with no chunk and no end is a stream
 that has not started, which the first `push_claim` already says.
 
-**R-5. A producer that stops on purpose interrupts; `Transport` gains
-`Interrupted`.** A provider interrupts a reply stream with
-`settle(claim, Err(CallError::Transport(Transport::Interrupted)))`; a caller
-interrupts every stream of a call with `forget(c)`, after which the provider's
-`pull_claim` answers `Failed(Transport(Interrupted))` and its `push_claim`
-answers `PushError::Gone`. The variant is new; `Transport` is
+**R-5 (amended). A side that stops a stream on purpose aborts it; `Transport`
+gains `Interrupted`.** A producer interrupts with
+`abort(c, s, CallError::Transport(Transport::Interrupted))` or `abort_claim`;
+`settle(claim, Err(e))` on a streamed-reply claim is the same as
+`abort_claim(claim, REPLY_STREAM, e)`. A caller's `forget(c)` aborts every
+stream of the call with `Interrupted`, after which the provider's `pull_claim`
+answers `Failed(Transport(Interrupted))` and its `push_claim`
+`PushError::Failed(Transport(Interrupted))`. The variant is new; `Transport` is
 `#[non_exhaustive]` (ADR-0021 decision 9), so adding it is not a break. Reason:
 ADR-0032 decisions 10 and 11 make a mid-transfer failure of a byte stream reach
 the consumer only as an interruption, and without an explicit way to interrupt,
@@ -189,7 +199,38 @@ stream, when the window of that stream frees, or when the call is forgotten or
 settled; `ClaimStream` is the same on the handler's side. Reason: a face that
 waits registers interest and pulls, and the existing keys do not name a stream.
 `Interest` is exhaustive, so this is a breaking change of `ridl-rt` (ADR-0021
-decisions 10 and 13), released as a 0.x minor.
+decisions 10 and 13), released as a 0.x minor (R-35).
+
+**R-32. The stream ports are optional extensions, as `Wakeable`,
+`ScannableSignals` and `CoherentSignals` are.** No runtime is required to
+implement `StreamCaller` or `StreamHandler`; neither is in the
+`Factory::Runtime` bound of `ridl-rt-conformance` nor in `Backend::Ports` of
+`ridl-transport-ws`. A consumer that may or may not have them asks through a
+capability accessor, as `Backend::scannable()` does: `Backend` gains
+`fn streams(&mut self) -> Option<&mut dyn StreamCaller>` with a default of
+`None`, and the conformance suite gains a `streams` extension —
+`suite!(F; wakeable, streams)` — whose tests are bounded
+`where F::Runtime: StreamCaller + StreamHandler + Wakeable` and need no new
+`Factory` item: the window test pushes until a push answers 0 or until 1,024
+chunks, and a runtime whose window is never full passes that test with the cap.
+The generated `Client<P>` adds `StreamCaller` to its bounds only when the
+interface declares a member with a stream, and `serve`'s `H` adds
+`StreamHandler` under the same condition: the emitter already computes the bound
+set from the interface's interaction kinds (RA-19 of
+`docs/design/interaction-face.md`), and a stream is one more fact read from the
+same slots, so an interface with no stream is bound as today. Reason: a runtime
+without streams must stay a complete runtime, and the project's rule for a
+mechanism some runtimes have is an extension trait plus an accessor.
+_Alternative_: supertraits on `Caller` and `Handler`. Rejected: every runtime
+and every test double would have to implement them.
+
+The breaks this leaves (restated after R-32): `ridl-rt` — `Member` gains a field
+(R-7) and `Interest` gains two variants (R-6); nothing else, since the new
+traits, `Transport::Interrupted`, `Rule::Utf8` and the `face` traits are
+additive. `ridl-rt-conformance` — additive (a new module and extension, no new
+required item). `ridl-loopback` — additive. `ridl-transport-ws` — additive:
+`Frame` and `Note` are `#[non_exhaustive]`, `Backend::streams` has a default,
+and the new constants are new items. `ridl-descriptor` — additive accessors.
 
 ### 3.2 Flow
 
@@ -205,8 +246,8 @@ window. The provider pulls with `pull_claim(claim, k, buf)` until `End`. A
 command's claim settles `Ok(&[])` after its arguments and `require` pass, before
 any chunk is read, as ridl §6.1 and ADR-0032 note (a) state; a constraint
 failure in a chunk after the acknowledgment ends the stream with the Stratum 2
-category and is visible to the calling runtime through `pull`, not to the
-contract.
+category and reaches the producer through its next `push`, not through the
+contract (R-33).
 
 ### 3.3 How the `std` wrapper is woken
 
@@ -221,16 +262,24 @@ runtime that implements `Wakeable` and the two new keys serves the wrapper.
 
 ### 3.4 Descriptors in `ridl-rt`
 
-**R-7. `PayloadInfo` gains `stream: StreamForm`, and `contract::StreamForm` is
-`None`, `Elements`, `Bytes` or `Text`.** `None` is every payload that is not a
-stream. Reason: the three carriers of a member's shape (the catalog descriptor,
-the codegen model and the generated `MEMBERS` table) must say the same thing,
-and ADR-0032's consequences name this field as the breaking change of `ridl-rt`
-(ADR-0021 decision 10: generated code builds `PayloadInfo` as a struct literal).
-_Alternative_: leave the runtime descriptor unchanged, because no shipped
-runtime reads the form. Rejected: a runtime that carries generated descriptors
-but no catalog file (a shared-memory runtime, a Rust client of the WebSocket
-binding) would have no way to know which member streams.
+**R-7 (amended). `Member` gains `streams: &'static [StreamInfo]`, one entry per
+stream of the member in ascending `StreamNo`; `PayloadInfo` is unchanged.**
+
+```rust
+// contract::
+pub struct StreamNo(pub u8);                       // moved here from port::, which re-exports it
+pub enum StreamForm { Elements, Bytes, Text }
+pub struct StreamInfo { pub no: StreamNo, pub form: StreamForm, pub element: &'static str } // element "" under Bytes and Text
+```
+
+A member with no stream has an empty slice. Reason: R-31 gives every carrier one
+home for a stream's number, form and element, and `Member` is the carrier the
+generated `MEMBERS` table builds as a struct literal (ADR-0021 decision 10), so
+this is the one breaking field of `ridl-rt` in stage 1. _Alternative_: leave the
+runtime descriptor unchanged, because no shipped runtime reads the form.
+Rejected: a runtime that carries generated descriptors but no catalog file (a
+shared-memory runtime, a Rust client of the WebSocket binding) would have no way
+to know which streams a member has.
 
 ## 4. The catalog descriptor and the codegen model
 
@@ -239,48 +288,97 @@ stream from a stream of named elements (ADR-0032 consequences). Because the
 catalog hash is SHA-256 over the reduced IR, **no catalog hash changes** in any
 stage, and the `catalog-hash` line of the `wire` dump holds.
 
-**R-8. `Payload` of `catalog.fbs` gains `stream: StreamForm = None` and
-`element: string`, appended; `SCHEMA_VERSION` stays 1.** `StreamForm` is a new
-`ubyte` enum `{ None = 0, Elements = 1, Bytes = 2, Text = 3 }`. `element` is the
-canonical name of the named element type under `Elements` and absent otherwise.
-`type_name` keeps writing `<T>`, so a reader older than the fields reads what it
-read before. Reason: D-3 of the catalog descriptor record makes the schema
-append-only, and an appended optional field verifies and reads as absent in a
-file written before it existed, as `limit` and `compatible` did. `ridl describe`
-prints both fields.
+**R-31. One home for a member's streams in every carrier: a list of stream
+entries, one per stream, each with its `StreamNo`, its form and its element; the
+request stays the induced struct of the non-stream parameters (R-10).** The
+owner's ruling of 2026-10-31, decided in stage 1. Today the request row spells
+the whole parameter list, stream included
+(`crates/ridl-descriptor/src/lower.rs`, `request`), and after R-10 nothing would
+record how many streams a member has or which number each one carries. Reason:
+the frame (section 5), the port (section 3) and the faces (sections 7 and 8) all
+key a stream by `(call,
+StreamNo)`, so the descriptor has to say which numbers
+exist and what each one carries, in one place a reader need not infer from a
+spelling.
 
-**R-9. The `max_sizes` of a stream payload are the element's size states under
-`Elements`, and stay absent under `Bytes` and `Text`.** Reason: the per-element
-bound is what sizes the chunk buffer of a face and what the proto3 and
-FlatBuffers codecs already compute for the element's declaration; a byte chunk's
-only bound is the member's `limit`, which `Member` already carries. The model
-needs no new size field for the same reason: `Reply.value` and `Param.type`
-carry `StreamType.named`, and the plugin reads that declaration's own states
-(`Declaration.proto3`, `FbRoot.max_size`, the podbuf state). `request_sizes` and
-`reply_sizes` keep their `ABSENT_CAUSE_ENCODING_UNDEFINED` for a stream, so no
-existing field changes meaning.
+**R-8 (amended). `Member` of `catalog.fbs` gains `streams: [StreamPayload]`,
+appended; `Payload` is unchanged; `SCHEMA_VERSION` stays 1.**
 
-**R-10. A call's request payload is its non-stream parameters.** The lowering
-induces the argument struct over the non-stream parameters, zero parameters
-included, so `command put(info: DocInfo, data: <bytes>)` has the request
-`DocInfo` and one stream parameter, and `command upload(data: <FwBlock>)` has an
-induced struct with no field. The model's `CommandShape.request` or
-`request_tuple` is therefore present for every call, and the comment "no induced
-argument struct, because a parameter is a stream" goes. Reason: the `request`
-frame and `Claim.len` carry the non-stream arguments, and the face needs one
-named type for them, as it does today. _Alternative_: refuse a stream parameter
-beside other parameters. Rejected: ADR-0032 decision 5's own example
-(`command put(info: DocInfo, data: <bytes>)`) needs both.
+```text
+enum StreamForm : ubyte { Elements = 0, Bytes = 1, Text = 2 }
+table StreamPayload {
+  no: ubyte;                      // StreamNo: 0 the reply stream, k the k-th stream parameter
+  form: StreamForm;
+  element: string;                // canonical element type name under Elements; absent otherwise
+  max_sizes: [MaxSize] (required);
+}
+table Member { ...; limit: uint32 = null; streams: [StreamPayload]; }
+```
 
-**R-11. RIDL-157 extends to a stream's element.** The sizer gives the element
-its size, and RIDL-157 fires when the element's largest encoding is above the
-interaction's limit, the check ADR-0032 note (b) assigns to the stream work. The
-stream itself still has no size. Reason: such an element cannot be carried as
-one chunk (decision 14), so the source describes a stream no transport can
-serve. This is a new error on a source that compiles today; no frozen source
-copy declares one, so the `accepted-sources` dump holds, and the owner should
-know the surface moves. _Alternative_: a new code. Rejected: the rule is
-RIDL-157's rule applied to the element.
+Entries are in ascending `no`. The `request` payload's `type_name` becomes the
+spelling of the non-stream parameters (R-10), so
+`replayTrace(samples:
+<FilterState>)` has the request `()` and one entry
+`{ no: 1, form: Elements,
+element: "veh.hvac.FilterState" }`; the `response`
+payload of a streamed-reply query keeps `type_name` `<T>`, as today, beside its
+entry `no: 0`. A file written before the field verifies and reads `streams` as
+absent, as `limit` and `compatible` did (D-3 of the catalog descriptor record).
+`ridl describe` prints `streams`. Reason: an appended table list is the one
+schema change the append-only rule allows, and it is R-31's home.
+
+**R-9 (amended). Sizes: the request's sizes are the induced struct's; a stream
+entry's `max_sizes` are its element's size states under `Elements` and absent
+under `Bytes` and `Text`; the `response` payload of a streamed reply keeps no
+row.** In the codegen model, `CommandShape.request_sizes` and
+`QueryShape.request_sizes` are therefore the induced struct's for every call (as
+`model.proto` already states for `request_tuple`), `reply_sizes` keeps
+`ABSENT_CAUSE_ENCODING_UNDEFINED` for a streamed reply, and a new
+`Interaction.streams: repeated StreamShape { uint32 no; StreamForm form; TypeRef
+element; PayloadSizes sizes; }`
+carries each stream's element and its states. Reason: the per-element bound is
+what sizes a face's chunk buffer and what the codecs already compute for the
+element's declaration; a byte chunk's only bound is the member's `limit`. **What
+the Kotlin plugin reads**: `Interaction.streams` for the number, form, element
+and sizes of each stream; `Param.type` and `Reply.value` keep their `StreamType`
+for the declared shape; `request` or `request_tuple` for the non-stream
+arguments, present for every call. An older plugin that reads neither `streams`
+nor the new comment sees a request struct it did not see before and no stream,
+which is the model's additive rule.
+
+**R-10 (amended). A call's request payload is its non-stream parameters.** The
+lowering induces the argument struct over the non-stream parameters, zero
+parameters included, so `command put(info: DocInfo, data: <bytes>)` has the
+request `DocInfo` and one stream parameter, and
+`command upload(data:
+<FwBlock>)` has an induced struct with no field. `request`
+or `request_tuple` is therefore present for every call, and the comment "no
+induced argument struct, because a parameter is a stream" goes. This changes the
+frozen veh-cluster copy's output in stage 1: `replayTrace` and `rebalance`
+(`xtask/tests/freeze-fixtures/generated/veh-cluster/cluster/services.ridl`) gain
+induced params structs (`VehHvacCabinReplayTraceParams`,
+`VehHvacCabinRebalanceParams`, on the model of `VehHvacCabinGetBoundsParams`),
+which adds `.fbs` and `.proto` lines to the `wire` dump and items to the
+generated crate — additive, but `cargo xtask freeze update` is needed for both
+rows. Reason: the `request` frame and `Claim.len` carry the non-stream
+arguments, and the face needs one named type for them, as it does today.
+_Alternative_: refuse a stream parameter beside other parameters. Rejected:
+ADR-0032 decision 5's own example needs both.
+
+**R-11 (replaced; the first form is withdrawn). No diagnostic for a named
+element whose largest encoding is above the interaction's limit; the sending
+side refuses such an element at push, and it is never sent.** ADR-0032 decision
+14 is binding: the sizer gives a stream no size and RIDL-157 does not apply to a
+stream, and every source keeps the diagnostics it draws today. At run time the
+generated face encodes the element into its `BUFFER`; when the encoded length is
+above the member's `limit`, `push` or `push_claim` answers
+`PushError::TooLarge { cap }`, nothing crosses, and the face aborts the stream
+with `Transport::Interrupted` (R-5), which the receiver reads as an
+interruption; the application's `Source` is dropped, or its `Consumer` is told
+`failed`. Reason: the owner's ruling, and decision 14's statement that the
+checker does not change. A possible follow-up, not a ruling: a design lint
+(ADR-0027) could warn when an element type's bound is above its interaction's
+limit, since such a stream can never carry that element.
 
 ## 5. Frame version 2
 
@@ -352,13 +450,18 @@ per shape keeps the consumer's state machine one branch per member; the
 consumer's catalog says which members stream, and the server knows from its
 member table (R-18).
 
-**R-14. `interrupted` crosses the frame, as the third `Transport` variant that
-does.** Frame specification §9.6 says exactly two cross; version 2 adds this
-one. Reason: without it an interrupted download would wait with no bound, since
-decision 13 bounds only the start of a streamed reply. In the consumer→provider
-direction on a reply stream, and in the provider→consumer direction on a
-parameter stream, a `stream_end interrupted` is the receiver's cancel: the
-sender stops and forgets the call.
+**R-14 (amended). `interrupted` crosses the frame, as the third `Transport`
+variant that does, and a `stream_end` sent by the receiver of a stream carries
+the receiver's verdict.** Frame specification §9.6 says exactly two cross;
+version 2 adds this one. Reason: without it an interrupted download would wait
+with no bound, since decision 13 bounds only the start of a streamed reply. A
+`stream_end` travels against the stream's direction when its receiver stops it
+(the consumer on a reply stream, the provider on a parameter stream), and then
+carries `contract(c)` when a chunk was refused at the receiving boundary,
+`corrupt` when one could not be decoded, and `interrupted` when the receiver
+cancels with no reason to state. The sender stops, and the side that sent the
+`request` forgets the call once every stream of it has ended or was stopped.
+Section 5.5 states what each surface reports.
 
 **R-15. Invalid UTF-8 in a `<string>` chunk is `contract(InvalidValue(Utf8))`.**
 Reason: ADR-0032 decision 12 places it in Stratum 2, and no existing `Rule`
@@ -400,7 +503,45 @@ max` today) runs from the receipt of the
 consumer's `stream_end end`, and so does `call_abandon_after`. Nothing about
 timing crosses (§8).
 
-### 5.5 The vectors
+### 5.5 A refusal after the acknowledgment
+
+**R-33. A provider's refusal of a parameter stream after the acknowledgment
+reaches the producer through its next push, carries `contract(c)` or `corrupt`
+on the wire against the stream's direction, and leaves the acknowledgment as it
+was.** The owner's ruling of 2026-10-31. The chain, for
+`command put(info,
+data: <bytes>)` or `command upload(data: <FwBlock>)`:
+
+1. The generated `serve` pulls a chunk, verifies it (structure, constraints,
+   UTF-8 for `<string>`), and on a failure calls
+   `abort_claim(claim, k, CallError::Contract(InvalidValue(v)))` (or
+   `Transport(Corrupt)` for a structural failure) and tells the application's
+   `Consumer` `failed(e)`. The command's claim was settled `Ok(&[])` at the
+   acknowledgment and is not settled again; a query with a parameter stream and
+   a plain reply settles `Err(e)` instead, since its reply is still open.
+2. In process, the producer's next `push(c, k, _)` or `end(c, k)` answers
+   `PushError::Failed(e)`; a `Stream(c, k)` waker is woken.
+3. Over the frame, the provider sends `stream_end` on stream `k` with the
+   outcome of `e` (R-14), and drops every later `chunk` of that stream without a
+   note until the consumer's own `stream_end` or the end of the bound; the
+   consumer's runtime answers its producer as in step 2.
+4. The Rust `CSink`'s next `poll_ready`, `send` or `end` returns
+   `Err(ClientError::Call(e))`; the `CCall` future, which resolved `Ok(())` at
+   the acknowledgment, is unchanged. For a query with an upload and a plain
+   reply, `QCall` resolves `Err(ClientError::Call(e))`.
+5. In TypeScript, `commandStream`'s `accepted` promise, already resolved at the
+   acknowledgment, is unchanged; the `WritableStream` errors, so its pending and
+   later `write` and `close` reject with a `SessionError` carrying `e`'s
+   category (`contract` with the `Contract` and the `Rule`, or `corrupt`).
+   `queryWithUpload`'s `reply` rejects the same way.
+
+Reason: ridl §6.1 makes a command's acknowledgment a delivery acknowledgment
+that cannot cover chunks that arrive after it (ADR-0032 note (a)), so the
+refusal has to travel on the stream, not on the call's outcome, and the one
+place a producer looks after the acknowledgment is its next push. The
+conformance tests of stage 2 pin steps 1 and 2.
+
+### 5.6 The vectors
 
 Three rows join the vector table of §11.1, read into the `wire` dump by their
 `Id`: `chunk-reply` (a `chunk` on stream 0, correlation 2, seq 1, payload
@@ -411,12 +552,13 @@ edited. The exact bytes are written with the codec in stage 4.
 
 ## 6. The server (`ridl-transport-ws`) and the TypeScript client
 
-**R-18. A server offers `ridl-ws-v2` only with a member table that carries the
-stream form; without a table it offers `ridl-ws-v1` alone.** Reason: without a
-table the server cannot tell a streamed reply's end from an empty plain reply
-(R-4), so it cannot serve a stream correctly, and refusing the version at the
+**R-18 (amended). A server offers `ridl-ws-v2` only when its backend answers
+`streams()` with `Some` (R-32) and its member table carries the stream entries;
+otherwise it offers `ridl-ws-v1` alone.** Reason: without the stream ports it
+cannot carry a stream at all, and without a table it cannot tell a streamed
+reply's end from an empty plain reply (R-4); refusing the version at the
 subprotocol selection is the one place the frame has for that. `Polling` and
-`Scanning` backends with a table serve streams alike.
+`Scanning` backends serve streams alike.
 
 On a version 2 session the server, each tick:
 
@@ -431,13 +573,16 @@ On a version 2 session the server, each tick:
   accepted, and grants one credit per chunk the backend takes. A chunk longer
   than the member's limit (D-26) is answered `stream_end corrupt` and the call
   is forgotten, as a `request` longer than the limit is answered `corrupt`;
-- a `stream_end interrupted` from the client forgets the call; the end of the
-  session forgets every call, as today, and every open stream of it is
-  `Transport::Down` on the backend.
+- a `stream_end` from the client on a stream it receives aborts the backend
+  stream with its outcome (`interrupted`, or the verdict of R-14); a
+  `Pull::Failed(e)` or a `PushError::Failed(e)` from the backend on a parameter
+  stream sends `stream_end` with `e`'s outcome (R-33); the end of the session
+  forgets every call, as today, and every open stream of it is `Transport::Down`
+  on the backend.
 
 The `Config` check of D-26 is unchanged: 35 + 16,128 fits the default limit.
-Three `Note` values are added: `StreamCreditExceeded` (a violation),
-`ChunkTooLarge` and `StreamInterrupted`.
+Three `Note` values are added (`Note` is `#[non_exhaustive]`, so additively):
+`StreamCreditExceeded` (a violation), `ChunkTooLarge` and `StreamStopped`.
 
 **The TypeScript client** (`packages/ridl-transport-ws`) gains, on `Session`:
 
@@ -462,10 +607,15 @@ was selected; `queryStream` on a version 1 session rejects with
 
 ## 7. The generated Rust surface
 
-The Rust backend today refuses a stream and skips the interface
-(`docs/design/interaction-face.md`, "The consumer face", driftsys/ridl#943), so
-`VehicleStatus` of veh-cluster has no face. The face is extended as follows; the
-descriptors, `Client`, `Provider`, `serve` and the futures keep their shapes.
+The Rust backend today refuses a stream member
+(`docs/design/interaction-face.md`, "The consumer face", driftsys/ridl#943): the
+face of `veh.hvac.cabin` in the frozen veh-cluster crate covers the service's
+other members and leaves `replayTrace`, `streamFilterHistory` and `rebalance`
+out. (`VehicleStatus` has no face for an unrelated reason: its `setGear` clause
+is outside the narrow translator,
+`freeze/generated/veh-cluster/veh.cluster.rs`.) The face is extended as follows;
+the descriptors, `Client`, `Provider`, `serve` and the futures keep their
+shapes, and the bounds follow R-32.
 
 ### 7.1 The traits in `ridl_rt::face`
 
@@ -486,12 +636,13 @@ pub trait Consumer {
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn accept(&mut self, item: Self::Item);
     fn end(&mut self);
-    fn interrupted(&mut self);
+    /// The stream stopped without its end: interrupted, or refused by this side's own check (R-33).
+    fn failed(&mut self, e: CallError);
 }
 pub trait ByteConsumer {
     fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<usize>;
     fn end(&mut self);
-    fn interrupted(&mut self);
+    fn failed(&mut self, e: CallError);
 }
 pub struct Interrupted;
 ```
@@ -626,72 +777,86 @@ diagnostics, and the tests that prove it. "Frozen" refers to the rows of
 
 ### Stage 1 — Descriptor, model and `ridl-rt` descriptors
 
-Delivers: R-7 to R-11, and the two record corrections of section 1.
+Delivers: R-7 to R-11 and R-31, and the two record corrections of section 1.
 
 - **Crates**: `ridl-descriptor` (`schema/catalog.fbs`: `StreamForm`,
-  `Payload.stream`, `Payload.element`; `lower.rs`; `describe.rs`; `verify` walks
-  the new fields), `ridl-ir` (`model.proto`: nothing new — R-9; the lowering of
-  the induced argument struct over non-stream parameters, R-10; the sizer gives
-  a stream element its size for RIDL-157, R-11), `ridl-sem` (RIDL-157 on the
-  element; the induced struct rule), `ridl-rt` (`contract::StreamForm`,
-  `PayloadInfo.stream`), `ridl-backend-rust` (`descriptors.rs` writes the new
-  field; the face still refuses a stream), `ridl` (`ridl describe` prints
-  `stream` and `element`).
-- **Frozen surfaces**: `runtime-crates` — `PayloadInfo` gains a field, a break
-  under ADR-0021 decision 10: approve it by removing the row and adding it back
-  at the stage's commit (ADR-0029 decision 4), and release `ridl-rt` as a 0.x
-  minor. `generated-crate` — every `PayloadInfo` literal changes, so run
-  `cargo xtask freeze update`; the API of the generated crates does not change,
-  so the baseline comparison passes. `codegen-protocol` — unchanged, or lines
-  added if the induced-struct comment moves a field (it does not). `wire` —
-  unchanged: the IR and the catalog hash do not change. `diagnostics` —
-  unchanged codes.
-- **Diagnostics**: none new; RIDL-157 gains the element case (R-11).
+  `StreamPayload`, `Member.streams`; `lower.rs`: the stream entries and the
+  request spelling over the non-stream parameters; `describe.rs`; `verify` walks
+  the new table list), `ridl-ir` (`model.proto`: `StreamForm`, `StreamShape`,
+  `Interaction.streams`, the comment of `request_tuple`; the lowering of the
+  induced argument struct over non-stream parameters, R-10), `ridl-sem` (the
+  induced struct rule), `ridl-rt`
+  (`contract::{StreamNo, StreamForm,
+  StreamInfo}`, `Member.streams`),
+  `ridl-backend-rust` (`descriptors.rs` writes `streams` and the params struct
+  of every call; the face still leaves a stream member out), `ridl`
+  (`ridl describe` prints `streams`).
+- **Frozen surfaces**: `runtime-crates` — `Member` gains a field, a break under
+  ADR-0021 decision 10: approve it by removing the row and adding it back at the
+  stage's commit (ADR-0029 decision 4); the release is R-35's. `generated-crate`
+  — every `Member` literal changes and the frozen veh-cluster copy gains
+  `VehHvacCabinReplayTraceParams` and `VehHvacCabinRebalanceParams` (R-10):
+  additive, so the baseline comparison passes after `cargo xtask freeze update`.
+  `wire` — the `.fbs` and `.proto` lines of those two structs are added
+  (`freeze update`); the catalog hash lines do not change, because the IR does
+  not. `codegen-protocol` — lines added for the new messages and fields; passes.
+  `diagnostics` and `accepted-sources` — unchanged.
+- **Diagnostics**: none, and none changed (ADR-0032 decision 14; R-11).
 - **Records**: ADR-0032 decision 10 and ridl §12.4 change
   `<DocChunk | DocError>` to a named union (section 1);
-  `docs/design/catalog-descriptor.md` D-4 and "Not built";
-  `docs/design/ridl-rt.md` "The interaction descriptors".
-- **Tests**: `ridl-descriptor` lowers `streamFaults` with `Elements` and
-  `FaultEvent`, `<bytes>` with `Bytes`, `<string>` with `Text`, and a file
-  written without the fields reads `None`; `ridl describe` prints them; the
-  catalog hash of veh-cluster is unchanged (the `wire` dump); RIDL-157 fires on
-  `type Big: bytes [1..40000]` then `<Big>` on a query, and not on
-  `<FaultEvent>`; `ridl diff` reports a reply changed from `T` to `<T>` as it
-  reports it today (a test that pins the current category, so stage 3 can rely
-  on it); the induced argument struct of
-  `command put(info: DocInfo, data: <bytes>)` is `DocInfo` and of
-  `command upload(data: <FwBlock>)` has no field; `limits_parity.rs` still
-  passes.
+  `docs/design/catalog-descriptor.md` D-4, "What a catalog contains" and "Not
+  built"; `docs/design/ridl-rt.md` "The interaction descriptors";
+  `docs/design/codegen-plugins.md` for `Interaction.streams`.
+- **Tests**: `ridl-descriptor` lowers `streamFaults` to one entry
+  `{ 0,
+  Elements, veh.cluster.FaultEvent }` with the element's size rows,
+  `replayTrace` to `{ 1, Elements, … }` with the request `()`, `rebalance` to
+  entries 0 and 1, `<bytes>` to `Bytes` and `<string>` to `Text` with no size
+  row, and a file written without the field reads an empty `streams`;
+  `ridl describe` prints them; the catalog hash of veh-cluster is unchanged (the
+  `wire` dump); a stream whose element is `type Big: bytes [1..40000]` draws no
+  diagnostic (decision 14 pinned); `ridl diff` reports a reply changed from `T`
+  to `<T>` as it reports it today (a test that pins the current category); the
+  induced argument struct of `command put(info: DocInfo, data: <bytes>)` is
+  `DocInfo` and of `command upload(data: <FwBlock>)` has no field; the model's
+  `Interaction.streams` of the veh-cluster fixture is pinned in
+  `ridlc-gen-model`'s parity test; `limits_parity.rs` still passes.
 
 ### Stage 2 — The port, the loopback and the conformance suite
 
-Delivers: R-1 to R-6, sections 3.1 to 3.3.
+Delivers: R-1 to R-6, R-32, R-33's steps 1 and 2, sections 3.1 to 3.3.
 
-- **Crates**: `ridl-rt` (`port::StreamNo`, `Pull`, `PushError`, `StreamCaller`,
-  `StreamHandler`, the `&mut P` forwarding impls; `Interest::Stream` and
-  `Interest::ClaimStream`; `Transport::Interrupted`; `correlate::Table` gains a
-  per-slot `Stream` waker map keyed by `StreamNo`), `ridl-loopback` (stream
-  queues per call slot and `StreamNo`, `Loopback::STREAM_WINDOW = 4`, both
-  traits on `Loopback`, `CallerHandle` and `HandlerHandle`; the aggregate
-  forwards), `ridl-rt-conformance` (`streams.rs`;
-  `Factory::STREAM_WINDOW: usize`, a new required item; the `suite!` macro adds
-  the module).
-- **Frozen surfaces**: `runtime-crates` — breaks: `Interest` gains variants
-  (exhaustive), `Factory` gains a required const. Approve as in stage 1; one 0.x
-  minor if stages 1 and 2 ship in one release, two otherwise.
+- **Crates**: `ridl-rt` (`port::{Pull, PushError, StreamCaller, StreamHandler}`,
+  the `&mut P` forwarding impls; `Interest::Stream` and `Interest::ClaimStream`;
+  `Transport::Interrupted`; `correlate::Table` gains a per-slot `Stream` waker
+  map keyed by `StreamNo`), `ridl-loopback` (stream queues per call slot and
+  `StreamNo`, `Loopback::STREAM_WINDOW = 4`, both traits on `Loopback`,
+  `CallerHandle` and `HandlerHandle`; the aggregate forwards),
+  `ridl-rt-conformance` (`streams.rs`; the `streams` extension of `suite!`; no
+  new `Factory` item, R-32).
+- **Frozen surfaces**: `runtime-crates` — one break: `Interest` gains two
+  variants (exhaustive). Approve as in stage 1; it ships in R-35's release.
+  `ridl-rt-conformance` and `ridl-loopback` are additive.
 - **Diagnostics**: none.
-- **Tests** (`ridl-rt-conformance/src/streams.rs`, generic over `Factory`):
+- **Tests** (`ridl-rt-conformance/src/streams.rs`, bounded on
+  `F::Runtime: StreamCaller + StreamHandler + Wakeable`):
   `a_reply_stream_is_pulled_in_order_then_ends`;
   `a_pull_before_the_first_chunk_is_pending`;
   `a_short_buffer_reports_needed_and_does_not_consume`;
   `end_claim_on_the_reply_stream_settles_the_claim`;
   `a_settle_err_after_chunks_fails_the_stream_after_them`;
-  `a_push_beyond_the_window_answers_zero_and_the_pull_frees_it`;
+  `a_push_into_a_full_window_answers_zero_and_a_pull_frees_it` (pushes until 0
+  or 1,024 chunks);
   `a_stream_waker_is_woken_by_a_chunk_an_end_and_a_freed_window`;
-  `forget_interrupts_the_providers_pull_and_push`;
+  `forget_fails_the_providers_pull_and_push_with_interrupted`;
+  `an_abort_by_the_producer_fails_the_receivers_pull_after_the_chunks_before_it`;
+  `a_receivers_abort_of_a_parameter_stream_fails_the_producers_next_push` (R-33
+  step 2, with `Contract(InvalidValue)`);
+  `a_refusal_after_the_acknowledgment_leaves_the_acknowledgment` (R-33 step 1:
+  `ack` still answers `Ok(())`);
   `a_parameter_stream_pushed_before_the_claim_is_pulled_after_it`;
   `a_parameter_stream_ends_explicitly_and_a_second_end_is_ended`;
-  `a_chunk_longer_than_the_limit_is_too_large_and_not_sent`;
+  `a_chunk_longer_than_the_limit_is_too_large_and_not_sent` (R-11);
   `two_stream_parameters_are_two_streams`;
   `a_bidirectional_call_carries_both_streams`;
   `a_reclaimed_slots_stream_answers_unknown`. The loopback keeps its own
@@ -716,24 +881,30 @@ Delivers: section 7 for the first row of 7.3, R-20 to R-22.
   one adaptation, and its diagnostics are facts about the reference; a new
   interface in the authored file keeps that, and the ordinal space of
   `VehicleStatus` unchanged.
-- **Frozen surfaces**: `generated-crate` — `VehicleStatus` gains a face (it was
-  skipped) and the frozen corpus copy under `xtask/tests/freeze-fixtures/` is
-  refreshed on purpose to add `FaultLog`; both add lines and API items, so the
-  baseline comparison passes after `cargo xtask freeze update`. `wire` — the
-  refreshed copy changes the veh-cluster `.proto` and `.fbs` lines (additions)
-  and the cabin catalog hash line is untouched. `runtime-crates` — additive
-  (`face::Source`).
+- **Frozen surfaces**: `generated-crate` — the `veh.hvac.cabin` face gains
+  `stream_filter_history` (a streamed reply of named elements, in the frozen
+  copy today), and the frozen corpus copy under `xtask/tests/freeze-fixtures/`
+  is refreshed on purpose to add `FaultLog`, the only new face; both add items,
+  so the baseline comparison passes after `cargo xtask freeze update`.
+  `VehicleStatus` keeps no face (its `setGear` clause). `wire` — the refreshed
+  copy adds veh-cluster `.proto` and `.fbs` lines for `FaultLog` and
+  `FaultResult`; the cabin catalog hash line is untouched. `runtime-crates` —
+  additive (`face::Source`).
 - **Diagnostics**: none.
 - **Tests**: `tests/face_generation.rs` pins the emitted `FaultsStream`,
-  `Provider::Faults` and the `serve` arm; `tests/interaction_face.rs` runs a
-  loopback round trip of 64 `FaultResult` elements, about 68 KB in FlatBuffers,
-  above one call limit, checks order and the end, and a provider that returns
-  `Pending` twice before each element; a provider that interrupts after 3
-  elements gives the consumer 3 elements then `Transport::Interrupted`; a
-  dropped `FaultsStream` makes the provider's next push `Gone`; an element the
-  provider produces outside its range ends the stream with
-  `Contract(InvalidValue)` before it is sent; the `blocking` client reads the
-  same stream; `face_compile.rs` compiles the crate with and without the two
+  `Provider::Faults`, the `serve` arm and the `StreamCaller`/`StreamHandler`
+  bounds on `FaultLog` only (R-32: `Horn`'s signal-only `Client` still builds
+  over a port without them); `tests/interaction_face.rs` runs a loopback round
+  trip of 64 `FaultResult` elements, about 68 KB in FlatBuffers, above one call
+  limit, checks order and the end, and a provider that returns `Pending` twice
+  before each element; a provider that interrupts after 3 elements gives the
+  consumer 3 elements then `Transport::Interrupted`; a dropped `FaultsStream`
+  makes the provider's next push `Failed(Transport(Interrupted))`; an element
+  the provider produces outside its range ends the stream with
+  `Contract(InvalidValue)` before it is sent; an element whose encoding is above
+  a lowered `[limits.interaction]` entry is refused `TooLarge` at push and the
+  consumer reads `Interrupted` (R-11); the `blocking` client reads the same
+  stream; `face_compile.rs` compiles the crate with and without the two
   features; `just compat-check` and `just demo` stay green (cabin has no stream,
   so its crate is unchanged).
 
@@ -743,16 +914,16 @@ Delivers: sections 5 and 6 for the reply stream, R-12 to R-19.
 
 - **Crates**: `ridl-transport-ws` (`frame.rs`: `Frame::Chunk`,
   `Frame::StreamEnd`, `Frame::StreamCredit`, the codes, `FRAME_VERSION_2`,
-  `SUBPROTOCOL_V2`; `server/`: the version selection, R-18, the per-call stream
-  state, the credit, the kept `stream_end`, the three `Note`s; `descriptor`:
-  `MemberTable` reads `Payload.stream`), `ridl-ir` (`codegen/bindings.rs`: the
-  version `"2"` row), `packages/ridl-transport-ws` (`frame.ts`, `session.ts`,
-  `calls.ts`: `queryStream`, R-19), `xtask` (the three vectors read into the
-  `wire` dump).
+  `SUBPROTOCOL_V2`; `server/`: `Backend::streams()` with its default (R-32), the
+  version selection (R-18), the per-call stream state, the credit, the kept
+  `stream_end`, the three `Note`s; `descriptor`: `MemberTable` reads
+  `Member.streams`), `ridl-ir` (`codegen/bindings.rs`: the version `"2"` row),
+  `packages/ridl-transport-ws` (`frame.ts`, `session.ts`, `calls.ts`:
+  `queryStream`, R-19), `xtask` (the three vectors read into the `wire` dump).
 - **Frozen surfaces**: `wire` — three vector lines added; no version 1 line
-  changes. `runtime-crates` — additive (`ridl-transport-ws` gains variants on
-  `Frame`, which is not `#[non_exhaustive]`: check whether the dump treats it as
-  a break; if it does, approve it). `codegen-protocol` — unchanged.
+  changes. `runtime-crates` — additive: `Frame` and `Note` are
+  `#[non_exhaustive]`, `Backend::streams` has a default, the constants are new
+  items. `codegen-protocol` — unchanged.
 - **Records**: frame specification §4 (forms, codes), §7 (R-17), §8 (decision
   13's rows), §9.6 (R-14), §11.1 (version 2: subprotocol, layouts, vectors);
   `docs/design/ridl-transport-ws.md` and `ridl-transport-ws-ts.md`;
@@ -801,9 +972,12 @@ session half, ADR-0032 decisions 2, 3 and 12.
   valid UTF-8 is refused before transmission (R-15).
 - **Frozen surfaces**: `runtime-crates` — additive. `wire` — `Rule` code 7 is
   version 2's, already introduced as a code value in stage 4's vectors or added
-  here as a vector line (`stream-end-utf8`); additive. `generated-crate` —
-  unchanged (neither frozen copy declares a stream parameter or a byte stream).
-- **Diagnostics**: none new. The checker is unchanged (ADR-0032 decision 14).
+  here as a vector line (`stream-end-utf8`); additive. `generated-crate` — the
+  `veh.hvac.cabin` face gains `replay_trace` (a parameter stream) and
+  `rebalance` (bidirectional), which the frozen copy declares: additive, after
+  `cargo xtask freeze update`. No frozen copy declares a byte or text stream.
+- **Diagnostics**: none new. The checker is unchanged (ADR-0032 decision 14;
+  R-11): an element above the limit is refused at push, never by a diagnostic.
 - **Tests**: a loopback upload of 200 KB through `put`, read by the provider's
   `ByteConsumer` in chunks of at most the limit, byte-equal to the input; a
   `<string>` reply of a text whose code points straddle every chunk boundary
@@ -813,10 +987,15 @@ session half, ADR-0032 decisions 2, 3 and 12.
   a `query pipe(a: <T>): <U>` whose reply starts before the upload ends; a query
   with an upload and a plain reply measures its bound from the upload's end (a
   hand-driven clock advanced past `max` before the end does not time out, and
-  past `max` after it does); `just ts-e2e` uploads 200 KB from a
-  `WritableStream` and reads it back through `fetch`; the server answers an
-  oversized chunk `stream_end corrupt`; `docstore`'s example program runs in the
-  test suite.
+  past `max` after it does); R-33 steps 3 to 5: a provider that refuses the
+  third block of `uploadFirmware` makes the Rust `CSink`'s next `send` return
+  `Err(ClientError::Call(Contract(InvalidValue(_))))` while the `CCall` stays
+  `Ok(())`, sends `stream_end contract` against the upload over the frame, and
+  makes the TypeScript `WritableStream`'s next `write` reject with the
+  `contract` failure while `accepted` stays resolved; `just ts-e2e` uploads 200
+  KB from a `WritableStream` and reads it back through `fetch`; the server
+  answers an oversized chunk `stream_end corrupt`; `docstore`'s example program
+  runs in the test suite.
 
 ### Stage 6 — TypeScript codegen for streams
 
@@ -859,41 +1038,30 @@ Delivers: section 8, R-23.
   is unchanged, so every reader of it reads what it read; a diff category for
   "stream form changed" is unnecessary because changing `<T>` to `T` or the
   element type is already a change of the reply type.
+- **R-34. The generated crate's async trait impls are behind two opt-in features
+  named after the crates they pull, `futures-io` and `futures-core`.** The
+  owner's ruling of 2026-10-31 on R-22's open point; a single `async-traits`
+  feature is not added. Reason: a feature per dependency lets a consumer that
+  wants `Stream` and `Sink` leave `futures-io` out, and the name says what it
+  pulls.
+- **R-35. One breaking `ridl-rt` release carries stages 1 and 2 together, and it
+  ships in the next breaking release of the workspace, with
+  driftsys/ridl#1108.** The owner's ruling of 2026-10-31. Stage 1's `Member`
+  field and stage 2's `Interest` variants are the two breaks (R-32); stages 3 to
+  6 are additive and may ship in any later release. Reason: one break is cheaper
+  for every downstream runtime than two, and the workspace already has a
+  breaking release scheduled.
 
-## 11. Alternatives considered, in one place
+## 11. Questions settled by the owner
 
-| Choice                      | Chosen                                            | Rejected                                                                          |
-| --------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Stream identity             | `(call, StreamNo)`                                | one stream per call with a new error; a stream id minted by the sender            |
-| Port unit                   | whole chunks                                      | byte-granular pull and push                                                       |
-| Reply stream open           | implicit, first `chunk`/`stream_end`              | an `open` form; an `open_stream` port method                                      |
-| Interruption                | `Transport::Interrupted`, crosses as code 11      | reuse `Down`; no explicit interruption (rejected: an unbounded wait, decision 13) |
-| Flow control                | per-stream credit in chunks, initial 4            | transport flow control alone; byte credit; credit on `attach`                     |
-| Provider's side of a stream | pull-shaped `Source`/`Consumer` driven by `serve` | a sink handle passed to the method; one method call per element                   |
-| `std` async traits          | inherent `poll_*`, `futures-*` behind features    | `tokio` traits; a trait of `ridl-rt`                                              |
-| Invalid UTF-8 code          | `Rule::Utf8` 7                                    | reuse `Rule::Pattern`; treat as `corrupt` (contradicts decision 12)               |
-| Duplicates of a stream      | keep the `seq`, answer `interrupted`              | keep the chunks (unbounded memory); treat as a new call                           |
-| Server without a table      | offers version 1 only                             | serve streams with no table (cannot tell an empty reply from an end)              |
-| Corpus change               | sibling `FaultLog.faults`                         | edit `getFaultPage` in the appendix's text; widen `FaultPage` back to 64          |
-| Byte chunk size             | the member's limit, partial on `Pending`          | a fixed smaller chunk; wait for a full chunk                                      |
+The three questions the first version raised were answered on 2026-10-31 and are
+recorded as rulings: RIDL-157 does not extend to a stream element (R-11, as
+replaced); one breaking `ridl-rt` release carries stages 1 and 2, in the next
+breaking release with driftsys/ridl#1108 (R-35); the generated crate's async
+trait impls are behind `futures-io` and `futures-core` (R-34). Nothing in this
+document waits on the owner.
 
-## 12. Questions for the owner
-
-None of these blocks the stages as sequenced; each would change what gets built
-only if the owner's answer differs from the ruling.
-
-1. **R-11 moves the language surface**: RIDL-157 on a stream element is a new
-   error on a source that compiles today (one no shipped runtime can serve). If
-   the owner prefers no new error before the next breaking release, stage 1
-   emits it as a warning first.
-2. **R-7's `ridl-rt` break in stage 1**: if the owner wants a single `ridl-rt`
-   break, stages 1 and 2 ship in one release; the document assumes they may ship
-   apart.
-3. **R-22's two opt-in features** are a dependency decision for the generated
-   crate's manifest; the owner may prefer a single `async-traits` feature that
-   pulls both `futures-io` and `futures-core`.
-
-## 13. Where the as-built code and the ADR disagree
+## 12. Where the as-built code and the ADR disagree
 
 - **The inline union element.** ADR-0032 decision 10 and ridl §12.4 write
   `<DocChunk | DocError>`; the grammar accepts one path inside `<…>`, and
@@ -912,22 +1080,19 @@ only if the owner's answer differs from the ruling.
   argument struct, because a parameter is a stream or untyped"; ADR-0032
   decision 5's `command put(info: DocInfo, data: <bytes>)` needs the request
   `DocInfo` beside the stream. R-10 changes the lowering in stage 1.
+- **The descriptor's request spelling.** `crates/ridl-descriptor/src/lower.rs`
+  spells a request with a stream parameter as the whole list,
+  `(samples: <FilterState>)`, so a reader today can tell a stream only by
+  parsing a string the record says no reader parses. R-31 gives the streams
+  their own entries in stage 1.
 
 ## Trace
 
-- Issues: driftsys/ridl#1116 (the stream work), driftsys/ridl#336 (no stream
-  port), driftsys/ridl#943 (the face refuses a stream)
-- Decisions: [ADR-0032](../decisions/ADR-0032-byte-streams.md) (binding:
-  decisions 9 to 14),
-  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-  decision 2, [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
-  decisions 9, 10 and 13, [ADR-0029](../decisions/ADR-0029-stability-policy.md),
-  [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 12
-  and 16 to 18
-- Records this design amends when built: [`ridl-rt.md`](../design/ridl-rt.md),
-  [`ridl-transport-ws.md`](../design/ridl-transport-ws.md),
-  [`ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
-  [`catalog-descriptor.md`](../design/catalog-descriptor.md),
-  [`interaction-face.md`](../design/interaction-face.md),
-  [the frame specification](../specification/frame-specification.md),
-  [the ridl reference](../specification/ridl-language-reference.md) §9.3, §12
+- Issues: driftsys/ridl#1116, driftsys/ridl#336, driftsys/ridl#943.
+- Binding: [ADR-0032](../decisions/ADR-0032-byte-streams.md) decisions 9 to 14;
+  ADR-0018 decision 2; ADR-0021 decisions 9, 10 and 13; ADR-0029; ADR-0030
+  decisions 12 and 16 to 18.
+- Records this design amends when built: `docs/design/ridl-rt.md`,
+  `ridl-transport-ws.md`, `ridl-transport-ws-ts.md`, `catalog-descriptor.md`,
+  `interaction-face.md`, `codegen-plugins.md`, the frame specification, and the
+  ridl reference §9.3 and §12.
