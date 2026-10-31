@@ -1167,6 +1167,41 @@ Deno.test("a limit above 65,280 is held only for a fixed: a signal with such a l
   assert.equal(h.publishes[0].sample.detected, undefined);
 });
 
+Deno.test("a limit above 65,280 is held only for a fixed: an event with such a limit is delivered up to it", async () => {
+  const h = await attachedWith({
+    interfaces: [{
+      iface: 1,
+      big: { iface: 1, ord: 3, kind: "event", limit: 70_000 },
+    }],
+  });
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(65_281),
+  });
+  assert.equal(h.occurrences.length, 1);
+  assert.equal(h.occurrences[0].payload.length, 65_281);
+  assert.equal(h.occurrences[0].detected, undefined);
+});
+
+for (const kind of ["command", "query"] as const) {
+  Deno.test(`a limit above 65,280 is held only for a fixed: the arguments of a ${kind} are accepted up to it`, async () => {
+    const h = await attachedWith({
+      interfaces: [{
+        iface: 1,
+        big: { iface: 1, ord: 5, kind, limit: 70_000 },
+      }],
+    });
+    const call = h.session[kind](1, 5, new Uint8Array(65_281), { bound: 1000 });
+    const sent = h.socket.sent.length;
+    assert.ok(sent > 1, "the arguments are sent, as more than one message");
+    h.socket.serverClose(1000);
+    await assert.rejects(call, isFailure("down"));
+  });
+}
+
 Deno.test("an occurrence above the default ceiling of an event is delivered empty with detected corrupt", async () => {
   const h = await attached();
   await subscribed(h, EVENT);
