@@ -753,13 +753,15 @@ impl<'a> Lowering<'a> {
 
     /// Lifts one tuple position into `Model.tuples`, returning its index.
     ///
-    /// A tuple whose induced name is already claimed by an identical tuple is
-    /// the same generated type, so the claim is reused. A position of this
-    /// package claimed by a different shape is a collision, recorded as a
-    /// fact for the printer to refuse with its own message. A position inside
-    /// a declaration of another package claimed by a different shape gets a
-    /// second entry and records nothing: the declaring package records that
-    /// collision, and the podbuf walk refuses the pair when it meets both.
+    /// A tuple whose induced Rust name is already claimed by a tuple of the
+    /// same shape and the same visibility is the same generated type, so the
+    /// claim is reused. A position of this package whose claim is held by a
+    /// tuple of a different shape or a different visibility is a collision,
+    /// recorded as a fact for the printer to refuse with its own message. A
+    /// position inside a declaration of another package in the same case gets
+    /// a second entry and records nothing: the declaring package records that
+    /// collision, and the podbuf walk refuses the pair when it meets both
+    /// and their wire names are equal.
     fn tuple_ref(&mut self, home: &'a v2::Package, tuple: &v2::TupleType, at: &Path) -> u32 {
         let claim = (home.name.clone(), at.rust.clone());
         if let Some(index) = self.tuple_at.get(&claim).copied() {
@@ -777,7 +779,8 @@ impl<'a> Lowering<'a> {
             }
             // A collision inside a declaration of another package is that
             // package's to record; here the two positions get two entries,
-            // and the podbuf walk refuses the pair when it meets both.
+            // and the podbuf walk refuses the pair when it meets both under
+            // one wire name.
             if !at.named {
                 return self.lift(home, tuple, at, claim);
             }

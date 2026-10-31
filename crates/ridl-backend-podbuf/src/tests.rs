@@ -220,3 +220,74 @@ fn a_nested_tuple_with_no_wire_name_is_named_from_its_path() {
         "{header}"
     );
 }
+
+/// The two fallback names of `Header::type_name`, which checked input does
+/// not reach: a tuple of this package whose wire name is empty is named
+/// `<prefix>_tuple<N>_head` by its index in `Model.tuples`, and a head with
+/// no source `<prefix>_head<N>` by its index in the head list.
+#[test]
+fn a_head_with_no_wire_name_or_no_source_takes_a_fallback_name() {
+    use ridl_ir::codegen::v1;
+
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let write = |path: &str, text: &str| {
+        let path = dir.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write("ridl.toml", "[workspace]\nmembers = [\"parts\"]\n");
+    write(
+        "parts/ridl.toml",
+        "[package]\nname = \"pod.parts\"\nversion = \"1.0.0\"\n",
+    );
+    write(
+        "parts/parts.typl",
+        "package pod.parts\n\nstruct Hub {\n  size : (w: integer [0..10], h: integer [0..10])\n}\n",
+    );
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, dir.path()).expect("the workspace loads");
+    let mut packages: Vec<v2::Package> = output
+        .checked
+        .iter()
+        .map(|checked| checked.ir.clone())
+        .collect();
+    packages.push(output.std_ir.clone());
+    let others: Vec<&v2::Package> = packages.iter().collect();
+    let parts = &packages[0];
+    let model = ridl_ir::codegen::lower(parts, &others);
+    let tuple_head = |model: &v1::Model| -> usize {
+        let projection = model.podbuf.as_ref().expect("a podbuf projection");
+        projection
+            .heads
+            .iter()
+            .position(|head| matches!(head.source, Some(v1::podbuf_head::Source::Tuple(0))))
+            .expect("the head of tuple 0")
+    };
+
+    let mut unnamed = model.clone();
+    unnamed.tuples[0]
+        .name
+        .as_mut()
+        .expect("a name")
+        .wire
+        .clear();
+    let header = crate::generate_model(parts, &others, &unnamed)
+        .expect("generate")
+        .header_source;
+    assert!(
+        header.contains("typedef struct pod_parts_tuple0_head {"),
+        "{header}"
+    );
+    assert!(!header.contains("pod_parts_hub_size_head"), "{header}");
+
+    let mut sourceless = model.clone();
+    let at = tuple_head(&sourceless);
+    sourceless.podbuf.as_mut().unwrap().heads[at].source = None;
+    let header = crate::generate_model(parts, &others, &sourceless)
+        .expect("generate")
+        .header_source;
+    assert!(
+        header.contains(&format!("typedef struct pod_parts_head{at} {{")),
+        "{header}"
+    );
+}

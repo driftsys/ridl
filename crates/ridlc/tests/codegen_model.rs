@@ -1531,7 +1531,13 @@ fn workspace_model(members: &[(&str, &str, &str)], local: &str) -> v1::Model {
             &format!("{dir}/ridl.toml"),
             &format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
         );
-        write(&format!("{dir}/{dir}.typl"), text);
+        // A member that declares an interface is a ridl source.
+        let extension = if text.contains("\ninterface ") {
+            "ridl"
+        } else {
+            "typl"
+        };
+        write(&format!("{dir}/{dir}.{extension}"), text);
     }
     let mut db = RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, root.path()).expect("the workspace loads");
@@ -1815,7 +1821,8 @@ fn two_positions_of_one_declaration_with_one_induced_name_share_one_wire_name() 
 /// package that declares it, not by a package that imports it: `A.bC` and
 /// `AB.c` both induce `ABC` with two shapes, so `p.a` carries one
 /// `TupleCollision` and `p.b`, which reaches both through `Local`, carries
-/// none.
+/// none. The two positions keep two entries in `p.b`, so its podbuf walk
+/// meets both under one wire name and refuses `Local`, naming both paths.
 #[test]
 fn a_collision_inside_a_foreign_declaration_is_not_recorded_by_the_importer() {
     const A: &str = "package p.a\n\n\
@@ -1838,6 +1845,60 @@ fn a_collision_inside_a_foreign_declaration_is_not_recorded_by_the_importer() {
         "{:?}",
         importing.tuple_collisions
     );
+    let projection = importing.podbuf.as_ref().expect("a podbuf projection");
+    assert_eq!(projection.refused.len(), 1, "{:?}", projection.refused);
+    let refused = &projection.refused[0];
+    assert_eq!(
+        refused.source,
+        Some(v1::podbuf_refused::Source::Declaration(declaration_index(
+            &importing, "Local"
+        )))
+    );
+    for text in ["ABC", "p.a.A.bC", "p.a.AB.c"] {
+        assert!(
+            refused.cause.contains(text),
+            "{text} not in {}",
+            refused.cause
+        );
+    }
+}
+
+/// A tuple nested inside the induced reply tuple of a query is reached under
+/// that tuple's own root: the interaction position has no walk path, and the
+/// induced tuple re-roots its fields, so the reply, its nested `inner` and the
+/// request each have a head and none is refused.
+#[test]
+fn a_tuple_inside_an_interaction_tuple_has_its_own_head() {
+    const A: &str = "package p.a\n\ntype Pt : integer [0..255]\n\n\
+        interface Probe {\n  query get(a: Pt, b: Pt): (x: Pt, inner: (p: Pt, q: Pt)) @[..50ms]\n}\n";
+    let model = workspace_model(&[("a", "p.a", A)], "p.a");
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    assert_eq!(projection.heads.len(), 3, "{:?}", projection.heads);
+    let reply = projection
+        .heads
+        .iter()
+        .find(|head| {
+            head.fields.iter().any(|field| {
+                matches!(
+                    field.source.as_ref().and_then(|s| s.kind.as_ref()),
+                    Some(v1::podbuf_source::Kind::Position(2))
+                ) && matches!(form_kind(field), v1::podbuf_form::Kind::InlineHead(_))
+            })
+        })
+        .expect("the reply head lays out `inner` inline");
+    let inner = reply
+        .fields
+        .iter()
+        .find_map(|field| match form_kind(field) {
+            v1::podbuf_form::Kind::InlineHead(at) => Some(*at),
+            _ => None,
+        })
+        .unwrap();
+    assert!(matches!(
+        projection.heads[inner as usize].source,
+        Some(v1::podbuf_head::Source::Tuple(_))
+    ));
 }
 
 /// A colliding position does not take the claim of the entry that holds it:
