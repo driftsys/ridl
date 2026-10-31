@@ -732,3 +732,27 @@ fn the_claimed_preamble_names_are_the_names_the_preamble_defines() {
     claimed.sort_unstable();
     assert_eq!(defined, claimed);
 }
+
+/// `Header::identity` keeps the three parts the build-wide check compares:
+/// two heads of one package differ by their key, and one head's type name and
+/// guard differ by their role, under one package.
+#[test]
+fn the_identity_of_a_head_carries_its_package_its_key_and_its_role() {
+    let package = compile(
+        "package p.i\n\
+         struct S {\n  x : integer [0..10]\n}\n\
+         struct T {\n  y : integer [0..10]\n}\n",
+    );
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let projection = model.podbuf.clone().expect("a projection");
+    let header = crate::Header::new(&model, &projection);
+    assert_eq!(header.heads.len(), 2, "{:?}", header.type_names);
+    let (s, t) = (header.identity(0, "head"), header.identity(1, "head"));
+    assert_eq!(s.package, "p.i");
+    assert_eq!(s.package, t.package);
+    assert_ne!(s.key, t.key);
+    assert_eq!(s.role, "head");
+    let guard = header.identity(0, "guard");
+    assert_eq!((&guard.package, &guard.key), (&s.package, &s.key));
+    assert_ne!(guard, s);
+}

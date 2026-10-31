@@ -320,6 +320,21 @@ fn three_claimants_of_one_name_are_one_error_naming_all_three() {
         "{}",
         error.message
     );
+    // The claimants are in the order of the build's packages, and the errors
+    // in the order of the names, so the guard's error comes first.
+    let order = |text: &str| error.message.find(text).expect(text);
+    assert!(
+        order("in the header of `x`") < order("in the header of `x.w`")
+            && order("in the header of `x.w`") < order("in the header of `x.w.ya`"),
+        "{}",
+        error.message
+    );
+    let names: Vec<&str> = diagnostics
+        .iter()
+        .filter_map(|diagnostic| diagnostic.message.strip_prefix("the C name `"))
+        .map(|rest| rest.split('`').next().unwrap())
+        .collect();
+    assert_eq!(names, vec!["X_W_YA_Z_HEAD_DEFINED", "x_w_ya_z_head"]);
     assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
 }
 
@@ -348,4 +363,204 @@ fn a_head_name_equal_to_a_ridl_std_head_is_refused() {
         error.message
     );
     assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// Two headers that claim one head name for one identity are refused when
+/// their definitions differ. The importing lowering names the tuple at
+/// `a.A.bX.y` by its position, `ABXField1`, the wire name `a` gives the tuple
+/// at `AB.xField1`, so `b.h` defines `a_abx_field1_head` with the members of
+/// the first and `a.h` with the member of the second, behind one guard.
+#[test]
+fn one_identity_with_two_definitions_is_refused() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "a",
+                "a",
+                "package a\n\
+                 struct A { bX : (y : (u: integer [0..10], v: integer [0..10])) }\n\
+                 struct AB {\n  xY : (u: integer [0..10], v: integer [0..10])\n  \
+                 xField1 : (w: integer [0..200])\n}\n",
+            ),
+            ("b", "b", "package b\nimport a.A\nstruct B { a : A }\n"),
+        ],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "a_abx_field1_head");
+    assert!(
+        error
+            .message
+            .contains("the head of the tuple at `AB.xField1` in the header of `a`")
+            && error
+                .message
+                .contains("the head of the tuple at `a.A.bX.1` in the header of `b`"),
+        "{}",
+        error.message
+    );
+    error_naming(&diagnostics, "A_ABX_FIELD1_HEAD_DEFINED");
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// Two entities whose heads render to one text are still two entities:
+/// `veh.CommonSpeed` and `veh.common.Speed { value }` both define
+/// `veh_common_speed_head` with one `uint8_t value`, and are refused.
+#[test]
+fn two_identities_with_one_definition_text_are_refused() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "veh",
+                "veh",
+                "package veh\ntype CommonSpeed : integer [0..100]\n",
+            ),
+            (
+                "common",
+                "veh.common",
+                "package veh.common\nstruct Speed { value : integer [0..100] }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    error_naming(&diagnostics, "veh_common_speed_head");
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// A clash together with a deployment no source declares is a usage error:
+/// the build exits 2 with the deployment's message, as it does without the
+/// clash.
+#[test]
+fn a_clash_with_an_unknown_deployment_is_a_usage_error() {
+    let src = tempfile::tempdir().expect("a temp dir");
+    let out = tempfile::tempdir().expect("a temp dir");
+    write_clashing_workspace(src.path());
+    let run = ridlc::run_build_with(
+        src.path(),
+        out.path(),
+        &[Emit::Podbuf],
+        &[],
+        std::time::Duration::from_secs(1),
+        false.into(),
+        ridlc::ApplyLints::Yes,
+        Some("Typo"),
+        &std::collections::BTreeMap::new(),
+    )
+    .expect("the build runs");
+    assert!(run.usage_error, "{:?}", run.diagnostics);
+    assert!(
+        run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.starts_with("no deployment named `Typo`")),
+        "{:?}",
+        run.diagnostics
+    );
+}
+
+/// Writes the `veh` + `veh.common` clashing workspace into `dir`.
+fn write_clashing_workspace(dir: &Path) {
+    std::fs::write(
+        dir.join("ridl.toml"),
+        "[workspace]\nmembers = [\"veh\", \"common\"]\n\n[lints]\nmissing-docs = \"allow\"\n",
+    )
+    .unwrap();
+    for (member, name, source) in [
+        (
+            "veh",
+            "veh",
+            "package veh\ntype CommonSpeed : integer [0..100]\n",
+        ),
+        (
+            "common",
+            "veh.common",
+            "package veh.common\nstruct Speed { v : integer [0..1000] }\n",
+        ),
+    ] {
+        let path = dir.join(member);
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(
+            path.join("ridl.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        )
+        .unwrap();
+        std::fs::write(path.join(format!("{member}.typl")), source).unwrap();
+    }
+}
+
+/// A package whose own header is refused is left out of the check: `veh`
+/// has a type with no podbuf size bound, so its `veh_common_speed_head` is
+/// not held against `veh.common`, which gets its header; `veh` gets its own
+/// refusal.
+#[test]
+fn a_package_whose_header_is_refused_is_left_out_of_the_check() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "veh",
+                "veh",
+                "package veh\ntype CommonSpeed : integer [0..100]\ntype Huge : string [0..1100000000]\n",
+            ),
+            (
+                "common",
+                "veh.common",
+                "package veh.common\nstruct Speed { v : integer [0..1000] }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.starts_with("the C name ")),
+        "{diagnostics:?}"
+    );
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .contains("`veh.Huge` has no podbuf size bound")),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), vec!["veh.common.h"]);
+}
+
+/// On a clash the per-package files of the other emits are written: the
+/// FlatBuffers schemas and the Rust modules. The crate's `lib.rs` and
+/// `Cargo.toml` are not, as on any error of a build.
+#[test]
+fn the_per_package_files_of_the_other_emits_are_written_on_a_clash() {
+    let src = tempfile::tempdir().expect("a temp dir");
+    let out = tempfile::tempdir().expect("a temp dir");
+    write_clashing_workspace(src.path());
+    let run = ridlc::run_build(
+        src.path(),
+        out.path(),
+        &[Emit::Podbuf, Emit::Flatbuffers, Emit::Rust],
+        false.into(),
+    )
+    .expect("the build runs");
+    error_naming(&run.diagnostics, "veh_common_speed_head");
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+    assert_eq!(
+        files_with(out.path(), "fbs"),
+        vec!["veh.common.fbs", "veh.fbs"]
+    );
+    assert_eq!(
+        files_with(out.path(), "rs"),
+        vec!["veh.common.rs", "veh.rs"]
+    );
+    assert_eq!(files_with(out.path(), "toml"), Vec::<String>::new());
+}
+
+/// The check runs only when the build writes the headers: a FlatBuffers
+/// build over the same workspace succeeds.
+#[test]
+fn a_build_without_the_podbuf_emit_does_not_run_the_check() {
+    let src = tempfile::tempdir().expect("a temp dir");
+    let out = tempfile::tempdir().expect("a temp dir");
+    write_clashing_workspace(src.path());
+    let run = ridlc::run_build(src.path(), out.path(), &[Emit::Flatbuffers], false.into())
+        .expect("the build runs");
+    assert!(!run.has_error(), "{:?}", run.diagnostics);
+    assert_eq!(
+        files_with(out.path(), "fbs"),
+        vec!["veh.common.fbs", "veh.fbs"]
+    );
 }

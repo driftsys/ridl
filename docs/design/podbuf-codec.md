@@ -260,16 +260,25 @@ build (`others`, the same scope every code emit reads, `ridl.std` included when
 present) and compares the claims. Each claim carries the identity of the entity
 it names, (declaring package, entity key, role): a declaration by its declared
 name in its package, a tuple by its wire name in the package that declares it
-(`NestedTuple.package` and `NestedTuple.wire` for a tuple of another package), a
-union arm by its union and ordinal, a map entry by its qualified path, so a head
-one package declares and another lays out inline is one identity under two
-definitions, and is not refused. A name claimed by two or more headers for two
-or more identities is one detached error, which names every claimant and its
-package; on any clash no `.h` is written for the build, every other emit
-proceeds, and the build exits 1. A package whose own header is refused is
-skipped by the check, because its own generation reports that refusal; in a run
-that found a clash the podbuf backend is not called, so that refusal is reported
-only once the clash is repaired.
+(`NestedTuple.package` and `NestedTuple.wire` for a tuple of another package); a
+union arm and a map entry are reached through a descriptor, so no importing
+header defines their heads. The claim of a head and of its guard also carries
+the text of the guarded definition, because the importing lowering can give a
+nested tuple of another package the wire name that package gives a different
+tuple (`a_abx_field1_head`, the tuple at `a.A.bX.y` seen from an importer and
+the tuple at `a.AB.xField1`). Two headers claim one name for one entity only
+when the identities are equal and, for a head or a guard, the definitions are
+equal: a head one package declares and another lays out inline is one entity
+under two definitions, and is not refused. A name claimed for two or more
+entities is one detached error, which names one claimant per entity and its
+package; on any clash no `.h` is written for the build, the per-package files of
+the other emits are still written (the generated crate's `lib.rs` and
+`Cargo.toml` are not, as on any error of a build), and the build exits 1. A
+package whose own header is refused is skipped by the check, because its own
+generation reports that refusal; in a run that found a clash the podbuf backend
+is not called, so that refusal is reported only once the clash is repaired. The
+check runs after the deployment is selected, so a clash together with a
+deployment no source declares is still a usage error.
 
 ## Determinism
 

@@ -1516,34 +1516,6 @@ fn run_build_inner<E: From<std::io::Error>>(
         // region over.
         let others = catalog_scope(&packages, std_ir.as_ref());
 
-        // The podbuf headers of one build are written for a C file that
-        // includes any of them together, so their C names are checked
-        // against each other once per build, over every package a header is
-        // written for. A clash is one detached error per name, naming every
-        // claimant, and no header is written for the build; the other emits
-        // proceed (`write_emits`'s doc comment). With the podbuf emit
-        // dropped, a package's own podbuf refusal is not reported in this
-        // run; it is reported once the clash is repaired.
-        let podbuf_names_clash = emits.contains(&Emit::Podbuf)
-            && match ridl_backend_podbuf::check_c_names(&others) {
-                Ok(()) => false,
-                Err(clashes) => {
-                    diagnostics.extend(clashes.into_iter().map(|clash| {
-                        error_diagnostic("", clash.message, FileId::DETACHED, TextRange::default())
-                    }));
-                    true
-                }
-            };
-        let emits: Vec<Emit> = emits
-            .iter()
-            .copied()
-            .filter(|emit| !(podbuf_names_clash && *emit == Emit::Podbuf))
-            .collect();
-        let code_emits: Vec<Emit> = code_emits
-            .into_iter()
-            .filter(|emit| !(podbuf_names_clash && *emit == Emit::Podbuf))
-            .collect();
-
         // The lowered system, with the catalog hashes its regions carry. The
         // region hashes must equal the hashes a `--emit catalog` build
         // writes, so `ridl.std` is in their scope whenever a package
@@ -1611,6 +1583,38 @@ fn run_build_inner<E: From<std::io::Error>>(
                 });
             }
         };
+
+        // The podbuf headers of one build are written for a C file that
+        // includes any of them together, so their C names are checked
+        // against each other once per build, over every package a header is
+        // written for. A clash is one detached error per name, naming one
+        // claimant per entity, and no header is written for the build; the
+        // per-package files of the other emits are still written, and the
+        // crate's `lib.rs` and `Cargo.toml` are not, as on any error
+        // (`write_emits`'s doc comment). With the podbuf emit dropped, a
+        // package's own podbuf refusal is not reported in this run; it is
+        // reported once the clash is repaired. The check runs after the
+        // deployment is selected, so a name no source declares stays a usage
+        // error (ADR-0010 decision 1).
+        let podbuf_names_clash = emits.contains(&Emit::Podbuf)
+            && match ridl_backend_podbuf::check_c_names(&others) {
+                Ok(()) => false,
+                Err(clashes) => {
+                    diagnostics.extend(clashes.into_iter().map(|clash| {
+                        error_diagnostic("", clash.message, FileId::DETACHED, TextRange::default())
+                    }));
+                    true
+                }
+            };
+        let emits: Vec<Emit> = emits
+            .iter()
+            .copied()
+            .filter(|emit| !(podbuf_names_clash && *emit == Emit::Podbuf))
+            .collect();
+        let code_emits: Vec<Emit> = code_emits
+            .into_iter()
+            .filter(|emit| !(podbuf_names_clash && *emit == Emit::Podbuf))
+            .collect();
 
         std::fs::create_dir_all(out_dir).map_err(E::from)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
@@ -3124,10 +3128,12 @@ fn write_catalogs(
 /// before this function runs for any package: a C file includes any of them
 /// together, so a C name two packages derive for two different entities
 /// (`ridl_backend_podbuf::check_c_names`, over `others`) is a detached error
-/// per name, naming every claimant; [`Emit::Podbuf`] is dropped from the
-/// build's emits so that no header is written, and every other emit proceeds;
-/// the build exits 1. In that run the podbuf backend is not called, so a
-/// package's own podbuf refusal is reported only once the clash is repaired.
+/// per name, naming one claimant per entity; [`Emit::Podbuf`] is dropped from
+/// the build's emits so that no header is written, and the per-package files
+/// of every other emit are still written (the crate's `lib.rs` and
+/// `Cargo.toml` are not, as on any error of a build); the build exits 1. In
+/// that run the podbuf backend is not called, so a package's own podbuf
+/// refusal is reported only once the clash is repaired.
 ///
 /// [`Emit::Catalog`] calls no backend and writes nothing here: the catalogs
 /// are per unit, not per package, and [`write_catalogs`] writes them once

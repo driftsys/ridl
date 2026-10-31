@@ -25,26 +25,30 @@
 //!   checks, and the accessors `<prefix>_<type>_value_at` and
 //!   `<prefix>_<type>_value`, as for the head of any other declaration.
 //!
-//! Every C name the header defines is claimed once: first the fixed names of
-//! the preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`,
-//! `PREAMBLE_NAMES`) and the include guard of the header, then the
-//! constants of the enums, enum sets and union tags, the head type names, the
-//! guard macro of each head, and the accessor and presence-test functions. A
-//! package where two of them are equal (an enum value equal to the guard of a
-//! head, two heads under one name, two accessors under one name, an accessor
-//! `ridl_podbuf_desc_at` of a package `ridl.podbuf`) is refused, and the
-//! message names both claimants.
+//! The header claims each name it writes once: first the fixed names of the
+//! preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`, `PREAMBLE_NAMES`)
+//! and the include guard of the header, then the names it derives from the
+//! package: the constants of the enums, enum sets and union tags, the head
+//! type names, the guard macro of each head, and the accessor and
+//! presence-test functions. A package where two of them are equal (an enum
+//! value equal to the guard of a head, two heads under one name, two accessors
+//! under one name, an accessor `ridl_podbuf_desc_at` of a package
+//! `ridl.podbuf`) is refused, and the message names both claimants. The names
+//! `<stdint.h>` and `<stddef.h>` define are not claimed.
 //!
 //! The headers of one build are checked against each other too, by
 //! [`check_c_names`], because a C file includes any of them together and
 //! `package veh` with `type CommonSpeed` and `package veh.common` with
 //! `struct Speed` both derive `veh_common_speed_head`. Each claim carries the
 //! identity of the entity it names (`Identity`: the declaring package, a key
-//! for the entity, the role of the name), and a name claimed by two or more
-//! headers for two or more identities is refused once, with every claimant
-//! and its package named. A head that another package declares and this package lays out
-//! inline has the identity the declaring header gives it, so its second
-//! definition is not a clash.
+//! for the entity, the role of the name) and, for a head and its guard, the
+//! text of the guarded definition. Two headers claim one name for one entity
+//! only when the identities are equal and, for a head or a guard, the
+//! definitions are equal; a name claimed for two or more entities is refused
+//! once, with one claimant per entity and its package named. A head that
+//! another package declares and this package lays out inline has the identity
+//! and the text the declaring header gives it, so its second definition is
+//! not a clash.
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -330,11 +334,24 @@ impl Identity {
 }
 
 /// One claim of a C name: what the name stands for in the message of a
-/// refusal, and the identity the build-wide check compares.
+/// refusal, the identity the build-wide check compares, and, for a head and
+/// its guard, the guarded definition the header writes, which the check
+/// compares too.
 #[derive(Debug, Clone)]
 struct Claim {
     what: String,
     identity: Identity,
+    definition: Option<String>,
+}
+
+impl Claim {
+    /// Whether two claims of one name stand for one entity: equal identities
+    /// and, for a head or a guard, equal definitions. An importing lowering
+    /// can give a nested tuple of another package the wire name that package
+    /// gives a different tuple, so the identity alone is not trusted.
+    fn same_entity(&self, other: &Claim) -> bool {
+        self.identity == other.identity && self.definition == other.definition
+    }
 }
 
 /// The names the header claims at file scope, so that two claims of one name
@@ -348,14 +365,32 @@ struct Claims {
 
 impl Claims {
     fn claim(&mut self, name: &str, what: String, identity: Identity) -> Result<(), GenerateError> {
+        self.claim_definition(name, what, identity, None)
+    }
+
+    /// A claim that carries the guarded definition of a head, for the head's
+    /// type name and for its guard macro.
+    fn claim_definition(
+        &mut self,
+        name: &str,
+        what: String,
+        identity: Identity,
+        definition: Option<String>,
+    ) -> Result<(), GenerateError> {
         match self.by_name.get(name) {
             Some(first) => fail(format!(
                 "the C name `{name}` is claimed by {} and by {what}",
                 first.what
             )),
             None => {
-                self.by_name
-                    .insert(name.to_string(), Claim { what, identity });
+                self.by_name.insert(
+                    name.to_string(),
+                    Claim {
+                        what,
+                        identity,
+                        definition,
+                    },
+                );
                 Ok(())
             }
         }
@@ -385,18 +420,21 @@ const PREAMBLE_NAMES: [&str; 12] = [
 /// of `veh.CommonSpeed` and a head of `veh.common.Speed`, both
 /// `veh_common_speed_head`; the accessor `x_y_z_head` of `x.Y.zHead` and the
 /// head of `x.y.Z`; a constant of one package equal to the include guard of
-/// another header) is one error per name, which names every claimant and its
-/// package. A head one package declares and another lays out inline is one
-/// entity, and is not an error. Each package is lowered over `packages`, as
+/// another header) is one error per name, which names one claimant per entity
+/// and its package. A head one package declares and another lays out inline is
+/// one entity, and is not an error, when the two headers define it with one
+/// text (`Claim::same_entity`). Each package is lowered over `packages`, as
 /// `ridl build` lowers it; a package whose own header is refused is skipped
-/// here, because its own generation reports that refusal.
+/// here, and its own generation reports that refusal, on the next run when a
+/// clash made `ridl build` write no header.
 ///
-/// The errors are in name order. Two headers of two separate builds are not
-/// checked against each other.
+/// The errors are in name order, and the claimants of one error in the order
+/// of `packages`. Two headers of two separate builds are not checked against
+/// each other.
 pub fn check_c_names(packages: &[&v2::Package]) -> Result<(), Vec<GenerateError>> {
     // Per name, the claimants of the headers of the build, in build order,
-    // one per identity: the first header that claims a name for an identity
-    // speaks for every header that claims it for the same identity.
+    // one per entity: a later header that claims a name for an entity already
+    // listed adds nothing.
     let mut claimants: BTreeMap<String, Vec<(Claim, String)>> = BTreeMap::new();
     for package in packages {
         let model = codegen::lower(package, packages);
@@ -411,10 +449,7 @@ pub fn check_c_names(packages: &[&v2::Package]) -> Result<(), Vec<GenerateError>
         };
         for (name, claim) in claims.by_name {
             let entry = claimants.entry(name).or_default();
-            if !entry
-                .iter()
-                .any(|(seen, _)| seen.identity == claim.identity)
-            {
+            if !entry.iter().any(|(seen, _)| seen.same_entity(&claim)) {
                 entry.push((claim, package.name.clone()));
             }
         }
@@ -744,9 +779,9 @@ impl<'a> Header<'a> {
     ///   nested in a foreign declaration: (its package, its wire name), the
     ///   key the declaring header uses, or its path when the model carries no
     ///   wire name;
-    /// - a union arm: (the union's package, `<union>.<ordinal>`);
-    /// - a map entry: (the package of the path's first declaration, the
-    ///   qualified path);
+    /// - a union arm or a map entry: (this package, the C type name). Such a
+    ///   head is reached through a descriptor, so no importing header defines
+    ///   it, and the type name is unique in this header;
     /// - the fallbacks of [`Header::type_name`]: (this package, `tuple<N>`)
     ///   and (this package, `head<N>`).
     fn identity(&self, at: usize, role: &str) -> Identity {
@@ -758,20 +793,6 @@ impl<'a> Header<'a> {
                 .and_then(|decl| decl.name.as_ref())
                 .map(|name| name.declared.clone())
                 .unwrap_or_default()
-        };
-        let foreign = |index: u32| {
-            let package = self
-                .model
-                .foreign
-                .get(index as usize)
-                .map(|foreign| foreign.package.clone())
-                .unwrap_or_default();
-            let name = self
-                .foreign_declared(index)
-                .and_then(|decl| decl.name.as_ref())
-                .map(|name| name.declared.clone())
-                .unwrap_or_default();
-            (package, name)
         };
         let (package, key) = match self.heads[at].source.as_ref() {
             Some(Source::Declaration(index)) => (self.package.clone(), declared(*index)),
@@ -786,30 +807,23 @@ impl<'a> Header<'a> {
                     .unwrap_or_else(|| format!("tuple{index}"));
                 (self.package.clone(), wire)
             }
-            Some(Source::MapEntry(entry)) => {
-                if is_foreign_path(&entry.path) {
-                    let package = entry
-                        .path
-                        .first()
-                        .and_then(|first| first.rsplit_once('.'))
-                        .map(|(package, _)| package.to_string())
-                        .unwrap_or_default();
-                    (package, entry.path.join("."))
-                } else {
-                    (
-                        self.package.clone(),
-                        format!("{}.{}", self.package, entry.path.join(".")),
-                    )
-                }
+            Some(Source::MapEntry(_)) | Some(Source::Arm(_)) => {
+                (self.package.clone(), self.type_names[at].clone())
             }
-            Some(Source::Arm(arm)) => {
-                let (package, union) = match arm.foreign {
-                    Some(index) => foreign(index),
-                    None => (self.package.clone(), declared(arm.declaration)),
-                };
-                (package, format!("{union}.{}", arm.arm))
+            Some(Source::Foreign(index)) => {
+                let package = self
+                    .model
+                    .foreign
+                    .get(*index as usize)
+                    .map(|foreign| foreign.package.clone())
+                    .unwrap_or_default();
+                let name = self
+                    .foreign_declared(*index)
+                    .and_then(|decl| decl.name.as_ref())
+                    .map(|name| name.declared.clone())
+                    .unwrap_or_default();
+                (package, name)
             }
-            Some(Source::Foreign(index)) => foreign(*index),
             Some(Source::NestedTuple(nested)) if !nested.wire.is_empty() => {
                 (nested.package.clone(), nested.wire.clone())
             }
@@ -1104,15 +1118,7 @@ impl<'a> Header<'a> {
             return Ok(());
         }
         let name = &self.type_names[at];
-        claims.claim(name, self.owner_text(at), self.identity(at, "head"))?;
-        // The guard is claimed too: a constant of the same name would make
-        // the `#ifndef` drop the head.
         let guard = self.guard(at);
-        claims.claim(
-            &guard,
-            format!("the guard of {}", self.owner_text(at)),
-            self.identity(at, "guard"),
-        )?;
 
         // The members by offset, the pads among them.
         let mut members: Vec<Member> = Vec::new();
@@ -1145,15 +1151,34 @@ impl<'a> Header<'a> {
             }
         }
 
-        let _ = writeln!(out, "#ifndef {guard}");
-        let _ = writeln!(out, "#define {guard}");
-        let _ = writeln!(out, "typedef struct {name} {{");
+        // The guarded definition, which the claims of the type name and of
+        // the guard carry: two headers that define one head with two texts
+        // are refused by the build-wide check.
+        let mut block = String::new();
+        let _ = writeln!(block, "#ifndef {guard}");
+        let _ = writeln!(block, "#define {guard}");
+        let _ = writeln!(block, "typedef struct {name} {{");
         for (index, member) in members.iter().enumerate() {
             let align = if index == 0 { "_Alignas(8) " } else { "" };
-            let _ = writeln!(out, "  {align}{};", member.declaration);
+            let _ = writeln!(block, "  {align}{};", member.declaration);
         }
-        let _ = writeln!(out, "}} {name};");
-        let _ = writeln!(out, "#endif");
+        let _ = writeln!(block, "}} {name};");
+        let _ = writeln!(block, "#endif");
+        claims.claim_definition(
+            name,
+            self.owner_text(at),
+            self.identity(at, "head"),
+            Some(block.clone()),
+        )?;
+        // The guard is claimed too: a constant of the same name would make
+        // the `#ifndef` drop the head.
+        claims.claim_definition(
+            &guard,
+            format!("the guard of {}", self.owner_text(at)),
+            self.identity(at, "guard"),
+            Some(block.clone()),
+        )?;
+        out.push_str(&block);
         let _ = writeln!(
             out,
             "_Static_assert(sizeof({name}) == {}, \"{name} size\");",
