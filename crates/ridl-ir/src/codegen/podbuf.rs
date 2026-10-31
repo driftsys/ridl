@@ -626,7 +626,7 @@ impl Walk<'_> {
                     let (key_at, owner) = match self.arm_type(declaration, *ordinal) {
                         Some((target, declaring)) => (
                             vec![self.root_of(target, declaring)],
-                            self.owner_of(target, declaring).unwrap_or(declaration),
+                            self.owner_of(target, declaring)?.unwrap_or(declaration),
                         ),
                         None => {
                             let mut key_at = key.to_vec();
@@ -694,23 +694,38 @@ impl<'a> Walk<'a> {
     }
 
     /// The owner a head copied from `decl` of `declaring` names for its arms:
-    /// the union itself, when `decl` is one. `None` for any other declaration,
-    /// and for a foreign union the lowering did not reach.
-    fn owner_of(&self, decl: &v2::Decl, declaring: &v2::Package) -> Option<Owner> {
+    /// the union itself, when `decl` is one; `None` for any other declaration.
+    /// A foreign union the lowering did not reach is an error: the lowering
+    /// adds every declaration it resolves to the foreign list, so the walk
+    /// and the lowering disagree.
+    fn owner_of(&self, decl: &v2::Decl, declaring: &v2::Package) -> Result<Option<Owner>, String> {
         if !matches!(decl.kind.as_ref(), Some(v2::decl::Kind::UnionDef(_))) {
-            return None;
+            return Ok(None);
         }
         if declaring.name == self.scope.package.name {
             let index = declaring
                 .decls
                 .iter()
-                .position(|candidate| candidate.name == decl.name)?;
-            Some(Owner::Declaration(index as u32))
+                .position(|candidate| candidate.name == decl.name)
+                .ok_or_else(|| {
+                    format!(
+                        "internal: the union {} is not a declaration of {}",
+                        decl.name, declaring.name
+                    )
+                })?;
+            Ok(Some(Owner::Declaration(index as u32)))
         } else {
             let index = self
                 .foreign_at
-                .get(&(declaring.name.clone(), decl.name.clone()))?;
-            Some(Owner::Foreign(*index))
+                .get(&(declaring.name.clone(), decl.name.clone()))
+                .ok_or_else(|| {
+                    format!(
+                        "internal: the union {}.{} is an arm's type but not in the foreign \
+                         list (the lowering and the podbuf walk disagree)",
+                        declaring.name, decl.name
+                    )
+                })?;
+            Ok(Some(Owner::Foreign(*index)))
         }
     }
 }
