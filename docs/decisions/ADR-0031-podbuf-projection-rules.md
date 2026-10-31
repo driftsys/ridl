@@ -824,10 +824,10 @@ stated in the decision above; this list is the index.
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                              |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                             |
-| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                               |
 | [ADR-0014](ADR-0014-ir-encodings.md)                                                     | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                        |
 | [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                   | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                     |
+| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
 
 ## Trace

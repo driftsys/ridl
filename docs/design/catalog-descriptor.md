@@ -271,12 +271,10 @@ differing only in the list have the same hash. The rule is
   interface of the unit reaches (`reachable_decls`), on either side. A breaking
   change in a declaration the unit does not reach leaves the unit's chain
   intact. `ridl diff`'s own report and exit code are unchanged. `ridl baseline`
-  and `ridl build` judge the report for the root manifest's encodings, the union
-  of `encodings` over every `[backend.<name>]` table of the root `ridl.toml`
-  (`root_manifest_encodings` in `crates/ridl/src/main.rs`), so under `podbuf` a
-  podbuf break ends the chain as any other break does, and the two commands give
-  one verdict. A snapshot does not record encodings, so a baseline published
-  before `podbuf` was listed is judged by the podbuf rules once it is.
+  and `ridl build` judge the report for the root manifest's encodings
+  (`root_manifest_encodings` in `crates/ridl/src/main.rs`), as
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decision 13
+  states.
 - **Publication order.** `publish_baseline` removes every published `*.catalogs`
   file, moves the fresh snapshots in, moves the fresh `*.catalogs` files in, and
   then removes the stale snapshots. The histories are written to the staging
