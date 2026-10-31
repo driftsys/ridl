@@ -392,6 +392,9 @@ fn member_row(
             name: #name,
             timing: #timing,
             payloads: &[ #(#payloads),* ],
+            // The backend does not emit stream entries yet, so every row's
+            // list is empty (driftsys/ridl#1116).
+            streams: &[],
         }
     })
 }

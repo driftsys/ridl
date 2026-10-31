@@ -282,6 +282,9 @@ pub struct Member {
     /// reply), one for every other kind. A `fixed` has its one entry here
     /// although its row of [`Sizes::RESERVATIONS`] is `0`.
     pub payloads: &'static [PayloadInfo],
+    /// One entry per stream of the member, in ascending [`StreamNo`]. A
+    /// member with no stream has an empty slice.
+    pub streams: &'static [StreamInfo],
 }
 
 impl Member {
@@ -384,6 +387,41 @@ impl Timing {
 pub struct PayloadInfo {
     /// The payload type's name.
     pub type_name: &'static str,
+}
+
+/// The number of a stream on its call (ridl §12).
+///
+/// A stream is numbered on the call, so a call may declare several stream
+/// parameters. `0` names the reply stream
+/// ([`REPLY_STREAM`](crate::port::REPLY_STREAM)); `k` from `1` names the
+/// `k`-th stream parameter, counting only the stream parameters, in
+/// declaration order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StreamNo(pub u8);
+
+/// The form of a stream (ridl §12).
+///
+/// A member with no stream has no form: its [`Member::streams`] is empty.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StreamForm {
+    /// A stream of elements of a named type: `<T>`.
+    Elements,
+    /// A stream of bytes: `<bytes>`.
+    Bytes,
+    /// A stream of text: `<string>`.
+    Text,
+}
+
+/// One stream of a member.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StreamInfo {
+    /// The stream's number on the call.
+    pub no: StreamNo,
+    /// The stream's form.
+    pub form: StreamForm,
+    /// The canonical name of the element type under [`StreamForm::Elements`];
+    /// `""` under [`StreamForm::Bytes`] and [`StreamForm::Text`].
+    pub element: &'static str,
 }
 
 #[cfg(test)]

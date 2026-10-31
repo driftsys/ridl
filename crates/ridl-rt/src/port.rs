@@ -26,6 +26,7 @@
 
 use core::task::Waker;
 
+pub use crate::contract::StreamNo;
 use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
 use crate::encoding::Encoding;
 use crate::error::{CallError, Contract};
@@ -287,6 +288,10 @@ pub trait Caller: Attached {
 /// Identifies one sent call to its caller.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Correlation(pub u64);
+
+/// The number of a call's reply stream (ridl §12). A stream parameter is
+/// numbered from `1`; see [`StreamNo`].
+pub const REPLY_STREAM: StreamNo = StreamNo(0);
 
 /// Calls, provider side.
 ///

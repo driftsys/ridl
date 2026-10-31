@@ -11048,6 +11048,7 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
                     type_name: "FanLevel",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -11063,6 +11064,7 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
                     type_name: "veh.common.Temperature",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(5),
@@ -11078,6 +11080,7 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
                     type_name: "veh.common.Ratio",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -11728,6 +11731,7 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
                     type_name: "FanLevel",
                 },
             ],
+            streams: &[],
         },
     ];
 }

@@ -5,9 +5,11 @@
 
 use ridl_rt::contract::{
     CatalogHash, CatalogRef, Command, Event, Fixed, Interaction, Interface, InterfaceNo, Kind,
-    Member, Ordinal, PayloadInfo, Query, Signal, Timing, TimingMode,
+    Member, Ordinal, PayloadInfo, Query, Signal, StreamForm, StreamInfo, StreamNo, Timing,
+    TimingMode,
 };
 use ridl_rt::error::Contract;
+use ridl_rt::port::REPLY_STREAM;
 use ridl_rt::sample::Duration;
 
 const VEHICLE: CatalogRef = CatalogRef {
@@ -34,6 +36,7 @@ impl Interface for Drivetrain {
                 max: Some(Duration(500_000)),
             }),
             payloads: &[PayloadInfo { type_name: "Speed" }],
+            streams: &[],
         },
         Member {
             ordinal: Ordinal(2),
@@ -45,6 +48,7 @@ impl Interface for Drivetrain {
                 max: Some(Duration(500_000)),
             }),
             payloads: &[PayloadInfo { type_name: "Gear" }],
+            streams: &[],
         },
         Member {
             ordinal: Ordinal(3),
@@ -58,6 +62,7 @@ impl Interface for Drivetrain {
             payloads: &[PayloadInfo {
                 type_name: "SetGearArgs",
             }],
+            streams: &[],
         },
         Member {
             ordinal: Ordinal(4),
@@ -70,6 +75,7 @@ impl Interface for Drivetrain {
                 },
                 PayloadInfo { type_name: "Speed" },
             ],
+            streams: &[],
         },
         Member {
             ordinal: Ordinal(5),
@@ -77,6 +83,7 @@ impl Interface for Drivetrain {
             name: "wheelCount",
             timing: None,
             payloads: &[PayloadInfo { type_name: "u8" }],
+            streams: &[],
         },
     ];
 }
@@ -226,4 +233,38 @@ fn contract_clauses_run_through_a_generic_bound() {
         Err(Contract::PreconditionFailed)
     );
     assert_eq!(SpeedSignal::init(), 0);
+}
+
+/// A member's `streams` lists one entry per stream, in ascending number, and
+/// the reply stream is number 0 (ridl §12; `REPLY_STREAM`).
+#[test]
+fn a_member_lists_its_streams_in_ascending_number() {
+    const M: Member = Member {
+        ordinal: Ordinal(3),
+        kind: Kind::Query,
+        name: "rebalance",
+        timing: None,
+        payloads: &[
+            PayloadInfo {
+                type_name: "RebalanceParams",
+            },
+            PayloadInfo {
+                type_name: "<ClimateReport>",
+            },
+        ],
+        streams: &[
+            StreamInfo {
+                no: StreamNo(0),
+                form: StreamForm::Elements,
+                element: "ClimateReport",
+            },
+            StreamInfo {
+                no: StreamNo(1),
+                form: StreamForm::Elements,
+                element: "FilterState",
+            },
+        ],
+    };
+    assert_eq!(M.streams[0].no, REPLY_STREAM);
+    assert!(M.streams.windows(2).all(|w| w[0].no < w[1].no));
 }
