@@ -1029,3 +1029,86 @@ where
         Err(PushError::Contract(unknown))
     );
 }
+
+/// A claim offered through `ReadError::ShortClaim` and not yet taken has no
+/// streams: a pull, a push and an end on it are unknown interactions, and a
+/// `ClaimStream` registration on it is woken at once. Once the provider takes
+/// the claim with a large enough buffer, under the same id, it reads the
+/// parameter stream from its first chunk: the refused operations consumed
+/// nothing.
+pub fn a_claim_only_offered_has_no_streams_until_it_is_taken<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let c = rt.query(IFACE, ORD, &[1, 2, 3], None).expect("query sent");
+    assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+    let mut short = [0u8; 1];
+    let Err(ReadError::ShortClaim { claim, .. }) = rt.next_claim(&mut short) else {
+        panic!("a buffer shorter than the arguments reports ShortClaim");
+    };
+    let unknown = Contract::UnknownInteraction;
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_1, &mut out),
+        Err(ReadError::Contract(unknown)),
+        "an offered claim has no stream to pull"
+    );
+    assert_eq!(
+        rt.push_claim(claim, REPLY_STREAM, &[7]),
+        Err(PushError::Contract(unknown)),
+        "an offered claim has no stream to push to"
+    );
+    assert_eq!(
+        rt.end_claim(claim, REPLY_STREAM),
+        Err(PushError::Contract(unknown)),
+        "an offered claim has no stream to end"
+    );
+    let (count, waker) = task();
+    rt.wake_on(Interest::ClaimStream(claim, PARAM_1), &waker);
+    assert!(
+        wakes(&count) > 0,
+        "a registration on a stream of an offered claim is woken at once"
+    );
+    let taken = claim_next(&mut rt);
+    assert_eq!(taken, claim, "the call is presented under the same id");
+    assert_eq!(
+        rt.pull_claim(taken, PARAM_1, &mut out),
+        Ok(Pull::Chunk(1)),
+        "the provider reads the stream from its first chunk once it took the claim"
+    );
+    assert_eq!(&out[..1], &[1]);
+}
+
+/// The settlement of a query drops the unread chunks of its stream
+/// parameters: the provider's pull after the settlement answers `End` for a
+/// stream the caller ended, and `Failed(Interrupted)` for one it did not,
+/// never the chunk.
+pub fn a_querys_settlement_drops_the_unread_chunks_of_its_parameter_streams<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let interrupted = CallError::Transport(Transport::Interrupted);
+    for ended in [false, true] {
+        let (mut rt, c, claim) = claimed_query::<F>();
+        assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+        if ended {
+            rt.end(c, PARAM_1).expect("end");
+        }
+        rt.settle(claim, Ok(&[])).expect("settle");
+        let expected = if ended {
+            Pull::End
+        } else {
+            Pull::Failed(interrupted)
+        };
+        let mut out = [0u8; 8];
+        assert_eq!(
+            rt.pull_claim(claim, PARAM_1, &mut out),
+            Ok(expected),
+            "ended {ended}: the unread chunk was dropped at the settlement"
+        );
+    }
+}

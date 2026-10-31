@@ -373,6 +373,8 @@ macro_rules! suite {
             streams::a_providers_abort_of_an_ended_parameter_stream_lets_the_forget_free_the_slot,
             streams::a_querys_settlement_and_a_commands_refusal_release_the_parameter_streams,
             streams::a_pull_by_the_producer_and_a_push_by_the_receiver_are_unknown,
+            streams::a_claim_only_offered_has_no_streams_until_it_is_taken,
+            streams::a_querys_settlement_drops_the_unread_chunks_of_its_parameter_streams,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
