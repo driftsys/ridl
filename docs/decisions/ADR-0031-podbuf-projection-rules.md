@@ -72,6 +72,13 @@ open item 3 is closed. [ADR-0014](ADR-0014-ir-encodings.md) decision 15 and
 `docs/design/catalog-descriptor.md` say the per-unit verdict is judged for those
 encodings.
 
+**Amended 2026-10-31 — decision 7, the C reader of a boxed root, from
+driftsys/ridl#1096.** The C header holds a one-field head and its two accessors
+for each named scalar, enum and enum set that can be laid out, and claims the
+guard macro of every head with its other names; decision 7 carries the dated
+note, decision 14's "As built" note says the C header has a head the Rust codec
+does not, and open item 4 is closed.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a
@@ -391,6 +398,21 @@ a field is appended.
    from two different tuples is refused, whatever their layouts;
    [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) has the detail.
 
+   _Amended 2026-10-31, from driftsys/ridl#1096._ In C, a boxed root (a named
+   scalar, an enum or an enum set, the entries of `PodbufProjection.boxes`) has
+   the head `<pkg>_<type>_head`, with the one member `value` at offset 0, the
+   guard `<PKG>_<TYPE>_HEAD_DEFINED`, and the accessors `<pkg>_<type>_value`,
+   which reads a whole buffer, and `<pkg>_<type>_value_at`, which reads a head
+   of a given size: the C names of the Rust view's `value` accessor. The
+   constants of the enums, enum sets and union tags, the head type names, the
+   guard macro of each head, and the accessor and presence-test functions are
+   claimed once, and a package where two of them are equal is refused with a
+   message that names both claimants. A box whose head has no byte (`bytes [0]`)
+   has no head and no accessor, as any head with no field.
+   `ridl build --emit podbuf` refuses a package with a named scalar, enum or
+   enum set that has no podbuf size bound, or whose box head name equals the
+   name of another head, as the Rust codec refuses it.
+
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:
    1. The buffer start is 8-aligned and the length is at least 8. In the
@@ -697,9 +719,11 @@ a field is appended.
     law again (ADR-0020 decisions 8 and 9). **As built (builder's call):** the
     model carries `Declaration.podbuf`, the size state of a declaration as a
     payload root, and `PodbufProjection.boxes`, the one-field head of each named
-    scalar, enum or enum set that is a payload root. Both are required because
+    scalar, enum or enum set that can be laid out. Both are required because
     interfaces use such types as payloads, and ADR-0020 decisions 8 and 9 forbid
-    a plugin from computing a layout or a bound itself. The wire dump of the
+    a plugin from computing a layout or a bound itself. The C header gives each
+    box a one-field head struct, which the Rust codec does not: the Rust codec
+    reads a box through its view alone (decision 7). The wire dump of the
     stability policy holds the offset and size of every field of the head of
     every struct and union of the corpus.
 
@@ -836,9 +860,13 @@ stated in the decision above; this list is the index.
    judge the catalog history for the root manifest's encodings, and
    `ridl check --baseline` stays the ordinal desk check, so a podbuf break is
    caught by `ridl diff --encoding podbuf` in CI.
-4. **A C reader for a boxed root.** The header has no reader for a payload root
-   that is a named scalar, an enum or an enum set (the box). It is listed in the
-   known gaps of `docs/design/podbuf-codec.md`, as driftsys/ridl#1096.
+4. **A C reader for a boxed root.** Closed 2026-10-31 by driftsys/ridl#1096: the
+   C header holds the head `<pkg>_<type>_head` and the accessors
+   `<pkg>_<type>_value` and `<pkg>_<type>_value_at` for each named scalar, enum
+   and enum set that can be laid out (decision 7). The text below is the
+   question as it was asked. The header has no reader for a payload root that is
+   a named scalar, an enum or an enum set (the box). It was listed in the known
+   gaps of `docs/design/podbuf-codec.md`, as driftsys/ridl#1096.
 5. **Quantized floats.** The typl reference defines a quantized wire form, a
    float with a range and a step sent as a scaled integer (typl §4.3); the spike
    showed it removes a large software floating-point cost on the R52. It is a
@@ -846,19 +874,20 @@ stated in the decision above; this list is the index.
 
 ## Documents amended
 
-| Document                                                                                 | Change                                                                                                                               |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                              |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                             |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                               |
-| [ADR-0014](ADR-0014-ir-encodings.md)                                                     | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                        |
-| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                   | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                     |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name     |
-| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                         | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                          |
-| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                 |
-| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
-| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
+| Document                                                                                 | Change                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                               |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                              |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                                |
+| [ADR-0014](ADR-0014-ir-encodings.md)                                                     | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                         |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                   | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                      |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name      |
+| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                         | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                           |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
+| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
+| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
 
 ## Trace
 
