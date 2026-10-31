@@ -3499,7 +3499,9 @@ mod podbuf {
 
     /// A stream parameter is not part of the request, so a call with one
     /// named parameter beside it sends that named type as it is: the struct
-    /// is the root, not a member of an induced head.
+    /// is the root, not a member of an induced head. A walk that counted the
+    /// stream as a parameter would induce a head over both and find the
+    /// struct inline in it.
     #[test]
     fn a_named_parameter_beside_a_stream_parameter_is_not_an_inline_use() {
         assert_no_interaction_use(|| {
@@ -3508,20 +3510,67 @@ mod podbuf {
                 1,
                 vec![
                     param("info", named("SensorReading")),
-                    param(
-                        "data",
-                        v2::FieldType {
-                            optional: false,
-                            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
-                                element: Some(v2::stream_type::Element::Primitive(
-                                    v2::PrimitiveType::Bytes as i32,
-                                )),
-                            })),
-                        },
-                    ),
+                    byte_stream_param("data"),
                 ],
             )]
         });
+    }
+
+    /// The named request root beside a stream parameter is a declaration,
+    /// and a declaration root is not entered: a struct that holds
+    /// `SensorReading` inline is a use through its own field, and the call
+    /// that sends it adds none. The named parameter is not the appended
+    /// struct, so the request is read as a root of its own.
+    #[test]
+    fn a_named_parameter_beside_a_stream_parameter_is_a_root_that_is_not_entered() {
+        let holder_package = |reading: v2::Decl| {
+            let mut package = interface_package(
+                reading,
+                vec![command(
+                    "put",
+                    1,
+                    vec![
+                        param("info", named("SensorBounds")),
+                        byte_stream_param("data"),
+                    ],
+                )],
+            );
+            package.decls.push(struct_decl(
+                "SensorBounds",
+                vec![field("range", 1, named("SensorReading"))],
+            ));
+            package
+        };
+        let report = diff(
+            &holder_package(reading_v1()),
+            &holder_package(reading_v2()),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .unwrap_or_else(|| panic!("the use is found: {:?}", report.changes));
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.common/SensorBounds/range")
+        );
+    }
+
+    /// A `<bytes>` stream parameter.
+    fn byte_stream_param(name: &str) -> v2::Param {
+        param(
+            name,
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                    element: Some(v2::stream_type::Element::Primitive(
+                        v2::PrimitiveType::Bytes as i32,
+                    )),
+                })),
+            },
+        )
     }
 
     /// A stream parameter beside two named parameters leaves the two in the
