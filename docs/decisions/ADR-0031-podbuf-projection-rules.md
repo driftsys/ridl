@@ -403,11 +403,14 @@ a field is appended.
    the head `<pkg>_<type>_head`, with the one member `value` at offset 0, the
    guard `<PKG>_<TYPE>_HEAD_DEFINED`, and the accessors `<pkg>_<type>_value`,
    which reads a whole buffer, and `<pkg>_<type>_value_at`, which reads a head
-   of a given size: the C names of the Rust view's `value` accessor. Every C
-   name the header writes at file scope, the guard macro of each head included,
-   is claimed once, and a package where two of them are equal is refused with a
-   message that names both claimants. A box whose head has no byte (`bytes [0]`)
-   has no head and no accessor, as any head with no field.
+   of a given size: the C names of the Rust view's `value` accessor. The
+   constants, the head type names, the guard macro of each head and the accessor
+   functions are claimed once, and a package where two of them are equal is
+   refused with a message that names both claimants. A box whose head has no
+   byte (`bytes [0]`) has no head and no accessor, as any head with no field.
+   `ridl build --emit podbuf` refuses a package with a named scalar, enum or
+   enum set that has no podbuf size bound, or whose box head name equals the
+   name of another head, as the Rust codec refuses it.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:
@@ -715,7 +718,7 @@ a field is appended.
     law again (ADR-0020 decisions 8 and 9). **As built (builder's call):** the
     model carries `Declaration.podbuf`, the size state of a declaration as a
     payload root, and `PodbufProjection.boxes`, the one-field head of each named
-    scalar, enum or enum set that is a payload root. Both are required because
+    scalar, enum or enum set that can be laid out. Both are required because
     interfaces use such types as payloads, and ADR-0020 decisions 8 and 9 forbid
     a plugin from computing a layout or a bound itself. The C header gives each
     box a one-field head struct, which the Rust codec does not: the Rust codec

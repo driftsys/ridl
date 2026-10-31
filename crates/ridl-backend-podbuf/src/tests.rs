@@ -460,6 +460,7 @@ fn a_constant_equal_to_a_head_guard_is_refused() {
     );
     assert!(
         err.message.contains("`P_G_GEAR_BOX_HEAD_DEFINED`")
+            && err.message.contains("the enum value `BOX_HEAD_DEFINED`")
             && err.message.contains("the guard of `p_g_gear_box_head`"),
         "{}",
         err.message
@@ -468,7 +469,7 @@ fn a_constant_equal_to_a_head_guard_is_refused() {
 
 /// The accessor of a box can collide with the accessor of a struct: `Gear`'s
 /// `p_g_gear_value_at` and the field `at` of `GearValue`, which the existing
-/// claims refuse.
+/// claims refuse, naming both claimants.
 #[test]
 fn a_box_accessor_equal_to_a_struct_accessor_is_refused() {
     let err = generate_fixture_err(
@@ -476,7 +477,13 @@ fn a_box_accessor_equal_to_a_struct_accessor_is_refused() {
          struct GearValue {\n  at : integer [0..255]\n}\n",
     );
     assert!(
-        err.message.contains("`p_g_gear_value_at`"),
+        err.message.contains("`p_g_gear_value_at`")
+            && err
+                .message
+                .contains("the accessor of `at` of the head of `GearValue`")
+            && err
+                .message
+                .contains("the accessor of `value` of the head of `Gear`"),
         "{}",
         err.message
     );
@@ -504,9 +511,131 @@ fn a_box_head_equal_to_a_tuple_head_is_refused_naming_both() {
 fn a_box_with_no_size_bound_is_refused_naming_it() {
     let err = generate_fixture_err("package p.huge\ntype Huge : string [0..1100000000]\n");
     assert!(
-        err.message
-            .contains("`p.huge.Huge` has no podbuf size bound"),
+        err.message.contains(
+            "`p.huge.Huge` has no podbuf size bound: a largest buffer above 4294967295 bytes"
+        ),
         "{}",
         err.message
     );
+}
+
+/// The owner texts of `Header::owner_text` for the heads of a union arm, a
+/// map entry, and a tuple whose model carries no declaration path.
+#[test]
+fn the_owner_text_names_an_arm_a_map_entry_and_a_tuple_with_no_path() {
+    let package = compile(
+        "package p.o\n\
+         struct W {\n  r : integer [0..10]\n}\n\
+         struct V {\n  s : integer [0..10]\n}\n\
+         union U {\n  a : W\n  b : V\n}\n\
+         struct M {\n  byKey : [integer [0..10] : integer [0..10]; 0..4]\n}\n\
+         struct T {\n  pair : (x: integer [0..10], y: integer [0..10])\n}\n",
+    );
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    for tuple in &mut model.tuples {
+        tuple.origin = None;
+    }
+    let projection = model.podbuf.clone().expect("a projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let header = crate::Header::new(&model, &projection);
+    let texts: Vec<String> = (0..header.heads.len())
+        .map(|at| header.owner_text(at))
+        .collect();
+    for expected in [
+        "the head of the arm `a` of `U`",
+        "the entry head of the map at `M.byKey`",
+        "the head of the tuple `TPair`",
+    ] {
+        assert!(
+            texts.iter().any(|text| text == expected),
+            "{expected}: {texts:?}"
+        );
+    }
+    assert!(!texts.iter().any(|text| text == "a head"), "{texts:?}");
+}
+
+/// The owner texts of the heads an importing header defines again: a foreign
+/// declaration and a tuple nested in it.
+#[test]
+fn the_owner_text_names_a_foreign_head_and_a_nested_tuple() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, &path).expect("the workspace loads");
+    let mut packages: Vec<v2::Package> = output
+        .checked
+        .iter()
+        .map(|checked| checked.ir.clone())
+        .collect();
+    packages.push(output.std_ir.clone());
+    let others: Vec<&v2::Package> = packages.iter().collect();
+    let vehicle = packages
+        .iter()
+        .find(|package| package.name == "pod.vehicle")
+        .expect("pod.vehicle");
+    let model = ridl_ir::codegen::lower(vehicle, &others);
+    let projection = model.podbuf.clone().expect("a projection");
+    let header = crate::Header::new(&model, &projection);
+    let texts: Vec<String> = (0..header.heads.len())
+        .map(|at| header.owner_text(at))
+        .collect();
+    for expected in [
+        "the head of `pod.parts.Wheel`",
+        "the head of the tuple at `pod.parts.Hub.size`",
+    ] {
+        assert!(
+            texts.iter().any(|text| text == expected),
+            "{expected}: {texts:?}"
+        );
+    }
+    assert!(!texts.iter().any(|text| text == "a head"), "{texts:?}");
+}
+
+/// `Header::new` skips a box whose head is unset and a box whose declaration
+/// index is out of range, as the Rust codec skips them.
+#[test]
+fn a_box_with_no_head_or_an_unknown_declaration_is_skipped() {
+    use ridl_ir::codegen::v1;
+
+    let package = compile("package p.s\ntype Count : integer [0..1000]\n");
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let projection = model.podbuf.clone().expect("a projection");
+    assert_eq!(projection.boxes.len(), 1, "{projection:?}");
+    let base = crate::Header::new(&model, &projection).heads.len();
+    assert_eq!(base, projection.heads.len() + 1);
+
+    let mut no_head = projection.clone();
+    no_head.boxes[0].head = None;
+    assert_eq!(
+        crate::Header::new(&model, &no_head).heads.len(),
+        projection.heads.len()
+    );
+    let h = crate::generate_model(
+        &package,
+        &[],
+        &v1::Model {
+            podbuf: Some(no_head),
+            ..model.clone()
+        },
+    )
+    .expect("generate")
+    .header_source;
+    assert!(!h.contains("p_s_count"), "{h}");
+
+    let mut unknown = projection.clone();
+    unknown.boxes[0].declaration = 999;
+    assert_eq!(
+        crate::Header::new(&model, &unknown).heads.len(),
+        projection.heads.len()
+    );
+    let h = crate::generate_model(
+        &package,
+        &[],
+        &v1::Model {
+            podbuf: Some(unknown),
+            ..model
+        },
+    )
+    .expect("generate")
+    .header_source;
+    assert!(!h.contains("p_s_count"), "{h}");
 }

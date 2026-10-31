@@ -227,10 +227,11 @@ no byte (`bytes [0]`) has no head and no accessor. A box head is defined only in
 the header of the package that declares the type: a consumer of an interface
 that sends a foreign boxed root includes that package's header.
 
-Every C name the header writes at file scope is claimed once: the constants, the
-accessor functions, the head names and the guard macro of each head. A package
-where two are equal is refused, with a message that names both claimants: a
-constant equal to the guard of a head (an enum `Gear` with a value
+The names the header derives from the package are claimed once: the constants,
+the accessor functions, the head names and the guard macro of each head (the
+fixed `ridl_podbuf_*` names and the include guard of the header are not). A
+package where two are equal is refused, with a message that names both
+claimants: a constant equal to the guard of a head (an enum `Gear` with a value
 `BOX_HEAD_DEFINED` next to a struct `GearBox`), which would make the `#ifndef`
 drop the head, or a box head whose name equals the name of a tuple head (a
 scalar `HubSize` next to the tuple at `Hub.size`), which the Rust backend

@@ -121,8 +121,9 @@ fn the_static_asserts_hold_on_i686_aarch64_and_armv8r() {
     }
 }
 
-/// A payload whose root is an enum, an integer scalar or a string scalar is
-/// read through `<pkg>_<type>_value`, and `_value_at` over a head smaller than
+/// A payload whose root is an enum, an integer scalar, a string scalar, a
+/// boolean scalar, a 64-bit float scalar, an enum set or a fixed-size bytes
+/// scalar is read through `<pkg>_<type>_value`, and `_value_at` over a head smaller than
 /// the field reads 0 (or `NULL`).
 #[test]
 fn the_box_accessors_read_a_boxed_root() {
@@ -149,8 +150,29 @@ static const uint8_t label[] = {
   16, 0, 0, 0, 5, 0, 0, 0,
   'h', 'e', 'l', 'l', 'o', 0
 };
+/* Flag: true. */
+static const uint8_t flag[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  1, 0, 0, 0, 0, 0, 0, 0
+};
+/* Level: 2.5 as a little-endian double (0x4004000000000000). */
+static const uint8_t level[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0x04, 0x40
+};
+/* Gears: PARK and DRIVE, bits 0 and 3. */
+static const uint8_t gears[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  0x09, 0, 0, 0, 0, 0, 0, 0
+};
+/* Mac: six bytes in the head. */
+static const uint8_t mac[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  1, 2, 3, 4, 5, 6, 0, 0
+};
 
 int main(void) {
+  const uint8_t *bytes;
   uint32_t len = 99;
   const char *text;
   if (pod_boxes_gear_value(gear) != POD_BOXES_GEAR_DRIVE) return 1;
@@ -163,6 +185,13 @@ int main(void) {
   len = 99;
   text = pod_boxes_label_value_at(label, label + RIDL_PODBUF_PREAMBLE_SIZE, 4, &len);
   if (len != 0 || text != NULL) return 5;
+  if (pod_boxes_flag_value(flag) != 1) return 6;
+  if (pod_boxes_level_value(level) != 2.5) return 7;
+  if (pod_boxes_gears_value(gears) != (POD_BOXES_GEARS_PARK | POD_BOXES_GEARS_DRIVE)) return 8;
+  bytes = pod_boxes_mac_value(mac);
+  if (bytes == NULL || bytes[0] != 1 || bytes[5] != 6) return 9;
+  /* A head of 4 bytes holds no whole 6-byte array. */
+  if (pod_boxes_mac_value_at(mac + RIDL_PODBUF_PREAMBLE_SIZE, 4) != NULL) return 10;
   return 0;
 }
 "#;

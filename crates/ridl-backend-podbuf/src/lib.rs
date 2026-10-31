@@ -25,10 +25,13 @@
 //!   checks, and the accessors `<prefix>_<type>_value_at` and
 //!   `<prefix>_<type>_value`, as for the head of any other declaration.
 //!
-//! Every C name the header writes at file scope, the guard macro of each head
-//! included, is claimed once: a package where two of them are equal (an enum
-//! value equal to the guard of a head, two heads under one name) is refused,
-//! and the message names both claimants.
+//! The names the header derives from the package are claimed once: the
+//! constants of the enums, enum sets and union tags, the head type names, the
+//! guard macro of each head, and the accessor and presence-test functions. A
+//! package where two of them are equal (an enum value equal to the guard of a
+//! head, two heads under one name, two accessors under one name) is refused,
+//! and the message names both claimants. The fixed `ridl_podbuf_*` names of
+//! the preamble and the include guard of the header are not claimed.
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -320,8 +323,8 @@ struct Header<'a> {
     /// that a box head is named, emitted and read as the head of a
     /// declaration.
     heads: Vec<v1::PodbufHead>,
-    /// The index of the first box head in `heads`.
-    first_box: usize,
+    /// Whether each head is the head of a box.
+    boxed: Vec<bool>,
     /// `veh_cluster`.
     prefix: String,
     /// The C type name of each head.
@@ -339,7 +342,7 @@ impl<'a> Header<'a> {
             .map(|name| package_prefix(&name.dotted))
             .unwrap_or_default();
         let mut heads = projection.heads.clone();
-        let first_box = heads.len();
+        let mut is_box = vec![false; heads.len()];
         // A box whose declaration is out of range or whose head is unset is
         // skipped, as the Rust codec skips it.
         for boxed in &projection.boxes {
@@ -353,12 +356,13 @@ impl<'a> Header<'a> {
                 source: Some(v1::podbuf_head::Source::Declaration(boxed.declaration)),
                 ..head.clone()
             });
+            is_box.push(true);
         }
         let positional = heads.iter().map(spelled_tuple_names_clash).collect();
         let mut header = Self {
             model,
             heads,
-            first_box,
+            boxed: is_box,
             prefix,
             type_names: Vec::new(),
             positional,
@@ -498,8 +502,10 @@ impl<'a> Header<'a> {
     }
 
     /// What head `at` is, for the message of a refused name claim: the head
-    /// of a declaration or a box, the head of a tuple by its path, or, for
-    /// the other heads, `a head`.
+    /// of a declaration, a box or a foreign declaration, the head of a tuple
+    /// by its path (by its wire name when the model gives no path), the head
+    /// of a union arm, or the entry head of a map. `a head` when the model
+    /// does not name the owner.
     fn owner_text(&self, at: usize) -> String {
         use v1::podbuf_head::Source;
         let declared = |index: u32| {
@@ -528,9 +534,56 @@ impl<'a> Header<'a> {
                         .map(|name| format!("the head of the tuple `{}`", name.wire)),
                 }
             }
-            _ => None,
+            Some(Source::MapEntry(entry)) => Some(format!(
+                "the entry head of the map at `{}`",
+                entry.path.join(".")
+            )),
+            Some(Source::Arm(arm)) => {
+                let union = match arm.foreign {
+                    Some(index) => self.foreign_declared(index),
+                    None => self.model.declarations.get(arm.declaration as usize),
+                };
+                let union_name = match arm.foreign {
+                    Some(index) => self.foreign_qualified(index),
+                    None => declared(arm.declaration),
+                };
+                let arms = match union.and_then(|decl| decl.kind.as_ref()) {
+                    Some(v1::declaration::Kind::Union(union)) => union.arms.as_slice(),
+                    _ => &[],
+                };
+                let arm_name = arms
+                    .iter()
+                    .find(|candidate| candidate.ordinal == arm.arm)
+                    .and_then(|candidate| candidate.name.as_ref())
+                    .map(|name| name.declared.clone())
+                    .unwrap_or_else(|| format!("arm{}", arm.arm));
+                union_name.map(|name| format!("the head of the arm `{arm_name}` of `{name}`"))
+            }
+            Some(Source::Foreign(index)) => self
+                .foreign_qualified(*index)
+                .map(|name| format!("the head of `{name}`")),
+            Some(Source::NestedTuple(nested)) => Some(format!(
+                "the head of the tuple at `{}`",
+                nested.path.join(".")
+            )),
+            None => None,
         };
         text.unwrap_or_else(|| "a head".to_string())
+    }
+
+    /// The declaration of `Model.foreign[index]`.
+    fn foreign_declared(&self, index: u32) -> Option<&v1::Declaration> {
+        self.model
+            .foreign
+            .get(index as usize)
+            .and_then(|foreign| foreign.declaration.as_ref())
+    }
+
+    /// `pkg.Decl` for `Model.foreign[index]`.
+    fn foreign_qualified(&self, index: u32) -> Option<String> {
+        let foreign = self.model.foreign.get(index as usize)?;
+        let name = foreign.declaration.as_ref()?.name.as_ref()?;
+        Some(format!("{}.{}", foreign.package, name.declared))
     }
 
     /// The guard macro of head `at`: `<PKG>_<TYPE>_HEAD_DEFINED`.
@@ -608,7 +661,7 @@ impl<'a> Header<'a> {
             Some(Kind::Flags(index)) => format!("_flags{index}"),
             Some(Kind::Tag(_)) => "tag".to_string(),
             // The one field of a box is the value itself.
-            Some(Kind::Arm(_)) if at >= self.first_box => "value".to_string(),
+            Some(Kind::Arm(_)) if self.boxed[at] => "value".to_string(),
             Some(Kind::Arm(_)) => match head.source {
                 Some(Owner::Arm(_)) => "value".to_string(),
                 _ => "arm".to_string(),
@@ -877,6 +930,7 @@ impl<'a> Header<'a> {
                 name.strip_suffix("_head").unwrap_or(name).to_string()
             }
         };
+        let owner_text = self.owner_text(at);
         let flags_offset = |index: u32| -> Option<u32> {
             head.fields.iter().find_map(|field| {
                 let kind = field.source.as_ref()?.kind.as_ref()?;
@@ -975,7 +1029,10 @@ impl<'a> Header<'a> {
                     },
                 };
             let at_name = format!("{function}_at");
-            claims.claim(&at_name, format!("the accessor of `{member}`"))?;
+            claims.claim(
+                &at_name,
+                format!("the accessor of `{member}` of {owner_text}"),
+            )?;
             let lead = if uses_buf {
                 "const uint8_t *buf, const uint8_t *h, uint32_t sz"
             } else {
@@ -987,7 +1044,10 @@ impl<'a> Header<'a> {
                 if ret.ends_with('*') { "" } else { " " }
             );
             if root {
-                claims.claim(&function, format!("the accessor of `{member}`"))?;
+                claims.claim(
+                    &function,
+                    format!("the accessor of `{member}` of {owner_text}"),
+                )?;
                 let pass = if uses_buf { "buf, " } else { "" };
                 let _ = writeln!(
                     out,
@@ -1004,7 +1064,7 @@ impl<'a> Header<'a> {
                 let has = format!("{owner}_has_{}", member.trim_end_matches('_'));
                 claims.claim(
                     &format!("{has}_at"),
-                    format!("the presence test of `{member}`"),
+                    format!("the presence test of `{member}` of {owner_text}"),
                 )?;
                 let _ = writeln!(
                     out,
@@ -1013,7 +1073,10 @@ impl<'a> Header<'a> {
                     bit.bit
                 );
                 if root {
-                    claims.claim(&has, format!("the presence test of `{member}`"))?;
+                    claims.claim(
+                        &has,
+                        format!("the presence test of `{member}` of {owner_text}"),
+                    )?;
                     let _ = writeln!(
                         out,
                         "static inline int {has}(const uint8_t *buf) {{\n  \
