@@ -1664,6 +1664,33 @@ Deno.test("a read sent while a payload is collected waits for the next payload",
   assert.deepEqual(h.socket.closes, []);
 });
 
+Deno.test("a read of a fixed is settled by the shared block-one message, a payload of one block", async () => {
+  const h = await attached();
+  const reading = handled(h.session.read(FIXED));
+  h.socket.deliver(BLOCK_ONE);
+  assert.deepEqual(h.notes, []);
+  const sample = await reading;
+  assert.equal(sample.provenance, "live");
+  assert.deepEqual(sample.envelope, BLOCK_ENVELOPE);
+  assert.deepEqual(sample.payload, Uint8Array.of(0xab));
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("a payload of one block above the lowered limit of a fixed rejects the read with corrupt and records over-limit", async () => {
+  const table = {
+    iface: 1,
+    blob: { iface: 1, ord: 5, kind: "fixed", limit: 100 },
+  } as const;
+  const h = await attachedWith({ interfaces: [table] });
+  const reading = handled(h.session.read(FIXED));
+  const parts = blocksOf(FIXED, pattern(101));
+  assert.equal(parts.length, 1);
+  h.socket.deliver(parts[0]);
+  await assert.rejects(reading, isFailure("corrupt"));
+  assertNotes(h.notes, [overLimit(parts[0])]);
+  assert.deepEqual(h.socket.closes, []);
+});
+
 Deno.test("blocks delivered after close are ignored", async () => {
   const h = await attached();
   const down = assert.rejects(h.session.read(FIXED), isFailure("down"));
