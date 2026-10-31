@@ -67,7 +67,7 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, LineCol, Severity, SourceMap, Span, house_style_message,
     line_col, remap_diagnostics,
 };
-use ridl_core::lint::{LintScopes, apply_lint_levels};
+use ridl_core::lint::{LintScopes, apply_lint_levels, report_lint_directives};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, RemoteAccess, find_root, load_workspace_with_remotes,
@@ -1054,6 +1054,17 @@ impl ServerState {
             );
             all.extend(sized);
         }
+        // The lint directives are reported once, over the list as it stands
+        // after the last diagnostic is raised and before any level is applied
+        // (ADR-0024 decision 19). They are reported before the remote filter
+        // below, which then drops what is reported for a remote unit's file.
+        // `not_raised` is the compile entry points' list: the loader's lints
+        // are not in `all`, but each is spanned at a file that cannot hold a
+        // directive (a manifest, an `interfaces.lock`, a `.rxdl` or `.rmdl`
+        // file, or the empty range of a file under `vendor/` that is not
+        // loaded), so a directive that names one is unused here, as it is in
+        // `ridl check`.
+        report_lint_directives(&mut all, &sources, ridlc::NOT_RAISED_BY_COMPILE);
         // A remote unit's packages were checked so that the consumer's
         // references resolve; nothing is published for their files. Their
         // Errors go to the window message instead, and their Warnings and
@@ -1073,7 +1084,8 @@ impl ServerState {
         // The `[lints]` levels, resolved through the paths this source map
         // recorded for every file, including an overlay's (ADR-0024
         // decision 6). `allow` removes a diagnostic before conversion, so it is
-        // never published.
+        // never published. The same step removes a diagnostic that a
+        // directive allows.
         apply_lint_levels(&mut all, &sources, &self.lints);
         let mut out = batch(all, &table);
         out.remote_errors = remote_errors;

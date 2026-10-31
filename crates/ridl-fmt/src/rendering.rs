@@ -63,6 +63,9 @@ struct Renderer<'a> {
     state: LineState,
     lines: Vec<String>,
     width: Option<usize>,
+    /// Whether the text appended so far ends inside a block comment that
+    /// spans lines, for `line_comment_start`.
+    in_block_comment: bool,
 }
 
 impl<'a> Renderer<'a> {
@@ -120,11 +123,25 @@ impl<'a> Renderer<'a> {
 
     fn text(&mut self, text: &'a str) {
         if let Some((line, rest)) = text.split_once('\n') {
-            self.append(line);
+            self.append_line(line);
             self.prepend(Instruction::Text(rest));
             self.finish_line();
         } else {
-            self.append(text);
+            self.append_line(text);
+        }
+    }
+
+    /// Appends one physical line of text; a line comment inside it counts as
+    /// a trailing comment for the line's code width.
+    fn append_line(&mut self, line: &str) {
+        match super::line_comment_start(line, &mut self.in_block_comment) {
+            Some(at) => {
+                let code = line[..at].trim_end();
+                self.append(code);
+                self.state.code_columns.get_or_insert(self.state.columns);
+                self.append(&line[code.len()..]);
+            }
+            None => self.append(line),
         }
     }
 
@@ -304,6 +321,7 @@ pub(super) fn render(layout: &Layout, indent: usize, options: &FormatOptions) ->
         state: LineState::default(),
         lines: Vec::new(),
         width: options.max_line_length,
+        in_block_comment: false,
     };
     renderer.append(&indent_str(indent));
     renderer.prepend(Instruction::Layout(layout, false));
@@ -325,6 +343,7 @@ mod tests {
             state: LineState::default(),
             lines: Vec::new(),
             width: Some(100),
+            in_block_comment: false,
         }
     }
 

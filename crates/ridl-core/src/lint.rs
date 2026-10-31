@@ -5,12 +5,23 @@
 //! names up in it, defines the four levels a `[lints]` table can set, resolves
 //! the effective levels by directory ([`LintScopes`], ADR-0024 decision 10),
 //! and applies them to a diagnostic list ([`apply_lint_levels`], ADR-0024
-//! decision 6).
+//! decision 6). The same step removes a diagnostic that a `// lint: allow …`
+//! directive in its file allows ([`directives_in`], ADR-0024 decision 2), and
+//! [`report_lint_directives`] reports a directive that is malformed or unused
+//! (ADR-0024 decisions 18 and 19).
+
+mod directive;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::diag::{ALL_CATALOGS, CatalogEntry, DiagCode, Diagnostic, Severity, SourceMap};
+use rowan::{TextRange, TextSize};
+
+use crate::diag::{
+    ALL_CATALOGS, CatalogEntry, DiagCode, Diagnostic, FileId, Severity, SourceMap, Span,
+};
+
+pub use directive::{DirectiveProblem, LintDirective, directives_in};
 
 /// The level a project sets for a lint. The order is from the least to the
 /// most severe.
@@ -154,24 +165,37 @@ impl LintScopes {
     }
 }
 
-/// Applies the effective lint levels to `diagnostics` (ADR-0024 decision 6).
+/// Applies the lint directives and the effective lint levels to `diagnostics`
+/// (ADR-0024 decisions 2 and 6).
 ///
-/// For each diagnostic whose code is a lint, the level comes from the scope of
-/// `sources.path(primary.file)`, or from the registry defaults when the file
-/// has no path (a detached diagnostic, or an id `sources` never issued) or its
-/// path is in no scope. `allow` removes the diagnostic; `info`, `warn` and
-/// `deny` set its severity. A diagnostic with an Error code or with no code is
-/// left unchanged. Applying the function twice gives the same list.
+/// A diagnostic whose code is a lint is removed before its level is looked up
+/// when an effective directive ([`LintDirective::is_effective`]) of its file
+/// allows that lint and the directive's scope contains `primary.range`. The
+/// directive wins over every level, `deny` included; the check reads the code,
+/// not the severity, so a diagnostic an earlier application raised to Error is
+/// still removed. The two lints that report a directive's own mistakes
+/// (`unused-lint-directive` and `malformed-lint-directive`) are never removed.
+///
+/// For each remaining diagnostic whose code is a lint, the level comes from
+/// the scope of `sources.path(primary.file)`, or from the registry defaults
+/// when the file has no path (a detached diagnostic, or an id `sources` never
+/// issued) or its path is in no scope. `allow` removes the diagnostic; `info`,
+/// `warn` and `deny` set its severity. A diagnostic with an Error code or with
+/// no code is left unchanged. Applying the function twice gives the same list.
 pub fn apply_lint_levels(
     diagnostics: &mut Vec<Diagnostic>,
     sources: &SourceMap,
     scopes: &LintScopes,
 ) {
     let defaults = LintLevels::default();
+    let directives = directives_by_file(sources);
     diagnostics.retain_mut(|diagnostic| {
         let Some(entry) = lint_of(diagnostic.code) else {
             return true;
         };
+        if directive_allows(&directives, diagnostic, entry) {
+            return false;
+        }
         let levels = sources
             .path(diagnostic.primary.file)
             .and_then(|path| scopes.for_path(Path::new(path)))
@@ -189,6 +213,186 @@ pub fn apply_lint_levels(
     });
 }
 
+/// The directives of every file of `sources` whose path ends in `.typl`,
+/// `.ridl` or `.rsdl` and whose text contains `lint:`, keyed by file id.
+/// The file is parsed with `crate::db::profile_of_path`.
+fn directives_by_file(sources: &SourceMap) -> BTreeMap<FileId, Vec<LintDirective>> {
+    sources
+        .iter_files()
+        .filter(|(path, text)| {
+            (path.ends_with(".typl") || path.ends_with(".ridl") || path.ends_with(".rsdl"))
+                && text.contains("lint:")
+        })
+        .filter_map(|(path, text)| {
+            let id = sources.id_of(path)?;
+            let parse = ridl_syntax::parse(text, crate::db::profile_of_path(path));
+            Some((id, directives_in(&parse.syntax())))
+        })
+        .collect()
+}
+
+/// Raises TYPL-412 for each problem of each directive, and TYPL-411 for each
+/// name of an effective directive whose lint raises no diagnostic of
+/// `diagnostics` inside the directive's scope. `not_raised` lists the lint
+/// codes this entry point never raises; a name of one of them is never
+/// unused. Call once per report, after the last diagnostic is raised and
+/// before `apply_lint_levels` (ADR-0024 decision 19).
+///
+/// A diagnostic counts as raised whatever its severity, as long as it is in
+/// `diagnostics` when the function is called; a TYPL-411 or TYPL-412 that the
+/// same call adds does not count. The reports are appended in source order,
+/// each at the catalogue severity (Info): TYPL-412 on the comment, or on the
+/// name for a name problem; TYPL-411 on the name.
+pub fn report_lint_directives(
+    diagnostics: &mut Vec<Diagnostic>,
+    sources: &SourceMap,
+    not_raised: &[DiagCode],
+) {
+    let mut reports = Vec::new();
+    for (file, directives) in directives_by_file(sources) {
+        let text = sources.text(file).unwrap_or_default();
+        for directive in &directives {
+            for problem in &directive.problems {
+                reports.push(malformed(file, text, directive, problem));
+            }
+            if !directive.is_effective() {
+                continue;
+            }
+            let Some(scope) = directive.scope else {
+                continue;
+            };
+            for (entry, range) in &directive.allows {
+                if not_raised.contains(&entry.code) {
+                    continue;
+                }
+                let raised = diagnostics.iter().any(|diagnostic| {
+                    diagnostic.code == entry.code
+                        && diagnostic.primary.file == file
+                        && scope.contains_range(diagnostic.primary.range)
+                });
+                if !raised {
+                    reports.push(unused(file, entry, *range));
+                }
+            }
+        }
+    }
+    diagnostics.extend(reports);
+}
+
+/// The TYPL-412 report of one problem.
+fn malformed(
+    file: FileId,
+    text: &str,
+    directive: &LintDirective,
+    problem: &DirectiveProblem,
+) -> Diagnostic {
+    let (range, message) = match problem {
+        DirectiveProblem::NotAllow { word } if word.is_empty() => (
+            comment_range(text, directive),
+            "a lint directive needs `allow` after `lint:`".to_string(),
+        ),
+        DirectiveProblem::NotAllow { word } => (
+            comment_range(text, directive),
+            format!("a lint directive only accepts `allow`, not `{word}`"),
+        ),
+        DirectiveProblem::NoNames => (
+            comment_range(text, directive),
+            "the lint directive names no lint".to_string(),
+        ),
+        DirectiveProblem::UnknownName { name, range } if name.is_empty() => (
+            *range,
+            "the lint directive has an empty lint name".to_string(),
+        ),
+        DirectiveProblem::UnknownName { name, range } => (
+            *range,
+            format!(
+                "`{name}` is not a lint name; a directive names a lint by its `[lints]` name, \
+                 not by its code"
+            ),
+        ),
+        DirectiveProblem::DirectiveLintName { name, range } => (
+            *range,
+            format!("a directive cannot allow `{name}`; set its level in `[lints]`"),
+        ),
+        DirectiveProblem::NoReason => (
+            comment_range(text, directive),
+            "the lint directive has no reason after `--`".to_string(),
+        ),
+        DirectiveProblem::NoDeclaration => (
+            comment_range(text, directive),
+            "the lint directive applies to no declaration; place it on the line before one, \
+             with no blank line, or at the end of the line where one starts"
+                .to_string(),
+        ),
+    };
+    report(DiagCode::TYPL_412, file, range, message)
+}
+
+/// The TYPL-411 report of one unused name.
+fn unused(file: FileId, entry: &CatalogEntry, range: TextRange) -> Diagnostic {
+    let name = entry.lint.unwrap_or_default();
+    report(
+        DiagCode::TYPL_411,
+        file,
+        range,
+        format!(
+            "`{name}` is allowed here, but no `{name}` diagnostic is raised in this declaration"
+        ),
+    )
+}
+
+/// The directive's comment range without a trailing `\r`, which the lexer
+/// keeps in the comment token of a CRLF line.
+fn comment_range(text: &str, directive: &LintDirective) -> TextRange {
+    let range = directive.range;
+    let end = usize::from(range.end());
+    if text.get(end - 1..end) == Some("\r") {
+        TextRange::new(range.start(), range.end() - TextSize::from(1))
+    } else {
+        range
+    }
+}
+
+/// A directive report at the catalogue severity of `code`.
+fn report(code: DiagCode, file: FileId, range: TextRange, message: String) -> Diagnostic {
+    let severity = lint_of(code)
+        .map(|entry| entry.severity)
+        .expect("TYPL-411 and TYPL-412 are lint rows");
+    Diagnostic {
+        code,
+        severity,
+        message,
+        primary: Span { file, range },
+        labels: Vec::new(),
+        fixits: Vec::new(),
+    }
+}
+
+/// Whether an effective directive of the diagnostic's file allows `entry`,
+/// the lint row of its code, over a scope that contains its primary range.
+/// A directive lint (`directive::DIRECTIVE_LINT_NAMES`) is never allowed:
+/// `directives_in` never puts one in `allows`.
+fn directive_allows(
+    directives: &BTreeMap<FileId, Vec<LintDirective>>,
+    diagnostic: &Diagnostic,
+    entry: &CatalogEntry,
+) -> bool {
+    directives
+        .get(&diagnostic.primary.file)
+        .is_some_and(|directives| {
+            directives.iter().any(|directive| {
+                directive.is_effective()
+                    && directive
+                        .scope
+                        .is_some_and(|scope| scope.contains_range(diagnostic.primary.range))
+                    && directive
+                        .allows
+                        .iter()
+                        .any(|(allowed, _)| allowed.code == entry.code)
+            })
+        })
+}
+
 /// Removes every diagnostic whose lint is `allow` by default (ADR-0024
 /// decision 1) and leaves every other diagnostic unchanged.
 ///
@@ -204,7 +408,7 @@ pub fn drop_allowed_by_default(diagnostics: &mut Vec<Diagnostic>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diag::{FileId, Span};
+    use crate::diag::Span;
     use rowan::{TextRange, TextSize};
 
     #[test]
@@ -494,5 +698,628 @@ mod tests {
         let once = diagnostics.clone();
         apply_lint_levels(&mut diagnostics, &sources, &scopes);
         assert_eq!(diagnostics, once);
+    }
+
+    /// A `.ridl` text with one directive that allows `missing-docs` on
+    /// `interface A`, and a second interface outside the scope.
+    const DIRECTIVE_TEXT: &str = "package p\n\n\
+        // lint: allow missing-docs -- legacy\n\
+        interface A {}\n\n\
+        interface B {}\n";
+
+    /// A `.ridl` text with a directive that has no reason.
+    const NO_REASON_TEXT: &str = "package p\n\n// lint: allow missing-docs\ninterface A {}\n";
+
+    /// The range of the first occurrence of `needle` in `text`.
+    fn range_of(text: &str, needle: &str) -> TextRange {
+        let start = text.find(needle).expect("needle is in the text");
+        TextRange::at(
+            TextSize::from(start as u32),
+            TextSize::from(needle.len() as u32),
+        )
+    }
+
+    /// A diagnostic of `code` at `severity`, with its primary span at `range`
+    /// in `file`.
+    fn diagnostic_at(
+        code: DiagCode,
+        severity: Severity,
+        file: FileId,
+        range: TextRange,
+    ) -> Diagnostic {
+        let mut diagnostic = diagnostic(code, severity, file);
+        diagnostic.primary.range = range;
+        diagnostic
+    }
+
+    /// One scope for `/ws` with `missing-docs` at `level`.
+    fn missing_docs_scopes(level: LintLevel) -> LintScopes {
+        let mut scopes = LintScopes::default();
+        scopes.insert(PathBuf::from("/ws"), levels("missing-docs", level));
+        scopes
+    }
+
+    /// The codes left after `apply_lint_levels` over `diagnostics`, with
+    /// `text` interned as `/ws/x.ridl` and `missing-docs` at `level`.
+    fn apply_over(
+        text: &str,
+        level: LintLevel,
+        diagnostics: impl FnOnce(FileId) -> Vec<Diagnostic>,
+    ) -> Vec<(DiagCode, Severity)> {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.ridl", text);
+        let mut diagnostics = diagnostics(file);
+        apply_lint_levels(&mut diagnostics, &sources, &missing_docs_scopes(level));
+        diagnostics.iter().map(|d| (d.code, d.severity)).collect()
+    }
+
+    #[test]
+    fn directive_removes_its_lint_inside_scope() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![]);
+    }
+
+    #[test]
+    fn directive_wins_over_deny() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Deny, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![]);
+    }
+
+    #[test]
+    fn directive_leaves_a_diagnostic_outside_scope() {
+        let outside = range_of(DIRECTIVE_TEXT, "interface B");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                outside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
+    }
+
+    /// A diagnostic before the scope stays: containment is checked at the
+    /// scope's start as well as at its end.
+    #[test]
+    fn directive_leaves_a_diagnostic_before_scope() {
+        let before = range_of(DIRECTIVE_TEXT, "package p");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                before,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
+    }
+
+    /// A directive applies to its own file only: the same range in another
+    /// file, with no directive, keeps its diagnostic.
+    #[test]
+    fn directive_leaves_another_file() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let mut sources = SourceMap::new();
+        let _a = sources.file_id("/ws/a.ridl", DIRECTIVE_TEXT);
+        let b = sources.file_id("/ws/b.ridl", "package q\n\ninterface A {}\n");
+        let mut diagnostics = vec![diagnostic_at(
+            DiagCode::TYPL_406,
+            Severity::Warning,
+            b,
+            inside,
+        )];
+        apply_lint_levels(
+            &mut diagnostics,
+            &sources,
+            &missing_docs_scopes(LintLevel::Warn),
+        );
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    }
+
+    /// The check reads the code, not the severity: a diagnostic already at
+    /// Error (raised by an earlier application under `deny`) is removed.
+    #[test]
+    fn directive_removes_a_diagnostic_already_at_error() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Deny, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Error,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![]);
+    }
+
+    #[test]
+    fn directive_leaves_another_lint() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::RIDL_100,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::RIDL_100, Severity::Warning)]);
+    }
+
+    #[test]
+    fn directive_never_removes_an_error_code() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::RIDL_101,
+                Severity::Error,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::RIDL_101, Severity::Error)]);
+    }
+
+    #[test]
+    fn ineffective_directive_removes_nothing() {
+        let inside = range_of(NO_REASON_TEXT, "interface A");
+        let kept = apply_over(NO_REASON_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
+    }
+
+    /// The directive lints (`unused-lint-directive`, `malformed-lint-directive`)
+    /// stay even when a directive names them. Both names resolve to a
+    /// catalogue row, and both rows are checked.
+    #[test]
+    fn directive_never_removes_typl_411_or_412() {
+        let text = "package p\n\n\
+            // lint: allow missing-docs, unused-lint-directive, malformed-lint-directive -- r\n\
+            interface A {}\n";
+        let inside = range_of(text, "interface A");
+        let mut checked = Vec::new();
+        for name in directive::DIRECTIVE_LINT_NAMES {
+            let entry = lint_by_name(name).unwrap_or_else(|| panic!("{name} is a lint"));
+            let kept = apply_over(text, LintLevel::Warn, |file| {
+                vec![diagnostic_at(entry.code, entry.severity, file, inside)]
+            });
+            assert_eq!(kept, vec![(entry.code, entry.severity)], "{name} stays");
+            checked.push(entry.code);
+        }
+        assert_eq!(checked, [DiagCode::TYPL_411, DiagCode::TYPL_412]);
+    }
+
+    #[test]
+    fn directives_are_idempotent() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let outside = range_of(DIRECTIVE_TEXT, "interface B");
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.ridl", DIRECTIVE_TEXT);
+        let scopes = missing_docs_scopes(LintLevel::Deny);
+        let mut diagnostics = vec![
+            diagnostic_at(DiagCode::TYPL_406, Severity::Warning, file, inside),
+            diagnostic_at(DiagCode::TYPL_406, Severity::Warning, file, outside),
+            diagnostic_at(DiagCode::RIDL_100, Severity::Warning, file, inside),
+        ];
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        let once = diagnostics.clone();
+        assert_eq!(once.len(), 2, "{once:?}");
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        assert_eq!(diagnostics, once);
+    }
+
+    /// A file whose path is not `.typl`, `.ridl` or `.rsdl` is not scanned,
+    /// even when its text is a valid directive over a declaration.
+    #[test]
+    fn toml_file_is_not_scanned() {
+        let text = "package p\n\n// lint: allow missing-docs -- r\ntype T: float\n";
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/ridl.toml", text);
+        let mut diagnostics = vec![
+            diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                range_of(text, "type T"),
+            ),
+            diagnostic_at(
+                DiagCode::MANI_010,
+                Severity::Warning,
+                file,
+                range_of(text, "type T"),
+            ),
+        ];
+        apply_lint_levels(&mut diagnostics, &sources, &LintScopes::default());
+        let codes: Vec<&str> = diagnostics.iter().map(|d| d.code.as_str()).collect();
+        assert_eq!(codes, ["TYPL-406", "MANI-010"]);
+    }
+
+    /// The reports `report_lint_directives` adds over `text` interned as
+    /// `/ws/x.ridl`, after the diagnostics `before` builds, as
+    /// `(code, range, message)` triples in the order added.
+    fn reports_over(
+        text: &str,
+        not_raised: &[DiagCode],
+        before: impl FnOnce(FileId) -> Vec<Diagnostic>,
+    ) -> Vec<(DiagCode, TextRange, String)> {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.ridl", text);
+        let mut diagnostics = before(file);
+        let raised = diagnostics.len();
+        report_lint_directives(&mut diagnostics, &sources, not_raised);
+        assert!(
+            diagnostics
+                .iter()
+                .take(raised)
+                .all(|d| d.primary.file == file),
+            "the diagnostics raised before the call are kept in place: {diagnostics:?}"
+        );
+        diagnostics[raised..]
+            .iter()
+            .map(|d| (d.code, d.primary.range, d.message.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn unused_name_draws_typl_411_on_the_name() {
+        let reports = reports_over(DIRECTIVE_TEXT, &[], |_| Vec::new());
+        assert_eq!(
+            reports,
+            vec![(
+                DiagCode::TYPL_411,
+                range_of(DIRECTIVE_TEXT, "missing-docs"),
+                "`missing-docs` is allowed here, but no `missing-docs` diagnostic is raised \
+                 in this declaration"
+                    .to_string(),
+            )],
+        );
+    }
+
+    /// The report is Info, the catalogue severity of TYPL-411.
+    #[test]
+    fn typl_411_is_info() {
+        let mut sources = SourceMap::new();
+        let _file = sources.file_id("/ws/x.ridl", DIRECTIVE_TEXT);
+        let mut diagnostics = Vec::new();
+        report_lint_directives(&mut diagnostics, &sources, &[]);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].severity, Severity::Info);
+    }
+
+    #[test]
+    fn used_name_draws_nothing() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let reports = reports_over(DIRECTIVE_TEXT, &[], |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(reports, vec![]);
+    }
+
+    /// A diagnostic outside the scope does not use the directive: the name
+    /// is unused on `interface A` even though `interface B` raises it, and
+    /// even though a diagnostic that starts before the scope ends inside it.
+    #[test]
+    fn name_used_outside_scope_is_unused() {
+        let outside = range_of(DIRECTIVE_TEXT, "interface B");
+        let scope = range_of(DIRECTIVE_TEXT, "interface A {}");
+        let overlapping = TextRange::new(TextSize::from(0), scope.end());
+        for range in [outside, overlapping] {
+            let reports = reports_over(DIRECTIVE_TEXT, &[], |file| {
+                vec![diagnostic_at(
+                    DiagCode::TYPL_406,
+                    Severity::Warning,
+                    file,
+                    range,
+                )]
+            });
+            assert_eq!(reports.len(), 1, "{range:?}: {reports:?}");
+            assert_eq!(reports[0].0, DiagCode::TYPL_411);
+        }
+    }
+
+    /// A directive is read from a `.typl`, a `.ridl` and a `.rsdl` file, and
+    /// from no other file.
+    #[test]
+    fn directives_are_read_from_the_three_source_languages() {
+        let mut sources = SourceMap::new();
+        let unused = "package p\n\n// lint: allow missing-docs -- r\ntype T: float\n";
+        let typl = sources.file_id("/ws/a.typl", unused);
+        let ridl = sources.file_id("/ws/b.ridl", unused);
+        let rsdl = sources.file_id(
+            "/ws/c.rsdl",
+            "package p\n\n// lint: allow missing-docs -- r\ncomponent C {}\n",
+        );
+        let _other = sources.file_id("/ws/d.rmdl", unused);
+        let mut diagnostics = Vec::new();
+        report_lint_directives(&mut diagnostics, &sources, &[]);
+        let reported: Vec<(DiagCode, FileId)> = diagnostics
+            .iter()
+            .map(|d| (d.code, d.primary.file))
+            .collect();
+        assert_eq!(
+            reported,
+            [
+                (DiagCode::TYPL_411, typl),
+                (DiagCode::TYPL_411, ridl),
+                (DiagCode::TYPL_411, rsdl),
+            ],
+            "{diagnostics:?}"
+        );
+    }
+
+    /// The same range in another file does not use the directive.
+    #[test]
+    fn name_used_in_another_file_is_unused() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let mut sources = SourceMap::new();
+        let _a = sources.file_id("/ws/a.ridl", DIRECTIVE_TEXT);
+        let b = sources.file_id("/ws/b.ridl", "package q\n\ninterface A {}\n");
+        let mut diagnostics = vec![diagnostic_at(
+            DiagCode::TYPL_406,
+            Severity::Warning,
+            b,
+            inside,
+        )];
+        report_lint_directives(&mut diagnostics, &sources, &[]);
+        let codes: Vec<DiagCode> = diagnostics.iter().map(|d| d.code).collect();
+        assert_eq!(codes, [DiagCode::TYPL_406, DiagCode::TYPL_411]);
+    }
+
+    #[test]
+    fn allow_by_default_lint_raised_counts_as_used() {
+        let text = "package p\n\n\
+            // lint: allow doc-comment-style -- legacy\n\
+            /** doc */\n\
+            interface A {}\n";
+        let at_doc = range_of(text, "/** doc */");
+        let reports = reports_over(text, &[], |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_410,
+                Severity::Warning,
+                file,
+                at_doc,
+            )]
+        });
+        assert_eq!(reports, vec![]);
+    }
+
+    #[test]
+    fn not_raised_name_is_never_unused() {
+        let text = "package p\n\n\
+            // lint: allow ordinal-changed -- the baseline is not read here\n\
+            interface A {}\n";
+        let reports = reports_over(text, &[DiagCode::RIDL_407], |_| Vec::new());
+        assert_eq!(reports, vec![]);
+        let reports = reports_over(text, &[], |_| Vec::new());
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        assert_eq!(reports[0].0, DiagCode::TYPL_411);
+    }
+
+    /// One TYPL-412 per problem: on the comment, or on the name for the two
+    /// name problems, each with its own message.
+    #[test]
+    fn each_problem_draws_one_typl_412() {
+        let comment = |text: &str| {
+            let start = text.find("// lint:").expect("the directive is in the text");
+            let end = text[start..].find('\n').expect("the directive ends a line") + start;
+            TextRange::new(TextSize::from(start as u32), TextSize::from(end as u32))
+        };
+
+        let not_allow = "package p\n\n// lint: deny missing-docs -- r\ninterface A {}\n";
+        assert_eq!(
+            reports_over(not_allow, &[], |_| Vec::new()),
+            vec![(
+                DiagCode::TYPL_412,
+                comment(not_allow),
+                "a lint directive only accepts `allow`, not `deny`".to_string(),
+            )],
+        );
+
+        let no_names = "package p\n\n// lint: allow -- r\ninterface A {}\n";
+        assert_eq!(
+            reports_over(no_names, &[], |_| Vec::new()),
+            vec![(
+                DiagCode::TYPL_412,
+                comment(no_names),
+                "the lint directive names no lint".to_string(),
+            )],
+        );
+
+        let unknown = "package p\n\n// lint: allow TYPL-406 -- r\ninterface A {}\n";
+        assert_eq!(
+            reports_over(unknown, &[], |_| Vec::new()),
+            vec![(
+                DiagCode::TYPL_412,
+                range_of(unknown, "TYPL-406"),
+                "`TYPL-406` is not a lint name; a directive names a lint by its `[lints]` \
+                 name, not by its code"
+                    .to_string(),
+            )],
+        );
+
+        let directive_lint =
+            "package p\n\n// lint: allow unused-lint-directive -- r\ninterface A {}\n";
+        assert_eq!(
+            reports_over(directive_lint, &[], |_| Vec::new()),
+            vec![(
+                DiagCode::TYPL_412,
+                range_of(directive_lint, "unused-lint-directive"),
+                "a directive cannot allow `unused-lint-directive`; set its level in `[lints]`"
+                    .to_string(),
+            )],
+        );
+
+        assert_eq!(
+            reports_over(NO_REASON_TEXT, &[], |_| Vec::new()),
+            vec![(
+                DiagCode::TYPL_412,
+                comment(NO_REASON_TEXT),
+                "the lint directive has no reason after `--`".to_string(),
+            )],
+        );
+
+        let no_declaration = "package p\n\n// lint: allow missing-docs -- r\n\ninterface A {}\n";
+        assert_eq!(
+            reports_over(no_declaration, &[], |_| Vec::new()),
+            vec![(
+                DiagCode::TYPL_412,
+                comment(no_declaration),
+                "the lint directive applies to no declaration; place it on the line before \
+                 one, with no blank line, or at the end of the line where one starts"
+                    .to_string(),
+            )],
+        );
+    }
+
+    /// `// lint:` with nothing after it has an empty level word; the message
+    /// says what is missing instead of quoting an empty name.
+    #[test]
+    fn empty_word_draws_typl_412_with_its_own_message() {
+        let text = "package p\n\n// lint:\ninterface A {}\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        assert_eq!(
+            reports,
+            vec![(
+                DiagCode::TYPL_412,
+                range_of(text, "// lint:"),
+                "a lint directive needs `allow` after `lint:`".to_string(),
+            )],
+        );
+    }
+
+    /// Under CRLF the comment token ends with `\r`; the report's span on the
+    /// comment stops before it.
+    #[test]
+    fn typl_412_on_the_comment_stops_before_a_carriage_return() {
+        let text = "package p\r\n\r\n// lint: allow missing-docs\r\ninterface A {}\r\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        assert_eq!(reports[0].1, range_of(text, "// lint: allow missing-docs"));
+    }
+
+    /// A raised diagnostic counts whatever its severity: an Info-row lint
+    /// inside the scope uses the directive.
+    #[test]
+    fn info_diagnostic_in_scope_counts_as_used() {
+        let text = "package p\n\n\
+            // lint: allow podbuf-padding-order -- r\n\
+            struct A {}\n";
+        let inside = range_of(text, "struct A");
+        let reports = reports_over(text, &[], |file| {
+            vec![diagnostic_at(
+                DiagCode::RIDL_156,
+                Severity::Info,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(reports, vec![]);
+    }
+
+    /// A directive with two problems reports both, in source order, each on
+    /// its own name.
+    #[test]
+    fn two_problems_draw_two_typl_412() {
+        let text = "package p\n\n// lint: allow TYPL-406, bogus -- r\ninterface A {}\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        let spans: Vec<(DiagCode, TextRange)> = reports.iter().map(|r| (r.0, r.1)).collect();
+        assert_eq!(
+            spans,
+            vec![
+                (DiagCode::TYPL_412, range_of(text, "TYPL-406")),
+                (DiagCode::TYPL_412, range_of(text, "bogus")),
+            ],
+            "{reports:?}"
+        );
+    }
+
+    /// An empty item is an unknown name with an empty string; its message
+    /// says so instead of quoting the empty name.
+    #[test]
+    fn empty_name_draws_typl_412_with_its_own_message() {
+        let text =
+            "package p\n\n// lint: allow missing-docs,, missing-timing -- r\ninterface A {}\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        let empty = text.find(",,").expect("the empty item is in the text") + 1;
+        let at = TextSize::from(empty as u32);
+        assert_eq!(reports.len(), 3, "{reports:?}");
+        assert_eq!(
+            reports[0],
+            (
+                DiagCode::TYPL_412,
+                TextRange::empty(at),
+                "the lint directive has an empty lint name".to_string(),
+            ),
+        );
+    }
+
+    /// A directive that is still effective after a name problem reports the
+    /// problem, and an unused valid name of the same directive.
+    #[test]
+    fn a_name_problem_and_an_unused_name_both_report() {
+        let text = "package p\n\n// lint: allow TYPL-406, missing-docs -- r\ninterface A {}\n";
+        let reports = reports_over(text, &[], |_| Vec::new());
+        let codes: Vec<DiagCode> = reports.iter().map(|r| r.0).collect();
+        assert_eq!(codes, [DiagCode::TYPL_412, DiagCode::TYPL_411]);
+    }
+
+    /// TYPL-411 is computed once, before the levels are applied: the second
+    /// application does not report the directive as unused because the first
+    /// removed what it allowed, and the two directive lints are kept.
+    #[test]
+    fn report_then_apply_twice_keeps_one_report() {
+        let text = "package p\n\n\
+            // lint: allow missing-docs, missing-timing -- r\n\
+            interface A {}\n";
+        let inside = range_of(text, "interface A");
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.ridl", text);
+        let scopes = missing_docs_scopes(LintLevel::Deny);
+        let mut diagnostics = vec![diagnostic_at(
+            DiagCode::TYPL_406,
+            Severity::Warning,
+            file,
+            inside,
+        )];
+        report_lint_directives(&mut diagnostics, &sources, &[]);
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        let once = diagnostics.clone();
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        assert_eq!(diagnostics, once);
+        let kept: Vec<(DiagCode, Severity)> =
+            diagnostics.iter().map(|d| (d.code, d.severity)).collect();
+        assert_eq!(kept, vec![(DiagCode::TYPL_411, Severity::Info)]);
+        assert_eq!(
+            diagnostics[0].primary.range,
+            range_of(text, "missing-timing")
+        );
     }
 }

@@ -1313,6 +1313,142 @@ fn lsp_matches_check_with_lints() {
     assert_eq!(lsp, cli, "published: {publishes:#?}");
 }
 
+/// A package with one used directive (it allows the RIDL-100 of `speed`),
+/// one unused directive (`rate` draws no RIDL-405) and one malformed
+/// directive (no reason), one that names a loader lint (unused), two that
+/// name lints that only `ridl check` raises, and one that names a lint only a
+/// build raises (not unused on any face).
+const DIRECTIVES: &str = "package demo\n\ntype Speed: integer [0..300]\n\ninterface Sensor {\n  \
+    // lint: allow missing-timing -- timing comes later\n  signal speed: Speed\n  \
+    // lint: allow shared-error-type -- nothing to allow\n  signal rate: Speed @10ms\n  \
+    // lint: allow missing-timing\n  signal gear: Speed @10ms\n}\n\n\
+    // lint: allow vendor-source-not-loaded -- no entry point reads a directive for it\n\
+    type A: integer [0..1]\n\n\
+    // lint: allow ordinal-changed -- raised by the desk check only\n\
+    type B: integer [0..1]\n\n\
+    // lint: allow podbuf-padding-order -- raised by the padding check only\n\
+    type C: integer [0..1]\n\n\
+    // lint: allow link-encoding-not-emitted -- raised by a build only\n\
+    type D: integer [0..1]\n";
+
+/// The sorted `(code, file name, line)` triples of a JSON diagnostic array as
+/// `ridl check --format json` and `ridl_check` print it, with 1-based lines.
+fn code_file_lines(diagnostics: &serde_json::Value) -> Vec<(String, String, u64)> {
+    let mut triples: Vec<_> = diagnostics
+        .as_array()
+        .expect("a JSON array")
+        .iter()
+        .map(|diagnostic| {
+            let path = diagnostic["span"]["path"].as_str().expect("a span path");
+            (
+                diagnostic["code"].as_str().expect("a code").to_string(),
+                Path::new(path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .expect("a file name")
+                    .to_string(),
+                diagnostic["span"]["start"]["line"]
+                    .as_u64()
+                    .expect("a start line"),
+            )
+        })
+        .collect();
+    triples.sort();
+    triples
+}
+
+/// `ridl check`, the language server and the MCP `ridl_check` path mode
+/// report the same `(code, file, line)` set over a workspace that holds a
+/// used, an unused and a malformed lint directive (ADR-0024 decisions 6, 8
+/// and 19).
+#[tokio::test]
+async fn directives_give_the_same_diagnostics_in_check_lsp_and_mcp() {
+    let dir = TempDir::new("directives-parity");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("demo.ridl", DIRECTIVES);
+    let root = dir.0.clone();
+
+    let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(["check", "--format", "json"])
+        .arg(&root)
+        .output()
+        .expect("run ridl check");
+    assert_eq!(cli.status.code(), Some(0), "{cli:?}");
+    let cli_json: serde_json::Value = serde_json::from_slice(&cli.stdout).expect("CLI JSON");
+    let expected = code_file_lines(&cli_json);
+    // Pinned, or the equality below would pass over a fixture that stopped
+    // drawing the diagnostics it is here for. The used directive removes
+    // RIDL-100 from `speed`; the unused one is TYPL-411 and the malformed
+    // one is TYPL-412, each on the directive's line.
+    for (code, line) in [("TYPL-411", 8), ("TYPL-411", 14), ("TYPL-412", 10)] {
+        assert!(
+            expected.contains(&(code.to_string(), "demo.ridl".to_string(), line)),
+            "{code} on line {line}: {expected:?}"
+        );
+    }
+    assert!(
+        expected.iter().all(|(code, _, _)| code != "RIDL-100"),
+        "{expected:?}"
+    );
+    // The directives on lines 17 and 20 name lints that `ridl check` raises
+    // and the language server and the MCP tool do not (`ordinal-changed`,
+    // `podbuf-padding-order`), and the one on line 23 names a lint that only
+    // a build raises (`link-encoding-not-emitted`); none of the three faces
+    // reports them unused. The one on line 14 names a loader lint that no
+    // directive can cover, so it is unused on all three.
+    assert_eq!(
+        expected
+            .iter()
+            .filter(|(code, _, _)| code == "TYPL-411")
+            .count(),
+        2,
+        "{expected:?}"
+    );
+
+    let session = LspSession::start(&root);
+    let publishes = session.shutdown_collecting_publishes();
+    let mut last: std::collections::BTreeMap<String, &serde_json::Value> = Default::default();
+    for params in &publishes {
+        last.insert(params["uri"].as_str().expect("a uri").to_string(), params);
+    }
+    let mut lsp: Vec<(String, String, u64)> = last
+        .iter()
+        .flat_map(|(uri, params)| {
+            let file = uri.rsplit('/').next().expect("a file name").to_string();
+            params["diagnostics"]
+                .as_array()
+                .expect("a diagnostics array")
+                .iter()
+                .map(move |diagnostic| {
+                    (
+                        diagnostic["code"].as_str().expect("a code").to_string(),
+                        file.clone(),
+                        diagnostic["range"]["start"]["line"]
+                            .as_u64()
+                            .expect("a start line")
+                            + 1,
+                    )
+                })
+        })
+        .collect();
+    lsp.sort();
+    assert_eq!(lsp, expected, "published: {publishes:#?}");
+
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect().await;
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path": root})).await;
+        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+        let mcp = code_file_lines(&result.structured_content.unwrap()["diagnostics"]);
+        assert_eq!(mcp, expected);
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("directive parity timeout");
+}
+
 /// The server finds the root from the absolute paths of the `file://` URIs
 /// it receives, not from its current directory: run from inside member `a`,
 /// it still loads the whole workspace and publishes what the CLI reports for
@@ -1600,6 +1736,56 @@ fn lsp_resolves_a_cached_remote_unit_and_publishes_nothing_for_it() {
     assert_eq!(codes, ["RIDL-100"], "the import resolves: {app:?}");
     assert!(shown.is_empty(), "no notice on a cache hit: {shown:?}");
     assert_eq!(stub.hits(), 0, "the language server never fetches");
+}
+
+/// A used and a malformed directive in a remote unit's file draw no TYPL-411
+/// or TYPL-412 in the language server, and nothing is published for the file.
+#[test]
+fn lsp_reports_no_directive_for_a_remote_unit() {
+    use remote_support::{DIRECTIVE_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp-directives");
+    let stub = Stub::serving(unit_tar(DIRECTIVE_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    let session = LspSession::start_in_with_home(&root, Some(&root), Some(dir.path()));
+    let (publishes, _) = session.shutdown_collecting();
+    for (uri, list) in published_lists(&publishes) {
+        assert!(!uri.contains(".ridl/cache"), "{uri}: {list:?}");
+        assert!(
+            list.iter()
+                .all(|d| d["code"] != "TYPL-411" && d["code"] != "TYPL-412"),
+            "{uri}: {list:?}"
+        );
+    }
+}
+
+/// The same for the MCP `ridl_check` path mode.
+#[tokio::test]
+async fn mcp_reports_no_directive_for_a_remote_unit() {
+    use remote_support::{DIRECTIVE_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("mcp-directives");
+    let stub = Stub::serving(unit_tar(DIRECTIVE_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect_with_home(Some(dir.path())).await;
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path": root})).await;
+        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+        let found = result.structured_content.unwrap()["diagnostics"].clone();
+        assert!(
+            found
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|d| d["code"] != "TYPL-411" && d["code"] != "TYPL-412"),
+            "{found}"
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("mcp remote directive timeout");
 }
 
 /// The consumer's `[lints]` do not apply to the remote unit in the language

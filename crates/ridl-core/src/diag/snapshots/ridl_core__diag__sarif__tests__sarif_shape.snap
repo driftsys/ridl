@@ -652,6 +652,26 @@ expression: log
               }
             },
             {
+              "id": "TYPL-411",
+              "name": "unused-lint-directive",
+              "shortDescription": {
+                "text": "lint directive allows a lint that no diagnostic in its scope raises"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "TYPL-412",
+              "name": "malformed-lint-directive",
+              "shortDescription": {
+                "text": "malformed lint directive"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "RIDL-100",
               "name": "missing-timing",
               "shortDescription": {
@@ -1765,7 +1785,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 69,
+          "ruleIndex": 71,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1830,7 +1850,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 179,
+          "ruleIndex": 181,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

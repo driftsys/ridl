@@ -770,3 +770,11 @@ provenance. Nothing here is normative — the current references live in
   R-1 to R-26. The durable record is
   [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) and the design
   records its Status names.
+
+- **2026-10-30-inline-lint-directives-plan.md** — the plan for
+  driftsys/ridl#1124: the `// lint: allow <name> -- <reason>` comment directive,
+  the `ridl_core::lint::directive` module, TYPL-411 and TYPL-412, and the shared
+  carrier predicate in `ridl-syntax`. Archived verbatim, on 2026-10-31, once the
+  work landed. The durable records are
+  [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md) and
+  [the lints chapter](../book/lints.md).

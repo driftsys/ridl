@@ -87,6 +87,19 @@ pub const WARNING_UNIT: &[(&str, &str)] = &[
     ),
 ];
 
+/// The same unit with a used and a malformed lint directive: the consumer
+/// must see neither a TYPL-411 nor a TYPL-412 for the unit's file.
+pub const DIRECTIVE_UNIT: &[(&str, &str)] = &[
+    (
+        "ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    ),
+    (
+        "common.ridl",
+        "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  // lint: allow missing-timing -- remote\n  signal s: Speed\n  // lint: allow missing-timing\n  signal t: Speed @10ms\n}\n",
+    ),
+];
+
 /// The same unit with a range whose minimum exceeds its maximum: TYPL-104,
 /// an Error the consumer must see.
 pub const BROKEN_UNIT: &[(&str, &str)] = &[

@@ -369,6 +369,41 @@ pub fn doc_comments_before(node: &SyntaxNode) -> Vec<SyntaxToken> {
     out
 }
 
+/// A carrier of a doc comment (typl reference §14.4), the declarations a lint
+/// directive applies to (ADR-0024 decision 2): a declaration, an interaction, a
+/// member, a call parameter, or an rsdl declaration or body line.
+pub fn is_doc_carrier(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::TypeDef
+            | SyntaxKind::ConstDef
+            | SyntaxKind::StructDef
+            | SyntaxKind::EnumDef
+            | SyntaxKind::EnumSetDef
+            | SyntaxKind::UnionDef
+            | SyntaxKind::FieldDef
+            | SyntaxKind::ReservedEntry
+            | SyntaxKind::EnumValue
+            | SyntaxKind::EnumSetBit
+            | SyntaxKind::UnionArm
+            | SyntaxKind::InterfaceDef
+            | SyntaxKind::ServiceDef
+            | SyntaxKind::SignalDef
+            | SyntaxKind::EventDef
+            | SyntaxKind::CommandDef
+            | SyntaxKind::QueryDef
+            | SyntaxKind::FixedDef
+            | SyntaxKind::Param
+            | SyntaxKind::SystemDef
+            | SyntaxKind::ComponentDef
+            | SyntaxKind::ComponentLine
+            | SyntaxKind::DistributionDef
+            | SyntaxKind::DeploymentDef
+            | SyntaxKind::MachineDef
+            | SyntaxKind::MemberLine
+    )
+}
+
 impl HasName for TypeDef {}
 impl HasName for ConstDef {}
 impl HasName for StructDef {}

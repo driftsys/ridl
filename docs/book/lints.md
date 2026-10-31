@@ -47,10 +47,12 @@ shared-error-type = "allow"
 ```
 
 A package manifest and a workspace manifest both accept the table. There is no
-command-line flag that changes a level and no source attribute that changes a
-level: a CI that wants stricter checks commits the levels to the manifest, so
-the editor, the command line and an agent see the same levels for the same
-entry point.
+command-line flag that changes a level. A source comment can allow a lint on
+one declaration (see [Allowing a lint on one
+declaration](#allowing-a-lint-on-one-declaration)), but nothing in the source
+raises a level: a CI that wants stricter checks commits the levels to the
+manifest, so the editor, the command line and an agent see the same levels for
+the same entry point.
 
 The level of a lint for a package is resolved key by key, and a later source
 replaces an earlier one:
@@ -105,6 +107,83 @@ fail. The text note that names the lint still appears in their output. A lint
 that is `allow` by default is left out of their output, as it is everywhere
 else.
 
+## Allowing a lint on one declaration
+
+A `[lints]` entry sets a level for a whole package. A lint directive allows one
+or more lints on one declaration and everything inside it. It is a `//` line
+comment:
+
+```ridl
+package lints.directive
+
+// lint: allow unbounded-float -- the sensor reports the raw value unscaled
+type RawTemperature: float
+```
+
+The comment text, after `//` and optional whitespace, is `lint:`, the word
+`allow`, one or more lint names separated by commas, then `--` and a reason that
+is not empty. Without the directive, the declaration above draws `unbounded-float`.
+Only a `//` line comment is read. A `///` doc comment and a `/* */` comment are
+not, even when the text starts with `lint:`.
+
+A directive names a lint by its name, never by its code, and only `allow` is
+accepted: a directive cannot set `info`, `warn` or `deny`.
+
+**Scope.** A directive applies to one declaration, never to a range of lines.
+The declarations are the carriers of a doc comment: a `type`, `const`, `struct`,
+`enum`, `enumset`, `union`, `interface` or `service`; a field, an enum value, an
+enumset bit, a union arm, an interaction, a parameter and a `reserved` entry;
+and the rsdl `system`, `component`, `distribution`, `deployment` and `machine`
+with their body lines. The scope is the declaration with its doc comment and
+its members. A diagnostic is inside the scope when its primary span is.
+
+- A directive on its own line applies to the next declaration. Only doc comment
+  lines and other directive lines may come between them. A blank line may not.
+- A directive at the end of a line applies to the first outermost declaration
+  whose first token, not counting its doc comment, is on that line. After
+  `struct Pose { x: m, y: m }` that is `Pose`. After one field, it is that
+  field.
+
+**Precedence.** A directive wins over the level that every `[lints]` table gives
+the lint, `deny` included, and over the default level. The diagnostic is removed
+from the report, as `allow` in `[lints]` removes it. An error is never removed:
+an error code has no lint name, so no directive can name it.
+
+**Where it applies.** A directive is read where levels apply (see [Where levels
+apply](#where-levels-apply)): `ridl check`, `ridl build`, `ridlc check` and
+`ridlc build`, the language server and the MCP tool `ridl_check`. The other
+commands ignore directives. The formatter keeps every directive on its
+declaration.
+
+A lint that the entry point never raises is never reported as unused there.
+`ridl check` raises RIDL-407 (`ordinal-changed`, with a baseline) and RIDL-156
+(`podbuf-padding-order`), so a directive that names one of those is used or
+unused only in `ridl check`. A build that selects a deployment and compares a
+backend's `encodings` against the links raises RSDL-807
+(`link-encoding-not-emitted`), so a directive that names it is used or unused
+only in such a build, where a link of any declared deployment counts; a build
+that selects no deployment or compares no backend, and every other entry point,
+does not run that check. The other entry points do not run those checks.
+
+Two lints report the mistakes of directives. Both are `info` by default, and
+`[lints]` sets their level:
+
+- `unused-lint-directive` (TYPL-411) reports a name in a directive when no
+  diagnostic of that lint has its primary span inside the scope. A lint that is
+  `allow` by default, or `allow` in `[lints]`, still counts as raised when the
+  check raises it, so a directive for it is used.
+- `malformed-lint-directive` (TYPL-412) reports a `//` comment that starts with
+  `lint:` and is not a valid directive: a word other than `allow`, an empty lint
+  name or no lint name, a name that is not a lint name, no reason, or no
+  declaration to apply to. A directive with no reason, with another word, or
+  with no declaration allows nothing. A name that is not a lint name is ignored,
+  and the other names of the same directive still apply. This includes a code,
+  the name of an error, a retired lint name, and the names of these two lints: a
+  directive cannot silence the report of its own mistake.
+
+Neither lint is reported for a file of a remote unit, which is a dependency's
+file: its author sees those reports in their own check.
+
 ## Mistakes in `[lints]`
 
 A mistake in the table never stops a check. Each of these raises MANI-010
@@ -141,6 +220,8 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unknown-doc-tag` | TYPL-408 | warn | doc tag other than `@see`, `@since`, `@deprecated` and `@labels` |
 | `malformed-doc-tag` | TYPL-409 | warn | `@see` or `@since` with a missing or malformed value |
 | `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |
+| `unused-lint-directive` | TYPL-411 | info | lint directive allows a lint that no diagnostic in its scope raises |
+| `malformed-lint-directive` | TYPL-412 | info | malformed lint directive |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |

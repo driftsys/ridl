@@ -10,6 +10,11 @@ pub struct Snapshot {
     pub output: ridlc::WorkspaceOutput,
     pub root: PathBuf,
     pub notes: Vec<String>,
+    /// The diagnostics of the workspace that the report scope left out of
+    /// `output.diagnostics`, and the directories the scope also keeps. Only
+    /// [`Snapshot::report_directives`] reads them.
+    out_of_scope: Vec<ridl_core::Diagnostic>,
+    remote_dirs: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -59,15 +64,31 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
     // reports on the member only, as `ridl check` does (ADR-0024 decision 9,
     // as ADR-0026 amends it). The lookup tools still see every member.
     let mut output = output;
+    let remote_dirs = ridlc::remote_dirs(
+        &output.remote_units,
+        &ridl_core::Cache::user_default(),
+        entry,
+    );
+    // Kept apart so that a directive can be reported against the diagnostics
+    // of its own file, in or out of the scope.
+    let out_of_scope: Vec<_> = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            !ridlc::in_report_scope(
+                diagnostic,
+                &output.sources,
+                output.report_scope.as_deref(),
+                &remote_dirs,
+            )
+        })
+        .cloned()
+        .collect();
     ridlc::retain_in_report_scope(
         &mut output.diagnostics,
         &output.sources,
         output.report_scope.as_deref(),
-        &ridlc::remote_dirs(
-            &output.remote_units,
-            &ridl_core::Cache::user_default(),
-            entry,
-        ),
+        &remote_dirs,
     );
     let root = if entry.is_file() {
         entry.parent().and_then(ridl_core::find_root)
@@ -89,6 +110,8 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         output,
         root,
         notes,
+        out_of_scope,
+        remote_dirs,
     })
 }
 /// The snapshot a lookup tool reads (`ridl_references`, `ridl_dependencies`,
@@ -105,6 +128,29 @@ pub fn lookup_snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot
     Ok(snap)
 }
 impl Snapshot {
+    /// Reports the lint directives of the workspace over `output.diagnostics`
+    /// (ADR-0024 decision 19), as `ridlc::run_check` does: over the
+    /// diagnostics of the whole workspace, then back to the report scope. It
+    /// adds TYPL-411 and TYPL-412 and applies no level, so a caller calls
+    /// `apply_lint_levels` after it. Only `ridl_check` calls it; the lookup
+    /// tools apply no levels and read no directives.
+    pub fn report_directives(&mut self) {
+        let mut all = std::mem::take(&mut self.output.diagnostics);
+        all.extend(self.out_of_scope.iter().cloned());
+        ridl_core::lint::report_lint_directives(
+            &mut all,
+            &self.output.sources,
+            ridlc::NOT_RAISED_BY_COMPILE,
+        );
+        ridlc::drop_remote_non_errors(&mut all, &self.output.sources, &self.output.remote_units);
+        ridlc::retain_in_report_scope(
+            &mut all,
+            &self.output.sources,
+            self.output.report_scope.as_deref(),
+            &self.remote_dirs,
+        );
+        self.output.diagnostics = all;
+    }
     /// The consumer's checked packages: `output.checked` without the
     /// packages of the remote units, which the loader appends after the
     /// consumer's (ADR-0002 §5, "Remote units").

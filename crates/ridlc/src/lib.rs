@@ -95,7 +95,9 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
+use ridl_core::lint::{
+    LintScopes, apply_lint_levels, drop_allowed_by_default, report_lint_directives,
+};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, MaterializedUnit, RemoteAccess, RidlDatabase,
@@ -193,6 +195,11 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
     // The callers, `check_source` and `compile`, report their diagnostics, so
     // the levels apply here, with the empty scopes: every lint gets its
     // registry default (ADR-0024 decision 6).
+    report_lint_directives(
+        &mut compiled.diagnostics,
+        &compiled.sources,
+        NOT_RAISED_BY_COMPILE,
+    );
     apply_lint_levels(
         &mut compiled.diagnostics,
         &compiled.sources,
@@ -523,7 +530,7 @@ pub fn retain_in_report_scope(
 }
 
 /// Whether [`retain_in_report_scope`] keeps `diagnostic`.
-fn in_report_scope(
+pub fn in_report_scope(
     diagnostic: &Diagnostic,
     sources: &SourceMap,
     scope: Option<&Path>,
@@ -893,16 +900,66 @@ impl CliRun {
 
 /// Runs `check`: loads the workspace at `entry` with the remote units of its
 /// `[imports]` — materialized against `ridl.lock`, which a clean non-frozen
-/// run regenerates — then resolves and checks every package, and applies the
-/// lint levels of every `[lints]` table (ADR-0024 decision 6). Returns the
-/// diagnostics and the source map for rendering; for an entry inside a
-/// workspace member, the compile diagnostics are those of the member's files
-/// and of the remote units ([`retain_in_report_scope`]).
+/// run regenerates — then resolves and checks every package, reports the lint
+/// directives, and applies the lint levels of every `[lints]` table
+/// (ADR-0024 decisions 6 and 19). Returns the diagnostics and the source map
+/// for rendering; for an entry inside a workspace member, the compile
+/// diagnostics are those of the member's files and of the remote units
+/// ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
-    run_check_with_ir(entry, frozen).map(|(run, _)| run)
+    let (mut run, ir) = run_check_unlevelled(entry, frozen)?;
+    report_directives(&mut run, &ir, NOT_RAISED_BY_COMPILE);
+    apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
+    Ok(run)
 }
 
-/// What [`run_check_with_ir`] returns beside the run: the checked workspace
+/// The lint codes the compile entry points never raise: RIDL-407 is the
+/// baseline desk check and RIDL-156 is the podbuf padding check, both run by
+/// `ridl check` only, and RSDL-807 is the link-encoding check, run by a build
+/// that selects a deployment only. A directive that names one of them is not
+/// unused there.
+pub const NOT_RAISED_BY_COMPILE: &[DiagCode] =
+    &[DiagCode::RIDL_407, DiagCode::RIDL_156, DiagCode::RSDL_807];
+
+/// [`NOT_RAISED_BY_COMPILE`] without RSDL-807: the list of a build that
+/// compared at least one backend's encodings against the links.
+const NOT_RAISED_BY_BUILD_WITH_DEPLOYMENT: &[DiagCode] = &[DiagCode::RIDL_407, DiagCode::RIDL_156];
+
+/// Reports the lint directives of `run` ([`report_lint_directives`]) over the
+/// diagnostics of the whole workspace, so that a directive in a file outside
+/// the report scope is checked against that file's own diagnostics, then
+/// keeps in the run only what [`retain_in_report_scope`] keeps. `run` is the
+/// result of [`run_check_unlevelled`] for `ir`, possibly with more
+/// diagnostics added.
+pub fn report_directives(run: &mut CliRun, ir: &CheckedIr, not_raised: &[DiagCode]) {
+    let mut all = std::mem::take(&mut run.diagnostics);
+    all.extend(
+        ir.diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                !in_report_scope(
+                    diagnostic,
+                    &run.sources,
+                    ir.report_scope.as_deref(),
+                    &ir.remote_dirs,
+                )
+            })
+            .cloned(),
+    );
+    report_lint_directives(&mut all, &run.sources, not_raised);
+    // A remote unit is a read-only dependency: no directive report is made
+    // for one of its files, as no other Warning or Info is.
+    drop_remote_non_errors(&mut all, &run.sources, &ir.remote_units);
+    retain_in_report_scope(
+        &mut all,
+        &run.sources,
+        ir.report_scope.as_deref(),
+        &ir.remote_dirs,
+    );
+    run.diagnostics = all;
+}
+
+/// What [`run_check_unlevelled`] returns beside the run: the checked workspace
 /// a caller reads after the run, so that it does not compile the workspace a
 /// second time. `ridl check` reads it for the desk check against the
 /// baseline and for the podbuf padding lint.
@@ -915,14 +972,19 @@ pub struct CheckedIr {
     /// The member directory the entry lies in, when the entry is inside a
     /// workspace member ([`retain_in_report_scope`]).
     pub report_scope: Option<PathBuf>,
+    /// The directories a remote unit is read from ([`remote_dirs`]).
+    pub remote_dirs: Vec<PathBuf>,
     /// The diagnostics of the whole workspace with the severities the emit
     /// sites chose, before the report scope and the lint levels are applied
     /// to the run's own list: the gate a whole-workspace pass reads.
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// [`run_check`], returning the checked workspace as well ([`CheckedIr`]).
-pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRun, CheckedIr)> {
+/// [`run_check`] without the directive report and without the levels: the raw
+/// list, after [`retain_in_report_scope`], and the checked workspace
+/// ([`CheckedIr`]). A caller that raises more diagnostics itself calls
+/// [`report_directives`] and `apply_lint_levels` once, after the last one.
+pub fn run_check_unlevelled(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRun, CheckedIr)> {
     let mut db = RidlDatabase::default();
     let cache = Cache::user_default();
     let Compiled {
@@ -937,14 +999,14 @@ pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRu
         .map_err(load_io_error)?;
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
+    let remote_dirs = remote_dirs(&remote_units, &cache, entry);
     let mut diagnostics = unfiltered.clone();
     retain_in_report_scope(
         &mut diagnostics,
         &sources,
         report_scope.as_deref(),
-        &remote_dirs(&remote_units, &cache, entry),
+        &remote_dirs,
     );
-    apply_lint_levels(&mut diagnostics, &sources, &lints);
     Ok((
         CliRun {
             diagnostics,
@@ -956,6 +1018,7 @@ pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRu
             checked,
             remote_units,
             report_scope,
+            remote_dirs,
             diagnostics: unfiltered,
         },
     ))
@@ -1283,8 +1346,15 @@ fn run_build_inner<E: From<std::io::Error>>(
     // reported (driftsys/ridl#853). Raised here, before the levels are
     // applied, so that `deny` makes it an error the emit gate below reads.
     // The deployment is the one `select_deployment` selects below; a name no
-    // source declares draws nothing here and is reported there.
-    if let Some(selected) = requested_or_only(&declared_deployments(&system), deployment) {
+    // source declares draws nothing here and is reported there. A link is
+    // placed per deployment, so the check also runs over the other declared
+    // deployments: what it raises there is not reported, but it counts as
+    // raised for a directive that names `link-encoding-not-emitted`, which
+    // sits on the consumer's `requires` line, shared by every deployment.
+    let declared = declared_deployments(&system);
+    let mut raised_elsewhere: Vec<Diagnostic> = Vec::new();
+    let mut link_check_ran = false;
+    if let Some(selected) = requested_or_only(&declared, deployment) {
         let mut compared: BTreeSet<&str> = BTreeSet::new();
         let tables = emits
             .iter()
@@ -1305,28 +1375,27 @@ fn run_build_inner<E: From<std::io::Error>>(
             // A table written with no `encodings` key at all is the same
             // declaration: the manifest records the two forms alike
             // (`BackendTable::encodings`).
-            let Some(encodings) = backends.get(table) else {
-                diagnostics.extend(link_encodings::link_encoding_not_emitted(
+            let encodings = match backends.get(table) {
+                None => &[][..],
+                Some(encodings) if encodings.is_empty() => continue,
+                Some(encodings) => encodings.as_slice(),
+            };
+            link_check_ran = true;
+            for name in &declared {
+                let raised = link_encodings::link_encoding_not_emitted(
                     &db,
                     &system,
-                    selected,
+                    name,
                     table,
-                    &[],
+                    encodings,
                     &mut sources,
-                ));
-                continue;
-            };
-            if encodings.is_empty() {
-                continue;
+                );
+                if name == selected {
+                    diagnostics.extend(raised);
+                } else {
+                    raised_elsewhere.extend(raised);
+                }
             }
-            diagnostics.extend(link_encodings::link_encoding_not_emitted(
-                &db,
-                &system,
-                selected,
-                table,
-                encodings,
-                &mut sources,
-            ));
         }
     }
 
@@ -1336,6 +1405,35 @@ fn run_build_inner<E: From<std::io::Error>>(
     // lockfile is not an artifact (Task 4 of
     // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
+        // Both lists are the report's: the directives of a file outside the
+        // scope are checked against the diagnostics of that file.
+        // The reports go to the list their file belongs to; every other
+        // diagnostic stays in the list it was in.
+        // RSDL-807 counts as raised only when the link-encoding check
+        // compared a backend's encodings; what it raised for the other
+        // deployments counts, and is then removed from the list.
+        let (in_len, out_len) = (diagnostics.len(), outside_scope.len());
+        let elsewhere_len = raised_elsewhere.len();
+        diagnostics.append(&mut outside_scope);
+        diagnostics.append(&mut raised_elsewhere);
+        let not_raised = if link_check_ran {
+            NOT_RAISED_BY_BUILD_WITH_DEPLOYMENT
+        } else {
+            NOT_RAISED_BY_COMPILE
+        };
+        report_lint_directives(&mut diagnostics, &sources, not_raised);
+        let mut reports = diagnostics.split_off(in_len + out_len + elsewhere_len);
+        diagnostics.truncate(in_len + out_len);
+        // No report is made for a remote unit's file, as for `run_check`.
+        drop_remote_non_errors(&mut reports, &sources, &remote_units);
+        outside_scope = diagnostics.split_off(in_len);
+        for report in reports {
+            if in_report_scope(&report, &sources, report_scope.as_deref(), &remote_dirs) {
+                diagnostics.push(report);
+            } else {
+                outside_scope.push(report);
+            }
+        }
         apply_lint_levels(&mut diagnostics, &sources, &lints);
         apply_lint_levels(&mut outside_scope, &sources, &lints);
     } else {
@@ -2686,7 +2784,7 @@ fn size_checks_blocked(
 /// unit name when the loader has not done so already. The loader applies the
 /// same rule to its own findings; this applies it to the parser's, the
 /// resolver's, the checker's and the workspace passes'.
-fn drop_remote_non_errors(
+pub fn drop_remote_non_errors(
     diagnostics: &mut Vec<Diagnostic>,
     sources: &SourceMap,
     remote_units: &BTreeMap<String, MaterializedUnit>,

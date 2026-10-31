@@ -10,7 +10,12 @@
 //!   **and comments**. Comparing it catches a dropped or renamed identifier, a
 //!   mutated literal, and a dropped comment — none of which a node-kind-only
 //!   comparison could see. Comment text is compared after trimming trailing
-//!   whitespace, which the formatter strips as insignificant.
+//!   whitespace, which the formatter strips as insignificant. The lint
+//!   directives are compared in their own order, after the other tokens,
+//!   because a directive on the first line of a declaration stays on that
+//!   line when the declaration is broken over several lines (ADR-0024
+//!   decision 2); every other comment keeps its place, so a plain comment
+//!   moved to another declaration is a failure.
 //!
 //! The corpus is reached by a path relative to this crate's manifest, so the
 //! two crates stay decoupled at the filesystem level.
@@ -79,6 +84,50 @@ fn formatting_is_idempotent_over_the_ok_corpus() {
                 syntax_structure(&source, profile),
                 syntax_structure(&once, profile),
                 "`{name}` changed structure at width {width}"
+            );
+        }
+    }
+}
+
+/// Sources with a plain `//` comment after a declaration the formatter
+/// breaks, after a member on the first line of one, and after the second
+/// member of a line: the comment keeps its place among the other tokens.
+const TRAILING_COMMENT_SHAPES: &[(&str, Profile)] = &[
+    (
+        "package p\nstruct S { pair: (a: A, b: B) // pair detail\n  t: (x: X, y: Y, z: Z) // t\n}\n",
+        Profile::Typl,
+    ),
+    (
+        "package p\nstruct S {\n  a: (x: A,\n    y: B) // note\n  b: B, c: C // bc\n  d: D /* x\n  y */ e: E, f: F // ef\n}\n",
+        Profile::Typl,
+    ),
+    (
+        "package p\ninterface I {\n  query getMinMax(window: Duration): (min: Speed, max: Speed) // mm\n  command c(x: u32) [require x > 0, // attrs\n    ensure x > 1]\n}\n",
+        Profile::Ridl,
+    ),
+    (
+        "package p\nservice veh.body.composite: DoorControl, MotorControl // shapes\n",
+        Profile::Ridl,
+    ),
+    (
+        "package p\ncomponent Backend [ external ] { // c\n  requires X\n}\ndeployment D for S {\n  machine A { First } // note\n  machine B { Second }\n}\n",
+        Profile::Rsdl,
+    ),
+];
+
+#[test]
+fn formatting_preserves_content_tokens_over_trailing_comment_shapes() {
+    for (i, (source, profile)) in TRAILING_COMMENT_SHAPES.iter().enumerate() {
+        for width in [100, 40, 20] {
+            let options = FormatOptions {
+                max_line_length: Some(width),
+            };
+            let name = format!("shape {i}");
+            let formatted = format_ok(source, *profile, &options, &name);
+            assert_eq!(
+                content_tokens(source, *profile),
+                content_tokens(&formatted, *profile),
+                "`{name}` changed content tokens at width {width}:\n{formatted}"
             );
         }
     }

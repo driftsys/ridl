@@ -1217,7 +1217,8 @@ in the ridl profile (§1.3).
 
 ## 13. Comments
 
-Discarded by the compiler.
+Discarded by the compiler, except that a `//` comment that starts with `lint:`
+is read by the checker as a lint directive (ADR-0024 decision 2).
 
 ```ridl
 // line comment
@@ -1460,18 +1461,20 @@ a `.ridl` file, as its row says:
 
 ### 16.5 Documentation (TYPL-4xx)
 
-| Code     | Rule                                                                                                                                                    | Severity |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| TYPL-401 | doc link or `@see` target that does not resolve — the name is unknown, is `internal` in another package, or names no member of the declaration          | warning  |
-| TYPL-402 | `@labels` identifier not recognised by active profile                                                                                                   | info     |
-| TYPL-403 | `@labels` combination invalid per active profile                                                                                                        | error    |
-| TYPL-404 | blank line between a doc comment and its carrier — a declaration or a member                                                                            | warning  |
-| TYPL-405 | `@deprecated` doc tag without a reason string                                                                                                           | warning  |
-| TYPL-406 | item without a doc comment — a declaration that is not `internal`, a member of one, or an rsdl declaration; a doc made only of tags is missing          | warning  |
-| TYPL-407 | doc comment in a position that is not a carrier — before `package`, an `import`, a return type or an attribute block, or at the end of a file or a body | warning  |
-| TYPL-408 | doc tag other than `@see`, `@since`, `@deprecated` and `@labels`                                                                                        | warning  |
-| TYPL-409 | `@see` or `@since` with a missing or malformed value                                                                                                    | warning  |
-| TYPL-410 | doc comment written as `/** */` — `allow` by default                                                                                                    | warning  |
+| Code     | Rule                                                                                                                                                                     | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| TYPL-401 | doc link or `@see` target that does not resolve — the name is unknown, is `internal` in another package, or names no member of the declaration                           | warning  |
+| TYPL-402 | `@labels` identifier not recognised by active profile                                                                                                                    | info     |
+| TYPL-403 | `@labels` combination invalid per active profile                                                                                                                         | error    |
+| TYPL-404 | blank line between a doc comment and its carrier — a declaration or a member                                                                                             | warning  |
+| TYPL-405 | `@deprecated` doc tag without a reason string                                                                                                                            | warning  |
+| TYPL-406 | item without a doc comment — a declaration that is not `internal`, a member of one, or an rsdl declaration; a doc made only of tags is missing                           | warning  |
+| TYPL-407 | doc comment in a position that is not a carrier — before `package`, an `import`, a return type or an attribute block, or at the end of a file or a body                  | warning  |
+| TYPL-408 | doc tag other than `@see`, `@since`, `@deprecated` and `@labels`                                                                                                         | warning  |
+| TYPL-409 | `@see` or `@since` with a missing or malformed value                                                                                                                     | warning  |
+| TYPL-410 | doc comment written as `/** */` — `allow` by default                                                                                                                     | warning  |
+| TYPL-411 | lint directive allows a lint that no diagnostic in its scope raises                                                                                                      | info     |
+| TYPL-412 | malformed lint directive — a word other than `allow`, no lint name, a name that is not a lint name, a name of a directive lint, no reason, or no declaration to apply to | info     |
 
 ---
 

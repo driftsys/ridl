@@ -60,9 +60,9 @@ interaction its limit; it has no lint name and no level (decision 1). Decision
 18 names RIDL-150 as the example of a lint the language server does not run; the
 text stands as written. The language server runs the size checks (RIDL-151,
 RIDL-152, RIDL-157 and the MANI-022 of the `[limits]` table) through the same
-`ridlc` function as `ridl check` (ADR-0030 decision 21). When driftsys/ridl#1124
-is built, `payload-above-ceiling` is not a lint name, so a directive that names
-it is TYPL-412.
+`ridlc` function as `ridl check` (ADR-0030 decision 21). Because
+`payload-above-ceiling` is not a lint name, a directive that names it is
+TYPL-412.
 
 Amended 2026-10-30 from the owner's decision of that day: decision 2 is changed
 in place, and decisions 17 to 19 are added. A `//` line comment of the form
@@ -72,17 +72,50 @@ included. Two lints join the registry, TYPL-411 `unused-lint-directive` and
 TYPL-412 `malformed-lint-directive`, both at `info` (decision 18). The deferred
 source attribute of the alternatives is taken in this comment form, and the
 `forbid` alternative now has something to forbid and stays deferred. Decision 4
-gains a sentence. Not built: driftsys/ridl#1124. Until it is built,
-[the lints page](../book/lints.md) keeps saying that no source attribute changes
-a level, because the book describes the system as built.
+gains a sentence. Built by driftsys/ridl#1124: the checker reads directives in
+`ridl_core::lint::directive`, and `apply_lint_levels` and
+`report_lint_directives` apply and report them in `ridl check` (the desk check
+included), `ridl build`, `ridlc check`, `ridlc build`, the language server and
+the MCP tool `ridl_check`. [The lints page](../book/lints.md) and the typl
+reference §13 and §16.5 describe it. The build settled these points the text
+above leaves open:
 
-Documents amended by the amendment of 2026-10-30: this record only. When the
-code lands, driftsys/ridl#1124 updates the lints page, adds one sentence to the
-typl reference §13 (decision 17) and adds the two lints to the typl reference
-§16.5. It also updates the two ranges of documentation codes that name §16.5, in
-the rsdl reference §16 (the codes an `.rsdl` file draws) and in the family
-overview §7, to include the two new codes. The ridl reference, the general form
-and ADR-0029 do not change.
+- A directive that names `unused-lint-directive` or `malformed-lint-directive`
+  draws TYPL-412, and the name is ignored.
+- RIDL-156 `podbuf-padding-order` joins RIDL-407 as a lint that most entry
+  points do not raise. A directive that names it is reported as unused only by
+  the command `ridl check`. RSDL-807 `link-encoding-not-emitted` is raised only
+  by a build that selects a deployment and compares a backend's `encodings`, so
+  a directive that names it is reported as unused only by such a build, which
+  counts a link of any declared deployment, not only the selected one, because
+  the directive sits on the consumer's `requires` line, which every deployment
+  shares.
+- The language server lists no loader lint as not raised, because no directive
+  can cover a loader lint.
+- TYPL-411 and TYPL-412 are not reported for a file of a remote unit.
+- `ridl fmt` never changes which declaration a directive names, a directive that
+  names none included. When the formatter breaks a declaration, a lint directive
+  at the end of its first line stays on that line, after the opening delimiter,
+  also when it followed a member or an attribute on that line. A directive on a
+  line where no declaration starts stays on that line: after a declaration, on
+  the last line of that declaration, which keeps its source layout; after a
+  block comment that leads the next member, on that comment's line. A plain `//`
+  comment is placed as it was before directives existed, so the output for a
+  source without a directive is unchanged.
+- `ridl check` applies the report and the levels once: it starts from the
+  unlevelled run (`ridlc::run_check_unlevelled`), raises RIDL-407 and RIDL-156
+  when their checks run, then reports the directives and applies the levels over
+  the whole run. Decisions 6 and 19 describe the two applications of the levels
+  in `ridl check --baseline` as the build found them; the text stands as
+  written, and the one application is the as-built behaviour.
+
+Documents amended by the amendment of 2026-10-30: this record only.
+driftsys/ridl#1124 updated the lints page, added one sentence to the typl
+reference §13 (decision 17) and added the two lints to the typl reference §16.5.
+It also updated the two ranges of documentation codes that name §16.5, in the
+rsdl reference §16 (the codes an `.rsdl` file draws) and in the family overview
+§7, to include the two new codes. The ridl reference, the general form and
+ADR-0029 do not change.
 
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
@@ -344,15 +377,15 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
     `ridl mcp`: they apply levels to the diagnostics they report, and no exit
     code of theirs depends on a level.
 
-17. **The directive is defined in this record, and the typl reference gains one
-    sentence when the code lands** (2026-10-30). The typl reference §13 says a
-    comment is discarded by the compiler, which stops being true for a lint
-    directive, and the reference is where an author reads the meaning of a
-    comment. It gains one sentence in §13: a `//` comment that starts with
-    `lint:` is read by the checker as a lint directive, ADR-0024 decision 2. The
-    reference is included in the book, which describes the system as built, so
-    the sentence is added with the code (driftsys/ridl#1124), not now. The ridl
-    and rsdl references take comments from typl and do not change.
+17. **The directive is defined in this record, and the typl reference gained one
+    sentence with the code** (2026-10-30). The typl reference §13 said a comment
+    is discarded by the compiler, which stopped being true for a lint directive,
+    and the reference is where an author reads the meaning of a comment. It has
+    one sentence in §13: a `//` comment that starts with `lint:` is read by the
+    checker as a lint directive, ADR-0024 decision 2. The reference is included
+    in the book, which describes the system as built, so the sentence was added
+    with the code (driftsys/ridl#1124), not before. The ridl and rsdl references
+    take comments from typl and did not change.
 
 18. **Two lints report directive mistakes, both at `info`** (2026-10-30). Both
     are TYPL-4xx, the band of the documentation rules (typl §16.5), which read
