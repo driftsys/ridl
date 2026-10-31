@@ -230,7 +230,9 @@ traits, `Transport::Interrupted`, `Rule::Utf8` and the `face` traits are
 additive. `ridl-rt-conformance` — additive (a new module and extension, no new
 required item). `ridl-loopback` — additive. `ridl-transport-ws` — additive:
 `Frame` and `Note` are `#[non_exhaustive]`, `Backend::streams` has a default,
-and the new constants are new items. `ridl-descriptor` — additive accessors.
+and the new constants are new items. `ridl-descriptor` — breaks, in the same
+release: `ridl_descriptor::Member` gains a public field (`streams`), and its
+accessors are additive.
 
 ### 3.2 Flow
 
@@ -320,7 +322,7 @@ spelling of the non-stream parameters (R-10), so
 `replayTrace(samples:
 <FilterState>)` has the request `()` and one entry
 `{ no: 1, form: Elements,
-element: "veh.hvac.FilterState" }`; the `response`
+element: "veh.cluster.FilterState" }`; the `response`
 payload of a streamed-reply query keeps `type_name` `<T>`, as today, beside its
 entry `no: 0`. A file written before the field verifies and reads `streams` as
 absent, as `limit` and `compatible` did (D-3 of the catalog descriptor record).
@@ -1047,10 +1049,11 @@ Delivers: section 8, R-23.
 - **R-35. One breaking `ridl-rt` release carries stages 1 and 2 together, and it
   ships in the next breaking release of the workspace, with
   driftsys/ridl#1108.** The owner's ruling of 2026-10-31. Stage 1's `Member`
-  field and stage 2's `Interest` variants are the two breaks (R-32); stages 3 to
-  6 are additive and may ship in any later release. Reason: one break is cheaper
-  for every downstream runtime than two, and the workspace already has a
-  breaking release scheduled.
+  field and stage 2's `Interest` variants are the two breaks of `ridl-rt`
+  (R-32), and `ridl-descriptor` breaks in the same release through its `Member`
+  field; stages 3 to 6 are additive and may ship in any later release. Reason:
+  one break is cheaper for every downstream runtime than two, and the workspace
+  already has a breaking release scheduled.
 
 ## 11. Questions settled by the owner
 
@@ -1085,6 +1088,18 @@ document waits on the owner.
   `(samples: <FilterState>)`, so a reader today can tell a stream only by
   parsing a string the record says no reader parses. R-31 gives the streams
   their own entries in stage 1.
+
+## As built
+
+Rulings taken while the port was built. The source is the rustdoc of
+`crates/ridl-rt/src/port.rs`; this note only lists them.
+
+- An empty chunk is always taken.
+- A runtime without a member table accepts stream numbers 0, 1 and 2.
+- A forget keeps an ended stream and interrupts an open one.
+- A query's settlement releases its parameter streams; a command's does not.
+- A dropped handler interrupts a call whose streams have moved.
+- No `Command` or `Query` impl is generated for a member that has a stream.
 
 ## Trace
 

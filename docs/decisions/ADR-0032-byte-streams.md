@@ -18,6 +18,13 @@ code. The documents in "Documents amended" are changed with the acceptance.
 Nothing in this record is built: streams have no port, no transport framing and
 no generated code (driftsys/ridl#336, driftsys/ridl#1116).
 
+Amended 2026-10-31. Decision 10's example spelled the result union inline as
+`<DocChunk | DocError>`, which the grammar does not admit; the example now
+declares a named union (`union DocChunkResult`) and writes `<DocChunkResult>`,
+as ridl §12.4 does. Decisions 9 and 11 are built as the stream port of `ridl-rt`
+0.x (the signatures are in [the ridl-rt design](../design/ridl-rt.md)); the
+frame version and the generated face are still to come (driftsys/ridl#1116).
+
 ## Context
 
 - The ridl reference §12 defines the stream container `<T>`, valid only in
@@ -171,10 +178,13 @@ order the questions were listed.
     returning `DocInfo | DocError`). A failure the producer meets during the
     transfer reaches the consumer of a byte stream only as an interrupted
     transfer (decision 11). An author who needs the reason inside the stream
-    declares a named element type that is a result union
-    (`<DocChunk | DocError>`, decision 4, ridl §12.4). In the upload direction,
-    a `command` carries no functional result (ridl §6.1), so a provider's
-    failure of an upload is state, or the author declares a
+    declares a named element type that is a result union, as in
+    `union DocChunkResult { chunk : DocChunk, failure : DocError }` with
+    `query fetch(id: DocId): <DocChunkResult>` (decision 4, ridl §12.4). The
+    element of a stream is one named type, so the union is declared and named:
+    the grammar admits one path inside `<…>`. In the upload direction, a
+    `command` carries no functional result (ridl §6.1), so a provider's failure
+    of an upload is state, or the author declares a
     `query put(...): PutResult | PutError` whose reply follows the upload.
 
 11. **The end of a stream is explicit.** A stream ends when its producer ends

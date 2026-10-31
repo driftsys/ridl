@@ -180,18 +180,28 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
   stated under "The catalog hash".
 - **Members.** One `Member` per interaction, in body order: `name`, `ordinal`
   (the position in the body, ridl §11), `kind` (`Signal`, `Event`, `Command`,
-  `Query`, `Fixed`), `payloads`, and `timing` (`mode`, `min_us`, `max_us`) when
-  the interaction declares one. A fixed member never has a timing. `limit` is
-  the payload limit in bytes that a `[limits]` entry of the unit's manifest
-  gives the interaction, copied from the IR's optional limit, which the catalog
-  hash covers (ADR-0030 decisions 12 and 13). It is an optional scalar appended
-  last to `Member`: absent when no entry applies, and in a file written before
-  the field existed, so `SCHEMA_VERSION` stays 1. An absent limit means the
-  default ceiling of the member's kind: 3,840 bytes for a signal and an event,
-  16,128 for a command and a query, 65,280 for a fixed (ADR-0030 decision 16). A
-  limit of a signal or an event above 3,840 bytes is one that a
-  `[limits.interaction]` entry raised, up to 16,128 (decision 18). Contract
-  clauses and a signal's initial value are not carried.
+  `Query`, `Fixed`), `payloads`, `streams`, and `timing` (`mode`, `min_us`,
+  `max_us`) when the interaction declares one. A fixed member never has a
+  timing. `limit` is the payload limit in bytes that a `[limits]` entry of the
+  unit's manifest gives the interaction, copied from the IR's optional limit,
+  which the catalog hash covers (ADR-0030 decisions 12 and 13). It is an
+  optional scalar appended last to `Member`: absent when no entry applies, and
+  in a file written before the field existed, so `SCHEMA_VERSION` stays 1. An
+  absent limit means the default ceiling of the member's kind: 3,840 bytes for a
+  signal and an event, 16,128 for a command and a query, 65,280 for a fixed
+  (ADR-0030 decision 16). A limit of a signal or an event above 3,840 bytes is
+  one that a `[limits.interaction]` entry raised, up to 16,128 (decision 18).
+  Contract clauses and a signal's initial value are not carried. `streams` is
+  the list of the member's streams, appended to `Member` and absent in a file
+  written before the field existed. Each `StreamPayload` has `no` (0 is the
+  reply stream, `k` from 1 is the `k`-th stream parameter, counting only the
+  stream parameters), `form` (`Elements`, `Bytes` or `Text`), `element` (the
+  canonical element type name under `Elements`, absent otherwise) and
+  `max_sizes` (the element's rows, as for a payload). Entries are in ascending
+  `no`. The `request` payload's `type_name` spells the non-stream parameters
+  only, so a request of stream parameters alone is `()`. The `response` payload
+  of a query that replies with a stream keeps `<T>` as its `type_name`, beside
+  its entry `no` 0.
 - **Payloads.** A signal has one payload with the role `value`, an event one
   with `occurrence`, a command one with `request`, a fixed one with `value`. A
   query has a `request`, and a `response` when the IR carries a return type.
@@ -603,7 +613,7 @@ the status in the code and the rejected alternatives in short form.
 | D-1 Two descriptors; the system descriptor is self-contained | Half built: a catalog descriptor for every unit with an interface shape. The system descriptor is not built.                                                                                                                                                                                                | A system descriptor that references catalogs by hash only; one file per machine.                                                                                              |
 | D-2 Descriptors are FlatBuffers; the IR stays protobuf       | Built. ADR-0014 is unchanged for the IR.                                                                                                                                                                                                                                                                    | Protobuf descriptors; JSON or TOML as the artifact; both encodings.                                                                                                           |
 | D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                                                                       | A descriptor schema generated from the IR schema.                                                                                                                             |
-| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, the timing and the optional payload limit are carried. No `stream` flag (driftsys/ridl#336).                                                | —                                                                                                                                                                             |
+| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, the timing and the optional payload limit are carried. Including the `streams` list of each member.                                         | —                                                                                                                                                                             |
 | D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
 | D-6 A size state per payload and encoding                    | Built for proto3, FlatBuffers and podbuf, as "The size states" states. The max-size conformance test is built for FlatBuffers and, since 2026-10-20, for proto3.                                                                                                                                            | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
 | D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                                                                              | —                                                                                                                                                                             |
@@ -626,25 +636,23 @@ the status in the code and the rejected alternatives in short form.
   a second emitter over the same system IR, built when a runtime that reads one
   exists.
 - **Payload layouts** as a `.bfbs` reflection schema (D-7).
-- **The `stream` flag** and the per-element bound of a stream payload
-  (driftsys/ridl#336), to be appended to the schema.
 - **The cross-compiler check** of the schemas with `flatc` and `flatcc` (D-3).
 
 For these, the archived design note is the record of the agreed direction.
 
 ## Open items and debt
 
-| Item                                                                                                 | Issue             |
-| ---------------------------------------------------------------------------------------------------- | ----------------- |
-| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                         | driftsys/ridl#665 |
-| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it            | driftsys/ridl#336 |
-| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling              | driftsys/ridl#670 |
-| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                              | driftsys/ridl#679 |
-| debt: review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684 |
-| debt: review follow-ups — shared proto3 refusal rules (all but `optional_repeated`), agreement tests | driftsys/ridl#690 |
-| debt: deferred review items from PR #692 (the lowering and the catalog check)                        | driftsys/ridl#693 |
-| debt: deferred review items from PR #696 (ridl describe)                                             | driftsys/ridl#697 |
-| debt: deferred review items from PR #699 (the catalog hash per region)                               | driftsys/ridl#701 |
+| Item                                                                                                 | Issue              |
+| ---------------------------------------------------------------------------------------------------- | ------------------ |
+| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                         | driftsys/ridl#665  |
+| Streams (ridl §12): the frame version and the generated face follow the port and the descriptor      | driftsys/ridl#1116 |
+| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling              | driftsys/ridl#670  |
+| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                              | driftsys/ridl#679  |
+| debt: review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684  |
+| debt: review follow-ups — shared proto3 refusal rules (all but `optional_repeated`), agreement tests | driftsys/ridl#690  |
+| debt: deferred review items from PR #692 (the lowering and the catalog check)                        | driftsys/ridl#693  |
+| debt: deferred review items from PR #696 (ridl describe)                                             | driftsys/ridl#697  |
+| debt: deferred review items from PR #699 (the catalog hash per region)                               | driftsys/ridl#701  |
 
 ## Trace
 

@@ -52,8 +52,8 @@ table Payload {
   // the streams.
   type_name: string (required);
   // One row per encoding that has a state; empty when every encoding is
-  // absent (a stream, a request of zero or several parameters, a `T | E`
-  // reply, until a record defines their encoding).
+  // absent (a stream, a request of zero or several non-stream parameters, a
+  // `T | E` reply, until a record defines their encoding).
   max_sizes: [MaxSize] (required);
 }
 

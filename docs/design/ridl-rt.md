@@ -212,9 +212,8 @@ package whose `encodings` list names `podbuf`.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
-`Contract::UnknownInteraction` for either), the stream element type and flag
-(streams are out of 0.1), and `default_applied` (no runtime behaviour depends on
-it).
+`Contract::UnknownInteraction` for either), and `default_applied` (no runtime
+behaviour depends on it).
 
 ## Time and the envelope
 
@@ -1158,9 +1157,9 @@ Generated code returns both since the async client: a call future's output is
 
 ## What 0.1 leaves out
 
-The frame framing of a stream and the generated face of a `stream`-typed field
-(driftsys/ridl#1116); `Inline` payloads; `Constrained` (nothing calls it in
-0.1); `Family` (the IR carries no family field yet); `ServiceId` (dropped,
+The frame framing of a stream and the generated face of a stream parameter or
+reply (driftsys/ridl#1116); `Inline` payloads; `Constrained` (nothing calls it
+in 0.1); `Family` (the IR carries no family field yet); `ServiceId` (dropped,
 ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's wire tag
 values — the frame specification fixed the values, 1 FlatBuffers, 2 proto3, 3
 `podbuf`; the constant itself is a later 0.x minor); `Access` (the trust

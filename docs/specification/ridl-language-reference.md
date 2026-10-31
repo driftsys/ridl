@@ -1431,11 +1431,19 @@ spelling. A failure the provider knows about before the transfer is the reply of
 a preceding query (`query describe(id: DocId): DocInfo | DocError`). A failure
 the producer meets during the transfer reaches the consumer of a byte stream
 only as an interrupted transfer. An author who needs the reason inside the
-stream declares a named element type that is a result union
-(`<DocChunk | DocError>`), and the rules above apply. In the upload direction a
-`command` carries no functional result (§6.1), so a provider's failure of an
-upload is state, or the author declares a `query put(...): PutResult | PutError`
-whose reply follows the upload.
+stream declares a named element type that is a result union, and the rules above
+apply:
+
+```ridl,ignore
+union DocChunkResult { chunk : DocChunk, failure : DocError }
+query fetch(id: DocId): <DocChunkResult>
+```
+
+The element of a stream is one named type, so the union is declared and named;
+the grammar admits one path inside `<…>`. In the upload direction a `command`
+carries no functional result (§6.1), so a provider's failure of an upload is
+state, or the author declares a `query put(...): PutResult | PutError` whose
+reply follows the upload.
 
 **Invalid UTF-8 in a `<string>` stream ends the stream** (ADR-0032 decision 12).
 Content that is not valid UTF-8 is a Stratum 2 `INVALID_VALUE`, with the RPC
