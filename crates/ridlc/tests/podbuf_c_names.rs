@@ -1,0 +1,279 @@
+//! The build-wide check of the C names the podbuf headers of one build claim
+//! (driftsys/ridl#1153). The header of each package is written for a C file
+//! that includes several of them, so a name two packages derive for two
+//! different entities is refused once per build, before any header is
+//! written; a head one package declares and another lays out inline is one
+//! entity, defined twice behind one guard, and is not refused.
+
+use std::path::Path;
+
+use ridl_core::diag::Diagnostic;
+use ridlc::Emit;
+
+/// Writes a workspace whose members are `packages`, each a `(directory,
+/// package name, source)` triple, and builds it with `emits`. Answers the
+/// build's diagnostics and the output directory.
+fn build(packages: &[(&str, &str, &str)], emits: &[Emit]) -> (Vec<Diagnostic>, tempfile::TempDir) {
+    let src = tempfile::tempdir().expect("a temp dir");
+    let out = tempfile::tempdir().expect("a temp dir");
+    let members: Vec<String> = packages
+        .iter()
+        .map(|(dir, _, _)| format!("\"{dir}\""))
+        .collect();
+    std::fs::write(
+        src.path().join("ridl.toml"),
+        format!(
+            "[workspace]\nmembers = [{}]\n\n[lints]\nmissing-docs = \"allow\"\n",
+            members.join(", ")
+        ),
+    )
+    .unwrap();
+    for (dir, name, source) in packages {
+        let member = src.path().join(dir);
+        std::fs::create_dir(&member).unwrap();
+        std::fs::write(
+            member.join("ridl.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        )
+        .unwrap();
+        std::fs::write(member.join(format!("{dir}.typl")), source).unwrap();
+    }
+    let run =
+        ridlc::run_build(src.path(), out.path(), emits, false.into()).expect("the build runs");
+    (run.diagnostics, out)
+}
+
+/// The names of the files in `dir` with the extension `ext`, sorted.
+fn files_with(dir: &Path, ext: &str) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .expect("the output directory is read")
+        .map(|entry| entry.expect("an entry").path())
+        .filter(|path| path.extension().is_some_and(|found| found == ext))
+        .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// The one error diagnostic that refuses the C name `name`.
+fn error_naming<'a>(diagnostics: &'a [Diagnostic], name: &str) -> &'a Diagnostic {
+    let lead = format!("the C name `{name}` is claimed by ");
+    let found: Vec<&Diagnostic> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.message.starts_with(&lead))
+        .collect();
+    assert_eq!(found.len(), 1, "{name}: {diagnostics:?}");
+    found[0]
+}
+
+/// `package veh` with `type CommonSpeed` and `package veh.common` with
+/// `struct Speed` both derive `veh_common_speed_head` and its guard, with two
+/// layouts. The build refuses both headers, names both packages, writes no
+/// header, writes the other emits, and exits 1.
+#[test]
+fn two_packages_deriving_one_head_name_are_refused_naming_both() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "veh",
+                "veh",
+                "package veh\ntype CommonSpeed : integer [0..100]\n",
+            ),
+            (
+                "common",
+                "veh.common",
+                "package veh.common\nstruct Speed { v : integer [0..1000] }\n",
+            ),
+        ],
+        &[Emit::Podbuf, Emit::IrJson],
+    );
+    let error = error_naming(&diagnostics, "veh_common_speed_head");
+    assert!(
+        error
+            .message
+            .contains("the head of `CommonSpeed` in the header of `veh`")
+            && error
+                .message
+                .contains("the head of `Speed` in the header of `veh.common`"),
+        "{}",
+        error.message
+    );
+    assert_eq!(
+        error.severity,
+        ridl_core::diag::Severity::Error,
+        "{error:?}"
+    );
+    // The guard macro of the two heads is one name too, and is its own error.
+    let guard = error_naming(&diagnostics, "VEH_COMMON_SPEED_HEAD_DEFINED");
+    assert!(
+        guard
+            .message
+            .contains("the guard of `veh_common_speed_head`"),
+        "{}",
+        guard.message
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+    assert_eq!(
+        files_with(out.path(), "json"),
+        vec!["veh.common.ir.json", "veh.ir.json"]
+    );
+}
+
+/// The tuple at `a.Hub.size` and `struct Size` of `package a.hub` both derive
+/// `a_hub_size_head`; the two heads are refused.
+#[test]
+fn a_tuple_head_and_a_struct_head_of_another_package_are_refused() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "a",
+                "a",
+                "package a\nstruct Hub { size : (w: integer [0..10], h: integer [0..10]) }\n",
+            ),
+            (
+                "hub",
+                "a.hub",
+                "package a.hub\nstruct Size { w : integer [0..10] }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "a_hub_size_head");
+    assert!(
+        error
+            .message
+            .contains("the head of the tuple at `Hub.size` in the header of `a`")
+            && error
+                .message
+                .contains("the head of `Size` in the header of `a.hub`"),
+        "{}",
+        error.message
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// The accessor `x_y_z_head_at` of the field `zHead` of `x.Y` and the head
+/// `x_y_z_head` of `x.y.Z` are refused together: the whole-buffer accessor
+/// `x_y_z_head` of the first is the head type name of the second.
+#[test]
+fn an_accessor_and_a_head_of_another_package_are_refused() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "x",
+                "x",
+                "package x\nstruct Y { zHead : integer [0..10] }\n",
+            ),
+            (
+                "xy",
+                "x.y",
+                "package x.y\nstruct Z { q : integer [0..10] }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "x_y_z_head");
+    assert!(
+        error
+            .message
+            .contains("the accessor of `z_head` of the head of `Y` in the header of `x`")
+            && error
+                .message
+                .contains("the head of `Z` in the header of `x.y`"),
+        "{}",
+        error.message
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// The enum `A` of `package ridl.podbuf` with a value `H` spells
+/// `RIDL_PODBUF_A_H`, the include guard of the header of `package a`; a C
+/// file that includes both would skip the second header.
+#[test]
+fn a_constant_equal_to_the_include_guard_of_another_header_is_refused() {
+    let (diagnostics, out) = build(
+        &[
+            ("a", "a", "package a\nstruct S { x : integer [0..10] }\n"),
+            (
+                "pb",
+                "ridl.podbuf",
+                "package ridl.podbuf\nenum A { H = 0 }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "RIDL_PODBUF_A_H");
+    assert!(
+        error
+            .message
+            .contains("the include guard of the header in the header of `a`")
+            && error
+                .message
+                .contains("the enum value `H` in the header of `ridl.podbuf`"),
+        "{}",
+        error.message
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// A head one package declares and another lays out inline is one entity: the
+/// two headers define `a_inner_head` behind one guard, and the build writes
+/// both.
+#[test]
+fn an_inline_redefinition_of_a_foreign_head_is_not_a_clash() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "a",
+                "a",
+                "package a\nstruct Inner { x : integer [0..10] }\n",
+            ),
+            (
+                "b",
+                "b",
+                "package b\nimport a.Inner\nstruct Outer { i : Inner }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
+    let b = std::fs::read_to_string(out.path().join("b.h")).unwrap();
+    assert!(b.contains("typedef struct a_inner_head {"), "{b}");
+}
+
+/// The same for the head of a tuple: `b` lays `a.Hub` out inline and defines
+/// the tuple head `a_hub_size_head` that `a.h` defines, under the declaring
+/// package's name.
+#[test]
+fn an_inline_redefinition_of_a_foreign_tuple_head_is_not_a_clash() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "a",
+                "a",
+                "package a\nstruct Hub { size : (w: integer [0..10], h: integer [0..10]) }\n",
+            ),
+            (
+                "b",
+                "b",
+                "package b\nimport a.Hub\nstruct Wheel { h : Hub }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
+    let b = std::fs::read_to_string(out.path().join("b.h")).unwrap();
+    assert!(b.contains("typedef struct a_hub_size_head {"), "{b}");
+}

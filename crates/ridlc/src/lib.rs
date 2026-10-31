@@ -1516,6 +1516,32 @@ fn run_build_inner<E: From<std::io::Error>>(
         // region over.
         let others = catalog_scope(&packages, std_ir.as_ref());
 
+        // The podbuf headers of one build are written for a C file that
+        // includes any of them together, so their C names are checked
+        // against each other once per build, over every package a header is
+        // written for. A clash is one detached error per name, and no header
+        // is written for the build; the other emits proceed
+        // (`write_emits`'s doc comment).
+        let podbuf_names_clash = emits.contains(&Emit::Podbuf)
+            && match ridl_backend_podbuf::check_c_names(&others) {
+                Ok(()) => false,
+                Err(clashes) => {
+                    diagnostics.extend(clashes.into_iter().map(|clash| {
+                        error_diagnostic("", clash.message, FileId::DETACHED, TextRange::default())
+                    }));
+                    true
+                }
+            };
+        let emits: Vec<Emit> = emits
+            .iter()
+            .copied()
+            .filter(|emit| !(podbuf_names_clash && *emit == Emit::Podbuf))
+            .collect();
+        let code_emits: Vec<Emit> = code_emits
+            .into_iter()
+            .filter(|emit| !(podbuf_names_clash && *emit == Emit::Podbuf))
+            .collect();
+
         // The lowered system, with the catalog hashes its regions carry. The
         // region hashes must equal the hashes a `--emit catalog` build
         // writes, so `ridl.std` is in their scope whenever a package
@@ -1751,7 +1777,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         if emits.iter().any(|emit| emit.system_dump_suffix().is_some())
             && let Some(lowered) = &lowered_system
         {
-            write_system_emits(out_dir, lowered, emits, &mut diagnostics)?;
+            write_system_emits(out_dir, lowered, &emits, &mut diagnostics)?;
         }
     }
 
@@ -3091,6 +3117,13 @@ fn write_catalogs(
 /// that in place of the request's model. A backend that cannot render this
 /// package answers with an error diagnostic and no file, and only its own
 /// artifact is skipped.
+///
+/// The podbuf headers are also checked against each other once per build,
+/// before this function runs for any package: a C file includes any of them
+/// together, so a C name two packages derive for two different entities
+/// (`ridl_backend_podbuf::check_c_names`, over `others`) is a detached error
+/// per name, [`Emit::Podbuf`] is dropped from the build's emits so that no
+/// header is written, and every other emit proceeds; the build exits 1.
 ///
 /// [`Emit::Catalog`] calls no backend and writes nothing here: the catalogs
 /// are per unit, not per package, and [`write_catalogs`] writes them once
