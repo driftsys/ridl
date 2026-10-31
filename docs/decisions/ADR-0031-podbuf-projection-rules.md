@@ -404,10 +404,11 @@ a field is appended.
    guard `<PKG>_<TYPE>_HEAD_DEFINED`, and the accessors `<pkg>_<type>_value`,
    which reads a whole buffer, and `<pkg>_<type>_value_at`, which reads a head
    of a given size: the C names of the Rust view's `value` accessor. The
-   constants, the head type names, the guard macro of each head and the accessor
-   functions are claimed once, and a package where two of them are equal is
-   refused with a message that names both claimants. A box whose head has no
-   byte (`bytes [0]`) has no head and no accessor, as any head with no field.
+   constants of the enums, enum sets and union tags, the head type names, the
+   guard macro of each head, and the accessor and presence-test functions are
+   claimed once, and a package where two of them are equal is refused with a
+   message that names both claimants. A box whose head has no byte (`bytes [0]`)
+   has no head and no accessor, as any head with no field.
    `ridl build --emit podbuf` refuses a package with a named scalar, enum or
    enum set that has no podbuf size bound, or whose box head name equals the
    name of another head, as the Rust codec refuses it.

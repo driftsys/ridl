@@ -543,6 +543,7 @@ fn the_owner_text_names_an_arm_a_map_entry_and_a_tuple_with_no_path() {
         .collect();
     for expected in [
         "the head of the arm `a` of `U`",
+        "the head of the arm `b` of `U`",
         "the entry head of the map at `M.byKey`",
         "the head of the tuple `TPair`",
     ] {
@@ -555,7 +556,8 @@ fn the_owner_text_names_an_arm_a_map_entry_and_a_tuple_with_no_path() {
 }
 
 /// The owner texts of the heads an importing header defines again: a foreign
-/// declaration and a tuple nested in it.
+/// declaration, a tuple nested in it, the first and the second arm of a
+/// foreign union, and the entry head of a foreign map.
 #[test]
 fn the_owner_text_names_a_foreign_head_and_a_nested_tuple() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
@@ -581,6 +583,9 @@ fn the_owner_text_names_a_foreign_head_and_a_nested_tuple() {
     for expected in [
         "the head of `pod.parts.Wheel`",
         "the head of the tuple at `pod.parts.Hub.size`",
+        "the head of the arm `slick` of `pod.parts.Tyre`",
+        "the head of the arm `flat` of `pod.parts.Tyre`",
+        "the entry head of the map at `pod.parts.Table.byPair`",
     ] {
         assert!(
             texts.iter().any(|text| text == expected),
@@ -638,4 +643,27 @@ fn a_box_with_no_head_or_an_unknown_declaration_is_skipped() {
     .expect("generate")
     .header_source;
     assert!(!h.contains("p_s_count"), "{h}");
+}
+
+/// A presence test whose `_at` function equals the accessor of another head
+/// is refused, and the message names both claimants: `S`'s
+/// `p_q_s_has_x_at` and the accessor of the field `xAt` of `SHas`.
+#[test]
+fn a_presence_test_equal_to_an_accessor_is_refused_naming_both() {
+    let err = generate_fixture_err(
+        "package p.q\n\
+         struct S {\n  x : integer [0..255]?\n}\n\
+         struct SHas {\n  xAt : integer [0..255]\n}\n",
+    );
+    assert!(
+        err.message.contains("`p_q_s_has_x_at`")
+            && err
+                .message
+                .contains("the presence test of `x` of the head of `S`")
+            && err
+                .message
+                .contains("the accessor of `x_at` of the head of `SHas`"),
+        "{}",
+        err.message
+    );
 }

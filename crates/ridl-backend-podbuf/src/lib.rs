@@ -501,11 +501,23 @@ impl<'a> Header<'a> {
             .unwrap_or_else(|| format!("arm{}", arm.arm))
     }
 
-    /// What head `at` is, for the message of a refused name claim: the head
-    /// of a declaration, a box or a foreign declaration, the head of a tuple
-    /// by its path (by its wire name when the model gives no path), the head
-    /// of a union arm, or the entry head of a map. `a head` when the model
-    /// does not name the owner.
+    /// What head `at` is, for the message of a refused name claim:
+    ///
+    /// - the head of a declaration or a box: ``the head of `Decl` ``, and of a
+    ///   foreign declaration: ``the head of `pkg.Decl` ``;
+    /// - a tuple of this package: ``the head of the tuple at `Decl.field` ``,
+    ///   or ``the head of the tuple `<wire>` `` when the model gives it no
+    ///   declaration path;
+    /// - a tuple nested in a foreign declaration:
+    ///   ``the head of the tuple at `<path>` ``, where the path starts at the
+    ///   qualified name of that declaration (`pod.parts.Hub.size`);
+    /// - a union arm: ``the head of the arm `arm` of `Union` ``, with
+    ///   `pkg.Union` for a foreign union and `arm<ordinal>` when the arm is not
+    ///   found;
+    /// - a map entry: ``the entry head of the map at `<path>` ``.
+    ///
+    /// `a head` for a head with no source, or when the declaration, tuple or
+    /// foreign entry the source names cannot be read from the model.
     fn owner_text(&self, at: usize) -> String {
         use v1::podbuf_head::Source;
         let declared = |index: u32| {
