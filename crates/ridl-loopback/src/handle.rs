@@ -5,7 +5,7 @@
 //! The six here group eleven roles the way that decision derives the
 //! threading split: the five roles with a `&mut self` method take a handle
 //! each, and the six whose methods all take `&self` share one, because they
-//! are exactly the roles several threads may hold at once. `Wakeable`, the
+//! are exactly the roles several threads may hold at once. `Wakeable`, a
 //! port trait outside the eleven roles, is on every handle, because each
 //! handle wakes its own waiters, and the two stream extensions are on the
 //! caller and the handler handle, beside the role each extends. Every handle here

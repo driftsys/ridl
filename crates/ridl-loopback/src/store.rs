@@ -893,8 +893,12 @@ impl Store {
     /// operation that frees a slot. What it does depends on where the call
     /// is:
     ///
-    /// - **Settled**: nothing is left to happen to it, so its slot is
-    ///   reclaimed now.
+    /// - **Settled**: its slot is reclaimed now, unless the provider still
+    ///   has a stream parameter to pull to its end, as for a command
+    ///   acknowledged `Ok` whose stream parameter is not drained. Then
+    ///   [`Store::defer_forget`] marks it forgotten and keeps its slot until
+    ///   the provider is done with every stream parameter or its handler is
+    ///   dropped.
     /// - **Claimed by a handler and not settled**: it is marked forgotten and
     ///   keeps its slot. The provider still settles it — `Handler`'s contract
     ///   is that every claim is settled, and a caller losing interest is not
@@ -1075,7 +1079,7 @@ impl Store {
     /// it would be lost to every other caller. One exception holds the slot
     /// longer: a call whose provider still has a stream parameter to read
     /// keeps its slot until the provider is done with it or its handler is
-    /// dropped (`Store::forget`, the deferred case), so a settled command
+    /// dropped (`Store::defer_forget`), so a settled command
     /// whose stream parameter no provider drains holds its slot for as long
     /// as the handler that acknowledged it lives.
     ///
@@ -1645,10 +1649,11 @@ impl Store {
         if let Some(closed) = stream.closed(side) {
             return Err(closed);
         }
+        // The provider produces only the reply stream, and reaches this end
+        // only for a claim already settled, whose reply stream the
+        // settlement finished: so the provider never gets past `closed`, and
+        // an end marks no call for `close_handler`.
         stream.ended = true;
-        if side == Side::Provider {
-            entry.provider_used_streams = true;
-        }
         wake.extend(self.take_stream_waker(slot, s, side.other()));
         Ok(())
     }
