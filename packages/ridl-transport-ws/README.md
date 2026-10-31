@@ -46,6 +46,50 @@ The arguments of a command or a query longer than the member's limit reject the
 call with `SessionError` `corrupt` before anything is sent, the answer the
 provider gives a `request` above the limit.
 
+## A large `fixed`
+
+On a session of frame version 2, the provider sends the value of a `fixed` that
+does not fit one message as `block` frames of 4,096 bytes each, except the last
+one, which holds the rest of the value. The session reassembles them and settles
+the waiting reads with one sample, as for a value that arrived in one `publish`.
+The limit of a `fixed` is the one its interface table gives, else
+`FIXED_CEILING`, and never more than 65,280 bytes: a table limit above 65,280
+counts as 65,280, and one that is not a finite number counts as 0. Each
+reassembled value goes into a new buffer of its own length, which the session
+does not write to again.
+
+A value of a `fixed` longer than its limit, whether it arrived in one `publish`
+or in blocks, and on either frame version:
+
+- rejects every read waiting for it with `SessionError` `corrupt`;
+- is recorded once, through `onNote`, as
+  `{ note: "discarded", reason: "over-limit", frame }`, where `frame` is the
+  `publish` or the first block, also when no read waits for it. In blocks, it is
+  refused at the first block, before a byte is copied, and its other blocks are
+  skipped;
+- leaves the session open.
+
+The blocks of one value come in order, from index 0, with no blocks of another
+value between them. Each of these ends the session with the violation
+`block-sequence`, and every waiting operation then rejects with `down`:
+
+- a missing, a repeated or a reordered block;
+- a block of index above 0 with no value in progress, or a block of index 0
+  while a value is in progress;
+- a block whose interface, ordinal, envelope or total length differs from the
+  value in progress;
+- a whole `publish` or an `answer` of the `fixed` whose blocks are in progress.
+
+Frames of other interactions between two blocks are handled as usual, and so is
+a `publish` or an `answer` with the same interface and ordinal under another
+kind.
+
+Against a provider that serves frame version 1 only (`ridl-ws-v1` selected), a
+`fixed` larger than one message is not sent in blocks: the provider answers the
+read with `contract(UnknownInteraction)`, so the read rejects with
+`SessionError` `contract` `unknown-interaction`, the same error an unknown
+member gives.
+
 ## Limits
 
 - On a protocol violation, the client closes the socket without a close code,
