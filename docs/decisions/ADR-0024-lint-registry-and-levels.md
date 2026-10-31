@@ -60,9 +60,9 @@ interaction its limit; it has no lint name and no level (decision 1). Decision
 18 names RIDL-150 as the example of a lint the language server does not run; the
 text stands as written. The language server runs the size checks (RIDL-151,
 RIDL-152, RIDL-157 and the MANI-022 of the `[limits]` table) through the same
-`ridlc` function as `ridl check` (ADR-0030 decision 21). When driftsys/ridl#1124
-is built, `payload-above-ceiling` is not a lint name, so a directive that names
-it is TYPL-412.
+`ridlc` function as `ridl check` (ADR-0030 decision 21). Because
+`payload-above-ceiling` is not a lint name, a directive that names it is
+TYPL-412.
 
 Amended 2026-10-30 from the owner's decision of that day: decision 2 is changed
 in place, and decisions 17 to 19 are added. A `//` line comment of the form
@@ -81,30 +81,26 @@ reference §13 and §16.5 describe it. The build settled these points the text
 above leaves open:
 
 - A directive that names `unused-lint-directive` or `malformed-lint-directive`
-  draws TYPL-412, and the name is ignored (ruling R-1).
+  draws TYPL-412, and the name is ignored.
 - RIDL-156 `podbuf-padding-order` joins RIDL-407 as a lint that most entry
-  points do not raise, so a directive that names it is unused only in
-  `ridl
-  check` (ruling R-8).
+  points do not raise. A directive that names it is reported as unused only by
+  the command `ridl check`.
 - The language server lists no loader lint as not raised, because no directive
-  can cover a loader lint (ruling R-11).
-- TYPL-411 and TYPL-412 are not reported for a file of a remote unit (ruling
-  R-12).
+  can cover a loader lint.
+- TYPL-411 and TYPL-412 are not reported for a file of a remote unit.
 - When the formatter breaks a declaration, a `//` comment at the end of its
-  first line stays on that line. A lint directive after a member or an attribute
-  on that line moves to the line of the opening delimiter, so that it keeps its
-  declaration (rulings R-14 to R-16).
-- Known limit: a directive after a member that began on an earlier line names no
-  declaration before formatting, and can name the next member after it (ruling
-  R-17).
+  first line stays on that line, after the opening delimiter. A comment after a
+  member or an attribute on that line stays with that member, except a lint
+  directive, which moves to the line of the opening delimiter so that it keeps
+  its declaration.
 
-Documents amended by the amendment of 2026-10-30: this record only. When the
-code lands, driftsys/ridl#1124 updates the lints page, adds one sentence to the
-typl reference §13 (decision 17) and adds the two lints to the typl reference
-§16.5. It also updates the two ranges of documentation codes that name §16.5, in
-the rsdl reference §16 (the codes an `.rsdl` file draws) and in the family
-overview §7, to include the two new codes. The ridl reference, the general form
-and ADR-0029 do not change.
+Documents amended by the amendment of 2026-10-30: this record only.
+driftsys/ridl#1124 updated the lints page, added one sentence to the typl
+reference §13 (decision 17) and added the two lints to the typl reference §16.5.
+It also updated the two ranges of documentation codes that name §16.5, in the
+rsdl reference §16 (the codes an `.rsdl` file draws) and in the family overview
+§7, to include the two new codes. The ridl reference, the general form and
+ADR-0029 do not change.
 
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution

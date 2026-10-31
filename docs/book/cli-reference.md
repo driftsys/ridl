@@ -1416,8 +1416,9 @@ them for editor settings.
 
 When the formatter breaks a declaration over several lines, a `//` comment at
 the end of the declaration's first line stays on the first line, after the
-opening delimiter. A lint directive after a member or an attribute on that line
-moves to the line of the opening delimiter, so that it keeps its declaration
+opening delimiter. A comment after a member or an attribute on that line stays with that
+member, except a lint directive, which moves to the line of the opening
+delimiter so that it keeps its declaration
 (see [Allowing a lint on one declaration](lints.md#allowing-a-lint-on-one-declaration)).
 
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without

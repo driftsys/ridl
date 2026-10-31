@@ -120,7 +120,7 @@ package lints.directive
 type RawTemperature: float
 ```
 
-The comment text, after `//` and optional spaces, is `lint:`, the word `allow`,
+The comment text, after `//` and optional whitespace, is `lint:`, the word `allow`,
 one or more lint names separated by commas, then `--` and a reason that is not
 empty. Without the directive, the declaration above draws `unbounded-float`.
 Only a `//` line comment is read. A `///` doc comment and a `/* */` comment are
@@ -139,7 +139,7 @@ its members. A diagnostic is inside the scope when its primary span is.
 
 - A directive on its own line applies to the next declaration. Only doc comment
   lines and other directive lines may come between them. A blank line may not.
-- A directive at the end of a line applies to the outermost declaration whose
+- A directive at the end of a line applies to the first outermost declaration whose
   first token, not counting its doc comment, is on that line. After
   `struct Pose { x: m, y: m }` that is `Pose`. After one field, it is that
   field.
@@ -156,7 +156,7 @@ commands ignore directives. The formatter keeps every directive on its
 declaration.
 
 A lint that the entry point never raises is never reported as unused there.
-`ridl check` raises RIDL-407 (`ridl check` with a baseline) and RIDL-156
+`ridl check` raises RIDL-407 (`ordinal-changed`, with a baseline) and RIDL-156
 (`podbuf-padding-order`), so a directive that names one of those is used or
 unused only in `ridl check`. The other entry points do not run those checks.
 
