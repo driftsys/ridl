@@ -1587,6 +1587,44 @@ fn a_member_row_lists_its_streams() {
         format!("streams:&[{},]", info(0, "Text", ""))
     );
     assert_eq!(row("cabinTemp"), "streams:&[]");
+    assert_eq!(
+        row("lookup"),
+        format!(
+            "streams:&[{},]",
+            info(1, "Elements", "veh.hvac.FilterState")
+        )
+    );
+
+    // A streamed reply keeps the reference text of the IR, as a payload does,
+    // not the qualified name of the stream entry.
+    assert!(source.contains("type_name:\"<ClimateReport>\""), "{face}");
+    assert!(source.contains("type_name:\"<FilterState>\""), "{face}");
+    assert!(source.contains("type_name:\"<string>\""), "{face}");
+    assert!(!source.contains("type_name:\"<veh.hvac"), "{face}");
+
+    // A member with a stream has its row and its `Interaction` impl, and no
+    // `Command` or `Query` impl, whichever position the stream is in.
+    for streamed in [
+        "CabinReplayTrace",
+        "CabinPutBlob",
+        "CabinRebalance",
+        "CabinStreamFilterHistory",
+        "CabinLookup",
+        "CabinReadNotes",
+    ] {
+        assert!(
+            source.contains(&format!(
+                "impl::ridl_rt::contract::Interactionfor{streamed}{{"
+            )),
+            "{streamed} has an Interaction impl:\n{face}"
+        );
+        for kind in ["Command", "Query"] {
+            assert!(
+                !source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{")),
+                "{streamed} has no {kind} impl:\n{face}"
+            );
+        }
+    }
 
     assert!(
         source.contains("structCabinReplayTraceParams{}"),

@@ -306,6 +306,34 @@ interface Wide {
     assert!(!text.contains("fn history("), "{text}");
 }
 
+/// A member with a stream is left out of the face, so it is never the call
+/// the skip note blames: beside a `fixed` that the face cannot carry, it leaves
+/// the note the `fixed` alone leaves.
+#[test]
+fn a_stream_member_does_not_change_the_skip_note_of_an_interface() {
+    let note = |members: &str| {
+        let source = format!(
+            "package face.stream_note\n\ntype Level : integer [0..100]\n\n\
+             interface Wide {{\n{members}\n}}\n"
+        );
+        let output = ridlc::compile("stream_note.ridl", &source);
+        let text = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+            .expect("generate_pipeline")
+            .rust_source;
+        let at = text
+            .find("__RIDL_NO_FACE_Wide")
+            .unwrap_or_else(|| panic!("the interface is skipped:\n{text}"));
+        let start = text[..at]
+            .rfind("/// Interface `Wide`")
+            .expect("the note starts");
+        text[start..at].to_string()
+    };
+    let alone = note("  fixed blades: [Level; 4]");
+    let with_stream =
+        note("  fixed blades: [Level; 4]\n  query history(limit: Level): <Level> @[..50ms]");
+    assert_eq!(alone, with_stream);
+}
+
 /// A public query with one named parameter and a fallible reply reaches the
 /// query arm of `face_gap`'s match through its reply operand alone, so it gets
 /// the call-shape owner line, not the unowned one. A tuple reply is carried by

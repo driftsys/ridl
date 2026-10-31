@@ -17,8 +17,10 @@
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
-//!   A query that replies with a stream has no `Query` impl, because it has
-//!   no reply type; every row of `MEMBERS` lists the member's streams.
+//!   A member with a stream, as a parameter or as the reply, has no `Command`
+//!   or `Query` impl until the face carries streams, so a generic caller
+//!   cannot send it without its stream; its `MEMBERS` row is written all the
+//!   same, and every row lists the member's streams.
 //!
 //! It is reached from [`crate::generate_pipeline`], which is
 //! what `ridl build --emit rust` calls, as well as from
@@ -461,6 +463,28 @@ fn interaction_item(
                 }
             }
         }
+        // A member with a stream, as a parameter or as the reply, gets no
+        // `Command` or `Query` impl until the face carries streams: a generic
+        // caller of such an impl could send the call without its stream. Its
+        // row of `MEMBERS` and its size-table row are written all the same;
+        // a streamed reply has no reply type and no row of the table.
+        Some(v1::interaction::Shape::Command(command)) if has_stream(interaction) => {
+            let arg_name = single_param_type(ctx, command, member)?;
+            row.push(arg_name.to_string());
+            sizes.calls.push(arg_name.to_string());
+            TokenStream::new()
+        }
+        Some(v1::interaction::Shape::Query(query)) if has_stream(interaction) => {
+            let arg_name = query_param_type(ctx, query, member)?;
+            row.push(arg_name.to_string());
+            sizes.calls.push(arg_name.to_string());
+            if stream_reply(interaction).is_none() {
+                let reply_name = query_reply_type(ctx, query, member)?;
+                row.push(reply_name.to_string());
+                sizes.calls.push(reply_name.to_string());
+            }
+            TokenStream::new()
+        }
         Some(v1::interaction::Shape::Command(command)) => {
             let arg_name = single_param_type(ctx, command, member)?;
             let args = type_path(arg_name);
@@ -486,16 +510,6 @@ fn interaction_item(
                     }
                 }
             }
-        }
-        Some(v1::interaction::Shape::Query(query)) if stream_reply(interaction).is_some() => {
-            // A streamed reply has no reply type, so the descriptor carries
-            // no `Query` implementation and the size table counts the request
-            // alone. Nothing else reads a `Query` implementation of this
-            // member.
-            let arg_name = query_param_type(ctx, query, member)?;
-            row.push(arg_name.to_string());
-            sizes.calls.push(arg_name.to_string());
-            TokenStream::new()
         }
         Some(v1::interaction::Shape::Query(query)) => {
             let arg_name = query_param_type(ctx, query, member)?;
@@ -636,12 +650,17 @@ fn stream_element(stream: &v1::StreamShape) -> String {
 /// The spelling of a query's reply when it is a stream (`<T>`, `<bytes>` or
 /// `<string>`), or `None` when the reply is not a stream. A streamed reply
 /// has no payload type, so it has no `Reply` and no row of the size table.
+/// The element is spelled as the IR reference text, as a payload is.
 fn stream_reply(interaction: &v1::Interaction) -> Option<String> {
     let stream = interaction.streams.iter().find(|stream| stream.no == 0)?;
     let inner = match v1::StreamForm::try_from(stream.form) {
         Ok(v1::StreamForm::Bytes) => "bytes".to_string(),
         Ok(v1::StreamForm::Text) => "string".to_string(),
-        _ => stream_element(stream),
+        _ => stream
+            .element
+            .as_ref()
+            .map(|element| element.reference.clone())
+            .unwrap_or_default(),
     };
     Some(format!("<{inner}>"))
 }
@@ -773,7 +792,7 @@ pub(crate) fn single_param_type<'a>(
         command.request_tuple.as_ref(),
         command.request_sizes.as_ref(),
     )?
-    .ok_or_else(|| no_single_param(&command.params, member))
+    .ok_or_else(|| no_single_param(member))
 }
 
 /// [`single_param_type`] for a query, which carries the same request shape.
@@ -790,7 +809,7 @@ pub(crate) fn query_param_type<'a>(
         query.request_tuple.as_ref(),
         query.request_sizes.as_ref(),
     )?
-    .ok_or_else(|| no_single_param(&query.params, member))
+    .ok_or_else(|| no_single_param(member))
 }
 
 /// The Rust name of the induced tuple `reference` names, when it names one.
@@ -905,7 +924,7 @@ pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
 }
 
 /// Why a call has no argument type: a parameter with no declared type.
-fn no_single_param(_params: &[v1::Param], member: &str) -> GenerateError {
+fn no_single_param(member: &str) -> GenerateError {
     GenerateError {
         message: format!("interaction `{member}` declares a parameter with no type"),
     }

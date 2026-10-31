@@ -1,7 +1,7 @@
 // A fixture for the stream entries of a member's descriptor row.
 //
 // `replayTrace` has a stream parameter and no other, `streamFilterHistory`
-// replies with a stream and `rebalance` does both. `blobs` and `notes` use the
+// replies with a stream and `rebalance` does both. `putBlob` and `readNotes` use the
 // two forms that name no element, and `cabinTemp` has no stream.
 
 package veh.hvac
@@ -38,6 +38,9 @@ interface Cabin {
 
   /// A stream of bytes beside a named parameter.
   command putBlob(level: FanLevel, data: <bytes>) @[..50ms]
+
+  /// A stream parameter and a named reply.
+  query lookup(samples: <FilterState>): ClimateReport @[..50ms]
 
   /// A stream of text in return position.
   query readNotes(): <string> @[..50ms]

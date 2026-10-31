@@ -464,6 +464,10 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
         return FaceGap::Clause;
     }
     for (_, interaction) in descriptors::interactions(interface) {
+        // The face leaves a member with a stream out, so it cannot be the gap.
+        if descriptors::has_stream(interaction) {
+            continue;
+        }
         let member = declared(interaction.name.as_ref());
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Command(command)) => {
