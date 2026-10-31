@@ -1,6 +1,6 @@
 //! `ridl-loopback` — the in-process reference runtime.
 //!
-//! This crate implements the twelve port traits of
+//! This crate implements the fourteen port traits of
 //! [`ridl_rt::port`](https://docs.rs/ridl-rt) over one in-memory store. It is
 //! the first runtime in this workspace (ADR-0020 decision 6, which names the
 //! crate and fixes `ridl-rt` as its only dependency), and it is what the
@@ -28,8 +28,10 @@
 //! `&mut self` method, and one handle for the six whose methods all take
 //! `&self`, which are exactly the roles several threads may hold at once. The
 //! twelfth port trait, `Wakeable`, is implemented on every handle, because
-//! each handle wakes its own waiters (see "Waking" below).
-//! [`Loopback`] is the aggregate: it implements all twelve port traits by
+//! each handle wakes its own waiters (see "Waking" below). The two stream
+//! extensions, [`StreamCaller`] and [`StreamHandler`], are on the caller and
+//! the handler handle.
+//! [`Loopback`] is the aggregate: it implements all fourteen port traits by
 //! delegating to the six role handles it holds, and it is what a generated
 //! `Client`, `Publisher` or `dispatch` is normally built over, and it states
 //! the encoding the face encodes with. Every handle carries that encoding as
@@ -70,7 +72,8 @@
 //! against. What it therefore never returns:
 //! `WriteError::NotOwner`, `RaiseError::NotOwner`, `ServeError::NotOwner`, any
 //! port error's `Contract` variant except
-//! [`FixedReader::read_fixed`]'s, and
+//! [`FixedReader::read_fixed`]'s and the stream ports'
+//! `Contract::UnknownInteraction` for a call or a claim it does not hold, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either. Two
 //! things are bounded. The call table's [`Loopback::SLOTS`]: a send with
@@ -87,9 +90,11 @@
 //!
 //! Every handle implements [`Wakeable`], and a handle stores a waker only
 //! under a kind of key one of its roles observes: a caller handle under
-//! `Interest::Outcome`, kept with each call, and one waker under
-//! `Interest::Slot`, a source handle one waker under `Interest::Event`, and a
-//! handler handle one waker under `Interest::Claim`.
+//! `Interest::Outcome` and `Interest::Stream`, kept with each call, and one
+//! waker under `Interest::Slot`, a source handle one waker under
+//! `Interest::Event`, and a handler handle one waker under `Interest::Claim`
+//! and one per stream of a claim under `Interest::ClaimStream`, kept with the
+//! claim's call.
 //! For `Event` and `Claim` the rule is one waker per kind, and a change to
 //! any key of the kind wakes the stored waker, whatever interface it was
 //! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,
@@ -98,10 +103,14 @@
 //! as for every kind). A settlement wakes the
 //! call's waiter, a raise wakes each source it queues the occurrence for, and
 //! a send wakes each handler that serves the member, and a reclaimed slot of
-//! the call table wakes every caller's `Slot` waiter. A registration whose key
-//! already holds — the outcome is known, an occurrence or a call is waiting, a
-//! slot is free — is woken at once, and so is one under a kind the handle does
-//! not observe. A registration of the waker already stored refreshes it
+//! the call table wakes every caller's `Slot` waiter. A chunk, an end, an
+//! abort or a pull that frees a stream's window wakes the other side's waiter
+//! of that stream, and a settlement or a `forget` wakes the call's `Stream`
+//! waiters, as a `forget` wakes its `ClaimStream` waiters. A registration
+//! whose key already holds — the outcome is known, an occurrence or a call is
+//! waiting, a slot is free — is woken at once, and so is one under a kind the
+//! handle does not observe; a stream registration is stored, and is woken at
+//! once only for a call or a claim whose streams can no longer change. A registration of the waker already stored refreshes it
 //! without waking it. No waker is woken while the store is locked.
 //!
 //! [`Attached::catalog`] returns the
@@ -118,14 +127,15 @@
 use std::sync::{Arc, Mutex};
 use std::task::Waker;
 
-use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
+use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal, StreamNo};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
-    EventSink, EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample,
-    ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Wakeable, Watermark, WriteError,
+    EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
+    RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError,
+    SignalReader, SignalWriter, StreamCaller, StreamHandler, SubscribeError, Wakeable, Watermark,
+    WriteError,
 };
 use ridl_rt::sample::{Duration, Timestamp};
 use ridl_rt::trace::TraceContext;
@@ -158,7 +168,7 @@ pub struct Handles<E: Encoding = FlatBuffers> {
     pub handler: HandlerHandle<E>,
 }
 
-/// The aggregate handle: one value implementing all twelve port traits by
+/// The aggregate handle: one value implementing all fourteen port traits by
 /// delegating to the six role handles it holds.
 ///
 /// A face is built over one value implementing at least the port traits its
@@ -219,6 +229,19 @@ impl Loopback<FlatBuffers> {
     /// defined once, here, where `Loopback::SLOTS` resolves with no type
     /// argument.
     pub const SLOTS: usize = store::SLOTS;
+
+    /// The number of non-empty chunks one stream of a call holds, pushed and
+    /// not yet pulled. A push of a non-empty chunk into a stream that holds
+    /// this many answers 0 and takes nothing, and the receiver's next pull
+    /// frees room for one. An empty chunk is always taken, whatever the
+    /// window holds.
+    ///
+    /// Each stream has one producer, so this is the window of one stream in
+    /// its one direction: the reply stream's, which the provider pushes, and
+    /// each stream parameter's, which the caller pushes. Four is small, so
+    /// that a test reaches the bound in a few pushes, as with
+    /// [`SLOTS`](Loopback::SLOTS).
+    pub const STREAM_WINDOW: usize = store::STREAM_WINDOW;
 
     /// A runtime attached to `catalog`, with an empty store and its clock at
     /// [`Timestamp`] 0, whose ports carry FlatBuffers, the loopback's
@@ -408,7 +431,7 @@ impl<E: Encoding> Loopback<E> {
 }
 
 // ---------------------------------------------------------------------------
-// The aggregate's twelve port implementations, each one a delegation.
+// The aggregate's fourteen port implementations, each one a delegation.
 // ---------------------------------------------------------------------------
 
 impl<E: Encoding> Attached for Loopback<E> {
@@ -573,10 +596,55 @@ impl<E: Encoding> Handler for Loopback<E> {
     }
 }
 
-/// Each key goes to the handle that observes it: `Outcome` and `Slot` to the
-/// caller, `Event` to the source, and `Claim` to the handler. `Stream` goes to
-/// the caller and `ClaimStream` to the handler, each of which wakes it at once,
-/// because the loopback carries no stream yet.
+impl<E: Encoding> StreamCaller for Loopback<E> {
+    fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError> {
+        self.handles.caller.pull(c, s, out)
+    }
+
+    fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError> {
+        self.handles.caller.push(c, s, chunk)
+    }
+
+    fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError> {
+        self.handles.caller.end(c, s)
+    }
+
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        self.handles.caller.abort(c, s, e)
+    }
+}
+
+impl<E: Encoding> StreamHandler for Loopback<E> {
+    fn pull_claim(
+        &mut self,
+        claim: ClaimId,
+        s: StreamNo,
+        out: &mut [u8],
+    ) -> Result<Pull, ReadError> {
+        self.handles.handler.pull_claim(claim, s, out)
+    }
+
+    fn push_claim(
+        &mut self,
+        claim: ClaimId,
+        s: StreamNo,
+        chunk: &[u8],
+    ) -> Result<usize, PushError> {
+        self.handles.handler.push_claim(claim, s, chunk)
+    }
+
+    fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError> {
+        self.handles.handler.end_claim(claim, s)
+    }
+
+    fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        self.handles.handler.abort_claim(claim, s, e)
+    }
+}
+
+/// Each key goes to the handle that observes it: `Outcome`, `Slot` and
+/// `Stream` to the caller, `Event` to the source, and `Claim` and
+/// `ClaimStream` to the handler.
 impl<E: Encoding> Wakeable for Loopback<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {

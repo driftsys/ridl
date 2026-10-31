@@ -959,7 +959,7 @@ compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 records the reasoning and the alternative it rejects, one runtime struct behind
 a mutex. The first runtime to this shape is [`ridl-loopback`](ridl-loopback.md):
 six handles, a `Send + Sync` reader handle, and an aggregate implementing all
-twelve traits by delegation.
+fourteen traits by delegation.
 
 ## The correlation table
 
@@ -1158,19 +1158,21 @@ Generated code returns both since the async client: a call future's output is
 
 ## What 0.1 leaves out
 
-Streams (`stream`-typed fields) and `Inline` payloads; `Constrained` (nothing
-calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
-(dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
-wire tag values — the frame specification fixed the values, 1 FlatBuffers, 2
-proto3, 3 `podbuf`; the constant itself is a later 0.x minor); `Access` (the
-trust constant the Rust codegen generates once the rsdl lowering exists); the
-three payload codecs; the runtimes — `ridl-loopback` is its own crate
+The frame framing of a stream and the generated face of a `stream`-typed field
+(driftsys/ridl#1116); `Inline` payloads; `Constrained` (nothing calls it in
+0.1); `Family` (the IR carries no family field yet); `ServiceId` (dropped,
+ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's wire tag
+values — the frame specification fixed the values, 1 FlatBuffers, 2 proto3, 3
+`podbuf`; the constant itself is a later 0.x minor); `Access` (the trust
+constant the Rust codegen generates once the rsdl lowering exists); the three
+payload codecs; the runtimes — `ridl-loopback` is its own crate
 ([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own
 crate, built; and the engine. `Family` returns as a `Member` field, which is a
 breaking change (ADR-0021 decision 10).
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 9 fixes the principle
 of the stream port — a pull API over caller-supplied buffers that never waits,
-keyed by the call — and the port is not built (driftsys/ridl#1116).
+keyed by the call — and the port is built to it: `StreamCaller` and
+`StreamHandler`, which `ridl-loopback` implements.
 
 ## Versioning
 

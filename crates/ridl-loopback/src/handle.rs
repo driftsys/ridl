@@ -7,7 +7,8 @@
 //! each, and the six whose methods all take `&self` share one, because they
 //! are exactly the roles several threads may hold at once. The twelfth port
 //! trait, `Wakeable`, is on every handle, because each handle wakes its own
-//! waiters. Every handle here
+//! waiters, and the two stream extensions are on the caller and the handler
+//! handle, beside the role each extends. Every handle here
 //! holds the same `Arc<Mutex<Store>>` and its own copy of the
 //! [`CatalogRef`](ridl_rt::contract::CatalogRef) the runtime was built with,
 //! so `Attached::catalog` can return a reference without reaching through the
@@ -21,14 +22,14 @@
 //! what each handle adds to them, and the split follows the receiver of those
 //! methods, as ADR-0021 decision 12 derives it:
 //!
-//! | Handle            | Port roles beside `Attached`, `Encoded` and `Wakeable`                        | Kinds of key it stores                            | Threading     |
-//! | ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------- |
-//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                                              | `Send + Sync` |
-//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                                              | `Send`        |
-//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker                                | `Send`        |
-//! | [`SinkHandle`]    | `EventSink`                                                                   | none                                              | `Send`        |
-//! | [`CallerHandle`]  | `Clock`, `Caller`                                                             | `Outcome`, kept with each call; `Slot`, one waker | `Send`        |
-//! | [`HandlerHandle`] | `Handler`                                                                     | `Claim`, one waker                                | `Send`        |
+//! | Handle            | Port roles beside `Attached`, `Encoded` and `Wakeable`                        | Kinds of key it stores                                         | Threading     |
+//! | ----------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------- |
+//! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                                                           | `Send + Sync` |
+//! | [`WriterHandle`]  | `SignalWriter`                                                                | none                                                           | `Send`        |
+//! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker                                             | `Send`        |
+//! | [`SinkHandle`]    | `EventSink`                                                                   | none                                                           | `Send`        |
+//! | [`CallerHandle`]  | `Clock`, `Caller`, `StreamCaller`                                             | `Outcome` and `Stream`, kept with each call; `Slot`, one waker | `Send`        |
+//! | [`HandlerHandle`] | `Handler`, `StreamHandler`                                                    | `Claim`, one waker; `ClaimStream`, kept with each claim's call | `Send`        |
 //!
 //! A handle stores a waker only under a kind of key one of its roles
 //! observes. For `Event` and `Claim` that is one waker per kind, and a
@@ -40,7 +41,9 @@
 //! call table is free, and otherwise by the next reclaim of a slot — a
 //! `forget`, a settlement of a forgotten call, a caller handle's drop, or a
 //! handler handle's drop while it holds a claim whose call was forgotten —
-//! which wakes every other caller's `Slot` waker. A registration
+//! which wakes every other caller's `Slot` waker. A `Stream` waker is per
+//! stream of a call and a `ClaimStream` waker per stream of a claim, each
+//! kept with its call. A registration
 //! under any other kind is woken at once, because nothing that handle could
 //! read changes under it, and a stored waker would never be woken.
 //!
@@ -55,19 +58,20 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::Waker;
 
-use ridl_rt::contract::{CatalogRef, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{CatalogRef, InterfaceNo, Kind, Ordinal, StreamNo};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
-use ridl_rt::error::CallError;
+use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
     Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
-    EventSink, EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample,
-    ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    SubscribeError, Wakeable, Watermark, WriteError,
+    EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
+    RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError,
+    SignalReader, SignalWriter, StreamCaller, StreamHandler, SubscribeError, Wakeable, Watermark,
+    WriteError,
 };
 use ridl_rt::sample::Timestamp;
 use ridl_rt::trace::TraceContext;
 
-use crate::store::{CallKind, Key, Staged, Store};
+use crate::store::{CallKind, Key, Side, Staged, Store};
 
 /// The shared store, as every handle holds it.
 pub(crate) type Shared = Arc<Mutex<Store>>;
@@ -517,7 +521,9 @@ impl<E: Encoding> Clock for CallerHandle<E> {
 /// Stores one `Outcome` waker per call, kept with the call and woken by its
 /// settlement, its `forget`, the drop of this handle, or a displacement by
 /// another task. Stores one `Slot` waker, woken at once while a slot is free
-/// and otherwise by the next reclaim.
+/// and otherwise by the next reclaim. Stores one `Stream` waker per stream of
+/// a call, kept with the call and woken by a chunk or the end the provider
+/// pushes, an abort, a freed window, the call's settlement and its `forget`.
 impl<E: Encoding> Wakeable for CallerHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
@@ -527,15 +533,56 @@ impl<E: Encoding> Wakeable for CallerHandle<E> {
             Interest::Slot => locked(&self.shared, |store, wake| {
                 store.wait_slot(self.id, waker, wake);
             }),
-            // The loopback carries no stream yet, so this handle observes no
-            // `Stream` key.
-            Interest::Event(_)
-            | Interest::Claim(_)
-            | Interest::Stream(..)
-            | Interest::ClaimStream(..) => wake_at_once(waker),
+            Interest::Stream(c, s) => locked(&self.shared, |store, wake| {
+                store.wait_stream(c, s, waker, wake);
+            }),
+            Interest::Event(_) | Interest::Claim(_) | Interest::ClaimStream(..) => {
+                wake_at_once(waker)
+            }
         }
     }
 }
+
+/// The calling side of a call's streams. The reply stream is the provider's
+/// to push and this side's to pull, and a stream parameter the other way
+/// round; a push, an end or a pull from the wrong side, and any operation on
+/// a correlation the table does not hold or that was forgotten, answers
+/// `Contract::UnknownInteraction`.
+impl<E: Encoding> StreamCaller for CallerHandle<E> {
+    fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError> {
+        locked(&self.shared, |store, wake| {
+            let slot = store
+                .caller_slot(c)
+                .ok_or(ReadError::Contract(Contract::UnknownInteraction))?;
+            store.pull(slot, Side::Caller, s, out, wake)
+        })
+    }
+
+    fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError> {
+        locked(&self.shared, |store, wake| {
+            let slot = store.caller_slot(c).ok_or(UNKNOWN)?;
+            store.push(slot, Side::Caller, s, chunk, wake)
+        })
+    }
+
+    fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError> {
+        locked(&self.shared, |store, wake| {
+            let slot = store.caller_slot(c).ok_or(UNKNOWN)?;
+            store.end(slot, Side::Caller, s, wake)
+        })
+    }
+
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        locked(&self.shared, |store, wake| {
+            let slot = store.caller_slot(c).ok_or(UNKNOWN)?;
+            store.abort(slot, Side::Caller, s, e, wake)
+        })
+    }
+}
+
+/// The push error of an operation on a call or a claim the store does not
+/// hold.
+const UNKNOWN: PushError = PushError::Contract(Contract::UnknownInteraction);
 
 impl<E: Encoding> Caller for CallerHandle<E> {
     fn command(
@@ -680,20 +727,65 @@ impl<E: Encoding> Handler for HandlerHandle<E> {
 /// Stores one `Claim` waker, whatever interface it was registered under, woken
 /// by a send of a member this handler serves, by a `serve` that admits a call
 /// already waiting, or by another handler's drop that returns a claim this
-/// handler serves.
+/// handler serves. Stores one `ClaimStream` waker per stream of a claim, kept
+/// with the claim's call and woken by a chunk or the end the caller pushes,
+/// an abort, a freed window and the caller's `forget`.
 impl<E: Encoding> Wakeable for HandlerHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Claim(_) => locked(&self.shared, |store, wake| {
                 store.wait_claim(self.id, what, waker, wake);
             }),
-            // The loopback carries no stream yet, so this handle observes no
-            // `ClaimStream` key.
-            Interest::Outcome(_)
-            | Interest::Slot
-            | Interest::Event(_)
-            | Interest::Stream(..)
-            | Interest::ClaimStream(..) => wake_at_once(waker),
+            Interest::ClaimStream(claim, s) => locked(&self.shared, |store, wake| {
+                store.wait_claim_stream(self.id, claim, s, waker, wake);
+            }),
+            Interest::Outcome(_) | Interest::Slot | Interest::Event(_) | Interest::Stream(..) => {
+                wake_at_once(waker)
+            }
         }
+    }
+}
+
+/// The providing side of a call's streams, by the claim this handler was
+/// presented: a claim it holds, or one it settled whose call the caller has
+/// not forgotten yet. Any other claim, and a push, an end or a pull from the
+/// wrong side, answers `Contract::UnknownInteraction`.
+impl<E: Encoding> StreamHandler for HandlerHandle<E> {
+    fn pull_claim(
+        &mut self,
+        claim: ClaimId,
+        s: StreamNo,
+        out: &mut [u8],
+    ) -> Result<Pull, ReadError> {
+        locked(&self.shared, |store, wake| {
+            let slot = store
+                .claim_slot(self.id, claim)
+                .ok_or(ReadError::Contract(Contract::UnknownInteraction))?;
+            store.pull(slot, Side::Provider, s, out, wake)
+        })
+    }
+
+    fn push_claim(
+        &mut self,
+        claim: ClaimId,
+        s: StreamNo,
+        chunk: &[u8],
+    ) -> Result<usize, PushError> {
+        locked(&self.shared, |store, wake| {
+            let slot = store.claim_slot(self.id, claim).ok_or(UNKNOWN)?;
+            store.push(slot, Side::Provider, s, chunk, wake)
+        })
+    }
+
+    fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError> {
+        locked(&self.shared, |store, wake| {
+            store.end_claim(self.id, claim, s, wake)
+        })
+    }
+
+    fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        locked(&self.shared, |store, wake| {
+            store.abort_claim(self.id, claim, s, e, wake)
+        })
     }
 }

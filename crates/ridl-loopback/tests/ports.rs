@@ -123,9 +123,10 @@
 //!   `a_dropped_callers_call_in_flight_wakes_its_outcome_waiter`,
 //!   `a_dropped_callers_own_slot_waiter_is_not_woken_by_its_drop`,
 //!   `a_caller_whose_stored_waker_owns_another_handle_drops_without_deadlock`,
-//!   `a_source_whose_stored_waker_owns_another_handle_drops_without_deadlock`
+//!   `a_source_whose_stored_waker_owns_another_handle_drops_without_deadlock`,
+//!   `a_handler_whose_stored_waker_owns_another_handle_drops_without_deadlock`
 //!   and
-//!   `a_handler_whose_stored_waker_owns_another_handle_drops_without_deadlock`.
+//!   `a_stream_waker_whose_task_holds_a_handle_drops_without_deadlock`.
 //! - **The withdrawal of a forgotten call no handler holds.** The suite
 //!   accepts either result for such a call, withdrawn or held until settled,
 //!   because a transport that has already sent a request cannot recall it;
@@ -168,7 +169,7 @@ use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, ClaimId, Clock, EventSink, EventSource, FixedReader, Handler, Interest,
     RaiseError, ReadError, SendError, SettleError, SignalReader, SignalWriter, Wakeable,
-    WriteError,
+    WriteError, REPLY_STREAM,
 };
 use ridl_rt::sample::{Duration, Freshness, Provenance, Timestamp};
 
@@ -2374,7 +2375,7 @@ fn assert_drop_finishes<H: Send + 'static>(handle: H, what: &str) {
     );
 }
 
-// Each of the three builds its own runtime and leaks it before the drop under
+// Each of the four builds its own runtime and leaks it before the drop under
 // test. Were the drop to deadlock, the assertion's panic would otherwise drop
 // the runtime's own handles while the lock is still held, and hang the test
 // instead of failing it.
@@ -2411,6 +2412,20 @@ fn a_handler_whose_stored_waker_owns_another_handle_drops_without_deadlock() {
     drop(waker);
     std::mem::forget(rt);
     assert_drop_finishes(handler, "a handler");
+}
+
+#[test]
+fn a_stream_waker_whose_task_holds_a_handle_drops_without_deadlock() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let c = caller.query(IFACE, ORD, &[1], None).expect("send");
+    let waker = owning(rt.caller());
+    caller.wake_on(Interest::Stream(c, REPLY_STREAM), &waker);
+    drop(waker);
+    std::mem::forget(rt);
+    // The drop forgets the call, which takes the stream waker, the last
+    // reference to the handle it owns.
+    assert_drop_finishes(caller, "a caller with a stream waker");
 }
 
 #[test]
