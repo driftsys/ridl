@@ -47,8 +47,8 @@
 //! definitions are equal; a name claimed for two or more entities is refused
 //! once, with one claimant per entity and its package named. A head that
 //! another package declares and this package lays out inline has the identity
-//! and the text the declaring header gives it, so its second definition is
-//! not a clash.
+//! the declaring header gives it, so its second definition is not a clash
+//! when its text is identical to the first; two texts are refused.
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`

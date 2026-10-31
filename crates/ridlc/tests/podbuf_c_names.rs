@@ -2,8 +2,9 @@
 //! (driftsys/ridl#1153). The header of each package is written for a C file
 //! that includes several of them, so a name two packages derive for two
 //! different entities is refused once per build, before any header is
-//! written; a head one package declares and another lays out inline is one
-//! entity, defined twice behind one guard, and is not refused.
+//! written; a head one package declares and another lays out inline with an
+//! identical definition is one entity, defined twice behind one guard, and is
+//! not refused.
 
 use std::path::Path;
 
@@ -219,9 +220,9 @@ fn a_constant_equal_to_the_include_guard_of_another_header_is_refused() {
     assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
 }
 
-/// A head one package declares and another lays out inline is one entity: the
-/// two headers define `a_inner_head` behind one guard, and the build writes
-/// both.
+/// A head one package declares and another lays out inline with the same
+/// text is one entity: the two headers define `a_inner_head` behind one guard,
+/// and the build writes both.
 #[test]
 fn an_inline_redefinition_of_a_foreign_head_is_not_a_clash() {
     let (diagnostics, out) = build(
