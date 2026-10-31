@@ -158,7 +158,12 @@ declaration.
 A lint that the entry point never raises is never reported as unused there.
 `ridl check` raises RIDL-407 (`ordinal-changed`, with a baseline) and RIDL-156
 (`podbuf-padding-order`), so a directive that names one of those is used or
-unused only in `ridl check`. The other entry points do not run those checks.
+unused only in `ridl check`. A build that selects a deployment and compares a
+backend's `encodings` against the links raises RSDL-807
+(`link-encoding-not-emitted`), so a directive that names it is used or unused
+only in such a build, where a link of any declared deployment counts; a build
+that selects no deployment or compares no backend, and every other entry point,
+does not run that check. The other entry points do not run those checks.
 
 Two lints report the mistakes of directives. Both are `info` by default, and
 `[lints]` sets their level:

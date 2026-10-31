@@ -915,8 +915,15 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 
 /// The lint codes the compile entry points never raise: RIDL-407 is the
 /// baseline desk check and RIDL-156 is the podbuf padding check, both run by
-/// `ridl check` only. A directive that names one of them is not unused there.
-pub const NOT_RAISED_BY_COMPILE: &[DiagCode] = &[DiagCode::RIDL_407, DiagCode::RIDL_156];
+/// `ridl check` only, and RSDL-807 is the link-encoding check, run by a build
+/// that selects a deployment only. A directive that names one of them is not
+/// unused there.
+pub const NOT_RAISED_BY_COMPILE: &[DiagCode] =
+    &[DiagCode::RIDL_407, DiagCode::RIDL_156, DiagCode::RSDL_807];
+
+/// [`NOT_RAISED_BY_COMPILE`] without RSDL-807: the list of a build that
+/// compared at least one backend's encodings against the links.
+const NOT_RAISED_BY_BUILD_WITH_DEPLOYMENT: &[DiagCode] = &[DiagCode::RIDL_407, DiagCode::RIDL_156];
 
 /// Reports the lint directives of `run` ([`report_lint_directives`]) over the
 /// diagnostics of the whole workspace, so that a directive in a file outside
@@ -1339,8 +1346,15 @@ fn run_build_inner<E: From<std::io::Error>>(
     // reported (driftsys/ridl#853). Raised here, before the levels are
     // applied, so that `deny` makes it an error the emit gate below reads.
     // The deployment is the one `select_deployment` selects below; a name no
-    // source declares draws nothing here and is reported there.
-    if let Some(selected) = requested_or_only(&declared_deployments(&system), deployment) {
+    // source declares draws nothing here and is reported there. A link is
+    // placed per deployment, so the check also runs over the other declared
+    // deployments: what it raises there is not reported, but it counts as
+    // raised for a directive that names `link-encoding-not-emitted`, which
+    // sits on the consumer's `requires` line, shared by every deployment.
+    let declared = declared_deployments(&system);
+    let mut raised_elsewhere: Vec<Diagnostic> = Vec::new();
+    let mut link_check_ran = false;
+    if let Some(selected) = requested_or_only(&declared, deployment) {
         let mut compared: BTreeSet<&str> = BTreeSet::new();
         let tables = emits
             .iter()
@@ -1361,28 +1375,27 @@ fn run_build_inner<E: From<std::io::Error>>(
             // A table written with no `encodings` key at all is the same
             // declaration: the manifest records the two forms alike
             // (`BackendTable::encodings`).
-            let Some(encodings) = backends.get(table) else {
-                diagnostics.extend(link_encodings::link_encoding_not_emitted(
+            let encodings = match backends.get(table) {
+                None => &[][..],
+                Some(encodings) if encodings.is_empty() => continue,
+                Some(encodings) => encodings.as_slice(),
+            };
+            link_check_ran = true;
+            for name in &declared {
+                let raised = link_encodings::link_encoding_not_emitted(
                     &db,
                     &system,
-                    selected,
+                    name,
                     table,
-                    &[],
+                    encodings,
                     &mut sources,
-                ));
-                continue;
-            };
-            if encodings.is_empty() {
-                continue;
+                );
+                if name == selected {
+                    diagnostics.extend(raised);
+                } else {
+                    raised_elsewhere.extend(raised);
+                }
             }
-            diagnostics.extend(link_encodings::link_encoding_not_emitted(
-                &db,
-                &system,
-                selected,
-                table,
-                encodings,
-                &mut sources,
-            ));
         }
     }
 
@@ -1396,10 +1409,21 @@ fn run_build_inner<E: From<std::io::Error>>(
         // scope are checked against the diagnostics of that file.
         // The reports go to the list their file belongs to; every other
         // diagnostic stays in the list it was in.
+        // RSDL-807 counts as raised only when the link-encoding check
+        // compared a backend's encodings; what it raised for the other
+        // deployments counts, and is then removed from the list.
         let (in_len, out_len) = (diagnostics.len(), outside_scope.len());
+        let elsewhere_len = raised_elsewhere.len();
         diagnostics.append(&mut outside_scope);
-        report_lint_directives(&mut diagnostics, &sources, NOT_RAISED_BY_COMPILE);
-        let mut reports = diagnostics.split_off(in_len + out_len);
+        diagnostics.append(&mut raised_elsewhere);
+        let not_raised = if link_check_ran {
+            NOT_RAISED_BY_BUILD_WITH_DEPLOYMENT
+        } else {
+            NOT_RAISED_BY_COMPILE
+        };
+        report_lint_directives(&mut diagnostics, &sources, not_raised);
+        let mut reports = diagnostics.split_off(in_len + out_len + elsewhere_len);
+        diagnostics.truncate(in_len + out_len);
         // No report is made for a remote unit's file, as for `run_check`.
         drop_remote_non_errors(&mut reports, &sources, &remote_units);
         outside_scope = diagnostics.split_off(in_len);

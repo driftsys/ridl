@@ -84,7 +84,12 @@ above leaves open:
   draws TYPL-412, and the name is ignored.
 - RIDL-156 `podbuf-padding-order` joins RIDL-407 as a lint that most entry
   points do not raise. A directive that names it is reported as unused only by
-  the command `ridl check`.
+  the command `ridl check`. RSDL-807 `link-encoding-not-emitted` is raised only
+  by a build that selects a deployment and compares a backend's `encodings`, so
+  a directive that names it is reported as unused only by such a build, which
+  counts a link of any declared deployment, not only the selected one, because
+  the directive sits on the consumer's `requires` line, which every deployment
+  shares.
 - The language server lists no loader lint as not raised, because no directive
   can cover a loader lint.
 - TYPL-411 and TYPL-412 are not reported for a file of a remote unit.

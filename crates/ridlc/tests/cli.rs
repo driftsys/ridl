@@ -2523,6 +2523,74 @@ fn no_deployment_selected_draws_nothing() {
     );
 }
 
+/// The fixture's topology with a directive that allows
+/// `link-encoding-not-emitted` on `Telemetry`, the consumer of the link that
+/// crosses machines in `Bench` only.
+fn topology_allowing_link_encoding() -> String {
+    let fixture = Path::new(LINK_ENCODINGS_FIXTURE).join("topology.rsdl");
+    let text = std::fs::read_to_string(fixture).expect("the fixture file reads");
+    text.replace(
+        "component Telemetry { requires Horn }",
+        "component Telemetry { requires Horn } // lint: allow link-encoding-not-emitted -- bench",
+    )
+}
+
+/// A directive that allows `link-encoding-not-emitted` is used by the build
+/// that selects the deployment whose link draws it, and is not unused where
+/// the check does not run: `check`, a build with no deployment selected, and
+/// a build that selects the other deployment.
+#[test]
+fn a_directive_on_the_link_encoding_lint_is_unused_only_where_the_check_ran() {
+    let topology = topology_allowing_link_encoding();
+    let dir = link_encodings_workspace(
+        "link-encoding-directive",
+        LINK_ENCODINGS_MANIFEST,
+        Some(&topology),
+    );
+
+    let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-411") && !stderr.contains("TYPL-412"),
+        "`check` does not run the link-encoding check, got:\n{stderr}"
+    );
+
+    for deployment in [None, Some("Lab"), Some("Bench")] {
+        let out = TempDir::new("link-encoding-directive-out");
+        let (code, stderr) = build_rust(dir.path(), out.path(), deployment);
+        assert_eq!(code, 0, "{deployment:?}, stderr:\n{stderr}");
+        assert!(
+            !stderr.contains("RSDL-807"),
+            "{deployment:?}: the directive allows the lint, got:\n{stderr}"
+        );
+        assert!(
+            !stderr.contains("TYPL-411"),
+            "{deployment:?}: the directive is used by `Bench`'s link, got:\n{stderr}"
+        );
+    }
+
+    // With the encoding emitted, no deployment draws the lint, and the build
+    // that ran the check reports the directive as unused.
+    let manifest =
+        LINK_ENCODINGS_MANIFEST.replace("[\"flatbuffers\"]", "[\"flatbuffers\", \"proto3\"]");
+    let dir = link_encodings_workspace("link-encoding-directive-stale", &manifest, Some(&topology));
+    let out = TempDir::new("link-encoding-directive-stale-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("[TYPL-411]").count(),
+        1,
+        "the check ran and raised nothing, got:\n{stderr}"
+    );
+    let out = TempDir::new("link-encoding-directive-stale-check-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), None);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-411"),
+        "no deployment selected, so the check did not run, got:\n{stderr}"
+    );
+}
+
 /// A workspace with exactly one deployment selects it without the flag, and
 /// the lint reads that selection: the one different-machine link warns.
 #[test]
