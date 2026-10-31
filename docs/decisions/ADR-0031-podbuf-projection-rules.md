@@ -434,14 +434,15 @@ a field is appended.
    any header is written. Each claim carries the identity of the entity it
    names, (declaring package, entity, role), and the claim of a head and of its
    guard carries the guarded definition too; two headers claim one name for one
-   entity only when the identities are equal and the definitions are equal, so a
-   head one package declares and another lays out inline is one entity under two
-   definitions, and is not refused. A name claimed for two or more entities is
-   one detached error naming one claimant per entity and its package, no header
-   is written for the build, the per-package files of the other emits are still
-   written (the generated crate's `lib.rs` and `Cargo.toml` are not, as on any
-   error of a build), and the build exits 1. Two headers of two separate builds
-   are not checked against each other;
+   entity only when the identities are equal and the definitions are equal: the
+   second definition of a head one package declares and another lays out inline
+   is accepted only when its text is identical to the first, and equal
+   identities with two texts are refused. A name claimed for two or more
+   entities is one detached error naming one claimant per entity and its
+   package, no header is written for the build, the per-package files of the
+   other emits are still written (the generated crate's `lib.rs` and
+   `Cargo.toml` are not, as on any error of a build), and the build exits 1. Two
+   headers of two separate builds are not checked against each other;
    [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) lists the gap.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,

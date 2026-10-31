@@ -367,9 +367,10 @@ fn a_head_name_equal_to_a_ridl_std_head_is_refused() {
 
 /// Two headers that claim one head name for one identity are refused when
 /// their definitions differ. The importing lowering names the tuple at
-/// `a.A.bX.y` by its position, `ABXField1`, the wire name `a` gives the tuple
-/// at `AB.xField1`, so `b.h` defines `a_abx_field1_head` with the members of
-/// the first and `a.h` with the member of the second, behind one guard.
+/// position 1 of `a.A.bX` by that position (`a.A.bX.1`, wire name
+/// `ABXField1`), the wire name `a` gives the tuple at `AB.xField1`, so `b.h`
+/// defines `a_abx_field1_head` with the members of the first and `a.h` with
+/// the member of the second, behind one guard.
 #[test]
 fn one_identity_with_two_definitions_is_refused() {
     let (diagnostics, out) = build(
@@ -422,6 +423,48 @@ fn two_identities_with_one_definition_text_are_refused() {
         &[Emit::Podbuf],
     );
     error_naming(&diagnostics, "veh_common_speed_head");
+    error_naming(&diagnostics, "VEH_COMMON_SPEED_HEAD_DEFINED");
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// Three headers claim `veh_common_speed_head`, two of them for one entity:
+/// `veh` declares `CommonSpeed`, `b` lays it out inline with the same text,
+/// and `veh.common` declares `Speed`. The error names one claimant per
+/// entity: `veh` and `veh.common`, not `b`.
+#[test]
+fn a_claimant_of_an_entity_already_listed_is_not_named_again() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "veh",
+                "veh",
+                "package veh\nstruct CommonSpeed { v : integer [0..100] }\n",
+            ),
+            (
+                "b",
+                "b",
+                "package b\nimport veh.CommonSpeed\nstruct Reading { s : CommonSpeed }\n",
+            ),
+            (
+                "common",
+                "veh.common",
+                "package veh.common\nstruct Speed { w : integer [0..100] }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "veh_common_speed_head");
+    assert!(
+        error
+            .message
+            .contains("the head of `CommonSpeed` in the header of `veh`")
+            && error
+                .message
+                .contains("the head of `Speed` in the header of `veh.common`")
+            && !error.message.contains("in the header of `b`"),
+        "{}",
+        error.message
+    );
     assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
 }
 
@@ -537,6 +580,8 @@ fn the_per_package_files_of_the_other_emits_are_written_on_a_clash() {
     )
     .expect("the build runs");
     error_naming(&run.diagnostics, "veh_common_speed_head");
+    // The build exits 1: an error, and not a usage error.
+    assert!(run.has_error() && !run.usage_error, "{:?}", run.diagnostics);
     assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
     assert_eq!(
         files_with(out.path(), "fbs"),

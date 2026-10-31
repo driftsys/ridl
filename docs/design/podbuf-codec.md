@@ -265,20 +265,21 @@ union arm and a map entry are reached through a descriptor, so no importing
 header defines their heads. The claim of a head and of its guard also carries
 the text of the guarded definition, because the importing lowering can give a
 nested tuple of another package the wire name that package gives a different
-tuple (`a_abx_field1_head`, the tuple at `a.A.bX.y` seen from an importer and
-the tuple at `a.AB.xField1`). Two headers claim one name for one entity only
-when the identities are equal and, for a head or a guard, the definitions are
-equal: a head one package declares and another lays out inline is one entity
-under two definitions, and is not refused. A name claimed for two or more
-entities is one detached error, which names one claimant per entity and its
-package; on any clash no `.h` is written for the build, the per-package files of
-the other emits are still written (the generated crate's `lib.rs` and
-`Cargo.toml` are not, as on any error of a build), and the build exits 1. A
-package whose own header is refused is skipped by the check, because its own
-generation reports that refusal; in a run that found a clash the podbuf backend
-is not called, so that refusal is reported only once the clash is repaired. The
-check runs after the deployment is selected, so a clash together with a
-deployment no source declares is still a usage error.
+tuple (`a_abx_field1_head`, the tuple at position 1 of `a.A.bX`, which the
+importer names `a.A.bX.1`, and the tuple at `a.AB.xField1`). Two headers claim
+one name for one entity only when the identities are equal and, for a head or a
+guard, the definitions are equal: the second definition of a head one package
+declares and another lays out inline is accepted only when its text is identical
+to the first, and equal identities with two texts are refused. A name claimed
+for two or more entities is one detached error, which names one claimant per
+entity and its package; on any clash no `.h` is written for the build, the
+per-package files of the other emits are still written (the generated crate's
+`lib.rs` and `Cargo.toml` are not, as on any error of a build), and the build
+exits 1. A package whose own header is refused is skipped by the check, because
+its own generation reports that refusal; in a run that found a clash the podbuf
+backend is not called, so that refusal is reported only once the clash is
+repaired. The check runs after the deployment is selected, so a clash together
+with a deployment no source declares is still a usage error.
 
 ## Determinism
 

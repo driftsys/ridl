@@ -312,8 +312,9 @@ fn path_words(path: &[String]) -> String {
 /// the package that declares the entity, a key that names the entity inside
 /// that package, and the role of the name (the head type, its guard macro, an
 /// accessor of one member, ...). A head that another package declares and this
-/// package lays out inline has the identity the declaring header gives it, so
-/// the two definitions of one head are one identity, not a clash.
+/// package lays out inline has the identity the declaring header gives it; the
+/// second definition is accepted only when its text is identical to the first
+/// ([`Claim::same_entity`]), and equal identities with two texts are refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Identity {
     package: String,
@@ -422,8 +423,9 @@ const PREAMBLE_NAMES: [&str; 12] = [
 /// head of `x.y.Z`; a constant of one package equal to the include guard of
 /// another header) is one error per name, which names one claimant per entity
 /// and its package. A head one package declares and another lays out inline is
-/// one entity, and is not an error, when the two headers define it with one
-/// text (`Claim::same_entity`). Each package is lowered over `packages`, as
+/// accepted only when the two headers define it with one text
+/// (`Claim::same_entity`); equal identities with two texts are refused. Each
+/// package is lowered over `packages`, as
 /// `ridl build` lowers it; a package whose own header is refused is skipped
 /// here, and its own generation reports that refusal, on the next run when a
 /// clash made `ridl build` write no header.

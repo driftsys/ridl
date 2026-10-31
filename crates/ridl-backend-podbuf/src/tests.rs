@@ -756,3 +756,42 @@ fn the_identity_of_a_head_carries_its_package_its_key_and_its_role() {
     assert_eq!((&guard.package, &guard.key), (&s.package, &s.key));
     assert_ne!(guard, s);
 }
+
+/// `check_c_names` leaves out a package whose projection refuses a head: a
+/// struct whose field names a type that does not resolve, which checked
+/// source does not reach, so the IR is edited after the compile. The package
+/// also declares `CommonSpeed`, which would clash with `veh.common.Speed`;
+/// with the package left out, the check passes.
+#[test]
+fn a_package_whose_projection_refuses_a_head_is_left_out_of_the_check() {
+    let mut veh = compile(
+        "package veh\ntype CommonSpeed : integer [0..100]\n\
+         struct Bad {\n  s : integer [0..10]\n}\n",
+    );
+    let bad = veh
+        .decls
+        .iter_mut()
+        .find(|decl| decl.name == "Bad")
+        .expect("Bad");
+    let Some(v2::decl::Kind::StructDef(def)) = bad.kind.as_mut() else {
+        panic!("a struct");
+    };
+    let Some(v2::struct_member::Member::Field(field)) = def.members[0].member.as_mut() else {
+        panic!("a field");
+    };
+    field.r#type.as_mut().expect("a type").kind =
+        Some(v2::field_type::Kind::Named("Nowhere".to_string()));
+    let common = compile("package veh.common\nstruct Speed {\n  v : integer [0..1000]\n}\n");
+    let packages = [&veh, &common];
+    let model = ridl_ir::codegen::lower(&veh, &packages);
+    assert!(
+        !model
+            .podbuf
+            .as_ref()
+            .expect("a projection")
+            .refused
+            .is_empty(),
+        "the edited struct is refused by the projection"
+    );
+    assert_eq!(crate::check_c_names(&packages), Ok(()));
+}
