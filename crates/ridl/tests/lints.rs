@@ -1890,6 +1890,28 @@ fn a_sibling_members_used_directive_passes_a_member_build_at_deny() {
     );
 }
 
+/// A lint that is `allow` by default still counts as raised: a directive
+/// that names `doc-comment-style` (TYPL-410, `allow` by default) over a
+/// `/** */` doc comment is used, and the lint stays silent.
+#[test]
+fn a_directive_for_a_default_allow_lint_is_used() {
+    let dir = TempDir::new("directive-default-allow");
+    let root = member_workspace(&dir, "");
+    dir.write(
+        "sensor/sensor.ridl",
+        &SOURCE.replace(
+            "type Speed",
+            "// lint: allow doc-comment-style -- legacy\n/** A speed. */\ntype Speed",
+        ),
+    );
+
+    let (code, diagnostics) = check_json(&root);
+
+    assert_eq!(code, 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-410"), 0, "{diagnostics:?}");
+}
+
 /// A lint at `allow` in `[lints]` still counts as raised: a directive that
 /// names it is used, not unused.
 #[test]
