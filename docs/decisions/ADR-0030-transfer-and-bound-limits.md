@@ -517,7 +517,7 @@ When accepted, these records gain a dated note or are changed in place:
     [limits.kind]
     signal = 256
     event = 2048
-    query = 16256
+    query = 16128
 
     [limits.interaction]
     "Climate.temperature" = 64      # Interface.member, in this unit
@@ -576,12 +576,15 @@ When accepted, these records gain a dated note or are changed in place:
     catalog descriptor's member table gains a column with each member's limit.
     Amended 2026-10-28: an interaction whose limit is the default ceiling of its
     kind because no entry applies records no limit. The default ceiling of a
-    kind is a platform constant, not recorded in the IR, so a unit whose entries
-    are unchanged keeps its catalog hash. A limit that an entry gives is
-    recorded, covered by the hash and carried in the descriptor's limit column,
-    as before, including a limit that an entry raises above the default of its
-    kind (decision 18). An absent limit in the IR and in the descriptor means
-    the default ceiling of the member's kind.
+    kind is a platform constant, not recorded in the IR. A unit whose entries
+    are unchanged keeps its catalog hash, except when its `default` is above the
+    default ceiling of a kind: the limit of that kind is then clamped to the
+    ceiling and recorded, so the hash changes. With `default = 4096`, a signal
+    recorded the limit 4,096 and now records 3,840. A limit that an entry gives
+    is recorded, covered by the hash and carried in the descriptor's limit
+    column, as before, including a limit that an entry raises above the default
+    of its kind (decision 18). An absent limit in the IR and in the descriptor
+    means the default ceiling of the member's kind.
 
 14. **A payload above a declared limit is an error** (added 2026-10-24). When a
     `[limits]` entry gives an interaction its limit, and the computed bound of
@@ -1102,8 +1105,9 @@ When accepted, these records gain a dated note or are changed in place:
   the veh-cluster corpus are 67 to 70 KB, above 16,128 bytes, and keep a warning
   until the reply becomes a stream (ADR-0032). No fixed is above 16,256 bytes or
   unbounded. The diagnostics surface gains RIDL-157. A unit whose `[limits]`
-  entries are unchanged keeps its catalog hash, and the IR and the descriptor
-  schema do not change.
+  entries are unchanged keeps its catalog hash, except a unit whose `default` is
+  above the default ceiling of a kind, whose clamped limit is recorded (decision
+  13). The IR and the descriptor schema do not change.
 - From the amendment of 2026-10-30: every command, query and fixed whose payload
   is above the default ceiling of its kind or has no finite bound, with no
   `[limits.interaction]` entry for it, which drew the warning RIDL-150 before,
