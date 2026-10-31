@@ -208,8 +208,12 @@ declaring header and in an importing header alike: a tuple of the same shape at
 another position has a head of its own, and the importing header names a foreign
 tuple's head by the declaring package's induced name, so the two headers define
 the head under one guard with one text (ADR-0031 decision 7, amendment of
-2026-10-31). A head reached only through a tail descriptor, an array element or
-a map entry, is not laid out inline, so an importing header does not define it.
+2026-10-31). Two tuples of one package that induce one wire name with two
+layouts (a struct field `sizeField2` next to position 2 of the tuple at `size`)
+are refused in both headers: the declaring header through its C name claim, an
+importing header by refusing the head that reaches them, with a cause that names
+both paths. A head reached only through a tail descriptor, an array element or a
+map entry, is not laid out inline, so an importing header does not define it.
 The header carries `#error` on a big-endian target, and has no `verify`: the
 gate is Rust.
 
