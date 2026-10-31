@@ -1856,6 +1856,58 @@ fn a_sibling_members_unused_directive_fails_a_member_build_at_deny() {
     );
 }
 
+/// A sibling member's directive is checked against the sibling's own
+/// diagnostics: used there, it draws no TYPL-411, so a member build at
+/// `unused-lint-directive = "deny"` succeeds.
+#[test]
+fn a_sibling_members_used_directive_passes_a_member_build_at_deny() {
+    let dir = TempDir::new("directive-sibling-used-build");
+    let root = sibling_workspace(&dir);
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"a\", \"b\"]\n\n[lints]\nunused-lint-directive = \"deny\"\n",
+    );
+    std::fs::remove_file(dir.path().join("b/broken.typl")).expect("the broken file is removed");
+    dir.write(
+        "b/speed.typl",
+        "package b\n// lint: allow unbounded-float -- legacy\ntype Speed: float\n",
+    );
+    let out = TempDir::new("directive-sibling-used-build-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.join("a").as_os_str(),
+    ]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        !stderr.contains("TYPL-411") && !stderr.contains("another member"),
+        "the sibling's directive is used by the sibling's TYPL-102:\n{stderr}"
+    );
+}
+
+/// A lint at `allow` in `[lints]` still counts as raised: a directive that
+/// names it is used, not unused.
+#[test]
+fn a_directive_for_a_lint_at_allow_is_used() {
+    let dir = TempDir::new("directive-allow-level");
+    let root = member_workspace(&dir, ALLOW);
+    dir.write(
+        "sensor/sensor.ridl",
+        &directive_source("// lint: allow missing-timing -- timing comes later"),
+    );
+
+    let (code, diagnostics) = check_json(&root);
+
+    assert_eq!(code, 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "TYPL-411"), 0, "{diagnostics:?}");
+    assert_eq!(count_code(&diagnostics, "RIDL-100"), 0, "{diagnostics:?}");
+}
+
 #[test]
 fn unused_directive_on_podbuf_padding_order_is_reported_when_the_check_ran() {
     let dir = TempDir::new("directive-padding-unused");

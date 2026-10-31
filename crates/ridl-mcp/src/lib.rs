@@ -828,10 +828,9 @@ mod tests {
         assert_eq!(count_code(&value, "RIDL-100"), 1, "{value}");
     }
 
-    // A directive in a member outside the report scope is checked against
-    // that member's own diagnostics: used there, it is not reported unused
-    // when the path names another member, and nothing from that member is
-    // reported, a malformed or unused directive of its own included.
+    // Nothing from a member outside the report scope is reported when the
+    // path names another member: not its diagnostics, and not a report on a
+    // directive of its own, used, unused or malformed.
     #[tokio::test]
     async fn ridl_check_path_mode_directive_outside_the_report_scope_draws_nothing() {
         let copy = directive_workspace("// lint: allow missing-timing -- timing comes later");

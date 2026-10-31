@@ -318,8 +318,7 @@ fn a_member_entry_reports_the_root_manifest_diagnostics() {
     assert!(files.is_empty(), "the build wrote: {files:?}");
 }
 
-/// `run_check` reports an unused directive once, and a directive that names
-/// the lint a diagnostic of its scope raises is used.
+/// `run_check` reports an unused directive once.
 #[test]
 fn run_check_reports_an_unused_directive_once() {
     let fixture = Fixture::new("");
