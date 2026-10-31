@@ -1115,6 +1115,21 @@ Rulings taken while the port was built. The source is the rustdoc of
 - The interaction's limit bounds every chunk in both directions.
 - A streamed reply reserves nothing in the codegen model.
 - No `Command` or `Query` impl is generated for a member that has a stream.
+- A call table slot holds `Interest::Stream` wakers for four streams
+  (`ridl_rt::correlate::STREAM_WAKERS`), not one per `(slot, StreamNo)` as R-6
+  read; a waiter on a fifth stream of one call is handed back and woken at once
+  on every registration, a busy loop until a cell frees. Kept: `Table` is
+  fixed-size and allocates nothing, and no diagnostic is added for a member with
+  five streams. Every slot carries the four cells, in a runtime with no stream
+  extension too.
+- The codegen model numbers stream parameters as a `u32`; `StreamNo` and the
+  descriptor's stream entries are a `u8`, so past 255 stream parameters the
+  descriptor lowering drops the stream and the Rust backend emits a `StreamNo`
+  that does not compile. Documented, not changed: no source declares that many,
+  and no diagnostic is added.
+- `settle(Ok(&[]))` after the caller refused the reply stream records `Ok` and
+  leaves the refusal on the stream; `end_claim` there answers `Failed(e)` and
+  records `Err(e)`.
 
 ## Trace
 

@@ -842,16 +842,18 @@ leaves those files as they are. The `lib.rs` itself is formatted as `rustfmt`
 formats it. `rustfmt` does not read a file reached through `include!`, so a
 consumer that includes a generated file that way needs no attribute.
 
-**Two things it may leave out, each with a note in the source it writes.** A
-type whose size the compiler cannot bound — one that reaches itself, or a
-stream — carries no codec, and gets a `__RIDL_FB_NO_CODEC_<NAME>` constant
-whose documentation names the member and the reason. An interface the face
-cannot carry — a parameter with no declared type, a stream in either
-position, a query whose reply is a fallible `T | E`, or a contract clause
-outside the form the translator accepts — is skipped along with its
-descriptors, and gets a
-`__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason, and,
-when an issue tracks the limit, that issue. An `internal` interface gets no
+**Two things it may leave out, each with a note in the source it writes, and
+one it leaves out without a note.** A type whose size the compiler cannot
+bound — one that reaches itself, or a stream — carries no codec, and gets a
+`__RIDL_FB_NO_CODEC_<NAME>` constant whose documentation names the member and
+the reason. An interface the face cannot carry — a parameter with no declared
+type, a query whose reply is a fallible `T | E`, or a contract clause outside
+the form the translator accepts — is skipped along with its descriptors, and
+gets a `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason,
+and, when an issue tracks the limit, that issue. A member with a stream, as a
+parameter or as its reply, is left out of an otherwise emitted face, with no
+note: its descriptor row is written all the same, and the face carries no
+method for it until a stream face exists. An `internal` interface gets no
 face in any case
 ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face)
 gives the rule). When its descriptors are refused, its note says that the

@@ -47,6 +47,8 @@ them has a `&mut self` method, and checks this itself.
 | `ScannableSignals` | walks the signals that changed since a mark (extension)       | a consumer that scans a store; no generated face calls it          |
 | `CoherentSignals`  | reads several signals from one publication (extension)        | a consumer that needs one coherent set; no generated face calls it |
 | `Wakeable`         | wakes a waiting task when a port may have changed (extension) | a `Client` with events or calls, and `serve`                       |
+| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a consumer that streams; no generated face calls it yet          |
+| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension) | a provider that streams; no generated face calls it yet          |
 
 **`Attached` and `Clock`.** `Attached` has one method, `catalog`, which returns
 the `CatalogRef` the port serves; every interaction port has it as a
@@ -102,15 +104,17 @@ the reply bytes, or the `CallError` the caller sees. A send fails with
 It fails with `ReadError`. How a value is provisioned into the runtime is the
 runtime's own API, not a port.
 
-**Extensions.** A runtime may omit `ScannableSignals` and `CoherentSignals`,
-because they describe mechanisms that some runtimes have.
+**Extensions.** A runtime may omit `ScannableSignals`, `CoherentSignals`,
+`StreamCaller` and `StreamHandler`, because they describe mechanisms that some
+runtimes have.
 `ScannableSignals` reports a generation counter for each interface and writes
 the signals that changed since a `Watermark`; neither method returns an error.
 `CoherentSignals::read_coherent` answers several ordinals of one interface from
 one publication and fails with `ReadError`. A runtime whose transport delivers
 each field separately cannot present it. `Wakeable::wake_on` stores a waker
-for an `Interest` — a call's outcome, a free call slot, an event, or a claim —
-and wakes it when that interest may have changed. A runtime that serves a
+for an `Interest` — a call's outcome, a free call slot, an event, a claim, or
+a stream of a call or of a claim — and wakes it when that interest may have
+changed. A runtime that serves a
 generated async client implements `Wakeable`, because every face future that
 waits is bounded on it.
 

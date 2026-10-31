@@ -26,9 +26,10 @@
 //! offers both. Its six handles group eleven roles the way that decision
 //! derives the threading split: a handle each for the five roles with a
 //! `&mut self` method, and one handle for the six whose methods all take
-//! `&self`, which are exactly the roles several threads may hold at once. The
-//! twelfth port trait, `Wakeable`, is implemented on every handle, because
-//! each handle wakes its own waiters (see "Waking" below). The two stream
+//! `&self`, which are exactly the roles several threads may hold at once.
+//! `Wakeable`, the port trait outside the eleven roles, is implemented on
+//! every handle, because each handle wakes its own waiters (see "Waking"
+//! below). The two stream
 //! extensions, [`StreamCaller`] and [`StreamHandler`], are on the caller and
 //! the handler handle.
 //! [`Loopback`] is the aggregate: it implements all fourteen port traits by

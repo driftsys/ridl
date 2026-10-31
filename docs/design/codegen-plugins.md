@@ -708,7 +708,8 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   member whose `Interaction.streams` is not empty has a request of its
   non-stream parameters only, and a plugin must not emit it as a plain call; a
   model written before `Interaction.streams` existed had neither `request` nor
-  `request_tuple` for such a member, so a plugin that does not read the list
+  `request_tuple` for a member with a stream parameter (a query whose reply
+  alone is a stream had its `request`), so a plugin that does not read the list
   skips every member whose list is not empty. A streamed reply adds nothing to
   `Interaction.reservation`: its chunks are not held by the call table, and the
   member's limit bounds each one (ADR-0032 decision 14), so the model's

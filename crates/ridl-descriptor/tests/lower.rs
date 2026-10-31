@@ -674,7 +674,8 @@ fn an_unset_limit_is_absent() {
 
 #[test]
 fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
-    // Driver §4 answer 10: no `stream` flag, no per-element bound yet (#336).
+    // The payload row of a streamed reply carries no sizes: the stream's
+    // entry in `Member.streams` carries the element's bound.
     let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     let trace = vehicle(catalog).members().unwrap().get(5).unwrap().unwrap();

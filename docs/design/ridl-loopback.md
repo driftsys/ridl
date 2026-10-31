@@ -114,11 +114,11 @@ an aggregate**, which is ADR-0021 decision 12's shape and this story's
 `Done when`. The six here group eleven roles the way that decision derives the
 threading split: a handle each for the five roles with a `&mut self` method, and
 one handle for the six whose methods all take `&self`, which are exactly the
-roles several threads may hold at once. The twelfth port trait, `Wakeable`, is
-implemented on every handle rather than grouped, because each handle wakes its
-own waiters ("Waking", below). The two stream extensions, `StreamCaller` and
-`StreamHandler`, are on the caller and the handler handle, beside the role they
-extend.
+roles several threads may hold at once. `Wakeable`, the port trait outside the
+eleven roles, is implemented on every handle rather than grouped, because each
+handle wakes its own waiters ("Waking", below). The two stream extensions,
+`StreamCaller` and `StreamHandler`, are on the caller and the handler handle,
+beside the role they extend.
 
 Every handle implements `Attached`, which every port trait but `Clock` and
 `Wakeable` carries as a supertrait, and `Encoded`. The table lists what each

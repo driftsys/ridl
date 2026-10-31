@@ -321,10 +321,11 @@ A member whose `Interaction.streams` is not empty has a request of its
 non-stream parameters only, and a plugin must not emit it as a plain call. The
 Rust backend leaves such a member out of the interaction face, and the
 TypeScript backend leaves it out of the codec module's interface table. This is
-a change for a plugin written against an earlier model: such a member then had
-neither `request` nor `request_tuple`, so a plugin that does not read
-`Interaction.streams` emitted no call for it, and now sees what looks like a
-plain call. Such a plugin skips every member whose `Interaction.streams` is not
+a change for a plugin written against an earlier model: a member with a stream
+parameter then had neither `request` nor `request_tuple`, so a plugin that does
+not read `Interaction.streams` emitted no call for it, and now sees what looks
+like a plain call; a query whose reply alone is a stream had its `request` then
+as now. Such a plugin skips every member whose `Interaction.streams` is not
 empty. A streamed reply adds nothing to the member's reservation, so a query
 that replies with a stream reserves its request alone.
 
