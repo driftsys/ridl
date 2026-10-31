@@ -331,12 +331,30 @@ impl<'a> Header<'a> {
             .unwrap_or_default()
     }
 
-    /// The C type name of head `at`: `<package>_<type>_head` for a
-    /// declaration and for a tuple that has an induced wire name, in the
-    /// package that declares it and in one that lays it out inline alike;
-    /// `<prefix>_tuple<N>_head` for a tuple of this package with no wire
-    /// name; `<prefix>_head<N>` for a head with no source; and a name built
-    /// from the path to the head for the others.
+    /// The C type name of head `at`, where `<prefix>` is the package prefix
+    /// of this package (`veh_cluster`) and `<pkg>` that of another package:
+    ///
+    /// - a declaration of this package: `<prefix>_<declaration>_head`;
+    /// - a tuple of this package: `<prefix>_<wire name>_head`;
+    /// - a foreign declaration: `<pkg>_<declaration>_head`;
+    /// - a tuple inside a foreign declaration (`NestedTuple`):
+    ///   `<pkg>_<wire name>_head`, the name the declaring header gives it;
+    ///   with no wire name (a producer older than that field),
+    ///   `<path words>_head`, from its path, which starts at the qualified
+    ///   name of the foreign declaration;
+    /// - a map entry: `<prefix>_<path words>_entry_head`, or
+    ///   `<path words>_entry_head` when the path starts at a foreign
+    ///   declaration;
+    /// - a union arm: `<prefix>_<union>_<arm>_arm_head`, or
+    ///   `<pkg>_<union>_<arm>_arm_head` for an arm of a foreign union, from
+    ///   the union's name and the arm's name (`arm<ordinal>` when the arm is
+    ///   not found);
+    /// - two fallbacks that checked input does not reach: a tuple of this
+    ///   package with an empty wire name, `<prefix>_tuple<N>_head` for
+    ///   `Model.tuples[N]`, and a head with no source, `<prefix>_head<N>` for
+    ///   head `N`.
+    ///
+    /// Every name and wire name is in the pinned snake case.
     fn type_name(&self, at: usize) -> String {
         use v1::podbuf_head::Source;
         let prefix = &self.prefix;
