@@ -657,6 +657,60 @@ mod tests {
         assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
     }
 
+    /// A diagnostic before the scope stays: containment is checked at the
+    /// scope's start as well as at its end.
+    #[test]
+    fn directive_leaves_a_diagnostic_before_scope() {
+        let before = range_of(DIRECTIVE_TEXT, "package p");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                before,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
+    }
+
+    /// A directive applies to its own file only: the same range in another
+    /// file, with no directive, keeps its diagnostic.
+    #[test]
+    fn directive_leaves_another_file() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let mut sources = SourceMap::new();
+        let _a = sources.file_id("/ws/a.ridl", DIRECTIVE_TEXT);
+        let b = sources.file_id("/ws/b.ridl", "package q\n\ninterface A {}\n");
+        let mut diagnostics = vec![diagnostic_at(
+            DiagCode::TYPL_406,
+            Severity::Warning,
+            b,
+            inside,
+        )];
+        apply_lint_levels(
+            &mut diagnostics,
+            &sources,
+            &missing_docs_scopes(LintLevel::Warn),
+        );
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    }
+
+    /// The check reads the code, not the severity: a diagnostic already at
+    /// Error (raised by an earlier application under `deny`) is removed.
+    #[test]
+    fn directive_removes_a_diagnostic_already_at_error() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Deny, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Error,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![]);
+    }
+
     #[test]
     fn directive_leaves_another_lint() {
         let inside = range_of(DIRECTIVE_TEXT, "interface A");
@@ -738,18 +792,29 @@ mod tests {
         assert_eq!(diagnostics, once);
     }
 
+    /// A file whose path is not `.typl`, `.ridl` or `.rsdl` is not scanned,
+    /// even when its text is a valid directive over a declaration.
     #[test]
     fn toml_file_is_not_scanned() {
-        let text = "// lint: allow unknown-lint -- not a source file\n[lints]\nfoo = \"warn\"\n";
+        let text = "package p\n\n// lint: allow missing-docs -- r\ntype T: float\n";
         let mut sources = SourceMap::new();
         let file = sources.file_id("/ws/ridl.toml", text);
-        let mut diagnostics = vec![diagnostic_at(
-            DiagCode::MANI_010,
-            Severity::Warning,
-            file,
-            range_of(text, "foo"),
-        )];
+        let mut diagnostics = vec![
+            diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                range_of(text, "type T"),
+            ),
+            diagnostic_at(
+                DiagCode::MANI_010,
+                Severity::Warning,
+                file,
+                range_of(text, "type T"),
+            ),
+        ];
         apply_lint_levels(&mut diagnostics, &sources, &LintScopes::default());
-        assert_eq!(diagnostics.len(), 1);
+        let codes: Vec<&str> = diagnostics.iter().map(|d| d.code.as_str()).collect();
+        assert_eq!(codes, ["TYPL-406", "MANI-010"]);
     }
 }
