@@ -7932,3 +7932,18 @@ fn nested_multi_line_doc_renders_as_line_comments() {
     assert!(!source.contains("/**"), "got:\n{source}");
     assert!(source.contains("/// a\n    /// b\n"), "got:\n{source}");
 }
+
+/// A doc inside parentheses, here on a tuple-struct field, is split too, and
+/// an attribute that is not `doc` keeps its string as it is.
+#[test]
+fn doc_in_parentheses_is_split_and_other_attributes_are_kept() {
+    let text = "a\nb";
+    let items = vec![quote::quote! {
+        #[foo = #text]
+        pub struct Item(#[doc = #text] pub u8);
+    }];
+    let source = super::render(items).unwrap().rust_source;
+    assert!(!source.contains("/**"), "got:\n{source}");
+    assert!(source.contains("/// a\n    /// b\n"), "got:\n{source}");
+    assert!(source.contains("#[foo = \"a\\nb\"]"), "got:\n{source}");
+}

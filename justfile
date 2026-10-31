@@ -857,8 +857,9 @@ _cabin-generate:
 # podbuf layout assertions for those targets; the program exiting non-zero or
 # not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
 # the lock being out of date; the consumer or either generated crate being
-# unformatted; the consumer drawing a clippy warning; the generated crate drawing a clippy warning that its
-# `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
+# unformatted; the consumer drawing a clippy warning; the generated crate
+# drawing a clippy warning that its `lib.rs` does not allow, or an allow that
+# no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
 # cargo finishing no build there; `cargo doc` on either generated crate drawing

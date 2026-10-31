@@ -845,7 +845,8 @@ fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
 ///
 /// prettyplease prints a doc string that holds a line break as one `/** */`
 /// block and every other doc string as one `///` line, so after this pass every
-/// generated doc comment is written with `///`. Each line that is not empty
+/// outer doc comment is written with `///`. An inner `#![doc]` is left as it
+/// is; the generated output has none (see [`render`]). Each line that is not empty
 /// gets one leading space, which puts a space after `///` and keeps the
 /// indentation of the lines relative to each other; rustdoc removes the
 /// indentation that all lines share, so the rendered documentation does not
