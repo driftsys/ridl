@@ -32,23 +32,23 @@ them has a `&mut self` method, and checks this itself.
 
 ## The port traits
 
-| Trait              | Role                                                          | Used by                                                            |
-| ------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `Attached`         | names the catalog the port serves                             | the face, when it binds; a supertrait of every interaction port    |
-| `Encoded`          | states the encoding of the bytes the port carries             | the face: every port a face is bound to; a conformance fixture need not |
-| `Clock`            | gives the time envelopes are stamped with                     | the runtime; a `Client` with calls, to measure a call's bound      |
-| `SignalReader`     | reads a signal's current value                                | the consumer: `Client`                                             |
-| `SignalWriter`     | stages signal changes and publishes them with `commit`        | the producer: `Publisher`                                          |
-| `EventSource`      | subscribes to events and takes the next occurrence            | the consumer: `Client`                                             |
-| `EventSink`        | raises an occurrence                                          | the producer: `Publisher`                                          |
-| `Caller`           | sends a command or a query and reads its outcome              | the consumer: `Client`                                             |
-| `Handler`          | serves members, takes each call, and settles it               | the provider: `serve`                                              |
-| `FixedReader`      | reads a provisioned `fixed` value                             | the application, directly; the face has no method over it          |
-| `ScannableSignals` | walks the signals that changed since a mark (extension)       | a consumer that scans a store; no generated face calls it          |
-| `CoherentSignals`  | reads several signals from one publication (extension)        | a consumer that needs one coherent set; no generated face calls it |
-| `Wakeable`         | wakes a waiting task when a port may have changed (extension) | a `Client` with events or calls, and `serve`                       |
-| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a consumer that streams; no generated face calls it yet          |
-| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension) | a provider that streams; no generated face calls it yet          |
+| Trait              | Role                                                             | Used by                                                                 |
+| ------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `Attached`         | names the catalog the port serves                                | the face, when it binds; a supertrait of every interaction port         |
+| `Encoded`          | states the encoding of the bytes the port carries                | the face: every port a face is bound to; a conformance fixture need not |
+| `Clock`            | gives the time envelopes are stamped with                        | the runtime; a `Client` with calls, to measure a call's bound           |
+| `SignalReader`     | reads a signal's current value                                   | the consumer: `Client`                                                  |
+| `SignalWriter`     | stages signal changes and publishes them with `commit`           | the producer: `Publisher`                                               |
+| `EventSource`      | subscribes to events and takes the next occurrence               | the consumer: `Client`                                                  |
+| `EventSink`        | raises an occurrence                                             | the producer: `Publisher`                                               |
+| `Caller`           | sends a command or a query and reads its outcome                 | the consumer: `Client`                                                  |
+| `Handler`          | serves members, takes each call, and settles it                  | the provider: `serve`                                                   |
+| `FixedReader`      | reads a provisioned `fixed` value                                | the application, directly; the face has no method over it               |
+| `ScannableSignals` | walks the signals that changed since a mark (extension)          | a consumer that scans a store; no generated face calls it               |
+| `CoherentSignals`  | reads several signals from one publication (extension)           | a consumer that needs one coherent set; no generated face calls it      |
+| `Wakeable`         | wakes a waiting task when a port may have changed (extension)    | a `Client` with events or calls, and `serve`                            |
+| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a consumer that streams; no generated face calls it yet                 |
+| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | a provider that streams; no generated face calls it yet                 |
 
 **`Attached` and `Clock`.** `Attached` has one method, `catalog`, which returns
 the `CatalogRef` the port serves; every interaction port has it as a
