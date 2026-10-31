@@ -1,0 +1,23 @@
+// The package that `podbuf_nested_union_holder.ridl` references across a
+// package boundary: a union whose arm is a union, over a struct that holds a
+// tuple.
+
+package pod.parts
+
+struct Span {
+  bounds : (low: integer [0..255], high: integer [0..255])
+}
+
+struct Mark {
+  value : integer [0..255]
+}
+
+union Inner {
+  span : Span
+  mark : Mark
+}
+
+union Outer {
+  span  : Span
+  inner : Inner
+}

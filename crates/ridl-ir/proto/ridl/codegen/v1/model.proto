@@ -1345,11 +1345,20 @@ message ArmHead {
   optional uint32 foreign = 3;
 }
 
-// A tuple reached inside a foreign aggregate. Equal tuples share one head.
+// A tuple reached inside a foreign aggregate. Each tuple has one head, which
+// every position that lays that tuple out inline names; a tuple of the same
+// shape at another position has a head of its own.
 message NestedTuple {
   // The qualified name of the foreign declaration, then the names of the
   // fields that lead to the tuple.
   repeated string path = 1;
+  // The package that declares the tuple.
+  string package = 2;
+  // The induced wire name the declaring package gives the tuple, as
+  // `InducedName.wire` spells it in that package's model, so a backend names
+  // the head the way the declaring package's output names it. Empty from a
+  // producer older than this field.
+  string wire = 3;
 }
 
 // One field of a head and where the layout law put it.

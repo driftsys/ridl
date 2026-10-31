@@ -250,7 +250,10 @@ member equal to the presence test `has_<member>` of an optional member — falls
 back to positional names (`f1`, `f2`) for that whole tuple head, decided from
 the tuple's own member names so that both headers make the same choice. The
 proto3 and FlatBuffers backends still name a tuple's fields by position, and the
-scope of RIDL-149 is unchanged.
+scope of RIDL-149 is unchanged. The head a tuple gets is found by the tuple's
+identity, not by its shape, and an importing header names a foreign tuple's head
+by the declaring package's induced name (ADR-0031 decision 7, amendment of
+2026-10-31, from driftsys/ridl#1112).
 
 ## Context
 

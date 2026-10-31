@@ -1,0 +1,14 @@
+// A package whose head holds a union of another package inline, whose arm is
+// a union of that package.
+
+package pod.holder
+
+import pod.parts.Outer
+
+// The union field is optional: the Rust backend gives `Outer` no `Default`
+// (its first arm's type has none), so a required field of that type would
+// not build; the podbuf codec is what this fixture exercises.
+struct Holder {
+  tag   : integer [0..255]
+  outer : Outer?
+}

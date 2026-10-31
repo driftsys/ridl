@@ -663,7 +663,8 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   fields that lead to the map, an `ArmHead` that names the union declaration and
   the arm ordinal (and, for a union of another package, the index into
   `Model.foreign`), an index into `Model.foreign`, or a `NestedTuple`, a tuple
-  written inside a struct of another package.
+  written inside a struct of another package, with the `package` that declares
+  it and the induced `wire` name that package gives it.
 - **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
   head. A head with no field has size 0.
 - **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
@@ -677,8 +678,12 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
 - **Forms.** A struct, a tuple or a union written as a field is laid out inline
   as a copy of its own head. The form names the head of the type it was written
   with (`inline_head`): the head of that declaration, the foreign head for a
-  type of another package, or for a tuple written at the field the named tuple
-  with the same structure. Two declarations with one layout have two heads. A
+  type of another package, or for a tuple written at the field that tuple's own
+  head: the head of its entry in `Model.tuples`, or the one `NestedTuple` head
+  of a tuple of another package, keyed by its package and wire name. Two
+  declarations with one layout have two heads; when two tuple positions share
+  one entry and one head is stated in
+  [ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md). A
   descriptor form says what the tail holds: a bounded string or bytes (`min`,
   `max`), an array (the element form, the stride `elem_size`, `min`, `max`), a
   map (the entry head, `elem_size`, `min`, `max`) or the arms of a union (the

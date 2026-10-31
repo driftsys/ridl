@@ -1508,23 +1508,37 @@ fn two_declarations_with_one_layout_keep_their_own_heads() {
 /// The model of package `p.b`, which imports from `p.a`, in a two-member
 /// workspace.
 fn two_package_model(a: &str, b: &str) -> v1::Model {
+    workspace_model(&[("a", "p.a", a), ("b", "p.b", b)], "p.b")
+}
+
+/// The codegen model of the package named `local`, lowered with every member
+/// of a workspace of `members` (directory, package name, source) in scope.
+fn workspace_model(members: &[(&str, &str, &str)], local: &str) -> v1::Model {
     let root = tempfile::tempdir().expect("a temp dir");
     let write = |path: &str, text: &str| {
         let path = root.path().join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     };
-    write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
-    write(
-        "a/ridl.toml",
-        "[package]\nname = \"p.a\"\nversion = \"1.0.0\"\n",
-    );
-    write("a/a.typl", a);
-    write(
-        "b/ridl.toml",
-        "[package]\nname = \"p.b\"\nversion = \"1.0.0\"\n",
-    );
-    write("b/b.typl", b);
+    let list = members
+        .iter()
+        .map(|(dir, _, _)| format!("\"{dir}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    write("ridl.toml", &format!("[workspace]\nmembers = [{list}]\n"));
+    for (dir, name, text) in members {
+        write(
+            &format!("{dir}/ridl.toml"),
+            &format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        );
+        // A member that declares an interface is a ridl source.
+        let extension = if text.contains("\ninterface ") {
+            "ridl"
+        } else {
+            "typl"
+        };
+        write(&format!("{dir}/{dir}.{extension}"), text);
+    }
     let mut db = RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, root.path()).expect("the workspace loads");
     let mut packages: Vec<v2::Package> = output
@@ -1534,8 +1548,611 @@ fn two_package_model(a: &str, b: &str) -> v1::Model {
         .collect();
     packages.push(output.std_ir.clone());
     let others: Vec<&v2::Package> = packages.iter().collect();
-    let local = packages.iter().find(|p| p.name == "p.b").expect("p.b");
+    let local = packages
+        .iter()
+        .find(|p| p.name == local)
+        .unwrap_or_else(|| panic!("no package {local}"));
     codegen::lower(local, &others)
+}
+
+/// A union whose arm is a union: the arm head is a copy of the inner union's
+/// head, whose arms belong to the inner union, so a tuple under them is found
+/// under the inner arm's type, in the declaring package and in an importing
+/// one. The arm heads of the inner union name the inner union.
+#[test]
+fn a_union_arm_that_is_a_union_keeps_its_tuples() {
+    const A: &str = "package p.a\n\n        struct S {\n  f : (x: integer [0..255], y: integer [0..255])\n}\n\n        struct T {\n  g : integer [0..255]\n}\n\n        union Inner {\n  s : S\n  t : T\n}\n\n        union Outer {\n  i : Inner\n  s : S\n}\n";
+    const B: &str = "package p.b\n\nimport p.a.Outer\n\nstruct Local {\n  o : Outer\n}\n";
+    let arm_heads = |model: &v1::Model, at: u32| -> Vec<(u32, u32)> {
+        let projection = model.podbuf.as_ref().expect("a podbuf projection");
+        projection.heads[at as usize]
+            .fields
+            .iter()
+            .find_map(|field| match form_kind(field) {
+                v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+                    Some(v1::podbuf_descriptor::Kind::Arms(arms)) => Some(
+                        arms.arms
+                            .iter()
+                            .map(|arm| (arm.ordinal, arm.head))
+                            .collect(),
+                    ),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .expect("the arms")
+    };
+
+    let declaring = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.a");
+    let projection = declaring.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (outer_at, _) = declaration_head(&declaring, "Outer");
+    let inner_index = declaration_index(&declaring, "Inner");
+    let (_, inner_arm) = arm_heads(&declaring, outer_at)[0];
+    let inner_arms = arm_heads(&declaring, inner_arm);
+    let (_, s_arm) = inner_arms[0];
+    assert_eq!(
+        projection.heads[s_arm as usize].source,
+        Some(v1::podbuf_head::Source::Arm(v1::ArmHead {
+            declaration: inner_index,
+            arm: 1,
+            foreign: None,
+        }))
+    );
+    let v1::podbuf_form::Kind::InlineHead(f_at) =
+        form_kind(field(&projection.heads[s_arm as usize], "f"))
+    else {
+        panic!("an inline head");
+    };
+    assert!(matches!(
+        projection.heads[*f_at as usize].source,
+        Some(v1::podbuf_head::Source::Tuple(_))
+    ));
+
+    let importing = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.b");
+    let projection = importing.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, local) = declaration_head(&importing, "Local");
+    let v1::podbuf_form::Kind::InlineHead(outer_at) = form_kind(field(local, "o")) else {
+        panic!("an inline head");
+    };
+    let (_, inner_arm) = arm_heads(&importing, *outer_at)[0];
+    let (_, s_arm) = arm_heads(&importing, inner_arm)[0];
+    let Some(v1::podbuf_head::Source::Arm(arm)) = &projection.heads[s_arm as usize].source else {
+        panic!("an arm head");
+    };
+    let inner_foreign = arm.foreign.expect("a foreign union");
+    assert_eq!(
+        importing.foreign[inner_foreign as usize]
+            .declaration
+            .as_ref()
+            .and_then(|d| d.name.as_ref())
+            .map(|n| n.declared.as_str()),
+        Some("Inner")
+    );
+    let v1::podbuf_form::Kind::InlineHead(f_at) =
+        form_kind(field(&projection.heads[s_arm as usize], "f"))
+    else {
+        panic!("an inline head");
+    };
+    assert_eq!(
+        projection.heads[*f_at as usize].source,
+        Some(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
+            path: ["p.a.Outer", "1", "1", "f"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            package: "p.a".to_string(),
+            wire: "SF".to_string(),
+        }))
+    );
+}
+
+/// Two tuples of one package can induce one wire name with two shapes (a
+/// struct field `sizeField2` next to position 2 of the tuple at `size`). The
+/// declaring header refuses the pair through its C name claim; an importing
+/// package refuses the head that reaches them, naming both, so that the two
+/// never share one head.
+#[test]
+fn two_tuples_of_one_package_with_one_wire_name_are_refused_when_imported() {
+    let model = two_package_model(
+        "package p.a\n\nstruct Hub {\n           size       : (w: integer [0..255], inner: (p: integer [0..255], q: integer [0..255]))\n           sizeField2 : (a: integer [0..255], b: integer [0..255], c: integer [0..255])\n}\n",
+        "package p.b\n\nimport p.a.Hub\n\nstruct Holder {\n  hub : Hub\n}\n",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert_eq!(projection.refused.len(), 1, "{:?}", projection.refused);
+    let refused = &projection.refused[0];
+    assert_eq!(
+        refused.source,
+        Some(v1::podbuf_refused::Source::Declaration(declaration_index(
+            &model, "Holder"
+        )))
+    );
+    for text in [
+        "HubSizeField2",
+        "p.a.Hub.size.2",
+        "p.a.Hub.sizeField2",
+        "rename",
+    ] {
+        assert!(
+            refused.cause.contains(text),
+            "{text} not in {}",
+            refused.cause
+        );
+    }
+}
+
+/// Two distinct tuples of one package under one wire name are refused in an
+/// importing package whatever their layouts, equal ones included: the
+/// declaring header refuses the pair by its C name claim, so the importing
+/// header must not define one head for both.
+#[test]
+fn two_tuples_of_one_package_with_one_wire_name_and_one_layout_are_refused_when_imported() {
+    let model = two_package_model(
+        "package p.a\n\nstruct Hub {\n  \
+         sizeField2 : (a: integer [0..255], b: integer [0..255])\n  \
+         size       : (x: integer [0..255], inner: (a: integer [0..255], b: integer [0..255]))\n}\n",
+        "package p.b\n\nimport p.a.Hub\n\nstruct Holder {\n  hub : Hub\n}\n",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert_eq!(projection.refused.len(), 1, "{:?}", projection.refused);
+    let refused = &projection.refused[0];
+    assert_eq!(
+        refused.source,
+        Some(v1::podbuf_refused::Source::Declaration(declaration_index(
+            &model, "Holder"
+        )))
+    );
+    for text in [
+        "HubSizeField2",
+        "p.a.Hub.sizeField2",
+        "p.a.Hub.size.2",
+        "rename",
+    ] {
+        assert!(
+            refused.cause.contains(text),
+            "{text} not in {}",
+            refused.cause
+        );
+    }
+}
+
+/// Two positions whose induced Rust names are one (`A.bC` and `AB.c`, both
+/// `ABC`) share one entry: both resolve to that entry's head in the declaring
+/// package, and to one nested head in an importing package.
+#[test]
+fn two_positions_with_one_induced_name_share_one_head() {
+    const A: &str = "package p.a\n\n\
+        struct A {\n  bC : (x: integer [0..255], y: integer [0..255])\n}\n\n\
+        struct AB {\n  c : (x: integer [0..255], y: integer [0..255])\n}\n";
+    const B: &str = "package p.b\n\nimport p.a.A\nimport p.a.AB\n\n\
+        struct Local {\n  a : A\n  ab : AB\n}\n";
+    let inline_at = |field: &v1::PodbufField| match form_kind(field) {
+        v1::podbuf_form::Kind::InlineHead(at) => *at,
+        other => panic!("an inline head, got {other:?}"),
+    };
+
+    let declaring = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.a");
+    let projection = declaring.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, a) = declaration_head(&declaring, "A");
+    let (_, ab) = declaration_head(&declaring, "AB");
+    let at = inline_at(field(a, "bC"));
+    assert_eq!(at, inline_at(field(ab, "c")));
+    assert!(matches!(
+        projection.heads[at as usize].source,
+        Some(v1::podbuf_head::Source::Tuple(_))
+    ));
+
+    let importing = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.b");
+    let projection = importing.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, local) = declaration_head(&importing, "Local");
+    let a = &projection.heads[inline_at(field(local, "a")) as usize];
+    let ab = &projection.heads[inline_at(field(local, "ab")) as usize];
+    let at = inline_at(field(a, "bC"));
+    assert_eq!(at, inline_at(field(ab, "c")));
+    let Some(v1::podbuf_head::Source::NestedTuple(nested)) = &projection.heads[at as usize].source
+    else {
+        panic!("a nested tuple");
+    };
+    assert_eq!(
+        (nested.package.as_str(), nested.wire.as_str()),
+        ("p.a", "ABC")
+    );
+}
+
+/// The ruled pair inside one declaration (`S.aInner` and `S.a.inner`, both
+/// `SAInner`): the declaring package gives them one entry under the wire name
+/// `SAInner`, and the importing lowering reuses the claim the same way, so the
+/// nested head of `S.a.inner` carries that wire name, not `SAField1`. The C
+/// headers accept the declaration, with distinct accessors for the two
+/// positions (`two_positions_of_one_declaration_that_share_one_entry_have_one_text`
+/// in the podbuf backend's tests).
+#[test]
+fn two_positions_of_one_declaration_with_one_induced_name_share_one_wire_name() {
+    const A: &str = "package p.a\n\n\
+        struct S {\n  aInner : (p: integer [0..255], q: integer [0..255])\n  \
+        a : (inner: (p: integer [0..255], q: integer [0..255]))\n}\n";
+    const B: &str = "package p.b\n\nimport p.a.S\n\nstruct Local {\n  s : S\n}\n";
+    let inline_at = |field: &v1::PodbufField| match form_kind(field) {
+        v1::podbuf_form::Kind::InlineHead(at) => *at,
+        other => panic!("an inline head, got {other:?}"),
+    };
+    let declaring = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.a");
+    let wires: Vec<String> = declaring
+        .tuples
+        .iter()
+        .filter_map(|tuple| tuple.name.as_ref().map(|name| name.wire.clone()))
+        .collect();
+    assert_eq!(wires, vec!["SAInner".to_string(), "SA".to_string()]);
+
+    let importing = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.b");
+    let projection = importing.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, local) = declaration_head(&importing, "Local");
+    let s = &projection.heads[inline_at(field(local, "s")) as usize];
+    let a_inner = inline_at(field(s, "aInner"));
+    let a = &projection.heads[inline_at(field(s, "a")) as usize];
+    let inner = a
+        .fields
+        .iter()
+        .find(|field| {
+            matches!(
+                field.source.as_ref().and_then(|s| s.kind.as_ref()),
+                Some(v1::podbuf_source::Kind::Position(1))
+            )
+        })
+        .map(inline_at)
+        .expect("position 1");
+    assert_eq!(a_inner, inner, "one entry, one head");
+    let Some(v1::podbuf_head::Source::NestedTuple(nested)) =
+        &projection.heads[inner as usize].source
+    else {
+        panic!("a nested tuple");
+    };
+    assert_eq!(
+        (nested.package.as_str(), nested.wire.as_str()),
+        ("p.a", "SAInner")
+    );
+}
+
+/// A collision inside a declaration of another package is recorded by the
+/// package that declares it, not by a package that imports it: `A.bC` and
+/// `AB.c` both induce `ABC` with two shapes, so `p.a` carries one
+/// `TupleCollision` and `p.b`, which reaches both through `Local`, carries
+/// none. The two positions keep two entries in `p.b`, so its podbuf walk
+/// meets both under one wire name and refuses `Local`, naming both paths.
+#[test]
+fn a_collision_inside_a_foreign_declaration_is_not_recorded_by_the_importer() {
+    const A: &str = "package p.a\n\n\
+        struct A {\n  bC : (x: integer [0..255], y: integer [0..255])\n}\n\n\
+        struct AB {\n  c : (x: integer [0..255], y: integer [0..255], z: integer [0..255])\n}\n";
+    const B: &str = "package p.b\n\nimport p.a.A\nimport p.a.AB\n\n\
+        struct Local {\n  a : A\n  ab : AB\n}\n";
+    let declaring = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.a");
+    assert_eq!(
+        declaring
+            .tuple_collisions
+            .iter()
+            .map(|collision| collision.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ABC"]
+    );
+    let importing = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.b");
+    assert!(
+        importing.tuple_collisions.is_empty(),
+        "{:?}",
+        importing.tuple_collisions
+    );
+    let projection = importing.podbuf.as_ref().expect("a podbuf projection");
+    assert_eq!(projection.refused.len(), 1, "{:?}", projection.refused);
+    let refused = &projection.refused[0];
+    assert_eq!(
+        refused.source,
+        Some(v1::podbuf_refused::Source::Declaration(declaration_index(
+            &importing, "Local"
+        )))
+    );
+    for text in ["ABC", "p.a.A.bC", "p.a.AB.c"] {
+        assert!(
+            refused.cause.contains(text),
+            "{text} not in {}",
+            refused.cause
+        );
+    }
+}
+
+/// A tuple nested inside the induced reply tuple of a query is reached under
+/// that tuple's own root: the interaction position has no walk path, and the
+/// induced tuple re-roots its fields, so the reply, its nested `inner` and the
+/// request each have a head and none is refused.
+#[test]
+fn a_tuple_inside_an_interaction_tuple_has_its_own_head() {
+    const A: &str = "package p.a\n\ntype Pt : integer [0..255]\n\n\
+        interface Probe {\n  query get(a: Pt, b: Pt): (x: Pt, inner: (p: Pt, q: Pt)) @[..50ms]\n}\n";
+    let model = workspace_model(&[("a", "p.a", A)], "p.a");
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    assert_eq!(projection.heads.len(), 3, "{:?}", projection.heads);
+    let reply = projection
+        .heads
+        .iter()
+        .find(|head| {
+            head.fields.iter().any(|field| {
+                matches!(
+                    field.source.as_ref().and_then(|s| s.kind.as_ref()),
+                    Some(v1::podbuf_source::Kind::Position(2))
+                ) && matches!(form_kind(field), v1::podbuf_form::Kind::InlineHead(_))
+            })
+        })
+        .expect("the reply head lays out `inner` inline");
+    let inner = reply
+        .fields
+        .iter()
+        .find_map(|field| match form_kind(field) {
+            v1::podbuf_form::Kind::InlineHead(at) => Some(*at),
+            _ => None,
+        })
+        .unwrap();
+    assert!(matches!(
+        projection.heads[inner as usize].source,
+        Some(v1::podbuf_head::Source::Tuple(_))
+    ));
+}
+
+/// A colliding position does not take the claim of the entry that holds it:
+/// `A.bC` claims `ABC`, `AB.c` collides with it, and `A.b.c`, reached after
+/// both, has the shape of `A.bC` and reuses its claim, so one collision is
+/// recorded, not two.
+#[test]
+fn a_colliding_position_leaves_the_first_claim_in_place() {
+    const A: &str = "package p.a\n\n\
+        struct A {\n  bC : (x: integer [0..255], y: integer [0..255])\n  \
+        b : (c: (x: integer [0..255], y: integer [0..255]))\n}\n\n\
+        struct AB {\n  c : (x: integer [0..255], y: integer [0..255], z: integer [0..255])\n}\n";
+    let model = workspace_model(&[("a", "p.a", A)], "p.a");
+    assert_eq!(
+        model
+            .tuple_collisions
+            .iter()
+            .map(|collision| (
+                collision.first_fields.clone(),
+                collision.second_fields.clone()
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            vec!["x".to_string(), "y".to_string()],
+            vec!["x".to_string(), "y".to_string(), "z".to_string()]
+        )]
+    );
+}
+
+/// A tuple as the key and as the value of a map is found under the entry
+/// head's `key` and `value` positions, in the declaring package and in an
+/// importing one.
+#[test]
+fn a_tuple_as_a_map_key_or_value_is_found_by_its_identity() {
+    const A: &str = "package p.a\n\n\
+        struct Table {\n  byPair : [(k1: integer [0..255], k2: integer [0..255]) : \
+        (v1: integer [0..255], v2: integer [0..255]); 0..4]\n}\n";
+    const B: &str = "package p.b\n\nimport p.a.Table\n\nstruct Local {\n  table : Table\n}\n";
+    let entry_of = |projection: &v1::PodbufProjection, table: &v1::PodbufHead| -> u32 {
+        match form_kind(field(table, "byPair")) {
+            v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+                Some(v1::podbuf_descriptor::Kind::Map(map)) => {
+                    assert!(matches!(
+                        projection.heads[map.entry_head as usize].source,
+                        Some(v1::podbuf_head::Source::MapEntry(_))
+                    ));
+                    map.entry_head
+                }
+                other => panic!("a map, got {other:?}"),
+            },
+            other => panic!("a descriptor, got {other:?}"),
+        }
+    };
+    let position = |head: &v1::PodbufHead, key: bool| -> u32 {
+        let field = head
+            .fields
+            .iter()
+            .find(
+                |field| match field.source.as_ref().and_then(|s| s.kind.as_ref()) {
+                    Some(v1::podbuf_source::Kind::Key(_)) => key,
+                    Some(v1::podbuf_source::Kind::Value(_)) => !key,
+                    _ => false,
+                },
+            )
+            .expect("the position");
+        match form_kind(field) {
+            v1::podbuf_form::Kind::InlineHead(at) => *at,
+            other => panic!("an inline head, got {other:?}"),
+        }
+    };
+
+    let declaring = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.a");
+    let projection = declaring.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, table) = declaration_head(&declaring, "Table");
+    let entry = &projection.heads[entry_of(projection, table) as usize];
+    let tuple_wire = |at: u32| -> String {
+        match projection.heads[at as usize].source {
+            Some(v1::podbuf_head::Source::Tuple(index)) => declaring.tuples[index as usize]
+                .name
+                .as_ref()
+                .map(|name| name.wire.clone())
+                .unwrap_or_default(),
+            ref other => panic!("a tuple root, got {other:?}"),
+        }
+    };
+    assert_eq!(tuple_wire(position(entry, true)), "TableByPairKey");
+    assert_eq!(tuple_wire(position(entry, false)), "TableByPairValue");
+
+    let importing = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.b");
+    let projection = importing.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, local) = declaration_head(&importing, "Local");
+    let v1::podbuf_form::Kind::InlineHead(table_at) = form_kind(field(local, "table")) else {
+        panic!("an inline head");
+    };
+    let entry =
+        &projection.heads[entry_of(projection, &projection.heads[*table_at as usize]) as usize];
+    let nested = |at: u32| match &projection.heads[at as usize].source {
+        Some(v1::podbuf_head::Source::NestedTuple(nested)) => {
+            (nested.package.clone(), nested.wire.clone())
+        }
+        other => panic!("a nested tuple, got {other:?}"),
+    };
+    assert_eq!(
+        nested(position(entry, true)),
+        ("p.a".to_string(), "TableByPairKey".to_string())
+    );
+    assert_eq!(
+        nested(position(entry, false)),
+        ("p.a".to_string(), "TableByPairValue".to_string())
+    );
+}
+
+/// The nested key is the home package and the wire name: two packages whose
+/// tuples induce one wire name have two heads.
+#[test]
+fn tuples_of_two_packages_with_one_wire_name_have_two_heads() {
+    let model = workspace_model(
+        &[
+            (
+                "a",
+                "p.a",
+                "package p.a\n\nstruct Pair {\n  a : (x: integer [0..255], y: integer [0..255])\n}\n",
+            ),
+            (
+                "c",
+                "p.c",
+                "package p.c\n\nstruct Pair {\n  a : (x: integer [0..255], y: integer [0..255])\n}\n\nstruct Boxed {\n  pair : Pair\n}\n",
+            ),
+            (
+                "b",
+                "p.b",
+                "package p.b\n\nimport p.a.Pair\nimport p.c.Boxed\n\nstruct Local {\n  pair : Pair\n  boxed : Boxed\n}\n",
+            ),
+        ],
+        "p.b",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let inline_at = |field: &v1::PodbufField| match form_kind(field) {
+        v1::podbuf_form::Kind::InlineHead(at) => *at,
+        other => panic!("an inline head, got {other:?}"),
+    };
+    let nested = |at: u32| match &projection.heads[at as usize].source {
+        Some(v1::podbuf_head::Source::NestedTuple(nested)) => {
+            (nested.package.clone(), nested.wire.clone())
+        }
+        other => panic!("a nested tuple, got {other:?}"),
+    };
+    let (_, local) = declaration_head(&model, "Local");
+    let a_pair = &projection.heads[inline_at(field(local, "pair")) as usize];
+    let boxed = &projection.heads[inline_at(field(local, "boxed")) as usize];
+    let c_pair = &projection.heads[inline_at(field(boxed, "pair")) as usize];
+    let a_at = inline_at(field(a_pair, "a"));
+    let c_at = inline_at(field(c_pair, "a"));
+    assert_ne!(a_at, c_at, "one head for the tuples of two packages");
+    assert_eq!(nested(a_at), ("p.a".to_string(), "PairA".to_string()));
+    assert_eq!(nested(c_at), ("p.c".to_string(), "PairA".to_string()));
+}
+
+/// A tuple is found by its own identity, not by its shape: two same-shape
+/// tuples of one package have two heads under two wire names; a tuple inside
+/// a struct of another package is one `NestedTuple` head, keyed by that
+/// package and the wire name it gives the tuple, wherever the walk reaches it
+/// (at a field, at a tuple position, as an array element, or inside an arm of
+/// a union of that package); and a same-shape tuple of this package keeps its
+/// own head.
+#[test]
+fn an_inline_tuple_is_found_by_its_identity() {
+    let model = two_package_model(
+        "package p.a\n\n\
+         struct Pair {\n  a : (x: integer [0..255], y: integer [0..255])\n  \
+         b : (x: integer [0..255], y: integer [0..255])\n}\n\n\
+         struct Hub {\n  size : (w: integer [0..255], inner: (p: integer [0..255], q: integer [0..255]))\n  \
+         items : [(l: integer [0..255], r: integer [0..255]); 0..4]\n}\n\n\
+         union Part {\n  pair : Pair\n  hub : Hub\n}\n",
+        "package p.b\n\nimport p.a.Pair\nimport p.a.Part\n\n\
+         struct Local {\n  own : (x: integer [0..255], y: integer [0..255])\n  pair : Pair\n  part : Part\n}\n",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let nested = |at: u32| match &projection.heads[at as usize].source {
+        Some(v1::podbuf_head::Source::NestedTuple(nested)) => {
+            (nested.package.as_str(), nested.wire.as_str())
+        }
+        other => panic!("a nested tuple, got {other:?}"),
+    };
+    let inline_at = |field: &v1::PodbufField| match form_kind(field) {
+        v1::podbuf_form::Kind::InlineHead(at) => *at,
+        other => panic!("an inline head, got {other:?}"),
+    };
+    let (_, local) = declaration_head(&model, "Local");
+
+    // The local tuple has a root head of its own, which no foreign head shares.
+    let own_at = inline_at(field(local, "own"));
+    assert!(matches!(
+        projection.heads[own_at as usize].source,
+        Some(v1::podbuf_head::Source::Tuple(_))
+    ));
+
+    // The two members of `Pair` have two heads, under two wire names.
+    let pair = &projection.heads[inline_at(field(local, "pair")) as usize];
+    let a_at = inline_at(field(pair, "a"));
+    let b_at = inline_at(field(pair, "b"));
+    assert_ne!(a_at, b_at);
+    assert_ne!(own_at, a_at);
+    assert_eq!(nested(a_at), ("p.a", "PairA"));
+    assert_eq!(nested(b_at), ("p.a", "PairB"));
+
+    // Inside an arm of the foreign union, the same tuples name the same heads,
+    // and the tuples of `Hub` are keyed by the names `p.a` gives them.
+    let part = &projection.heads[inline_at(field(local, "part")) as usize];
+    let arms = part
+        .fields
+        .iter()
+        .find_map(|field| match form_kind(field) {
+            v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+                Some(v1::podbuf_descriptor::Kind::Arms(arms)) => Some(arms),
+                _ => None,
+            },
+            _ => None,
+        })
+        .expect("the arms");
+    let arm_pair = &projection.heads[arms.arms[0].head as usize];
+    assert_eq!(inline_at(field(arm_pair, "a")), a_at);
+    assert_eq!(inline_at(field(arm_pair, "b")), b_at);
+    let arm_hub = &projection.heads[arms.arms[1].head as usize];
+    let size_at = inline_at(field(arm_hub, "size"));
+    assert_eq!(nested(size_at), ("p.a", "HubSize"));
+    let inner = projection.heads[size_at as usize]
+        .fields
+        .iter()
+        .find(|field| {
+            matches!(
+                field.source.as_ref().and_then(|s| s.kind.as_ref()),
+                Some(v1::podbuf_source::Kind::Position(2))
+            )
+        })
+        .expect("position 2");
+    assert_eq!(nested(inline_at(inner)), ("p.a", "HubSizeField2"));
+    let element = match form_kind(field(arm_hub, "items")) {
+        v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+            Some(v1::podbuf_descriptor::Kind::Array(array)) => {
+                array.element.as_deref().expect("an element")
+            }
+            other => panic!("an array, got {other:?}"),
+        },
+        other => panic!("a descriptor, got {other:?}"),
+    };
+    let Some(v1::podbuf_form::Kind::InlineHead(element_at)) = element.kind.as_ref() else {
+        panic!("an inline element, got {element:?}");
+    };
+    assert_eq!(nested(*element_at), ("p.a", "HubItemsElement"));
 }
 
 /// A struct of another package, written inline, has a head of its own that
@@ -1644,6 +2261,8 @@ fn a_foreign_union_and_a_foreign_tuple_keep_their_heads() {
         tuple.source,
         Some(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
             path: vec!["p.a.Holder".to_string(), "t".to_string()],
+            package: "p.a".to_string(),
+            wire: "HolderT".to_string(),
         }))
     );
     assert_eq!(tuple.size, 8);

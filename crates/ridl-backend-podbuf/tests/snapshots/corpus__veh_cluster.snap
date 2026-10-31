@@ -186,11 +186,26 @@ _Static_assert(sizeof(((veh_cluster_raw_wheel_span_span_head *)0)->first) == 2, 
 _Static_assert(offsetof(veh_cluster_raw_wheel_span_span_head, latest) == 2, "veh_cluster_raw_wheel_span_span_head.latest offset");
 _Static_assert(sizeof(((veh_cluster_raw_wheel_span_span_head *)0)->latest) == 2, "veh_cluster_raw_wheel_span_span_head.latest size");
 
+#ifndef VEH_CLUSTER_RAW_WHEEL_SPAN_BURSTS_ELEMENT_HEAD_DEFINED
+#define VEH_CLUSTER_RAW_WHEEL_SPAN_BURSTS_ELEMENT_HEAD_DEFINED
+typedef struct veh_cluster_raw_wheel_span_bursts_element_head {
+  _Alignas(8) uint16_t first;
+  uint16_t latest;
+  uint8_t _pad4[4];
+} veh_cluster_raw_wheel_span_bursts_element_head;
+#endif
+_Static_assert(sizeof(veh_cluster_raw_wheel_span_bursts_element_head) == 8, "veh_cluster_raw_wheel_span_bursts_element_head size");
+_Static_assert(_Alignof(veh_cluster_raw_wheel_span_bursts_element_head) == 8, "veh_cluster_raw_wheel_span_bursts_element_head alignment");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_bursts_element_head, first) == 0, "veh_cluster_raw_wheel_span_bursts_element_head.first offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_bursts_element_head *)0)->first) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.first size");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_bursts_element_head, latest) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.latest offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_bursts_element_head *)0)->latest) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.latest size");
+
 #ifndef VEH_CLUSTER_RAW_WHEEL_SPAN_HEAD_DEFINED
 #define VEH_CLUSTER_RAW_WHEEL_SPAN_HEAD_DEFINED
 typedef struct veh_cluster_raw_wheel_span_head {
   _Alignas(8) veh_cluster_raw_wheel_span_span_head span;
-  veh_cluster_raw_wheel_span_span_head bursts[2];
+  veh_cluster_raw_wheel_span_bursts_element_head bursts[2];
 } veh_cluster_raw_wheel_span_head;
 #endif
 _Static_assert(sizeof(veh_cluster_raw_wheel_span_head) == 24, "veh_cluster_raw_wheel_span_head size");
@@ -232,21 +247,6 @@ _Static_assert(offsetof(veh_cluster_climate_report_head, setpoint) == 4, "veh_cl
 _Static_assert(sizeof(((veh_cluster_climate_report_head *)0)->setpoint) == 4, "veh_cluster_climate_report_head.setpoint size");
 _Static_assert(offsetof(veh_cluster_climate_report_head, fan) == 8, "veh_cluster_climate_report_head.fan offset");
 _Static_assert(sizeof(((veh_cluster_climate_report_head *)0)->fan) == 1, "veh_cluster_climate_report_head.fan size");
-
-#ifndef VEH_CLUSTER_RAW_WHEEL_SPAN_BURSTS_ELEMENT_HEAD_DEFINED
-#define VEH_CLUSTER_RAW_WHEEL_SPAN_BURSTS_ELEMENT_HEAD_DEFINED
-typedef struct veh_cluster_raw_wheel_span_bursts_element_head {
-  _Alignas(8) uint16_t first;
-  uint16_t latest;
-  uint8_t _pad4[4];
-} veh_cluster_raw_wheel_span_bursts_element_head;
-#endif
-_Static_assert(sizeof(veh_cluster_raw_wheel_span_bursts_element_head) == 8, "veh_cluster_raw_wheel_span_bursts_element_head size");
-_Static_assert(_Alignof(veh_cluster_raw_wheel_span_bursts_element_head) == 8, "veh_cluster_raw_wheel_span_bursts_element_head alignment");
-_Static_assert(offsetof(veh_cluster_raw_wheel_span_bursts_element_head, first) == 0, "veh_cluster_raw_wheel_span_bursts_element_head.first offset");
-_Static_assert(sizeof(((veh_cluster_raw_wheel_span_bursts_element_head *)0)->first) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.first size");
-_Static_assert(offsetof(veh_cluster_raw_wheel_span_bursts_element_head, latest) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.latest offset");
-_Static_assert(sizeof(((veh_cluster_raw_wheel_span_bursts_element_head *)0)->latest) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.latest size");
 
 #ifndef VEH_CLUSTER_WHEEL_DIAGNOSTICS_READ_SPAN_REPLY_HEAD_DEFINED
 #define VEH_CLUSTER_WHEEL_DIAGNOSTICS_READ_SPAN_REPLY_HEAD_DEFINED
@@ -379,6 +379,14 @@ static inline uint16_t veh_cluster_raw_wheel_span_span_latest_at(const uint8_t *
   return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
 }
 
+static inline uint16_t veh_cluster_raw_wheel_span_bursts_element_first_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_raw_wheel_span_bursts_element_latest_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
+}
+
 static inline const uint8_t *veh_cluster_raw_wheel_span_span_at(const uint8_t *h, uint32_t sz) {
   return ridl_podbuf_fits(sz, 0, 8) ? h + 0 : NULL;
 }
@@ -433,14 +441,6 @@ static inline uint8_t veh_cluster_climate_report_fan_at(const uint8_t *h, uint32
 
 static inline uint8_t veh_cluster_climate_report_fan(const uint8_t *buf) {
   return veh_cluster_climate_report_fan_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
-}
-
-static inline uint16_t veh_cluster_raw_wheel_span_bursts_element_first_at(const uint8_t *h, uint32_t sz) {
-  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
-}
-
-static inline uint16_t veh_cluster_raw_wheel_span_bursts_element_latest_at(const uint8_t *h, uint32_t sz) {
-  return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
 }
 
 static inline uint16_t veh_cluster_wheel_diagnostics_read_span_reply_min_at(const uint8_t *h, uint32_t sz) {

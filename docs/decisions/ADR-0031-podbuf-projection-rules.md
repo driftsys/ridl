@@ -59,6 +59,11 @@ which replaces the retired lint RIDL-150. Built 2026-10-30: the generated
 `verify` checks structure only, and RIDL-157 replaces RIDL-150
 (driftsys/ridl#1108, driftsys/ridl#1128).
 
+**Amended 2026-10-31 — decision 7, tuple heads by identity, from
+driftsys/ridl#1112.** An inline tuple names its own head, never a head of the
+same shape, and an importing header names a foreign tuple's head by the
+declaring package's induced name; decision 7 carries the dated note.
+
 **Amended 2026-10-31 — decision 13, the catalog history and the encodings, from
 driftsys/ridl#1095.** `ridl build` and `ridl baseline` judge the catalog history
 for the root manifest's encodings, and `ridl check --baseline` is stated to be
@@ -369,6 +374,22 @@ a field is appended.
    (`ridl-backend-rust/src/claims.rs`), so a ridl name cannot collide with it;
    the `__ridl_podbuf_*` functions need none, because no typl name spells a
    leading `__`, and a view accessor is the field's own name on the view type.
+
+   _Amended 2026-10-31, from driftsys/ridl#1112._ Each tuple has its own head,
+   found by the tuple's identity and never by a head of the same shape. Two
+   positions of one package share one entry and one head when their induced Rust
+   names, their shapes and their visibilities are equal (`A.bC` and `AB.c`, both
+   `ABC`); with one induced Rust name and a different shape or visibility, the
+   pair is a tuple collision, which every backend refuses; two tuples with
+   different induced Rust names have two heads, unless their wire names are
+   equal (`sizeField2` next to position 2 of `size`), which is refused. An
+   importing header names a foreign tuple's head by the declaring package's
+   induced name (`<pkg>_<wire name under snake_case>_head`, the name the
+   declaring header gives it), so the two headers define one head under one
+   guard with one text. The codegen model carries the identity on
+   `NestedTuple.package` and `NestedTuple.wire`. A (package, wire) key reached
+   from two different tuples is refused, whatever their layouts;
+   [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) has the detail.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:
@@ -833,6 +854,9 @@ stated in the decision above; this list is the index.
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                               |
 | [ADR-0014](ADR-0014-ir-encodings.md)                                                     | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                        |
 | [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                   | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                     |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name     |
+| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                         | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                          |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                 |
 | [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
 

@@ -130,6 +130,50 @@ fn the_headers_of_two_packages_compile_in_one_unit_in_either_order() {
     }
 }
 
+/// Whichever header defines a shared head first, a member of a tuple head has
+/// the type the other header names for it: a pointer to the member assigns to
+/// a pointer of the type each header spells, in either include order. A head
+/// that named a same-shape head, or a head under another name, would make the
+/// assignment an incompatible pointer type, which `-Werror` refuses
+/// (driftsys/ridl#1112).
+#[test]
+fn a_shared_tuple_head_has_one_type_in_either_include_order() {
+    let Some(cc) = host_cc() else {
+        return skip("no C compiler (cc, clang or gcc) on PATH");
+    };
+    const BODY: &str = r#"
+int main(void) {
+  pod_parts_pair_head pair;
+  pod_parts_hub_size_head size;
+  pod_vehicle_axle_head axle;
+  pod_parts_pair_a_head *a = &pair.a;
+  pod_parts_pair_b_head *b = &pair.b;
+  pod_parts_hub_size_field3_head *inner = &size.inner;
+  pod_vehicle_axle_own_head *own = &axle.own;
+  pod_parts_pair_a_head *pair_a = &axle.pair.a;
+  pod_parts_hub_size_field3_head *hub_inner = &axle.hub.size.inner;
+  (void)a;
+  (void)b;
+  (void)inner;
+  (void)own;
+  (void)pair_a;
+  (void)hub_inner;
+  return 0;
+}
+"#;
+    let forward = format!("#include \"pod_parts.h\"\n#include \"pod_vehicle.h\"\n{BODY}");
+    let backward = format!("#include \"pod_vehicle.h\"\n#include \"pod_parts.h\"\n{BODY}");
+    let dir = with_headers(
+        &two_package_headers(),
+        &[("forward.c", &forward), ("backward.c", &backward)],
+    );
+    for source in ["forward.c", "backward.c"] {
+        let mut args = STRICT.to_vec();
+        args.extend_from_slice(&["-Werror=incompatible-pointer-types", source]);
+        run(cc, &args, dir.path()).unwrap_or_else(|error| panic!("{source}: {error}"));
+    }
+}
+
 /// The accessors read a hand-written `FaultEvent` buffer, answer 0 for a field
 /// past the producer's head, and read a string through its descriptor.
 #[test]
