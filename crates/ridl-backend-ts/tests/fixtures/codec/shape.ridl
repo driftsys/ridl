@@ -17,13 +17,18 @@ union Outcome {
   errFault  : SensorFault
 }
 
-/// A string with no length bound, so a payload that holds one has no finite
-/// FlatBuffers bound.
-type Free : string [0..18446744073709551615]
+/// A string with a length bound.
+type Remark : string [0..256]
 
-/// A struct with no finite FlatBuffers bound.
+/// A struct that fits the default ceiling of a signal.
 struct Note {
-  text : Free
+  text : Remark
+}
+
+/// The part of `SensorBounds` that fits the default ceiling of an event.
+struct BoundsSummary {
+  range    : (min: Speed, max: Speed)
+  readings : [Speed; 8]
 }
 
 /// The conversions the other structs do not exercise: an inline tuple with a
@@ -36,7 +41,7 @@ struct Extras {
   gears    : [GearPosition; 0..4]
   maybe    : [Speed; 0..4]?
   tag      : bytes [0..8]?
-  notes    : [Label : Name; 0..8]?
+  notes    : [Label : Name; 0..3]?
   default  : Counter
   new      : Counter
   class    : Counter
@@ -53,7 +58,7 @@ interface Sensors {
   signal latest : SensorReading @100ms
   reserved legacyRaw
   event result : SensorResult @[100ms..1s]
-  event bounds : SensorBounds @[100ms..1s]
+  event bounds : BoundsSummary @[100ms..1s]
   command setLimit(limit: Speed, actual: Speed) @[..50ms]
   query profile(name: Name): DriverProfile @[..100ms]
   query span(): (min: Speed, max: Speed) @[..100ms]

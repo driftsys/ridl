@@ -81,21 +81,58 @@ Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
 the WebSocket limits of decisions 10 and 15 with the descriptor's limit column
-(driftsys/ridl#1098). Decisions 3 and 4 are not built: `MAX_SIZE` is not capped
-at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
-`EncodeError::TooLarge` (driftsys/ridl#996). The amendment of 2026-10-28 is not
-built (driftsys/ridl#1108): the code still uses 16,256 as the ceiling, the
-WebSocket limits of decisions 10 and 15 are built at 16,292, and decisions 16 to
-18 are not built. The amendment of 2026-10-30 is not built: TYPL-116 still uses
-4,032 characters and 16,128 bytes, RIDL-150 is still raised at `warn` for a
-signal, an event, a command and a query and does not size a fixed, the language
-server does not run RIDL-150, RIDL-151 or RIDL-152, and the generated
-FlatBuffers and podbuf `verify` still refuse a buffer longer than the type's
-`MAX_SIZE` (driftsys/ridl#1108, driftsys/ridl#1128), no sending side refuses a
-payload longer than its member's limit from the catalog (the port's
-`TooLarge { cap }` reports the capacity of the runtime's slot today, and
-`ridl-loopback` never returns it; driftsys/ridl#1128), and the WebSocket binding
-has no blocks (driftsys/ridl#1129).
+(driftsys/ridl#1098). Decisions 3 and 4 were not built, and were withdrawn on
+2026-10-30 (driftsys/ridl#996).
+
+Built 2026-10-30 (driftsys/ridl#1108, driftsys/ridl#1128): the amendments of
+2026-10-28 and 2026-10-30, except what waits for driftsys/ridl#1129. Built:
+
+- `ridl_core::limits` holds the three default ceilings (3,840, 16,128 and 65,280
+  bytes), the largest raise, and the TYPL-116 thresholds (16,256 characters and
+  65,280 bytes). TYPL-116 warns only on a bound that no kind can carry.
+- The `ridlc` size pass resolves each interaction's limit (the
+  `[limits.interaction]` entry, else the `[limits.kind]` entry, else `default`
+  clamped to the kind's ceiling) and raises RIDL-151 against it, and RIDL-157
+  where no entry gives the limit and the payload is above the default ceiling of
+  its kind or has no finite bound, for a signal, an event, a command, a query
+  and a fixed. RIDL-150 is retired and its lint name is reserved, so a `[lints]`
+  key that names it draws MANI-010. MANI-022 follows decisions 12 and 18.
+- The language server publishes RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of
+  the limits pass (decision 21).
+- The generated FlatBuffers and podbuf `verify` check structure only (decision
+  19). Decision 3 and decision 4 stay withdrawn: `MAX_SIZE` is not capped, and
+  `ridl-rt` has no `PAYLOAD_CEILING` and no `EncodeError::TooLarge`.
+- `ridl-rt` exports the three default ceilings. A sending port refuses a payload
+  above its member's limit with `TooLarge { cap }`, and `ridl-loopback` returns
+  it. The WebSocket transport applies the limit of each member on both sides,
+  carries a message of at most 16,164 bytes, and refuses a `Config` that cannot
+  carry an allowed payload. The TypeScript client reads each member's limit from
+  the generated codec module and rejects a received payload above it before
+  `verify`, and the codegen model carries the limit.
+
+What waits for driftsys/ridl#1129 (decisions 15 and 20): the WebSocket blocks.
+Until then, a fixed whose payload is above one message (16,137 bytes at the
+default message limit) and within its limit is not carried over WebSocket: the
+session records `ValueTooLarge` and sends no `publish`, nothing is refused at
+attach, and the WebSocket provider answers a `read` of it with `answer` and
+`contract(UnknownInteraction)`; the TypeScript client rejects a payload above
+the limit as `corrupt`. The fixed itself is accepted by the catalog and by the
+loopback.
+
+Departure from decision 19, on the providing side of the WebSocket binding: a
+`read` of a signal or of a fixed whose value is above the member's limit is
+answered `answer` with `contract(UnknownInteraction)` and recorded as
+`ValueTooLarge`, with no `publish`, so that no read waits on a value the
+provider does not send; the decision's "a fixed's read reports the detection" is
+what the client side reports for a payload it receives above the limit. The
+provider reaches that path only behind a runtime that does not refuse the value
+on send, which `ridl-loopback` does.
+
+Note 2026-10-30, on decision 19: the rationale says the FlatBuffers verifier is
+bounded by its depth and table limits. No code returns `Malformed::TooDeep` or
+`Malformed::TooManyTables`. The work of the FlatBuffers verifier is bounded by
+the maxima that the type declares and by the nesting of the type, as
+`docs/design/flatbuffers-codec.md` states.
 
 When accepted, these records gain a dated note or are changed in place:
 
@@ -119,17 +156,18 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/design/ridl-transport-ws.md`, the frame specification §11.1, and the
   records of the `ridl diff` categories (`docs/book/cli-reference.md`,
   `docs/book/evolving-an-interface.md`).
-- From the amendment of 2026-10-28, when its code lands: ADR-0002 (the note of
-  2026-10-24: the range of a `[limits]` value and MANI-022), ADR-0024 (the note
-  of 2026-10-24: the kinds RIDL-150 checks, and the error RIDL-157), the ridl
-  reference's diagnostics table (the RIDL-150 and RIDL-151 rows, and a new
-  RIDL-157 row), the family overview §7 (the MANI-022 row), the typl reference
-  §4.4 and §4.5 (the ceiling of 16,128 bytes, and the smaller default ceiling of
-  a signal and an event), `docs/book/lints.md` (the paragraphs on
-  `payload-above-ceiling` and on `[limits]`, including the sentence that a
-  `fixed` is not checked), `docs/book/cli-reference.md` (the `[limits]` section:
-  the order that resolves a limit, the raise by a `[limits.interaction]` entry,
-  MANI-022, RIDL-150, RIDL-151 and RIDL-157), `docs/design/interaction-face.md`,
+- From the amendment of 2026-10-28, updated when its code landed on 2026-10-30
+  (driftsys/ridl#1108): ADR-0002 (the note of 2026-10-24: the range of a
+  `[limits]` value and MANI-022), ADR-0024 (the note of 2026-10-24: the kinds
+  RIDL-150 checks, and the error RIDL-157), the ridl reference's diagnostics
+  table (the RIDL-150 and RIDL-151 rows, and a new RIDL-157 row), the family
+  overview §7 (the MANI-022 row), the typl reference §4.4 and §4.5 (the ceiling
+  of 16,128 bytes, and the smaller default ceiling of a signal and an event),
+  `docs/book/lints.md` (the paragraphs on `payload-above-ceiling` and on
+  `[limits]`, including the sentence that a `fixed` is not checked),
+  `docs/book/cli-reference.md` (the `[limits]` section: the order that resolves
+  a limit, the raise by a `[limits.interaction]` entry, MANI-022, RIDL-150,
+  RIDL-151 and RIDL-157), `docs/design/interaction-face.md`,
   `docs/design/ridl-rt.md` and `docs/design/flatbuffers-codec.md` (no `BUFFER`
   above 16,128 bytes on the stack, and a fixed above that read through a view
   and encoded through the caller-buffer API),
@@ -150,9 +188,10 @@ When accepted, these records gain a dated note or are changed in place:
   of RIDL-150; decision 8: no length check in `verify`; open item 2 closed; the
   list of departures from the design) and `docs/decisions/README.md` (the
   summaries of ADR-0030 and ADR-0031).
-- From the amendment of 2026-10-30, to be updated when its code lands: ADR-0021
-  (the entry of the first list above: `ridl-rt` gains no `PAYLOAD_CEILING` and
-  no `EncodeError::TooLarge`, and gains the three default ceilings),
+- From the amendment of 2026-10-30, updated when its code landed on 2026-10-30
+  (driftsys/ridl#1108, driftsys/ridl#1128): ADR-0021 (the entry of the first
+  list above: `ridl-rt` gains no `PAYLOAD_CEILING` and no
+  `EncodeError::TooLarge`, and gains the three default ceilings),
   `docs/design/ridl-rt.md` and `docs/design/interaction-face.md` (the port's
   `TooLarge { cap }` against the member's limit is the one refusal on send),
   ADR-0024 (a note: RIDL-150 retired, its name reserved, RIDL-157 for every
@@ -774,11 +813,12 @@ When accepted, these records gain a dated note or are changed in place:
     has checked, such as the gate of the podbuf trust model (ADR-0031), checks
     the length against the interaction's limit itself.
 
-    The codecs as built differ: the generated FlatBuffers and podbuf `verify`
-    refuse a buffer longer than the type's `MAX_SIZE` with
-    `Malformed::TooLarge`, and the proto3 `verify` applies no length check,
-    because its verifier skips unknown fields (`docs/design/proto3-codec.md`).
-    FlatBuffers and podbuf change to the proto3 behaviour. `Malformed::TooLarge`
+    Before this decision was built, the codecs differed: the generated
+    FlatBuffers and podbuf `verify` refused a buffer longer than the type's
+    `MAX_SIZE` with `Malformed::TooLarge`, and the proto3 `verify` applied no
+    length check, because its verifier skips unknown fields
+    (`docs/design/proto3-codec.md`). FlatBuffers and podbuf were changed to the
+    proto3 behaviour on 2026-10-30 (driftsys/ridl#1108). `Malformed::TooLarge`
     stays in `ridl-rt`, because removing a variant would change its published
     API; the generated code no longer returns it.
 
@@ -816,16 +856,16 @@ When accepted, these records gain a dated note or are changed in place:
     RIDL-152, RIDL-157, and the MANI-022 that the pass of decision 12 raises for
     an entry between 16,129 and 65,280 that does not name a fixed), also run in
     the language server, so an author sees them in the editor, on the
-    interaction, as `ridl check` reports them. Today the lint
-    `payload-above-ceiling` (RIDL-150) and the errors RIDL-151 and RIDL-152 are
+    interaction, as `ridl check` reports them. Before 2026-10-30 the lint
+    `payload-above-ceiling` (RIDL-150) and the errors RIDL-151 and RIDL-152 were
     raised only by `ridl check` and `ridl build`; RIDL-157, and MANI-022 for an
-    entry between 16,129 and 65,280 that does not name a fixed, are not raised
-    yet and come with driftsys/ridl#1108. The language server already reads the
-    lowered IR for its hovers and inlay hints and runs the design lints of
-    `ridlc`; the cost added on each check is the lowering of the workspace where
-    it is not already done, the sizing of each interaction's payload in each
-    enabled encoding and the resolution of the `[limits]` tables. This record
-    does not say how the server schedules that work.
+    entry between 16,129 and 65,280 that does not name a fixed, came with
+    driftsys/ridl#1108, which also built this decision. The language server
+    already read the lowered IR for its hovers and inlay hints and ran the
+    design lints of `ridlc`; the cost added on each check is the lowering of the
+    workspace where it is not already done, the sizing of each interaction's
+    payload in each enabled encoding and the resolution of the `[limits]`
+    tables. This record does not say how the server schedules that work.
 
 ## Where the rules are stated
 

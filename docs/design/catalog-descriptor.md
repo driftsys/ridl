@@ -186,8 +186,12 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
   gives the interaction, copied from the IR's optional limit, which the catalog
   hash covers (ADR-0030 decisions 12 and 13). It is an optional scalar appended
   last to `Member`: absent when no entry applies, and in a file written before
-  the field existed, so `SCHEMA_VERSION` stays 1. Contract clauses and a
-  signal's initial value are not carried.
+  the field existed, so `SCHEMA_VERSION` stays 1. An absent limit means the
+  default ceiling of the member's kind: 3,840 bytes for a signal and an event,
+  16,128 for a command and a query, 65,280 for a fixed (ADR-0030 decision 16). A
+  limit of a signal or an event above 3,840 bytes is one that a
+  `[limits.interaction]` entry raised, up to 16,128 (decision 18). Contract
+  clauses and a signal's initial value are not carried.
 - **Payloads.** A signal has one payload with the role `value`, an event one
   with `occurrence`, a command one with `request`, a fixed one with `value`. A
   query has a `request`, and a `response` when the IR carries a return type.

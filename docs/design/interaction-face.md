@@ -1061,14 +1061,27 @@ workspace alike, and not a special case for one.
 stack.** That follows from two decisions the records already hold: the face
 allocates nothing
 ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)), and the
-declared bound is the buffer size ([the codec design](flatbuffers-codec.md)). So
-a payload such as `[string [0..256]; 0..1000]` gives a stack frame on the order
-of a megabyte, whatever the actual value carries. This is recorded as a known
-property rather than a defect, and nothing in the corpus meets it. The two ways
-out are named here so that a consumer who does meet it finds them stated: a
-caller-supplied buffer variant of each method, which is the shape `dispatch`
-already has, or a runtime that hands the face a buffer it owns. Neither is
-built.
+declared bound is the buffer size ([the codec design](flatbuffers-codec.md)).
+The face carries a method, and so a `BUFFER`, for a signal, an event, a command
+and a query only; a fixed is provisioned, not interacted with, so the face has
+no method for it, `MAX_BUFFER_SIZE` counts no fixed, and its payload, up to
+65,280 bytes, is read through the view in place. The catalog's limits keep every
+other payload at 16,128 bytes or less, so generated code puts no `BUFFER` larger
+than 16,128 bytes on the stack
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 5). The
+face itself refuses no payload for its size: the one refusal on send is the
+port's `TooLarge { cap }`, which the runtime raises against the member's limit
+(ADR-0030 decision 19) and the face returns unchanged, as it returns every port
+error. A reply the port refuses with `SettleError::TooLarge` is left to the
+handler: the claim stays unsettled, and the dispatch pass continues with the
+next claim. A claim whose arguments do not fit `MAX_BUFFER_SIZE` is a different
+case: it is settled `corrupt` without being read
+(`round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_served`
+in `crates/ridl-backend-rust/tests/interaction_face.rs`). The two ways to a
+smaller frame are named here so that a consumer on a target with a smaller stack
+finds them stated: a caller-supplied buffer variant of each method, which is the
+shape `dispatch` already has, or a runtime that hands the face a buffer it owns.
+Neither is built.
 
 **A bounded collection is a plain field, not a newtype.** A field declared
 `labels : [Label; 1..16]` is emitted as a `Vec`, so a value that breaks the

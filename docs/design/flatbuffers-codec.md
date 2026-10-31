@@ -201,6 +201,20 @@ range, step, length and pattern constraints. Named scalar checks use a
 `fn check(value: &T)` emitted beside `new` in every constrained named scalar's
 `impl` block.
 
+**`verify` applies no length check.** It reads what the root offset, the vtables
+and the offsets reference and ignores the bytes past them, so an older reader
+accepts the longer buffer a newer writer produces after a compatible append
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 19).
+Its work is bounded by the maxima the reader's type declares, each collection's
+count being checked before its elements are walked, and by the type's own
+nesting, since typl has no recursive shape; it is not bounded by the buffer's
+length. `Malformed::TooDeep` and `Malformed::TooManyTables` are variants of
+`ridl-rt` that this verifier does not return. The size of a payload is refused
+by the transport, against the interaction's limit from the catalog, before
+`verify`; an embedder that calls `verify` on bytes no binding has checked,
+checks the length against the interaction's limit itself. `Malformed::TooLarge`
+stays in `ridl-rt` and is returned by no generated codec.
+
 **`check` is `pub(crate)` since 2026-09-21; whether it becomes `pub` is still an
 open question of the public surface.** It carried no visibility modifier while
 every caller was a function generated into the same module, or a child `pub mod`
@@ -261,7 +275,12 @@ order.
 writes `type Buffer = [u8; <literal>]` and the zeroed constant
 `BUFFER = [0u8; <literal>]`, so a payload's buffer is exactly its own `MAX_SIZE`
 bytes long. Code generic over the encoding names the buffer type through
-`Payload`, because a generic array length is not expressible on stable Rust.
+`Payload`, because a generic array length is not expressible on stable Rust. The
+face puts a `BUFFER` on the stack for a signal, an event, a command and a query
+only, which the catalog's limits keep at 16,128 bytes or less; a fixed has no
+face method and reserves nothing in the size table, and its payload, up to
+65,280 bytes, is read through the view in place
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 5).
 
 **A type with no finite bound carries no codec**, per type rather than per
 package: `check_flatbuffers_bound` is called as each type's implementation is

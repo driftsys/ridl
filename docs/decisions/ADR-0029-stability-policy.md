@@ -139,6 +139,11 @@ that a new lint starts at `allow` or `info` has two exceptions,
 lower level would hide that failure until then. A `warn` diagnostic does not
 fail `ridl check`, so no source that compiled before stops compiling.
 
+**Amended 2026-10-30 — decision 2, one exception remains.** RIDL-150
+`payload-above-ceiling` is retired (ADR-0030 decision 7 as amended): the error
+RIDL-157 reports the case, for every kind, and an error has no level. TYPL-116
+`bound-above-transfer` is the one lint that starts at `warn`.
+
 ## Context
 
 Until 0.9.x, a breaking change could land in any release. 0.10.0 is the first

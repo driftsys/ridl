@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 
+use crate::frame::Target;
+
 /// The members of one catalog, as the server needs them to refuse an
 /// interaction the catalog does not hold (frame specification §6.4).
 ///
@@ -13,7 +15,10 @@ use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 /// [`Described::new`](super::Described::new) can check it against the ports
 /// it is paired with. Each entry maps an interface number and an ordinal to
 /// the member's kind, its `max` bound and its payload limit, the largest
-/// number of argument bytes a `request` to the member may carry. A retired
+/// number of payload bytes the member carries in either direction: the
+/// arguments of a `request` to it, and the value the session sends for it
+/// (a `publish`, an `occurrence` or a `reply`). A member with no limit has
+/// the default ceiling of its kind. A retired
 /// interface and a reserved ordinal have no entry. The embedder builds the
 /// table with [`new`](Self::new) and [`insert`](Self::insert), or, with the
 /// `descriptor` feature, with `from_descriptor` from the bytes of a catalog
@@ -119,6 +124,18 @@ impl MemberTable {
         self.members
             .get(&(iface, ord))
             .map(|entry| (entry.kind, entry.max))
+    }
+
+    /// Every member, in key order, with its payload limit when it has one.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (Target, Option<u32>)> + '_ {
+        self.members.iter().map(|(&(iface, ord), entry)| {
+            let target = Target {
+                kind: entry.kind,
+                iface,
+                ord,
+            };
+            (target, entry.limit)
+        })
     }
 
     /// The number of members.

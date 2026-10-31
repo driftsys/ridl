@@ -31,7 +31,11 @@ pub enum Note {
         target: Target,
     },
     /// A value the backend holds does not fit one message under the limit of
-    /// [`Config::max_message_bytes`]. Nothing is sent for it.
+    /// [`Config::max_message_bytes`], or is longer than its member's limit
+    /// (frame specification §11.1 "The sizes"). No `publish` and no
+    /// `occurrence` is sent for it; a reply is answered `corrupt`, and a
+    /// `read` of a signal or a `fixed` is answered
+    /// `contract(UnknownInteraction)`.
     ValueTooLarge {
         /// The interaction whose value did not fit.
         target: Target,
@@ -65,6 +69,19 @@ pub enum Note {
     UnknownInteraction {
         /// The interaction named.
         target: Target,
+    },
+    /// [`Config::max_message_bytes`] is below what one message of this
+    /// member needs: `needed` bytes, the 36 bytes of header and envelope
+    /// plus the member's limit, at most 16,128 bytes for a `fixed`. The
+    /// configuration cannot carry a payload the catalog allows, so
+    /// [`serve`](crate::serve) returned
+    /// [`Ended::ConfigRefused`](crate::Ended::ConfigRefused) before the
+    /// opening handshake.
+    MessageLimitTooSmall {
+        /// The member whose messages need the most bytes.
+        target: Target,
+        /// The message limit the member needs.
+        needed: usize,
     },
 }
 
@@ -145,7 +162,7 @@ pub struct Config {
 
 impl Default for Config {
     /// 20 ms between polls, a ping every 5 s, a liveness timeout of 15 s, a
-    /// call abandoned after 60 s, a message limit of 16,292 bytes
+    /// call abandoned after 60 s, a message limit of 16,164 bytes
     /// ([`MAX_MESSAGE_LIMIT`]), a retained-bytes cap of 16 MiB, nothing
     /// recorded, and no origin check.
     fn default() -> Self {
@@ -257,37 +274,39 @@ mod tests {
         assert_eq!(Config::default().max_message_bytes(), MAX_MESSAGE_LIMIT);
     }
 
+    /// The largest limit is 36 bytes of header and envelope plus 16,128
+    /// bytes, the default ceiling of a command and a query.
     #[test]
     fn a_limit_above_the_maximum_is_refused() {
-        let err = Config::default()
-            .with_max_message_bytes(MAX_MESSAGE_LIMIT + 1)
-            .err();
-        assert_eq!(err, Some(LimitOutOfRange { given: 16_293 }));
-        assert!(err.unwrap().to_string().contains("294 to 16292"));
+        let err = Config::default().with_max_message_bytes(16_165).err();
+        assert_eq!(err, Some(LimitOutOfRange { given: 16_165 }));
+        assert!(err.unwrap().to_string().contains("294 to 16164"));
     }
 
     #[test]
-    fn the_maximum_limit_is_accepted() {
+    fn the_maximum_limit_is_accepted_and_is_the_default() {
         let config = Config::default()
             .with_max_message_bytes(1024)
             .unwrap()
-            .with_max_message_bytes(MAX_MESSAGE_LIMIT)
+            .with_max_message_bytes(16_164)
             .expect("accepted");
-        assert_eq!(config.max_message_bytes(), MAX_MESSAGE_LIMIT);
+        assert_eq!(config.max_message_bytes(), 16_164);
+        assert_eq!(Config::default().max_message_bytes(), 16_164);
+        assert_eq!(MAX_MESSAGE_LIMIT, 16_164);
     }
 
     #[test]
     fn a_retained_cap_below_the_largest_message_limit_is_refused() {
         let config = Config::default().with_max_message_bytes(1024).unwrap();
-        let err = config.clone().with_max_retained_bytes(16_291).err();
-        assert_eq!(err, Some(RetainedTooSmall { given: 16_291 }));
-        assert!(err.unwrap().to_string().contains("16292"));
+        let err = config.clone().with_max_retained_bytes(16_163).err();
+        assert_eq!(err, Some(RetainedTooSmall { given: 16_163 }));
+        assert!(err.unwrap().to_string().contains("16164"));
         assert_eq!(
             config
-                .with_max_retained_bytes(16_292)
+                .with_max_retained_bytes(16_164)
                 .unwrap()
                 .max_retained_bytes(),
-            16_292
+            16_164
         );
     }
 

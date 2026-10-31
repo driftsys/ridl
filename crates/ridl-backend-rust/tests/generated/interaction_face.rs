@@ -546,17 +546,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<TemperatureFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Temperature(buf, table)?;
@@ -673,17 +662,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LevelFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Level(buf, table)?;
@@ -802,17 +780,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WindowFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Window(buf, table)?;
@@ -931,17 +898,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<AverageFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Average(buf, table)?;
@@ -1057,17 +1013,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<HealthFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Health(buf, table)?;
@@ -1248,17 +1193,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WarningFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Warning(buf, table)?;
@@ -1377,17 +1311,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Tag {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<TagFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Tag(buf, table)?;
@@ -1628,17 +1551,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Log {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LogFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Log(buf, table)?;
@@ -1979,17 +1891,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Tally {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<TallyFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Tally(buf, table)?;
@@ -2226,17 +2127,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for InlinePay
         InlinePayloadFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_InlinePayload(buf, table)?;
@@ -2424,17 +2314,6 @@ for ValveSetBothParams {
         ValveSetBothParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_ValveSetBothParams(buf, table)?;
@@ -2527,17 +2406,6 @@ for ValveStatusParams {
         ValveStatusParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_ValveStatusParams(buf, table)?;

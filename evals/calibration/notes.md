@@ -59,7 +59,7 @@ mapping with its judgement calls.
   pair that reaches the floor is at least 7 groups with a minimum group size of
   at least 1, with 2 retained findings: 1 accepted (`Nav2MsgsInteractions` in
   ros2, 17 groups, finding
-  `low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0`) and 1
+  `low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15197-15217:0`) and 1
   dismissed (`MissionProtocol` in mavlink `common/interactions.ridl`, 8 groups,
   finding `low-cohesion-interface:mavlink:common/interactions.ridl:61-76:0`).
   Fewer than ten findings caps the level at Info. Ships at Info at that pair.
@@ -79,7 +79,7 @@ dependency count, so three checks report `not applicable`.
 | `duplicate-shape`        | `review-0001:1` (Point and Vector3 share x/y/z)                  | `duplicate-shape:ros2:geometry_msgs/messages.typl:7423-7430:0`          | dismiss            |
 | `duplicate-shape`        | `review-0003:1` (missionRequest and missionRequestInt)           | `duplicate-shape:mavlink:common/messages.typl:25115-25132:0`            | accept             |
 | `duplicate-shape`        | `review-0005:1` (station packages repeat declarations)           | the seven vss `AirDistribution` findings                                | accept             |
-| `low-cohesion-interface` | `review-0002:1` (Nav2MsgsInteractions combines responsibilities) | `low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0` | accept             |
+| `low-cohesion-interface` | `review-0002:1` (Nav2MsgsInteractions combines responsibilities) | `low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15197-15217:0` | accept             |
 
 Two judgement calls in this mapping were noted in review:
 

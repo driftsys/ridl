@@ -288,7 +288,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 4,
+        lines: 5,
         why: "one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
@@ -297,7 +297,9 @@ const ALLOWED: &[Allowed] = &[
               unbounded payload can be built from the fixture the budget \
               tests already use; a fourth finds the call fixture's one named \
               interface by name, so that a test can extend it with an \
-              interaction shape the fixture does not hold",
+              interaction shape the fixture does not hold; a fifth sets a \
+              limit on one named interaction of the budget fixture, to pin \
+              that the model copies it",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",
@@ -369,19 +371,11 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-ts/tests/codec.rs",
-        lines: 8,
+        lines: 9,
         why: "a test fixture over `ridl_ir::codegen::v1::Model::interfaces`, \
               which is lowered from `Package::shapes()` and so holds an inline \
               shape too: the tests edit and rename the lowered model's \
               interfaces to build the refused shapes",
-    },
-    Allowed {
-        path: "crates/ridlc/src/design_lints/ceiling.rs",
-        lines: 1,
-        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
-              `Package::interfaces`: the model's list is lowered from \
-              `Package::shapes()`, so the lint pairs each shape with the model \
-              interface at the same position and an inline shape is covered",
     },
     Allowed {
         path: "crates/ridlc/src/design_lints/limits.rs",

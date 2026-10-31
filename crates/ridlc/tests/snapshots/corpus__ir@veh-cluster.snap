@@ -1135,7 +1135,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "named": "FaultEvent"
                   },
                   "min": "0",
-                  "max": "64"
+                  "max": "14"
                 }
               },
               "init": {

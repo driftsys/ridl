@@ -495,17 +495,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Count {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<CountFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Count(buf, table)?;
@@ -622,17 +611,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LevelFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Level(buf, table)?;
@@ -751,17 +729,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LabelFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Label(buf, table)?;
@@ -877,17 +844,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Mode {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<ModeFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Mode(buf, table)?;
@@ -1247,17 +1203,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Reading {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<ReadingFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Reading(buf, table)?;
@@ -1376,17 +1321,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Key {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<KeyFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Key(buf, table)?;
@@ -1563,17 +1497,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Inner {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<InnerFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Inner(buf, table)?;
@@ -2107,17 +2030,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Panel {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<PanelFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Panel(buf, table)?;
@@ -2440,17 +2352,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Outcome {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<OutcomeFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Outcome(buf, table)?;
@@ -2637,17 +2538,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GaugeSetP
         GaugeSetParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_GaugeSetParams(buf, table)?;
@@ -5327,17 +5217,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Reading {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<ReadingPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -5592,17 +5471,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Inner {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<InnerPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -6288,17 +6156,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Panel {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<PanelPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -6863,17 +6720,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Outcome {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<OutcomePodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7056,17 +6902,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for GaugeSetParams
         GaugeSetParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7173,17 +7008,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Count {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<CountPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7290,17 +7114,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Level {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LevelPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7482,17 +7295,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Label {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<LabelPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7607,17 +7409,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Mode {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<ModePodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7799,17 +7590,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Key {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<KeyPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(

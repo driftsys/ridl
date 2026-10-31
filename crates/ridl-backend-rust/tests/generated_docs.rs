@@ -146,6 +146,20 @@ const PROTO3_REFUSED: [(&str, &str); 4] = [
 /// has no finite podbuf bound.
 const PODBUF_REFUSED: [(&str, &str); 1] = [("proto3_free.ridl", "` has no finite podbuf bound")];
 
+/// The fixtures that carry a payload with no finite bound on purpose, which
+/// the checker reports as RIDL-157: compiled through
+/// `ir::compile_oversized_fixture`, which requires that error and no other.
+const OVERSIZED: [&str; 1] = ["proto3_unbounded_call.ridl"];
+
+/// The IR of the fixture `name`, by whichever helper its diagnostics need.
+fn compile(name: &str) -> ridl_ir::v2::Package {
+    if OVERSIZED.contains(&name) {
+        ir::compile_oversized_fixture(name)
+    } else {
+        ir::compile_fixture(name)
+    }
+}
+
 fn fixtures() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
@@ -189,7 +203,7 @@ fn the_checked_in_face_cites_no_issue() {
 #[test]
 fn generate_over_every_fixture_cites_no_issue() {
     for name in fixtures() {
-        let package = ir::compile_fixture(&name);
+        let package = compile(&name);
         let source = ridl_backend_rust::generate(&package)
             .unwrap_or_else(|error| panic!("generate {name}: {error:?}"))
             .rust_source;
@@ -217,7 +231,7 @@ fn generate_pipeline_over_every_fixture_cites_no_issue() {
         );
     }
     for name in names {
-        let package = ir::compile_fixture(&name);
+        let package = compile(&name);
         for (encoding, label, refused) in [
             (WireEncoding::FlatBuffers, "", &FLATBUFFERS_REFUSED[..]),
             (WireEncoding::Proto3, ", proto3", &PROTO3_REFUSED[..]),

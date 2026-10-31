@@ -1143,6 +1143,7 @@ impl<'a> Lowering<'a> {
             see: doc_links(&decl.see),
             since: decl.since.clone(),
             rules: model_rules(home, &self.deps, ItemRef::Decl(decl)),
+            limit: decl.limit,
         }
     }
 

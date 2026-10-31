@@ -1,7 +1,7 @@
 //! Events: subscription, delivery, a short buffer, and the sender's sequence
 //! number (`EventSink` and `EventSource`).
 
-use ridl_rt::port::{EventSink, EventSource, ReadError};
+use ridl_rt::port::{EventSink, EventSource, RaiseError, ReadError};
 
 use crate::{runtime, Factory, IFACE, ORD, OTHER, TRACE_A, TRACE_B, TRACE_ZERO};
 
@@ -180,4 +180,32 @@ pub fn an_all_zero_occurrence_context_is_carried_unchanged<F: Factory>() {
     let mut out = [0u8; 8];
     let occurrence = rt.next(&mut out).expect("next").expect("waiting");
     assert_eq!(occurrence.trace, Some(TRACE_ZERO));
+}
+
+/// An occurrence longer than the event's limit is refused with the limit,
+/// and no source receives it. The suite attaches to a catalog with no
+/// descriptor, so the limit is the default ceiling of an event, 3,840 bytes
+/// (ADR-0030 decision 16); an occurrence of exactly that length is delivered.
+pub fn an_occurrence_longer_than_the_event_limit_is_refused_and_not_raised<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    assert_eq!(
+        rt.raise(IFACE, ORD, &[0u8; 3_841], None),
+        Err(RaiseError::TooLarge { cap: 3_840 }),
+        "one byte above the default ceiling of an event is refused"
+    );
+
+    let mut out = vec![0u8; 4_096];
+    assert!(
+        rt.next(&mut out).expect("next").is_none(),
+        "the refused occurrence reached no source"
+    );
+
+    rt.raise(IFACE, ORD, &[0u8; 3_840], None)
+        .expect("an occurrence of exactly the default ceiling is accepted");
+    let occurrence = rt
+        .next(&mut out)
+        .expect("next")
+        .expect("the accepted occurrence is waiting");
+    assert_eq!(occurrence.len, 3_840);
 }

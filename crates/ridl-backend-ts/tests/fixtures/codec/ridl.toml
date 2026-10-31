@@ -8,3 +8,7 @@ wasm = true
 
 [backend.typescript]
 codec = true
+
+[limits.interaction]
+# A raised member, so that the generated table carries a `limit`.
+"Sensors.note" = 4096

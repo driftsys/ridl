@@ -55,9 +55,9 @@ decisions 17 and 19, from driftsys/ridl#1099. Decision 8 is changed in place:
 `MAX_SIZE`; the transport refuses a payload longer than its interaction's limit,
 once. Open item 2 is closed with that answer. Decision 6 is changed in place: a
 payload above the default ceiling of its kind is reported by the error RIDL-157,
-which replaces the retired lint RIDL-150. Not built: the generated `verify`
-still checks the length (driftsys/ridl#1128), and RIDL-150 is still raised
-(driftsys/ridl#1108).
+which replaces the retired lint RIDL-150. Built 2026-10-30: the generated
+`verify` checks structure only, and RIDL-157 replaces RIDL-150
+(driftsys/ridl#1108, driftsys/ridl#1128).
 
 ## Context
 
@@ -343,8 +343,8 @@ a field is appended.
    as `Declaration.podbuf`. ADR-0030 decision 3 asks each backend to cap the
    generated `MAX_SIZE` at the payload ceiling; the podbuf codec, like the other
    two, emits the computed bound uncapped (driftsys/ridl#996), and RIDL-150
-   reports a payload above the ceiling at check time (RIDL-157 once ADR-0030's
-   amendment of 2026-10-30 is built).
+   reports a payload above the ceiling at check time (RIDL-157 since ADR-0030's
+   amendment of 2026-10-30 was built).
 
 7. **Generated names (builder's call).** In Rust, per type `T`: `TPodbufHead`
    (the `#[repr(C, align(8))]` struct, for a struct, union or named tuple),
@@ -423,8 +423,8 @@ a field is appended.
    the bytes past them. The transport refuses a payload longer than its
    interaction's limit from the catalog before `verify` runs, and an embedder
    whose gate copies bytes that no binding has checked checks that length
-   itself. The verify work bound below does not depend on the length check. Not
-   built yet (driftsys/ridl#1128).
+   itself. The verify work bound below does not depend on the length check.
+   Built 2026-10-30 (driftsys/ridl#1128).
 
    **Not checked, by design** (author's call): pad bytes, anywhere. First-fit
    backfill can place a field appended in a later release in the pad bytes of an
@@ -800,13 +800,13 @@ stated in the decision above; this list is the index.
 
 ## Documents amended
 
-| Document                                                                                 | Change                                                                                                                                |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding  |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                               |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30, to be updated when driftsys/ridl#1128 lands: `verify` has no length check, and the "Known gaps" row of #1099 goes |
-| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
-| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
+| Document                                                                                 | Change                                                                                                                               |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                              |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                             |
+| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
+| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
 
 ## Trace
 

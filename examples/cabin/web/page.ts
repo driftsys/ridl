@@ -25,6 +25,7 @@ import {
   Cabin,
   CATALOG_HASH,
   CATALOG_NAME,
+  Horn,
   PAYLOAD_TYPES,
   RULES,
 } from "./generated/veh.cabin.codec.ts";
@@ -72,6 +73,10 @@ async function run(): Promise<Progress> {
   const session = await connect(`ws://127.0.0.1:${port}`, {
     catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
     encoding: "flatbuffers",
+    // The generated tables give the session the limit of each member that a
+    // `[limits]` entry raises or lowers; cabin has none, so every member
+    // keeps the default ceiling of its kind.
+    interfaces: [Cabin, Horn],
     onPublish(target, sample) {
       if (settled || !sample.payload) return;
       if (

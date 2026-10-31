@@ -2920,20 +2920,14 @@ impl<'a> Codec<'a> {
                     })
                 }
 
+                // No length check: `verify` reads what the structure
+                // references and ignores the bytes past it, so an older
+                // reader accepts the longer buffer of a newer writer. The
+                // size of a payload is refused by the transport, against
+                // the interaction's limit (ADR-0030 decision 19).
                 fn verify(
                     buf: &[::core::primitive::u8],
                 ) -> ::core::result::Result<#view<'_>, ::ridl_rt::payload::VerifyError> {
-                    if buf.len()
-                        > <Self as ::ridl_rt::payload::Payload<
-                            ::ridl_rt::encoding::FlatBuffers,
-                        >>::MAX_SIZE
-                    {
-                        return ::core::result::Result::Err(
-                            ::ridl_rt::payload::VerifyError::Structure(
-                                ::ridl_rt::payload::Malformed::TooLarge,
-                            ),
-                        );
-                    }
                     let table = ::ridl_rt::flatbuffers::root(buf)
                         .map_err(::ridl_rt::payload::VerifyError::Structure)?;
                     #verify(buf, table)?;

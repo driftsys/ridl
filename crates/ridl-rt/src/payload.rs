@@ -262,7 +262,11 @@ pub enum Malformed {
     TooDeep,
     /// The buffer holds more tables than the verifier's limit.
     TooManyTables,
-    /// The buffer is larger than the verifier's limit.
+    /// The buffer is larger than the verifier's limit. No generated codec
+    /// returns it: `verify` applies no length check, and the size of a
+    /// payload is refused by the transport against the interaction's limit.
+    /// The variant stays, because removing it would change this crate's
+    /// published API.
     TooLarge,
     /// A varint is longer than ten bytes, has a tenth byte above 1, or holds
     /// a value wider than the scalar of its field: a `uint32` above

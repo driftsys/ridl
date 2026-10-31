@@ -38,7 +38,7 @@ struct LoadMapRequest {
 // URL of map resource
 // Can be an absolute path to a file: file:///path/to/maps/floor1.yaml
 // Or, relative to a ROS package: package://my_ros_package/maps/floor2.yaml
-  mapUrl : RosString
+  mapUrl : RosBoundedString
 }
 struct LoadMapResponse {
 
@@ -77,6 +77,6 @@ struct SetMapResponse {
 interface NavMsgsInteractions {
   query getMap(): GetMapResponse
   query getPlan(start: PoseStamped, goal: PoseStamped, tolerance: RosMetres): GetPlanResponse
-  query loadMap(mapUrl: RosString): LoadMapResponse
+  query loadMap(mapUrl: RosBoundedString): LoadMapResponse
   query setMap(map: OccupancyGrid, initialPose: PoseWithCovarianceStamped): SetMapResponse
 }

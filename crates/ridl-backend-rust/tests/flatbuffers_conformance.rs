@@ -1219,6 +1219,91 @@ fn main() {{
     );
 }
 
+/// `verify` checks structure, not length (ADR-0030 decision 19). The codec
+/// generated from `flatbuffers_evolution_v1.ridl` accepts a `WithLabel`
+/// buffer that the version 2 codec wrote with its appended 16-character
+/// `Label`, which is longer than the version 1 `MAX_SIZE` of a one-field
+/// table. Bytes past what the structure references are ignored, so a valid
+/// buffer with trailing bytes verifies and decodes to the same value; a
+/// malformed buffer longer than `MAX_SIZE` is refused for its structure,
+/// never as `TooLarge`.
+#[test]
+fn a_newer_writers_buffer_longer_than_the_readers_max_size_verifies() {
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_evolution_v2_long",
+        &fixture_program(
+            "flatbuffers_evolution_v2.ridl",
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let value = WithLabel {
+        a: Count::new_unchecked(7),
+        l: Label::new_unchecked(String::from("0123456789abcdef")),
+    };
+    let mut out = vec![0u8; <WithLabel as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes;
+    println!("{}", bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>());
+}
+"#,
+        ),
+    );
+    let with_label = transcript.trim();
+
+    let main = format!(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{{Malformed, Payload, Ref, VerifyError}};
+
+const WITH_LABEL: &str = "{with_label}";
+
+fn bytes(hex: &str) -> Vec<u8> {{
+    (0..hex.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+        .collect()
+}}
+
+fn main() {{
+    let max_size = <WithLabel as Payload<FlatBuffers>>::MAX_SIZE;
+    let expected = WithLabel {{ a: Count::new_unchecked(7) }};
+
+    let with_label = bytes(WITH_LABEL);
+    assert!(
+        with_label.len() > max_size,
+        "the probe ({{}} bytes) must pass MAX_SIZE ({{max_size}}), or it proves nothing",
+        with_label.len()
+    );
+    let proof: Ref<'_, WithLabel, FlatBuffers> =
+        Ref::verify(&with_label).expect("v1 accepts a longer v2 buffer");
+    assert_eq!(proof.decode(), expected);
+
+    // A valid buffer followed by unreferenced bytes.
+    let mut out = vec![0u8; max_size];
+    let mut with_tail = expected.encode(&mut out).expect("encode").bytes.to_vec();
+    with_tail.extend(std::iter::repeat(0xffu8).take(max_size));
+    assert!(with_tail.len() > max_size);
+    let proof: Ref<'_, WithLabel, FlatBuffers> =
+        Ref::verify(&with_tail).expect("trailing bytes are ignored");
+    assert_eq!(proof.decode(), expected);
+
+    // Longer than MAX_SIZE and malformed: the root offset of an all-zero
+    // buffer names a table whose vtable is shorter than its header.
+    let zeros = vec![0u8; max_size + 1];
+    match Ref::<'_, WithLabel, FlatBuffers>::verify(&zeros) {{
+        Err(VerifyError::Structure(Malformed::OutOfBounds)) => {{}}
+        other => panic!("expected OutOfBounds, got {{:?}}", other.map(|_| ())),
+    }}
+}}
+"#
+    );
+    rustc::run_program(
+        "fb_conformance_evolution_v1_long",
+        &fixture_program("flatbuffers_evolution_v1.ridl", &main),
+    );
+}
+
 /// **`ridl diff` calls an appended field compatible exactly when this codec
 /// reads a buffer of the old version** (driftsys/ridl#598).
 ///

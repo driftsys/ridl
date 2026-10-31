@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use ridl_rt::contract::{CatalogRef, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{default_ceiling, CatalogRef, InterfaceNo, Kind, Ordinal};
 use ridl_rt::encoding::Encoding;
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
@@ -345,10 +345,10 @@ impl<B: Backend> Session<B> {
     /// this tick reach the message limit. What is left waits for the next
     /// tick, so a provider that raises continuously cannot keep the tick
     /// from returning. The trace context is dropped: the frame does not
-    /// carry one. An occurrence that does not fit one message is read and
-    /// dropped, and recorded, because `next` does not consume what it
-    /// cannot copy: left in the queue, it would block every occurrence
-    /// behind it.
+    /// carry one. An occurrence that does not fit one message, or is longer
+    /// than its member's limit, is read and dropped, and recorded, because
+    /// `next` does not consume what it cannot copy: left in the queue, it
+    /// would block every occurrence behind it.
     fn drain_occurrences(&mut self, out: &mut Vec<Vec<u8>>) -> Step {
         let mut taken = 0;
         let mut bytes = 0;
@@ -380,6 +380,9 @@ impl<B: Backend> Session<B> {
                 iface: occurrence.iface,
                 ord: occurrence.ord,
             };
+            // The occurrence's identity is known only once it is read, so
+            // its member's limit is applied after the read.
+            let fits = fits && occurrence.len <= self.limit(target);
             // The channel's `seq` advances for a dropped occurrence too, so
             // that the client sees the gap and records a loss (frame
             // specification §5.2) rather than nothing.
@@ -411,7 +414,10 @@ impl<B: Backend> Session<B> {
 
     /// Reads the outcome of each call in flight. A known outcome is one
     /// `response`, or nothing for the three outcomes that never cross (frame
-    /// specification §9.6); either way the call is then forgotten. A call
+    /// specification §9.6); either way the call is then forgotten. A reply
+    /// longer than its member's limit, or than one message carries, is
+    /// answered `corrupt` and recorded: the backend holds a value the
+    /// catalog does not allow, and the call must still end. A call
     /// still unknown `call_abandon_after` after its request arrived is
     /// forgotten and recorded, so that it does not hold a backend slot until
     /// the client disconnects. The kept responses whose bound has passed by
@@ -419,7 +425,7 @@ impl<B: Backend> Session<B> {
     fn poll_calls(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
         let clock = self.backend.ports().now();
         self.calls.expire(clock);
-        'calls: for call in self.calls.in_flight() {
+        for call in self.calls.in_flight() {
             let outcome = match call.target.kind {
                 Kind::Command => self
                     .backend
@@ -427,7 +433,7 @@ impl<B: Backend> Session<B> {
                     .ack(call.correlation)
                     .map(Outcome::from),
                 _ => loop {
-                    let cap = self.reply_cap;
+                    let cap = self.reply_cap.min(self.limit(call.target));
                     let ports = self.backend.ports();
                     match ports.reply(call.correlation, room(&mut self.buf, cap)) {
                         Ok(known) => break known.map(Outcome::from),
@@ -439,8 +445,7 @@ impl<B: Backend> Session<B> {
                                 target: call.target,
                                 needed,
                             });
-                            self.forget(call.correlation);
-                            continue 'calls;
+                            break Some(Outcome::Corrupt);
                         }
                         Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
                     }
@@ -681,7 +686,17 @@ impl<B: Backend> Session<B> {
         match target.kind {
             Kind::Signal => match self.fetch_signal((target.iface, target.ord)) {
                 Fetch::Sample(sample) => self.publish_signal(target, sample, false, out),
-                Fetch::TooLarge(needed) => self.note(Note::ValueTooLarge { target, needed }),
+                // A value that is not sent is answered as a `fixed` that is
+                // not sent is (`read_fixed`), so that the read ends instead
+                // of waiting until the session ends.
+                Fetch::TooLarge(needed) => {
+                    self.note(Note::ValueTooLarge { target, needed });
+                    self.answer(
+                        target,
+                        AnswerOutcome::Contract(Contract::UnknownInteraction),
+                        out,
+                    );
+                }
                 Fetch::Contract(c) => self.answer(target, AnswerOutcome::Contract(c), out),
                 Fetch::Gone => return Step::Close(CloseCode::GOING_AWAY.0),
             },
@@ -696,18 +711,29 @@ impl<B: Backend> Session<B> {
     }
 
     /// Answers a `read` of a `fixed` with one `publish`: `Live`, `seq` 0 and
-    /// the backend's clock as the stamp.
+    /// the backend's clock as the stamp. A value that one message cannot
+    /// carry, or that is longer than the member's limit, is not sent: the
+    /// read is answered `contract(UnknownInteraction)`, as a `fixed` with no
+    /// value is, and recorded. Until the binding carries a `fixed` in blocks
+    /// (driftsys/ridl#1129), that is every `fixed` above `max_message_bytes`
+    /// minus the 27-byte `publish` header, 16,137 bytes at the default
+    /// limit. A `read` of a signal above its limit is answered the same way.
     fn read_fixed(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
+        let cap = self.payload_cap.min(self.limit(target));
         let len = loop {
-            let cap = self.payload_cap;
             match self
                 .backend
                 .read_fixed(target.iface, target.ord, room(&mut self.buf, cap))
             {
                 Ok(len) => break len,
                 Err(ReadError::Short { needed }) => {
-                    if needed > self.payload_cap {
+                    if needed > cap {
                         self.note(Note::ValueTooLarge { target, needed });
+                        self.answer(
+                            target,
+                            AnswerOutcome::Contract(Contract::UnknownInteraction),
+                            out,
+                        );
                         return Step::Continue;
                     }
                     self.buf.resize(needed, 0);
@@ -738,10 +764,9 @@ impl<B: Backend> Session<B> {
     /// sent to the backend, with no trace context; a send that fails is
     /// answered at once. A member that the member table does not hold under
     /// the request's kind is answered `contract(UnknownInteraction)`. Arguments
-    /// longer than the payload limit the table gives a command or a query are
-    /// answered `corrupt` without a call to the backend, and no note is recorded; the
-    /// response is kept like any other. A member with no limit, and a backend
-    /// with no member table, leave the message limit as the only bound.
+    /// longer than the member's limit (see [`Session::limit`]) are answered
+    /// `corrupt` without a call to the backend, and no note is recorded; the
+    /// response is kept like any other.
     fn request(
         &mut self,
         target: Target,
@@ -781,11 +806,7 @@ impl<B: Backend> Session<B> {
         // Only a command or a query is answered; any other kind falls to the
         // unknown-interaction answer below whatever the length.
         let over_limit = matches!(target.kind, Kind::Command | Kind::Query)
-            && self
-                .backend
-                .members()
-                .and_then(|table| table.limit(target.iface, target.ord))
-                .is_some_and(|limit| payload.len() > limit as usize);
+            && payload.len() > self.limit(target);
         if over_limit {
             return self.respond(target, seq, ResponseOutcome::Corrupt, stamp, receipt, out);
         }
@@ -891,16 +912,28 @@ impl<B: Backend> Session<B> {
         Some(Timestamp(stamp.0.min(receipt.0).saturating_add(max_micros)))
     }
 
+    /// The payload limit of a member, in bytes: the limit the member table
+    /// gives it, or the default ceiling of its kind when the table gives none
+    /// or the backend has no table (ADR-0030 decisions 13 and 19). A value
+    /// the session sends, and the arguments of a `request`, are checked
+    /// against it.
+    fn limit(&self, target: Target) -> usize {
+        self.backend
+            .members()
+            .and_then(|table| table.limit(target.iface, target.ord))
+            .map_or(default_ceiling(target.kind), |limit| limit as usize)
+    }
+
     /// Reads a signal into the session's buffer, growing it on `Short` up to
-    /// the payload the message limit allows.
+    /// the payload the message limit allows and the member's limit.
     fn fetch_signal(&mut self, key: Key) -> Fetch {
+        let cap = self.payload_cap.min(self.limit(signal_target(key)));
         loop {
-            let cap = self.payload_cap;
             let ports = self.backend.ports();
             match ports.read(key.0, key.1, room(&mut self.buf, cap)) {
                 Ok(sample) => return Fetch::Sample(sample),
                 Err(ReadError::Short { needed }) => {
-                    if needed > self.payload_cap {
+                    if needed > cap {
                         return Fetch::TooLarge(needed);
                     }
                     self.buf.resize(needed, 0);
@@ -1073,7 +1106,8 @@ impl Outcome {
 /// What a backend read of a signal gave.
 enum Fetch {
     Sample(RawSample),
-    /// The value needs more bytes than one message may carry.
+    /// The value needs more bytes than one message may carry, or than the
+    /// member's limit allows.
     TooLarge(usize),
     Contract(Contract),
     /// The port cannot be read: the runtime behind it is gone.
@@ -1125,7 +1159,10 @@ mod tests {
     use std::time::Instant;
 
     use ridl_loopback::Loopback;
-    use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
+    use ridl_rt::contract::{
+        CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal, CALL_CEILING, FIXED_CEILING,
+        SIGNAL_EVENT_CEILING,
+    };
     use ridl_rt::error::{CallError, Contract, Transport};
     use ridl_rt::payload::{Rule, Violation};
     use ridl_rt::port::{
@@ -1636,8 +1673,14 @@ mod tests {
 
     #[test]
     fn a_signal_larger_than_the_first_buffer_is_read_again() {
-        let (mut s, mut p, _n) = scanning();
+        // The signal's limit is raised to 4,096 bytes in the member table,
+        // which the session applies, and on the loopback, which refuses a
+        // value above its member's limit on send.
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, SIGNAL.ord, 4096));
+        let (mut s, mut p, _n) = described_with(t, |c| c);
         open(&mut s);
+        p.set_limit(SIGNAL.iface, SIGNAL.ord, 4096);
         let value = vec![0xAB; 4096];
         commit(&mut p, &value);
         let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
@@ -2297,7 +2340,8 @@ mod tests {
     fn a_read_of_a_fixed_publishes_kind_fixed_seq_0_live() {
         let (mut s, mut p, _n) = scanning();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &[0xF1, 0xF2]);
+        p.provision_fixed(IFACE, Ordinal(5), &[0xF1, 0xF2])
+            .expect("the loopback stores the fixed");
         p.advance(Duration(11));
         let (step, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(step, Step::Continue);
@@ -2321,7 +2365,8 @@ mod tests {
     fn a_read_of_a_fixed_through_polling_is_unknown_interaction() {
         let (mut s, mut p, _n) = polling();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &[1]);
+        p.provision_fixed(IFACE, Ordinal(5), &[1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
@@ -2331,7 +2376,8 @@ mod tests {
     fn a_subscribe_of_a_fixed_is_unknown_interaction() {
         let (mut s, mut p, _n) = scanning();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &[1]);
+        p.provision_fixed(IFACE, Ordinal(5), &[1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Subscribe(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
@@ -2452,9 +2498,14 @@ mod tests {
 
     #[test]
     fn a_large_occurrence_is_read_again() {
-        let (mut s, mut p, _n) = scanning();
+        // As in `a_signal_larger_than_the_first_buffer_is_read_again`: the
+        // event's limit is raised in the table and on the loopback.
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, EVENT.ord, 4096));
+        let (mut s, mut p, _n) = described_with(t, |c| c);
         open(&mut s);
         send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        p.set_limit(EVENT.iface, EVENT.ord, 4096);
         let value = vec![0xCD; 4096];
         raise(&mut p, EVENT, &value);
         let (_, out) = tick(&mut s);
@@ -3023,10 +3074,10 @@ mod tests {
         assert!(send_commands(&mut s, 2, Loopback::SLOTS as u64).is_empty());
     }
 
-    /// A reply that does not fit one message is recorded, and the call is
-    /// forgotten: its slot takes a new call.
+    /// A reply that does not fit one message is answered `corrupt` and
+    /// recorded, and the call is forgotten: its slot takes a new call.
     #[test]
-    fn a_reply_larger_than_the_message_limit_is_recorded_and_not_sent() {
+    fn a_reply_larger_than_the_message_limit_is_answered_corrupt_and_recorded() {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
@@ -3036,7 +3087,11 @@ mod tests {
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
         let out = settled(&mut s, &mut p, QUERY, 1, Ok(&[1; 2000]));
-        assert!(out.is_empty());
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {
@@ -3144,14 +3199,17 @@ mod tests {
         let (mut s, mut p, notes) = limited();
         open(&mut s);
         grow_by_occurrences(&mut s, &mut p);
-        p.provision_fixed(IFACE, Ordinal(5), &vec![3; signal_cap() + 1]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![3; signal_cap() + 1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
-        assert!(out.is_empty());
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
         assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
             target: FIXED,
             needed: signal_cap() + 1
         }));
-        p.provision_fixed(IFACE, Ordinal(5), &vec![4; signal_cap()]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![4; signal_cap()])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].len(), LIMIT);
@@ -3164,7 +3222,11 @@ mod tests {
         open(&mut s);
         grow_by_occurrences(&mut s, &mut p);
         let out = settled(&mut s, &mut p, QUERY, 1, Ok(&[1; 1500]));
-        assert!(out.is_empty());
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
         assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
             target: QUERY,
             needed: 1500
@@ -3173,7 +3235,7 @@ mod tests {
 
     /// The reply cap is below the signal cap: after a signal of the signal
     /// cap, a reply one byte over its own cap fits the buffer and is still
-    /// not sent.
+    /// not sent; the call is answered `corrupt`.
     #[test]
     fn a_reply_one_byte_over_its_cap_is_not_sent_after_a_full_size_signal() {
         let (mut s, mut p, notes) = limited();
@@ -3183,7 +3245,11 @@ mod tests {
         assert_eq!(out.len(), 2);
         assert_within_limit(&out);
         let out = settled(&mut s, &mut p, QUERY, 1, Ok(&vec![2; reply_cap() + 1]));
-        assert!(out.is_empty());
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {
@@ -3202,14 +3268,22 @@ mod tests {
     /// reported as `Short` and the comparison with the cap decides.
     const ROOMY_LIMIT: usize = 4096;
 
-    fn roomy() -> (Session<Scanning<Loopback>>, Loopback, Notes) {
-        let notes = Notes::default();
-        let rt = Loopback::new(CATALOG);
-        let p = rt.attach();
-        let config = config(&notes)
-            .with_max_message_bytes(ROOMY_LIMIT)
-            .expect("above the minimum");
-        (Session::new(Scanning(rt), &config), p, notes)
+    fn roomy() -> (Session<Described<Scanning<Loopback>>>, Loopback, Notes) {
+        // The default ceiling of a signal and an event is below
+        // `ROOMY_LIMIT`, so the table raises both to it, and the loopback,
+        // which refuses a value above its member's limit on send, is given
+        // the same raise: the session's message cap is what these tests
+        // observe.
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, SIGNAL.ord, ROOMY_LIMIT as u32));
+        assert!(t.set_limit(IFACE, EVENT.ord, ROOMY_LIMIT as u32));
+        let (s, mut p, notes) = described_with(t, |c| {
+            c.with_max_message_bytes(ROOMY_LIMIT)
+                .expect("above the minimum")
+        });
+        p.set_limit(SIGNAL.iface, SIGNAL.ord, ROOMY_LIMIT);
+        p.set_limit(EVENT.iface, EVENT.ord, ROOMY_LIMIT);
+        (s, p, notes)
     }
 
     fn roomy_cap(frame: Frame<'_>) -> usize {
@@ -3243,13 +3317,16 @@ mod tests {
         let (mut s, mut p, notes) = roomy();
         open(&mut s);
         let cap = roomy_cap(publish(FIXED, 0, 0, PublishState::Live(&[])));
-        p.provision_fixed(IFACE, Ordinal(5), &vec![1; cap]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![1; cap])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].len(), ROOMY_LIMIT);
-        p.provision_fixed(IFACE, Ordinal(5), &vec![2; cap + 1]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![2; cap + 1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
-        assert!(out.is_empty());
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {
@@ -3290,7 +3367,11 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].len(), ROOMY_LIMIT);
         let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![2; cap + 1]));
-        assert!(out.is_empty());
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 2, 2, ResponseOutcome::Corrupt)
+        );
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {
@@ -3759,13 +3840,288 @@ mod tests {
         assert_answered_corrupt(&mut s, &mut p, COMMAND, 2, &[1]);
     }
 
+    /// A loopback whose members admit any value a catalog could allow, as a
+    /// backend that does not refuse a value on send: the session's own
+    /// checks are then what a test observes.
+    fn permissive(p: &mut Loopback) {
+        for ord in [1, 2, 3, 4, 5, COMMAND_UNBOUNDED.ord.0] {
+            p.set_limit(IFACE, Ordinal(ord), FIXED_CEILING);
+        }
+    }
+
     #[test]
-    fn a_member_with_no_limit_checks_no_argument_length() {
+    fn a_member_with_no_limit_is_checked_against_the_default_ceiling_of_its_kind() {
         let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        permissive(&mut p);
         open(&mut s);
-        let (_, out) = send(&mut s, &request(COMMAND_UNBOUNDED, 1, &[1; 5]));
+        let over = vec![1; CALL_CEILING + 1];
+        assert_answered_corrupt(&mut s, &mut p, COMMAND_UNBOUNDED, 1, &over);
+        let (_, out) = send(&mut s, &request(COMMAND_UNBOUNDED, 2, &over[1..]));
         assert!(out.is_empty());
-        assert_eq!(claim(&mut p, COMMAND_UNBOUNDED).len, 5);
+        let mut buf = vec![0; CALL_CEILING];
+        let claim = p.next_claim(&mut buf).unwrap().expect("a claim is waiting");
+        assert_eq!(claim.len, CALL_CEILING);
+    }
+
+    #[test]
+    fn a_request_above_the_default_ceiling_of_its_kind_is_answered_corrupt_without_a_table() {
+        let (mut s, mut p, notes) = scanning();
+        permissive(&mut p);
+        open(&mut s);
+        p.serve(IFACE, &[COMMAND.ord]).unwrap();
+        let over = vec![1; CALL_CEILING + 1];
+        let (step, out) = send(&mut s, &request(COMMAND, 1, &over));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(COMMAND, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
+        let mut buf = vec![0; CALL_CEILING];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        assert!(notes.lock().unwrap().is_empty());
+        let (_, out) = send(&mut s, &request(COMMAND, 2, &over[1..]));
+        assert!(out.is_empty());
+        let claim = p.next_claim(&mut buf).unwrap().expect("a claim is waiting");
+        assert_eq!(claim.len, CALL_CEILING);
+    }
+
+    // -- The limit of a member on the send side (ADR-0030 decision 19) -------
+
+    #[test]
+    fn a_signal_above_the_default_ceiling_of_its_kind_is_recorded_and_not_sent() {
+        let (mut s, mut p, notes) = scanning();
+        permissive(&mut p);
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &vec![1; SIGNAL_EVENT_CEILING + 1]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: SIGNAL_EVENT_CEILING + 1
+            }]
+        );
+        let value = vec![2; SIGNAL_EVENT_CEILING];
+        commit(&mut p, &value);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&value))
+        );
+    }
+
+    #[test]
+    fn a_signal_is_checked_against_the_limit_its_table_entry_gives() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, SIGNAL.ord, 4096));
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        permissive(&mut p);
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &vec![1; 4097]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: 4097
+            }]
+        );
+        commit(&mut p, &vec![2; 4096]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), 4096 + PUBLISH_HEADER);
+    }
+
+    #[test]
+    fn an_occurrence_above_the_default_ceiling_of_its_kind_is_recorded_and_dropped() {
+        let (mut s, mut p, notes) = scanning();
+        permissive(&mut p);
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        raise(&mut p, EVENT, &vec![1; SIGNAL_EVENT_CEILING + 1]);
+        let value = vec![2; SIGNAL_EVENT_CEILING];
+        raise(&mut p, EVENT, &value);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        // The dropped occurrence advances the channel's `seq`.
+        assert_eq!(decode(&out[0]).unwrap(), occurrence(EVENT, 0, 2, &value));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: EVENT,
+                needed: SIGNAL_EVENT_CEILING + 1
+            }]
+        );
+    }
+
+    #[test]
+    fn a_reply_above_the_default_ceiling_of_its_kind_is_answered_corrupt_and_recorded() {
+        let (mut s, mut p, notes) = scanning();
+        permissive(&mut p);
+        open(&mut s);
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&vec![1; CALL_CEILING + 1]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: QUERY,
+                needed: CALL_CEILING + 1
+            }]
+        );
+        let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![2; CALL_CEILING]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), crate::frame::MAX_MESSAGE_LIMIT);
+    }
+
+    /// The reply cap is the member's limit from the table when the table
+    /// gives one, below the message cap: a reply one byte above it is
+    /// answered `corrupt` and recorded, one of exactly the limit is sent.
+    #[test]
+    fn a_reply_above_the_limit_its_table_entry_gives_is_answered_corrupt_and_recorded() {
+        let (mut s, mut p, notes) = described_with(limited_table(900, true), |c| c);
+        permissive(&mut p);
+        open(&mut s);
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&vec![1; 901]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: QUERY,
+                needed: 901
+            }]
+        );
+        let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![2; 900]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 2, 2, ResponseOutcome::Reply(&[2; 900]))
+        );
+        assert_eq!(notes.lock().unwrap().len(), 1);
+    }
+
+    /// Until the binding carries a `fixed` in blocks (driftsys/ridl#1129), a
+    /// `fixed` above what one message carries is not served: the read is
+    /// answered `contract(UnknownInteraction)`, the refusal is recorded, and
+    /// the session goes on serving every other member.
+    #[test]
+    fn a_read_of_a_fixed_above_one_message_is_answered_unknown_interaction_and_recorded() {
+        let (mut s, mut p, notes) = scanning();
+        open(&mut s);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![1; 20_000])
+            .expect("within the default ceiling of a fixed");
+        let (step, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 20_000
+            }]
+        );
+        commit(&mut p, &[9]);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        assert_eq!(out.len(), 2);
+        assert_eq!(
+            decode(&out[1]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&[9]))
+        );
+    }
+
+    #[test]
+    fn a_fixed_above_the_limit_its_table_entry_gives_is_answered_unknown_interaction() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, FIXED.ord, 8));
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        permissive(&mut p);
+        open(&mut s);
+        p.provision_fixed(IFACE, Ordinal(5), &[1; 9]).unwrap();
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 9
+            }]
+        );
+        p.provision_fixed(IFACE, Ordinal(5), &[2; 8]).unwrap();
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(FIXED, 0, 0, PublishState::Live(&[2; 8]))
+        );
+    }
+
+    /// A `read` of a signal whose value is above the limit its table entry
+    /// gives is answered `contract(UnknownInteraction)`, as a `read` of a
+    /// `fixed` above its limit is, so that the client's read ends; the value
+    /// is recorded and no `publish` is sent.
+    ///
+    /// Mutation: record the value and send no frame.
+    #[test]
+    fn a_signal_read_above_the_limit_its_table_entry_gives_is_answered_unknown_interaction() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, SIGNAL.ord, 4096));
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        permissive(&mut p);
+        open(&mut s);
+        commit(&mut p, &vec![1; 4097]);
+        let (step, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(SIGNAL));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: 4097
+            }]
+        );
+        // The read did not subscribe, and a value within the limit is read.
+        commit(&mut p, &vec![2; 4096]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), 4096 + PUBLISH_HEADER);
+    }
+
+    /// The same without a table: the signal is read against the default
+    /// ceiling of its kind.
+    #[test]
+    fn a_signal_read_above_the_default_ceiling_of_its_kind_is_answered_unknown_interaction() {
+        let (mut s, mut p, notes) = scanning();
+        permissive(&mut p);
+        open(&mut s);
+        commit(&mut p, &vec![1; SIGNAL_EVENT_CEILING + 1]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(SIGNAL));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: SIGNAL_EVENT_CEILING + 1
+            }]
+        );
     }
 
     #[test]
@@ -4157,9 +4513,9 @@ mod tests {
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        let big = vec![1u8; 4037];
-        // Four replies of 4,037 bytes are 4,073 bytes each with their
-        // headers, 16,292 bytes in all, the cap; the fifth passes it, long
+        let big = vec![1u8; 4005];
+        // Four replies of 4,005 bytes are 4,041 bytes each with their
+        // headers, 16,164 bytes in all, the cap; the fifth passes it, long
         // before the ring holds 64.
         for seq in 1..=5 {
             let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
@@ -4168,7 +4524,7 @@ mod tests {
             p.settle(c.id, Ok(&big)).unwrap();
             let (step, out) = tick(&mut s);
             assert_eq!(out.len(), 1, "reply {seq}");
-            assert_eq!(out[0].len(), 4073, "reply {seq}");
+            assert_eq!(out[0].len(), 4041, "reply {seq}");
             let expected = if seq < 5 {
                 Step::Continue
             } else {
@@ -4184,14 +4540,14 @@ mod tests {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
-        // The cap cannot go below 16,292 bytes. Four `response`s of 4,073
+        // The cap cannot go below 16,164 bytes. Four `response`s of 4,041
         // bytes reach it exactly, and the next one passes it.
         let config = config(&notes)
             .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        let reply = vec![1u8; 4037];
+        let reply = vec![1u8; 4005];
         for seq in 1..=4 {
             let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
             assert!(out.is_empty());
@@ -4200,7 +4556,7 @@ mod tests {
             let (step, out) = tick(&mut s);
             assert_eq!(
                 (step, out.len(), out[0].len()),
-                (Step::Continue, 1, 4073),
+                (Step::Continue, 1, 4041),
                 "response {seq}"
             );
         }

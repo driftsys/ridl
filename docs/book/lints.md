@@ -129,7 +129,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-float` | TYPL-102 | warn | `float` without both a range and a `step` |
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
-| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above the advised transfer limit |
+| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above what the largest payload of any kind can carry |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
 | `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
@@ -144,7 +144,6 @@ MANI-010 is itself a lint, so the table can set its level.
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |
-| `payload-above-ceiling` | RIDL-150 | warn | payload above the payload ceiling or with no finite bound |
 | `podbuf-padding-order` | RIDL-156 | info | struct field order wastes podbuf padding |
 | `error-typed-parameter` | RIDL-304 | warn | `error`-typed or result-union parameter on a `command` or `query` |
 | `ensure-without-result` | RIDL-305 | warn | `ensure` clause that never references `result` |
@@ -169,39 +168,50 @@ MANI-010 is itself a lint, so the table can set its level.
 `vendor-source-not-loaded` (MANI-018) is raised in standalone mode only; a
 workspace has no such warning.
 
-`bound-above-transfer` (TYPL-116) reports a `string` bound above 4,032
-characters or a `bytes` bound above 16,128 bytes, on the bound.
-`payload-above-ceiling` (RIDL-150) reports a payload whose largest encoded size,
-in an encoding that the workspace manifest enables, is above 16,256 bytes or has no finite
-bound. It reads the encodings from every `[backend.<name>]` table of the
-workspace manifest, as one set, and checks FlatBuffers when that set is empty,
-which is the case for no table and for tables whose `encodings` lists are all
-empty. It reports on the
-interaction that carries the payload, so a type that no interaction carries is
-not reported. A `fixed` is provisioned and never in flight, so it is not
-checked. A `query` whose reply is a fallible `T | E` is checked through both
-types, and the larger problem is reported. Both messages say that the payload
-ceiling is 16,256 bytes and that the codecs do not yet enforce it
-(driftsys/ridl#996). Both default to `warn`, and a package can set either to
-`deny`. The limits are stated in
+`bound-above-transfer` (TYPL-116) reports a `string` bound above 16,256
+characters or a `bytes` bound above 65,280 bytes, on the bound. Its message
+names 65,280 bytes as the largest payload of any kind. It defaults to `warn`,
+and a package can set it to `deny`. The limits are stated in
 [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
 
-`[limits]` in a unit's `ridl.toml` sets a payload limit below the ceiling for an
-interaction. RIDL-151 (a payload above its declared limit or with no finite
-bound) and RIDL-152 (a `[limits]` entry that names no interaction of its unit)
+`payload-above-ceiling` (RIDL-150) is retired, and its name is reserved: a
+`[lints]` key that names it draws MANI-010 (`unknown-lint`) and is ignored. The
+case it reported, a payload above the ceiling of its interaction's kind or with
+no finite bound, is the error RIDL-157, which has no lint name and no level.
+RIDL-157 reports a payload carried by an interaction that no `[limits]` entry
+gives a limit, whose largest encoded size, in an encoding that the workspace
+manifest enables, is above the default ceiling of the interaction's kind (3,840
+bytes for a `signal` and an `event`, 16,128 for a `command` and a `query`,
+65,280 for a `fixed`) or has no finite bound. It reads the encodings from every
+`[backend.<name>]` table of the workspace manifest, as one set, and checks
+FlatBuffers when that set is empty, which is the case for no table and for
+tables whose `encodings` lists are all empty. It reports on the interaction that
+carries the payload, so a type that no interaction carries is not reported. A
+`fixed` is sized like every other kind. A `query` whose reply is a fallible
+`T | E` is checked through both types, and the larger problem is reported.
+
+`[limits]` in a unit's `ridl.toml` gives an interaction its payload limit, below
+the default ceiling of its kind, or above it through a `[limits.interaction]`
+entry. RIDL-151 (a payload above its declared limit or with no finite bound),
+RIDL-152 (a `[limits]` entry that names no interaction of its unit) and RIDL-157
 are errors, so they have no lint name and no level in `[lints]`. RIDL-151 runs
-only where an entry gives the limit; where none does, `payload-above-ceiling`
-alone applies. The table and the codes are described in the
-[CLI reference](cli-reference.md) and in
+where an entry gives the limit; where none does, RIDL-157 applies, so an
+interaction draws at most one of the two. The table and the codes are described
+in the [CLI reference](cli-reference.md) and in
 [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
 
-`payload-above-ceiling` is raised by `ridl check` and `ridl build`. The language
-server does not run it, so it does not appear in the editor. It skips a package
-that has an error that stops `ridl build` writing artifacts, or that references
-a package that has one, and still reports on the other packages of the
-workspace. An RSDL-7xx error does not count, because a build still writes code
-after it. An error in no package source file, such as a manifest error, skips
-every package.
+The three codes are raised by `ridl check`, `ridl build` and the language
+server, by one pass that sizes every interaction after lowering. The pass skips
+a package that has an error that stops `ridl build` writing artifacts, or that
+references a package that has one, and still reports on the other packages of
+the workspace. An RSDL-7xx error does not count, because a build still writes
+code after it. An error in a manifest skips the packages beneath that manifest.
+The language server sizes the workspace under the encodings and the
+`[limits]` tables that it loaded, and a file open outside the workspace under
+FlatBuffers and the default ceilings. It publishes the diagnostics of a
+`[limits]` table (RIDL-152 and MANI-022) for the `ridl.toml` that holds it, and
+reads the table when it loads the workspace, so an edit to a `[limits]` table
+or to a `[backend.<name>]` table takes effect after the server restarts.
 
 `podbuf-padding-order` (RIDL-156) reports a struct whose declared field order
 lays out in a larger podbuf head than the same fields sorted by descending

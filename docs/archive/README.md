@@ -760,3 +760,13 @@ provenance. Nothing here is normative — the current references live in
   the design as decisions corrected to the code and lists where it departs from
   the design, and [the podbuf codec design record](../design/podbuf-codec.md).
   Its plan stays in `docs/wip/` until Tasks 13 and 14 are built.
+
+- **2026-10-30-size-rules-plan.md** — the plan for the code of the ADR-0030
+  amendments of 2026-10-28 and 2026-10-30: `ridl_core::limits`, the `ridlc` size
+  pass with RIDL-157, the structure-only `verify`, the `ridl-rt` default
+  ceilings, the size refusals of the loopback and of both WebSocket transports,
+  and the limits in the generated TypeScript codec. Archived verbatim, on
+  2026-10-30, once the work landed; its Open questions section holds the rulings
+  R-1 to R-26. The durable record is
+  [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) and the design
+  records its Status names.

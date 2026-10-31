@@ -31,6 +31,17 @@
 //! conversion. A lint at `allow` is not published; one at `deny` is published
 //! as an error.
 //!
+//! The size pass of `ridlc` (RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of
+//! the `[limits]` table) runs on every recompute, through the same function
+//! `ridl check` calls. The workspace is sized under the encodings of the root
+//! manifest's `[backend.<name>]` tables and the `[limits]` table of each unit;
+//! a standalone overlay has neither, so it is sized for FlatBuffers against
+//! the default ceilings. Each source set is passed only its own errors, so an
+//! error in one set does not skip the others. The pass also reads the loader's
+//! errors, other than RSDL-7xx, as `ridl check` does, so a manifest error
+//! skips the packages beneath that manifest. Its diagnostics on a manifest
+//! are published for that `ridl.toml`.
+//!
 //! Two scope limits of this task, both by design:
 //!
 //! - The loader's own findings (manifest diagnostics and the
@@ -307,6 +318,24 @@ struct ServerState {
     loader_diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
     /// The remote units the load read, by name and directory.
     remote_units: Vec<(String, PathBuf)>,
+    /// The `[backend.<name>]` tables of the loaded root manifest, whose
+    /// encodings the size pass measures. Empty when no table is named.
+    backends: BTreeMap<String, ridl_core::BackendTable>,
+    /// The `[limits]` table of each loaded unit by unit name, with the path
+    /// and text of the manifest it was read from. The load-time file ids of
+    /// the tables are not valid in a recompute's source map, so each
+    /// recompute interns the manifest again.
+    unit_limits: BTreeMap<String, SizeManifest>,
+    /// The path and text of the file of each load-time Error that blocks the
+    /// size pass (any code but RSDL-7xx), so the pass skips the same
+    /// packages as `ridl check`. Only the workspace call reads them; they
+    /// are not published here.
+    loader_errors: Vec<(String, String)>,
+    /// Whether a load-time Error that blocks the size pass has no file (only
+    /// a [`FileId::DETACHED`] span: a remote import that is not cached, for
+    /// example). `ridl check` lets such an error block every package, so the
+    /// size pass of the workspace is skipped while it stands.
+    loader_error_detached: bool,
     /// The directories a remote unit is read from — each loaded unit's
     /// directory, the manifest root's `vendor/` and the cache root
     /// ([`ridlc::remote_dirs`]). A remote unit
@@ -334,6 +363,14 @@ struct ServerState {
     cancelled: HashSet<RequestId>,
 }
 
+/// One unit's `[limits]` table with the manifest it was read from: the path
+/// and the text the table's byte ranges point into.
+struct SizeManifest {
+    path: String,
+    text: String,
+    limits: ridl_core::manifest::Limits,
+}
+
 impl ServerState {
     /// A state with no workspace loaded yet: the embedded `ridl.std` package
     /// and an empty `Workspace` input, which [`ServerState::load`] replaces.
@@ -354,6 +391,10 @@ impl ServerState {
             line_indexes: HashMap::new(),
             loader_diagnostics: BTreeMap::new(),
             remote_units: Vec::new(),
+            backends: BTreeMap::new(),
+            unit_limits: BTreeMap::new(),
+            loader_errors: Vec::new(),
+            loader_error_detached: false,
             remote_dirs: Vec::new(),
             remote_notice: None,
             edited: HashSet::new(),
@@ -393,8 +434,8 @@ impl ServerState {
             units: _,
             root_package: _,
             codegen_header: _,
-            backends: _,
-            unit_limits: _,
+            backends,
+            unit_limits,
             imports: _,
             remote_units,
         } = load_workspace_with_remotes(
@@ -429,6 +470,38 @@ impl ServerState {
             }
         }
         self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache, dir);
+        let blocking = diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error && !d.code.as_str().starts_with("RSDL-7"));
+        self.loader_error_detached = blocking
+            .clone()
+            .any(|d| sources.path(d.primary.file).is_none());
+        self.loader_errors = blocking
+            .filter_map(|d| {
+                let path = sources.path(d.primary.file)?.to_string();
+                let text = sources.text(d.primary.file)?.to_string();
+                Some((path, text))
+            })
+            .collect();
+        self.backends = backends;
+        self.unit_limits = unit_limits
+            .into_iter()
+            .filter_map(|(unit, table)| {
+                let path = sources.path(table.manifest)?.to_string();
+                let text = match sources.text(table.manifest) {
+                    Some(text) => text.to_string(),
+                    None => std::fs::read_to_string(&path).ok()?,
+                };
+                Some((
+                    unit,
+                    SizeManifest {
+                        path,
+                        text,
+                        limits: table.limits,
+                    },
+                ))
+            })
+            .collect();
         self.remote_units = remote_units
             .into_iter()
             .map(|(name, unit)| (name, unit.dir))
@@ -875,6 +948,111 @@ impl ServerState {
                 &resolutions[index..index + 1],
                 &mut sources,
             ));
+        }
+        // The size pass (ADR-0030), as `ridl check` runs it: the workspace
+        // under the loaded `[backend.<name>]` encodings and `[limits]`
+        // tables, and each standalone overlay under neither, so it is sized
+        // for FlatBuffers against the default ceilings. A manifest is interned
+        // in this source map, so the diagnostics on it are published under
+        // its path. The pass reads the errors so far, remote ones included,
+        // as `ridlc` does, and runs before the remote units' diagnostics are
+        // dropped.
+        let mut limits = BTreeMap::new();
+        for (unit, manifest) in &self.unit_limits {
+            let file = sources.file_id(&manifest.path, &manifest.text);
+            table
+                .entry(file)
+                .or_insert_with(|| (manifest.path.clone(), manifest.text.clone()));
+            limits.insert(
+                unit.clone(),
+                ridl_core::UnitLimits {
+                    manifest: file,
+                    limits: manifest.limits.clone(),
+                },
+            );
+        }
+        // Each source set sees only its own errors: an error in one set must
+        // not skip the packages of another. A diagnostic belongs to the
+        // standalone overlay that holds its file, and otherwise to the
+        // workspace. The loader's blocking errors go to the workspace call
+        // only, as one synthetic error per file, so nothing extra is
+        // published.
+        let overlay_paths: Vec<BTreeSet<String>> = packages[workspace_packages..]
+            .iter()
+            .map(|package| {
+                package
+                    .files(db)
+                    .iter()
+                    .map(|file| file.path(db).to_string())
+                    .collect()
+            })
+            .collect();
+        let mut workspace_errors: Vec<Diagnostic> = Vec::new();
+        let mut overlay_errors: Vec<Vec<Diagnostic>> = vec![Vec::new(); overlay_paths.len()];
+        for diagnostic in &all {
+            let owner = sources
+                .path(diagnostic.primary.file)
+                .and_then(|path| overlay_paths.iter().position(|set| set.contains(path)));
+            match owner {
+                Some(index) => overlay_errors[index].push(diagnostic.clone()),
+                None => workspace_errors.push(diagnostic.clone()),
+            }
+        }
+        // Only the file of a marker is read; its code stands for any loader
+        // error.
+        let marker = |file: FileId| Diagnostic {
+            code: DiagCode::MANI_001,
+            severity: Severity::Error,
+            message: String::new(),
+            primary: Span {
+                file,
+                range: TextRange::default(),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        for (path, text) in &self.loader_errors {
+            if self.edited.contains(path) {
+                continue;
+            }
+            workspace_errors.push(marker(sources.file_id(path, text)));
+        }
+        // A detached error has no file an edit could clear, so it blocks the
+        // workspace's size pass until the next load, as it blocks every
+        // package of `ridl check`.
+        if self.loader_error_detached {
+            workspace_errors.push(marker(FileId::DETACHED));
+        }
+        let sized = ridlc::check_payload_sizes(
+            db,
+            self.workspace,
+            self.std,
+            &packages[..workspace_packages],
+            &checked[..workspace_packages],
+            &resolutions[..workspace_packages],
+            &workspace_errors,
+            &self.backends,
+            &limits,
+            &mut sources,
+        );
+        all.extend(sized);
+        let no_backends = BTreeMap::new();
+        let no_limits = BTreeMap::new();
+        for index in workspace_packages..packages.len() {
+            let own = &overlay_errors[index - workspace_packages];
+            let sized = ridlc::check_payload_sizes(
+                db,
+                self.workspace,
+                self.std,
+                &packages[index..index + 1],
+                &checked[index..index + 1],
+                &resolutions[index..index + 1],
+                own,
+                &no_backends,
+                &no_limits,
+                &mut sources,
+            );
+            all.extend(sized);
         }
         // A remote unit's packages were checked so that the consumer's
         // references resolve; nothing is published for their files. Their

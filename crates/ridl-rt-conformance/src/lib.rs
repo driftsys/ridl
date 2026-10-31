@@ -51,6 +51,13 @@
 //! - **`FixedReader`.** How a `fixed` is provisioned into a runtime is the
 //!   runtime's own API, not a port, and what an unprovisioned `fixed` reads
 //!   as is not fixed by the port contract.
+//! - **A member's limit other than the default ceiling of its kind.** The
+//!   suite attaches to a catalog with no descriptor, so it pins the default
+//!   ceiling of each kind (ADR-0030 decision 16), which every sending port
+//!   refuses a longer payload against with `TooLarge { cap }`. How a runtime
+//!   learns the limit a `[limits.interaction]` entry gives a member, a
+//!   descriptor's limit column or its own API (`Loopback::set_limit`), is the
+//!   runtime's.
 //! - **Anything a runtime reports from a catalog descriptor**: an unknown
 //!   ordinal, an unowned member, a freshness of `Fresh` or `Stale` measured
 //!   against a staleness bound. The suite attaches to a catalog with no
@@ -231,6 +238,7 @@ macro_rules! suite {
             signals::a_set_after_a_touch_replaces_it,
             signals::touch_on_a_channel_with_no_publication_publishes_nothing,
             signals::a_short_buffer_reports_what_the_read_needs_and_consumes_nothing,
+            signals::a_value_longer_than_the_signal_limit_is_refused_and_not_staged,
             events::an_event_raise_and_receive_round_trips,
             events::an_occurrence_raised_before_the_subscription_is_not_delivered,
             events::unsubscribe_stops_delivery_of_what_is_already_queued,
@@ -238,6 +246,7 @@ macro_rules! suite {
             events::a_short_buffer_leaves_the_occurrence_for_the_next_call,
             events::a_sink_sequence_number_counts_one_channel_publications,
             events::an_event_raised_without_a_context_arrives_without_one,
+            events::an_occurrence_longer_than_the_event_limit_is_refused_and_not_raised,
             calls::a_command_is_delivered_and_acknowledged,
             calls::a_query_is_delivered_and_replied,
             calls::settle_can_be_made_to_fail_once_then_succeed,
@@ -248,6 +257,8 @@ macro_rules! suite {
             calls::an_oversized_claim_is_reported_with_its_id_and_is_not_consumed,
             calls::an_unread_claim_is_settled_by_its_id,
             calls::the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled,
+            calls::arguments_longer_than_the_call_limit_are_refused_and_not_sent,
+            calls::a_reply_longer_than_the_call_limit_is_refused_and_not_recorded,
             calls::forget_releases_a_settled_correlation,
             calls::forget_before_the_claim_is_presented_withdraws_or_leaves_the_call,
             calls::a_send_with_every_slot_taken_is_busy_for_every_caller,

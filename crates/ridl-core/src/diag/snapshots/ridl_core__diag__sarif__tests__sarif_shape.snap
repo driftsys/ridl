@@ -337,7 +337,7 @@ expression: log
               "id": "TYPL-116",
               "name": "bound-above-transfer",
               "shortDescription": {
-                "text": "`string`/`bytes` bound above the advised transfer limit"
+                "text": "`string`/`bytes` bound above what the largest payload of any kind can carry"
               },
               "defaultConfiguration": {
                 "level": "warning"
@@ -817,16 +817,6 @@ expression: log
               }
             },
             {
-              "id": "RIDL-150",
-              "name": "payload-above-ceiling",
-              "shortDescription": {
-                "text": "payload above the payload ceiling or with no finite bound"
-              },
-              "defaultConfiguration": {
-                "level": "warning"
-              }
-            },
-            {
               "id": "RIDL-151",
               "shortDescription": {
                 "text": "payload above its declared limit or with no finite bound"
@@ -879,6 +869,15 @@ expression: log
               },
               "defaultConfiguration": {
                 "level": "note"
+              }
+            },
+            {
+              "id": "RIDL-157",
+              "shortDescription": {
+                "text": "payload above the default ceiling of its kind or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
@@ -1659,7 +1658,7 @@ expression: log
             {
               "id": "MANI-022",
               "shortDescription": {
-                "text": "payload limit above the payload ceiling of 16,256 bytes"
+                "text": "payload limit above what its entry may give"
               },
               "defaultConfiguration": {
                 "level": "error"

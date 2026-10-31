@@ -1,12 +1,19 @@
-//! RIDL-151 and RIDL-152: the payload limits of a unit's `[limits]` table
-//! (ADR-0030 decisions 12 and 14).
+//! The size pass: RIDL-151, RIDL-152 and RIDL-157, and the MANI-022 of a
+//! `[limits.interaction]` entry that raises a member above what its kind may
+//! be given (ADR-0030 decisions 12, 14, 17 and 18).
 //!
-//! RIDL-151 reports a payload whose largest encoded size, in an encoding that
-//! the workspace manifest enables, is above the limit that a `[limits]` entry
-//! gives its interaction, or has no finite bound. It runs only where an entry
-//! gives the limit: where the limit is the payload ceiling because no entry
-//! applies, only RIDL-150 runs. RIDL-152 reports a `[limits.interaction]` key
-//! that names no interaction of its unit.
+//! Every interaction of every examined package is sized once, in each
+//! encoding that the workspace manifest enables. The limit of an interaction
+//! is, first found: its entry in `[limits.interaction]`, the entry of its kind
+//! in `[limits.kind]`, `default` clamped to the default ceiling of its kind,
+//! and, when no entry applies, the default ceiling of its kind. Where an entry
+//! gives the limit, a payload above it, or with no finite bound, is RIDL-151;
+//! where none does, a payload above the default ceiling of the kind, or with no
+//! finite bound, is RIDL-157. An interaction draws at most one of the two.
+//! RIDL-152 reports a `[limits.interaction]` key that names no interaction of
+//! its unit. A `[limits.interaction]` entry above 16,128 bytes that names a
+//! member other than a fixed is MANI-022 on the value, and the entry is
+//! dropped, as the manifest reader drops an entry above 65,280.
 //!
 //! An interaction is named `Interface.member`: the short name of its shape,
 //! then `.`, then the member name. The short name is the interface name, or for
@@ -19,7 +26,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ridl_core::UnitLimits;
 use ridl_core::diag::{DiagCode, Diagnostic, Severity, Span};
-use ridl_core::manifest::{LimitKind, Limits};
+use ridl_core::limits::{RAISE_MAX, default_ceiling};
+use ridl_core::manifest::{LimitEntry, LimitKind, Limits};
 use ridl_ir::codegen::{self, v1};
 use ridl_ir::v2;
 use ridl_sem::CheckedPackage;
@@ -28,22 +36,52 @@ use rowan::{TextRange, TextSize};
 use super::Ctx;
 use super::ceiling::{self, Entry};
 
+/// The `[limits.interaction]` entry of an interaction, or `None` when the
+/// table has none for it. `owner` is the short name of the shape, or `None`
+/// when another shape of the unit has the same short name, so that no entry
+/// can apply.
+fn name_entry<'a>(limits: &'a Limits, owner: Option<&str>, member: &str) -> Option<&'a LimitEntry> {
+    let name = format!("{}.{member}", owner?);
+    limits.interactions.iter().find(|entry| entry.name == name)
+}
+
+/// Whether a `[limits.interaction]` entry of `value` bytes may apply to a
+/// member of `kind` (ADR-0030 decision 18): a fixed may be given up to its
+/// default ceiling, which the manifest reader already bounds, and every other
+/// kind up to [`RAISE_MAX`].
+fn raise_allowed(kind: LimitKind, value: u32) -> bool {
+    kind == LimitKind::Fixed || value <= RAISE_MAX
+}
+
 /// The limit that a `[limits]` table gives an interaction: its entry in
-/// `[limits.interaction]`, else the entry of its kind, else `default`, or
-/// `None` when no entry applies.
-///
-/// `owner` is the short name of the shape, or `None` when another shape of the
-/// unit has the same short name, so that no `[limits.interaction]` entry can
-/// apply.
+/// `[limits.interaction]`, else the entry of its kind, else `default` clamped
+/// to the default ceiling of the kind, or `None` when no entry applies
+/// (ADR-0030 decision 12). An interaction entry that [`raise_allowed`]
+/// refuses is dropped, so the next step applies. `owner` is as for
+/// [`name_entry`].
 fn resolve(limits: &Limits, kind: LimitKind, owner: Option<&str>, member: &str) -> Option<u32> {
-    let name = owner.map(|owner| format!("{owner}.{member}"));
-    limits
-        .interactions
-        .iter()
-        .find(|entry| Some(&entry.name) == name.as_ref())
+    name_entry(limits, owner, member)
         .map(|entry| entry.value)
+        .filter(|value| raise_allowed(kind, *value))
         .or_else(|| limits.kinds.get(&kind).map(|entry| *entry.get_ref()))
-        .or_else(|| limits.default.as_ref().map(|entry| *entry.get_ref()))
+        .or_else(|| {
+            limits
+                .default
+                .as_ref()
+                .map(|entry| (*entry.get_ref()).min(default_ceiling(kind)))
+        })
+}
+
+/// The kind with its indefinite article, for a message: `a signal`, `an
+/// event`.
+fn a_kind(kind: LimitKind) -> String {
+    let name = kind.name();
+    let article = if name.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} {name}")
 }
 
 /// The last segment of the name of a shape.
@@ -130,16 +168,19 @@ pub(crate) fn annotate_limits(
     }
 }
 
-/// The packages of one unit, as indices of `Ctx::checked`.
+/// The packages of one unit, as indices of `Ctx::checked`, with the unit's
+/// `[limits]` table when it has one.
 struct Unit<'a> {
-    table: &'a UnitLimits,
+    table: Option<&'a UnitLimits>,
     packages: Vec<usize>,
 }
 
-/// RIDL-151 and RIDL-152. `units` holds the unit of each entry of
-/// `ctx.checked`; `limits` holds the `[limits]` table of each unit by unit
-/// name. A table applies to every package of its unit, so an entry may name an
-/// interface of any of them.
+/// The size pass: RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of an
+/// interaction entry that raises a member above what its kind may be given.
+/// `units` holds the unit of each entry of `ctx.checked`; `limits` holds the
+/// `[limits]` table of each unit by unit name. A table applies to every
+/// package of its unit, so an entry may name an interface of any of them. The
+/// pass runs over every unit, with or without a table.
 ///
 /// This function computes short-name ambiguity over the examined packages
 /// only, while `annotate_limits` computes it over all packages of the unit.
@@ -154,20 +195,18 @@ pub(crate) fn check(
     let (flatbuffers, proto3, podbuf) = ceiling::checked_encodings(encodings);
     let mut by_unit: BTreeMap<&str, Unit<'_>> = BTreeMap::new();
     for (index, unit) in units.iter().enumerate() {
-        if let Some(table) = limits.get(unit) {
-            by_unit
-                .entry(unit.as_str())
-                .or_insert_with(|| Unit {
-                    table,
-                    packages: Vec::new(),
-                })
-                .packages
-                .push(index);
-        }
+        by_unit
+            .entry(unit.as_str())
+            .or_insert_with(|| Unit {
+                table: limits.get(unit),
+                packages: Vec::new(),
+            })
+            .packages
+            .push(index);
     }
     let mut diagnostics = Vec::new();
     for unit in by_unit.values() {
-        let table = &unit.table.limits;
+        let table = unit.table.map(|table| &table.limits);
         // The packages that the checks examine. When one package of the unit is
         // skipped, its interfaces are unknown, so an entry cannot be called
         // unmatched.
@@ -214,9 +253,30 @@ pub(crate) fn check(
                     let Some(kind) = kind_of(decl) else {
                         continue;
                     };
-                    let Some(limit) = resolve(table, kind, owner, &decl.name) else {
-                        continue;
-                    };
+                    let name = format!("{short}.{}", decl.name);
+                    if let Some(unit_limits) = unit.table
+                        && let Some(entry) = name_entry(&unit_limits.limits, owner, &decl.name)
+                        && !raise_allowed(kind, entry.value)
+                    {
+                        diagnostics.push(Diagnostic {
+                            code: DiagCode::MANI_022,
+                            severity: Severity::Error,
+                            message: format!(
+                                "`{name}` is {}, above what the entry may give {} \
+                                 ({RAISE_MAX} bytes); only a `fixed` may be given more",
+                                entry.value,
+                                a_kind(kind),
+                            ),
+                            primary: Span {
+                                file: unit_limits.manifest,
+                                range: text_range(&entry.value_span),
+                            },
+                            labels: Vec::new(),
+                            fixits: Vec::new(),
+                        });
+                    }
+                    let declared = table.and_then(|table| resolve(table, kind, owner, &decl.name));
+                    let limit = declared.unwrap_or_else(|| default_ceiling(kind));
                     let Some(span) = ctx.sites.member(&package.name, shape.name, &decl.name) else {
                         continue;
                     };
@@ -255,15 +315,30 @@ pub(crate) fn check(
                         if found.is_empty() {
                             continue;
                         }
-                        diagnostics.push(Diagnostic {
-                            code: DiagCode::RIDL_151,
-                            severity: Severity::Error,
-                            message: format!(
-                                "the {} of `{short}.{}` has {}; its limit is {limit} bytes",
-                                payload.role,
-                                decl.name,
-                                found.join(" and "),
+                        let found = found.join(" and ");
+                        let (code, message) = match declared {
+                            Some(limit) => (
+                                DiagCode::RIDL_151,
+                                format!(
+                                    "the {} of `{name}` has {found}; its limit is {limit} bytes",
+                                    payload.role,
+                                ),
                             ),
+                            None => (
+                                DiagCode::RIDL_157,
+                                format!(
+                                    "the {} of `{name}` has {found}; the default ceiling of {} \
+                                     is {limit} bytes{}",
+                                    payload.role,
+                                    a_kind(kind),
+                                    raise_hint(kind),
+                                ),
+                            ),
+                        };
+                        diagnostics.push(Diagnostic {
+                            code,
+                            severity: Severity::Error,
+                            message,
                             primary: span,
                             labels: Vec::new(),
                             fixits: Vec::new(),
@@ -272,6 +347,9 @@ pub(crate) fn check(
                 }
             }
         }
+        let Some(table) = table else {
+            continue;
+        };
         if !complete {
             continue;
         }
@@ -279,10 +357,6 @@ pub(crate) fn check(
             if known.contains(&entry.name) {
                 continue;
             }
-            let range = TextRange::new(
-                TextSize::from(u32::try_from(entry.key.start).unwrap_or(u32::MAX)),
-                TextSize::from(u32::try_from(entry.key.end).unwrap_or(u32::MAX)),
-            );
             let message = match entry.name.split_once('.') {
                 Some((name, _)) if ambiguous.contains(name) => format!(
                     "`{}` is ambiguous: more than one interface or inline service of the \
@@ -300,8 +374,8 @@ pub(crate) fn check(
                 severity: Severity::Error,
                 message,
                 primary: Span {
-                    file: unit.table.manifest,
-                    range,
+                    file: unit.table.expect("the table of the entry").manifest,
+                    range: text_range(&entry.key),
                 },
                 labels: Vec::new(),
                 fixits: Vec::new(),
@@ -309,6 +383,25 @@ pub(crate) fn check(
         }
     }
     diagnostics
+}
+
+/// What a RIDL-157 message adds after the default ceiling of `kind`: how a
+/// `[limits.interaction]` entry may raise a member of the kind, when the
+/// kind's default ceiling is below [`RAISE_MAX`] (ADR-0030 decision 18).
+fn raise_hint(kind: LimitKind) -> String {
+    if default_ceiling(kind) < RAISE_MAX {
+        format!(", and a `[limits.interaction]` entry may raise it up to {RAISE_MAX}")
+    } else {
+        String::new()
+    }
+}
+
+/// A byte range of a manifest as a span range.
+fn text_range(range: &std::ops::Range<usize>) -> TextRange {
+    TextRange::new(
+        TextSize::from(u32::try_from(range.start).unwrap_or(u32::MAX)),
+        TextSize::from(u32::try_from(range.end).unwrap_or(u32::MAX)),
+    )
 }
 
 #[cfg(test)]
@@ -322,6 +415,7 @@ mod tests {
             name: "I.named".to_string(),
             key: 0..0,
             value: 1,
+            value_span: 0..0,
         });
         limits
     }
@@ -345,5 +439,76 @@ mod tests {
             None
         );
         assert_eq!(resolve(&limits(), LimitKind::Signal, None, "named"), None);
+    }
+
+    /// `default` applies to each kind up to the default ceiling of that kind
+    /// (ADR-0030 decision 12).
+    #[test]
+    fn default_is_clamped_to_the_ceiling_of_the_kind() {
+        let mut limits = Limits {
+            default: Some(toml::Spanned::new(0..0, 65_280)),
+            ..Limits::default()
+        };
+        assert_eq!(
+            resolve(&limits, LimitKind::Signal, Some("I"), "s"),
+            Some(3_840)
+        );
+        assert_eq!(
+            resolve(&limits, LimitKind::Query, Some("I"), "q"),
+            Some(16_128)
+        );
+        assert_eq!(
+            resolve(&limits, LimitKind::Fixed, Some("I"), "f"),
+            Some(65_280)
+        );
+        limits.default = Some(toml::Spanned::new(0..0, 100));
+        assert_eq!(
+            resolve(&limits, LimitKind::Signal, Some("I"), "s"),
+            Some(100)
+        );
+    }
+
+    /// An interaction entry above 16,128 applies to a fixed only; for another
+    /// kind it is dropped and the next step applies.
+    #[test]
+    fn a_raise_above_the_largest_applies_to_a_fixed_only() {
+        let mut limits = limits();
+        limits.interactions[0].value = 16_129;
+        assert_eq!(
+            resolve(&limits, LimitKind::Fixed, Some("I"), "named"),
+            Some(16_129)
+        );
+        assert_eq!(
+            resolve(&limits, LimitKind::Command, Some("I"), "named"),
+            None
+        );
+        limits
+            .kinds
+            .insert(LimitKind::Command, toml::Spanned::new(0..0, 7));
+        assert_eq!(
+            resolve(&limits, LimitKind::Command, Some("I"), "named"),
+            Some(7)
+        );
+        limits.interactions[0].value = 16_128;
+        assert_eq!(
+            resolve(&limits, LimitKind::Command, Some("I"), "named"),
+            Some(16_128)
+        );
+    }
+
+    #[test]
+    fn the_article_of_a_kind_fits_its_name() {
+        assert_eq!(a_kind(LimitKind::Signal), "a signal");
+        assert_eq!(a_kind(LimitKind::Event), "an event");
+        assert_eq!(a_kind(LimitKind::Fixed), "a fixed");
+    }
+
+    #[test]
+    fn the_raise_hint_names_the_largest_raise_below_it_only() {
+        assert!(raise_hint(LimitKind::Signal).contains("16128"));
+        assert!(raise_hint(LimitKind::Event).contains("16128"));
+        assert!(raise_hint(LimitKind::Command).is_empty());
+        assert!(raise_hint(LimitKind::Query).is_empty());
+        assert!(raise_hint(LimitKind::Fixed).is_empty());
     }
 }

@@ -2,12 +2,13 @@
 # `final` is the agreed label where the two labels agree; where they disagree, it is the label Sebastien set at adjudication (2026-10-06). Every finding has a `final`.
 # Agreement sample seed: 20261005.
 # Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:duplicate-shape:<finding-id>" (lowercase hex, ascending); take the first 10.
+# Id shift: the ros2 ids in this file were shifted to new byte offsets on 2026-10-30, when the corpus was bounded. The sample above is the one drawn from the ids before the shift; the algorithm does not reproduce it from the shifted ids.
 # Agreed findings: 15. Sampled: 10. Shortfall: 0.
 # Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row3.passenger/contract.ridl:1440-1455:0
-# Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:5991-6003:0
+# Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:6013-6025:0
 # Sampled: duplicate-shape:ros2:geometry_msgs/messages.typl:6412-6417:0
 # Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row1.passenger/contract.ridl:1440-1455:0
-# Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:14368-14378:0
+# Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:14407-14417:0
 # Sampled: duplicate-shape:mavlink:common/messages.typl:22691-22706:0
 # Sampled: duplicate-shape:ros2:geometry_msgs/messages.typl:7423-7430:0
 # Sampled: duplicate-shape:ros2:builtin_interfaces/messages.typl:850-854:0
@@ -88,7 +89,7 @@ kind = "struct"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:ros2:nav2_msgs/interactions.ridl:5991-6003:0"
+id = "duplicate-shape:ros2:nav2_msgs/interactions.ridl:6013-6025:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:161"
 message = "`nav2msgs.BackUpResult` has the same 3 fields as `nav2msgs.AssistedTeleopResult`"
@@ -102,7 +103,7 @@ kind = "struct"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:ros2:nav2_msgs/interactions.ridl:13114-13124:0"
+id = "duplicate-shape:ros2:nav2_msgs/interactions.ridl:13153-13163:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:326"
 message = "`nav2msgs.SpinResult` has the same 3 fields as `nav2msgs.AssistedTeleopResult`"
@@ -116,7 +117,7 @@ kind = "struct"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:ros2:nav2_msgs/interactions.ridl:14368-14378:0"
+id = "duplicate-shape:ros2:nav2_msgs/interactions.ridl:14407-14417:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:361"
 message = "`nav2msgs.WaitResult` has the same 3 fields as `nav2msgs.AssistedTeleopResult`"
@@ -130,9 +131,9 @@ kind = "struct"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:ros2:std_srvs/interactions.ridl:621-636:0"
+id = "duplicate-shape:ros2:std_srvs/interactions.ridl:669-684:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:23"
+location = "std_srvs/interactions.ridl:24"
 message = "`stdsrvs.TriggerResponse` has the same 2 fields as `stdsrvs.SetBoolResponse`"
 claude = "dismiss"
 claude_reason = "Trigger and SetBool responses intentionally share the standard success/message shape; merging unrelated services is not a design improvement"

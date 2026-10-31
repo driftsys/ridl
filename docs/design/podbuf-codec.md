@@ -17,7 +17,12 @@ descriptors and the face, only when the manifest's `[backend.rust] encodings`
 names `podbuf`; the C header is written by `ridl build --emit podbuf`
 (`<base>.h`). Every payload also carries its own zeroed buffer,
 `Payload<Podbuf>::BUFFER`, an `Aligned` array of `MAX_SIZE` bytes, because a
-podbuf buffer starts on an 8-byte boundary.
+podbuf buffer starts on an 8-byte boundary. The face puts a `BUFFER` on the
+stack for a signal, an event, a command and a query only, which the catalog's
+limits keep at 16,128 bytes or less; a fixed has no face method and reserves
+nothing in the size table, and its payload, up to 65,280 bytes, is read through
+the view in place
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 5).
 
 ## Where the code is
 
@@ -135,10 +140,21 @@ descriptor and has no content check, so an older reader accepts the arm a newer
 producer wrote after the arm type gained a field. A boolean above 1 is
 `Contract` with the rule `Range`; an absent optional whose bytes are not zero is
 `Contract` with the rule `Variant`; the structure faults are `Malformed`
-variants. `Payload<Podbuf>::verify` first refuses a buffer longer than the
-reader's own `MAX_SIZE` with `Malformed::TooLarge`
-([ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), open item 2). The
-full list of checks, and what is not checked, is ADR-0031 decision 8.
+variants. `Payload<Podbuf>::verify` applies no length check: it reads what the
+preamble, the head and the descriptors reference and ignores the bytes past
+them, so an older reader accepts the longer buffer a newer writer produces after
+a compatible append
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 19,
+which closes [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) open
+item 2). Its work is bounded by the maxima the reader's type declares, not by
+the buffer: each descriptor's `len` is checked against the declared bound before
+its data is read (ADR-0031 decision 8, rule 4). The size of a payload is refused
+by the transport, against the interaction's limit from the catalog, before
+`verify`; an embedder that calls `verify` on bytes no binding has checked, such
+as the gate of the podbuf trust model, checks the length against the
+interaction's limit itself. `Malformed::TooLarge` stays in `ridl-rt` and is
+returned by no generated codec. The full list of checks, and what is not
+checked, is ADR-0031 decision 8.
 
 **`decode`** builds the owned domain value from a view that `verify` returned,
 and allocates for `String`, `Vec` and maps as the other codecs do.
@@ -151,10 +167,11 @@ fail after `verify`, and it is the price of generated code with no `unsafe`.
 **`MAX_SIZE`** is the preamble, the head and the largest tail, computed by
 `ridl_ir::projection::podbuf::max_size`, with every optional present and every
 bound at its maximum, and with the worst-case alignment gap before each aligned
-tail block. ADR-0030 decision 3 asks each backend to cap the generated
-`MAX_SIZE` at the payload ceiling; the podbuf codec, like the other two, emits
-the computed bound uncapped (driftsys/ridl#996), and RIDL-150 reports a payload
-above the ceiling at check time.
+tail block. It is the computed bound, uncapped, and equals the descriptor's
+bound: ADR-0030 decision 3, which asked each backend to cap it at the payload
+ceiling, is withdrawn. A type with no finite bound has no codec. The limit of an
+interaction's payload is a rule of the catalog, checked at check time
+(ADR-0030).
 
 ## The face names this codec through `Payload<Podbuf>` and `Sizes<Podbuf>`
 
@@ -228,14 +245,13 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 ## Known gaps
 
-| Gap                                                                                                                              | Issue                         |
-| -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `ridl build` and `ridl check --baseline` do not pass the manifest's `[backend.<name>] encodings` to the diff                     | driftsys/ridl#1095            |
-| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                            | the typl change it depends on |
-| `Payload<Podbuf>::verify` refuses a buffer longer than its own `MAX_SIZE`, which a compatible append can raise (ADR-0031 item 2) | driftsys/ridl#1099            |
-| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                     | driftsys/ridl#1096            |
-| A string that holds U+0000 cannot be encoded                                                                                     | a limit of the encoding       |
-| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                      | ADR-0020 decision 2           |
+| Gap                                                                                                          | Issue                         |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| `ridl build` and `ridl check --baseline` do not pass the manifest's `[backend.<name>] encodings` to the diff | driftsys/ridl#1095            |
+| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                        | the typl change it depends on |
+| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                 | driftsys/ridl#1096            |
+| A string that holds U+0000 cannot be encoded                                                                 | a limit of the encoding       |
+| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                  | ADR-0020 decision 2           |
 
 ## Trace
 

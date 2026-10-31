@@ -6,6 +6,7 @@ type RosByte : integer [0..255]
 type RosChar : integer [0..255]
 type RosFloat32 : float
 type RosFloat64 : float
+type RosFrameId : string [0..64]
 type RosInt16 : integer [-32768..32767]
 type RosInt32 : integer [-2147483648..2147483647]
 type RosInt64 : integer [-9223372036854775808..9223372036854775807]
@@ -119,7 +120,7 @@ struct Header {
   stamp : Time
 
 // Transform frame with which this data is associated.
-  frameId : RosString
+  frameId : RosFrameId
 }
 // Upstream: std_msgs/msg/Int16.msg
 struct Int16 {

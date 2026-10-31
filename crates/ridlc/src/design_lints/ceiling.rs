@@ -1,23 +1,16 @@
-//! RIDL-150 `payload-above-ceiling`: a payload carried by an interaction whose
-//! largest encoded size, in an encoding that the workspace manifest enables, is above the
-//! payload ceiling, or has no finite bound (ADR-0030 decision 7).
+//! The sizes of the payloads an interaction carries, under each encoding the
+//! workspace manifest enables, for the size pass of `limits` (RIDL-151 and
+//! RIDL-157; ADR-0030 decisions 14 and 17).
 //!
 //! The sizes are the ones the codegen model carries for each payload, which
-//! are the sizes the backends write as `MAX_SIZE`, so the lint and the
+//! are the sizes the backends write as `MAX_SIZE`, so the checks and the
 //! generated code never disagree about a bound. A fallible `T | E` reply has
 //! no size of its own in the model, so its success and error types are sized
-//! separately with the same sizer, and the larger problem is reported. The
-//! diagnostic is reported on the interaction that carries the payload; a type
-//! that no interaction carries is not reported.
+//! separately with the same sizer, and the larger problem is reported.
 
-use ridl_core::diag::{DiagCode, Diagnostic};
-use ridl_core::limits::PAYLOAD_CEILING;
-use ridl_core::lint::lint_by_name;
 use ridl_ir::codegen::{self, v1};
 use ridl_ir::projection::size::{self, Ctx as SizeCtx, PayloadShape};
 use ridl_ir::v2;
-
-use super::Ctx;
 
 /// What one payload's size state says, ordered from the least to the most
 /// serious so that the worst of several is their maximum.
@@ -150,9 +143,9 @@ fn fallible_entry(
     }
 }
 
-/// The value of a fixed, sized under each encoding. RIDL-150 never sizes a
-/// fixed, because it is provisioned and never in flight; the payload limits
-/// of a unit apply to it all the same (ADR-0030 decision 14).
+/// The value of a fixed, sized under each encoding. A fixed is provisioned
+/// and never in flight, but its limit and its default ceiling apply to its
+/// value all the same (ADR-0030 decisions 14 and 17).
 pub(super) fn fixed_entry(
     package: &v2::Package,
     others: &[&v2::Package],
@@ -178,7 +171,7 @@ pub(super) fn fixed_entry(
 }
 
 /// The payloads one interaction carries on the wire, with the role of each.
-/// A fixed is provisioned and never in flight, so it carries none.
+/// A fixed carries none here; [`fixed_entry`] sizes its value.
 pub(super) fn payloads(
     interaction: &v1::Interaction,
     decl: &v2::Decl,
@@ -300,11 +293,8 @@ pub(super) fn checked_encodings(encodings: &[String]) -> (bool, bool, bool) {
     )
 }
 
-fn describe(side: &Side, encoding: &str) -> Option<String> {
-    describe_above(side, encoding, u64::from(PAYLOAD_CEILING))
-}
-
-/// [`describe`] for a payload limit of `limit` bytes.
+/// Why `side` breaks a limit of `limit` bytes under `encoding`, naming the
+/// type when the payload is a fallible reply, or `None` when it does not.
 pub(super) fn describe_above(side: &Side, encoding: &str, limit: u64) -> Option<String> {
     let why = problem_above(side.size, limit)?;
     Some(match &side.ty {
@@ -313,93 +303,21 @@ pub(super) fn describe_above(side: &Side, encoding: &str, limit: u64) -> Option<
     })
 }
 
-pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -> Vec<Diagnostic> {
-    let (flatbuffers, proto3, podbuf) = checked_encodings(encodings);
-    let severity = lint_by_name("payload-above-ceiling")
-        .expect("registered lint")
-        .severity;
-    let mut diagnostics = Vec::new();
-    for checked in ctx.subjects() {
-        let package = &checked.ir;
-        if package.shapes().next().is_none() {
-            continue;
-        }
-        let others: Vec<&v2::Package> = ctx
-            .checked
-            .iter()
-            .filter(|other| other.ir.name != package.name)
-            .map(|other| &other.ir)
-            .chain(std::iter::once(std_ir))
-            .collect();
-        let model = codegen::lower(package, &others);
-        for (shape, interface) in package.shapes().zip(&model.interfaces) {
-            // An inline shape is named by its service, whose name already
-            // carries the package.
-            let owner = if shape.service.is_some() {
-                shape.name.to_string()
-            } else {
-                format!("{}.{}", package.name, shape.name)
-            };
-            for (decl, slot) in shape.interface.interactions.iter().zip(&interface.slots) {
-                let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
-                    slot.occupant.as_ref()
-                else {
-                    continue;
-                };
-                let Some(span) = ctx.sites.member(&package.name, shape.name, &decl.name) else {
-                    continue;
-                };
-                for payload in payloads(interaction, decl, package, &others) {
-                    let mut found = Vec::new();
-                    if flatbuffers {
-                        found.extend(describe(&payload.flatbuffers, "flatbuffers"));
-                    }
-                    if proto3 {
-                        found.extend(describe(&payload.proto3, "proto3"));
-                    }
-                    if podbuf {
-                        found.extend(describe(&payload.podbuf, "podbuf"));
-                    }
-                    if found.is_empty() {
-                        continue;
-                    }
-                    diagnostics.push(Diagnostic {
-                        code: DiagCode::RIDL_150,
-                        severity,
-                        message: format!(
-                            "the {} of `{owner}.{}` has {}; the payload ceiling is \
-                             {PAYLOAD_CEILING} bytes, which the codecs do not yet enforce \
-                             (driftsys/ridl#996)",
-                            payload.role,
-                            decl.name,
-                            found.join(" and "),
-                        ),
-                        primary: span,
-                        labels: Vec::new(),
-                        fixits: Vec::new(),
-                    });
-                }
-            }
-        }
-    }
-    diagnostics
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Why a payload is reported against the payload ceiling.
+    /// Why a payload is reported against a limit of 3,840 bytes.
     fn problem(size: Size) -> Option<String> {
-        problem_above(size, u64::from(PAYLOAD_CEILING))
+        problem_above(size, 3_840)
     }
 
     #[test]
-    fn a_bound_is_a_problem_only_above_the_ceiling() {
-        assert_eq!(problem(Size::Bytes(u64::from(PAYLOAD_CEILING))), None);
+    fn a_bound_is_a_problem_only_above_the_limit() {
+        assert_eq!(problem(Size::Bytes(3_840)), None);
         assert_eq!(
-            problem(Size::Bytes(u64::from(PAYLOAD_CEILING) + 1)).as_deref(),
-            Some("up to 16257 bytes")
+            problem(Size::Bytes(3_841)).as_deref(),
+            Some("up to 3841 bytes")
         );
     }
 

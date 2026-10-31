@@ -568,7 +568,8 @@ other entry below is Accepted.
   the refusal at attach is withdrawn; the WebSocket binding keeps messages of
   16,164 bytes and carries a larger payload, today only a fixed, from provider
   to consumer, in blocks, a new frame version whose layout is tracked in
-  driftsys/ridl#1129; breaking, and not built yet (driftsys/ridl#1108).
+  driftsys/ridl#1129; breaking, built 2026-10-30 (driftsys/ridl#1108,
+  driftsys/ridl#1128) except the blocks, which wait for driftsys/ridl#1129.
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
@@ -589,7 +590,7 @@ other entry below is Accepted.
   which is archived, and carries five open items. Amends ADR-0020 decision 4 and
   closes its open item 1. Amended 2026-10-30 by ADR-0030: `verify` no longer
   refuses a buffer longer than its own `MAX_SIZE`, which closes open item 2, and
-  RIDL-157 replaces RIDL-150; not built yet (driftsys/ridl#1128).
+  RIDL-157 replaces RIDL-150; built 2026-10-30 (driftsys/ridl#1128).
 
 - **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
   file or document of unknown size, downloaded or uploaded and read or written
