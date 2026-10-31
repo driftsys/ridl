@@ -1005,14 +1005,18 @@ AIDL all bound the whole call.
 **On a stream (§12), `max` bounds the start of the response, not the whole
 transfer** ([ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13). On a
 `query` whose reply is a stream, byte or named element, `max` bounds the first
-chunk or element, or the end of the stream, whichever comes first. On a `query`
-with a stream parameter, `max` is measured from the end of the consumer's
-stream, not from the request's stamp, so it bounds the time to the reply after
-the upload ends. On a `command` with a stream parameter, `max` keeps its meaning
-of acceptance (§6.1); the upload itself has no contract bound. A stream that
-stops in the middle is detected by the transport as a Stratum 3 interruption
-(§12.4), not by the response bound. No frozen surface carries a stream today
-(frame version 1 has none), so no existing declaration changes meaning.
+chunk or element, or the end of the stream, whichever comes first, measured from
+the request's stamp — whether or not the query also has a stream parameter,
+since on a bidirectional `query` (§12's `pipe`) the reply can start before the
+consumer's stream ends. On a `query` with a stream parameter whose reply is not
+a stream, `max` is measured from the end of the consumer's stream, not from the
+request's stamp, so it bounds the time to the reply after the upload ends; only
+there can the reply not start before the upload ends. On a `command` with a
+stream parameter, `max` keeps its meaning of acceptance (§6.1); the upload
+itself has no contract bound. A stream that stops in the middle is detected by
+the transport as a Stratum 3 interruption (§12.4), not by the response bound. No
+frozen surface carries a stream today (frame version 1 has none), so no existing
+declaration changes meaning.
 
 The half-open spellings carry the two partial cases: `@[..100ms]` is a response
 bound with no throttle, and `@[20ms..]` a throttle with no response bound. An

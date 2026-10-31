@@ -80,7 +80,7 @@ that names `payload-above-ceiling` now draws MANI-010.
 Amended 2026-10-31 from the acceptance of [ADR-0032](ADR-0032-byte-streams.md):
 decisions 11 and 16 are changed in place. Data larger than one transfer is a
 byte stream or a stream of bounded elements, and the interaction's limit bounds
-each chunk of a byte stream. No number changes.
+each chunk or element of a stream. No number changes.
 
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
@@ -737,9 +737,9 @@ When accepted, these records gain a dated note or are changed in place:
     fixed is usually memory-mapped and read in place, with no copy, so its
     ceiling is larger; 65,280 bytes is safe for the address space and fits a
     `u16` length. Amended 2026-10-31: the interaction's limit bounds each chunk
-    of a byte stream the same way ([ADR-0032](ADR-0032-byte-streams.md) decision
-    14); the sentence read "a byte stream (ADR-0032, drafted in parallel) bounds
-    one chunk the same way" before.
+    or element of a stream the same way ([ADR-0032](ADR-0032-byte-streams.md)
+    decision 14); the sentence read "a byte stream (ADR-0032, drafted in
+    parallel) bounds one chunk the same way" before.
 
     The numbers come from memory pages of 4,096 bytes with 256 bytes of each
     cell reserved, once per cell: a ceiling is the cell's pages × 4,096 − 256. A

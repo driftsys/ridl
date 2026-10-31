@@ -826,7 +826,7 @@ import veh.common.ProcessedSample
 
 interface Transfer {
   query streamFaults(filter: DiagFilter): <FaultCode> @[..1s] // provider produces
-  query streamLogs(): <LogLine> @[..1s] // text stream
+  query streamLogs(): <LogLine> @[..1s] // stream of log lines (named elements)
   command uploadFirmware(data: <FwBlock>) @[..1s] // consumer produces
   query pipe(samples: <SensorSample>): <ProcessedSample> @[..1s] // bidirectional
 }
@@ -839,9 +839,10 @@ flows until a binding exists to carry it. A stream on a `signal` or an `event` i
 error — a signal is the better stream for state, and an unbounded push of
 occurrences is an event.
 
-A stream's element is usually a named type, as above. The one place the
-language accepts a bare `bytes` or `string` is as a stream element, and it
-means something different there: a **byte stream**. Use it for a file or a
+A stream's element is usually a named type, as above. A stream element is the
+only position where a bare `bytes` or `string` carries no bound (a bare map key
+takes the `[0..256]` default), and it means something different there: a **byte
+stream**. Use it for a file or a
 document whose size you do not know and whose chunking you have no reason to
 choose — the application reads or writes it as I/O, not as a sequence of
 messages.

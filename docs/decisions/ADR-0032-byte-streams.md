@@ -160,12 +160,10 @@ order the questions were listed.
    fewer bytes than offered is the backpressure of ridl §12.2, and the producer
    ends its stream explicitly (decision 11). A stream is keyed by its call: by
    the `Correlation` on the calling side and by the `ClaimId` on the providing
-   side, and one key covers both directions of a bidirectional stream. On a
-   target without `std` the generated face is this API. With `std` the generated
-   face wraps it in `AsyncRead` and `AsyncWrite`, or `Stream` and `Sink`
-   (decision 6), and the port's `Interest` gains the variants that wrapper needs
-   to wake a task. The exact signatures are settled when streams are built
-   (driftsys/ridl#1116).
+   side. On a target without `std` the generated face is this API. With `std`
+   the generated face wraps it in `AsyncRead` and `AsyncWrite`, or `Stream` and
+   `Sink` (decision 6). The exact signatures, and how the `std` wrapper is
+   woken, are settled when streams are built (driftsys/ridl#1116).
 
 10. **No in-band typed error on a byte stream, and no new syntax.** The spelling
     `<bytes> | E` is not added. A failure the provider knows about before the
@@ -199,14 +197,19 @@ order the questions were listed.
 13. **The response bound covers the start of a streamed reply, not the whole
     transfer.** On a query whose reply is a stream, byte or named element, `max`
     (ridl §9.3) bounds the first chunk or element, or the end of the stream,
-    whichever comes first. On a query with a stream parameter, `max` is measured
-    from the end of the consumer's stream, not from the request's stamp, so it
-    bounds the time to the reply after the upload ends. On a command with a
-    stream parameter, `max` keeps its meaning of acceptance (ridl §6.1, §9.3);
-    the upload itself has no contract bound. A stream that stops in the middle
-    is detected by the transport (decision 11), not by the response bound. No
-    frozen surface carries a stream today (frame version 1 has none), so no
-    existing declaration changes meaning.
+    whichever comes first, measured from the request's stamp. This holds whether
+    or not the query also has a stream parameter: on a bidirectional query (ridl
+    §12's `query pipe(...)`) the reply can start before the consumer's stream
+    ends, so the streamed-reply rule applies. On a query with a stream parameter
+    whose reply is not a stream, `max` is measured from the end of the
+    consumer's stream, not from the request's stamp, so it bounds the time to
+    the reply after the upload ends; only there can the reply not start before
+    the upload ends. On a command with a stream parameter, `max` keeps its
+    meaning of acceptance (ridl §6.1, §9.3); the upload itself has no contract
+    bound. A stream that stops in the middle is detected by the transport
+    (decision 11), not by the response bound. No frozen surface carries a stream
+    today (frame version 1 has none), so no existing declaration changes
+    meaning.
 
 14. **The interaction's limit bounds each chunk.** The interaction's resolved
     limit (ADR-0030 decisions 12 and 16 to 18) bounds every payload the
@@ -268,8 +271,12 @@ order the questions were listed.
   11), and for `<string>` must place chunk boundaries between code points and
   refuse a chunk that is not valid UTF-8 (decision 12).
 - The frame version that adds streams has to encode the end of a stream
-  (decision 11) and settle how duplicate suppression treats a streamed reply
-  (note c).
+  (decision 11), settle how duplicate suppression treats a streamed reply (note
+  c), and change where the frame specification measures the response bound of a
+  query with a stream parameter and a plain reply: §7 keeps a settled response
+  until the bound has passed, measured from the request's stamp, and §8 raises
+  the query `Timeout` once now − request stamp > max, where decision 13 measures
+  from the end of the upload.
 
 ## Open questions
 
@@ -310,14 +317,15 @@ each names the record or the issue that owns it.
 
 These documents were changed with the acceptance of 2026-10-31.
 
-| Document                                                                                       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | §12 introduction and §12.3 "Maps to": the I/O mapping (decision 6). §12.2: a bare `bytes` element is a byte stream and a bare `string` element a UTF-8 text stream, with no element bound and no contracted chunk boundary, each chunk bounded by the interaction's limit; a named element keeps its bound (decisions 2 to 4, 14). §12.4: the explicit end (decision 11), invalid UTF-8 (decision 12), the failure paths of a byte stream (decision 10). §9.3: the response bound on a stream (decision 13). The glossary entry "stream" |
-| [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §4.4 and §4.5: the `[0..256]` default and TYPL-103 do not apply to a bare `string` or `bytes` in ridl stream element position (decision 2). §12.2: the map-key paragraph's "the same as every other position". §15.3: the stream exception states that the element has no bound                                                                                                                                                                                                                                                          |
-| [ADR-0030](ADR-0030-transfer-and-bound-limits.md)                                              | decision 11: data larger than one transfer is a byte stream or a stream of bounded elements (decision 8). decision 16: the interaction's limit bounds each chunk of a byte stream (decision 14)                                                                                                                                                                                                                                                                                                                                          |
-| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | §5: a decision-ledger row for this record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| [`docs/book/getting-started.md`](../book/getting-started.md)                                   | "Collections and streams": a byte stream example with `<bytes>`, and the distinction from a stream of named elements such as `<FwBlock>`                                                                                                                                                                                                                                                                                                                                                                                                 |
-| [`docs/decisions/README.md`](README.md)                                                        | the entry for this record loses its _Proposed_ mark and summarises decisions 9 to 14                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Document                                                                                       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | §12 introduction: the two forms of a stream, a `<bytes>` example and the note that no runtime carries a stream today (decision 1). §12.3 "Maps to": the I/O mapping (decision 6). §12.2: a bare `bytes` element is a byte stream and a bare `string` element a UTF-8 text stream, with no element bound and no contracted chunk boundary, each chunk bounded by the interaction's limit; a named element keeps its bound (decisions 2 to 4, 14). §12.4: the explicit end (decision 11), invalid UTF-8 (decision 12), the failure paths of a byte stream (decision 10). §9.3: the response bound on a stream (decision 13). The glossary entry "stream" |
+| [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §4.4 and §4.5: the `[0..256]` default and TYPL-103 do not apply to a bare `string` or `bytes` in ridl stream element position (decision 2). §12.2: the map-key paragraph's "the same as every other position". §15.3: the stream exception states that the element has no bound                                                                                                                                                                                                                                                                                                                                                                        |
+| [ADR-0030](ADR-0030-transfer-and-bound-limits.md)                                              | decision 11: data larger than one transfer is a byte stream or a stream of bounded elements (decision 8). decision 16: the interaction's limit bounds each chunk or element of a stream (decision 14). Status: a paragraph for the amendment of 2026-10-31                                                                                                                                                                                                                                                                                                                                                                                             |
+| [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | "What 0.1 leaves out": the stream port follows decision 9 and is not built (driftsys/ridl#1116)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | §5: a decision-ledger row for this record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`docs/book/getting-started.md`](../book/getting-started.md)                                   | "Collections and streams": a byte stream example with `<bytes>`, and the distinction from a stream of named elements such as `<FwBlock>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| [`docs/decisions/README.md`](README.md)                                                        | the entry for this record loses its _Proposed_ mark and summarises decisions 9 to 14                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## References
 

@@ -1072,7 +1072,10 @@ trust constant the Rust codegen generates once the rsdl lowering exists); the
 three payload codecs; the runtimes — `ridl-loopback` is its own crate
 ([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own
 crate, built; and the engine. `Family` returns as a `Member` field, which is a
-breaking change (ADR-0021 decision 10); streams have no story yet.
+breaking change (ADR-0021 decision 10).
+[ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 9 fixes the principle
+of the stream port — a pull API over caller-supplied buffers that never waits,
+keyed by the call — and the port is not built (driftsys/ridl#1116).
 
 ## Versioning
 
