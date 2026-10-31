@@ -360,6 +360,11 @@ export class Session {
   #limits: Map<string, number>;
   /** The `block` payload being collected or skipped. */
   #reassembly = new Reassembly();
+  /**
+   * The reads that the payload being collected answers: the reads at the
+   * head of the identity's queue when its first block arrived.
+   */
+  #collected: Extract<Waiting, { op: "read" }>[] = [];
 
   /** @internal Use {@link connect}. */
   constructor(
@@ -733,7 +738,14 @@ export class Session {
     head.resolve();
   }
 
-  #onPublish(frame: Extract<Frame, { form: "publish" }>): void {
+  /**
+   * Applies one `publish`. `reads` are the reads it answers; by default,
+   * every `read` at the head of the identity's queue.
+   */
+  #onPublish(
+    frame: Extract<Frame, { form: "publish" }>,
+    reads: Extract<Waiting, { op: "read" }>[] = this.#takeReads(frame.target),
+  ): void {
     const t = frame.target;
     // A `live` payload longer than the member's limit never reaches the
     // application: the sample is invalid with `detected`, and a `read` it
@@ -752,8 +764,6 @@ export class Session {
         envelope: frame.envelope,
         payload: frame.state.provenance === "live" ? frame.state.payload : null,
       };
-    // Every `read` at the head of the identity's queue settles with this frame.
-    const reads = this.#takeReads(t);
     for (const r of reads) {
       if (oversized) r.reject(new SessionError({ category: "corrupt" }));
       else r.resolve(sample);
@@ -802,7 +812,9 @@ export class Session {
 
   /**
    * Applies one `block`. A completed payload is handled as a `live`
-   * `publish` that arrived whole. A payload whose `total` is above the
+   * `publish` that arrived whole, and settles the reads that were at the
+   * head of the identity's queue when its first block arrived: a read sent
+   * later waits for the next payload. A payload whose `total` is above the
    * member's limit rejects the reads at the head of the identity's queue with
    * `corrupt` at its first block, is recorded `over-limit`, and its other
    * blocks change nothing. A sequence error ends the session.
@@ -811,14 +823,17 @@ export class Session {
     const t = frame.target;
     const step = this.#reassembly.accept(frame, this.#limitOf(t));
     switch (step.step) {
-      case "complete":
+      case "complete": {
+        const reads = frame.index === 0 ? this.#takeReads(t) : this.#collected;
+        this.#collected = [];
         this.#onPublish({
           form: "publish",
           target: t,
           envelope: frame.envelope,
           state: { provenance: "live", payload: step.payload },
-        });
+        }, reads);
         return;
+      }
       case "over-limit":
         for (const r of this.#takeReads(t)) {
           r.reject(new SessionError({ category: "corrupt" }));
@@ -829,6 +844,8 @@ export class Session {
         this.#violate("block-sequence");
         return;
       case "collecting":
+        if (frame.index === 0) this.#collected = this.#takeReads(t);
+        return;
       case "skipping":
         return;
     }
@@ -906,7 +923,8 @@ export class Session {
     this.#ended = true;
     this.#reassembly.clear();
     this.#calls.fail();
-    const waiting = [...this.#waiting.values()].flat();
+    const waiting = [...this.#collected, ...this.#waiting.values()].flat();
+    this.#collected = [];
     this.#waiting.clear();
     this.#signals.clear();
     this.#held.clear();

@@ -1642,6 +1642,28 @@ Deno.test("a read waiting on a payload in progress rejects with down when the se
   assert.deepEqual(h.notes, []);
 });
 
+Deno.test("a read sent while a payload is collected waits for the next payload", async () => {
+  const h = await attached();
+  const first = handled(h.session.read(FIXED));
+  const data = pattern(8193);
+  const parts = blocksOf(FIXED, data);
+  h.socket.deliver(parts[0]);
+  let settled = false;
+  const second = handled(h.session.read(FIXED));
+  second.then(() => settled = true, () => settled = true);
+  deliverAll(h.socket, parts.slice(1));
+  assertBytes((await first).payload, data);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.deepEqual(h.notes, []);
+  // The provider's answer to the second read settles it and records nothing.
+  const next = pattern(5000);
+  deliverAll(h.socket, blocksOf(FIXED, next));
+  assertBytes((await second).payload, next);
+  assert.deepEqual(h.notes, []);
+  assert.deepEqual(h.socket.closes, []);
+});
+
 Deno.test("blocks delivered after close are ignored", async () => {
   const h = await attached();
   const down = assert.rejects(h.session.read(FIXED), isFailure("down"));

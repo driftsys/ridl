@@ -51,12 +51,13 @@ provider gives a `request` above the limit.
 On a session of frame version 2, the provider sends the value of a `fixed` that
 does not fit one message as `block` frames of 4,096 bytes each, except the last
 one, which holds the rest of the value. The session reassembles them and settles
-the waiting reads with one sample, as for a value that arrived in one `publish`.
-The limit of a `fixed` is the one its interface table gives, else
-`FIXED_CEILING`, and never more than 65,280 bytes: a table limit above 65,280
-counts as 65,280, and one that is not a finite number counts as 0. Each
-reassembled value goes into a new buffer of its own length, which the session
-does not write to again.
+the reads that were waiting when the first block arrived with one sample, as for
+a value that arrived in one `publish`. A read sent after the first block, while
+the value is still arriving, waits for the next value. The limit of a `fixed` is
+the one its interface table gives, else `FIXED_CEILING`, and never more than
+65,280 bytes: a table limit above 65,280 counts as 65,280, and one that is not a
+finite number counts as 0. Each reassembled value goes into a new buffer of its
+own length, which the session does not write to again.
 
 A value of a `fixed` longer than its limit, whether it arrived in one `publish`
 or in blocks, and on either frame version:
