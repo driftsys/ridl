@@ -1313,6 +1313,118 @@ fn lsp_matches_check_with_lints() {
     assert_eq!(lsp, cli, "published: {publishes:#?}");
 }
 
+/// A package with one used directive (it allows the RIDL-100 of `speed`),
+/// one unused directive (`rate` draws no RIDL-405) and one malformed
+/// directive (no reason).
+const DIRECTIVES: &str = "package demo\n\ntype Speed: integer [0..300]\n\ninterface Sensor {\n  \
+    // lint: allow missing-timing -- timing comes later\n  signal speed: Speed\n  \
+    // lint: allow shared-error-type -- nothing to allow\n  signal rate: Speed @10ms\n  \
+    // lint: allow missing-timing\n  signal gear: Speed @10ms\n}\n";
+
+/// The sorted `(code, file name, line)` triples of a JSON diagnostic array as
+/// `ridl check --format json` and `ridl_check` print it, with 1-based lines.
+fn code_file_lines(diagnostics: &serde_json::Value) -> Vec<(String, String, u64)> {
+    let mut triples: Vec<_> = diagnostics
+        .as_array()
+        .expect("a JSON array")
+        .iter()
+        .map(|diagnostic| {
+            let path = diagnostic["span"]["path"].as_str().expect("a span path");
+            (
+                diagnostic["code"].as_str().expect("a code").to_string(),
+                Path::new(path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .expect("a file name")
+                    .to_string(),
+                diagnostic["span"]["start"]["line"]
+                    .as_u64()
+                    .expect("a start line"),
+            )
+        })
+        .collect();
+    triples.sort();
+    triples
+}
+
+/// `ridl check`, the language server and the MCP `ridl_check` path mode
+/// report the same `(code, file, line)` set over a workspace that holds a
+/// used, an unused and a malformed lint directive (ADR-0024 decisions 6, 8
+/// and 19).
+#[tokio::test]
+async fn directives_give_the_same_diagnostics_in_check_lsp_and_mcp() {
+    let dir = TempDir::new("directives-parity");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("demo.ridl", DIRECTIVES);
+    let root = dir.0.clone();
+
+    let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(["check", "--format", "json"])
+        .arg(&root)
+        .output()
+        .expect("run ridl check");
+    assert_eq!(cli.status.code(), Some(0), "{cli:?}");
+    let cli_json: serde_json::Value = serde_json::from_slice(&cli.stdout).expect("CLI JSON");
+    let expected = code_file_lines(&cli_json);
+    // Pinned, or the equality below would pass over a fixture that stopped
+    // drawing the diagnostics it is here for. The used directive removes
+    // RIDL-100 from `speed`; the unused one is TYPL-411 and the malformed
+    // one is TYPL-412, each on the directive's line.
+    for (code, line) in [("TYPL-411", 8), ("TYPL-412", 10)] {
+        assert!(
+            expected.contains(&(code.to_string(), "demo.ridl".to_string(), line)),
+            "{code} on line {line}: {expected:?}"
+        );
+    }
+    assert!(
+        expected.iter().all(|(code, _, _)| code != "RIDL-100"),
+        "{expected:?}"
+    );
+
+    let session = LspSession::start(&root);
+    let publishes = session.shutdown_collecting_publishes();
+    let mut last: std::collections::BTreeMap<String, &serde_json::Value> = Default::default();
+    for params in &publishes {
+        last.insert(params["uri"].as_str().expect("a uri").to_string(), params);
+    }
+    let mut lsp: Vec<(String, String, u64)> = last
+        .iter()
+        .flat_map(|(uri, params)| {
+            let file = uri.rsplit('/').next().expect("a file name").to_string();
+            params["diagnostics"]
+                .as_array()
+                .expect("a diagnostics array")
+                .iter()
+                .map(move |diagnostic| {
+                    (
+                        diagnostic["code"].as_str().expect("a code").to_string(),
+                        file.clone(),
+                        diagnostic["range"]["start"]["line"]
+                            .as_u64()
+                            .expect("a start line")
+                            + 1,
+                    )
+                })
+        })
+        .collect();
+    lsp.sort();
+    assert_eq!(lsp, expected, "published: {publishes:#?}");
+
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect().await;
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path": root})).await;
+        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+        let mcp = code_file_lines(&result.structured_content.unwrap()["diagnostics"]);
+        assert_eq!(mcp, expected);
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("directive parity timeout");
+}
+
 /// The server finds the root from the absolute paths of the `file://` URIs
 /// it receives, not from its current directory: run from inside member `a`,
 /// it still loads the whole workspace and publishes what the CLI reports for

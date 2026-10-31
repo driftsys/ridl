@@ -322,7 +322,10 @@ impl RidlMcp {
                     // project's `[lints]` levels here, before the JSON and the
                     // status counts are built (ADR-0024 decision 8).
                     // `snapshot` itself does not apply them: the lookup tools
-                    // share it and keep the emitted severities.
+                    // share it and keep the emitted severities. The directives
+                    // are reported first, once, over the whole workspace
+                    // (decision 19).
+                    snap.report_directives();
                     apply_lint_levels(
                         &mut snap.output.diagnostics,
                         &snap.output.sources,
@@ -774,6 +777,88 @@ mod tests {
         assert_eq!(ridl_100[0]["lint"], "missing-timing");
         assert_eq!(value["workspace"]["errors"], 1);
         assert_eq!(value["workspace"]["warnings"], 0);
+    }
+
+    /// The `ws-lints` fixture with `directive` on the line before its signal.
+    fn directive_workspace(directive: &str) -> snapshot::tests::TempWorkspace {
+        let copy = snapshot::tests::TempWorkspace::copy("ws-lints");
+        let file = copy.0.join("sensor/sensor.ridl");
+        let text = std::fs::read_to_string(&file).unwrap().replace(
+            "  /// The current speed.\n",
+            &format!("  {directive}\n  /// The current speed.\n"),
+        );
+        std::fs::write(&file, text).unwrap();
+        copy
+    }
+
+    async fn check_path(path: &std::path::Path) -> serde_json::Value {
+        let params = serde_json::from_value(json!({"path": path})).unwrap();
+        let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+        result.structured_content.unwrap()
+    }
+
+    fn count_code(value: &serde_json::Value, code: &str) -> usize {
+        value["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|d| d["code"] == code)
+            .count()
+    }
+
+    // Path mode reports the lint directives (ADR-0024 decisions 6 and 19): a
+    // directive removes the lint the fixture's `deny` would make an error, an
+    // unused one is TYPL-411, and a malformed one is TYPL-412.
+    #[tokio::test]
+    async fn ridl_check_path_mode_applies_directives() {
+        let used = directive_workspace("// lint: allow missing-timing -- timing comes later");
+        let value = check_path(&used.0).await;
+        assert_eq!(count_code(&value, "RIDL-100"), 0, "{value}");
+        assert_eq!(count_code(&value, "TYPL-411"), 0, "{value}");
+        assert_eq!(value["workspace"]["errors"], 0, "{value}");
+
+        let unused = directive_workspace("// lint: allow unbounded-float -- nothing to allow");
+        let value = check_path(&unused.0).await;
+        assert_eq!(count_code(&value, "TYPL-411"), 1, "{value}");
+        assert_eq!(count_code(&value, "RIDL-100"), 1, "{value}");
+
+        let malformed = directive_workspace("// lint: allow missing-timing");
+        let value = check_path(&malformed.0).await;
+        assert_eq!(count_code(&value, "TYPL-412"), 1, "{value}");
+        assert_eq!(count_code(&value, "RIDL-100"), 1, "{value}");
+    }
+
+    // A directive in a member outside the report scope is checked against
+    // that member's own diagnostics: used there, it is not reported unused
+    // when the path names another member, and nothing from that member is
+    // reported.
+    #[tokio::test]
+    async fn ridl_check_path_mode_directive_outside_the_report_scope_draws_nothing() {
+        let copy = directive_workspace("// lint: allow missing-timing -- timing comes later");
+        let root = copy.0.clone();
+        std::fs::write(
+            root.join("ridl.toml"),
+            "[workspace]\nmembers = [\"sensor\", \"other\"]\n\n[lints]\nmissing-timing = \"deny\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("other")).unwrap();
+        std::fs::write(
+            root.join("other/ridl.toml"),
+            "[package]\nname = \"fx.other\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("other/other.ridl"),
+            "package fx.other\n\n/// A speed reading.\ntype Speed: integer [0..300]\n\n\
+             /// An untimed sensor.\ninterface Other {\n  \
+             // lint: allow missing-timing -- timing comes later\n  \
+             /// The current speed.\n  signal speed: Speed\n}\n",
+        )
+        .unwrap();
+        let value = check_path(&root.join("sensor")).await;
+        assert_eq!(count_code(&value, "TYPL-411"), 0, "{value}");
+        assert_eq!(count_code(&value, "TYPL-412"), 0, "{value}");
+        assert_eq!(count_code(&value, "RIDL-100"), 0, "{value}");
     }
 
     #[tokio::test]

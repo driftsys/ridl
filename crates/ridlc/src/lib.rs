@@ -530,7 +530,7 @@ pub fn retain_in_report_scope(
 }
 
 /// Whether [`retain_in_report_scope`] keeps `diagnostic`.
-fn in_report_scope(
+pub fn in_report_scope(
     diagnostic: &Diagnostic,
     sources: &SourceMap,
     scope: Option<&Path>,

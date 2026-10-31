@@ -5972,6 +5972,149 @@ fn doc_comment_style_offers_a_quick_fix_that_rewrites_the_comment() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A single-package workspace with an untimed signal, which draws RIDL-100
+/// (`missing-timing`, a Warning by default), and `directive` on the line
+/// before the signal.
+fn directive_source(directive: &str) -> String {
+    format!(
+        "package demo\n\ntype Speed: integer [0..300]\n\ninterface Sensor {{\n  {directive}\n  signal speed: Speed\n}}\n"
+    )
+}
+
+/// The `(code, line)` pairs of the last publish for `uri` in `publishes`,
+/// without TYPL-406 (`missing-docs`): the fixture has no docs.
+fn published_code_lines(
+    publishes: &[lt::PublishDiagnosticsParams],
+    uri: &lt::Uri,
+) -> Vec<(String, u32)> {
+    let last = publishes
+        .iter()
+        .rev()
+        .find(|p| p.uri == *uri)
+        .unwrap_or_else(|| panic!("nothing published for {uri:?}: {publishes:?}"));
+    let mut pairs: Vec<_> = last
+        .diagnostics
+        .iter()
+        .filter_map(|d| match &d.code {
+            Some(lt::NumberOrString::String(code)) if code != "TYPL-406" => {
+                Some((code.clone(), d.range.start.line))
+            }
+            _ => None,
+        })
+        .collect();
+    pairs.sort();
+    pairs
+}
+
+/// Starts a server over a one-file workspace holding `source`, and returns
+/// what it published for the file before answering a barrier request.
+fn directive_publishes(source: &str) -> (Vec<(String, u32)>, lt::Uri) {
+    let dir = TempDir::new("directive");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let uri = uri_of(&dir.write("demo.ridl", source));
+    let (client, server) = start(uri_of(dir.path()));
+    let publishes = published_before_barrier(&client, 20, &uri);
+    let pairs = published_code_lines(&publishes, &uri);
+    shut_down(&client, 21);
+    server.join().expect("thread joins").expect("clean exit");
+    (pairs, uri)
+}
+
+/// A directive that allows a lint removes it before publishing, and is not
+/// reported as unused (ADR-0024 decisions 6 and 19).
+#[test]
+fn directive_allowed_lint_is_not_published() {
+    let (pairs, _) = directive_publishes(&directive_source(
+        "// lint: allow missing-timing -- timing comes later",
+    ));
+    assert_eq!(pairs, Vec::<(String, u32)>::new());
+}
+
+/// A directive that names a lint the file does not draw is published as
+/// TYPL-411 (Info) on its own line, and the lint it did not match stays.
+#[test]
+fn unused_directive_is_published_as_typl_411() {
+    let dir = TempDir::new("directive-unused");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let uri = uri_of(&dir.write(
+        "demo.ridl",
+        &directive_source("// lint: allow unbounded-float -- nothing to allow"),
+    ));
+    let (client, server) = start(uri_of(dir.path()));
+    let publishes = published_before_barrier(&client, 20, &uri);
+    let last = publishes.iter().rev().find(|p| p.uri == uri).unwrap();
+    let unused = last
+        .diagnostics
+        .iter()
+        .find(|d| d.code == Some(lt::NumberOrString::String("TYPL-411".to_string())))
+        .unwrap_or_else(|| panic!("TYPL-411 published: {last:?}"));
+    assert_eq!(unused.severity, Some(lt::DiagnosticSeverity::INFORMATION));
+    assert_eq!(unused.range.start.line, 5, "the directive's line");
+    assert_eq!(
+        published_code_lines(&publishes, &uri),
+        vec![("RIDL-100".to_string(), 6), ("TYPL-411".to_string(), 5)],
+    );
+    shut_down(&client, 21);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A malformed directive is published as TYPL-412 and allows nothing.
+#[test]
+fn malformed_directive_is_published_as_typl_412() {
+    let (pairs, _) = directive_publishes(&directive_source("// lint: allow missing-timing"));
+    assert_eq!(
+        pairs,
+        vec![("RIDL-100".to_string(), 6), ("TYPL-412".to_string(), 5)],
+    );
+}
+
+/// An unsaved edit above the directive moves it: the directive is read from
+/// the buffer, so it still allows the lint, and the published lines follow
+/// the edit.
+#[test]
+fn unsaved_edit_moves_the_directive_scope() {
+    let dir = TempDir::new("directive-overlay");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let on_disk = directive_source("// lint: allow missing-timing -- timing comes later");
+    let uri = uri_of(&dir.write("demo.ridl", &on_disk));
+    let (client, server) = start(uri_of(dir.path()));
+    let before = published_before_barrier(&client, 20, &uri);
+    assert_eq!(published_code_lines(&before, &uri), Vec::new());
+
+    let edited = on_disk.replacen("package demo\n", "package demo\n// a note\n// another\n", 1);
+    did_open(&client, &uri, &edited);
+    let after = published_before_barrier(&client, 21, &uri);
+    assert_eq!(
+        published_code_lines(&after, &uri),
+        Vec::new(),
+        "the directive still allows the lint after the lines above it move"
+    );
+
+    // The same edit with the directive removed draws the lint on its new line.
+    let without = edited.replacen(
+        "  // lint: allow missing-timing -- timing comes later\n",
+        "",
+        1,
+    );
+    did_open(&client, &uri, &without);
+    let last = published_before_barrier(&client, 22, &uri);
+    assert_eq!(
+        published_code_lines(&last, &uri),
+        vec![("RIDL-100".to_string(), 7)],
+    );
+    shut_down(&client, 23);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// A package whose contract clauses use members: parameters, an interaction
 /// of the same shape, and enum values, bare and qualified.
 const CONTRACT_USES: &str = "package demo\n\

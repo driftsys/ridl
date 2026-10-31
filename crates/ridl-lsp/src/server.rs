@@ -67,7 +67,7 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, LineCol, Severity, SourceMap, Span, house_style_message,
     line_col, remap_diagnostics,
 };
-use ridl_core::lint::{LintScopes, apply_lint_levels};
+use ridl_core::lint::{LintScopes, apply_lint_levels, report_lint_directives};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, RemoteAccess, find_root, load_workspace_with_remotes,
@@ -1070,10 +1070,29 @@ impl ServerState {
             }
             !remote
         });
+        // The lint directives are reported once, over the list as it stands
+        // after the last diagnostic is raised and before any level is applied
+        // (ADR-0024 decision 19). The loader's findings are not in `all`, so a
+        // directive that names a lint raised only by the loader would look
+        // unused. `not_raised` lists the lints that this list never carries:
+        //
+        // - RIDL-407 (`ridl check`'s baseline desk check) and RIDL-156 (its
+        //   podbuf padding check), the two `ridlc::NOT_RAISED_BY_COMPILE`
+        //   names, because the server runs neither;
+        // - MANI-018 (`vendor-source-not-loaded`), the one lint that
+        //   `ridl_core::load_workspace` raises with a span in a `.typl`,
+        //   `.ridl` or `.rsdl` file (`workspace.rs`, the `vendor/` scan).
+        //   RIDL-416 is spanned at an `interfaces.lock`, RIDL-417 at a `.rxdl`
+        //   or `.rmdl` file and MANI-010 at a manifest, none of which can hold
+        //   a directive.
+        let mut not_raised = ridlc::NOT_RAISED_BY_COMPILE.to_vec();
+        not_raised.push(DiagCode::MANI_018);
+        report_lint_directives(&mut all, &sources, &not_raised);
         // The `[lints]` levels, resolved through the paths this source map
         // recorded for every file, including an overlay's (ADR-0024
         // decision 6). `allow` removes a diagnostic before conversion, so it is
-        // never published.
+        // never published. The same step removes a diagnostic that a
+        // directive allows.
         apply_lint_levels(&mut all, &sources, &self.lints);
         let mut out = batch(all, &table);
         out.remote_errors = remote_errors;
