@@ -860,6 +860,42 @@ fn a_head_inlines_a_struct_of_another_package() {
     rustc::run_program("podbuf_cross_package", &podbuf::program(&modules, "", main));
 }
 
+/// A head that holds a union of another package whose arm is itself a union
+/// of that package, over a struct that holds a tuple: the codec of each
+/// package generates, and a value round-trips through the inner arm.
+#[test]
+fn a_head_inlines_a_union_whose_arm_is_a_union_of_another_package() {
+    let packages = podbuf::compile_fixture_workspace(&[
+        ("parts", "pod.parts", "podbuf_nested_union_parts.ridl"),
+        ("holder", "pod.holder", "podbuf_nested_union_holder.ridl"),
+    ]);
+    let parts = packages
+        .iter()
+        .find(|package| package.name == "pod.parts")
+        .expect("the parts package");
+    let holder = packages
+        .iter()
+        .find(|package| package.name == "pod.holder")
+        .expect("the holder package");
+    let parts_source = podbuf::generated(parts, &[holder]);
+    let holder_source = podbuf::generated(holder, &[parts]);
+    let modules = format!(
+        "pub mod pod {{\npub mod parts {{\n{parts_source}\n}}\npub mod holder {{\n{holder_source}\n}}\n}}\n\
+         use pod::holder::Holder;\nuse pod::parts::{{Inner, Outer, Span, SpanBounds}};\n"
+    );
+    let main = r#"
+    let value = Holder {
+        tag: 7,
+        outer: Some(Outer::Inner(Inner::Span(Span { bounds: SpanBounds { low: 3, high: 9 } }))),
+    };
+    let hex: String = encode(&value).iter().map(|b| format!("{b:02x}")).collect();
+    aligned_bytes!(bytes, &hex);
+    let proof = Ref::<Holder, Podbuf>::verify(bytes).expect("the bytes verify");
+    assert_eq!(proof.decode(), value);
+"#;
+    rustc::run_program("podbuf_nested_union", &podbuf::program(&modules, "", main));
+}
+
 // ---------------------------------------------------------------------------
 // The layout drift test
 // ---------------------------------------------------------------------------

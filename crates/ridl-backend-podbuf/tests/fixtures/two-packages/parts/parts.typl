@@ -27,6 +27,13 @@ union Tyre {
   flat  : Hub
 }
 
+// A union whose arm is a union: the tuples of `Hub` are reached through two
+// arm heads, and each names the tuple's own head.
+union Mount {
+  tyre  : Tyre
+  wheel : Wheel
+}
+
 // A signed field, and a field that a producer of an older type leaves out.
 struct Reading {
   delta : integer [-30000..30000]

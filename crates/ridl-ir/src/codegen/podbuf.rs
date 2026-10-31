@@ -168,6 +168,7 @@ fn boxes(scope: Scope<'_>) -> Vec<v1::PodbufBox> {
             declared: HashMap::new(),
             tuples: HashMap::new(),
             nested: HashMap::new(),
+            arms: HashMap::new(),
             foreign: HashMap::new(),
             refused: HashSet::new(),
         };
@@ -249,7 +250,7 @@ struct Root {
 }
 
 /// What a head belongs to, which names the arms of a union.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Owner {
     /// A tuple, which has no union.
     None,
@@ -280,6 +281,7 @@ fn attempt(
         declared: HashMap::new(),
         tuples: HashMap::new(),
         nested: HashMap::new(),
+        arms: HashMap::new(),
         foreign: HashMap::new(),
         refused: roots
             .iter()
@@ -336,8 +338,14 @@ struct Walk<'a> {
     /// The head of each named tuple, by its index in `Model.tuples`.
     tuples: HashMap<u32, u32>,
     /// The head of each tuple reached inside a foreign aggregate, by its home
-    /// package and its induced wire name.
-    nested: HashMap<(String, String), u32>,
+    /// package and its induced wire name, with its layout and the path that
+    /// reached it first: a second tuple of another layout under the same name
+    /// is refused, never merged.
+    nested: HashMap<(String, String), (u32, Head, Vec<String>)>,
+    /// The head of each union arm, by the union's owner and the arm ordinal:
+    /// a union reached again as the arm of another union shares the arm heads
+    /// of its own walk, so a header defines each once.
+    arms: HashMap<(Owner, u32), u32>,
     /// The head of each foreign struct or union reached inline, by package and
     /// name.
     foreign: HashMap<(String, String), u32>,
@@ -475,19 +483,40 @@ impl Walk<'_> {
                         .copied()
                         .ok_or_else(|| format!("{at}: needs the refused head of tuple {tuple}"));
                 }
+                // Unreachable for checked input: the lowering lifts a tuple
+                // at every position the projection lays one out, under the
+                // same path. A miss is a disagreement between the two walks.
                 let Some((package, wire)) = self.keys.foreign.get(key) else {
-                    return Err(format!("{at}: no tuple was lowered at this position"));
+                    return Err(format!(
+                        "{at}: internal: no tuple was lowered at this position (the \
+                         lowering's tuple keys and the podbuf walk disagree on the path)"
+                    ));
                 };
                 let identity = (package.clone(), wire.clone());
-                if let Some(index) = self.nested.get(&identity) {
-                    return Ok(*index);
+                if let Some((index, known, first)) = self.nested.get(&identity) {
+                    if known == head {
+                        return Ok(*index);
+                    }
+                    // Two tuples of one package induce one wire name from two
+                    // paths (a struct field `sizeField2` next to position 2 of
+                    // the tuple at `size`), with two layouts. The declaring
+                    // header refuses the pair through its C name claim; this
+                    // package refuses it here, so neither header types one
+                    // tuple with the other's head.
+                    return Err(format!(
+                        "{at}: the tuple at {} and the tuple at {at} of package {package} both \
+                         induce the wire name {wire} with different layouts; rename one of \
+                         the two fields so that each tuple has a name of its own",
+                        first.join(".")
+                    ));
                 }
                 let index = self.push(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
                     path: path.to_vec(),
                     package: package.clone(),
                     wire: wire.clone(),
                 }));
-                self.nested.insert(identity, index);
+                self.nested
+                    .insert(identity, (index, head.clone(), path.to_vec()));
                 self.fill(index, head, path, key, declaration)?;
                 Ok(index)
             }
@@ -576,6 +605,13 @@ impl Walk<'_> {
                 };
                 let mut out = Vec::with_capacity(arms.len());
                 for (ordinal, head) in arms {
+                    if let Some(index) = self.arms.get(&(declaration, *ordinal)) {
+                        out.push(v1::PodbufArm {
+                            ordinal: *ordinal,
+                            head: *index,
+                        });
+                        continue;
+                    }
                     let index = self.push(v1::podbuf_head::Source::Arm(v1::ArmHead {
                         declaration: union,
                         arm: *ordinal,
@@ -585,13 +621,21 @@ impl Walk<'_> {
                     at.push(ordinal.to_string());
                     // The arm's head is a copy of the arm type's head, so a
                     // tuple inside it is the one the lowering reached under
-                    // that type.
-                    let key_at = self.arm_root(declaration, *ordinal).unwrap_or_else(|| {
-                        let mut key_at = key.to_vec();
-                        key_at.push(ordinal.to_string());
-                        key_at
-                    });
-                    self.fill(index, head, &at, &key_at, declaration)?;
+                    // that type, and when that type is a union, its arms
+                    // belong to it, not to the union being filled.
+                    let (key_at, owner) = match self.arm_type(declaration, *ordinal) {
+                        Some((target, declaring)) => (
+                            vec![self.root_of(target, declaring)],
+                            self.owner_of(target, declaring).unwrap_or(declaration),
+                        ),
+                        None => {
+                            let mut key_at = key.to_vec();
+                            key_at.push(ordinal.to_string());
+                            (key_at, declaration)
+                        }
+                    };
+                    self.arms.insert((declaration, *ordinal), index);
+                    self.fill(index, head, &at, &key_at, owner)?;
                     out.push(v1::PodbufArm {
                         ordinal: *ordinal,
                         head: index,
@@ -604,12 +648,15 @@ impl Walk<'_> {
     }
 }
 
-impl Walk<'_> {
-    /// The root of the lowering's path to the type of arm `ordinal` of the
-    /// union `declaration`: its bare name for a type of this package, its
-    /// qualified name for one of another package. `None` when the union or
-    /// the arm's type is not found, which the projection has already refused.
-    fn arm_root(&self, declaration: Owner, ordinal: u32) -> Option<Vec<String>> {
+impl<'a> Walk<'a> {
+    /// The type of arm `ordinal` of the union `declaration`, and the package
+    /// that declares that type. `None` when the union or the arm's type is
+    /// not found, which the projection has already refused.
+    fn arm_type(
+        &self,
+        declaration: Owner,
+        ordinal: u32,
+    ) -> Option<(&'a v2::Decl, &'a v2::Package)> {
         let (home, decl) = match declaration {
             Owner::None => return None,
             Owner::Declaration(index) => (
@@ -632,12 +679,39 @@ impl Walk<'_> {
             return None;
         };
         let arm = def.arms.iter().find(|arm| arm.ordinal == ordinal)?;
-        let (target, declaring) = self.scope.resolve(home, &arm.type_ref)?;
-        Some(vec![if declaring.name == self.scope.package.name {
-            target.name.clone()
+        self.scope.resolve(home, &arm.type_ref)
+    }
+
+    /// The root of the lowering's path to `decl` of `declaring`: its bare
+    /// name for a type of this package, its qualified name for one of another
+    /// package.
+    fn root_of(&self, decl: &v2::Decl, declaring: &v2::Package) -> String {
+        if declaring.name == self.scope.package.name {
+            decl.name.clone()
         } else {
-            format!("{}.{}", declaring.name, target.name)
-        }])
+            format!("{}.{}", declaring.name, decl.name)
+        }
+    }
+
+    /// The owner a head copied from `decl` of `declaring` names for its arms:
+    /// the union itself, when `decl` is one. `None` for any other declaration,
+    /// and for a foreign union the lowering did not reach.
+    fn owner_of(&self, decl: &v2::Decl, declaring: &v2::Package) -> Option<Owner> {
+        if !matches!(decl.kind.as_ref(), Some(v2::decl::Kind::UnionDef(_))) {
+            return None;
+        }
+        if declaring.name == self.scope.package.name {
+            let index = declaring
+                .decls
+                .iter()
+                .position(|candidate| candidate.name == decl.name)?;
+            Some(Owner::Declaration(index as u32))
+        } else {
+            let index = self
+                .foreign_at
+                .get(&(declaring.name.clone(), decl.name.clone()))?;
+            Some(Owner::Foreign(*index))
+        }
     }
 }
 

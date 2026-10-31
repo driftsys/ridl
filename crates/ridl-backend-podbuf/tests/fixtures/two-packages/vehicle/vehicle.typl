@@ -6,6 +6,7 @@ import pod.parts.Tyre
 import pod.parts.Gauge
 import pod.parts.Clash
 import pod.parts.Pair
+import pod.parts.Mount
 
 struct Axle {
   note  : integer [0..255]
@@ -15,6 +16,7 @@ struct Axle {
   gauge : Gauge
   clash : Clash
   pair  : Pair
+  mount : Mount
   // The shape of `Pair.a`, local to this package: no foreign head uses it.
   own   : (x: integer [0..10], y: integer [0..10])
 }
