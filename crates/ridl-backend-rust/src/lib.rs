@@ -464,10 +464,10 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
         return FaceGap::Clause;
     }
     for (_, interaction) in descriptors::interactions(interface) {
-        // The face leaves a member with a stream out, so it cannot be the gap.
-        if descriptors::has_stream(interaction) {
-            continue;
-        }
+        // The face leaves a member with a stream out, but its descriptor is
+        // still written, and refuses the same request and reply shapes as
+        // any other member's. A streamed reply has no reply type, so only
+        // its request is checked.
         let member = declared(interaction.name.as_ref());
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Command(command)) => {
@@ -476,9 +476,9 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
                 }
             }
             Some(v1::interaction::Shape::Query(query)) => {
-                if descriptors::query_reply_type(ctx, query, member).is_err()
-                    || descriptors::query_param_type(ctx, query, member).is_err()
-                {
+                let reply_refused = !descriptors::has_stream_reply(interaction)
+                    && descriptors::query_reply_type(ctx, query, member).is_err();
+                if reply_refused || descriptors::query_param_type(ctx, query, member).is_err() {
                     return FaceGap::CallShape;
                 }
             }

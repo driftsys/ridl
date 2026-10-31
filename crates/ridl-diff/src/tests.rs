@@ -3524,6 +3524,36 @@ mod podbuf {
         });
     }
 
+    /// A stream parameter beside two named parameters leaves the two in the
+    /// induced argument struct, so the struct is still held inline in it.
+    #[test]
+    fn a_stream_parameter_beside_two_named_parameters_keeps_the_argument_struct() {
+        assert_interaction_use(
+            || {
+                vec![command(
+                    "set",
+                    1,
+                    vec![
+                        param(
+                            "data",
+                            v2::FieldType {
+                                optional: false,
+                                kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                                    element: Some(v2::stream_type::Element::Primitive(
+                                        v2::PrimitiveType::Bytes as i32,
+                                    )),
+                                })),
+                            },
+                        ),
+                        param("a", named("SensorReading")),
+                        param("b", named("Level")),
+                    ],
+                )]
+            },
+            "nested inline in veh.common/Ctl/set",
+        );
+    }
+
     /// A tuple parameter is a tuple head inside the argument struct.
     #[test]
     fn a_tuple_parameter_holds_the_struct_inline() {

@@ -1527,6 +1527,64 @@ interface Tank {
     );
 }
 
+/// A streamed reply has no row of the size table: the query's reservation is
+/// its request alone, and a stream's element is never a term. The codegen
+/// model agrees: every member of the interface has a sized reservation, and
+/// so has the interface's table budget, which a plugin that emits a member
+/// table reads instead of computing it.
+#[test]
+fn a_streamed_reply_reserves_its_request_alone_in_the_table_and_the_model() {
+    let package = ir::compile_fixture("streams.ridl");
+    let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+    let d = dense(&face);
+    let rows = sizes_item(
+        sizes_impl(&d, "Cabin"),
+        "RESERVATIONS",
+        "constMAX_BUFFER_SIZE",
+    );
+    assert!(
+        !rows.contains(&max_size_path("FilterState")),
+        "a stream's element is not a term of any row: {rows}"
+    );
+    assert_eq!(
+        rows.matches(&max_size_path("ClimateReport")).count(),
+        1,
+        "only lookup's named reply is a term, not rebalance's streamed one: {rows}"
+    );
+
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let cabin = model
+        .interfaces
+        .iter()
+        .find(|interface| {
+            matches!(
+                interface.identity.as_ref(),
+                Some(v1::interface::Identity::Declared(name)) if name.declared == "Cabin"
+            )
+        })
+        .expect("the Cabin interface");
+    let sized = |reservation: &Option<v1::Reservation>| {
+        matches!(
+            reservation
+                .as_ref()
+                .and_then(|r| r.flatbuffers.as_ref())
+                .and_then(|s| s.state.as_ref()),
+            Some(v1::reservation_state::State::Bytes(_))
+        )
+    };
+    for slot in &cabin.slots {
+        if let Some(v1::interaction_slot::Occupant::Interaction(member)) = &slot.occupant {
+            assert!(sized(&member.reservation), "{:?}", member.name);
+        }
+    }
+    assert!(
+        sized(&cabin.table_budget),
+        "the model's table budget is sized, as the table is"
+    );
+}
+
 /// A member's row lists its streams: the reply stream is number 0 and each
 /// stream parameter follows in declaration order. A member with no stream
 /// has an empty list, and a stream call has an induced argument struct.

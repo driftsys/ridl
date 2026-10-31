@@ -923,6 +923,11 @@ pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
     !interaction.streams.is_empty()
 }
 
+/// Whether a query replies with a stream: its stream number 0.
+pub(crate) fn has_stream_reply(interaction: &v1::Interaction) -> bool {
+    interaction.streams.iter().any(|stream| stream.no == 0)
+}
+
 /// Why a call has no argument type: a parameter with no declared type.
 fn no_single_param(member: &str) -> GenerateError {
     GenerateError {

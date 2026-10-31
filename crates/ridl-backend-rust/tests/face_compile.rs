@@ -367,6 +367,38 @@ interface Wide {
     assert!(!text.contains("No tracking issue owns this one"), "{text}");
 }
 
+/// A query with a stream parameter and a fallible reply is left out of the
+/// face, but its descriptor is still refused for the reply, so the interface
+/// is skipped with the call-shape owner line, as the same query without the
+/// stream parameter is.
+#[test]
+fn a_stream_query_with_an_inline_reply_leaves_the_call_shape_note() {
+    let source = r#"
+package face.stream_query_reply
+
+type Level : integer [0..100]
+
+type Fault : integer [0..10]
+
+interface Wide {
+  signal level : Level @10ms
+  query lookup(samples: <Level>): Level | Fault @[..50ms]
+}
+"#;
+    let output = ridlc::compile("stream_query_reply.ridl", source);
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    assert!(
+        text.contains("carries no generated interaction face"),
+        "{text}"
+    );
+    assert!(
+        text.contains("A call the face cannot carry"),
+        "the call-shape owner line:\n{text}"
+    );
+}
+
 /// An internal interface whose descriptors are refused for a contract clause
 /// leaves the internal note: the descriptors headline, the clause reason, and
 /// the internal owner line in place of the clause owner. Its trailer does not
