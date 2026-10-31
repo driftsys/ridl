@@ -1084,6 +1084,21 @@ mod tests {
         assert_eq!(value["diagnostics"][0]["span"]["path"], json!("input.typl"));
     }
 
+    // Source mode applies a directive in the text: the lint it allows is not
+    // reported, a directive is used by it, and an unused one is TYPL-411.
+    #[tokio::test]
+    async fn source_mode_applies_a_directive_in_the_text() {
+        let source = "package p\ntype Speed: integer [0..300]\ninterface Sensor {\n  \
+                      // lint: allow missing-timing -- timing comes later\n  signal speed: Speed\n  \
+                      // lint: allow unbounded-float -- nothing to allow\n  signal rate: Speed @10ms\n}\n";
+        let params = serde_json::from_value(json!({"source": source, "profile": "ridl"})).unwrap();
+        let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+        let value = result.structured_content.unwrap();
+        assert_eq!(count_code(&value, "RIDL-100"), 0, "{value}");
+        assert_eq!(count_code(&value, "TYPL-411"), 1, "{value}");
+        assert_eq!(count_code(&value, "TYPL-412"), 0, "{value}");
+    }
+
     #[tokio::test]
     async fn source_mode_public_wrapper_reports_positive_design_diagnostic() {
         let source = "package p\ntype Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\nstruct First { speed: Speed }\nstruct Second { speed: Speed }\nstruct Third { speed: SpeedMs }\n";
