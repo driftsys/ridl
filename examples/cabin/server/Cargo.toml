@@ -2,9 +2,10 @@
 # signal of the generated crate over `ridl-transport-ws`, the way the
 # repository's loopback test server does, with cabin's own catalog.
 #
-# `generated/` and the workspace's other generated member,
-# `generated-corpus/`, are written by `ridl build --emit rust` and are not in
-# git, so this manifest resolves only after `just demo` or `just cabin-ws-demo`
+# `generated/` and the workspace's other generated members,
+# `generated-corpus/` and `generated-shapes/`, are written by
+# `ridl build --emit rust` and are not in git, so this manifest resolves only
+# after `just demo` or `just cabin-ws-demo`
 # has run both builds once.
 [package]
 name = "server"

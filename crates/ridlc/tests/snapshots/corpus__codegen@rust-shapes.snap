@@ -2663,9 +2663,132 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       "flatbuffersTable": 26,
       "interaction": {
         "interface": 0,
-        "slot": 16,
+        "slot": 13,
         "segments": [
           "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "ArchiveBoundsParams",
+        "wire": "ArchiveBoundsParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 27,
+      "interaction": {
+        "interface": 1,
+        "slot": 2,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "ArchiveBoundsReply",
+        "wire": "ArchiveBoundsReply"
+      },
+      "fields": [
+        {
+          "name": {
+            "declared": "min",
+            "snake": "min",
+            "camel": "Min",
+            "screaming": "MIN",
+            "pascal": "Min"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        },
+        {
+          "name": {
+            "declared": "max",
+            "snake": "max",
+            "camel": "Max",
+            "screaming": "MAX",
+            "pascal": "Max"
+          },
+          "type": {
+            "optional": false,
+            "named": {
+              "reference": "Level",
+              "resolved": true,
+              "package": "lint.shapes",
+              "foreign": false,
+              "index": 1,
+              "kind": "DECL_KIND_SCALAR"
+            }
+          },
+          "init": {
+            "derivable": true,
+            "source": "INIT_SOURCE_DERIVED",
+            "oneLevel": false
+          },
+          "doc": "",
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
+        }
+      ],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 28,
+      "interaction": {
+        "interface": 1,
+        "slot": 2,
+        "segments": [
+          "Reply"
         ]
       }
     },
@@ -2690,9 +2813,9 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 27,
+      "flatbuffersTable": 29,
       "interaction": {
-        "interface": 1,
+        "interface": 2,
         "slot": 1,
         "segments": [
           "Params"
@@ -2702,10 +2825,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   ],
   "interfaces": [
     {
-      "number": 2,
+      "number": 3,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
-      "doc": "Every interaction kind, with every timing form.",
+      "doc": "Every interaction kind, with every timing form, in shapes the interaction\nface accepts, so the face and the descriptors are emitted for each.",
       "labels": [],
       "slots": [
         {
@@ -3123,13 +3246,6 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "responseBound": {
                   "maxUs": "50000"
                 }
-              },
-              {
-                "text": "require `count <= MAX_COUNT`",
-                "contract": {
-                  "kind": "CONTRACT_KIND_REQUIRE",
-                  "source": "count <= MAX_COUNT"
-                }
               }
             ],
             "command": {
@@ -3201,19 +3317,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   ]
                 }
               ],
-              "clauses": [
-                {
-                  "kind": "CONTRACT_KIND_REQUIRE",
-                  "source": "count <= MAX_COUNT",
-                  "signalRefs": [],
-                  "paramRefs": [
-                    "count"
-                  ],
-                  "usesResult": false,
-                  "observerId": "Station.set.require[0]",
-                  "refused": "not `<subject> <comparison> <numeric literal>`"
-                }
-              ],
+              "clauses": [],
               "requestSizes": {
                 "proto3": {
                   "bounded": 12
@@ -3234,6 +3338,146 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         },
         {
           "ordinal": 7,
+          "interaction": {
+            "name": {
+              "declared": "reset",
+              "snake": "reset",
+              "camel": "Reset",
+              "screaming": "RESET",
+              "pascal": "Reset"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 6,
+            "doc": "A command with a clause the face translates.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "6"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "require `count <= 200`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "count <= 200"
+                }
+              }
+            ],
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "count",
+                    "snake": "count",
+                    "camel": "Count",
+                    "screaming": "COUNT",
+                    "pascal": "Count"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Count",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 200",
+                      "range": {
+                        "min": "0",
+                        "max": "200"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "count <= 200",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "count"
+                  ],
+                  "usesResult": false,
+                  "observerId": "Station.reset.require[0]",
+                  "comparison": {
+                    "op": "COMPARISON_OP_LE",
+                    "literal": "200",
+                    "literalClass": "SCALAR_CLASS_INTEGER",
+                    "param": 0
+                  }
+                }
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 6
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "shape": "SHAPE_NONE"
+            }
+          }
+        },
+        {
+          "ordinal": 8,
           "retired": {
             "name": {
               "declared": "retired",
@@ -3245,7 +3489,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         },
         {
-          "ordinal": 8,
+          "ordinal": 9,
           "interaction": {
             "name": {
               "declared": "read",
@@ -3255,7 +3499,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "pascal": "Read"
             },
             "kind": "KIND_QUERY",
-            "row": 6,
+            "row": 7,
             "doc": "A query.",
             "labels": [],
             "timing": {
@@ -3404,170 +3648,6 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 },
                 "podbuf": {
                   "bounded": 1143
-                }
-              }
-            }
-          }
-        },
-        {
-          "ordinal": 9,
-          "interaction": {
-            "name": {
-              "declared": "tryRead",
-              "snake": "try_read",
-              "camel": "TryRead",
-              "screaming": "TRY_READ",
-              "pascal": "TryRead"
-            },
-            "kind": "KIND_QUERY",
-            "row": 7,
-            "doc": "A fallible query over an error enum.",
-            "labels": [],
-            "timing": {
-              "mode": "TIMING_MODE_RANGE",
-              "maxUs": "100000",
-              "defaultApplied": false
-            },
-            "reservation": {
-              "proto3": {
-                "unsized": "tryRead.reply: Inner | Failure"
-              },
-              "flatbuffers": {
-                "unsized": "tryRead.reply: Inner | Failure"
-              },
-              "podbuf": {
-                "unsized": "tryRead.reply: Inner | Failure"
-              }
-            },
-            "family": "FAMILY_DISPATCH",
-            "links": [],
-            "see": [],
-            "since": [],
-            "rules": [
-              {
-                "text": "response within 100000 us",
-                "responseBound": {
-                  "maxUs": "100000"
-                }
-              },
-              {
-                "text": "errors lint.shapes.Failure",
-                "errors": {
-                  "names": [
-                    "lint.shapes.Failure"
-                  ]
-                }
-              }
-            ],
-            "query": {
-              "params": [
-                {
-                  "name": {
-                    "declared": "tag",
-                    "snake": "tag",
-                    "camel": "Tag",
-                    "screaming": "TAG",
-                    "pascal": "Tag"
-                  },
-                  "type": {
-                    "optional": false,
-                    "named": {
-                      "reference": "Tag",
-                      "resolved": true,
-                      "package": "lint.shapes",
-                      "foreign": false,
-                      "index": 4,
-                      "kind": "DECL_KIND_SCALAR"
-                    }
-                  },
-                  "doc": "",
-                  "links": [],
-                  "see": [],
-                  "since": [],
-                  "rules": [
-                    {
-                      "text": "length 1 ..= 16",
-                      "length": {
-                        "min": "1",
-                        "max": "16"
-                      }
-                    },
-                    {
-                      "text": "pattern `/^[a-z][a-z0-9-]*$/`",
-                      "pattern": "/^[a-z][a-z0-9-]*$/"
-                    }
-                  ]
-                }
-              ],
-              "request": {
-                "type": {
-                  "reference": "Tag",
-                  "resolved": true,
-                  "package": "lint.shapes",
-                  "foreign": false,
-                  "index": 4,
-                  "kind": "DECL_KIND_SCALAR"
-                },
-                "flatbuffersMaxSize": 122,
-                "sizes": {
-                  "proto3": {
-                    "bounded": 66
-                  },
-                  "flatbuffers": {
-                    "bounded": 122
-                  },
-                  "podbuf": {
-                    "bounded": 81
-                  }
-                }
-              },
-              "reply": {
-                "fallible": {
-                  "ok": {
-                    "reference": "Inner",
-                    "resolved": true,
-                    "package": "lint.shapes",
-                    "foreign": false,
-                    "index": 14,
-                    "kind": "DECL_KIND_STRUCT"
-                  },
-                  "err": {
-                    "reference": "Failure",
-                    "resolved": true,
-                    "package": "lint.shapes",
-                    "foreign": false,
-                    "index": 13,
-                    "kind": "DECL_KIND_ENUM"
-                  }
-                }
-              },
-              "clauses": [],
-              "requestSizes": {
-                "proto3": {
-                  "bounded": 66
-                },
-                "flatbuffers": {
-                  "bounded": 122
-                },
-                "podbuf": {
-                  "bounded": 81
-                }
-              },
-              "replySizes": {
-                "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
-                },
-                "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
-                },
-                "podbuf": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
                 }
               }
             }
@@ -3829,13 +3909,6 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "responseBound": {
                   "maxUs": "50000"
                 }
-              },
-              {
-                "text": "ensure `result.min <= result.max`",
-                "contract": {
-                  "kind": "CONTRACT_KIND_ENSURE",
-                  "source": "result.min <= result.max"
-                }
               }
             ],
             "query": {
@@ -3848,17 +3921,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   }
                 }
               },
-              "clauses": [
-                {
-                  "kind": "CONTRACT_KIND_ENSURE",
-                  "source": "result.min <= result.max",
-                  "signalRefs": [],
-                  "paramRefs": [],
-                  "usesResult": true,
-                  "observerId": "Station.bounds.ensure[0]",
-                  "refused": "not `<subject> <comparison> <numeric literal>`"
-                }
-              ],
+              "clauses": [],
               "requestSizes": {
                 "proto3": {
                   "bounded": 0
@@ -3894,6 +3957,613 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           "ordinal": 13,
           "interaction": {
             "name": {
+              "declared": "serial",
+              "snake": "serial",
+              "camel": "Serial",
+              "screaming": "SERIAL",
+              "pascal": "Serial"
+            },
+            "kind": "KIND_FIXED",
+            "row": 11,
+            "doc": "A fixed value.",
+            "labels": [],
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
+                "bytes": "0"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [],
+            "fixed": {
+              "payload": {
+                "optional": false,
+                "named": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                }
+              },
+              "named": {
+                "type": {
+                  "reference": "Label",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 186,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 131
+                  },
+                  "flatbuffers": {
+                    "bounded": 186
+                  },
+                  "podbuf": {
+                    "bounded": 145
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 14,
+          "interaction": {
+            "name": {
+              "declared": "old",
+              "snake": "old",
+              "camel": "Old",
+              "screaming": "OLD",
+              "pascal": "Old"
+            },
+            "kind": "KIND_QUERY",
+            "row": 12,
+            "doc": "",
+            "labels": [],
+            "deprecated": "use `read`",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "6"
+              },
+              "flatbuffers": {
+                "bytes": "76"
+              },
+              "podbuf": {
+                "bytes": "24"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "named": {
+                    "reference": "Count",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 0,
+                    "kind": "DECL_KIND_SCALAR"
+                  }
+                }
+              },
+              "replyPayload": {
+                "type": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 6
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "requestTuple": {
+                "index": 6
+              }
+            }
+          }
+        }
+      ],
+      "tableBudget": {
+        "proto3": {
+          "bytes": "3672"
+        },
+        "flatbuffers": {
+          "bytes": "6226"
+        },
+        "podbuf": {
+          "bytes": "3992"
+        }
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "declared": {
+        "declared": "Station",
+        "snake": "station",
+        "camel": "Station",
+        "screaming": "STATION",
+        "pascal": "Station"
+      }
+    },
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The call shapes the interaction face refuses: the payload and codec items\nare still emitted for them.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "limit",
+              "snake": "limit",
+              "camel": "Limit",
+              "screaming": "LIMIT",
+              "pascal": "Limit"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 0,
+            "doc": "A clause that names a constant.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "6"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "require `count <= MAX_COUNT`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "count <= MAX_COUNT"
+                }
+              }
+            ],
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "count",
+                    "snake": "count",
+                    "camel": "Count",
+                    "screaming": "COUNT",
+                    "pascal": "Count"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Count",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 0,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 200",
+                      "range": {
+                        "min": "0",
+                        "max": "200"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "Count",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 6
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "count <= MAX_COUNT",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "count"
+                  ],
+                  "usesResult": false,
+                  "observerId": "Archive.limit.require[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 6
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "shape": "SHAPE_NONE"
+            }
+          }
+        },
+        {
+          "ordinal": 2,
+          "interaction": {
+            "name": {
+              "declared": "tryRead",
+              "snake": "try_read",
+              "camel": "TryRead",
+              "screaming": "TRY_READ",
+              "pascal": "TryRead"
+            },
+            "kind": "KIND_QUERY",
+            "row": 1,
+            "doc": "A fallible query over an error enum.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "tryRead.reply: Inner | Failure"
+              },
+              "flatbuffers": {
+                "unsized": "tryRead.reply: Inner | Failure"
+              },
+              "podbuf": {
+                "unsized": "tryRead.reply: Inner | Failure"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 100000 us",
+                "responseBound": {
+                  "maxUs": "100000"
+                }
+              },
+              {
+                "text": "errors lint.shapes.Failure",
+                "errors": {
+                  "names": [
+                    "lint.shapes.Failure"
+                  ]
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "tag",
+                    "snake": "tag",
+                    "camel": "Tag",
+                    "screaming": "TAG",
+                    "pascal": "Tag"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "Tag",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 4,
+                      "kind": "DECL_KIND_SCALAR"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "length 1 ..= 16",
+                      "length": {
+                        "min": "1",
+                        "max": "16"
+                      }
+                    },
+                    {
+                      "text": "pattern `/^[a-z][a-z0-9-]*$/`",
+                      "pattern": "/^[a-z][a-z0-9-]*$/"
+                    }
+                  ]
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "Tag",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 4,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 122,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 66
+                  },
+                  "flatbuffers": {
+                    "bounded": 122
+                  },
+                  "podbuf": {
+                    "bounded": 81
+                  }
+                }
+              },
+              "reply": {
+                "fallible": {
+                  "ok": {
+                    "reference": "Inner",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 14,
+                    "kind": "DECL_KIND_STRUCT"
+                  },
+                  "err": {
+                    "reference": "Failure",
+                    "resolved": true,
+                    "package": "lint.shapes",
+                    "foreign": false,
+                    "index": 13,
+                    "kind": "DECL_KIND_ENUM"
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 66
+                },
+                "flatbuffers": {
+                  "bounded": 122
+                },
+                "podbuf": {
+                  "bounded": 81
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 3,
+          "interaction": {
+            "name": {
+              "declared": "bounds",
+              "snake": "bounds",
+              "camel": "Bounds",
+              "screaming": "BOUNDS",
+              "pascal": "Bounds"
+            },
+            "kind": "KIND_QUERY",
+            "row": 2,
+            "doc": "A clause over a tuple return.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "12"
+              },
+              "flatbuffers": {
+                "bytes": "86"
+              },
+              "podbuf": {
+                "bytes": "24"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "ensure `result.min <= result.max`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result.min <= result.max"
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "tuple": {
+                    "index": 8
+                  }
+                }
+              },
+              "clauses": [
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result.min <= result.max",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "Archive.bounds.ensure[0]",
+                  "refused": "not `<subject> <comparison> <numeric literal>`"
+                }
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "bounded": 12
+                },
+                "flatbuffers": {
+                  "bounded": 53
+                },
+                "podbuf": {
+                  "bounded": 16
+                }
+              },
+              "requestTuple": {
+                "index": 7
+              },
+              "replyTuple": {
+                "index": 8
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 4,
+          "interaction": {
+            "name": {
               "declared": "history",
               "snake": "history",
               "camel": "History",
@@ -3901,7 +4571,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "pascal": "History"
             },
             "kind": "KIND_QUERY",
-            "row": 11,
+            "row": 3,
             "doc": "A provider-produced stream.",
             "labels": [],
             "timing": {
@@ -4038,7 +4708,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         },
         {
-          "ordinal": 14,
+          "ordinal": 5,
           "interaction": {
             "name": {
               "declared": "replay",
@@ -4048,7 +4718,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "pascal": "Replay"
             },
             "kind": "KIND_COMMAND",
-            "row": 12,
+            "row": 4,
             "doc": "A client-produced stream.",
             "labels": [],
             "timing": {
@@ -4132,74 +4802,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         },
         {
-          "ordinal": 15,
-          "interaction": {
-            "name": {
-              "declared": "serial",
-              "snake": "serial",
-              "camel": "Serial",
-              "screaming": "SERIAL",
-              "pascal": "Serial"
-            },
-            "kind": "KIND_FIXED",
-            "row": 13,
-            "doc": "A fixed value.",
-            "labels": [],
-            "reservation": {
-              "proto3": {
-                "bytes": "0"
-              },
-              "flatbuffers": {
-                "bytes": "0"
-              },
-              "podbuf": {
-                "bytes": "0"
-              }
-            },
-            "family": "FAMILY_DISPATCH",
-            "links": [],
-            "see": [],
-            "since": [],
-            "rules": [],
-            "fixed": {
-              "payload": {
-                "optional": false,
-                "named": {
-                  "reference": "Label",
-                  "resolved": true,
-                  "package": "lint.shapes",
-                  "foreign": false,
-                  "index": 5,
-                  "kind": "DECL_KIND_SCALAR"
-                }
-              },
-              "named": {
-                "type": {
-                  "reference": "Label",
-                  "resolved": true,
-                  "package": "lint.shapes",
-                  "foreign": false,
-                  "index": 5,
-                  "kind": "DECL_KIND_SCALAR"
-                },
-                "flatbuffersMaxSize": 186,
-                "sizes": {
-                  "proto3": {
-                    "bounded": 131
-                  },
-                  "flatbuffers": {
-                    "bounded": 186
-                  },
-                  "podbuf": {
-                    "bounded": 145
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "ordinal": 16,
+          "ordinal": 6,
           "interaction": {
             "name": {
               "declared": "tags",
@@ -4209,7 +4812,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "pascal": "Tags"
             },
             "kind": "KIND_FIXED",
-            "row": 14,
+            "row": 5,
             "doc": "A collection-typed fixed value.",
             "labels": [],
             "reservation": {
@@ -4249,115 +4852,6 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               }
             }
           }
-        },
-        {
-          "ordinal": 17,
-          "interaction": {
-            "name": {
-              "declared": "old",
-              "snake": "old",
-              "camel": "Old",
-              "screaming": "OLD",
-              "pascal": "Old"
-            },
-            "kind": "KIND_QUERY",
-            "row": 15,
-            "doc": "",
-            "labels": [],
-            "deprecated": "use `read`",
-            "timing": {
-              "mode": "TIMING_MODE_RANGE",
-              "maxUs": "50000",
-              "defaultApplied": false
-            },
-            "reservation": {
-              "proto3": {
-                "bytes": "6"
-              },
-              "flatbuffers": {
-                "bytes": "76"
-              },
-              "podbuf": {
-                "bytes": "24"
-              }
-            },
-            "family": "FAMILY_DISPATCH",
-            "links": [],
-            "see": [],
-            "since": [],
-            "rules": [
-              {
-                "text": "response within 50000 us",
-                "responseBound": {
-                  "maxUs": "50000"
-                }
-              }
-            ],
-            "query": {
-              "params": [],
-              "reply": {
-                "value": {
-                  "optional": false,
-                  "named": {
-                    "reference": "Count",
-                    "resolved": true,
-                    "package": "lint.shapes",
-                    "foreign": false,
-                    "index": 0,
-                    "kind": "DECL_KIND_SCALAR"
-                  }
-                }
-              },
-              "replyPayload": {
-                "type": {
-                  "reference": "Count",
-                  "resolved": true,
-                  "package": "lint.shapes",
-                  "foreign": false,
-                  "index": 0,
-                  "kind": "DECL_KIND_SCALAR"
-                },
-                "flatbuffersMaxSize": 43,
-                "sizes": {
-                  "proto3": {
-                    "bounded": 6
-                  },
-                  "flatbuffers": {
-                    "bounded": 43
-                  },
-                  "podbuf": {
-                    "bounded": 16
-                  }
-                }
-              },
-              "clauses": [],
-              "requestSizes": {
-                "proto3": {
-                  "bounded": 0
-                },
-                "flatbuffers": {
-                  "bounded": 33
-                },
-                "podbuf": {
-                  "bounded": 8
-                }
-              },
-              "replySizes": {
-                "proto3": {
-                  "bounded": 6
-                },
-                "flatbuffers": {
-                  "bounded": 43
-                },
-                "podbuf": {
-                  "bounded": 16
-                }
-              },
-              "requestTuple": {
-                "index": 6
-              }
-            }
-          }
         }
       ],
       "tableBudget": {
@@ -4376,15 +4870,15 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       "since": [],
       "rules": [],
       "declared": {
-        "declared": "Station",
-        "snake": "station",
-        "camel": "Station",
-        "screaming": "STATION",
-        "pascal": "Station"
+        "declared": "Archive",
+        "snake": "archive",
+        "camel": "Archive",
+        "screaming": "ARCHIVE",
+        "pascal": "Archive"
       }
     },
     {
-      "number": 1,
+      "number": 2,
       "provisional": true,
       "visibility": "VISIBILITY_INTERNAL",
       "doc": "A package-private interface over a package-private payload.",
@@ -4564,7 +5058,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 7
+                "index": 9
               }
             }
           }
@@ -4597,7 +5091,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   "services": [],
   "catalog": {
     "package": "lint.shapes",
-    "hash": "DYTXxgb33CNyy6jvmarCEPjFvgraEDdQYQvdHTdzvxw=",
+    "hash": "nNAzO+s30I+RuCIZG5btr7vfMuoTaR7kj36Hiv1g2YA=",
     "retired": [],
     "compatible": []
   },
@@ -4728,6 +5222,18 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 7,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 8,
+        "maxSize": 53
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 9,
         "maxSize": 33
       }
     ],
@@ -5439,10 +5945,45 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "tuple": 6
       },
       {
-        "name": "ProbeSampleParams",
+        "name": "ArchiveBoundsParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 7
+      },
+      {
+        "name": "ArchiveBoundsReply",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BYTE",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 8
+      },
+      {
+        "name": "ProbeSampleParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 9
       }
     ]
   },
@@ -5933,7 +6474,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "form": {
               "descriptor": {
                 "map": {
-                  "entryHead": 14,
+                  "entryHead": 16,
                   "elemSize": 16,
                   "min": "0",
                   "max": "3"
@@ -6007,15 +6548,15 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "arms": [
                     {
                       "ordinal": 1,
-                      "head": 15
+                      "head": 17
                     },
                     {
                       "ordinal": 2,
-                      "head": 16
+                      "head": 18
                     },
                     {
                       "ordinal": 3,
-                      "head": 17
+                      "head": 19
                     }
                   ]
                 }
@@ -6068,11 +6609,11 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "arms": [
                     {
                       "ordinal": 1,
-                      "head": 19
+                      "head": 21
                     },
                     {
                       "ordinal": 2,
-                      "head": 20
+                      "head": 22
                     }
                   ]
                 }
@@ -6309,6 +6850,56 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "fields": [],
         "pads": [],
         "tuple": 7
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "min",
+              "position": 1
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "max",
+              "position": 2
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_I8",
+                "signed": true
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 6
+          }
+        ],
+        "tuple": 8
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 9
       },
       {
         "size": 16,
@@ -6792,7 +7383,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "form": {
               "descriptor": {
                 "map": {
-                  "entryHead": 18,
+                  "entryHead": 20,
                   "elemSize": 16,
                   "min": "0",
                   "max": "3"

@@ -124,7 +124,8 @@ internal struct Raw {
 
 // --- interactions ---
 
-/// Every interaction kind, with every timing form.
+/// Every interaction kind, with every timing form, in shapes the interaction
+/// face accepts, so the face and the descriptors are emitted for each.
 interface Station {
   /// Strict periodic.
   signal tick : Count @10ms
@@ -137,19 +138,36 @@ interface Station {
   /// An event.
   event changed : Panel @[50ms..500ms]
   /// A command with two parameters, which induces its parameter struct.
-  command set(count: Count, level: Level) [
-    require count <= MAX_COUNT
+  command set(count: Count, level: Level) @[..50ms]
+  /// A command with a clause the face translates.
+  command reset(count: Count) [
+    require count <= 200
   ] @[..50ms]
   reserved retired
   /// A query.
   query read(tag: Tag): Panel @[..50ms]
-  /// A fallible query over an error enum.
-  query tryRead(tag: Tag): Inner | Failure @[..100ms]
   /// A query that returns a union.
   query outcome(): Outcome @[..100ms]
   /// A query that returns a result union.
   query checked(): Checked @[..100ms]
   /// A tuple return.
+  query bounds(): (min : Level, max : Level) @[..50ms]
+  /// A fixed value.
+  fixed serial : Label
+  /// @deprecated "use `read`"
+  query old(): Count @[..50ms]
+}
+
+/// The call shapes the interaction face refuses: the payload and codec items
+/// are still emitted for them.
+interface Archive {
+  /// A clause that names a constant.
+  command limit(count: Count) [
+    require count <= MAX_COUNT
+  ] @[..50ms]
+  /// A fallible query over an error enum.
+  query tryRead(tag: Tag): Inner | Failure @[..100ms]
+  /// A clause over a tuple return.
   query bounds(): (min : Level, max : Level) [
     ensure result.min <= result.max
   ] @[..50ms]
@@ -157,12 +175,8 @@ interface Station {
   query history(limit: Count): <Inner> @[..1s]
   /// A client-produced stream.
   command replay(samples: <Inner>) @[..50ms]
-  /// A fixed value.
-  fixed serial : Label
   /// A collection-typed fixed value.
   fixed tags : [Tag; 0..8]
-  /// @deprecated "use `read`"
-  query old(): Count @[..50ms]
 }
 
 /// A package-private interface over a package-private payload.

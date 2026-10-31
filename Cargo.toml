@@ -12,9 +12,9 @@
 # `[package] resolver`); cargo 1.88 reads either value.
 resolver = "2"
 members = ["crates/*", "xtask"]
-# `examples/cabin` is its own workspace (`just demo`). Two of its four
-# members, `generated/` and `generated-corpus/`, are written by
-# `ridl build --emit rust` and are not in git, so they have no place in the
+# `examples/cabin` is its own workspace (`just demo`). Three of its five
+# members, `generated/`, `generated-corpus/` and `generated-shapes/`, are
+# written by `ridl build --emit rust` and are not in git, so they have no place in the
 # workspace the gate builds. This exclusion states that
 # where a reader of this file looks; it is not what enforces it, since
 # `members` above never globbed the directory and `examples/cabin` declares a

@@ -770,8 +770,8 @@ compat-check: toolchain-check
     CARGO_HOME="$descriptor_home" cargo "+$minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
 
 # The generation both `demo` and `cabin-ws-demo` start with: the CLI, then the
-# two generated crates of the examples/cabin workspace, which does not resolve
-# without both.
+# three generated crates of the examples/cabin workspace, which does not resolve
+# without all three.
 [private]
 _cabin-generate:
     #!/usr/bin/env bash
@@ -805,8 +805,8 @@ _cabin-generate:
 # compiling.
 #
 # `examples/cabin` is its own cargo workspace, outside this repository's. Its
-# `generated/` and `generated-corpus/` members are written here and are not in
-# git, so nothing in the repository's own workspace depends on a build output.
+# `generated/`, `generated-corpus/` and `generated-shapes/` members are written
+# here and are not in git, so nothing in the repository's own workspace depends on a build output.
 # `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
 # change that the lock does not carry fails rather than silently resolving.
 #
@@ -826,13 +826,16 @@ _cabin-generate:
 # allow it needs on the item that needs it: `clippy::derivable_impls` on a
 # `Default` it writes out rather than derives, `clippy::module_inception` on
 # the face module (`veh::cabin::cabin` for a package `veh.cabin` and an
-# interface `Cabin`), and `clippy::collapsible_if` on the functions that walk
-# a proto3 message. Any warning is a defect in the emitter.
+# interface `Cabin`), `clippy::collapsible_if` on the functions that walk
+# a proto3 message, and `clippy::large_enum_variant` on the enum of a union,
+# whose arms hold their payloads by value. Any warning is a defect in the
+# emitter.
 #
 # Every generated crate is linted as the edition its emitted manifest
 # declares, 2021, and again as edition 2024, which a user reaches by copying
 # the emitted source into an edition 2024 crate. The edition 2024 run edits
-# every emitted manifest, and a trap restores them on exit.
+# every emitted manifest, and a trap restores them on exit. The `lint_shapes`
+# crate is linted as edition 2024 in each of its four configurations.
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line
@@ -845,7 +848,7 @@ _cabin-generate:
 # encodings, `transcode = true` and `wasm = true`. Nothing links it. It is
 # linted the same way as the corpus crate, and also with only
 # `validate-pattern` on, and with `wasm-exports` for `wasm32-unknown-unknown`;
-# it is linted as edition 2024, formatted, documented and checked for the
+# it is linted as edition 2021 and 2024, formatted, documented and checked for the
 # 32-bit and the 64-bit target like the other two. A shape that only it holds
 # and that draws a lint is a defect in the emitter.
 #
@@ -872,8 +875,10 @@ _cabin-generate:
 # drawing a clippy diagnostic, with default features or without them, or
 # cargo finishing no build there; the `lint_shapes` crate drawing a clippy
 # diagnostic in any of its four configurations, or cargo finishing no build
-# there; any generated crate drawing a clippy
-# warning as edition 2024, or an emitted manifest with no
+# there; the emitter refusing the face of `Station` in the shapes fixture;
+# any generated crate drawing a clippy
+# warning as edition 2024, or `lint_shapes` drawing a clippy diagnostic as
+# edition 2024 in any of its four configurations, or an emitted manifest with no
 # `edition = "2021"` line to rewrite; `cargo doc` on any generated crate drawing
 # a broken or private intra-doc link; a planus or a prost crate in the
 # resolved graph of `examples/cabin`; the planus and prost checks running other
@@ -890,7 +895,7 @@ _cabin-generate:
 # `the_generated_crate_reaches_no_prost_crate`, which are ignored for a plain
 # `cargo test` because they need the generated crates this recipe writes. A
 # generated package must not depend on planus (ADR-0014 decision 15) or on
-# prost (ADR-0021 decision 8); both generated crates carry the FlatBuffers
+# prost (ADR-0021 decision 8); every generated crate carries the FlatBuffers
 # and the proto3 codecs.
 #
 # The lock pins `ridl-rt`, whose version this recipe does not own, and the
@@ -977,6 +982,14 @@ demo: _cabin-generate
             exit 1
         fi
     }
+    # `Station` in the shapes fixture holds every interaction kind in a form
+    # the interaction face accepts. When the emitter refuses its face, it
+    # writes this marker instead, and the face and descriptor code of those
+    # interactions is no longer linted.
+    if grep -q '__RIDL_NO_FACE_Station\b' examples/cabin/generated-shapes/lint.shapes.rs; then
+        echo "demo: the emitter refused the face of Station in the shapes fixture" >&2
+        exit 1
+    fi
     for crate in ridl_generated lint_shapes; do
         corpus_lint "$crate"
         corpus_lint "$crate" --no-default-features --target thumbv7em-none-eabihf
@@ -995,6 +1008,12 @@ demo: _cabin-generate
         fi
     done
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin -p ridl_generated -p lint_shapes --locked --no-deps -- -D warnings
+    # The four configurations of `lint_shapes` under edition 2024: the default
+    # features were linted by the run above. A failure exits, and the EXIT trap
+    # restores the manifests.
+    corpus_lint lint_shapes --no-default-features --target thumbv7em-none-eabihf
+    corpus_lint lint_shapes --no-default-features --features validate-pattern
+    corpus_lint lint_shapes --features wasm-exports --target wasm32-unknown-unknown
     for c in generated generated-corpus generated-shapes; do
         mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"
     done
@@ -1108,9 +1127,9 @@ lint:
 # directories includes are allowed to reach. A chapter may also include a
 # source from `examples/` by anchor, so that the code it shows is the code
 # `just demo` builds; the recipe copies every `.rs` and `.ridl` file under
-# `examples/`, and nothing under a `target/`, a `generated/` or a
-# `generated-corpus/` directory, which hold build output and the generated
-# crates.
+# `examples/`, and nothing under a `target/`, a `generated/`, a
+# `generated-corpus/` or a `generated-shapes/` directory, which hold build
+# output and the generated crates.
 #
 # **mdBook exits 0 on a broken `{{#include}}`.** It logs `ERROR Error updating
 # ...`, leaves the directive in the page as literal text, renders the rest, and
@@ -1179,7 +1198,7 @@ book-check root="":
         # `.ridl` sources too, and nothing else from examples/: no build
         # output, no generated crates.
         if [ -d "$1/examples" ]; then
-            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*' -not -path '*/generated-corpus/*') |
+            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*' -not -path '*/generated-corpus/*' -not -path '*/generated-shapes/*') |
                 while IFS= read -r source; do
                     mkdir -p "$scratch/$(dirname "$source")"
                     cp "$1/$source" "$scratch/$source"
@@ -1276,10 +1295,10 @@ book-check root="":
     #    `ANCHOR_END`. mdBook renders the rest of the file and logs nothing;
     #    the gate has to fail and name the anchor (check 4).
     # 9. The book from case 6, with a `.rs` under examples/'s `target/`, one
-    #    under its `generated/` and one under its `generated-corpus/`, each a
-    #    symbolic link to a file that does not exist. Copying any one fails,
-    #    so the gate has to pass, which pins that the copy leaves the three
-    #    directories out.
+    #    under its `generated/`, one under its `generated-corpus/` and one
+    #    under its `generated-shapes/`, each a symbolic link to a file that
+    #    does not exist. Copying any one fails, so the gate has to pass, which
+    #    pins that the copy leaves the four directories out.
     # 10. The book from case 6, with a source that closes the anchor with
     #     `ANCHOR_END` but never opens it with `ANCHOR`. The gate has to fail
     #     and name the anchor (check 4).
@@ -1445,17 +1464,18 @@ book-check root="":
             exit 1
         fi
 
-        # Case 9: the copy leaves target/, generated/ and generated-corpus/
-        # out. A symbolic link to a file that does not exist cannot be copied,
+        # Case 9: the copy leaves target/, generated/, generated-corpus/ and
+        # generated-shapes/ out. A symbolic link to a file that does not exist cannot be copied,
         # so the gate fails if the copy reaches any one of them.
         printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
         mkdir -p "$example/examples/demo/target/debug" "$example/examples/demo/generated" \
-            "$example/examples/demo/generated-corpus"
+            "$example/examples/demo/generated-corpus" "$example/examples/demo/generated-shapes"
         ln -s "$work/nowhere.rs" "$example/examples/demo/target/debug/build.rs"
         ln -s "$work/nowhere.rs" "$example/examples/demo/generated/lib.rs"
         ln -s "$work/nowhere.rs" "$example/examples/demo/generated-corpus/lib.rs"
+        ln -s "$work/nowhere.rs" "$example/examples/demo/generated-shapes/lib.rs"
         if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
-            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/, a generated/ and a generated-corpus/ directory, so it copied one of them:" >&2
+            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/, a generated/, a generated-corpus/ and a generated-shapes/ directory, so it copied one of them:" >&2
             cat "$run" >&2
             exit 1
         fi

@@ -968,6 +968,40 @@ fn step_only_scalar_has_a_fallible_constructor_and_check() {
     assert!(!source.contains("Quantization (`step`) is not checked"));
 }
 
+/// The step check of a scalar carried as `f64` does not cast its rounding
+/// gaps to `f64`: a cast from `f64` to itself draws `clippy::unnecessary_cast`
+/// in the consumer's build. Only a gap computed in `f32` is widened.
+#[test]
+fn the_f64_step_check_does_not_cast_its_gaps_to_f64() {
+    let source = rust_for(vec![public_decl(
+        "Rounded",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Float as i32,
+                )),
+            }),
+            constraint: Some(constraint(None, None, Some("0.5"))),
+            declared_init: None,
+            init: Some(init_value(true, Some("0.0"))),
+            width: derived_float_width(),
+        }),
+    )]);
+    assert!(
+        source.contains("let __checked: ::core::primitive::f64 = value;"),
+        "the fixture must check an `f64` value, got:\n{source}"
+    );
+    assert!(
+        source.contains("let __lower_gap = __represented - __below;")
+            && source.contains("__above - __represented\n"),
+        "the `f64` gaps must not be cast, got:\n{source}"
+    );
+    assert!(
+        !source.contains("__represented - __below)"),
+        "no `f64` gap may be cast to `f64`, got:\n{source}"
+    );
+}
+
 /// The float step check binds its verdict with a `let` and tests the binding.
 /// An `if { ... } {` condition draws `clippy::blocks_in_conditions` in the
 /// consumer's build.

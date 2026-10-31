@@ -440,10 +440,10 @@ as a `DynamicMessage` without generating code per package.
 `the_runtime_reaches_no_prost_crate` resolves `ridl-rt` with every feature and
 finds none of `prost`, `prost-derive`, `prost-build`, `prost-types`,
 `prost-reflect`, `protox` or `protox-parse` at any edge kind;
-`the_generated_crate_reaches_no_prost_crate` does the same for the two crates
-`just demo` writes under `examples/cabin/` (`generated/` and
-`generated-corpus/`, the latter from `veh-cluster`), ignored for a plain
-`cargo test` and run by `just demo`; and
+`the_generated_crate_reaches_no_prost_crate` does the same for the three crates
+`just demo` writes under `examples/cabin/` (`generated/`, `generated-corpus/`
+from `veh-cluster`, and `generated-shapes/` from `rust-shapes`), ignored for a
+plain `cargo test` and run by `just demo`; and
 `the_rust_backend_takes_its_oracles_as_dev_dependencies_only` reads the
 backend's own direct edges and requires every edge to `prost`, `prost-build`,
 `prost-reflect`, `protox` or `ridl-backend-proto` to be a dev edge. That last
