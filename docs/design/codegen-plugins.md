@@ -663,7 +663,8 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   fields that lead to the map, an `ArmHead` that names the union declaration and
   the arm ordinal (and, for a union of another package, the index into
   `Model.foreign`), an index into `Model.foreign`, or a `NestedTuple`, a tuple
-  written inside a struct of another package.
+  written inside a struct of another package, with the `package` that declares
+  it and the induced `wire` name that package gives it.
 - **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
   head. A head with no field has size 0.
 - **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
@@ -677,12 +678,14 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
 - **Forms.** A struct, a tuple or a union written as a field is laid out inline
   as a copy of its own head. The form names the head of the type it was written
   with (`inline_head`): the head of that declaration, the foreign head for a
-  type of another package, or for a tuple written at the field the named tuple
-  with the same structure. Two declarations with one layout have two heads. A
-  descriptor form says what the tail holds: a bounded string or bytes (`min`,
-  `max`), an array (the element form, the stride `elem_size`, `min`, `max`), a
-  map (the entry head, `elem_size`, `min`, `max`) or the arms of a union (the
-  ordinal and head of each arm).
+  type of another package, or for a tuple written at the field that tuple's own
+  head: the head of its entry in `Model.tuples`, or the one `NestedTuple` head
+  of a tuple of another package, keyed by its package and wire name. Two
+  declarations with one layout have two heads, and so do two tuples of one
+  shape. A descriptor form says what the tail holds: a bounded string or bytes
+  (`min`, `max`), an array (the element form, the stride `elem_size`, `min`,
+  `max`), a map (the entry head, `elem_size`, `min`, `max`) or the arms of a
+  union (the ordinal and head of each arm).
 - **Refused heads.** `Model.podbuf` is set whenever the toolchain lowers a
   package. A struct, a union or a tuple that cannot be laid out has no head; it
   is listed in `refused` with its source and a cause. A valid workspace reaches

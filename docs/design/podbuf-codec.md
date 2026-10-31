@@ -202,8 +202,16 @@ reserved word takes, so the accessor names follow the member names. A tuple
 whose spelled member names would clash falls back to positional members (`f1`,
 `f2`) and accessors, in every header that defines its head (ADR-0016, amendment
 of 2026-10-28). A foreign struct, tuple or union that a field lays out inline is
-defined again behind a `<PKG>_<TYPE>_HEAD_DEFINED` guard. The header carries
-`#error` on a big-endian target, and has no `verify`: the gate is Rust.
+defined again behind a `<PKG>_<TYPE>_HEAD_DEFINED` guard. Each tuple has one
+head, which every position that lays the tuple out inline names, in the
+declaring header and in an importing header alike: a tuple of the same shape at
+another position has a head of its own, and the importing header names a foreign
+tuple's head by the declaring package's induced name, so the two headers define
+the head under one guard with one text (ADR-0031 decision 7, amendment of
+2026-10-31). A head reached only through a tail descriptor, an array element or
+a map entry, is not laid out inline, so an importing header does not define it.
+The header carries `#error` on a big-endian target, and has no `verify`: the
+gate is Rust.
 
 ## Determinism
 
