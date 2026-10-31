@@ -1846,7 +1846,8 @@ mod tests {
     }
 
     /// Two declarations with one layout are two identities, and a tuple
-    /// written at a field is identified by its structure.
+    /// written at a field is recorded as a tuple, whose head the codegen walk
+    /// finds by the position the tuple was lowered at.
     #[test]
     fn an_inline_head_records_the_type_it_lays_out() {
         let h = head(fixture(

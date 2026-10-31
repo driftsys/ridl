@@ -1759,9 +1759,10 @@ fn two_positions_with_one_induced_name_share_one_head() {
 /// The ruled pair inside one declaration (`S.aInner` and `S.a.inner`, both
 /// `SAInner`): the declaring package gives them one entry under the wire name
 /// `SAInner`, and the importing lowering reuses the claim the same way, so the
-/// nested head of `S.a.inner` carries that wire name, not `SAField1`. (The C
-/// header refuses this declaration on its own: the accessors of `a_inner` and
-/// of `a.inner` spell one name.)
+/// nested head of `S.a.inner` carries that wire name, not `SAField1`. The C
+/// headers accept the declaration, with distinct accessors for the two
+/// positions (`two_positions_of_one_declaration_that_share_one_entry_have_one_text`
+/// in the podbuf backend's tests).
 #[test]
 fn two_positions_of_one_declaration_with_one_induced_name_share_one_wire_name() {
     const A: &str = "package p.a\n\n\
@@ -1807,6 +1808,62 @@ fn two_positions_of_one_declaration_with_one_induced_name_share_one_wire_name() 
     assert_eq!(
         (nested.package.as_str(), nested.wire.as_str()),
         ("p.a", "SAInner")
+    );
+}
+
+/// A collision inside a declaration of another package is recorded by the
+/// package that declares it, not by a package that imports it: `A.bC` and
+/// `AB.c` both induce `ABC` with two shapes, so `p.a` carries one
+/// `TupleCollision` and `p.b`, which reaches both through `Local`, carries
+/// none.
+#[test]
+fn a_collision_inside_a_foreign_declaration_is_not_recorded_by_the_importer() {
+    const A: &str = "package p.a\n\n\
+        struct A {\n  bC : (x: integer [0..255], y: integer [0..255])\n}\n\n\
+        struct AB {\n  c : (x: integer [0..255], y: integer [0..255], z: integer [0..255])\n}\n";
+    const B: &str = "package p.b\n\nimport p.a.A\nimport p.a.AB\n\n\
+        struct Local {\n  a : A\n  ab : AB\n}\n";
+    let declaring = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.a");
+    assert_eq!(
+        declaring
+            .tuple_collisions
+            .iter()
+            .map(|collision| collision.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ABC"]
+    );
+    let importing = workspace_model(&[("a", "p.a", A), ("b", "p.b", B)], "p.b");
+    assert!(
+        importing.tuple_collisions.is_empty(),
+        "{:?}",
+        importing.tuple_collisions
+    );
+}
+
+/// A colliding position does not take the claim of the entry that holds it:
+/// `A.bC` claims `ABC`, `AB.c` collides with it, and `A.b.c`, reached after
+/// both, has the shape of `A.bC` and reuses its claim, so one collision is
+/// recorded, not two.
+#[test]
+fn a_colliding_position_leaves_the_first_claim_in_place() {
+    const A: &str = "package p.a\n\n\
+        struct A {\n  bC : (x: integer [0..255], y: integer [0..255])\n  \
+        b : (c: (x: integer [0..255], y: integer [0..255]))\n}\n\n\
+        struct AB {\n  c : (x: integer [0..255], y: integer [0..255], z: integer [0..255])\n}\n";
+    let model = workspace_model(&[("a", "p.a", A)], "p.a");
+    assert_eq!(
+        model
+            .tuple_collisions
+            .iter()
+            .map(|collision| (
+                collision.first_fields.clone(),
+                collision.second_fields.clone()
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            vec!["x".to_string(), "y".to_string()],
+            vec!["x".to_string(), "y".to_string(), "z".to_string()]
+        )]
     );
 }
 

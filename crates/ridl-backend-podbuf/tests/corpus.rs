@@ -140,7 +140,7 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
 /// The nested tuple heads are the ones the two headers once spelled apart
 /// (driftsys/ridl#1112): a tuple at a tuple position, a tuple as the element
 /// of a fixed-count array, the two same-shape tuples of `Pair`, and the two
-/// positions of `Twin` that share one entry. The element head of a
+/// positions `A.bC` and `AB.c` that share one entry. The element head of a
 /// variable-count array is a tail head, which the importing header does not
 /// define.
 #[test]
@@ -237,6 +237,52 @@ fn the_declaring_header_refuses_two_tuples_under_one_wire_name() {
             "{shape}: {}",
             error.message
         );
+    }
+}
+
+/// Two positions of one declaration whose induced names are one
+/// (`S.aInner` and `S.a.inner`, both `SAInner`) share one entry, so the
+/// declaring header and a header that imports `S` define one head for both
+/// by the same text, and neither header is refused: the accessors of the
+/// two positions are distinct.
+#[test]
+fn two_positions_of_one_declaration_that_share_one_entry_have_one_text() {
+    let packages = workspace_from(&[
+        (
+            "a",
+            "w.a",
+            "package w.a\n\nstruct S {\n  \
+             aInner : (p: integer [0..255], q: integer [0..255])\n  \
+             a      : (inner: (p: integer [0..255], q: integer [0..255]))\n}\n",
+        ),
+        (
+            "b",
+            "w.b",
+            "package w.b\n\nimport w.a.S\n\nstruct Local {\n  s : S\n}\n",
+        ),
+    ]);
+    let declaring = support::header(&packages, "w.a");
+    for accessor in ["w_a_s_a_inner_at(", "w_a_s_a_at(", "w_a_sa_inner_at("] {
+        assert!(declaring.contains(accessor), "no {accessor} in {declaring}");
+    }
+    let s = head_body(&declaring, "w_a_s_head");
+    assert!(s.contains("w_a_sa_inner_head a_inner;"), "{s}");
+    let a = head_body(&declaring, "w_a_sa_head");
+    assert!(a.contains("w_a_sa_inner_head inner;"), "{a}");
+    let declaring = guarded_blocks(&declaring);
+    let importing = guarded_blocks(&support::header(&packages, "w.b"));
+    for guard in [
+        "W_A_SA_INNER_HEAD_DEFINED",
+        "W_A_SA_HEAD_DEFINED",
+        "W_A_S_HEAD_DEFINED",
+    ] {
+        let text = declaring
+            .get(guard)
+            .unwrap_or_else(|| panic!("w.a has no {guard}"));
+        let other = importing
+            .get(guard)
+            .unwrap_or_else(|| panic!("w.b has no {guard}"));
+        assert_eq!(text, other, "{guard} differs between the two headers");
     }
 }
 
