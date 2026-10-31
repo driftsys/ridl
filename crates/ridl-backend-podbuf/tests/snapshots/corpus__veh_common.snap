@@ -296,6 +296,114 @@ _Static_assert(sizeof(((veh_common_sensor_result_err_arm_head *)0)->code) == 2, 
 _Static_assert(offsetof(veh_common_sensor_result_err_arm_head, message) == 4, "veh_common_sensor_result_err_arm_head.message offset");
 _Static_assert(sizeof(((veh_common_sensor_result_err_arm_head *)0)->message) == 8, "veh_common_sensor_result_err_arm_head.message size");
 
+#ifndef VEH_COMMON_SPEED_HEAD_DEFINED
+#define VEH_COMMON_SPEED_HEAD_DEFINED
+typedef struct veh_common_speed_head {
+  _Alignas(8) float value;
+  uint8_t _pad4[4];
+} veh_common_speed_head;
+#endif
+_Static_assert(sizeof(veh_common_speed_head) == 8, "veh_common_speed_head size");
+_Static_assert(_Alignof(veh_common_speed_head) == 8, "veh_common_speed_head alignment");
+_Static_assert(offsetof(veh_common_speed_head, value) == 0, "veh_common_speed_head.value offset");
+_Static_assert(sizeof(((veh_common_speed_head *)0)->value) == 4, "veh_common_speed_head.value size");
+
+#ifndef VEH_COMMON_TEMPERATURE_HEAD_DEFINED
+#define VEH_COMMON_TEMPERATURE_HEAD_DEFINED
+typedef struct veh_common_temperature_head {
+  _Alignas(8) float value;
+  uint8_t _pad4[4];
+} veh_common_temperature_head;
+#endif
+_Static_assert(sizeof(veh_common_temperature_head) == 8, "veh_common_temperature_head size");
+_Static_assert(_Alignof(veh_common_temperature_head) == 8, "veh_common_temperature_head alignment");
+_Static_assert(offsetof(veh_common_temperature_head, value) == 0, "veh_common_temperature_head.value offset");
+_Static_assert(sizeof(((veh_common_temperature_head *)0)->value) == 4, "veh_common_temperature_head.value size");
+
+#ifndef VEH_COMMON_RPM_HEAD_DEFINED
+#define VEH_COMMON_RPM_HEAD_DEFINED
+typedef struct veh_common_rpm_head {
+  _Alignas(8) float value;
+  uint8_t _pad4[4];
+} veh_common_rpm_head;
+#endif
+_Static_assert(sizeof(veh_common_rpm_head) == 8, "veh_common_rpm_head size");
+_Static_assert(_Alignof(veh_common_rpm_head) == 8, "veh_common_rpm_head alignment");
+_Static_assert(offsetof(veh_common_rpm_head, value) == 0, "veh_common_rpm_head.value offset");
+_Static_assert(sizeof(((veh_common_rpm_head *)0)->value) == 4, "veh_common_rpm_head.value size");
+
+#ifndef VEH_COMMON_RATIO_HEAD_DEFINED
+#define VEH_COMMON_RATIO_HEAD_DEFINED
+typedef struct veh_common_ratio_head {
+  _Alignas(8) float value;
+  uint8_t _pad4[4];
+} veh_common_ratio_head;
+#endif
+_Static_assert(sizeof(veh_common_ratio_head) == 8, "veh_common_ratio_head size");
+_Static_assert(_Alignof(veh_common_ratio_head) == 8, "veh_common_ratio_head alignment");
+_Static_assert(offsetof(veh_common_ratio_head, value) == 0, "veh_common_ratio_head.value offset");
+_Static_assert(sizeof(((veh_common_ratio_head *)0)->value) == 4, "veh_common_ratio_head.value size");
+
+#ifndef VEH_COMMON_COUNTER_HEAD_DEFINED
+#define VEH_COMMON_COUNTER_HEAD_DEFINED
+typedef struct veh_common_counter_head {
+  _Alignas(8) uint16_t value;
+  uint8_t _pad2[6];
+} veh_common_counter_head;
+#endif
+_Static_assert(sizeof(veh_common_counter_head) == 8, "veh_common_counter_head size");
+_Static_assert(_Alignof(veh_common_counter_head) == 8, "veh_common_counter_head alignment");
+_Static_assert(offsetof(veh_common_counter_head, value) == 0, "veh_common_counter_head.value offset");
+_Static_assert(sizeof(((veh_common_counter_head *)0)->value) == 2, "veh_common_counter_head.value size");
+
+#ifndef VEH_COMMON_GAIN_HEAD_DEFINED
+#define VEH_COMMON_GAIN_HEAD_DEFINED
+typedef struct veh_common_gain_head {
+  _Alignas(8) float value;
+  uint8_t _pad4[4];
+} veh_common_gain_head;
+#endif
+_Static_assert(sizeof(veh_common_gain_head) == 8, "veh_common_gain_head size");
+_Static_assert(_Alignof(veh_common_gain_head) == 8, "veh_common_gain_head alignment");
+_Static_assert(offsetof(veh_common_gain_head, value) == 0, "veh_common_gain_head.value offset");
+_Static_assert(sizeof(((veh_common_gain_head *)0)->value) == 4, "veh_common_gain_head.value size");
+
+#ifndef VEH_COMMON_GEAR_POSITION_HEAD_DEFINED
+#define VEH_COMMON_GEAR_POSITION_HEAD_DEFINED
+typedef struct veh_common_gear_position_head {
+  _Alignas(8) uint8_t value;
+  uint8_t _pad1[7];
+} veh_common_gear_position_head;
+#endif
+_Static_assert(sizeof(veh_common_gear_position_head) == 8, "veh_common_gear_position_head size");
+_Static_assert(_Alignof(veh_common_gear_position_head) == 8, "veh_common_gear_position_head alignment");
+_Static_assert(offsetof(veh_common_gear_position_head, value) == 0, "veh_common_gear_position_head.value offset");
+_Static_assert(sizeof(((veh_common_gear_position_head *)0)->value) == 1, "veh_common_gear_position_head.value size");
+
+#ifndef VEH_COMMON_WARNING_HEAD_DEFINED
+#define VEH_COMMON_WARNING_HEAD_DEFINED
+typedef struct veh_common_warning_head {
+  _Alignas(8) uint8_t value;
+  uint8_t _pad1[7];
+} veh_common_warning_head;
+#endif
+_Static_assert(sizeof(veh_common_warning_head) == 8, "veh_common_warning_head size");
+_Static_assert(_Alignof(veh_common_warning_head) == 8, "veh_common_warning_head alignment");
+_Static_assert(offsetof(veh_common_warning_head, value) == 0, "veh_common_warning_head.value offset");
+_Static_assert(sizeof(((veh_common_warning_head *)0)->value) == 1, "veh_common_warning_head.value size");
+
+#ifndef VEH_COMMON_WARNING_FLAGS_HEAD_DEFINED
+#define VEH_COMMON_WARNING_FLAGS_HEAD_DEFINED
+typedef struct veh_common_warning_flags_head {
+  _Alignas(8) uint8_t value;
+  uint8_t _pad1[7];
+} veh_common_warning_flags_head;
+#endif
+_Static_assert(sizeof(veh_common_warning_flags_head) == 8, "veh_common_warning_flags_head size");
+_Static_assert(_Alignof(veh_common_warning_flags_head) == 8, "veh_common_warning_flags_head alignment");
+_Static_assert(offsetof(veh_common_warning_flags_head, value) == 0, "veh_common_warning_flags_head.value offset");
+_Static_assert(sizeof(((veh_common_warning_flags_head *)0)->value) == 1, "veh_common_warning_flags_head.value size");
+
 static inline float veh_common_speed_limit_payload_limit_at(const uint8_t *h, uint32_t sz) {
   return ridl_podbuf_load_f32(h, sz, 0);
 }
@@ -496,6 +604,78 @@ static inline const char *veh_common_sensor_result_err_arm_message_at(const uint
   ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 4);
   *len = d.len;
   return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline float veh_common_speed_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_speed_value(const uint8_t *buf) {
+  return veh_common_speed_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_common_temperature_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_temperature_value(const uint8_t *buf) {
+  return veh_common_temperature_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_common_rpm_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_rpm_value(const uint8_t *buf) {
+  return veh_common_rpm_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_common_ratio_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_ratio_value(const uint8_t *buf) {
+  return veh_common_ratio_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint16_t veh_common_counter_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_common_counter_value(const uint8_t *buf) {
+  return veh_common_counter_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_common_gain_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_gain_value(const uint8_t *buf) {
+  return veh_common_gain_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_common_gear_position_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_common_gear_position_value(const uint8_t *buf) {
+  return veh_common_gear_position_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_common_warning_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_common_warning_value(const uint8_t *buf) {
+  return veh_common_warning_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_common_warning_flags_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_common_warning_flags_value(const uint8_t *buf) {
+  return veh_common_warning_flags_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
 
 #endif /* RIDL_PODBUF_VEH_COMMON_H */

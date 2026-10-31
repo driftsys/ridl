@@ -292,6 +292,65 @@ _Static_assert(sizeof(((veh_cluster_veh_hvac_cabin_get_bounds_reply_head *)0)->m
 _Static_assert(offsetof(veh_cluster_veh_hvac_cabin_get_bounds_reply_head, max) == 4, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head.max offset");
 _Static_assert(sizeof(((veh_cluster_veh_hvac_cabin_get_bounds_reply_head *)0)->max) == 4, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head.max size");
 
+#ifndef VEH_CLUSTER_DIAG_ERROR_HEAD_DEFINED
+#define VEH_CLUSTER_DIAG_ERROR_HEAD_DEFINED
+typedef struct veh_cluster_diag_error_head {
+  _Alignas(8) uint8_t value;
+  uint8_t _pad1[7];
+} veh_cluster_diag_error_head;
+#endif
+_Static_assert(sizeof(veh_cluster_diag_error_head) == 8, "veh_cluster_diag_error_head size");
+_Static_assert(_Alignof(veh_cluster_diag_error_head) == 8, "veh_cluster_diag_error_head alignment");
+_Static_assert(offsetof(veh_cluster_diag_error_head, value) == 0, "veh_cluster_diag_error_head.value offset");
+_Static_assert(sizeof(((veh_cluster_diag_error_head *)0)->value) == 1, "veh_cluster_diag_error_head.value size");
+
+#ifndef VEH_CLUSTER_RAW_TICK_COUNT_HEAD_DEFINED
+#define VEH_CLUSTER_RAW_TICK_COUNT_HEAD_DEFINED
+typedef struct veh_cluster_raw_tick_count_head {
+  _Alignas(8) uint16_t value;
+  uint8_t _pad2[6];
+} veh_cluster_raw_tick_count_head;
+#endif
+_Static_assert(sizeof(veh_cluster_raw_tick_count_head) == 8, "veh_cluster_raw_tick_count_head size");
+_Static_assert(_Alignof(veh_cluster_raw_tick_count_head) == 8, "veh_cluster_raw_tick_count_head alignment");
+_Static_assert(offsetof(veh_cluster_raw_tick_count_head, value) == 0, "veh_cluster_raw_tick_count_head.value offset");
+_Static_assert(sizeof(((veh_cluster_raw_tick_count_head *)0)->value) == 2, "veh_cluster_raw_tick_count_head.value size");
+
+#ifndef VEH_CLUSTER_FAN_LEVEL_HEAD_DEFINED
+#define VEH_CLUSTER_FAN_LEVEL_HEAD_DEFINED
+typedef struct veh_cluster_fan_level_head {
+  _Alignas(8) uint8_t value;
+  uint8_t _pad1[7];
+} veh_cluster_fan_level_head;
+#endif
+_Static_assert(sizeof(veh_cluster_fan_level_head) == 8, "veh_cluster_fan_level_head size");
+_Static_assert(_Alignof(veh_cluster_fan_level_head) == 8, "veh_cluster_fan_level_head alignment");
+_Static_assert(offsetof(veh_cluster_fan_level_head, value) == 0, "veh_cluster_fan_level_head.value offset");
+_Static_assert(sizeof(((veh_cluster_fan_level_head *)0)->value) == 1, "veh_cluster_fan_level_head.value size");
+
+#ifndef VEH_CLUSTER_HVAC_ERROR_HEAD_DEFINED
+#define VEH_CLUSTER_HVAC_ERROR_HEAD_DEFINED
+typedef struct veh_cluster_hvac_error_head {
+  _Alignas(8) uint8_t value;
+  uint8_t _pad1[7];
+} veh_cluster_hvac_error_head;
+#endif
+_Static_assert(sizeof(veh_cluster_hvac_error_head) == 8, "veh_cluster_hvac_error_head size");
+_Static_assert(_Alignof(veh_cluster_hvac_error_head) == 8, "veh_cluster_hvac_error_head alignment");
+_Static_assert(offsetof(veh_cluster_hvac_error_head, value) == 0, "veh_cluster_hvac_error_head.value offset");
+_Static_assert(sizeof(((veh_cluster_hvac_error_head *)0)->value) == 1, "veh_cluster_hvac_error_head.value size");
+
+#ifndef VEH_CLUSTER_FAN_TAG_HEAD_DEFINED
+#define VEH_CLUSTER_FAN_TAG_HEAD_DEFINED
+typedef struct veh_cluster_fan_tag_head {
+  _Alignas(8) ridl_podbuf_desc value;
+} veh_cluster_fan_tag_head;
+#endif
+_Static_assert(sizeof(veh_cluster_fan_tag_head) == 8, "veh_cluster_fan_tag_head size");
+_Static_assert(_Alignof(veh_cluster_fan_tag_head) == 8, "veh_cluster_fan_tag_head alignment");
+_Static_assert(offsetof(veh_cluster_fan_tag_head, value) == 0, "veh_cluster_fan_tag_head.value offset");
+_Static_assert(sizeof(((veh_cluster_fan_tag_head *)0)->value) == 8, "veh_cluster_fan_tag_head.value size");
+
 static inline uint8_t veh_cluster_door_payload_sensor_id_at(const uint8_t *h, uint32_t sz) {
   return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
 }
@@ -465,6 +524,48 @@ static inline float veh_cluster_veh_hvac_cabin_get_bounds_reply_min_at(const uin
 
 static inline float veh_cluster_veh_hvac_cabin_get_bounds_reply_max_at(const uint8_t *h, uint32_t sz) {
   return ridl_podbuf_load_f32(h, sz, 4);
+}
+
+static inline uint8_t veh_cluster_diag_error_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_cluster_diag_error_value(const uint8_t *buf) {
+  return veh_cluster_diag_error_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint16_t veh_cluster_raw_tick_count_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_raw_tick_count_value(const uint8_t *buf) {
+  return veh_cluster_raw_tick_count_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_cluster_fan_level_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_cluster_fan_level_value(const uint8_t *buf) {
+  return veh_cluster_fan_level_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_cluster_hvac_error_value_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_cluster_hvac_error_value(const uint8_t *buf) {
+  return veh_cluster_hvac_error_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const char *veh_cluster_fan_tag_value_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 0);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline const char *veh_cluster_fan_tag_value(const uint8_t *buf, uint32_t *len) {
+  return veh_cluster_fan_tag_value_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), len);
 }
 
 #endif /* RIDL_PODBUF_VEH_CLUSTER_H */

@@ -18,7 +18,17 @@
 //!   older producer; they exist for the head of a declaration and for the
 //!   heads in the tail (array elements, map entries, union arms), and the
 //!   head of a declaration also has `<owner>_<field>`, which reads a whole
-//!   buffer through the preamble's `head_size`.
+//!   buffer through the preamble's `head_size`;
+//! - for each named scalar, enum and enum set of the package that can be laid
+//!   out (`Model.podbuf.boxes`), the head of a buffer whose root is that type:
+//!   `<prefix>_<type>_head`, with one member `value` at offset 0, its layout
+//!   checks, and the accessors `<prefix>_<type>_value_at` and
+//!   `<prefix>_<type>_value`, as for the head of any other declaration.
+//!
+//! Every C name the header writes at file scope, the guard macro of each head
+//! included, is claimed once: a package where two of them are equal (an enum
+//! value equal to the guard of a head, two heads under one name) is refused,
+//! and the message names both claimants.
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -104,10 +114,11 @@ pub(crate) fn generate_model(
             refused.cause
         ));
     }
-    Header::new(model, &projection.heads).render()
+    Header::new(model, projection).render()
 }
 
-/// Refuses a struct or union whose largest buffer no `u32` offset can address,
+/// Refuses a struct, a union or a boxed root (a named scalar, enum or enum set)
+/// whose largest buffer no `u32` offset can address,
 /// or that holds an array or map past the descriptor limits. A diagnostic of
 /// the checker names the same defect in source; this keeps the backend from
 /// writing a header for a type the codec cannot encode.
@@ -115,13 +126,23 @@ fn check_limits(package: &v2::Package, others: &[&v2::Package]) -> Result<(), Ge
     let packages = Packages { package, others };
     for decl in &package.decls {
         let head = match &decl.kind {
-            Some(v2::decl::Kind::StructDef(def)) => layout::struct_head(packages, &decl.name, def),
-            Some(v2::decl::Kind::UnionDef(def)) => layout::union_head(packages, &decl.name, def),
+            Some(v2::decl::Kind::StructDef(def)) => {
+                layout::struct_head(packages, &decl.name, def).ok()
+            }
+            Some(v2::decl::Kind::UnionDef(def)) => {
+                layout::union_head(packages, &decl.name, def).ok()
+            }
+            Some(
+                v2::decl::Kind::TypeDef(_)
+                | v2::decl::Kind::EnumDef(_)
+                | v2::decl::Kind::EnumSetDef(_),
+            ) => layout::boxed_head_of(packages, decl),
             _ => continue,
         };
-        // A head that cannot be laid out is reported from the model's
-        // `refused` list, with its own cause.
-        let Ok(head) = head else { continue };
+        // A struct or union head that cannot be laid out is reported from the
+        // model's `refused` list, with its own cause; a named scalar, enum or
+        // enum set that cannot be laid out has no box.
+        let Some(head) = head else { continue };
         if layout::max_size(packages, decl).is_some() {
             continue;
         }
@@ -294,7 +315,13 @@ impl Claims {
 
 struct Header<'a> {
     model: &'a v1::Model,
-    heads: &'a [v1::PodbufHead],
+    /// The heads of the projection, then one head per box
+    /// (`PodbufProjection.boxes`) whose source is set to its declaration, so
+    /// that a box head is named, emitted and read as the head of a
+    /// declaration.
+    heads: Vec<v1::PodbufHead>,
+    /// The index of the first box head in `heads`.
+    first_box: usize,
     /// `veh_cluster`.
     prefix: String,
     /// The C type name of each head.
@@ -305,20 +332,40 @@ struct Header<'a> {
 }
 
 impl<'a> Header<'a> {
-    fn new(model: &'a v1::Model, heads: &'a [v1::PodbufHead]) -> Self {
+    fn new(model: &'a v1::Model, projection: &v1::PodbufProjection) -> Self {
         let prefix = model
             .name
             .as_ref()
             .map(|name| package_prefix(&name.dotted))
             .unwrap_or_default();
+        let mut heads = projection.heads.clone();
+        let first_box = heads.len();
+        // A box whose declaration is out of range or whose head is unset is
+        // skipped, as the Rust codec skips it.
+        for boxed in &projection.boxes {
+            let Some(head) = boxed.head.as_ref() else {
+                continue;
+            };
+            if model.declarations.get(boxed.declaration as usize).is_none() {
+                continue;
+            }
+            heads.push(v1::PodbufHead {
+                source: Some(v1::podbuf_head::Source::Declaration(boxed.declaration)),
+                ..head.clone()
+            });
+        }
+        let positional = heads.iter().map(spelled_tuple_names_clash).collect();
         let mut header = Self {
             model,
             heads,
+            first_box,
             prefix,
             type_names: Vec::new(),
-            positional: heads.iter().map(spelled_tuple_names_clash).collect(),
+            positional,
         };
-        header.type_names = (0..heads.len()).map(|at| header.type_name(at)).collect();
+        header.type_names = (0..header.heads.len())
+            .map(|at| header.type_name(at))
+            .collect();
         header
     }
 
@@ -334,7 +381,9 @@ impl<'a> Header<'a> {
     /// The C type name of head `at`, where `<prefix>` is the package prefix
     /// of this package (`veh_cluster`) and `<pkg>` that of another package:
     ///
-    /// - a declaration of this package: `<prefix>_<declaration>_head`;
+    /// - a declaration of this package: `<prefix>_<declaration>_head`; the
+    ///   head of a box (a named scalar, enum or enum set of
+    ///   `Model.podbuf.boxes`) is named the same way;
     /// - a tuple of this package: `<prefix>_<wire name>_head`;
     /// - a foreign declaration: `<pkg>_<declaration>_head`;
     /// - a tuple inside a foreign declaration (`NestedTuple`):
@@ -448,6 +497,42 @@ impl<'a> Header<'a> {
             .unwrap_or_else(|| format!("arm{}", arm.arm))
     }
 
+    /// What head `at` is, for the message of a refused name claim: the head
+    /// of a declaration or a box, the head of a tuple by its path, or, for
+    /// the other heads, `a head`.
+    fn owner_text(&self, at: usize) -> String {
+        use v1::podbuf_head::Source;
+        let declared = |index: u32| {
+            self.model
+                .declarations
+                .get(index as usize)
+                .and_then(|decl| decl.name.as_ref())
+                .map(|name| name.declared.clone())
+        };
+        let text = match self.heads[at].source.as_ref() {
+            Some(Source::Declaration(index)) => {
+                declared(*index).map(|name| format!("the head of `{name}`"))
+            }
+            Some(Source::Tuple(index)) => {
+                let tuple = self.model.tuples.get(*index as usize);
+                match tuple.and_then(|tuple| tuple.origin.as_ref()) {
+                    Some(v1::induced_tuple::Origin::Declaration(path)) => {
+                        declared(path.declaration).map(|name| {
+                            let mut words = vec![name];
+                            words.extend(path.segments.iter().cloned());
+                            format!("the head of the tuple at `{}`", words.join("."))
+                        })
+                    }
+                    _ => tuple
+                        .and_then(|tuple| tuple.name.as_ref())
+                        .map(|name| format!("the head of the tuple `{}`", name.wire)),
+                }
+            }
+            _ => None,
+        };
+        text.unwrap_or_else(|| "a head".to_string())
+    }
+
     /// The guard macro of head `at`: `<PKG>_<TYPE>_HEAD_DEFINED`.
     fn guard(&self, at: usize) -> String {
         let name = self.type_names[at].to_uppercase();
@@ -522,6 +607,8 @@ impl<'a> Header<'a> {
             Some(Kind::Field(named)) => member_name(&named.name),
             Some(Kind::Flags(index)) => format!("_flags{index}"),
             Some(Kind::Tag(_)) => "tag".to_string(),
+            // The one field of a box is the value itself.
+            Some(Kind::Arm(_)) if at >= self.first_box => "value".to_string(),
             Some(Kind::Arm(_)) => match head.source {
                 Some(Owner::Arm(_)) => "value".to_string(),
                 _ => "arm".to_string(),
@@ -687,8 +774,11 @@ impl<'a> Header<'a> {
             return Ok(());
         }
         let name = &self.type_names[at];
-        claims.claim(name, "a head".to_string())?;
+        claims.claim(name, self.owner_text(at))?;
+        // The guard is claimed too: a constant of the same name would make
+        // the `#ifndef` drop the head.
         let guard = self.guard(at);
+        claims.claim(&guard, format!("the guard of `{name}`"))?;
 
         // The members by offset, the pads among them.
         let mut members: Vec<Member> = Vec::new();

@@ -291,3 +291,222 @@ fn a_head_with_no_wire_name_or_no_source_takes_a_fallback_name() {
         "{header}"
     );
 }
+
+/// One named type of each box form: an integer, a float and a boolean scalar,
+/// an enum, an enum set, a bounded string, bytes with unequal bounds and bytes
+/// with equal bounds, and `bytes [0]`, whose head has no byte.
+const BOXES: &str = "package p.boxes\n\
+type Count : integer [0..1000]\n\
+type Level : float [-1.0e300..1.0e300]\n\
+type Flag : boolean\n\
+enum Gear {\n  PARK = 0\n  DRIVE = 1\n}\n\
+enumset Gears : Gear\n\
+type Label : string [0..16]\n\
+type Blob : bytes [0..16]\n\
+type Mac : bytes [6]\n\
+type Empty : bytes [0]\n";
+
+/// Every named scalar, enum and enum set gets a head named as the head of a
+/// declaration, with one `value` member at offset 0, its pads and its layout
+/// assertions, and the two accessors of a root head with the return type of
+/// its form.
+#[test]
+fn a_boxed_root_has_a_head_with_one_value_member_and_two_accessors() {
+    let h = generate_fixture(BOXES).header_source;
+    struct Case {
+        decl: &'static str,
+        member: &'static str,
+        size: u32,
+        pad: Option<&'static str>,
+        at: &'static str,
+        whole: &'static str,
+    }
+    // Every head is 8 bytes.
+    let cases = [
+        Case {
+            decl: "count",
+            member: "uint16_t value",
+            size: 2,
+            pad: Some("uint8_t _pad2[6];"),
+            at: "static inline uint16_t p_boxes_count_value_at(const uint8_t *h, uint32_t sz) {",
+            whole: "static inline uint16_t p_boxes_count_value(const uint8_t *buf) {",
+        },
+        Case {
+            decl: "level",
+            member: "double value",
+            size: 8,
+            pad: None,
+            at: "static inline double p_boxes_level_value_at(const uint8_t *h, uint32_t sz) {",
+            whole: "static inline double p_boxes_level_value(const uint8_t *buf) {",
+        },
+        Case {
+            decl: "flag",
+            member: "uint8_t value",
+            size: 1,
+            pad: Some("uint8_t _pad1[7];"),
+            at: "static inline uint8_t p_boxes_flag_value_at(const uint8_t *h, uint32_t sz) {",
+            whole: "static inline uint8_t p_boxes_flag_value(const uint8_t *buf) {",
+        },
+        Case {
+            decl: "gear",
+            member: "uint8_t value",
+            size: 1,
+            pad: Some("uint8_t _pad1[7];"),
+            at: "static inline uint8_t p_boxes_gear_value_at(const uint8_t *h, uint32_t sz) {",
+            whole: "static inline uint8_t p_boxes_gear_value(const uint8_t *buf) {",
+        },
+        Case {
+            decl: "gears",
+            member: "uint8_t value",
+            size: 1,
+            pad: Some("uint8_t _pad1[7];"),
+            at: "static inline uint8_t p_boxes_gears_value_at(const uint8_t *h, uint32_t sz) {",
+            whole: "static inline uint8_t p_boxes_gears_value(const uint8_t *buf) {",
+        },
+        Case {
+            decl: "label",
+            member: "ridl_podbuf_desc value",
+            size: 8,
+            pad: None,
+            at: "static inline const char *p_boxes_label_value_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {",
+            whole: "static inline const char *p_boxes_label_value(const uint8_t *buf, uint32_t *len) {",
+        },
+        Case {
+            decl: "blob",
+            member: "ridl_podbuf_desc value",
+            size: 8,
+            pad: None,
+            at: "static inline const uint8_t *p_boxes_blob_value_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {",
+            whole: "static inline const uint8_t *p_boxes_blob_value(const uint8_t *buf, uint32_t *len) {",
+        },
+        Case {
+            decl: "mac",
+            member: "uint8_t value[6]",
+            size: 6,
+            pad: Some("uint8_t _pad6[2];"),
+            at: "static inline const uint8_t *p_boxes_mac_value_at(const uint8_t *h, uint32_t sz) {",
+            whole: "static inline const uint8_t *p_boxes_mac_value(const uint8_t *buf) {",
+        },
+    ];
+    for Case {
+        decl,
+        member,
+        size,
+        pad,
+        at,
+        whole,
+    } in cases
+    {
+        let name = format!("p_boxes_{decl}_head");
+        let guard = format!("P_BOXES_{}_HEAD_DEFINED", decl.to_uppercase());
+        let mut body = format!("  _Alignas(8) {member};\n");
+        if let Some(pad) = pad {
+            body.push_str(&format!("  {pad}\n"));
+        }
+        let block = format!(
+            "#ifndef {guard}\n#define {guard}\ntypedef struct {name} {{\n{body}}} {name};\n"
+        );
+        assert!(h.contains(&block), "{decl}: {block}\n{h}");
+        for line in [
+            format!("_Static_assert(sizeof({name}) == 8, \"{name} size\");"),
+            format!("_Static_assert(_Alignof({name}) == 8, \"{name} alignment\");"),
+            format!("_Static_assert(offsetof({name}, value) == 0, \"{name}.value offset\");"),
+            format!(
+                "_Static_assert(sizeof((({name} *)0)->value) == {size}, \"{name}.value size\");"
+            ),
+        ] {
+            assert!(h.contains(&line), "{decl}: {line}\n{h}");
+        }
+        assert!(h.contains(at), "{decl}: {at}\n{h}");
+        assert!(h.contains(whole), "{decl}: {whole}\n{h}");
+    }
+    // `bytes [0]` generates, and has no head and no accessor.
+    assert!(!h.contains("p_boxes_empty"), "{h}");
+    // No member is named `arm`.
+    assert!(!h.contains(" arm;"), "{h}");
+}
+
+/// The box heads are written after the heads of the projection, and their
+/// accessors after the other accessors.
+#[test]
+fn the_box_heads_follow_the_projection_heads() {
+    let h = generate_fixture(
+        "package p.order\n\
+         type Count : integer [0..1000]\n\
+         struct Pair {\n  a : integer [0..255]\n}\n",
+    )
+    .header_source;
+    let at = |needle: &str| h.find(needle).unwrap_or_else(|| panic!("{needle}: {h}"));
+    assert!(at("typedef struct p_order_pair_head") < at("typedef struct p_order_count_head"));
+    assert!(at("p_order_pair_a_at(") < at("p_order_count_value_at("));
+    assert!(at("typedef struct p_order_count_head") < at("p_order_pair_a_at("));
+}
+
+/// A constant equal to the guard macro of a head is refused, for the head of
+/// a box and for the head of a struct: the `#ifndef` would drop the head.
+#[test]
+fn a_constant_equal_to_a_head_guard_is_refused() {
+    let err = generate_fixture_err("package p.g\nenum Gear {\n  PARK = 0\n  HEAD_DEFINED = 1\n}\n");
+    assert!(
+        err.message.contains("`P_G_GEAR_HEAD_DEFINED`")
+            && err.message.contains("the enum value `HEAD_DEFINED`")
+            && err.message.contains("the guard of `p_g_gear_head`"),
+        "{}",
+        err.message
+    );
+    let err = generate_fixture_err(
+        "package p.g\nenum Gear {\n  PARK = 0\n  BOX_HEAD_DEFINED = 1\n}\n\
+         struct GearBox {\n  a : integer [0..255]\n}\n",
+    );
+    assert!(
+        err.message.contains("`P_G_GEAR_BOX_HEAD_DEFINED`")
+            && err.message.contains("the guard of `p_g_gear_box_head`"),
+        "{}",
+        err.message
+    );
+}
+
+/// The accessor of a box can collide with the accessor of a struct: `Gear`'s
+/// `p_g_gear_value_at` and the field `at` of `GearValue`, which the existing
+/// claims refuse.
+#[test]
+fn a_box_accessor_equal_to_a_struct_accessor_is_refused() {
+    let err = generate_fixture_err(
+        "package p.g\nenum Gear {\n  PARK = 0\n  DRIVE = 1\n}\n\
+         struct GearValue {\n  at : integer [0..255]\n}\n",
+    );
+    assert!(
+        err.message.contains("`p_g_gear_value_at`"),
+        "{}",
+        err.message
+    );
+}
+
+/// A box head whose name equals the name of a tuple head is refused, and the
+/// message names both owners.
+#[test]
+fn a_box_head_equal_to_a_tuple_head_is_refused_naming_both() {
+    let err = generate_fixture_err(
+        "package p.t\ntype HubSize : integer [0..255]\n\
+         struct Hub {\n  size : (width: integer [0..10], height: integer [0..10])\n}\n",
+    );
+    assert!(
+        err.message.contains("`p_t_hub_size_head`")
+            && err.message.contains("the head of `HubSize`")
+            && err.message.contains("the head of the tuple at `Hub.size`"),
+        "{}",
+        err.message
+    );
+}
+
+/// A box with no podbuf bound refuses the header, as a struct does.
+#[test]
+fn a_box_with_no_size_bound_is_refused_naming_it() {
+    let err = generate_fixture_err("package p.huge\ntype Huge : string [0..1100000000]\n");
+    assert!(
+        err.message
+            .contains("`p.huge.Huge` has no podbuf size bound"),
+        "{}",
+        err.message
+    );
+}

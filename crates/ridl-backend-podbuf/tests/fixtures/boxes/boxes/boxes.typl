@@ -1,0 +1,20 @@
+package pod.boxes
+
+// One named type of each form a boxed root takes: each is carried as a
+// payload root by itself, at offset 0 of a one-field head.
+
+type Count : integer [-1000..1000]
+type Level : float [-1.0e300..1.0e300]
+type Flag : boolean
+
+enum Gear {
+  PARK  = 0
+  DRIVE = 3
+}
+
+enumset Gears : Gear
+
+type Label : string [0..16]
+type Blob : bytes [0..16]
+type Mac : bytes [6]
+type Empty : bytes [0]

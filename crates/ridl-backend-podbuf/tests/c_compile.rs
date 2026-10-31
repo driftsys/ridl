@@ -43,6 +43,13 @@ fn two_package_headers() -> Vec<(String, String)> {
     headers_of(&support::workspace(&path), &["pod.parts", "pod.vehicle"])
 }
 
+/// The header of the fixture that holds one named type of each form a boxed
+/// root takes.
+fn box_headers() -> Vec<(String, String)> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/boxes");
+    headers_of(&support::workspace(&path), &["pod.boxes"])
+}
+
 /// A translation unit that includes `headers` in order.
 fn unit(headers: &[&str]) -> String {
     let mut text: String = headers
@@ -76,12 +83,29 @@ fn the_veh_cluster_headers_compile_as_c11_on_the_host() {
 }
 
 #[test]
+fn the_box_headers_compile_as_c11_on_the_host() {
+    let Some(cc) = host_cc() else {
+        return skip("no C compiler (cc, clang or gcc) on PATH");
+    };
+    let source = unit(&["pod_boxes.h"]);
+    let dir = with_headers(&box_headers(), &[("unit.c", &source)]);
+    let mut args = STRICT.to_vec();
+    args.push("unit.c");
+    run(cc, &args, dir.path()).unwrap_or_else(|error| panic!("{error}"));
+}
+
+/// The veh-cluster headers and the header of the box fixture, whose boxes
+/// cover the boolean, bytes-descriptor and inline-bytes forms that veh-cluster
+/// does not hold.
+#[test]
 fn the_static_asserts_hold_on_i686_aarch64_and_armv8r() {
     let Some(clang) = clang() else {
         return skip("no clang on PATH");
     };
-    let source = unit(&["veh_common.h", "veh_cluster.h"]);
-    let dir = with_headers(&veh_cluster_headers(), &[("unit.c", &source)]);
+    let source = unit(&["veh_common.h", "veh_cluster.h", "pod_boxes.h"]);
+    let mut headers = veh_cluster_headers();
+    headers.extend(box_headers());
+    let dir = with_headers(&headers, &[("unit.c", &source)]);
     for target in TARGETS {
         let triple = format!("--target={target}");
         let mut args = vec![triple.as_str(), "-ffreestanding"];
@@ -95,6 +119,72 @@ fn the_static_asserts_hold_on_i686_aarch64_and_armv8r() {
             Err(error) => panic!("{target}: {error}"),
         }
     }
+}
+
+/// A payload whose root is an enum, an integer scalar or a string scalar is
+/// read through `<pkg>_<type>_value`, and `_value_at` over a head smaller than
+/// the field reads 0 (or `NULL`).
+#[test]
+fn the_box_accessors_read_a_boxed_root() {
+    let Some(cc) = host_cc() else {
+        return skip("no C compiler (cc, clang or gcc) on PATH");
+    };
+    let program = r#"
+#include <string.h>
+#include "pod_boxes.h"
+
+/* Gear: DRIVE (3) at offset 0 of an 8-byte head. */
+static const uint8_t gear[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  3, 0, 0, 0, 0, 0, 0, 0
+};
+/* Count: -2 as an int16_t at offset 0. */
+static const uint8_t count[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  0xFE, 0xFF, 0, 0, 0, 0, 0, 0
+};
+/* Label: a descriptor to 5 bytes at buffer offset 16. */
+static const uint8_t label[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  16, 0, 0, 0, 5, 0, 0, 0,
+  'h', 'e', 'l', 'l', 'o', 0
+};
+
+int main(void) {
+  uint32_t len = 99;
+  const char *text;
+  if (pod_boxes_gear_value(gear) != POD_BOXES_GEAR_DRIVE) return 1;
+  if (pod_boxes_count_value(count) != -2) return 2;
+  text = pod_boxes_label_value(label, &len);
+  if (len != 5 || text == NULL || memcmp(text, "hello", 5) != 0) return 3;
+  /* A head of 1 byte holds no part of the 2-byte count. */
+  if (pod_boxes_count_value_at(count + RIDL_PODBUF_PREAMBLE_SIZE, 1) != 0) return 4;
+  /* A head of 4 bytes holds no whole descriptor. */
+  len = 99;
+  text = pod_boxes_label_value_at(label, label + RIDL_PODBUF_PREAMBLE_SIZE, 4, &len);
+  if (len != 0 || text != NULL) return 5;
+  return 0;
+}
+"#;
+    let dir = with_headers(&box_headers(), &[("program.c", program)]);
+    run(
+        cc,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "program.c",
+            "-o",
+            "program",
+        ],
+        dir.path(),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let status = std::process::Command::new(dir.path().join("program"))
+        .status()
+        .expect("run the program");
+    assert!(status.success(), "the box program exited with {status}");
 }
 
 /// Two packages, one of which lays out three heads of the other inline, in
