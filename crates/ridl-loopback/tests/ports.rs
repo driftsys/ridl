@@ -171,6 +171,7 @@ use ridl_rt::port::{
     RaiseError, ReadError, SendError, SettleError, SignalReader, SignalWriter, Wakeable,
     WriteError, REPLY_STREAM,
 };
+use ridl_rt::port::{Pull, PushError, StreamCaller, StreamHandler, StreamNo};
 use ridl_rt::sample::{Duration, Freshness, Provenance, Timestamp};
 
 const IFACE: InterfaceNo = InterfaceNo(1);
@@ -2412,6 +2413,82 @@ fn a_handler_whose_stored_waker_owns_another_handle_drops_without_deadlock() {
     drop(waker);
     std::mem::forget(rt);
     assert_drop_finishes(handler, "a handler");
+}
+
+#[test]
+fn a_dropped_handler_interrupts_a_taken_call_whose_streams_moved() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut first = rt.handler();
+    let mut second = rt.handler();
+    let mut buf = [0u8; 8];
+    let c = caller.query(IFACE, ORD, &[1], None).expect("send");
+    let claim = first
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    let param = StreamNo(1);
+    assert_eq!(caller.push(c, param, &[1]), Ok(1));
+    assert_eq!(caller.push(c, param, &[2]), Ok(1));
+    assert_eq!(first.pull_claim(claim, param, &mut buf), Ok(Pull::Chunk(1)));
+    let (outcome, outcome_waker) = counting();
+    let (reply, reply_waker) = counting();
+    caller.wake_on(Interest::Outcome(c), &outcome_waker);
+    caller.wake_on(Interest::Stream(c, REPLY_STREAM), &reply_waker);
+    drop(first);
+
+    assert_eq!(
+        second.next_claim(&mut buf),
+        Ok(None),
+        "a call whose streams moved is not presented to another handler"
+    );
+    let interrupted = CallError::Transport(Transport::Interrupted);
+    assert_eq!(
+        wakes(&outcome),
+        1,
+        "the settlement wakes the outcome waiter"
+    );
+    assert_eq!(wakes(&reply), 1, "the settlement wakes the stream waiter");
+    assert_eq!(caller.reply(c, &mut buf), Ok(Some(Err(interrupted))));
+    assert_eq!(
+        caller.push(c, param, &[3]),
+        Err(PushError::Failed(interrupted)),
+        "the parameter stream stopped with the handler"
+    );
+    assert_eq!(
+        caller.pull(c, REPLY_STREAM, &mut buf),
+        Ok(Pull::Failed(interrupted))
+    );
+}
+
+#[test]
+fn a_claim_stream_registration_refreshes_the_same_task_and_displaces_another() {
+    let mut rt = runtime();
+    let mut buf = [0u8; 8];
+    let _c = rt.query(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting")
+        .id;
+    let key = Interest::ClaimStream(claim, StreamNo(1));
+    let (first, first_waker) = counting();
+    rt.wake_on(key, &first_waker);
+    rt.wake_on(key, &first_waker);
+    assert_eq!(
+        wakes(&first),
+        0,
+        "a registration of the same task is a refresh"
+    );
+    let (second, second_waker) = counting();
+    rt.wake_on(key, &second_waker);
+    assert_eq!(
+        wakes(&first),
+        1,
+        "another task's waker displaces the stored one"
+    );
+    assert_eq!(wakes(&second), 0, "the new waker is stored, not woken");
 }
 
 #[test]

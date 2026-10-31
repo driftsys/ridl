@@ -972,7 +972,9 @@ impl Store {
     /// returns to the waiting calls, in its place by send order and under the
     /// id it was first presented with, so another handler that serves the
     /// member can take it, and every handler that serves the member has its
-    /// `Claim` waiter woken. A claim it had only been offered, through
+    /// `Claim` waiter woken, unless its call has any stream state: such a call
+    /// is interrupted instead (`Store::interrupt_claim`). A claim it had only
+    /// been offered, through
     /// `ReadError::ShortClaim`, never left the waiting calls, so it is neither
     /// re-inserted nor woken for; its id stays on the entry for the next
     /// presentation (driftsys/ridl#569). A claim whose call the caller forgot
@@ -1030,6 +1032,15 @@ impl Store {
             if !owner.taken {
                 continue;
             }
+            if !entry.streams.is_empty() {
+                // Its streams already moved between the caller and this
+                // handler, so another handler cannot take the call over
+                // without reading partial streams. Every unfinished stream
+                // stops with `Transport::Interrupted`, and the call settles
+                // with that error instead of returning to the waiting calls.
+                self.interrupt_claim(owner.call, wake);
+                continue;
+            }
             let (sent, key) = (entry.sent, (entry.iface, entry.ord));
             let at = self
                 .pending
@@ -1038,6 +1049,34 @@ impl Store {
             self.wake_handlers_serving(key, wake);
         }
         waiters
+    }
+
+    /// Ends a taken call whose handler was dropped after its streams were
+    /// used: every unfinished stream stops with `Transport::Interrupted`, by
+    /// the provider's side, and the call settles `Err` with the same error,
+    /// which wakes its `Outcome` waiter and its `Stream` waiters.
+    fn interrupt_claim(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
+        let entry = self
+            .calls
+            .get_mut(&Calls::slot(c))
+            .expect("a held claim names a call the table holds");
+        // The settlement stops the reply stream too, as any settlement with
+        // an error does, whether or not anything named it yet.
+        let _ = entry.stream(REPLY_STREAM);
+        for stream in entry.streams.values_mut() {
+            if !stream.finished() {
+                stream.stopped = Some((INTERRUPTED, Side::Provider));
+            }
+            wake.extend(stream.claim_waker.take());
+        }
+        match self.table.settle(c, Err(INTERRUPTED)) {
+            Settled::Recorded(waker) => {
+                wake.extend(waker);
+                wake.extend(self.table.take_streams(Calls::slot(c)));
+            }
+            Settled::Reclaimed => self.reclaimed(c, wake),
+            Settled::Unknown => unreachable!("a held claim names a call in flight"),
+        }
     }
 
     /// Takes the `Claim` waker of every handler that serves `key`.

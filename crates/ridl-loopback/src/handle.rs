@@ -675,8 +675,10 @@ impl<E: Encoding> HandlerHandle<E> {
 /// only offered, through `ReadError::ShortClaim`, never left the waiting calls,
 /// so it is neither re-inserted nor woken for (driftsys/ridl#569). A claim whose
 /// call the caller forgot is withdrawn instead: its slot is reclaimed, and no
-/// handler is presented it again or woken for it. The handler's waker is
-/// dropped after the lock is released, as the source's is.
+/// handler is presented it again or woken for it. A taken claim whose call
+/// has any stream state is not returned: its unfinished streams stop with
+/// `Transport::Interrupted` and the call settles with that error. The
+/// handler's waker is dropped after the lock is released, as the source's is.
 impl<E: Encoding> Drop for HandlerHandle<E> {
     fn drop(&mut self) {
         let waiters = locked(&self.shared, |store, wake| {

@@ -455,8 +455,9 @@ pub trait StreamCaller: Caller {
     /// stream stopped without its end. The outer error is the port call:
     /// [`ReadError::Short`] when the chunk does not fit `out`, which does not
     /// consume it; `ReadError::Contract(Contract::UnknownInteraction)` when the
-    /// call or the stream number is unknown; [`ReadError::Detached`] when the
-    /// runtime behind the port is gone.
+    /// call or the stream number is unknown, and for a pull by the stream's
+    /// producer; [`ReadError::Detached`] when the runtime behind the port is
+    /// gone.
     ///
     /// A runtime that holds no member table, such as one attached to a
     /// catalog with no descriptor, does not know which streams a member
@@ -573,7 +574,8 @@ pub enum PushError {
     /// cancelled the stream or the call was forgotten.
     Failed(CallError),
     /// A contract error of the port call, such as
-    /// `Contract::UnknownInteraction` for an unknown call or stream number.
+    /// `Contract::UnknownInteraction` for an unknown call or stream number,
+    /// and for a push or an end by the stream's receiver.
     Contract(Contract),
     /// The runtime behind the port is gone.
     Detached,

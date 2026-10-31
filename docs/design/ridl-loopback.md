@@ -393,7 +393,12 @@ because the id lives on the call's entry (driftsys/ridl#569). A dropped
 handler's offered claim is not returned, because it never left the waiting
 calls, and no handler is woken for it. A claim whose call the caller forgot is
 not returned: it is withdrawn, its slot is reclaimed, and no handler is woken
-for it (see "`Caller::forget` releases the caller's interest" below). The same
+for it (see "`Caller::forget` releases the caller's interest" below). A taken
+claim whose call has any stream state is not returned either, because another
+handler would read partial streams: every unfinished stream of the call stops
+with `Transport::Interrupted`, and the call settles `Err` with the same error,
+which wakes its `Outcome` and `Stream` waiters
+(`a_dropped_handler_interrupts_a_taken_call_whose_streams_moved`). The same
 `Drop` removes the handler's state from the store, its stored `Claim` waker with
 it, so no later send reaches a waker of a handler that is gone.
 
@@ -486,9 +491,11 @@ is. Each stream has one producer: the provider pushes the reply stream
 or a pull from the other side answers `Contract::UnknownInteraction`; an abort
 is accepted from either side. A stream holds `Loopback::STREAM_WINDOW` — four —
 non-empty chunks; a push of a non-empty chunk into a full stream answers 0 and
-takes nothing, and an empty chunk is always taken. A chunk longer than the
-member's limit is refused with `PushError::TooLarge`, under the limit a
-settlement's reply has.
+takes nothing, and an empty chunk is always taken. Because an empty chunk is
+always taken, as the contract requires, the window does not bound a producer
+that pushes empty chunks and never ends the stream: each one is stored until it
+is pulled. A chunk longer than the member's limit is refused with
+`PushError::TooLarge`, under the limit a settlement's reply has.
 
 The caller addresses a call's streams by its correlation while the table holds
 it and the caller has not forgotten it. The provider addresses them by the claim
