@@ -75,11 +75,12 @@ jobs:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
       # Trusted publishing needs npm 11.5.1 or newer, which the Node LTS
-      # release does not always include.
-      - name: install npm 11
+      # release does not always include. The version is exact, so a new npm
+      # release cannot change a publish without a change here.
+      - name: install npm
         run: |
           set -euo pipefail
-          npm install --global "npm@>=11.5.1 <12"
+          npm install --global npm@11.21.1
           npm --version
       - run: just ts-check
       # Both packages are built before either is published, so a build
