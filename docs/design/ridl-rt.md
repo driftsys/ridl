@@ -218,6 +218,10 @@ it).
 pub struct Timestamp(pub i64);  // microseconds since the PTP epoch, TAI (ridl §3.1)
 pub struct Duration(pub i64);   // microseconds
 pub struct Envelope { pub stamp: Timestamp, pub seq: u64 }
+
+impl Duration {
+    pub const fn to_core(self) -> Option<core::time::Duration>;  // None when negative
+}
 ```
 
 `Envelope` carries exactly the sender's timestamp and sequence number, stamped
@@ -301,6 +305,12 @@ pub struct TrackerFull;
 
 impl Member {
     pub fn call_deadline(&self) -> Option<Duration>;
+    pub const fn rate_floor(&self) -> Option<Duration>;
+    pub const fn staleness_bound(&self) -> Option<Duration>;
+}
+impl Timing {
+    pub const fn rate_floor(&self) -> Option<Duration>;       // min
+    pub const fn staleness_bound(&self) -> Option<Duration>;  // max
 }
 
 pub trait Sizes<E: Encoding>: Interface {
@@ -337,6 +347,12 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
 - **The call deadline** (ridl §9.3): the `max` of the member's timing, `None`
   when the timing or its `max` is absent. It takes no position on what a caller
   does with `None`.
+- **The rate floor and the staleness bound** (ridl §9): the `min` and the `max`
+  of the member's timing, named for their meaning on a signal, so that a
+  producer that runs its own debounce or refresh timer reads them without the
+  descriptor path. Each is `None` when the timing or that bound is absent, and
+  each is a `const fn`, so a bound can be read into a `const` item. Like
+  `call_deadline`, they read the field whatever the member's kind.
 - **The size table and the in-flight budget**: no specification defines the
   budget. `Sizes<E>` is the size table of one interface in one encoding, which
   generated code implements once per interface per codec the package carries.
