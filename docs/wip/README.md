@@ -361,6 +361,12 @@ its Status names are the durable records. Its postponed companion,
 `2026-10-28-payload-ceilings-postponed.md`, stays here: its section 1 stays
 postponed until the owner decides.
 
+The inline lint directives plan (`2026-10-30-inline-lint-directives-plan.md`)
+was archived on 2026-10-31, once the work landed (driftsys/ridl#1124);
+[ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md) (decision 2,
+decisions 17 to 19 and the Status paragraph) and
+[the lints chapter](../book/lints.md) are the durable records.
+
 ## Files that stay after the 0.10.0 gardening pass (2026-10-13)
 
 Each file below was read against the code and the issue tracker on 2026-10-13
