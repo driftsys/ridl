@@ -370,18 +370,13 @@ fn report(code: DiagCode, file: FileId, range: TextRange, message: String) -> Di
 
 /// Whether an effective directive of the diagnostic's file allows `entry`,
 /// the lint row of its code, over a scope that contains its primary range.
-/// A directive lint (`directive::DIRECTIVE_LINT_NAMES`) is never allowed.
+/// A directive lint (`directive::DIRECTIVE_LINT_NAMES`) is never allowed:
+/// `directives_in` never puts one in `allows`.
 fn directive_allows(
     directives: &BTreeMap<FileId, Vec<LintDirective>>,
     diagnostic: &Diagnostic,
     entry: &CatalogEntry,
 ) -> bool {
-    if entry
-        .lint
-        .is_some_and(|name| directive::DIRECTIVE_LINT_NAMES.contains(&name))
-    {
-        return false;
-    }
     directives
         .get(&diagnostic.primary.file)
         .is_some_and(|directives| {
@@ -1029,20 +1024,55 @@ mod tests {
     }
 
     /// A diagnostic outside the scope does not use the directive: the name
-    /// is unused on `interface A` even though `interface B` raises it.
+    /// is unused on `interface A` even though `interface B` raises it, and
+    /// even though a diagnostic that starts before the scope ends inside it.
     #[test]
     fn name_used_outside_scope_is_unused() {
         let outside = range_of(DIRECTIVE_TEXT, "interface B");
-        let reports = reports_over(DIRECTIVE_TEXT, &[], |file| {
-            vec![diagnostic_at(
-                DiagCode::TYPL_406,
-                Severity::Warning,
-                file,
-                outside,
-            )]
-        });
-        assert_eq!(reports.len(), 1, "{reports:?}");
-        assert_eq!(reports[0].0, DiagCode::TYPL_411);
+        let scope = range_of(DIRECTIVE_TEXT, "interface A {}");
+        let overlapping = TextRange::new(TextSize::from(0), scope.end());
+        for range in [outside, overlapping] {
+            let reports = reports_over(DIRECTIVE_TEXT, &[], |file| {
+                vec![diagnostic_at(
+                    DiagCode::TYPL_406,
+                    Severity::Warning,
+                    file,
+                    range,
+                )]
+            });
+            assert_eq!(reports.len(), 1, "{range:?}: {reports:?}");
+            assert_eq!(reports[0].0, DiagCode::TYPL_411);
+        }
+    }
+
+    /// A directive is read from a `.typl`, a `.ridl` and a `.rsdl` file, and
+    /// from no other file.
+    #[test]
+    fn directives_are_read_from_the_three_source_languages() {
+        let mut sources = SourceMap::new();
+        let unused = "package p\n\n// lint: allow missing-docs -- r\ntype T: float\n";
+        let typl = sources.file_id("/ws/a.typl", unused);
+        let ridl = sources.file_id("/ws/b.ridl", unused);
+        let rsdl = sources.file_id(
+            "/ws/c.rsdl",
+            "package p\n\n// lint: allow missing-docs -- r\ncomponent C {}\n",
+        );
+        let _other = sources.file_id("/ws/d.rmdl", unused);
+        let mut diagnostics = Vec::new();
+        report_lint_directives(&mut diagnostics, &sources, &[]);
+        let reported: Vec<(DiagCode, FileId)> = diagnostics
+            .iter()
+            .map(|d| (d.code, d.primary.file))
+            .collect();
+        assert_eq!(
+            reported,
+            [
+                (DiagCode::TYPL_411, typl),
+                (DiagCode::TYPL_411, ridl),
+                (DiagCode::TYPL_411, rsdl),
+            ],
+            "{diagnostics:?}"
+        );
     }
 
     /// The same range in another file does not use the directive.

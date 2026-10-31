@@ -236,12 +236,14 @@ fn own_line_target(token: &SyntaxToken) -> Option<SyntaxNode> {
 }
 
 /// The declaration an end-of-line directive applies to: the outermost
-/// carrier whose first non-trivia token starts on the directive's line.
+/// carrier whose first non-trivia token starts on the directive's line. The
+/// line starts after the last token that holds a line break, a whitespace
+/// token or a block comment that spans lines.
 fn end_of_line_target(token: &SyntaxToken) -> Option<SyntaxNode> {
     let mut line = Vec::new();
     let mut cursor = token.prev_token();
     while let Some(previous) = cursor {
-        if previous.kind() == SyntaxKind::Whitespace && previous.text().contains('\n') {
+        if previous.text().contains('\n') {
             break;
         }
         cursor = previous.prev_token();
@@ -423,6 +425,61 @@ mod tests {
         assert_eq!(target.start(), range_of(text, "x: float").start());
         assert_eq!(d.target, Some(target));
         assert!(d.problems.is_empty());
+    }
+
+    #[test]
+    fn a_block_comment_that_spans_lines_ends_the_line_before_the_directive() {
+        // `d` starts before the block comment, so `e` is the first outermost
+        // declaration starting on the directive's line.
+        let text = "package p\n\nstruct S {\n  d: D /* x\n  y */ e: E, f: F // lint: allow missing-docs -- r\n}\n";
+        let found = typl(text);
+        assert_eq!(found.len(), 1);
+        let d = &found[0];
+        let target = d.target.expect("a declaration starts on the line");
+        assert_eq!(target.start(), range_of(text, "e: E").start());
+        assert!(d.problems.is_empty());
+
+        // With nothing starting after the block comment, no declaration
+        // applies.
+        let text =
+            "package p\n\nstruct S {\n  d: D /* x\n  y */ // lint: allow missing-docs -- r\n}\n";
+        let found = typl(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].target, None);
+        assert_eq!(found[0].problems, vec![DirectiveProblem::NoDeclaration]);
+    }
+
+    #[test]
+    fn problems_are_in_the_documented_order() {
+        // The names, the reason, then the declaration.
+        let text = "package p\n\n// lint: allow RIDL-100, missing-docs\n\ntype T: float\n";
+        let found = typl(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].problems,
+            vec![
+                DirectiveProblem::UnknownName {
+                    name: "RIDL-100".to_string(),
+                    range: range_of(text, "RIDL-100"),
+                },
+                DirectiveProblem::NoReason,
+                DirectiveProblem::NoDeclaration,
+            ]
+        );
+
+        // The level word, then the declaration: a word other than `allow`
+        // stops the reading of the names and the reason.
+        let text = "package p\n\n// lint: deny missing-docs\n\ntype T: float\n";
+        let found = typl(text);
+        assert_eq!(
+            found[0].problems,
+            vec![
+                DirectiveProblem::NotAllow {
+                    word: "deny".to_string()
+                },
+                DirectiveProblem::NoDeclaration,
+            ]
+        );
     }
 
     #[test]
