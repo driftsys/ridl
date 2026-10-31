@@ -1603,24 +1603,189 @@ fn an_append_that_fits_in_the_pads_carries_the_history_under_podbuf() {
     );
 }
 
-/// `MANIFEST` with two backend tables, `podbuf` listed only in the one that
-/// comes second in name order, so the encodings are the union over every
-/// table and not the first table's list.
-const PODBUF_IN_SECOND_TABLE_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
-                                               [backend.c]\nencodings = [\"flatbuffers\"]\n\n\
-                                               [backend.rust]\nencodings = [\"podbuf\"]\n";
+/// `MANIFEST` with three backend tables, `podbuf` listed only in the middle
+/// one in name order (`a`, `c`, `rust`), so the encodings are the union over
+/// every table: not the first table's list, not the last one's, and not the
+/// `rust` table's.
+const PODBUF_IN_MIDDLE_TABLE_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                                               [backend.a]\nencodings = [\"proto3\"]\n\n\
+                                               [backend.c]\nencodings = [\"podbuf\"]\n\n\
+                                               [backend.rust]\nencodings = [\"flatbuffers\"]\n";
+
+/// `MANIFEST` with one backend table that lists `flatbuffers` only.
+const FLATBUFFERS_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                                    [backend.rust]\nencodings = [\"flatbuffers\"]\n";
 
 /// The encodings are the union over every backend table: `podbuf` listed in
-/// the second table only still ends the history at a podbuf break.
+/// the middle table only still ends the history at a podbuf break.
 #[test]
 fn podbuf_in_any_backend_table_ends_the_history() {
     let (_, built, history, new_hash) = judge_edit(
-        "podbuf-second-table",
-        PODBUF_IN_SECOND_TABLE_MANIFEST,
+        "podbuf-middle-table",
+        PODBUF_IN_MIDDLE_TABLE_MANIFEST,
         INLINE_GROWN,
     );
     assert_eq!(built, Vec::<String>::new(), "ridl build lists nothing");
     assert_eq!(history, vec![new_hash], "ridl baseline restarts the chain");
+}
+
+/// A backend table that lists an encoding other than `podbuf` adds no podbuf
+/// rule, so the same append carries the chain.
+#[test]
+fn a_table_without_podbuf_carries_the_history() {
+    let (baseline_hash, built, history, new_hash) =
+        judge_edit("flatbuffers-only", FLATBUFFERS_MANIFEST, INLINE_GROWN);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}
+
+/// A snapshot does not record encodings. The step from a baseline published
+/// before `podbuf` was listed to the tree is judged by the podbuf rules once
+/// it is, so a podbuf break ends the history.
+#[test]
+fn the_step_from_a_baseline_published_before_podbuf_is_judged_under_podbuf() {
+    let dir = TempDir::new("before-podbuf");
+    let out = TempDir::new("before-podbuf-out");
+    let root = set_workspace(&dir, MANIFEST, INLINE_BASE);
+    publish(&root);
+    set_workspace(&dir, PODBUF_MANIFEST, INLINE_GROWN);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "ridl build lists nothing"
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    publish(&root);
+    assert_eq!(
+        history_lines(&root),
+        vec![new_hash],
+        "ridl baseline restarts the chain"
+    );
+}
+
+/// `INLINE_GROWN` with one event appended to the interface: compatible under
+/// every encoding.
+const INLINE_GROWN_APPENDED: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Wide
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+  event alarm: Level @[100ms..1s]
+}
+";
+
+/// Only the step from the latest published snapshots is judged for the
+/// current encodings. A podbuf break published before `podbuf` was listed was
+/// judged without the podbuf rules, so the hashes carried across it stay in
+/// the history once `podbuf` is listed.
+#[test]
+fn hashes_carried_before_podbuf_was_listed_stay_in_the_history() {
+    let dir = TempDir::new("carried-before-podbuf");
+    let first = TempDir::new("carried-before-podbuf-first");
+    let second = TempDir::new("carried-before-podbuf-second");
+    let out = TempDir::new("carried-before-podbuf-out");
+    let root = set_workspace(&dir, MANIFEST, INLINE_BASE);
+    publish(&root);
+    let base_hash = describe_hash(&root, first.path(), UNIT);
+    set_workspace(&dir, MANIFEST, INLINE_GROWN);
+    publish(&root);
+    let grown_hash = describe_hash(&root, second.path(), UNIT);
+    set_workspace(&dir, PODBUF_MANIFEST, INLINE_GROWN_APPENDED);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        vec![grown_hash.clone(), base_hash.clone()],
+        "the hash carried before podbuf was listed stays"
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    publish(&root);
+    assert_eq!(history_lines(&root), vec![new_hash, grown_hash, base_hash]);
+}
+
+/// A two-unit workspace whose root manifest lists `podbuf`: `veh.cluster`
+/// with `cluster_source` and `veh.body` with `body_source`.
+fn write_two_units_podbuf(dir: &TempDir, cluster_source: &str, body_source: &str) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\", \"body\"]\n\n\
+         [backend.rust]\nencodings = [\"podbuf\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", cluster_source);
+    dir.write(
+        "body/ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("body/body.ridl", body_source);
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    root
+}
+
+/// A podbuf break is attributed to its unit: it ends the history of
+/// `veh.cluster` and leaves the chain of `veh.body`, changed compatibly,
+/// carried, at build time and at publication.
+#[test]
+fn a_podbuf_break_in_one_unit_leaves_the_other_chain_carried() {
+    let dir = TempDir::new("podbuf-two-units");
+    let before = TempDir::new("podbuf-two-units-before");
+    let out = TempDir::new("podbuf-two-units-out");
+    let root = write_two_units_podbuf(&dir, INLINE_BASE, BODY);
+    publish(&root);
+    let body_hash = describe_hash(&root, before.path(), "veh.body");
+    write_two_units_podbuf(&dir, INLINE_GROWN, BODY_APPENDED);
+    build_catalog(&root, out.path());
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+    assert_eq!(
+        compatible_of(out.path(), "veh.body"),
+        vec![body_hash.clone()]
+    );
+    publish(&root);
+    assert_eq!(history_lines_of(&root, UNIT).len(), 1, "the chain restarts");
+    assert_eq!(history_lines_of(&root, "veh.body").len(), 2);
+    assert_eq!(history_lines_of(&root, "veh.body")[1], body_hash);
+}
+
+/// A `.ridl` file given as the entry reads the encodings of the root manifest
+/// around the file.
+#[test]
+fn a_file_entry_is_judged_for_the_root_manifest_encodings() {
+    let dir = TempDir::new("podbuf-file-entry");
+    let out = TempDir::new("podbuf-file-entry-out");
+    let root = set_workspace(&dir, PODBUF_MANIFEST, INLINE_BASE);
+    publish(&root);
+    set_workspace(&dir, PODBUF_MANIFEST, INLINE_GROWN);
+    let file = root.join("cluster.ridl");
+    build_catalog(&file, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "ridl build <file> lists nothing"
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    publish(&file);
+    assert_eq!(
+        history_lines(&root),
+        vec![new_hash],
+        "ridl baseline <file> restarts the chain"
+    );
 }
 
 /// A workspace whose root manifest lists `podbuf` and whose one member,

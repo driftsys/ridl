@@ -30,9 +30,8 @@ use crate::{default_baseline_dir, report_diff_side_error};
 /// file's hashes less the unit's current catalog hash when the unit's verdict
 /// is compatible or identical, or when the current catalog hash is the file's
 /// first hash: the catalog did not change, so every hash the file lists still
-/// applies. Otherwise the unit's list is empty. The verdict is judged for the
-/// root manifest's encodings ([`crate::root_manifest_encodings`]), so under
-/// `podbuf` a podbuf break empties the list as any other break does.
+/// applies. Otherwise the unit's list is empty. The verdict is judged by
+/// [`judged_diff`], for the root manifest's encodings.
 ///
 /// A history is carried only when its first hash is the hash recomputed from
 /// the published snapshots of that unit, so a history that does not describe
@@ -60,9 +59,7 @@ pub(crate) fn compatible_catalogs(
         .map_err(report_diff_side_error)?
         .packages;
     let old_refs: Vec<&Package> = old.iter().collect();
-    let encodings = crate::root_manifest_encodings(entry);
-    let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
-    let report = ridl_diff::diff_refs_with(&old_refs, checked, &[std], &encodings);
+    let report = judged_diff(entry, &old_refs, checked, std);
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&report, &old_refs, checked);
     let scope = ridlc::catalog_scope(checked, Some(std));
     let published_scope = ridlc::catalog_scope(&old_refs, Some(std));
@@ -106,11 +103,9 @@ pub(crate) fn compatible_catalogs(
 
 /// Writes `staging/<unit>.catalogs` for every unit of the snapshots `fresh`
 /// (the ones in `staging`) that has at least one interface shape. The
-/// verdicts are judged for `encodings`, the root manifest's
-/// ([`crate::root_manifest_encodings`]), as [`compatible_catalogs`] judges
-/// them, so `ridl baseline` and `ridl build` give one verdict. A snapshot
-/// does not record encodings: a baseline published before `podbuf` was
-/// listed is judged by the podbuf rules once it is.
+/// verdicts are judged by [`judged_diff`] for the root manifest of the
+/// workspace at `entry`, as [`compatible_catalogs`] judges them, so
+/// `ridl baseline` and `ridl build` give one verdict.
 ///
 /// Each file holds the unit's catalog hash, computed over `fresh` as
 /// `ridl build --emit catalog` computes it. When the unit's verdict between
@@ -136,13 +131,12 @@ pub(crate) fn write_catalog_histories(
     published: &Path,
     old: &[Package],
     fresh: &[Package],
-    encodings: &[&str],
+    entry: &Path,
 ) -> Result<(), ExitCode> {
     let std = ridlc::std_ir();
     let fresh_refs: Vec<&Package> = fresh.iter().collect();
     let old_refs: Vec<&Package> = old.iter().collect();
-    let report = (!old.is_empty())
-        .then(|| ridl_diff::diff_refs_with(&old_refs, &fresh_refs, &[&std], encodings));
+    let report = (!old.is_empty()).then(|| judged_diff(entry, &old_refs, &fresh_refs, &std));
     let verdicts = report
         .as_ref()
         .map(|report| ridl_diff::UnitVerdicts::new(report, old, fresh));
@@ -179,6 +173,28 @@ pub(crate) fn write_catalog_histories(
         write_history(staging, unit, &history)?;
     }
     Ok(())
+}
+
+/// The diff from the snapshots `old` to `new`, with `std` as context, judged
+/// for the root manifest's encodings of the workspace at `entry`
+/// ([`crate::root_manifest_encodings`]): the one report both catalog history
+/// verdicts read. Under `podbuf`, a podbuf break makes the unit's verdict
+/// breaking as any other break does.
+///
+/// Only this step, from the latest published snapshots to `new`, is judged
+/// for the current encodings. A snapshot does not record encodings, so the
+/// step from a baseline published before `podbuf` was listed is judged by the
+/// podbuf rules; the hashes the history carried before then were judged
+/// without them and stay in it.
+fn judged_diff(
+    entry: &Path,
+    old: &[&Package],
+    new: &[&Package],
+    std: &Package,
+) -> ridl_diff::DiffReport {
+    let encodings = crate::root_manifest_encodings(entry);
+    let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
+    ridl_diff::diff_refs_with(old, new, &[std], &encodings)
 }
 
 /// Whether `dir` holds at least one entry named `<unit>.catalogs` and at

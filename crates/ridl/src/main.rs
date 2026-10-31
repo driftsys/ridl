@@ -900,15 +900,9 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 
     // The histories are written into the staging directory only once both
     // gates passed, so a refused run leaves every published history as it was.
-    let encodings = root_manifest_encodings(path);
-    let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
-    if let Err(code) = catalogs::write_catalog_histories(
-        &staging,
-        &out_dir,
-        &sets.published,
-        &sets.fresh,
-        &encodings,
-    ) {
+    if let Err(code) =
+        catalogs::write_catalog_histories(&staging, &out_dir, &sets.published, &sets.fresh, path)
+    {
         let _ = std::fs::remove_dir_all(&staging);
         return code;
     }
@@ -1608,7 +1602,9 @@ fn desk_check(
 ///
 /// The padding lint runs when the list holds `podbuf`, and the catalog
 /// history verdicts of `ridl build` and `ridl baseline` are judged for the
-/// list, so the two commands give one verdict.
+/// list, so the two commands give one verdict. `ridlc`'s private
+/// `enabled_encodings` computes the same list from the compiled backend
+/// tables; a change to one is made to the other.
 pub(crate) fn root_manifest_encodings(entry: &Path) -> Vec<String> {
     let Some(root) = ridl_core::find_root(&index_root(entry)) else {
         return Vec::new();
