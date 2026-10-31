@@ -1687,10 +1687,615 @@ mod root {
                 }
             }
 
+            /// The enum `StreamForm` in the namespace `ridl.descriptor`
+            ///
+            /// Generated from these locations:
+            /// * Enum `StreamForm` in the file `crates/ridl-descriptor/schema/catalog.fbs:62`
+            #[derive(
+                Copy,
+                Clone,
+                Debug,
+                PartialEq,
+                Eq,
+                PartialOrd,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            #[repr(u8)]
+            pub enum StreamForm {
+                /// The variant `Elements` in the enum `StreamForm`
+                Elements = 0,
+
+                /// The variant `Bytes` in the enum `StreamForm`
+                Bytes = 1,
+
+                /// The variant `Text` in the enum `StreamForm`
+                Text = 2,
+            }
+
+            impl StreamForm {
+                /// Array containing all valid variants of StreamForm
+                pub const ENUM_VALUES: [Self; 3] = [Self::Elements, Self::Bytes, Self::Text];
+            }
+
+            impl ::core::convert::TryFrom<u8> for StreamForm {
+                type Error = ::planus::errors::UnknownEnumTagKind;
+                #[inline]
+                fn try_from(
+                    value: u8,
+                ) -> ::core::result::Result<Self, ::planus::errors::UnknownEnumTagKind>
+                {
+                    #[allow(clippy::match_single_binding)]
+                    match value {
+                        0 => ::core::result::Result::Ok(StreamForm::Elements),
+                        1 => ::core::result::Result::Ok(StreamForm::Bytes),
+                        2 => ::core::result::Result::Ok(StreamForm::Text),
+
+                        _ => ::core::result::Result::Err(::planus::errors::UnknownEnumTagKind {
+                            tag: value as i128,
+                        }),
+                    }
+                }
+            }
+
+            impl ::core::convert::From<StreamForm> for u8 {
+                #[inline]
+                fn from(value: StreamForm) -> Self {
+                    value as u8
+                }
+            }
+
+            /// # Safety
+            /// The Planus compiler correctly calculates `ALIGNMENT` and `SIZE`.
+            unsafe impl ::planus::Primitive for StreamForm {
+                const ALIGNMENT: usize = 1;
+                const SIZE: usize = 1;
+            }
+
+            impl ::planus::WriteAsPrimitive<StreamForm> for StreamForm {
+                #[inline]
+                fn write<const N: usize>(
+                    &self,
+                    cursor: ::planus::Cursor<'_, N>,
+                    buffer_position: u32,
+                ) {
+                    (*self as u8).write(cursor, buffer_position);
+                }
+            }
+
+            impl ::planus::WriteAs<StreamForm> for StreamForm {
+                type Prepared = Self;
+
+                #[inline]
+                fn prepare(&self, _builder: &mut ::planus::Builder) -> StreamForm {
+                    *self
+                }
+            }
+
+            impl ::planus::WriteAsDefault<StreamForm, StreamForm> for StreamForm {
+                type Prepared = Self;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    _builder: &mut ::planus::Builder,
+                    default: &StreamForm,
+                ) -> ::core::option::Option<StreamForm> {
+                    if self == default {
+                        ::core::option::Option::None
+                    } else {
+                        ::core::option::Option::Some(*self)
+                    }
+                }
+            }
+
+            impl ::planus::WriteAsOptional<StreamForm> for StreamForm {
+                type Prepared = Self;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    _builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<StreamForm> {
+                    ::core::option::Option::Some(*self)
+                }
+            }
+
+            impl<'buf> ::planus::TableRead<'buf> for StreamForm {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'buf>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    let n: u8 = ::planus::TableRead::from_buffer(buffer, offset)?;
+                    ::core::result::Result::Ok(::core::convert::TryInto::try_into(n)?)
+                }
+            }
+
+            impl<'buf> ::planus::VectorReadInner<'buf> for StreamForm {
+                type Error = ::planus::errors::UnknownEnumTag;
+                const STRIDE: usize = 1;
+                #[inline]
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'buf>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::UnknownEnumTag>
+                {
+                    let value = unsafe { *buffer.buffer.get_unchecked(offset) };
+                    let value: ::core::result::Result<Self, _> =
+                        ::core::convert::TryInto::try_into(value);
+                    value.map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "StreamForm",
+                            "VectorRead::from_buffer",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<StreamForm> for StreamForm {
+                const STRIDE: usize = 1;
+
+                type Value = Self;
+
+                #[inline]
+                fn prepare(&self, _builder: &mut ::planus::Builder) -> Self {
+                    *self
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[Self],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 1];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - i as u32,
+                        );
+                    }
+                }
+            }
+
+            /// The table `StreamPayload` in the namespace `ridl.descriptor`
+            ///
+            /// Generated from these locations:
+            /// * Table `StreamPayload` in the file `crates/ridl-descriptor/schema/catalog.fbs:71`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct StreamPayload {
+                /// The field `no` in the table `StreamPayload`
+                pub no: u8,
+                /// The field `form` in the table `StreamPayload`
+                pub form: self::StreamForm,
+                /// The field `element` in the table `StreamPayload`
+                pub element: ::core::option::Option<::planus::alloc::string::String>,
+                /// The field `max_sizes` in the table `StreamPayload`
+                pub max_sizes: ::planus::alloc::vec::Vec<self::MaxSize>,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for StreamPayload {
+                fn default() -> Self {
+                    Self {
+                        no: 0,
+                        form: self::StreamForm::Elements,
+                        element: ::core::default::Default::default(),
+                        max_sizes: ::core::default::Default::default(),
+                    }
+                }
+            }
+
+            impl StreamPayload {
+                /// Creates a [StreamPayloadBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> StreamPayloadBuilder<()> {
+                    StreamPayloadBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_no: impl ::planus::WriteAsDefault<u8, u8>,
+                    field_form: impl ::planus::WriteAsDefault<self::StreamForm, self::StreamForm>,
+                    field_element: impl ::planus::WriteAsOptional<
+                        ::planus::Offset<::core::primitive::str>,
+                    >,
+                    field_max_sizes: impl ::planus::WriteAs<
+                        ::planus::Offset<[::planus::Offset<self::MaxSize>]>,
+                    >,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_no = field_no.prepare(builder, &0);
+                    let prepared_form = field_form.prepare(builder, &self::StreamForm::Elements);
+                    let prepared_element = field_element.prepare(builder);
+                    let prepared_max_sizes = field_max_sizes.prepare(builder);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<12> =
+                        ::core::default::Default::default();
+                    if prepared_element.is_some() {
+                        table_writer.write_entry::<::planus::Offset<str>>(2);
+                    }
+                    table_writer
+                        .write_entry::<::planus::Offset<[::planus::Offset<self::MaxSize>]>>(3);
+                    if prepared_no.is_some() {
+                        table_writer.write_entry::<u8>(0);
+                    }
+                    if prepared_form.is_some() {
+                        table_writer.write_entry::<self::StreamForm>(1);
+                    }
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            if let ::core::option::Option::Some(prepared_element) = prepared_element
+                            {
+                                object_writer.write::<_, _, 4>(&prepared_element);
+                            }
+                            object_writer.write::<_, _, 4>(&prepared_max_sizes);
+                            if let ::core::option::Option::Some(prepared_no) = prepared_no {
+                                object_writer.write::<_, _, 1>(&prepared_no);
+                            }
+                            if let ::core::option::Option::Some(prepared_form) = prepared_form {
+                                object_writer.write::<_, _, 1>(&prepared_form);
+                            }
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<StreamPayload>> for StreamPayload {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<StreamPayload> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<StreamPayload>> for StreamPayload {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<StreamPayload>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<StreamPayload> for StreamPayload {
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<StreamPayload> {
+                    StreamPayload::create(
+                        builder,
+                        self.no,
+                        self.form,
+                        &self.element,
+                        &self.max_sizes,
+                    )
+                }
+            }
+
+            /// Builder for serializing an instance of the [StreamPayload] type.
+            ///
+            /// Can be created using the [StreamPayload::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct StreamPayloadBuilder<State>(State);
+
+            impl StreamPayloadBuilder<()> {
+                /// Setter for the [`no` field](StreamPayload#structfield.no).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn no<T0>(self, value: T0) -> StreamPayloadBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAsDefault<u8, u8>,
+                {
+                    StreamPayloadBuilder((value,))
+                }
+
+                /// Sets the [`no` field](StreamPayload#structfield.no) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn no_as_default(self) -> StreamPayloadBuilder<(::planus::DefaultValue,)> {
+                    self.no(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0> StreamPayloadBuilder<(T0,)> {
+                /// Setter for the [`form` field](StreamPayload#structfield.form).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn form<T1>(self, value: T1) -> StreamPayloadBuilder<(T0, T1)>
+                where
+                    T1: ::planus::WriteAsDefault<self::StreamForm, self::StreamForm>,
+                {
+                    let (v0,) = self.0;
+                    StreamPayloadBuilder((v0, value))
+                }
+
+                /// Sets the [`form` field](StreamPayload#structfield.form) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn form_as_default(self) -> StreamPayloadBuilder<(T0, ::planus::DefaultValue)> {
+                    self.form(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0, T1> StreamPayloadBuilder<(T0, T1)> {
+                /// Setter for the [`element` field](StreamPayload#structfield.element).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn element<T2>(self, value: T2) -> StreamPayloadBuilder<(T0, T1, T2)>
+                where
+                    T2: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                {
+                    let (v0, v1) = self.0;
+                    StreamPayloadBuilder((v0, v1, value))
+                }
+
+                /// Sets the [`element` field](StreamPayload#structfield.element) to null.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn element_as_null(self) -> StreamPayloadBuilder<(T0, T1, ())> {
+                    self.element(())
+                }
+            }
+
+            impl<T0, T1, T2> StreamPayloadBuilder<(T0, T1, T2)> {
+                /// Setter for the [`max_sizes` field](StreamPayload#structfield.max_sizes).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn max_sizes<T3>(self, value: T3) -> StreamPayloadBuilder<(T0, T1, T2, T3)>
+                where
+                    T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::MaxSize>]>>,
+                {
+                    let (v0, v1, v2) = self.0;
+                    StreamPayloadBuilder((v0, v1, v2, value))
+                }
+            }
+
+            impl<T0, T1, T2, T3> StreamPayloadBuilder<(T0, T1, T2, T3)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [StreamPayload].
+                #[inline]
+                pub fn finish(
+                    self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<StreamPayload>
+                where
+                    Self: ::planus::WriteAsOffset<StreamPayload>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<
+                T0: ::planus::WriteAsDefault<u8, u8>,
+                T1: ::planus::WriteAsDefault<self::StreamForm, self::StreamForm>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::MaxSize>]>>,
+            > ::planus::WriteAs<::planus::Offset<StreamPayload>>
+                for StreamPayloadBuilder<(T0, T1, T2, T3)>
+            {
+                type Prepared = ::planus::Offset<StreamPayload>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<StreamPayload> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<
+                T0: ::planus::WriteAsDefault<u8, u8>,
+                T1: ::planus::WriteAsDefault<self::StreamForm, self::StreamForm>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::MaxSize>]>>,
+            > ::planus::WriteAsOptional<::planus::Offset<StreamPayload>>
+                for StreamPayloadBuilder<(T0, T1, T2, T3)>
+            {
+                type Prepared = ::planus::Offset<StreamPayload>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<StreamPayload>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<
+                T0: ::planus::WriteAsDefault<u8, u8>,
+                T1: ::planus::WriteAsDefault<self::StreamForm, self::StreamForm>,
+                T2: ::planus::WriteAsOptional<::planus::Offset<::core::primitive::str>>,
+                T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::MaxSize>]>>,
+            > ::planus::WriteAsOffset<StreamPayload> for StreamPayloadBuilder<(T0, T1, T2, T3)>
+            {
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<StreamPayload> {
+                    let (v0, v1, v2, v3) = &self.0;
+                    StreamPayload::create(builder, v0, v1, v2, v3)
+                }
+            }
+
+            /// Reference to a deserialized [StreamPayload].
+            #[derive(Copy, Clone)]
+            pub struct StreamPayloadRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> StreamPayloadRef<'a> {
+                /// Getter for the [`no` field](StreamPayload#structfield.no).
+                #[inline]
+                pub fn no(&self) -> ::planus::Result<u8> {
+                    ::core::result::Result::Ok(
+                        self.0.access(0, "StreamPayload", "no")?.unwrap_or(0),
+                    )
+                }
+
+                /// Getter for the [`form` field](StreamPayload#structfield.form).
+                #[inline]
+                pub fn form(&self) -> ::planus::Result<self::StreamForm> {
+                    ::core::result::Result::Ok(
+                        self.0
+                            .access(1, "StreamPayload", "form")?
+                            .unwrap_or(self::StreamForm::Elements),
+                    )
+                }
+
+                /// Getter for the [`element` field](StreamPayload#structfield.element).
+                #[inline]
+                pub fn element(
+                    &self,
+                ) -> ::planus::Result<::core::option::Option<&'a ::core::primitive::str>>
+                {
+                    self.0.access(2, "StreamPayload", "element")
+                }
+
+                /// Getter for the [`max_sizes` field](StreamPayload#structfield.max_sizes).
+                #[inline]
+                pub fn max_sizes(
+                    &self,
+                ) -> ::planus::Result<::planus::Vector<'a, ::planus::Result<self::MaxSizeRef<'a>>>>
+                {
+                    self.0.access_required(3, "StreamPayload", "max_sizes")
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for StreamPayloadRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("StreamPayloadRef");
+                    f.field("no", &self.no());
+                    f.field("form", &self.form());
+                    if let ::core::option::Option::Some(field_element) = self.element().transpose()
+                    {
+                        f.field("element", &field_element);
+                    }
+                    f.field("max_sizes", &self.max_sizes());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<StreamPayloadRef<'a>> for StreamPayload {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: StreamPayloadRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        no: ::core::convert::TryInto::try_into(value.no()?)?,
+                        form: ::core::convert::TryInto::try_into(value.form()?)?,
+                        element: value.element()?.map(::core::convert::Into::into),
+                        max_sizes: value.max_sizes()?.to_vec_result()?,
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for StreamPayloadRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for StreamPayloadRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[StreamPayloadRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<StreamPayload>> for StreamPayload {
+                type Value = ::planus::Offset<StreamPayload>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<StreamPayload>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for StreamPayloadRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[StreamPayloadRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
             /// The table `Timing` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Timing` in the file `crates/ridl-descriptor/schema/catalog.fbs:58`
+            /// * Table `Timing` in the file `crates/ridl-descriptor/schema/catalog.fbs:78`
             #[derive(
                 Clone,
                 Debug,
@@ -2059,7 +2664,7 @@ mod root {
             /// The table `Member` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Member` in the file `crates/ridl-descriptor/schema/catalog.fbs:64`
+            /// * Table `Member` in the file `crates/ridl-descriptor/schema/catalog.fbs:84`
             #[derive(
                 Clone,
                 Debug,
@@ -2084,6 +2689,8 @@ mod root {
                 pub timing: ::core::option::Option<::planus::alloc::boxed::Box<self::Timing>>,
                 /// The field `limit` in the table `Member`
                 pub limit: ::core::option::Option<u32>,
+                /// The field `streams` in the table `Member`
+                pub streams: ::core::option::Option<::planus::alloc::vec::Vec<self::StreamPayload>>,
             }
 
             #[allow(clippy::derivable_impls)]
@@ -2096,6 +2703,7 @@ mod root {
                         payloads: ::core::default::Default::default(),
                         timing: ::core::default::Default::default(),
                         limit: ::core::default::Default::default(),
+                        streams: ::core::default::Default::default(),
                     }
                 }
             }
@@ -2118,6 +2726,9 @@ mod root {
                     >,
                     field_timing: impl ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
                     field_limit: impl ::planus::WriteAsOptional<u32>,
+                    field_streams: impl ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::StreamPayload>]>,
+                    >,
                 ) -> ::planus::Offset<Self> {
                     let prepared_name = field_name.prepare(builder);
                     let prepared_ordinal = field_ordinal.prepare(builder, &0);
@@ -2125,8 +2736,9 @@ mod root {
                     let prepared_payloads = field_payloads.prepare(builder);
                     let prepared_timing = field_timing.prepare(builder);
                     let prepared_limit = field_limit.prepare(builder);
+                    let prepared_streams = field_streams.prepare(builder);
 
-                    let mut table_writer: ::planus::table_writer::TableWriter<16> =
+                    let mut table_writer: ::planus::table_writer::TableWriter<18> =
                         ::core::default::Default::default();
                     table_writer.write_entry::<::planus::Offset<str>>(0);
                     if prepared_ordinal.is_some() {
@@ -2139,6 +2751,9 @@ mod root {
                     }
                     if prepared_limit.is_some() {
                         table_writer.write_entry::<u32>(5);
+                    }
+                    if prepared_streams.is_some() {
+                        table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::StreamPayload>]>>(6);
                     }
                     if prepared_kind.is_some() {
                         table_writer.write_entry::<self::Kind>(2);
@@ -2157,6 +2772,10 @@ mod root {
                             }
                             if let ::core::option::Option::Some(prepared_limit) = prepared_limit {
                                 object_writer.write::<_, _, 4>(&prepared_limit);
+                            }
+                            if let ::core::option::Option::Some(prepared_streams) = prepared_streams
+                            {
+                                object_writer.write::<_, _, 4>(&prepared_streams);
                             }
                             if let ::core::option::Option::Some(prepared_kind) = prepared_kind {
                                 object_writer.write::<_, _, 1>(&prepared_kind);
@@ -2199,6 +2818,7 @@ mod root {
                         &self.payloads,
                         &self.timing,
                         self.limit,
+                        &self.streams,
                     )
                 }
             }
@@ -2316,6 +2936,28 @@ mod root {
             }
 
             impl<T0, T1, T2, T3, T4, T5> MemberBuilder<(T0, T1, T2, T3, T4, T5)> {
+                /// Setter for the [`streams` field](Member#structfield.streams).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn streams<T6>(self, value: T6) -> MemberBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                where
+                    T6: ::planus::WriteAsOptional<
+                            ::planus::Offset<[::planus::Offset<self::StreamPayload>]>,
+                        >,
+                {
+                    let (v0, v1, v2, v3, v4, v5) = self.0;
+                    MemberBuilder((v0, v1, v2, v3, v4, v5, value))
+                }
+
+                /// Sets the [`streams` field](Member#structfield.streams) to null.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn streams_as_null(self) -> MemberBuilder<(T0, T1, T2, T3, T4, T5, ())> {
+                    self.streams(())
+                }
+            }
+
+            impl<T0, T1, T2, T3, T4, T5, T6> MemberBuilder<(T0, T1, T2, T3, T4, T5, T6)> {
                 /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [Member].
                 #[inline]
                 pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<Member>
@@ -2333,8 +2975,11 @@ mod root {
                 T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Payload>]>>,
                 T4: ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
                 T5: ::planus::WriteAsOptional<u32>,
+                T6: ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::StreamPayload>]>,
+                    >,
             > ::planus::WriteAs<::planus::Offset<Member>>
-                for MemberBuilder<(T0, T1, T2, T3, T4, T5)>
+                for MemberBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             {
                 type Prepared = ::planus::Offset<Member>;
 
@@ -2351,8 +2996,11 @@ mod root {
                 T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Payload>]>>,
                 T4: ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
                 T5: ::planus::WriteAsOptional<u32>,
+                T6: ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::StreamPayload>]>,
+                    >,
             > ::planus::WriteAsOptional<::planus::Offset<Member>>
-                for MemberBuilder<(T0, T1, T2, T3, T4, T5)>
+                for MemberBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             {
                 type Prepared = ::planus::Offset<Member>;
 
@@ -2372,12 +3020,15 @@ mod root {
                 T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Payload>]>>,
                 T4: ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
                 T5: ::planus::WriteAsOptional<u32>,
-            > ::planus::WriteAsOffset<Member> for MemberBuilder<(T0, T1, T2, T3, T4, T5)>
+                T6: ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::StreamPayload>]>,
+                    >,
+            > ::planus::WriteAsOffset<Member> for MemberBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             {
                 #[inline]
                 fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Member> {
-                    let (v0, v1, v2, v3, v4, v5) = &self.0;
-                    Member::create(builder, v0, v1, v2, v3, v4, v5)
+                    let (v0, v1, v2, v3, v4, v5, v6) = &self.0;
+                    Member::create(builder, v0, v1, v2, v3, v4, v5, v6)
                 }
             }
 
@@ -2430,6 +3081,18 @@ mod root {
                 pub fn limit(&self) -> ::planus::Result<::core::option::Option<u32>> {
                     self.0.access(5, "Member", "limit")
                 }
+
+                /// Getter for the [`streams` field](Member#structfield.streams).
+                #[inline]
+                pub fn streams(
+                    &self,
+                ) -> ::planus::Result<
+                    ::core::option::Option<
+                        ::planus::Vector<'a, ::planus::Result<self::StreamPayloadRef<'a>>>,
+                    >,
+                > {
+                    self.0.access(6, "Member", "streams")
+                }
             }
 
             impl<'a> ::core::fmt::Debug for MemberRef<'a> {
@@ -2444,6 +3107,10 @@ mod root {
                     }
                     if let ::core::option::Option::Some(field_limit) = self.limit().transpose() {
                         f.field("limit", &field_limit);
+                    }
+                    if let ::core::option::Option::Some(field_streams) = self.streams().transpose()
+                    {
+                        f.field("streams", &field_streams);
                     }
                     f.finish()
                 }
@@ -2468,6 +3135,11 @@ mod root {
                         },
                         limit: if let ::core::option::Option::Some(limit) = value.limit()? {
                             ::core::option::Option::Some(::core::convert::TryInto::try_into(limit)?)
+                        } else {
+                            ::core::option::Option::None
+                        },
+                        streams: if let ::core::option::Option::Some(streams) = value.streams()? {
+                            ::core::option::Option::Some(streams.to_vec_result()?)
                         } else {
                             ::core::option::Option::None
                         },
@@ -2551,7 +3223,7 @@ mod root {
             /// The table `Interface` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Interface` in the file `crates/ridl-descriptor/schema/catalog.fbs:78`
+            /// * Table `Interface` in the file `crates/ridl-descriptor/schema/catalog.fbs:101`
             #[derive(
                 Clone,
                 Debug,
@@ -2981,7 +3653,7 @@ mod root {
             /// The table `RetiredInterface` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `RetiredInterface` in the file `crates/ridl-descriptor/schema/catalog.fbs:95`
+            /// * Table `RetiredInterface` in the file `crates/ridl-descriptor/schema/catalog.fbs:118`
             #[derive(
                 Clone,
                 Debug,
@@ -3302,7 +3974,7 @@ mod root {
             /// The table `EarlierCatalog` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `EarlierCatalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:102`
+            /// * Table `EarlierCatalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:125`
             #[derive(
                 Clone,
                 Debug,
@@ -3572,7 +4244,7 @@ mod root {
             /// The table `Catalog` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:106`
+            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:129`
             #[derive(
                 Clone,
                 Debug,

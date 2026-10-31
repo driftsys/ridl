@@ -111,6 +111,7 @@ The member `average`, a query, as it appears in `members`:
       "type_name": "Average"
     }
   ],
+  "streams": [],
   "timing": { "max_us": "200000", "min_us": null, "mode": "Range" }
 }
 ```
@@ -142,11 +143,19 @@ does not read, makes `ridl describe` exit with code 2. The
   the rule for the names and the numbers.
 - **Each member**: its `name`, its `ordinal` (its position in the interface
   body), its `kind`, its `payloads`, its `timing` when the member declares
-  one, and its `limit`, the payload limit in bytes that a `[limits]` entry of
-  the unit's `ridl.toml` gives it, absent when no entry applies.
+  one, its `limit`, the payload limit in bytes that a `[limits]` entry of
+  the unit's `ridl.toml` gives it, absent when no entry applies, and its
+  `streams`, one entry per stream of the call. An entry has its `no` (0 for a
+  query's reply stream, `k` for the `k`-th stream parameter, counting only the
+  stream parameters), its `form` (`Elements`, `Bytes` or `Text`), its
+  `element`, the element type's name qualified by its package under
+  `Elements` and `null` otherwise, and its `max_sizes`, the element's rows
+  under `Elements` and none otherwise. A member with no stream, and every
+  member of a file written before the field existed, prints `[]`.
 - **Each payload**: its `role` (`value` for a signal or a `fixed`, `occurrence`
   for an event, `request` for a command or a query, `response` for a query's
-  reply), its `type_name`, and one `max_sizes` row per encoding. A row is
+  reply), its `type_name`, and one `max_sizes` row per encoding. A request
+  spells only the parameters that are not streams. A row is
   `Bounded`, with `bytes` the maximum encoded size of the payload, envelope and
   framing excluded; or `Unbounded`, with `bytes` 0 and a `cause` that says why
   the compiler cannot bound it in that encoding. For example, a FlatBuffers row
