@@ -377,13 +377,14 @@ a field is appended.
 
    _Amended 2026-10-31, from driftsys/ridl#1112._ Each tuple has its own head,
    found by the tuple's identity and never by a head of the same shape: two
-   same-shape tuples of one package have two heads, and an importing header
-   names a foreign tuple's head by the declaring package's induced name
-   (`<pkg>_<wire name under snake_case>_head`, the name the declaring header
-   gives it), so the two headers define one head under one guard with one text.
-   The codegen model carries the identity on `NestedTuple.package` and
-   `NestedTuple.wire`. A (package, wire) key reached from two different tuples
-   is refused, whatever their layouts;
+   same-shape tuples of one package have two heads when their induced names
+   differ, two positions with one induced name and one shape share one entry and
+   one head, and an importing header names a foreign tuple's head by the
+   declaring package's induced name (`<pkg>_<wire name under snake_case>_head`,
+   the name the declaring header gives it), so the two headers define one head
+   under one guard with one text. The codegen model carries the identity on
+   `NestedTuple.package` and `NestedTuple.wire`. A (package, wire) key reached
+   from two different tuples is refused, whatever their layouts;
    [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) has the detail.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
