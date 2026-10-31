@@ -62,8 +62,8 @@ of the declaration.
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.
 `PodbufProjection.boxes` holds the one-field head of each named scalar, enum or
-enum set that is a payload root, because interfaces use such types as payloads
-and a plugin may not compute a layout or a bound itself. A box is in no index of
+enum set that can be laid out, because interfaces use such types as payloads and
+a plugin may not compute a layout or a bound itself. A box is in no index of
 `heads`.
 
 `ridl_rt::podbuf` decides no layout. It is handed sizes, offsets and alignments.
@@ -86,8 +86,9 @@ For each struct, union and named induced tuple, the Rust codec emits:
   `BUFFER`, `View<'a> = TPodbufView<'a>`, and `encode`, `verify` and `decode`
   over the functions above.
 
-A named scalar, an enum and an enum set used as a payload root has a view with
-one accessor, `value`, the `Payload<Podbuf>` implementation, and no head struct.
+A named scalar, an enum and an enum set used as a payload root has, in the Rust
+codec, a view with one accessor, `value`, the `Payload<Podbuf>` implementation,
+and no head struct; the C header gives it a one-field head (see "The C header").
 The claim table reserves the generated type names, `TPodbufHead`, `TPodbufView`
 and `TPodbufArm`, so a ridl name cannot collide with one; the `__ridl_podbuf_*`
 functions need no claim, because no typl name spells a leading `__`, and a view
@@ -215,8 +216,27 @@ their layouts, are refused in both headers: the declaring header through its C
 name claim, an importing header by refusing the head that reaches them, with a
 cause that names both paths. A head reached only through a tail descriptor, an
 array element or a map entry, is not laid out inline, so an importing header
-does not define it. The header carries `#error` on a big-endian target, and has
-no `verify`: the gate is Rust.
+does not define it.
+
+The header also holds a head for each named scalar, enum and enum set the
+package declares that can be laid out (`PodbufProjection.boxes`), whether or not
+an interface sends it: `<owner>_head`, with one member `value` at offset 0, its
+pads and its `_Static_assert` checks, and the accessors `<owner>_value_at` and
+`<owner>_value`, as for the head of any other declaration. A box whose head has
+no byte (`bytes [0]`) has no head and no accessor. A box head is defined only in
+the header of the package that declares the type: a consumer of an interface
+that sends a foreign boxed root includes that package's header.
+
+Every C name the header writes at file scope is claimed once: the constants, the
+accessor functions, the head names and the guard macro of each head. A package
+where two are equal is refused, with a message that names both claimants: a
+constant equal to the guard of a head (an enum `Gear` with a value
+`BOX_HEAD_DEFINED` next to a struct `GearBox`), which would make the `#ifndef`
+drop the head, or a box head whose name equals the name of a tuple head (a
+scalar `HubSize` next to the tuple at `Hub.size`), which the Rust backend
+refuses too. A struct, a union or a box with no podbuf size bound is refused.
+The header carries `#error` on a big-endian target, and has no `verify`: the
+gate is Rust.
 
 ## Determinism
 
@@ -262,7 +282,6 @@ The encoding has no second implementation, so the oracle is the law itself.
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | An inline append whose head reaches a type from a remote package (an `[imports]` unit, not another workspace member) is not reported as a podbuf break, so it does not end the catalog history | driftsys/ridl#1141            |
 | `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                                                                          | the typl change it depends on |
-| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                                                                                   | driftsys/ridl#1096            |
 | A string that holds U+0000 cannot be encoded                                                                                                                                                   | a limit of the encoding       |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                    | ADR-0020 decision 2           |
 

@@ -593,7 +593,8 @@ other entry below is Accepted.
   RIDL-157 replaces RIDL-150; built 2026-10-30 (driftsys/ridl#1128). Amended
   2026-10-31, decision 13: `ridl build` and `ridl baseline` judge the catalog
   history for the root manifest's encodings, which closes open item 3
-  (driftsys/ridl#1095).
+  (driftsys/ridl#1095). Amended 2026-10-31, decision 7: the C header reads a
+  boxed root, which closes open item 4 (driftsys/ridl#1096).
 
 - **ADR-0032 — Byte streams.** Fourteen decisions: the use case is a file or
   document of unknown size, downloaded or uploaded and read or written as I/O;
