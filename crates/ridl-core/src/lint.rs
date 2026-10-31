@@ -7,10 +7,14 @@
 //! and applies them to a diagnostic list ([`apply_lint_levels`], ADR-0024
 //! decision 6).
 
+mod directive;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::diag::{ALL_CATALOGS, CatalogEntry, DiagCode, Diagnostic, Severity, SourceMap};
+
+pub use directive::{DirectiveProblem, LintDirective, directives_in};
 
 /// The level a project sets for a lint. The order is from the least to the
 /// most severe.

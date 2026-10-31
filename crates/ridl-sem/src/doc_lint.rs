@@ -34,7 +34,7 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, FixIt, Severity, Span, after_last_line_break, count_line_breaks,
     ends_with_line_break, line_ending_of, lines as text_lines,
 };
-use ridl_syntax::ast::{AstNode, SourceFile, doc_comments_before};
+use ridl_syntax::ast::{AstNode, SourceFile, doc_comments_before, is_doc_carrier};
 use ridl_syntax::{Profile, SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{NodeOrToken, TextRange};
 
@@ -71,7 +71,7 @@ fn lint_file(file: &SourceFile, file_id: FileId) -> Vec<Diagnostic> {
                 diagnostics.extend(doc_comment_style(&token, file_id));
                 diagnostics.extend(misplaced_doc_comment(&token, file_id));
             }
-            NodeOrToken::Node(node) if is_carrier(node.kind()) => {
+            NodeOrToken::Node(node) if is_doc_carrier(node.kind()) => {
                 let docs = doc_comments_before(&node);
                 diagnostics.extend(missing_docs(&node, &docs, file_id));
                 if docs.is_empty() {
@@ -84,41 +84,6 @@ fn lint_file(file: &SourceFile, file_id: FileId) -> Vec<Diagnostic> {
         }
     }
     diagnostics
-}
-
-/// Whether a node of `kind` is a doc carrier (typl §14, ADR-0026): a
-/// declaration, an interaction, a member, a call parameter, or an rsdl
-/// declaration or body line.
-fn is_carrier(kind: SyntaxKind) -> bool {
-    matches!(
-        kind,
-        SyntaxKind::TypeDef
-            | SyntaxKind::ConstDef
-            | SyntaxKind::StructDef
-            | SyntaxKind::EnumDef
-            | SyntaxKind::EnumSetDef
-            | SyntaxKind::UnionDef
-            | SyntaxKind::FieldDef
-            | SyntaxKind::ReservedEntry
-            | SyntaxKind::EnumValue
-            | SyntaxKind::EnumSetBit
-            | SyntaxKind::UnionArm
-            | SyntaxKind::InterfaceDef
-            | SyntaxKind::ServiceDef
-            | SyntaxKind::SignalDef
-            | SyntaxKind::EventDef
-            | SyntaxKind::CommandDef
-            | SyntaxKind::QueryDef
-            | SyntaxKind::FixedDef
-            | SyntaxKind::Param
-            | SyntaxKind::SystemDef
-            | SyntaxKind::ComponentDef
-            | SyntaxKind::ComponentLine
-            | SyntaxKind::DistributionDef
-            | SyntaxKind::DeploymentDef
-            | SyntaxKind::MachineDef
-            | SyntaxKind::MemberLine
-    )
 }
 
 /// TYPL-406: a covered item (ADR-0026) whose doc is absent or has no prose,
@@ -260,7 +225,7 @@ fn misplaced_doc_comment(token: &SyntaxToken, file_id: FileId) -> Option<Diagnos
         cursor = next.next_sibling_or_token();
     }
     let position = match &cursor {
-        Some(NodeOrToken::Node(node)) if is_carrier(node.kind()) => return None,
+        Some(NodeOrToken::Node(node)) if is_doc_carrier(node.kind()) => return None,
         Some(NodeOrToken::Node(node)) if node.kind() == SyntaxKind::ErrorNode => return None,
         Some(NodeOrToken::Node(node)) => match node.kind() {
             SyntaxKind::PackageDecl => "the `package` header".to_string(),
