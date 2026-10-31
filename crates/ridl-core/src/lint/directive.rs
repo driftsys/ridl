@@ -366,6 +366,36 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].target, None);
         assert_eq!(found[0].problems, vec![DirectiveProblem::NoDeclaration]);
+
+        // A block comment between them is not skipped either.
+        let text = "package p\n\n// lint: allow unbounded-float -- r\n/* x */\ntype T: float\n";
+        let found = typl(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].target, None);
+        assert_eq!(found[0].problems, vec![DirectiveProblem::NoDeclaration]);
+    }
+
+    #[test]
+    fn stacked_own_line_directives_target_the_same_declaration() {
+        let text = "package p\n\n// lint: allow unbounded-float -- r\n// lint: allow missing-docs -- r\ntype T: float\n";
+        let found = typl(text);
+        assert_eq!(found.len(), 2);
+        let target = node_range(text, Profile::Typl, SyntaxKind::TypeDef);
+        for d in &found {
+            assert_eq!(d.target, Some(target));
+            assert!(d.problems.is_empty());
+        }
+        assert_eq!(names(&found[0]), vec!["unbounded-float"]);
+        assert_eq!(names(&found[1]), vec!["missing-docs"]);
+    }
+
+    #[test]
+    fn reason_may_contain_a_second_separator() {
+        let text = "package p\n\n// lint: allow missing-docs -- see a -- b\ntype T: float\n";
+        let found = typl(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(names(&found[0]), vec!["missing-docs"]);
+        assert!(found[0].problems.is_empty());
     }
 
     #[test]
