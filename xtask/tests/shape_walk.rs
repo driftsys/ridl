@@ -149,6 +149,14 @@ const ALLOWED: &[Allowed] = &[
               that crosses the wire whatever its interface's identity",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/tests/descriptor_generation.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()`, and the test finds the named `Cabin` \
+              interface in it to check a streamed reply's reservation",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/tests/induced_call_refusals.rs",
         lines: 1,
         why: "a test fixture: a compiled package's named interface is moved \
@@ -223,9 +231,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/verify.rs",
-        lines: 2,
-        why: "test cases naming the catalog descriptor's own `Catalog.interfaces` \
-              field, not a read of `Package::interfaces`",
+        lines: 3,
+        why: "test cases naming or walking the catalog descriptor's own \
+              `Catalog.interfaces` field, the last one in a descriptor written \
+              before streams, not a read of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridl-transport-ws/src/server/descriptor.rs",
@@ -288,7 +297,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 5,
+        lines: 7,
         why: "one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
@@ -299,7 +308,9 @@ const ALLOWED: &[Allowed] = &[
               interface by name, so that a test can extend it with an \
               interaction shape the fixture does not hold; a fifth sets a \
               limit on one named interaction of the budget fixture, to pin \
-              that the model copies it",
+              that the model copies it; the sixth and seventh read the lowered \
+              model's own `Model.interfaces` field, which the lowering filled \
+              from a `shapes()` walk, to find the stream fixture's members",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",
