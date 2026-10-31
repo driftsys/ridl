@@ -208,6 +208,35 @@ fn directive_after_a_member_on_the_first_line_moves_to_the_opening_brace() {
 }
 
 #[test]
+fn directive_after_a_spanning_member_or_an_attribute_keeps_its_target() {
+    for (source, profile) in [
+        (
+            "package demo\nstruct S {\n  a: (x: A,\n    y: B), b: B // lint: allow missing-docs -- s\n}\n",
+            Profile::Typl,
+        ),
+        (
+            "package demo\ninterface I {\n  command c(x: u32) [require x > 0, // lint: allow missing-docs -- s\n    ensure x > 1]\n}\n",
+            Profile::Ridl,
+        ),
+    ] {
+        let before = identities(source, profile);
+        assert_eq!(before.len(), 1, "one directive is read: {before:?}");
+        assert!(
+            before[0].1.is_some(),
+            "the directive has a target: {before:?}"
+        );
+        for width in WIDTHS {
+            let formatted = format_ok(source, profile, width, "directive keeps its target");
+            assert_eq!(
+                identities(&formatted, profile),
+                before,
+                "width {width}:\n{formatted}"
+            );
+        }
+    }
+}
+
+#[test]
 fn plain_comment_after_a_member_on_the_first_line_stays_with_the_member() {
     let source = "package demo\nstruct S { a: A // note\n  b: B\n}\n";
     for width in WIDTHS {

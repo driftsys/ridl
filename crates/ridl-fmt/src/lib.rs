@@ -286,11 +286,12 @@ fn layout_container(
 /// The line comment on the first source line of `node`, with its trailing
 /// whitespace trimmed, when the node has one that belongs to its own line. A
 /// comment after the first attribute of an attribute block belongs to that
-/// attribute, and a comment after the first body member belongs to that member
+/// attribute, and a comment after the first body member belongs to that member,
 /// unless the comment is a lint directive: a directive names the outermost
 /// declaration starting on its line (ADR-0024 decision 2), so a directive
-/// after a member on the declaration's first line moves to the line of the
-/// opening brace, where the declaration still is after formatting. Any `{`
+/// after a member or an attribute on the declaration's first line moves to the
+/// line of the opening brace or bracket, where the declaration still is after
+/// formatting. Any `{`
 /// before the first line break is the node's own or nested in a member, so a
 /// `{` always starts the body region.
 fn first_line_comment(node: &SyntaxNode) -> Option<String> {
@@ -301,7 +302,7 @@ fn first_line_comment(node: &SyntaxNode) -> Option<String> {
         match element {
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::LineComment => {
                 let text = token.text().trim_end();
-                if after_attribute || (after_member && !is_lint_directive(text)) {
+                if (after_attribute || after_member) && !is_lint_directive(text) {
                     return None;
                 }
                 return Some(text.to_string());
@@ -475,9 +476,13 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                     node: Some(node.clone()),
                     trailing: Vec::new(),
                 });
-                if line_first.is_none() {
-                    line_first = Some(blocks.len() - 1);
-                }
+                // A node that spans lines ends on a later line, where no
+                // block has started yet.
+                line_first = if spans_lines(node) {
+                    None
+                } else {
+                    line_first.or(Some(blocks.len() - 1))
+                };
                 nl_run = 0;
                 can_trail = node.kind() != SyntaxKind::MachineDef;
             }
@@ -3623,6 +3628,56 @@ mod tests {
             Profile::Rsdl,
             &FormatOptions::default(),
         );
+    }
+
+    #[test]
+    fn a_directive_after_a_member_that_spans_lines_stays_with_the_next_member() {
+        // `a` ends on the directive's line but starts earlier; the directive
+        // names `b`, the declaration starting on its line.
+        assert_width_format(
+            "package p\nstruct S {\n  a: (x: A,\n    y: B), b: B // lint: allow missing-docs -- s\n}\n",
+            "package p\n\nstruct S {\n  a: (x: A, y: B)\n  b: B // lint: allow missing-docs -- s\n}\n",
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_directive_after_an_attribute_on_the_first_line_moves_to_the_bracket_line() {
+        // The directive names `c`; a plain comment there stays with the
+        // attribute.
+        assert_profile_format(
+            "package p\ninterface I {\n  command c(x: u32) [require x > 0, // lint: allow missing-docs -- s\n    ensure x > 1]\n}\n",
+            "package p\n\ninterface I {\n  command c(x: u32) [ // lint: allow missing-docs -- s\n    require x > 0\n    ensure x > 1\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+        assert_profile_format(
+            "package p\ninterface I {\n  command c(x: u32) [require x > 0, // note\n    ensure x > 1]\n}\n",
+            "package p\n\ninterface I {\n  command c(x: u32) [\n    require x > 0 // note\n    ensure x > 1\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_directive_trails_the_first_member_of_its_own_line() {
+        // A line comment ends the line before `b`; a block comment that spans
+        // lines ends the line before `d`.
+        assert_width_format(
+            "package p\nstruct S {\n  a: A // note\n  b: B, c: C // lint: allow missing-docs -- s\n  d: D /* x\n  y */ e: E, f: F // lint: allow missing-docs -- t\n}\n",
+            "package p\n\nstruct S {\n  a: A // note\n  b: B // lint: allow missing-docs -- s\n  c: C\n  d: D /* x\n  y */\n  e: E // lint: allow missing-docs -- t\n  f: F\n}\n",
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_line_comment_starts_outside_strings_and_block_comments() {
+        assert_eq!(line_comment_start("x = 1 // c"), Some(6));
+        assert_eq!(line_comment_start("x = \"a//b\" // c"), Some(11));
+        assert_eq!(line_comment_start("x = \"a\\\"//b\""), None);
+        assert_eq!(line_comment_start("/* a // b */ x // c"), Some(15));
+        assert_eq!(line_comment_start("/* a // b"), None);
+        assert_eq!(line_comment_start("x = 1"), None);
     }
 
     #[test]
