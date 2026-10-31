@@ -1153,6 +1153,20 @@ Deno.test("the limit of a raised member is keyed by its kind: a read of a fixed 
   assert.equal((await reading).payload?.length, 65_280);
 });
 
+Deno.test("a limit above 65,280 is held only for a fixed: a signal with such a limit stays live up to it", async () => {
+  const h = await attachedWith({
+    interfaces: [{
+      iface: 1,
+      big: { iface: 1, ord: 2, kind: "signal", limit: 70_000 },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 65_281));
+  assert.equal(h.publishes[0].sample.provenance, "live");
+  assert.equal(h.publishes[0].sample.payload?.length, 65_281);
+  assert.equal(h.publishes[0].sample.detected, undefined);
+});
+
 Deno.test("an occurrence above the default ceiling of an event is delivered empty with detected corrupt", async () => {
   const h = await attached();
   await subscribed(h, EVENT);
@@ -1341,7 +1355,7 @@ function assertBytes(
   );
 }
 
-/** The envelope of every `block` the shared vectors and these tests carry. */
+/** The envelope of every `block` the vectors and these tests carry. */
 const BLOCK_ENVELOPE = { stamp: 0x0123456789ABn, seq: 0n };
 
 /** The `block` frames of `payload` for `target`, in order. */

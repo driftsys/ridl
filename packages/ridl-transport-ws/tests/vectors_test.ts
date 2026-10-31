@@ -8,20 +8,10 @@ import {
   blockHeader,
   blockMessage,
   concat,
-  hex as hexBytes,
+  hex,
   pattern,
   sha256,
 } from "./block_vectors.ts";
-
-function hex(text: string): Uint8Array {
-  const digits = text.replace(/[`\s]/g, "");
-  assert.equal(digits.length % 2, 0, `odd number of hex digits in ${text}`);
-  const out = new Uint8Array(digits.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(digits.slice(2 * i, 2 * i + 2), 16);
-  }
-  return out;
-}
 
 function target(kind: Kind, iface: number, ord: number): Target {
   return { kind, iface, ord };
@@ -195,10 +185,10 @@ Deno.test("every version 2 vector decodes and re-encodes byte for byte", () => {
   }
 });
 
-Deno.test("block-last matches the hex of the design note", () => {
+Deno.test("block-last matches its bytes written out in hex", () => {
   assert.deepEqual(
     BLOCK_LAST,
-    hexBytes(
+    hex(
       "0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd",
     ),
   );
@@ -244,7 +234,7 @@ Deno.test("the 16 blocks of a 65,280-byte payload encode to the shared sequence"
   );
   assert.deepEqual(
     messages[0].subarray(0, 34),
-    hexBytes(blockHeader(65_280, 0)),
+    hex(blockHeader(65_280, 0)),
   );
   assert.equal(
     [...messages[0].subarray(0, 34)].map((b) => b.toString(16).padStart(2, "0"))
@@ -254,7 +244,7 @@ Deno.test("the 16 blocks of a 65,280-byte payload encode to the shared sequence"
   );
   assert.deepEqual(
     messages[15].subarray(26, 34),
-    hexBytes("00ff0000 0f000000"),
+    hex("00ff0000 0f000000"),
   );
   assert.deepEqual(
     messages[15].subarray(34, 38),

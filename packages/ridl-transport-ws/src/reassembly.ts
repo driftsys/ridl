@@ -13,7 +13,8 @@
  * @module
  */
 
-import { BLOCK_BYTES, FIXED_CEILING, Kind } from "./frame.ts";
+import { BLOCK_BYTES, blockCount } from "./blocks.ts";
+import { FIXED_CEILING, Kind } from "./frame.ts";
 import type { Frame, Target } from "./frame.ts";
 
 /** A decoded `block` frame. */
@@ -112,7 +113,7 @@ export class Reassembly {
   /** A block with no payload in progress. */
   #start(block: BlockFrame, limit: number): BlockStep {
     if (block.index !== 0) return { step: "sequence" };
-    const count = Math.ceil(block.total / BLOCK_BYTES);
+    const count = blockCount(block.total);
     const over = block.total > limit;
     let buffer: Uint8Array | null = null;
     if (!over) {

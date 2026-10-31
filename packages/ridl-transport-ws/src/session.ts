@@ -31,6 +31,7 @@ import {
   SessionError,
   type SessionViolation,
 } from "./errors.ts";
+import { FORM_BLOCK } from "./blocks.ts";
 import { Calls } from "./calls.ts";
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
@@ -210,7 +211,7 @@ export function connect(
   url: string,
   options: ConnectOptions,
 ): Promise<Session> {
-  let first: AttachFrame;
+  let first: ReturnType<typeof attach>;
   try {
     // `attach` builds an `attach` frame; its frame version is replaced by the
     // one of the selected subprotocol when the connection opens.
@@ -219,7 +220,7 @@ export function connect(
       encodingTag(options.encoding ?? "proto3"),
       options.catalog.hash,
       options.catalog.name,
-    ) as AttachFrame;
+    );
   } catch (e) {
     return Promise.reject(e);
   }
@@ -250,11 +251,6 @@ type Waiting =
     resolve: (sample: Sample) => void;
     reject: (e: SessionError) => void;
   };
-
-type AttachFrame = Extract<Frame, { form: "attach" }>;
-
-/** The form code of `block`, which frame version 1 does not have. */
-const FORM_BLOCK = 11;
 
 interface Opening {
   resolve: (session: Session) => void;
@@ -332,10 +328,11 @@ export class Session {
   #socket: WebSocket;
   #options: ConnectOptions;
   #opening: Opening | null;
-  #attachFrame: AttachFrame;
+  #attachFrame: ReturnType<typeof attach>;
   /**
    * The frame version of the session: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`.
-   * Set when the connection opens.
+   * It starts as the version of this binding and is set from the selected
+   * subprotocol when the connection opens.
    */
   #frameVersion = FRAME_VERSION;
   #attached = false;
@@ -369,7 +366,7 @@ export class Session {
   /** @internal Use {@link connect}. */
   constructor(
     socket: WebSocket,
-    attachFrame: AttachFrame,
+    attachFrame: ReturnType<typeof attach>,
     options: ConnectOptions,
     opening: Opening,
   ) {

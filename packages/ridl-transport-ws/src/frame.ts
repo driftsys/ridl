@@ -15,11 +15,16 @@
  * @module
  */
 
+import { BLOCK_BYTES, blockCount, FORM_BLOCK } from "./blocks.ts";
+
 /** The frame version this binding carries. */
 export const FRAME_VERSION = 2;
 /** The WebSocket subprotocol name of binding version 2. */
 export const SUBPROTOCOL = "ridl-ws-v2";
-/** The subprotocol name of binding version 1, which a server of frame version 1 selects. */
+/**
+ * The subprotocol name of binding version 1, which a server of frame version
+ * 1 selects.
+ */
 export const SUBPROTOCOL_V1 = "ridl-ws-v1";
 /**
  * The smallest message size limit a receiver may configure: the largest header
@@ -28,8 +33,7 @@ export const SUBPROTOCOL_V1 = "ridl-ws-v1";
 export const MIN_MESSAGE_LIMIT = 294;
 /** The size of an encoded {@link Envelope} in bytes. */
 export const ENVELOPE_BYTES = 16;
-/** The bytes of payload in every `block` but the last (binding version 2). */
-export const BLOCK_BYTES = 4_096;
+export { BLOCK_BYTES };
 
 /** The interaction kinds and their wire codes. */
 export const Kind = {
@@ -235,7 +239,6 @@ const FORM_PUBLISH = 7;
 const FORM_OCCURRENCE = 8;
 const FORM_REQUEST = 9;
 const FORM_RESPONSE = 10;
-const FORM_BLOCK = 11;
 
 const OUT_ACCEPTED = 1;
 const OUT_REPLY = 2;
@@ -515,7 +518,7 @@ function decodeBlock(msg: Uint8Array, view: DataView): Frame {
   const total = view.getUint32(COMMON + ENVELOPE_BYTES, true);
   const index = view.getUint32(COMMON + ENVELOPE_BYTES + 4, true);
   if (total < 1) fail("bad-block");
-  const count = Math.floor((total - 1) / BLOCK_BYTES) + 1;
+  const count = blockCount(total);
   if (index >= count) fail("bad-block");
   const expected = index < count - 1
     ? BLOCK_BYTES
@@ -590,7 +593,7 @@ export function attach(
   encoding: number,
   hash: Uint8Array,
   name: string,
-): Frame {
+): Extract<Frame, { form: "attach" }> {
   if (encoding < 1 || encoding > 3 || !Number.isInteger(encoding)) {
     throw new AttachError("unknown-encoding");
   }

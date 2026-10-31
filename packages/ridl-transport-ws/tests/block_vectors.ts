@@ -1,8 +1,10 @@
 /**
- * The byte vectors of frame version 2 that the decoder, the encoder and the
- * session tests share (driftsys/ridl#1129). Each hex string is one whole
- * message; spaces are for reading only.
+ * The byte vectors of `block` messages (frame version 2) that the decoder,
+ * the encoder and the session tests share (driftsys/ridl#1129). Each hex
+ * string is one whole message; spaces are for reading only.
  */
+
+import type { Violation } from "../mod.ts";
 
 /** Bytes of a hex string; spaces and backticks are ignored. */
 export function hex(text: string): Uint8Array {
@@ -22,7 +24,7 @@ export function pattern(n: number): Uint8Array {
   return out;
 }
 
-/** The bytes of `a` followed by the bytes of `b`. */
+/** The bytes of all `parts`, in order. */
 export function concat(...parts: Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
@@ -40,19 +42,22 @@ export async function sha256(bytes: Uint8Array): Promise<string> {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** The first 18 bytes of every vector `block`: `Fixed`, interface 1, ordinal 5, stamp, seq 0. */
+/**
+ * The first 26 bytes of every vector `block`: form 11, kind `Fixed`,
+ * interface 1, ordinal 5, stamp, seq 0.
+ */
 const COMMON = "0b 05 01000000 05000000 ab89674523010000 0000000000000000";
 
 const le32 = (v: number): string =>
   [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff]
     .map((b) => b.toString(16).padStart(2, "0")).join("");
 
-/** The 34-byte header of a `block` of the shared vectors, as hex. */
+/** The 34-byte header of a `block` of the vectors, as hex. */
 export function blockHeader(total: number, index: number): string {
   return `${COMMON} ${le32(total)} ${le32(index)}`;
 }
 
-/** A `block` message of the shared vectors: the header, then `payload`. */
+/** A `block` message of the vectors: the header, then `payload`. */
 export function blockMessage(
   total: number,
   index: number,
@@ -61,7 +66,7 @@ export function blockMessage(
   return concat(hex(blockHeader(total, index)), payload);
 }
 
-/** The vectors that decode, from the shared byte vectors. */
+/** The vectors that decode. */
 export const ATTACH_2 = hex(
   "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e",
 );
@@ -74,13 +79,17 @@ export const BLOCK_ONE = hex(`${blockHeader(1, 0)} ab`);
 export interface BlockViolation {
   id: string;
   message: Uint8Array;
-  violation: string;
+  violation: Violation;
 }
 
-/** The vectors that are protocol violations, from the shared byte vectors. */
+/** The vectors that are protocol violations. */
 export function blockViolations(): BlockViolation[] {
   const zeros = (n: number) => new Uint8Array(n);
-  const row = (id: string, message: Uint8Array, violation: string) => ({
+  const row = (
+    id: string,
+    message: Uint8Array,
+    violation: Violation,
+  ): BlockViolation => ({
     id,
     message,
     violation,
