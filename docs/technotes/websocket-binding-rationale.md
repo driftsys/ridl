@@ -232,7 +232,43 @@ gives the reasons.
   provider answers reads one after the other, so nothing needs several
   reassemblies at once. The transport is reliable and ordered, so a missing,
   repeated or reordered block is a sender defect, and dropping the payload would
-  leave the `read` waiting.
+  leave the `read` waiting. A payload above the catalog's limit is different:
+  decision 19 makes the refusal of a size a failure of that interaction's read,
+  so the session continues and the remaining blocks are skipped, still checked
+  for their sequence.
+- **Other frames may come between blocks.** Forbidding it is simpler to state,
+  but it would stop a sender from answering a call between two blocks, which is
+  what the copy rule of decision 16 asks of a sender on a single-threaded
+  executor. The receiver pays nothing, because it holds one reassembly either
+  way. The Rust provider as built sends the blocks of one payload in one step.
+  Two frames are the exception: a whole `publish` and an `answer` of the `fixed`
+  being reassembled. The provider answers the `read`s of one interaction in the
+  order it receives them and sends the whole answer of one `read` before the
+  next, so such a frame can only be a sender defect, and applying an `answer`
+  would settle the next `read` with the payload meant for the first. The
+  exceptions compare the kind as well as the numbers, because the consumer keys
+  its queues of waiting operations by the kind too, and a frame whose kind
+  disagrees with the catalog is a frame of an unknown interaction (frame
+  specification §4, §6.4), not a frame of the interaction being reassembled.
+- **A `ridl-ws-v1` connection refuses every `attach`.** The Rust provider cannot
+  serve version 1, so it refuses an `attach` of frame 1 and also an `attach` of
+  frame 2 that arrives on a connection that selected `ridl-ws-v1`. The reason is
+  the same `frame_version_unsupported`, and the subprotocol the connection
+  selected, not the field alone, decides.
+- **The consumer sizes its buffer from the catalog and treats its member table
+  as partial.** The generated TypeScript module carries each member's limit, so
+  no limit option exists on `connect` and the catalog stays the one source. The
+  tables omit members without a finite bound, so the session does not use them
+  to decide whether a block names a `fixed`; it reassembles within the limit it
+  has and lets the existing `publish` path discard an unsolicited payload.
+  Alternative: a second set of identities and a second discard path, rejected as
+  more rules for a case only a sender defect reaches.
+- **The `Config` check counts a `fixed` as at most one block message.** A
+  `fixed` that does not fit one message crosses in blocks of at most 4,130
+  bytes, so a message limit of 4,130 bytes carries every payload the catalog
+  allows. The check keeps one header size for every member, which refuses up to
+  9 bytes more than needed for a `fixed` below one block message; an exact rule
+  per kind is a separate change.
 
 Cost if wrong: the block size is a constant of binding version 2, so another
 size is another binding version, and version 2 stays as it is.

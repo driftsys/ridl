@@ -173,7 +173,12 @@ differently, so the error says which:
   outcome that is in the table but not allowed on that form (for example
   `refused` on a `response`); a nonzero `detail` where §11.1 requires 0;
   `interface` or `ordinal` 0; a `name_len` of 0 or one that does not match the
-  message; a `name` that is not valid UTF-8.
+  message; a `name` that is not valid UTF-8; and a block that is wrong by
+  itself, `ProtocolViolation::BadBlock` (`kind` not `Fixed`, `total` 0, no bytes
+  after the header, more than 4,096 bytes, `index` at or above the number of
+  blocks, a short block that is not the last, a last block of the wrong length).
+  A `kind` outside the table stays `UnknownCode` and an `interface` or `ordinal`
+  0 stays `ZeroNumber`, as for every form.
 - `DecodeError::Discard(_)`: a `publish` or a `response` whose header says it
   carries no payload and which has bytes after the header. A consumer records it
   and drops it, and its session continues; the server, which receives neither
@@ -184,6 +189,13 @@ code outside its table, so it is `Violation(UnknownCode)`, as §11.1 item 2 read
 literally. A tag in the table that the backend does not serve is a session
 matter, answered `refused(encoding_unsupported)` (D-11). A future fourth
 encoding needs an ADR and a frame version anyway.
+
+The codec does not know the version of the session. It decodes form 11 on any
+session, and the session decides what a `block` means: the provider never
+accepts one, so a `block` it receives closes the connection with 1002. The
+public API has no function that splits a payload into blocks; the encoder writes
+the fields of a `Frame::Block` as given, and the session's private `push_blocks`
+builds valid blocks.
 
 The ordering rules of item 4 (a message before `attach`, a second `attach`, a
 first provider message that is not `attached`) are the session's, not the
@@ -589,7 +601,10 @@ longer `fixed` is sent as `block` frames of 4,096 bytes (`BLOCK_BYTES`), all in
 one step of the session, so no other frame comes between two blocks of one
 payload. The rules of the blocks are in frame specification §5.5 and §11.1
 "Binding version 2". The value is read up to the smaller of its member's limit
-and the default ceiling of a `fixed`, 65,280 bytes (D-26).
+and the default ceiling of a `fixed`, 65,280 bytes (D-26). A member table can
+hold any `u32` as a limit; a limit above 65,280 is held to 65,280, so a larger
+value is answered `ValueTooLarge` as below and the session buffer never grows
+past 65,280 bytes.
 
 When `max_message_bytes` is below one block message, 4,130 bytes, no `block` can
 be sent: the value is read only up to what one `publish` carries. A `fixed`
@@ -691,6 +706,14 @@ surface. The default `Config` carries every catalog, a catalog with a large
 (ADR-0030 decision 20). Without a member table there is no `Config` check: the
 default ceiling of the frame's `kind`, under the message limit, bounds what the
 session sends and what a `request` carries.
+
+The check uses one header size for every member, 36 bytes, the largest
+data-plane header with its envelope. A `fixed` crosses only in a `publish`,
+whose header is 27 bytes, so for a `fixed` below one block message the check
+refuses a message limit from 27 plus its limit to 35 plus its limit, which would
+carry every value of it whole: up to 9 bytes more than needed. The check refuses
+the same 9 bytes for a signal, which also crosses in a `publish`. The rule is
+not made exact for one kind; that would be a separate change of the check.
 
 ## The WebSocket layer (`ws`)
 

@@ -415,7 +415,45 @@ first block arrived; a `read` sent while the payload is being reassembled waits
 for the next payload. The limit used at the first block is the member's limit
 held to 65,280 bytes. A message whose form is 11 on a connection that selected
 `ridl-ws-v1` ends the session, because that form is outside the table of frame
-version 1.
+version 1. The session refuses it before it decodes it, and before `attached`
+too, so a malformed block on that session gets the same violation code,
+`unknown-code`, as a well-formed one; the decoder itself reads form 11 on any
+session.
+
+The codes of the failures. A block that is wrong by itself is the violation
+`bad-block`; a `kind` outside the table stays `unknown-code` and an `interface`
+or `ordinal` 0 stays `zero-number`. A sequence error is the session violation
+`block-sequence`. A `fixed` payload refused for its size, whether it crossed
+whole or in blocks, rejects every `read` at the head of its identity's queue
+with `corrupt` and is recorded once as the note
+`{ note: "discarded", reason: "over-limit", frame }`, with the `publish` or the
+first block as `frame`, in place of the `not-subscribed` note that a payload no
+`read` waits for gets. The consumer does not know the provider's message limit,
+so the report of a `fixed` must not depend on whether the provider split it. A
+signal's or an event's payload above its limit keeps the `detected` report of
+D-19 and records no note.
+
+The session treats every identity as having no member table. The `interfaces`
+option lists only the members of the generated tables, and the generated module
+leaves out a member whose payload has no finite FlatBuffers bound, so the table
+is partial. Each listed entry carries its `kind`, which would let the session
+tell that a block does not name a `fixed`; it does not use that, on purpose. It
+reassembles any identity within that identity's limit (the entry's, else 65,280,
+and never more than 65,280) and hands the result to the existing `publish` path,
+which discards it as `not-subscribed` when no `read` waits. The cost is that a
+block payload that names an identity the tables list under another kind, which
+only a provider defect can send under a matching catalog hash, is copied, up to
+65,280 bytes, before it is discarded. The gain is one rule, no second set of
+identities and no second discard path in the session.
+
+The two exceptions of frame specification §5.5 (a whole `publish` and an
+`answer` of the `fixed` being reassembled) compare `(kind, interface, ordinal)`:
+`Reassembly.holds` is true when the frame's `kind` is `Fixed` and its
+`interface` and `ordinal` are the slot's. The session keys every queue of
+waiting operations by an identity that holds the kind, so a frame of another
+kind settles or shifts another queue and cannot change the reads that the blocks
+answer. A frame the codec discards for bytes after its header is recorded and
+the reassembly goes on.
 
 ## The end-to-end tests
 
