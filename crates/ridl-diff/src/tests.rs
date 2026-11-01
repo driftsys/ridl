@@ -4985,9 +4985,10 @@ mod enum_open {
         }
     }
 
-    /// An append to an open enum that widens the podbuf integer is still a
-    /// width change under podbuf: `ridl diff` reads IR snapshots, whatever
-    /// the build refuses.
+    /// An append to an open enum or enum set that widens the podbuf integer
+    /// is a width change under podbuf, and breaking there: a reader built
+    /// from the old declaration reads the field at the old width. Without
+    /// podbuf the same append is compatible.
     #[test]
     fn an_append_to_an_open_enum_that_widens_the_integer_is_a_podbuf_width_change() {
         for (label, build) in shapes() {

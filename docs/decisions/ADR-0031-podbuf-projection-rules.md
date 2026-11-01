@@ -304,8 +304,8 @@ a field is appended.
    | integer                        | the wire width typl infers from the range (typl §4.2)                                                 | Sebastien     |
    | float                          | `f32` or `f64` as typl infers (typl §4.3)                                                             | author's call |
    | boolean                        | `u8`, 0 or 1                                                                                          | author's call |
-   | enum                           | the narrowest integer that holds the declared values; strict (decision 12)                            | Sebastien     |
-   | enum set                       | the integer width typl infers (typl §9.3); strict (decision 12)                                       | Sebastien     |
+   | enum                           | the narrowest integer that holds the declared values; strict or open (decision 12)                    | Sebastien     |
+   | enum set                       | the integer width typl infers (typl §9.3); strict or open (decision 12)                               | Sebastien     |
    | optional field `?`             | one bit in a `u8` flags field placed by the first-fit law; an absent field's bytes are zero           | author's call |
    | tuple                          | an inline head, laid out by the same law and rounded to 8                                             | author's call |
    | exact-length array `[T; N]`    | inline `T[N]`, no length                                                                              | Sebastien     |
@@ -342,7 +342,7 @@ a field is appended.
    | typl construct                  | Rule                                                            |
    | ------------------------------- | --------------------------------------------------------------- |
    | boolean, integer, float         | a fixed-width scalar in the head (decision 5)                   |
-   | enum, enum set                  | an integer in the head, strict (decision 12)                    |
+   | enum, enum set                  | an integer in the head, strict or open (decision 12)            |
    | string, bytes                   | a descriptor and tail bytes (decisions 3 and 5)                 |
    | exact-length array `[T; N]`     | inline `T[N]` in the head                                       |
    | bounded array                   | a descriptor with a stride, and the elements (decision 3)       |
@@ -784,8 +784,9 @@ a field is appended.
     without an error. The codegen `Model` needs no new podbuf field: the codec
     and the header read `Enum.open` and `EnumSet.open`. The C header writes the
     constants as before, after one comment per enum and enum set that states its
-    rule in the wording of the `.proto` and `.fbs` output: a value (or a bit)
-    outside the constants is not valid, or is valid and is kept.
+    rule, and not how the rule is enforced, as the comment of the `.proto` and
+    `.fbs` output does: a value (or a bit) outside the constants is not valid,
+    or is valid and is kept. A declaration with no constant gets no comment.
 
     **Alternatives considered.** `#[non_exhaustive]` alone, with no unknown
     variant: a reader could not hold a value it does not know, so it would have
