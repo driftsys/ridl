@@ -4611,7 +4611,7 @@ mod podbuf_width {
 mod enum_open {
     use ridl_ir::v2;
 
-    use crate::{Category, Change, DiffReport, Verdict, diff_refs_with, explain, render_text};
+    use crate::{Category, Change, DiffReport, Verdict, diff_packages, diff_refs_with, explain, render_text};
 
     fn values(count: i64) -> Vec<v2::EnumValue> {
         (0..count)
@@ -4699,6 +4699,40 @@ mod enum_open {
                     render_text(&report)
                 );
             }
+        }
+    }
+
+    /// The pair-only entry point folds a strict append as the set entry
+    /// points do: one `strict_enum_append` line, breaking, and no
+    /// `decl_added` line per member.
+    #[test]
+    fn diff_packages_folds_a_strict_append_into_one_breaking_line() {
+        for (label, build) in shapes() {
+            let report = diff_packages(&build(3, false), &build(5, false));
+            let lines = of_category(&report, Category::StrictEnumAppend);
+            assert_eq!(lines.len(), 1, "{label}: {}", render_text(&report));
+            assert_eq!(lines[0].verdict, Verdict::Breaking, "{label}");
+            assert_eq!(lines[0].after.as_deref(), Some("V3, V4"), "{label}");
+            assert_eq!(report.verdict, Verdict::Breaking, "{label}");
+            assert!(
+                of_category(&report, Category::DeclAdded).is_empty(),
+                "{label}: {}",
+                render_text(&report)
+            );
+        }
+    }
+
+    #[test]
+    fn diff_packages_judges_an_open_append_compatible() {
+        for (label, build) in shapes() {
+            let report = diff_packages(&build(3, true), &build(5, true));
+            assert_eq!(
+                report.verdict,
+                Verdict::Compatible,
+                "{label}: {}",
+                render_text(&report)
+            );
+            assert!(of_category(&report, Category::StrictEnumAppend).is_empty());
         }
     }
 

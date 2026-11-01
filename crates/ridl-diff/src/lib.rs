@@ -440,6 +440,7 @@ pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let matching = walk::Matching::new(&[old], &[new]);
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &matching, &mut changes);
+    let mut changes = walk::fold_strict_enum_appends(changes, old, new);
     classify_all(&mut changes, old, new, &[], &[]);
     report(changes)
 }
