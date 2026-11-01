@@ -184,6 +184,15 @@ decision 4 and open item 1) and
 [the podbuf codec design record](../design/podbuf-codec.md) are its durable
 records. Its plan (`2026-10-24-podbuf-plan.md`) is not archived; see below.
 
+The open enums design and plan (`2026-11-01-open-enums-{design,plan}.md`) were
+archived on 2026-11-01, once the `open` keyword landed (#1121);
+[ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decision 12 (with
+its note of 2026-11-01),
+[the typl reference](../specification/typl-language-reference.md) §8.1 and §9,
+[the generated code chapter](../book/generated-code.md) and
+[the evolution chapter](../book/evolving-an-interface.md) are their durable
+records.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

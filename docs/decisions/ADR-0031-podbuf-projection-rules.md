@@ -741,6 +741,41 @@ a field is appended.
     `unknown_bits`; `ridl_ir::zero` treats 0 as a value of an open enum, because
     every integer is one.
 
+    **How the keyword is built (author's calls and rulings, 2026-11-01).**
+    - `open` is recognised only directly before `enum` or `enumset`, so
+      `open error enum` and `open internal enum` are parse errors; the order is
+      `internal`, `error`, `open`. A derived enum set carries its own `open`
+      flag, independent of the backing enum's.
+    - The IR carries `open` on `EnumDef` and `EnumSetDef`, and the codegen
+      `Model` on `Enum` and `EnumSet`. Both are append-only fields that read as
+      strict when absent. The catalog hash contributes the flag only when it is
+      `true`, so a strict declaration keeps its hash. The IR's canonical JSON
+      prints `"open": false` for every strict declaration.
+    - The `.proto` and `.fbs` files carry one comment above each enum that
+      states its rule; the type is the same for both. This is the one change to
+      the output for a strict declaration.
+    - A value of an open enum set outside the wire width of the set is refused
+      on encode with the range rule, never truncated, so that pass-through never
+      changes a bit silently. TYPL-413 also covers an open enum with only
+      `reserved` entries and an open enum set with no bit. The TypeScript name
+      `<Name>Value` and the Rust name `Unknown<Name>` are refused with RIDL-149
+      when a user declaration takes them.
+    - The audit before the change found that `ridl diff` reported an append as
+      compatible outside podbuf while every Rust codec refused the new value,
+      and that the TypeScript codec checks no enum value; the first is the
+      reason for Q-1, the second is driftsys/ridl#1173.
+
+    **Alternatives considered.** `#[non_exhaustive]` alone, with no unknown
+    variant: a reader could not hold a value it does not know, so it would have
+    to refuse it. `Unknown(i64)` with a public payload: `Unknown(1)` and a
+    declared variant of value 1 would both mean 1, and equality, hashing and
+    `match` would disagree with the wire. A newtype struct with one constant per
+    value: every value has one representation, but `match` is not checked for
+    exhaustiveness on the named values. `Result<Enum, NotInSchema>` from the
+    accessor: the decoded struct has to store something, so every field access
+    would unwrap. An attribute or doc tag in place of a keyword: the openness
+    changes the wire contract, so it belongs in the grammar.
+
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
       compatible change as compatible. Two changes are judged by encoding, all
