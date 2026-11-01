@@ -1062,7 +1062,10 @@ impl<'a> Header<'a> {
             };
             match decl.kind.as_ref() {
                 Some(v1::declaration::Kind::Enum(value)) => {
-                    let _ = writeln!(out, "{}", strictness_comment("value", value.open));
+                    // A declaration with no constant gets no comment.
+                    if value.values.iter().any(|entry| entry.name.is_some()) {
+                        let _ = writeln!(out, "{}", strictness_comment("value", value.open));
+                    }
                     for entry in &value.values {
                         let Some(spelled) = entry.name.as_ref() else {
                             continue;
@@ -1077,7 +1080,9 @@ impl<'a> Header<'a> {
                     }
                 }
                 Some(v1::declaration::Kind::EnumSet(value)) => {
-                    let _ = writeln!(out, "{}", strictness_comment("bit", value.open));
+                    if value.bits.iter().any(|entry| entry.name.is_some()) {
+                        let _ = writeln!(out, "{}", strictness_comment("bit", value.open));
+                    }
                     for entry in &value.bits {
                         let Some(spelled) = entry.name.as_ref() else {
                             continue;
@@ -1578,9 +1583,11 @@ static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h,
 
 /// The comment line above the constants of an enum (`what` is `value`) or an
 /// enum set (`what` is `bit`) that states which rule a reader applies to a
-/// value outside them, in the wording of the `.proto` and `.fbs` output: a
-/// strict declaration states that such a value is not valid, an open one that
-/// it is valid and is kept. The constants are the same for both.
+/// value outside them, and not how the rule is enforced, as the comment of
+/// the `.proto` and `.fbs` output does: a strict declaration states that such
+/// a value is not valid, an open one that it is valid and is kept. The
+/// constants are the same for both. A declaration that writes no constant
+/// gets no comment.
 fn strictness_comment(what: &str, open: bool) -> String {
     if open {
         format!("/* open: a {what} outside these constants is valid and is kept */")

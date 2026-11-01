@@ -843,8 +843,8 @@ enumset Warnings {\n  LOW_FUEL = 0\n}\n\
 open enumset Lamps {\n  LOW_BEAM = 0\n}\n";
 
 /// The constants of each enum and enum set follow a comment that states
-/// whether a value outside them is valid: the rule the reader applies, in
-/// the wording of the `.proto` and `.fbs` output.
+/// whether a value outside them is valid: the rule the reader applies, not
+/// how it is enforced, as the comment of the `.proto` and `.fbs` output does.
 #[test]
 fn the_header_states_whether_an_enum_or_an_enum_set_is_strict_or_open() {
     let h = generate_fixture(STRICTNESS).header_source;
@@ -862,4 +862,19 @@ fn the_header_states_whether_an_enum_or_an_enum_set_is_strict_or_open() {
     ] {
         assert!(h.contains(expected), "{expected}\nnot in:\n{h}");
     }
+}
+
+/// An open enum with no value, an open enum with only a `reserved` entry
+/// and an open enum set with no bit write no constant, so the header writes
+/// no comment for them either: a comment would sit above nothing.
+#[test]
+fn a_declaration_with_no_constant_has_no_strictness_comment() {
+    let h = generate_fixture(
+        "package veh.common\n\
+         open enum Pending {}\n\
+         open enum Retired {\n  reserved 3\n}\n\
+         open enumset Nothing {}\n",
+    )
+    .header_source;
+    assert!(!h.contains("these constants"), "{h}");
 }
