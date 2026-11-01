@@ -144,7 +144,13 @@ pub(super) fn serve(
              ends the claim. The source is dropped once its stream ended or \
              stopped. The future drives one stream per member at a time: a \
              call of a member whose stream is still running is settled \
-             `Transport::Busy`."
+             `Transport::Busy`. The handler port gives the future no signal \
+             when a caller forgets the call, by its bound passing or by \
+             dropping its stream: the future reads the forget from its next \
+             push. So while a member's source answers `Pending`, a caller \
+             that stopped keeps the member busy until the source yields its \
+             next element, whose push fails, and only then is the source \
+             dropped and the member free for a new call."
         )
     };
     let future_doc = format!(

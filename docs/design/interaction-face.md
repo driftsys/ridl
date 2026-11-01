@@ -475,13 +475,17 @@ on an interface that declares such a member. `dispatch` checks the arguments and
 `require` as for any query, calls the method, and keeps the source in the
 member's slot of `Serve` without settling the claim; the face drives one stream
 per member at a time, and a call of a member whose slot is held is settled
-`Transport::Busy`. Each poll of `Serve` drives its streams before it takes
-claims. An element that found the stream's window full is kept, as a range of
-the element buffer inline in `Serve`, and pushed again on a later poll before
-the source is polled again; otherwise the source is polled at most once per
-poll, and that poll counts as one of the 32. An element is encoded and checked
-against its type before `push_claim`; one that fails stops the stream with
-`Contract::InvalidValue` and is not sent. `Ready(None)` is `end_claim`,
+`Transport::Busy`. The handler port gives `serve` no signal of a caller's
+`forget` except through the next push, so while a member's source answers
+`Pending`, a caller that timed out or dropped its stream keeps the member `Busy`
+until the source yields its next element; that push fails, and the source is
+dropped and the member freed then. Each poll of `Serve` drives its streams
+before it takes claims. An element that found the stream's window full is kept,
+as a range of the element buffer inline in `Serve`, and pushed again on a later
+poll before the source is polled again; otherwise the source is polled at most
+once per poll, and that poll counts as one of the 32. An element is encoded and
+checked against its type before `push_claim`; one that fails stops the stream
+with `Contract::InvalidValue` and is not sent. `Ready(None)` is `end_claim`,
 `Err(Interrupted)` and a push refused `TooLarge` are `abort_claim` with
 `Transport::Interrupted`, and a push answered `Failed(_)`, a caller that refused
 or stopped reading the stream, is `end_claim`, which settles the claim so that
@@ -490,14 +494,17 @@ the caller's call slot is given back. The source is dropped with its slot.
 each path over `ridl-loopback`.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
-`Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
-the failure `serve` resolves to — and `Ok(0)` on a buffer shorter than
-`MAX_BUFFER_SIZE`, without consuming a claim. It takes a `budget: &mut usize`,
-which it decreases by one for each claim it takes and at 0 stops without asking
-for another claim; `serve` passes 32 and reads the budget left to know whether
-the pass stopped at the bound. It loops over `Handler::next_claim`, routing and
-settling every claim it takes — including one this interface does not recognise,
-because `Handler`'s own contract requires every claim to be settled:
+`Result<usize, ReadError>` — the count of claims `Handler::settle` accepted,
+plus the claims of streamed replies whose source it kept, which are not settled
+yet and which `serve` settles when it ends or stops their stream, or the failure
+`serve` resolves to — and `Ok(0)` on a buffer shorter than `MAX_BUFFER_SIZE`,
+without consuming a claim. It takes a `budget: &mut usize`, which it decreases
+by one for each claim it takes and at 0 stops without asking for another claim;
+`serve` passes 32 and reads the budget left to know whether the pass stopped at
+the bound. It loops over `Handler::next_claim`, routing and settling every claim
+it takes, except the claim of a streamed reply whose source it kept, which
+`serve` settles later — including one this interface does not recognise, because
+`Handler`'s own contract requires every claim to be settled:
 
 | Cause                                       | Settled as                                                          |
 | ------------------------------------------- | ------------------------------------------------------------------- |
