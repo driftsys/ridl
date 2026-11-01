@@ -1134,11 +1134,12 @@ by the `outcome` of a `response`. From §5: an `occurrence` and a `request`
 always carry one; a `publish` carries one under `Live` (a signal's publication,
 and every `publish` of a `fixed`) and none under `Init` or `Invalid(Declared)`;
 a `response` carries one under `reply` and none under any other outcome; a
-`block` always carries one (frame version 2); `attach`, `attached`, `subscribe`,
-`answer`, `unsubscribe` and `read` never carry one. `kind` does not change the
-answer. A payload that is present may be zero bytes long — a proto3 value whose
-fields all hold their defaults encodes to no bytes — and is handed to the
-generated binding as it is.
+`block` always carries one (frame version 2); a `chunk` always carries one,
+possibly zero bytes long (frame version 3); `attach`, `attached`, `subscribe`,
+`answer`, `unsubscribe`, `read`, `stream_end` and `stream_credit` never carry
+one. `kind` does not change the answer. A payload that is present may be zero
+bytes long — a proto3 value whose fields all hold their defaults encodes to no
+bytes — and is handed to the generated binding as it is.
 
 **The sizes.** The envelope is 16 bytes. The largest data-plane header without
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36
@@ -1192,21 +1193,23 @@ empty or not valid UTF-8, a first provider-to-consumer message that is not
 `attached` — is a protocol violation: the receiver records the frame (§9.5) and
 closes with 1002, and the session ends as §3 states. A `publish` or a `response`
 whose header says it carries no payload and which has bytes after its header is
-discarded and recorded (§9.5). A frame whose header says it carries a payload is
-never answered or discarded for the payload's length: the payload, zero bytes
-included, goes to `Payload::verify`, and a payload that fails to decode follows
-§9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
-payload is absent does not occur on this binding. One exception: a provider
-answers a `request` whose payload is longer than its member's limit — the limit
-its member table gives the member, or the default ceiling of the request's
-`kind`, 16,128 bytes, when the table gives none or the provider holds no table —
-`corrupt` without verifying it (§9; ADR-0030 decisions 15 and 19). A message
-above the receiver's configured size limit, which admits at least 294 bytes, is
-closed with 1009. Either side ends the session on purpose with 1000, the
-provider with 1001 when it shuts down; after `attached(refused)` the provider
-closes with 1000, and the reason is in the frame. A provider may close with 1008
-when a session passes a resource limit it states, such as a cap on the responses
-it keeps for §7. The binding defines no close code of its own.
+discarded and recorded (§9.5). A `stream_end` or a `stream_credit` with bytes
+after its header is a protocol violation, not a discard, because discarding an
+end or a credit would leave its stream stuck. A frame whose header says it
+carries a payload is never answered or discarded for the payload's length: the
+payload, zero bytes included, goes to `Payload::verify`, and a payload that
+fails to decode follows §9 — a `request`'s is answered `corrupt` (§5.3). So the
+`request` of §9.5 whose payload is absent does not occur on this binding. One
+exception: a provider answers a `request` whose payload is longer than its
+member's limit — the limit its member table gives the member, or the default
+ceiling of the request's `kind`, 16,128 bytes, when the table gives none or the
+provider holds no table — `corrupt` without verifying it (§9; ADR-0030 decisions
+15 and 19). A message above the receiver's configured size limit, which admits
+at least 294 bytes, is closed with 1009. Either side ends the session on purpose
+with 1000, the provider with 1001 when it shuts down; after `attached(refused)`
+the provider closes with 1000, and the reason is in the frame. A provider may
+close with 1008 when a session passes a resource limit it states, such as a cap
+on the responses it keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls
@@ -1231,8 +1234,8 @@ a runtime over this binding does not present `CoherentSignals`.
 be refused at admission and answered `busy`. The binding adds nothing.
 
 **10. Parts of a payload.** Version 1 carries every payload whole, one frame in
-one message, and has no `block` form. Version 2 carries a `fixed` that does not
-fit one message in blocks of 4,096 bytes, as "Binding version 2" states.
+one message, and has no `block` form. Versions 2 and 3 carry a `fixed` that does
+not fit one message in blocks of 4,096 bytes, as "Binding version 2" states.
 
 **Later versions.** An addition to the frame — a form, a field, a code — is a
 new frame version carried by a new binding version, offered beside the earlier
@@ -1368,8 +1371,9 @@ received a `stream_credit` for that stream. Each `stream_credit` adds its
 **Framing.** A stream frame that is wrong by itself (§4, "The stream forms") is
 a protocol violation of item 4: a `kind` other than `Command` or `Query`, an
 `outcome` not allowed on a `stream_end`, a `detail` other than 0 where the
-`outcome` has none, and a `credit` of 0. The receiver records it and closes with
-1002, as §3 states.
+`outcome` has none, a `credit` of 0, and bytes after the header of a
+`stream_end` or a `stream_credit`. The receiver records it and closes with 1002,
+as §3 states.
 
 **Version 3 test vectors.** Each line is one complete message in hexadecimal,
 spaces for reading only, with the stamp, the hash and the unit name of the

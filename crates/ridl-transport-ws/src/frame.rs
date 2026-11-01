@@ -418,8 +418,9 @@ pub enum ProtocolViolation {
     /// bytes after the header other than 4,096 (every block but the last) or
     /// `total - 4,096 * index` (the last).
     BadBlock,
-    /// A stream frame whose `kind` is not `Command` or `Query` (frame
-    /// version 3).
+    /// A stream frame that is wrong by itself (frame version 3): `kind` not
+    /// `Command` or `Query`, or bytes after the header of a `stream_end` or a
+    /// `stream_credit`, which never carry a payload.
     BadStream,
 }
 
@@ -849,7 +850,7 @@ pub fn decode(msg: &[u8]) -> Result<Frame<'_>, DecodeError> {
             let target = stream_target_at(msg)?;
             let outcome = stream_from(msg[STREAM_END_LEN - 2], msg[STREAM_END_LEN - 1])?;
             if msg.len() > STREAM_END_LEN {
-                return Err(DecodeError::Discard(Discarded::UnexpectedPayload));
+                return Err(ProtocolViolation::BadStream.into());
             }
             Frame::StreamEnd {
                 target,
@@ -867,7 +868,7 @@ pub fn decode(msg: &[u8]) -> Result<Frame<'_>, DecodeError> {
                 return Err(ProtocolViolation::ZeroNumber.into());
             }
             if msg.len() > STREAM_CREDIT_LEN {
-                return Err(DecodeError::Discard(Discarded::UnexpectedPayload));
+                return Err(ProtocolViolation::BadStream.into());
             }
             Frame::StreamCredit {
                 target,

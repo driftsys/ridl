@@ -637,7 +637,7 @@ function decodeFrame(msg: Uint8Array): Frame {
         msg[STREAM_END_LEN - 2],
         msg[STREAM_END_LEN - 1],
       );
-      if (msg.length > STREAM_END_LEN) discard();
+      if (msg.length > STREAM_END_LEN) fail("bad-stream");
       return {
         form: "stream_end",
         target,
@@ -652,7 +652,7 @@ function decodeFrame(msg: Uint8Array): Frame {
       const target = streamTargetAt(msg, view);
       const credit = view.getUint32(STREAM_CREDIT_LEN - 4, true);
       if (credit === 0) fail("zero-number");
-      if (msg.length > STREAM_CREDIT_LEN) discard();
+      if (msg.length > STREAM_CREDIT_LEN) fail("bad-stream");
       return {
         form: "stream_credit",
         target,

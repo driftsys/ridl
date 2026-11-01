@@ -373,7 +373,8 @@ fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
 /// frame specification §11.1: the first table under `### 11.1 WebSocket`
 /// whose columns are `Id`, `Vector` and `Hex` (binding version 1), then the
 /// first such table under `#### Binding version 2` and the first such table
-/// under `#### Binding version 3`, which the section must have. The tables are the vectors' source; no encoder exists. A
+/// under `#### Binding version 3`, which the section must have. The tables
+/// are the vectors' source; no encoder exists. A
 /// row whose bytes [`check_vector`] rejects, a malformed row, a separator
 /// row that is not one, an `Id` used twice (in one table or in both), a
 /// blank line inside a table and a missing or empty table are errors. The
@@ -908,8 +909,8 @@ mod tests {
 
     /// The sixteen vectors the frame specification §11.1 held when the `wire`
     /// dump froze them: nine of binding version 1, three of binding version 2
-    /// and four of binding version 3. A vector is never edited, so each is still in its table; a
-    /// vector added later needs no change here.
+    /// and four of binding version 3. A vector is never edited, so each is
+    /// still in its table; a vector added later needs no change here.
     #[test]
     fn the_frame_specification_holds_the_frozen_vectors() {
         let text = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();

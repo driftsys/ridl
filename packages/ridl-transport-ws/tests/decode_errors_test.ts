@@ -548,10 +548,10 @@ Deno.test("a stream frame shorter than its header is too short", () => {
   }
 });
 
-Deno.test("bytes after a stream_end or a stream_credit header are discarded", () => {
-  assert.equal(violation([...streamEnd(4, 10, 0), 0]), "unexpected-payload");
+Deno.test("bytes after a stream_end or a stream_credit header are bad-stream", () => {
+  assert.equal(violation([...streamEnd(4, 10, 0), 0]), "bad-stream");
   const credit = [
     ...hex("0e 04 01000000 04000000 0200000000000000 00 04000000"),
   ];
-  assert.equal(violation([...credit, 0]), "unexpected-payload");
+  assert.equal(violation([...credit, 0]), "bad-stream");
 });

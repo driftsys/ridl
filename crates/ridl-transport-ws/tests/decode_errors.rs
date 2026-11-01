@@ -632,17 +632,11 @@ fn chunk_shorter_than_its_header_is_too_short() {
 }
 
 #[test]
-fn bytes_after_a_stream_end_or_a_stream_credit_header_are_discarded() {
+fn bytes_after_a_stream_end_or_a_stream_credit_header_are_bad_stream() {
     let mut end = stream_end(4, 10, 0);
     end.push(0);
-    assert_eq!(
-        decode_err(&end),
-        Err(DecodeError::Discard(Discarded::UnexpectedPayload))
-    );
+    assert_eq!(decode_err(&end), violation(ProtocolViolation::BadStream));
     let mut credit = bytes("0e 04 01000000 04000000 0200000000000000 00 04000000");
     credit.push(0);
-    assert_eq!(
-        decode_err(&credit),
-        Err(DecodeError::Discard(Discarded::UnexpectedPayload))
-    );
+    assert_eq!(decode_err(&credit), violation(ProtocolViolation::BadStream));
 }
