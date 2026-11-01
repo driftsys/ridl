@@ -1830,7 +1830,7 @@ mod tests {
         }
     }
 
-    /// The provider serves frame version 2 only, so a connection upgraded
+    /// The provider serves no frame version 1, so a connection upgraded
     /// with `ridl-ws-v1` refuses every `attach`. The check runs with the
     /// frame-version check, before the unit name.
     #[test]

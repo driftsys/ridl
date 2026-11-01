@@ -1245,9 +1245,10 @@ of the catalog fits one message. The Rust provider answers a `read` of a signal
 or of a `fixed` whose value is above the member's limit the same way, so that no
 read waits on a value that is not sent. The codegen model carries the data-plane
 numbers as the `websocket` row, binding version `"3"`, `frame_header_max_bytes`
-21, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
-derived from this layout: the layout is frozen through the vectors below, and
-the row is a derived value, corrected in a patch release if it is wrong
+20 (the largest header, without the envelope, of a message that carries a
+payload), `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The
+row is derived from this layout: the layout is frozen through the vectors below,
+and the row is a derived value, corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the
@@ -1352,8 +1353,9 @@ offers `ridl-ws-v2, ridl-ws-v1`, newest first, as item 1 states, and sends
 `attach.frame_version` is 2 or the `attach` is refused
 `frame_version_unsupported`. On a version 1 session no `block` crosses, and a
 message whose `form` is 11 there is a code outside its table (item 4). The Rust
-provider serves frame version 2 only. It selects `ridl-ws-v2` when the client
-offers it; when the client offers `ridl-ws-v1` and not `ridl-ws-v2`, it selects
+provider serves frame version 2, or 3 (its design record, D-27), and never
+version 1. Without version 3, it selects `ridl-ws-v2` when the client offers it;
+when the client offers `ridl-ws-v1` and not `ridl-ws-v2`, it selects
 `ridl-ws-v1`, refuses every `attach` on that connection
 `frame_version_unsupported`, whatever its `frame_version`, and closes with 1000
 (item 4); a handshake that offers neither is answered `400 Bad Request`.

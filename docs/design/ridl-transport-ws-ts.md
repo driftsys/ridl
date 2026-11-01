@@ -124,15 +124,15 @@ the runtime package holds them.
 
 **D-5. Two layers, as in the crate: a sans-IO codec and a session.**
 
-| Module              | Holds                                                                                                                             |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `src/frame.ts`      | the eleven forms as the discriminated union `Frame`, `encode`, `decode`, `attach`, `AttachError`, `encodingTag` and the constants |
-| `src/blocks.ts`     | the block size (`BLOCK_BYTES`) and the number of blocks of a payload                                                              |
-| `src/reassembly.ts` | `Reassembly`: the one payload in progress of a session, and the sequence rules of its blocks (frame specification §5.5)           |
-| `src/session.ts`    | `connect` and the `Session` class: the consumer's state machine over one `WebSocket`                                              |
-| `src/calls.ts`      | the calls in flight of one session (`Calls`, not exported from `mod.ts`): the caller counter, the bounds and the correlation      |
-| `src/errors.ts`     | the errors a session rejects with: `AttachRefused`, `ProtocolError`, `SessionError` and its `CallFailure`                         |
-| `mod.ts`            | the public exports: everything exported by `frame.ts`, `errors.ts` and `session.ts`                                               |
+| Module              | Holds                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `src/frame.ts`      | the fourteen forms as the discriminated union `Frame`, `encode`, `decode`, `attach`, `AttachError`, `encodingTag` and the constants |
+| `src/blocks.ts`     | the block size (`BLOCK_BYTES`) and the number of blocks of a payload                                                                |
+| `src/reassembly.ts` | `Reassembly`: the one payload in progress of a session, and the sequence rules of its blocks (frame specification §5.5)             |
+| `src/session.ts`    | `connect` and the `Session` class: the consumer's state machine over one `WebSocket`                                                |
+| `src/calls.ts`      | the calls in flight of one session (`Calls`, not exported from `mod.ts`): the caller counter, the bounds and the correlation        |
+| `src/errors.ts`     | the errors a session rejects with: `AttachRefused`, `ProtocolError`, `SessionError` and its `CallFailure`                           |
+| `mod.ts`            | the public exports: everything exported by `frame.ts`, `errors.ts` and `session.ts`                                                 |
 
 `src/calls.ts` was split out of `session.ts` during implementation, to keep the
 session file at a readable size.
