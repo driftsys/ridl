@@ -24,6 +24,7 @@
 
 extern crate alloc;
 
+pub mod deployment;
 #[cfg(feature = "std")]
 pub mod describe;
 pub mod generated;
@@ -75,11 +76,21 @@ pub const FILE_SUFFIX: &str = ".catalog.binfb";
 /// in `tests/round_trip.rs` fails when a planus release changes that
 /// behaviour, which is when this function can call planus directly.
 pub fn finish(catalog: &Catalog) -> Vec<u8> {
+    finish_with_identifier(catalog, FILE_IDENTIFIER)
+}
+
+/// Builds a buffer for `root` with the header layout [`finish`] describes.
+/// The catalog descriptor and the deployment descriptor share it, so the
+/// header swap exists once.
+pub(crate) fn finish_with_identifier<T>(
+    root: impl planus::WriteAsOffset<T>,
+    identifier: [u8; 4],
+) -> Vec<u8> {
     let mut builder = planus::Builder::new();
-    let mut bytes = builder.finish(catalog, Some(FILE_IDENTIFIER)).to_vec();
+    let mut bytes = builder.finish(root, Some(identifier)).to_vec();
     let from_byte_4 = u32::from_le_bytes(bytes[4..8].try_into().expect("four bytes"));
     bytes[0..4].copy_from_slice(&(from_byte_4 + 4).to_le_bytes());
-    bytes[4..8].copy_from_slice(&FILE_IDENTIFIER);
+    bytes[4..8].copy_from_slice(&identifier);
     bytes
 }
 
@@ -95,6 +106,12 @@ pub enum VerifyError {
     /// The FlatBuffers structure is not sound: an offset or a length points
     /// outside the buffer, a required field is missing, an enum tag is unknown.
     Invalid(planus::Error),
+    /// A catalog embedded in a deployment descriptor failed the catalog
+    /// verifier. `catalog` is the name the deployment gives it.
+    EmbeddedCatalog {
+        catalog: String,
+        source: alloc::boxed::Box<VerifyError>,
+    },
 }
 
 impl fmt::Display for VerifyError {
@@ -114,11 +131,21 @@ impl fmt::Display for VerifyError {
                 "catalog descriptor version {v}; this toolchain reads version {SCHEMA_VERSION}"
             ),
             Self::Invalid(err) => write!(f, "catalog descriptor is malformed: {err}"),
+            Self::EmbeddedCatalog { catalog, source } => {
+                write!(f, "embedded catalog `{catalog}` is refused: {source}")
+            }
         }
     }
 }
 
-impl core::error::Error for VerifyError {}
+impl core::error::Error for VerifyError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::EmbeddedCatalog { source, .. } => Some(source.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 /// Checks the identifier and the version, then walks every table, vector
 /// and string once through the checked accessors so that a later read of
