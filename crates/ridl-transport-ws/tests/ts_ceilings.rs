@@ -88,3 +88,55 @@ fn the_typescript_client_holds_the_block_size_the_version_and_the_subprotocols()
         SUBPROTOCOL_V1
     );
 }
+
+const CATALOG_TS: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/ridl-transport-ws/e2e/catalog.ts"
+);
+
+const PROVIDER_RS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/support/provider.rs");
+
+/// The number in `<prefix><number>` on the first line of `source` that
+/// starts, after its leading spaces, with `prefix`, up to the first
+/// character that is not a digit or a numeric separator.
+fn number_after(source: &str, file: &str, prefix: &str) -> usize {
+    let rest = source
+        .lines()
+        .find_map(|line| line.trim_start().strip_prefix(prefix))
+        .unwrap_or_else(|| panic!("{file} has a line that starts `{prefix}`"));
+    let digits: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '_')
+        .filter(|c| *c != '_')
+        .collect();
+    digits
+        .parse()
+        .unwrap_or_else(|_| panic!("`{prefix}` in {file} is followed by a number"))
+}
+
+#[test]
+fn the_e2e_catalog_holds_the_ordinals_and_lengths_of_the_test_provider() {
+    let ts = std::fs::read_to_string(CATALOG_TS)
+        .expect("read packages/ridl-transport-ws/e2e/catalog.ts");
+    let rs = std::fs::read_to_string(PROVIDER_RS).expect("read tests/support/provider.rs");
+    for name in ["FIXED_LARGE", "FIXED_WHOLE", "FIXED_SPLIT"] {
+        assert_eq!(
+            number_after(&ts, "catalog.ts", &format!("export const {name} = ")),
+            number_after(
+                &rs,
+                "provider.rs",
+                &format!("pub const {name}: Ordinal = Ordinal(")
+            ),
+            "ordinal of {name}"
+        );
+        assert_eq!(
+            number_after(&ts, "catalog.ts", &format!("[{name}, ")),
+            number_after(
+                &rs,
+                "provider.rs",
+                &format!("pub const {name}_LEN: usize = ")
+            ),
+            "length of {name}"
+        );
+    }
+}
