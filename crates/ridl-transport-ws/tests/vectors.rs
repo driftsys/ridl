@@ -131,8 +131,10 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
 
 // -- Frame version 2 (driftsys/ridl#1129) ------------------------------------
 //
-// The version 2 vectors are test constants until the frame specification holds
-// them. Every hex string is one whole message.
+// `attach-2`, `block-last` and `block-one` are read from the version 2 table of
+// the frame specification. The other block vectors are test constants: they
+// are 4,096 bytes or more, or they are violations. Every hex string is one
+// whole message.
 
 const BLOCK_HEADER: &str = "0b 05 01000000 05000000 ab89674523010000 0000000000000000";
 
@@ -158,6 +160,26 @@ fn block_message(total_hex: &str, index_hex: &str, payload: &[u8]) -> Vec<u8> {
     m
 }
 
+/// The bytes of one row of the version 2 vector table of the frame
+/// specification, by its `Id`.
+fn spec_version_2_vector(id: &str) -> Vec<u8> {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/specification/frame-specification.md"
+    );
+    let text = std::fs::read_to_string(path).unwrap();
+    let start = text
+        .find("**Version 2 test vectors.**")
+        .expect("version 2 vectors paragraph");
+    text[start..]
+        .lines()
+        .filter(|l| l.starts_with('|'))
+        .map(|l| l.split('|').map(str::trim).collect::<Vec<_>>())
+        .find(|cells| cells[1].trim_matches('`') == id)
+        .map(|cells| hex(cells[3]))
+        .unwrap_or_else(|| panic!("no version 2 vector {id} in the specification"))
+}
+
 fn assert_round_trip(id: &str, want: Frame<'_>, bytes: &[u8]) {
     let got = decode(bytes).unwrap_or_else(|e| panic!("vector {id} did not decode: {e:?}"));
     assert_eq!(got, want, "vector {id}");
@@ -173,10 +195,7 @@ fn every_version_2_vector_decodes_and_reencodes_byte_for_byte() {
     for (i, b) in hash.iter_mut().enumerate() {
         *b = i as u8;
     }
-    let attach_2 = hex(
-        "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
-         09 7665682e636162696e",
-    );
+    let attach_2 = spec_version_2_vector("attach-2");
     assert_eq!(attach_2.len(), 48);
     assert_round_trip(
         "attach-2",
@@ -184,8 +203,7 @@ fn every_version_2_vector_decodes_and_reencodes_byte_for_byte() {
         &attach_2,
     );
 
-    let block_last =
-        hex("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd");
+    let block_last = spec_version_2_vector("block-last");
     assert_eq!(block_last.len(), 36);
     assert_round_trip(
         "block-last",
@@ -193,8 +211,7 @@ fn every_version_2_vector_decodes_and_reencodes_byte_for_byte() {
         &block_last,
     );
 
-    let block_one =
-        hex("0b 05 01000000 05000000 ab89674523010000 0000000000000000 01000000 00000000 ab");
+    let block_one = spec_version_2_vector("block-one");
     assert_eq!(block_one.len(), 35);
     assert_round_trip("block-one", fixed_block(1, 0, &[0xab]), &block_one);
 }

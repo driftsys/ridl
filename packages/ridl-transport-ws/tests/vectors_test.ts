@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { decode, encode, Kind } from "../mod.ts";
 import type { Frame, Target } from "../mod.ts";
 import {
-  ATTACH_2,
   BLOCK_LAST,
   BLOCK_ONE,
   blockHeader,
@@ -142,13 +141,33 @@ function block(total: number, index: number, payload: Uint8Array): Frame {
   };
 }
 
-Deno.test("every version 2 vector decodes and re-encodes byte for byte", () => {
+/**
+ * The bytes of one row of the version 2 vector table of the frame
+ * specification, by its `Id`.
+ */
+async function specVersion2Vector(id: string): Promise<Uint8Array> {
+  const text = await Deno.readTextFile(
+    new URL(
+      "../../../docs/specification/frame-specification.md",
+      import.meta.url,
+    ),
+  );
+  const start = text.indexOf("**Version 2 test vectors.**");
+  assert.ok(start >= 0, "no version 2 vector paragraph");
+  for (const line of text.slice(start).split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    if (line.startsWith("|") && cells[1] === `\`${id}\``) return hex(cells[3]);
+  }
+  throw new Error(`no version 2 vector ${id} in the specification`);
+}
+
+Deno.test("every version 2 vector decodes and re-encodes byte for byte", async () => {
   const hash = new Uint8Array(32);
   for (let i = 0; i < 32; i++) hash[i] = i;
   const vectors: [string, Uint8Array, Frame][] = [
     [
       "attach-2",
-      ATTACH_2,
+      await specVersion2Vector("attach-2"),
       {
         form: "attach",
         frameVersion: 2,
@@ -157,8 +176,16 @@ Deno.test("every version 2 vector decodes and re-encodes byte for byte", () => {
         name: "veh.cabin",
       },
     ],
-    ["block-last", BLOCK_LAST, block(4098, 1, Uint8Array.of(0xab, 0xcd))],
-    ["block-one", BLOCK_ONE, block(1, 0, Uint8Array.of(0xab))],
+    [
+      "block-last",
+      await specVersion2Vector("block-last"),
+      block(4098, 1, Uint8Array.of(0xab, 0xcd)),
+    ],
+    [
+      "block-one",
+      await specVersion2Vector("block-one"),
+      block(1, 0, Uint8Array.of(0xab)),
+    ],
     [
       "block-first",
       blockMessage(4098, 0, pattern(4096)),
@@ -185,13 +212,9 @@ Deno.test("every version 2 vector decodes and re-encodes byte for byte", () => {
   }
 });
 
-Deno.test("block-last matches its bytes written out in hex", () => {
-  assert.deepEqual(
-    BLOCK_LAST,
-    hex(
-      "0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd",
-    ),
-  );
+Deno.test("the shared block-last and block-one constants are the specification's bytes", async () => {
+  assert.deepEqual(BLOCK_LAST, await specVersion2Vector("block-last"));
+  assert.deepEqual(BLOCK_ONE, await specVersion2Vector("block-one"));
 });
 
 Deno.test("the first block of a 4,098-byte payload carries 4,096 bytes of the pattern", async () => {

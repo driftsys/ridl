@@ -67,9 +67,6 @@ export function blockMessage(
 }
 
 /** The vectors that decode. */
-export const ATTACH_2 = hex(
-  "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e",
-);
 export const BLOCK_LAST = hex(
   `${blockHeader(4098, 1)} abcd`,
 );
