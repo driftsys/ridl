@@ -37,7 +37,7 @@ adds:
 | `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                                |
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                                                                          |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                                                                           |
-| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                                                                                                             |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements; `Source` and `Interrupted`, the producer of a streamed reply an application implements — the section "The face traits" below                                                                                    |
 | `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                                                                                                    |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                                                                                                       |
 | `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                                                                                                   |
@@ -98,6 +98,25 @@ uses, and rustc reports a prelude as an unused import when the other imported
 preludes already bring every item it would add. No runtime implements anything
 here, so `ridl-rt-conformance` does not test it; the generated face's own tests
 do (`crates/ridl-backend-rust/tests/face_compile.rs` and `face_generation.rs`).
+
+`Source` is the one trait of the module an application implements. A `Provider`
+method for a query whose reply is a stream of named elements returns a `Source`
+of those elements, and the generated `serve` drives it over the `StreamHandler`
+port, one element per poll:
+
+```rust,ignore
+pub trait Source {
+    type Item;
+    fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Interrupted>>>;
+}
+pub struct Interrupted;
+```
+
+`Ready(Some(Ok(item)))` is the next element, `Ready(None)` the end,
+`Ready(Some(Err(Interrupted)))` stops the stream before its end, which the
+caller reads as `Transport::Interrupted`, and `Pending` stores the waker. The
+pull shape keeps a provider method synchronous on a target without `std`: the
+task that polls `serve` is the one that waits when the stream's window is full.
 
 ## Identity
 
@@ -1169,17 +1188,17 @@ Generated code returns both since the async client: a call future's output is
 
 ## What 0.1 leaves out
 
-The frame framing of a stream and the generated face of a stream parameter or
-reply (driftsys/ridl#1116); `Inline` payloads; `Constrained` (nothing calls it
-in 0.1); `Family` (the IR carries no family field yet); `ServiceId` (dropped,
-ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's wire tag
-values — the frame specification fixed the values, 1 FlatBuffers, 2 proto3, 3
-`podbuf`; the constant itself is a later 0.x minor); `Access` (the trust
-constant the Rust codegen generates once the rsdl lowering exists); the three
-payload codecs; the runtimes — `ridl-loopback` is its own crate
-([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own
-crate, built; and the engine. `Family` returns as a `Member` field, which is a
-breaking change (ADR-0021 decision 10).
+The frame framing of a stream and the generated face of a stream parameter, of a
+byte stream and of a text stream (driftsys/ridl#1116); `Inline` payloads;
+`Constrained` (nothing calls it in 0.1); `Family` (the IR carries no family
+field yet); `ServiceId` (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the
+frame specification's wire tag values — the frame specification fixed the
+values, 1 FlatBuffers, 2 proto3, 3 `podbuf`; the constant itself is a later 0.x
+minor); `Access` (the trust constant the Rust codegen generates once the rsdl
+lowering exists); the three payload codecs; the runtimes — `ridl-loopback` is
+its own crate ([its design record](ridl-loopback.md)) and `ridl-transport-ws` is
+its own crate, built; and the engine. `Family` returns as a `Member` field,
+which is a breaking change (ADR-0021 decision 10).
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 9 fixes the principle
 of the stream port — a pull API over caller-supplied buffers that never waits,
 keyed by the call — and the port is built to it: `StreamCaller` and

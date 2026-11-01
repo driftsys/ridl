@@ -252,6 +252,10 @@ impl Inner {
                 }
                 _ => {}
             },
+            Frame::Block { .. } => panic!(
+                "the test client has no support for `block` frames: it only reads a `fixed` \
+                 that one `publish` carries, so provision a smaller value or add the support"
+            ),
             Frame::Occurrence {
                 target,
                 envelope,

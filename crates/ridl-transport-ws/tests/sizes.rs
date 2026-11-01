@@ -5,8 +5,8 @@ use ridl_ir::codegen::known_bindings;
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    Attach, Frame, PublishState, ResponseOutcome, Target, ENVELOPE_BYTES, MAX_MESSAGE_LIMIT,
-    MIN_MESSAGE_LIMIT,
+    Attach, Frame, PublishState, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
+    FRAME_VERSION, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
 };
 
 /// The frame header maximum and the envelope size of the `websocket` row.
@@ -16,7 +16,7 @@ fn row() -> (usize, usize) {
         .iter()
         .find(|b| b.name == "websocket")
         .expect("the websocket row exists");
-    assert_eq!(row.version, "1");
+    assert_eq!(row.version, FRAME_VERSION.to_string());
     (
         row.frame_header_max_bytes.expect("the row states a header") as usize,
         row.envelope_bytes.expect("the row states an envelope") as usize,
@@ -85,6 +85,13 @@ fn every_other_data_plane_form_is_no_larger() {
                 envelope: envelope(),
                 payload: &payload,
             },
+            Frame::Block {
+                target: target(Kind::Fixed),
+                envelope: envelope(),
+                total: len.max(1) as u32,
+                index: 0,
+                payload: &payload,
+            },
         ];
         for frame in frames {
             assert!(written_len(&frame) <= bound, "{frame:?} exceeds {bound}");
@@ -112,4 +119,20 @@ fn the_largest_message_limit_is_the_largest_data_plane_message() {
         outcome: ResponseOutcome::Reply(&payload),
     };
     assert_eq!(written_len(&frame), MAX_MESSAGE_LIMIT);
+}
+
+#[test]
+fn a_block_message_is_its_34_byte_header_and_at_most_4096_bytes() {
+    assert_eq!(BLOCK_BYTES, 4_096);
+    let payload = vec![0u8; BLOCK_BYTES];
+    let frame = Frame::Block {
+        target: target(Kind::Fixed),
+        envelope: envelope(),
+        total: BLOCK_BYTES as u32,
+        index: 0,
+        payload: &payload,
+    };
+    assert_eq!(frame.encoded_len(), 4_130);
+    assert_eq!(written_len(&frame), 4_130);
+    assert_eq!(written_len(&frame), ENVELOPE_BYTES + 18 + BLOCK_BYTES);
 }

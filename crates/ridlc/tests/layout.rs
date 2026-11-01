@@ -339,7 +339,7 @@ fn a_layout_plugin_computes_cabin_from_the_request_alone() {
         deployment.bindings,
         vec![v1::Binding {
             name: "websocket".to_string(),
-            version: "1".to_string(),
+            version: "2".to_string(),
             frame_header_max_bytes: Some(20),
             envelope_bytes: Some(16),
         }]

@@ -5,8 +5,8 @@ use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
-    Target,
+    decode, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, ProtocolViolation,
+    PublishState, Reason, ResponseOutcome, Target, BLOCK_BYTES,
 };
 
 fn hex(text: &str) -> Vec<u8> {
@@ -126,5 +126,139 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
     assert_eq!(
         seen, known,
         "the table and this test disagree on the vectors"
+    );
+}
+
+// -- Frame version 2 (frame specification §11.1, binding version 2) ----------
+//
+// Every row of the version 2 table of the frame specification is read and
+// decoded; a row this test does not know fails it. The other block vectors are test constants: they
+// are 4,096 bytes or more, or they are violations. Every hex string is one
+// whole message.
+
+const BLOCK_HEADER: &str = "0b 05 01000000 05000000 ab89674523010000 0000000000000000";
+
+/// The pattern `P(n)`: byte `i` is `i mod 251`.
+fn pattern(n: usize) -> Vec<u8> {
+    (0..n).map(|i| (i % 251) as u8).collect()
+}
+
+fn fixed_block(total: u32, index: u32, payload: &[u8]) -> Frame<'_> {
+    Frame::Block {
+        target: target(Kind::Fixed, 1, 5),
+        envelope: envelope(0x0123_4567_89AB, 0),
+        total,
+        index,
+        payload,
+    }
+}
+
+/// The header of a `block` of the shared vectors followed by `payload`.
+fn block_message(total_hex: &str, index_hex: &str, payload: &[u8]) -> Vec<u8> {
+    let mut m = hex(&format!("{BLOCK_HEADER} {total_hex} {index_hex}"));
+    m.extend_from_slice(payload);
+    m
+}
+
+/// The `Id` and the bytes of every row of the version 2 vector table of the
+/// frame specification, in the table's order.
+fn spec_version_2_vectors() -> Vec<(String, Vec<u8>)> {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/specification/frame-specification.md"
+    );
+    let text = std::fs::read_to_string(path).unwrap();
+    let start = text
+        .find("**Version 2 test vectors.**")
+        .expect("version 2 vectors paragraph");
+    let rows: Vec<(String, Vec<u8>)> = text[start..]
+        .lines()
+        .skip_while(|l| !l.starts_with('|'))
+        .take_while(|l| l.starts_with('|'))
+        .skip(2)
+        .map(|l| {
+            let cells: Vec<&str> = l.split('|').map(str::trim).collect();
+            (cells[1].trim_matches('`').to_string(), hex(cells[3]))
+        })
+        .collect();
+    assert!(!rows.is_empty(), "no version 2 vector rows found");
+    rows
+}
+
+const KNOWN_2: [&str; 3] = ["attach-2", "block-last", "block-one"];
+
+/// The frame a row of the version 2 table describes, by its `Id`.
+fn expected_2(id: &str) -> Option<Frame<'static>> {
+    let mut hash = [0u8; 32];
+    for (i, b) in hash.iter_mut().enumerate() {
+        *b = i as u8;
+    }
+    Some(match id {
+        "attach-2" => Frame::Attach(Attach::new(2, 1, CatalogHash(hash), "veh.cabin").unwrap()),
+        "block-last" => fixed_block(4_098, 1, &[0xab, 0xcd]),
+        "block-one" => fixed_block(1, 0, &[0xab]),
+        _ => return None,
+    })
+}
+
+fn assert_round_trip(id: &str, want: Frame<'_>, bytes: &[u8]) {
+    let got = decode(bytes).unwrap_or_else(|e| panic!("vector {id} did not decode: {e:?}"));
+    assert_eq!(got, want, "vector {id}");
+    assert_eq!(want.encoded_len(), bytes.len(), "encoded_len of {id}");
+    let mut out = vec![0u8; bytes.len()];
+    let n = want.encode(&mut out).unwrap();
+    assert_eq!(&out[..n], bytes, "encoding of {id}");
+}
+
+#[test]
+fn every_version_2_vector_decodes_and_reencodes_byte_for_byte() {
+    let mut seen = Vec::new();
+    for (id, bytes) in spec_version_2_vectors() {
+        let want = expected_2(&id)
+            .unwrap_or_else(|| panic!("version 2 vector {id} is not known to this test"));
+        assert_round_trip(&id, want, &bytes);
+        seen.push(id);
+    }
+    seen.sort();
+    let mut known: Vec<String> = KNOWN_2.iter().map(|s| s.to_string()).collect();
+    known.sort();
+    assert_eq!(
+        seen, known,
+        "the version 2 table and this test disagree on the vectors"
+    );
+}
+
+#[test]
+fn the_first_block_of_a_4098_byte_payload_carries_4096_bytes_of_the_pattern() {
+    let payload = pattern(BLOCK_BYTES);
+    let message = block_message("02100000", "00000000", &payload);
+    assert_eq!(message.len(), 4_130);
+    assert_round_trip("block-first", fixed_block(4_098, 0, &payload), &message);
+    match decode(&message) {
+        Ok(Frame::Block { payload: got, .. }) => assert_eq!(got, &pattern(4_096)[..]),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[test]
+fn a_last_block_of_the_largest_total_decodes_without_overflow() {
+    let zeros = vec![0u8; 4_096];
+    let max_last = block_message("ffffffff", "ffff0f00", &zeros[..4_095]);
+    assert_eq!(max_last.len(), 4_129);
+    assert_round_trip(
+        "block-max-last",
+        fixed_block(u32::MAX, 1_048_575, &zeros[..4_095]),
+        &max_last,
+    );
+
+    let full = block_message("00100000", "00000000", &zeros);
+    assert_eq!(full.len(), 4_130);
+    assert_round_trip("block-full", fixed_block(4_096, 0, &zeros), &full);
+
+    let max_last_full = block_message("ffffffff", "ffff0f00", &zeros);
+    assert_eq!(max_last_full.len(), 4_130);
+    assert_eq!(
+        decode(&max_last_full),
+        Err(DecodeError::Violation(ProtocolViolation::BadBlock))
     );
 }

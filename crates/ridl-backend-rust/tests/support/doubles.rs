@@ -3,15 +3,18 @@
 //! face design, note F-14).
 //!
 //! [`RecordingPorts`] is the port set a `Client` over an interface with a
-//! signal, an event and a call needs — `Attached`, `Clock`, `SignalReader`,
-//! `EventSource`, `Caller` and `Wakeable` — built from one `Loopback`'s role
+//! signal, an event, a call and a streamed reply needs — `Attached`, `Clock`,
+//! `SignalReader`, `EventSource`, `Caller`, `StreamCaller` and `Wakeable` —
+//! built from one `Loopback`'s role
 //! handles rather than from the aggregate. Two things follow. The `Loopback`
 //! stays free while a future holds the ports, so a test can `advance` its
 //! clock, take a `handler()` for the provider side, and take a `caller()` to
 //! fill the call table. And every `Caller` and `Wakeable` call the face makes
 //! is recorded, in order, in a log the test reads while the future is alive,
 //! which is what shows that a future forgets its call exactly once, and that
-//! a poll registers its interest before it reads the port.
+//! a poll registers its interest before it reads the port. The `StreamCaller`
+//! calls are recorded the same way, for the tests of a stream value in
+//! `tests/stream_face.rs`.
 //!
 //! [`FailingHandler`] wraps a `HandlerHandle` and fails where the loopback
 //! never does: `next_claim` answers `ReadError::Detached` once a set number of
@@ -29,18 +32,19 @@ use std::sync::{Arc, Mutex};
 use std::task::Waker;
 
 use ridl_loopback::{CallerHandle, HandlerHandle, Loopback, ReaderHandle, SourceHandle};
+use ridl_rt::contract::StreamNo;
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Claim, ClaimId, Clock, Correlation, Encoded, EventSource, Handler, Interest,
-    RawOccurrence, RawSample, ReadError, SendError, ServeError, SettleError, SignalReader,
-    SubscribeError, Wakeable,
+    Pull, PushError, RawOccurrence, RawSample, ReadError, SendError, ServeError, SettleError,
+    SignalReader, StreamCaller, SubscribeError, Wakeable,
 };
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_rt::trace::TraceContext;
 
-/// One `Caller` or `Wakeable` call the face made, with what the port
-/// answered where the answer is what a test asserts on.
+/// One `Caller`, `StreamCaller` or `Wakeable` call the face made, with what
+/// the port answered where the answer is what a test asserts on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
     Command(Result<Correlation, SendError>),
@@ -49,6 +53,10 @@ pub enum Op {
     Reply(Correlation),
     Forget(Correlation),
     WakeOn(Interest),
+    Pull(Correlation, StreamNo),
+    Push(Correlation, StreamNo),
+    End(Correlation, StreamNo),
+    Abort(Correlation, StreamNo, CallError),
 }
 
 /// The log [`RecordingPorts`] writes, shared with the test that reads it.
@@ -224,6 +232,28 @@ impl Caller for RecordingPorts {
     fn forget(&mut self, c: Correlation) {
         self.record(Op::Forget(c));
         self.caller.forget(c);
+    }
+}
+
+impl StreamCaller for RecordingPorts {
+    fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError> {
+        self.record(Op::Pull(c, s));
+        self.caller.pull(c, s, out)
+    }
+
+    fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError> {
+        self.record(Op::Push(c, s));
+        self.caller.push(c, s, chunk)
+    }
+
+    fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError> {
+        self.record(Op::End(c, s));
+        self.caller.end(c, s)
+    }
+
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError> {
+        self.record(Op::Abort(c, s, e));
+        self.caller.abort(c, s, e)
     }
 }
 
@@ -430,11 +460,12 @@ impl QueuedClaims {
 
 /// `QueuedClaims` reports the catalog of the generated fixture face, which
 /// `serve` compares with its own and panics on a mismatch (ADR-0023 decision
-/// 8). This module is reached only from `tests/interaction_face.rs`, whose
-/// crate root holds `generated`.
+/// 8). This module is reached from `tests/interaction_face.rs` and
+/// `tests/stream_face.rs`, whose crate roots each hold that catalog as
+/// `CATALOG`.
 impl Attached for QueuedClaims {
     fn catalog(&self) -> &CatalogRef {
-        <crate::generated::Cabin as ridl_rt::contract::Interface>::CATALOG
+        &crate::CATALOG
     }
 }
 

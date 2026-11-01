@@ -17,10 +17,15 @@
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
-//!   A member with a stream, as a parameter or as the reply, has no `Command`
-//!   or `Query` impl until the face carries streams, so a generic caller
-//!   cannot send it without its stream; its `MEMBERS` row is written all the
-//!   same, and every row lists the member's streams.
+//!   A query whose reply is a stream of named elements, with no stream
+//!   parameter, has a `Query` impl whose `Reply` is `()`: its settlement
+//!   carries no reply bytes, because the elements travel on the reply
+//!   stream, and its `ensure` is always `Ok` (ridl refuses `result` on a
+//!   stream). Every other member with a stream, as a parameter or as the
+//!   reply, has no `Command` or `Query` impl until the face carries that
+//!   form, so a generic caller cannot send it without its stream; its
+//!   `MEMBERS` row is written all the same, and every row lists the member's
+//!   streams.
 //!
 //! It is reached from [`crate::generate_pipeline`], which is
 //! what `ridl build --emit rust` calls, as well as from
@@ -464,10 +469,15 @@ fn interaction_item(
             }
         }
         // A member with a stream, as a parameter or as the reply, gets no
-        // `Command` or `Query` impl until the face carries streams: a generic
-        // caller of such an impl could send the call without its stream. Its
-        // row of `MEMBERS` and its size-table row are written all the same;
-        // a streamed reply has no reply type and no row of the table.
+        // `Command` or `Query` impl until the face carries that form: a
+        // generic caller of such an impl could send the call without its
+        // stream. Its row of `MEMBERS` and its size-table row are written all
+        // the same; a streamed reply has no reply type and no row of the
+        // table. The one form the face carries, a query whose reply is a
+        // stream of named elements and nothing else, gets a `Query` impl
+        // whose `Reply` is `()`: the face's send evaluates `require` through
+        // it, and no payload type is claimed for a settlement that carries
+        // no reply bytes.
         Some(v1::interaction::Shape::Command(command)) if has_stream(interaction) => {
             let arg_name = single_param_type(ctx, command, member)?;
             row.push(arg_name.to_string());
@@ -483,7 +493,36 @@ fn interaction_item(
                 row.push(reply_name.to_string());
                 sizes.calls.push(reply_name.to_string());
             }
-            TokenStream::new()
+            if named_stream_reply(interaction) {
+                let args = type_path(arg_name);
+                let require = clauses::translate(
+                    ctx,
+                    &query.clauses,
+                    ClauseKind::Require,
+                    &query.params,
+                    None,
+                )?;
+                let args_param = binding("args", require.uses_args);
+                let require_expr = require.expr;
+                // `ensure` is not evaluated on a streamed reply (the checker
+                // refuses `result` on a stream), so the method is `Ok`
+                // whatever the clauses, and no reply is read: see
+                // `clauses.rs` for the `require` translation.
+                quote! {
+                    impl ::ridl_rt::contract::Query for #struct_ident {
+                        type Args = #args;
+                        type Reply = ();
+                        fn require(#args_param: &Self::Args) -> ::core::result::Result<(), ()> {
+                            #require_expr
+                        }
+                        fn ensure(_args: &Self::Args, _reply: &()) -> ::core::result::Result<(), ()> {
+                            Ok(())
+                        }
+                    }
+                }
+            } else {
+                TokenStream::new()
+            }
         }
         Some(v1::interaction::Shape::Command(command)) => {
             let arg_name = single_param_type(ctx, command, member)?;
@@ -652,7 +691,7 @@ fn stream_element(stream: &v1::StreamShape) -> String {
 /// has no payload type, so it has no `Reply` and no row of the size table.
 /// The element is spelled as the IR reference text, as a payload is.
 fn stream_reply(interaction: &v1::Interaction) -> Option<String> {
-    let stream = interaction.streams.iter().find(|stream| stream.no == 0)?;
+    let stream = reply_stream(interaction)?;
     let inner = match v1::StreamForm::try_from(stream.form) {
         Ok(v1::StreamForm::Bytes) => "bytes".to_string(),
         Ok(v1::StreamForm::Text) => "string".to_string(),
@@ -663,6 +702,19 @@ fn stream_reply(interaction: &v1::Interaction) -> Option<String> {
             .unwrap_or_default(),
     };
     Some(format!("<{inner}>"))
+}
+
+/// The number of a query's reply stream, which the generated face names as
+/// `ridl_rt::port::REPLY_STREAM`. The backend does not link `ridl-rt`, so the
+/// value is written here.
+const REPLY_STREAM_NO: u32 = 0;
+
+/// A query's reply stream, or `None` when the interaction has none.
+fn reply_stream(interaction: &v1::Interaction) -> Option<&v1::StreamShape> {
+    interaction
+        .streams
+        .iter()
+        .find(|stream| stream.no == REPLY_STREAM_NO)
 }
 
 /// One row of the size table: the sum, as a `u64`, of the `MAX_SIZE` paths
@@ -918,7 +970,8 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
 }
 
 /// Whether the interaction has a stream, as a parameter or as its reply. The
-/// face leaves such a member out; its descriptor row is written all the same.
+/// face carries such a member only in the form [`named_stream_reply`] names;
+/// its descriptor row is written all the same.
 pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
     !interaction.streams.is_empty()
 }
@@ -928,6 +981,18 @@ pub(crate) fn has_stream_reply(interaction: &v1::Interaction) -> bool {
     stream_reply(interaction).is_some()
 }
 
+/// Whether the interaction is a query whose reply is a stream of named
+/// elements and whose only stream is that reply: `query f(..): <T>` with `T`
+/// a named type. It is the one stream form the face carries; the element is
+/// what [`query_reply_type`] returns for the query.
+pub(crate) fn named_stream_reply(interaction: &v1::Interaction) -> bool {
+    interaction.streams.len() == 1
+        && reply_stream(interaction).is_some_and(|stream| {
+            v1::StreamForm::try_from(stream.form) == Ok(v1::StreamForm::Elements)
+                && stream.element.is_some()
+        })
+}
+
 /// Why a call has no argument type: a parameter with no declared type.
 fn no_single_param(member: &str) -> GenerateError {
     GenerateError {
@@ -935,9 +1000,10 @@ fn no_single_param(member: &str) -> GenerateError {
     }
 }
 
-/// A query's reply type: the declared named type, or the induced reply struct
-/// the lowering named for a tuple reply. A fallible `T | E` reply induces
-/// nothing and is refused.
+/// A query's reply type: the declared named type, the induced reply struct
+/// the lowering named for a tuple reply, or, for a streamed reply of named
+/// elements, the element type. A fallible `T | E` reply induces nothing and
+/// is refused; so is a stream of bytes or of text, which names no type.
 pub(crate) fn query_reply_type<'a>(
     ctx: &Ctx<'a>,
     query: &'a v1::QueryShape,
@@ -950,6 +1016,13 @@ pub(crate) fn query_reply_type<'a>(
         return Ok(name);
     }
     match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {
+        Some(v1::reply::Kind::Value(v1::Type {
+            kind:
+                Some(v1::r#type::Kind::Stream(v1::StreamType {
+                    element: Some(v1::stream_type::Element::Named(element)),
+                })),
+            ..
+        })) => Ok(element.reference.as_str()),
         Some(v1::reply::Kind::Value(_)) => Err(GenerateError {
             message: format!("query `{member}`'s reply must be a named type or a tuple"),
         }),

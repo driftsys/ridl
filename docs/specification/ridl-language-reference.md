@@ -1015,8 +1015,8 @@ there can the reply not start before the upload ends. On a `command` with a
 stream parameter, `max` keeps its meaning of acceptance (§6.1); the upload
 itself has no contract bound. A stream that stops in the middle is detected by
 the transport as a Stratum 3 interruption (§12.4), not by the response bound. No
-frozen surface carries a stream today (frame version 1 has none), so no existing
-declaration changes meaning.
+frozen surface carries a stream today (frame versions 1 and 2 have none), so no
+existing declaration changes meaning.
 
 The half-open spellings carry the two partial cases: `@[..100ms]` is a response
 bound with no throttle, and `@[20ms..]` a throttle with no response bound. An
@@ -1326,10 +1326,10 @@ query fetchDocument(id: DocId): <bytes>                  // byte stream, server 
 ```
 
 The stream port of `ridl-rt` is built, and `ridl-loopback` implements it in
-process, but no frame version encodes a stream and no generated face carries one
-yet (driftsys/ridl#1116), so nothing over the code the CLI generates carries a
-stream. This section states the contract a stream declares, which the checker
-and the IR already accept.
+process. The generated Rust face carries one stream form, a query whose reply is
+a stream of named elements; no generated face carries a stream of bytes or of
+text, or a stream parameter, yet (driftsys/ridl#1116). This section states the
+contract a stream declares, which the checker and the IR already accept.
 
 ### 12.1 Direction by Position
 

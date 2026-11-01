@@ -58,7 +58,8 @@ pinned toolchain.
 
 ## What 0.1 leaves out
 
-- the frame framing and the generated face of a stream (driftsys/ridl#1116)
+- the frame framing of a stream, and the generated face of a stream parameter,
+  of a byte stream and of a text stream (driftsys/ridl#1116)
 - `Inline`
 - the three payload codecs (proto3, FlatBuffers, `podbuf`)
 - `Encoding::FORMAT`

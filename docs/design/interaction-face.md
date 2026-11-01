@@ -181,16 +181,20 @@ induce a reply struct. The rule is held by
 the one place the backend asks what a call sends. They read the name the
 lowering wrote, and the backend never builds one. A fallible `T | E` reply and
 an untyped position are still refused (driftsys/ridl#943). A call with a stream
-gets its descriptor, whose row lists its streams, but no method on the face. An
-induced payload with no finite bound in an encoding `encodings` names is also
-refused before its descriptor is accepted, because that encoding's codec cannot
-implement `Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers
-root has no finite bound; under `proto3`, a tuple whose proto3 size state is not
-bounded — no finite bound, a bound that does not fit, or a member proto3 cannot
-represent — with the refusal naming the tuple and the sizer's cause. The
-pipeline skips that interface with the same refusal marker, leaving the
-package's domain types and its other interfaces unaffected
-(`tests/induced_call_refusals.rs`).
+gets its descriptor, whose row lists its streams, and a method on the face in
+one form only: a query whose reply is a stream of named elements and whose only
+stream is that reply, for which `query_reply_type` returns the element type and
+the consumer side below emits the call's future and its `<Name>Stream`. Every
+other stream form, a byte or text stream and a stream parameter, still gets its
+descriptor and no method on the face (driftsys/ridl#943). An induced payload
+with no finite bound in an encoding `encodings` names is also refused before its
+descriptor is accepted, because that encoding's codec cannot implement
+`Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers root has no
+finite bound; under `proto3`, a tuple whose proto3 size state is not bounded —
+no finite bound, a bound that does not fit, or a member proto3 cannot represent
+— with the refusal naming the tuple and the sizer's cause. The pipeline skips
+that interface with the same refusal marker, leaving the package's domain types
+and its other interfaces unaffected (`tests/induced_call_refusals.rs`).
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
@@ -208,11 +212,12 @@ consumer side is:
   the bounds computed from the interface's interaction kinds and no others:
   `SignalReader` when it declares a signal, `EventSource` when it declares an
   event, `Caller` and `Clock` when it declares a command or a query (`Clock` for
-  the call's deadline), and `Wakeable` when it declares an event, a command or a
-  query (for the wait). Each impl of `Client<P>` also carries the generated
-  `where` clause of the section "The encoding and the ports" below. This is
-  RA-19: a `Client` never carries a bound its own interface does not need. It is
-  proven, not merely asserted, by
+  the call's deadline), `Wakeable` when it declares an event, a command or a
+  query (for the wait), and `StreamCaller` when it declares a query whose reply
+  is a stream of named elements. Each impl of `Client<P>` also carries the
+  generated `where` clause of the section "The encoding and the ports" below.
+  This is RA-19: a `Client` never carries a bound its own interface does not
+  need. It is proven, not merely asserted, by
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` in
   `tests/interaction_face.rs`, which constructs the fixture's signal-only `Horn`
   interface's `Client` with a port implementing only `SignalReader`, `Attached`
@@ -242,6 +247,27 @@ consumer side is:
   a generated Rust `match` (driftsys/ridl#486).
 - **One future type per command and per query, `<Name>Call<'a, P>`**, and
   **`NextEvent<'a, P>`** when the interface declares an event.
+- **For a query whose reply is a stream of named elements, `<Name>Call<'a, P>`
+  resolves to `<Name>Stream<'a, P>`.** The method sends the call; the future
+  resolves `Ok(stream)` on the first element or the end, `Err(Timeout)` when the
+  bound passes first, and `Err(e)` when the provider failed the call before any
+  element. The stream holds the first chunk, so the first `poll_next` returns
+  it. `poll_next` is the pull API and needs only `core`; `async fn next` awaits
+  it with `core::future::poll_fn` and is emitted outside `cfg(feature = "std")`.
+  Both register the waker under `Interest::Stream`, and the stream allocates
+  nothing: the buffer for one element is inline. An element that fails its check
+  refuses the stream with `Contract::InvalidValue`, and a chunk that is no
+  well-formed element, or longer than any legal one, refuses it with
+  `Transport::Corrupt`. A refusal aborts the stream, which the provider reads
+  from its next push, and the call is kept until the stream is dropped; a chunk
+  the consumer refuses before any element resolves the call `Ok(stream)`, and
+  the stream yields the error on its first poll. After the end or an error every
+  later `poll_next` is `Ready(None)`. Dropping the stream forgets the call once,
+  which interrupts a stream that has not ended. There is no `blocking` method
+  for a stream. `tests/stream_face.rs` tests these paths over `ridl-loopback`.
+  The veh-cluster corpus carries the form in `FaultLog`, and
+  `crates/ridlc/tests/veh_cluster_stream.rs` reads 64 of its elements, about 67
+  KB in FlatBuffers, which is more than one call of the interface may carry.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
   section "The blocking module" below.
 - **`prelude`** — the module a consumer glob-imports,
@@ -464,15 +490,47 @@ rows are reachable only through the internal step directly, which is how
 `tests/interaction_face.rs` still exercises them — the test file is inside the
 crate that `include!`s the fixture, so `pub(crate)` reaches it.
 
+**A query whose reply is a stream of named elements** adds to the provider side.
+`Provider` gains `type <Name>: ridl_rt::face::Source<Item = T>` and
+`fn <name>(&mut self, ..) -> Self::<Name>`; `serve` registers the member with
+the others, and its `H`, and the blocking `serve`'s, add `StreamHandler`, only
+on an interface that declares such a member. `dispatch` checks the arguments and
+`require` as for any query, calls the method, and keeps the source in the
+member's slot of `Serve` without settling the claim; the face drives one stream
+per member at a time, and a call of a member whose slot is held is settled
+`Transport::Busy`. The handler port gives `serve` no signal of a caller's
+`forget` except through the next push, so while a member's source answers
+`Pending`, a caller that timed out or dropped its stream keeps the member `Busy`
+until the source yields its next element; that push fails, and the source is
+dropped and the member freed then. Each poll of `Serve` drives its streams
+before it takes claims. An element that found the stream's window full is kept,
+as a range of the element buffer inline in `Serve`, and pushed again on a later
+poll before the source is polled again; otherwise the source is polled at most
+once per poll, and that poll counts as one of the 32. An element is encoded and
+checked against its type before `push_claim`; one that fails stops the stream
+with `Contract::InvalidValue` and is not sent. `Ready(None)` is `end_claim`,
+`Err(Interrupted)` and a push refused `TooLarge` are `abort_claim` with
+`Transport::Interrupted`, and a push answered `Failed(_)`, a caller that refused
+or stopped reading the stream, is `end_claim`, which settles the claim so that
+the caller's call slot is given back. The source is dropped with its slot.
+Dropping `Serve` stops every stream it still drives with `abort_claim` and
+`Transport::Interrupted` and drops its source, so that `blocking::serve`, which
+drops the future when its timeout passes, leaves no claim held. `ensure` is not
+evaluated on a streamed reply. `tests/stream_face.rs` tests these paths over
+`ridl-loopback`.
+
 **The internal step, `dispatch`**, is `pub(crate)` and returns
-`Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
-the failure `serve` resolves to — and `Ok(0)` on a buffer shorter than
-`MAX_BUFFER_SIZE`, without consuming a claim. It takes a `budget: &mut usize`,
-which it decreases by one for each claim it takes and at 0 stops without asking
-for another claim; `serve` passes 32 and reads the budget left to know whether
-the pass stopped at the bound. It loops over `Handler::next_claim`, routing and
-settling every claim it takes — including one this interface does not recognise,
-because `Handler`'s own contract requires every claim to be settled:
+`Result<usize, ReadError>` — the count of claims `Handler::settle` accepted,
+plus the claims of streamed replies whose source it kept, which are not settled
+yet and which `serve` settles when it ends or stops their stream, or the failure
+`serve` resolves to — and `Ok(0)` on a buffer shorter than `MAX_BUFFER_SIZE`,
+without consuming a claim. It takes a `budget: &mut usize`, which it decreases
+by one for each claim it takes and at 0 stops without asking for another claim;
+`serve` passes 32 and reads the budget left to know whether the pass stopped at
+the bound. It loops over `Handler::next_claim`, routing and settling every claim
+it takes, except the claim of a streamed reply whose source it kept, which
+`serve` settles later — including one this interface does not recognise, because
+`Handler`'s own contract requires every claim to be settled:
 
 | Cause                                       | Settled as                                                          |
 | ------------------------------------------- | ------------------------------------------------------------------- |

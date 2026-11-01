@@ -278,11 +278,13 @@ interface Wide {
     assert!(!text.contains("pub mod wide"), "{text}");
 }
 
-/// The same for a query that has a stream parameter and one that replies with
-/// a stream: each has a descriptor, and the face module carries the methods
-/// of the other members only.
+/// The same for a query that has a stream parameter: it has a descriptor and
+/// no method on the face. A query whose reply is a stream of named elements
+/// is the one stream form the face carries: its client method and its stream
+/// value are emitted beside the other members' methods, while a streamed
+/// reply of bytes or of text is still left out.
 #[test]
-fn a_query_with_a_stream_has_a_descriptor_and_no_face_method() {
+fn a_query_with_a_stream_has_a_descriptor_and_only_a_named_reply_stream_has_a_face_method() {
     let source = r#"
 package face.query_shape
 
@@ -292,6 +294,8 @@ interface Wide {
   signal level: Level @10ms
   query read(samples: <Level>): Level @[..50ms]
   query history(limit: Level): <Level> @[..50ms]
+  query dump(limit: Level): <bytes> @[..50ms]
+  query notes(limit: Level): <string> @[..50ms]
 }
 "#;
     let output = ridlc::compile("query_shape.ridl", source);
@@ -301,9 +305,16 @@ interface Wide {
     assert!(!text.contains("__RIDL_NO_FACE_"), "{text}");
     assert!(text.contains("pub struct WideRead;"), "{text}");
     assert!(text.contains("pub struct WideHistory;"), "{text}");
+    assert!(text.contains("pub struct WideDump;"), "{text}");
+    assert!(text.contains("pub struct WideNotes;"), "{text}");
     assert!(text.contains("pub mod wide"), "{text}");
     assert!(!text.contains("fn read("), "{text}");
-    assert!(!text.contains("fn history("), "{text}");
+    assert!(text.contains("fn history("), "{text}");
+    assert!(text.contains("pub struct HistoryStream<"), "{text}");
+    assert!(!text.contains("fn dump("), "{text}");
+    assert!(!text.contains("fn notes("), "{text}");
+    // The emitted face compiles with the std cfg on and off.
+    face_compiles("query_shape", source);
 }
 
 /// A member with a stream is left out of the face, so it is never the call

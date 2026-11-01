@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
 import { connect, Kind } from "../mod.ts";
+import {
+  attach,
+  decode,
+  encode,
+  encodingTag,
+  FRAME_VERSION,
+  SUBPROTOCOL,
+} from "../src/frame.ts";
+import type { Frame } from "../src/frame.ts";
 import type { Note, Occurrence, Sample } from "../mod.ts";
 import * as catalog from "./catalog.ts";
 import { startServer } from "./server.ts";
@@ -43,6 +52,19 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
     assert.equal(fixed.provenance, "live");
     assert.deepEqual(fixed.payload, catalog.FIXED_VALUE);
     assert.equal(fixed.envelope.seq, 0n);
+
+    // The large values cross in blocks or whole, and every byte is checked.
+    for (const [ord, length] of catalog.FIXED_LENGTHS) {
+      const large = await session.read({
+        kind: Kind.Fixed,
+        iface: catalog.IFACE,
+        ord,
+      });
+      assert.equal(large.provenance, "live");
+      assert.equal(large.payload?.length, length);
+      assert.deepEqual(large.payload, catalog.pattern(length));
+    }
+    assert.deepEqual(notes.filter((n) => n.note === "discarded"), []);
 
     init.start();
     await session.subscribe({
@@ -93,6 +115,95 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
     init.cancel();
     live.cancel();
     occurred.cancel();
+    await server.stop();
+  }
+});
+
+Deno.test("the server answers a read of a fixed in one publish up to 16,137 bytes and in blocks above", async () => {
+  const server = await startServer();
+  let raw: WebSocket | undefined;
+  try {
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${server.port}`,
+      SUBPROTOCOL,
+    );
+    raw = socket;
+    socket.binaryType = "arraybuffer";
+    const received: Frame[] = [];
+    let wake: (() => void) | undefined;
+    socket.onmessage = (event) => {
+      const decoded = decode(new Uint8Array(event.data as ArrayBuffer));
+      assert.ok(decoded.ok, "the server sends a frame the codec reads");
+      received.push(decoded.frame);
+      wake?.();
+    };
+    await new Promise<void>((resolve, reject) => {
+      socket.onopen = () => resolve();
+      socket.onerror = () => reject(new Error("the connection failed"));
+    });
+    assert.equal(socket.protocol, SUBPROTOCOL);
+    /** Waits for `count` frames more than `from`, up to 2 s. */
+    const frames = async (from: number, count: number): Promise<Frame[]> => {
+      const deadline = Date.now() + 2000;
+      while (received.length < from + count && Date.now() < deadline) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+          setTimeout(resolve, 50);
+        });
+      }
+      return received.slice(from);
+    };
+    socket.send(encode(attach(
+      FRAME_VERSION,
+      encodingTag(catalog.ENCODING),
+      catalog.HASH,
+      catalog.NAME,
+    )));
+    const attached = await frames(0, 1);
+    assert.deepEqual(attached.map((f) => f.form), ["attached"]);
+
+    const target = (ord: number) => ({
+      kind: Kind.Fixed,
+      iface: catalog.IFACE,
+      ord,
+    });
+    // 16,137 bytes is the most one publish carries: one frame.
+    socket.send(encode({ form: "read", target: target(catalog.FIXED_WHOLE) }));
+    const whole = await frames(1, 1);
+    // Wait for any further frame, so that a split value is counted in full.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const wholeAll = received.slice(1);
+    assert.equal(whole.length, 1);
+    assert.deepEqual(wholeAll.map((f) => f.form), ["publish"]);
+
+    // 16,138 bytes is one more: ceil(16,138 / 4,096) = 4 blocks.
+    const mark = received.length;
+    socket.send(encode({ form: "read", target: target(catalog.FIXED_SPLIT) }));
+    await frames(mark, 4);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const split = received.slice(mark);
+    assert.deepEqual(split.map((f) => f.form), Array(4).fill("block"));
+    const blocks = split.map((f) => {
+      assert.equal(f.form, "block");
+      return f as Extract<Frame, { form: "block" }>;
+    });
+    assert.deepEqual(blocks.map((b) => b.index), [0, 1, 2, 3]);
+    assert.deepEqual(blocks.map((b) => b.total), Array(4).fill(16138));
+    assert.deepEqual(blocks.map((b) => b.payload.length), [
+      4096,
+      4096,
+      4096,
+      3850,
+    ]);
+  } finally {
+    // Close the raw socket and wait for it to end before the server stops.
+    if (raw !== undefined && raw.readyState !== WebSocket.CLOSED) {
+      const closed = new Promise<void>((resolve) => {
+        raw!.onclose = () => resolve();
+      });
+      raw.close();
+      await closed;
+    }
     await server.stop();
   }
 });

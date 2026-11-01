@@ -51,9 +51,131 @@ fn a_subscribe_with_trailing_bytes_is_control_too_long() {
 }
 
 #[test]
-fn form_0_and_form_11_are_unknown_codes() {
+fn form_0_and_form_12_are_unknown_codes_and_a_lone_form_11_is_too_short() {
     assert_eq!(decode_err(&[0]), violation(ProtocolViolation::UnknownCode));
-    assert_eq!(decode_err(&[11]), violation(ProtocolViolation::UnknownCode));
+    assert_eq!(decode_err(&[12]), violation(ProtocolViolation::UnknownCode));
+    assert_eq!(decode_err(&[11]), violation(ProtocolViolation::TooShort));
+}
+
+/// The header of the shared `block-last` vector, up to `total`.
+const BLOCK_HEAD: &str = "0b 05 01000000 05000000 ab89674523010000 0000000000000000";
+
+fn bytes(text: &str) -> Vec<u8> {
+    let digits: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    digits
+        .chunks(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+        .collect()
+}
+
+/// A `block` message from the hex of its header and a count of `00` bytes.
+fn block_with_zeros(head: &str, zeros: usize) -> Vec<u8> {
+    let mut m = bytes(head);
+    m.resize(m.len() + zeros, 0);
+    m
+}
+
+/// Each row of the version 2 vectors that is a protocol violation, with the
+/// code the Rust decoder gives it.
+#[test]
+fn every_single_block_error_is_a_protocol_violation() {
+    use ProtocolViolation::{BadBlock, TooShort, UnknownCode, ZeroNumber};
+    let rows: Vec<(&str, Vec<u8>, ProtocolViolation)> = vec![
+        (
+            "bad-kind-signal",
+            bytes("0b 01 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd"),
+            BadBlock,
+        ),
+        (
+            "bad-kind-6",
+            bytes("0b 06 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd"),
+            UnknownCode,
+        ),
+        (
+            "bad-interface-0",
+            bytes("0b 05 00000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd"),
+            ZeroNumber,
+        ),
+        (
+            "bad-total-0",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 00000000 00000000 abcd"),
+            BadBlock,
+        ),
+        (
+            "bad-no-bytes",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000"),
+            BadBlock,
+        ),
+        (
+            "bad-cut-33",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 010000"),
+            TooShort,
+        ),
+        (
+            "bad-index-2",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 02000000 abcd"),
+            BadBlock,
+        ),
+        (
+            "bad-index-max",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 ffffffff abcd"),
+            BadBlock,
+        ),
+        (
+            "bad-short-first",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 00000000 abcd"),
+            BadBlock,
+        ),
+        (
+            "bad-last-long",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcdef"),
+            BadBlock,
+        ),
+        (
+            "bad-last-short",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 ab"),
+            BadBlock,
+        ),
+        (
+            "bad-first-long",
+            block_with_zeros(&format!("{BLOCK_HEAD} 01200000 00000000"), 4_097),
+            BadBlock,
+        ),
+        (
+            "bad-max-last-full",
+            block_with_zeros(&format!("{BLOCK_HEAD} ffffffff ffff0f00"), 4_096),
+            BadBlock,
+        ),
+        (
+            "bad-index-past-full",
+            bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 00100000 01000000"),
+            BadBlock,
+        ),
+        (
+            "bad-signal-interface-0",
+            bytes("0b 01 00000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd"),
+            ZeroNumber,
+        ),
+        (
+            "bad-cut-33-kind-6",
+            bytes("0b 06 01000000 05000000 ab89674523010000 0000000000000000 02100000 010000"),
+            TooShort,
+        ),
+    ];
+    assert_eq!(rows.len(), 16);
+    for (id, message, want) in rows {
+        assert_eq!(decode_err(&message), violation(want), "vector {id}");
+    }
+}
+
+/// A block whose bytes are all 4,096 for an index below the last, and the
+/// exact remainder for the last, decodes at the edges of the block count.
+#[test]
+fn a_block_of_a_total_that_is_a_multiple_of_4096_has_no_empty_last_block() {
+    let full = block_with_zeros(&format!("{BLOCK_HEAD} 00200000 01000000"), 4_096);
+    assert!(decode(&full).is_ok(), "index 1 of 2 full blocks");
+    let past = block_with_zeros(&format!("{BLOCK_HEAD} 00200000 02000000"), 0);
+    assert_eq!(decode_err(&past), violation(ProtocolViolation::BadBlock));
 }
 
 #[test]
@@ -370,4 +492,21 @@ fn every_form_cut_short_of_its_header_is_too_short() {
             );
         }
     }
+    // A `block` has a 34-byte header and at least one byte after it. It is
+    // not in the list above, which asserts that the whole header decodes: the
+    // header with no bytes after it is wrong by itself, not too short.
+    let block =
+        bytes("0b 05 01000000 05000000 ab89674523010000 0000000000000000 01000000 00000000 ab");
+    assert!(decode(&block).is_ok());
+    for len in 1..34 {
+        assert_eq!(
+            decode_err(&block[..len]),
+            violation(ProtocolViolation::TooShort),
+            "block cut to {len} bytes"
+        );
+    }
+    assert_eq!(
+        decode_err(&block[..34]),
+        violation(ProtocolViolation::BadBlock)
+    );
 }

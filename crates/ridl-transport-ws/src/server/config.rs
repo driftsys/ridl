@@ -35,7 +35,11 @@ pub enum Note {
     /// (frame specification §11.1 "The sizes"). No `publish` and no
     /// `occurrence` is sent for it; a reply is answered `corrupt`, and a
     /// `read` of a signal or a `fixed` is answered
-    /// `contract(UnknownInteraction)`.
+    /// `contract(UnknownInteraction)`. A `fixed` that one message does not
+    /// carry is sent in blocks, so a `fixed` is recorded only when it is
+    /// longer than its member's limit, at most 65,280 bytes, or when the
+    /// message limit is below one block message, 4,130 bytes, and the value
+    /// does not fit one `publish`.
     ValueTooLarge {
         /// The interaction whose value did not fit.
         target: Target,
@@ -72,7 +76,8 @@ pub enum Note {
     },
     /// [`Config::max_message_bytes`] is below what one message of this
     /// member needs: `needed` bytes, the 36 bytes of header and envelope
-    /// plus the member's limit, at most 16,128 bytes for a `fixed`. The
+    /// plus the member's limit, and for a `fixed` the smaller of that and
+    /// one block message, 4,130 bytes. The
     /// configuration cannot carry a payload the catalog allows, so
     /// [`serve`](crate::serve) returned
     /// [`Ended::ConfigRefused`](crate::Ended::ConfigRefused) before the

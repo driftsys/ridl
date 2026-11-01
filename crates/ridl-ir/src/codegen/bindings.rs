@@ -30,7 +30,7 @@ pub struct Known {
 /// deployment section.
 pub const KNOWN: &[Known] = &[Known {
     name: "websocket",
-    version: "1",
+    version: "2",
     frame_header_max_bytes: Some(20),
     envelope_bytes: Some(16),
 }];

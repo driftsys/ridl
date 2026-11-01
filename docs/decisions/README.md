@@ -569,7 +569,12 @@ other entry below is Accepted.
   16,164 bytes and carries a larger payload, today only a fixed, from provider
   to consumer, in blocks, a new frame version whose layout is tracked in
   driftsys/ridl#1129; breaking, built 2026-10-30 (driftsys/ridl#1108,
-  driftsys/ridl#1128) except the blocks, which wait for driftsys/ridl#1129.
+  driftsys/ridl#1128) except the blocks. Amended 2026-11-01: decision 15 sends
+  in blocks only a fixed above what one `publish` carries, 16,137 bytes at the
+  16,164-byte message limit, and its blocks are built (driftsys/ridl#1129):
+  frame version 2 under `ridl-ws-v2`, blocks of 4,096 bytes, a Rust provider
+  that serves version 2 only, and a TypeScript client that offers both versions
+  and reassembles within the member's limit.
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen

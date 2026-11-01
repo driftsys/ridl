@@ -83,7 +83,12 @@ Deno.test("a browser page receives a live signal from the Rust server", async ()
       browser.evaluate(pageUrl, "globalThis.result"),
       10_000,
     );
-    assert.deepEqual(result, { init: "init:", live: "live:2a07" });
+    assert.deepEqual(result, {
+      init: "init:",
+      live: "live:2a07",
+      fixed: { "7": "65280:true", "8": "16137:true", "9": "16138:true" },
+      discarded: 0,
+    });
   } catch (error) {
     failure = { error };
   }

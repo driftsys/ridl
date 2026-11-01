@@ -372,10 +372,11 @@ crate the workspace holds — see `AGENTS.md` for that.
 
 - **`packages/ridl-transport-ws`** — the TypeScript client of the WebSocket
   binding, `@driftsys/ridl-transport-ws`, for Deno and the browser. It is the
-  consuming side of a frame session: it opens one WebSocket with the subprotocol
-  `ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`, `read` and
-  `request`, and applies the consumer's rules that need no catalog. It has no
-  dependency and is not published. It carries a payload as bytes and does not
+  consuming side of a frame session: it opens one WebSocket offering the
+  subprotocols `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`, `subscribe`,
+  `unsubscribe`, `read` and `request`, and applies the consumer's rules that
+  need no catalog. It has no dependency, and `.github/workflows/npm-release.yml`
+  publishes it to npm on a `v*` tag. It carries a payload as bytes and does not
   decode it. `packages/` is not a Cargo workspace member and holds TypeScript
   only; Deno builds and tests it (`just ts-check`, `just ts-e2e`, and
   `just ts-browser-e2e` in CI), at the version `.deno-version` pins. The version

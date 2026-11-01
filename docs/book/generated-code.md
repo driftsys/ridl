@@ -115,7 +115,9 @@ An interface that carries only `fixed` declarations gets no face module, and
 neither does an `internal` interface, whose descriptors are crate-visible (the
 [design record][consumer-face] gives the reason). A signal-only interface gets a
 `Client` and a `Publisher` and no `blocking` module, because a signal read
-returns at once.
+returns at once. A query whose reply is a stream does not count for the
+`blocking` row: the stream has no blocking form, so an interface whose only
+waiting member is such a query gets no `blocking` module either.
 
 An interface the face cannot carry gets none of these items and no interaction
 descriptor. In their place, the package module holds a

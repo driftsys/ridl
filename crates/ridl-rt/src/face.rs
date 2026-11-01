@@ -1,12 +1,13 @@
-//! The traits a generated face implements: the fixed methods of the
-//! consumer and provider faces the Rust backend emits (ADR-0023 decision 7,
-//! ADR-0021 decision 19).
+//! The traits of the generated face: the fixed methods of the consumer and
+//! provider faces the Rust backend emits (ADR-0023 decision 7, ADR-0021
+//! decision 19), and [`Source`], which the application implements for a
+//! streamed reply.
 //!
 //! A generated `Client` or `Publisher` has two kinds of method. A member
 //! method is derived from the interface — one per signal, event, command and
 //! query, named after the member — and is an inherent method of the type. A
 //! fixed method is the emitter's own — `new`, `next_event`, `with_timeout`,
-//! `set_timeout`, `commit` — and is a method of one of the four traits here.
+//! `set_timeout`, `commit` — and is a method of one of the traits here.
 //! Rust gives one type one inherent namespace, so a member whose snake case
 //! is `new` or `commit` could not sit beside a fixed inherent method of that
 //! name (rustc E0592); a trait method lives in the trait's namespace, so the
@@ -46,10 +47,19 @@
 //!
 //! [`Timeout`] is under the `std` feature, because its only implementor is
 //! the generated `blocking` module, which the emitted crate's `std` feature
-//! enables together with this crate's. The other three traits are
+//! enables together with this crate's. Every other trait here is
 //! unconditional and `no_std`, like the rest of the crate. Nothing here is
 //! implemented by a runtime: a runtime implements the [`port`](crate::port)
-//! traits, and generated code implements these.
+//! traits, and generated code implements the traits of the fixed methods.
+//!
+//! [`Source`] is the one trait here that an application implements rather
+//! than generated code: a provider's method for a query whose reply is a
+//! stream of named elements returns a `Source` of those elements, and the
+//! generated `serve` drives it, one element per poll, over the
+//! [`StreamHandler`](crate::port::StreamHandler) port. [`Interrupted`] is the
+//! one way such a source stops its stream before the end.
+
+use core::task::{Context, Poll};
 
 /// Binds a face to the port it holds: the `new` of a generated `Client`,
 /// `blocking::Client` and `Publisher`.
@@ -166,4 +176,133 @@ pub trait Timeout: Sized {
 pub trait Publish {
     /// Publishes every staged signal change.
     fn commit(&mut self);
+}
+
+/// A producer of one stream of elements, pulled one element at a time: what
+/// a `Provider` method returns for a query whose reply is a stream of named
+/// elements, and what the generated `serve` drives.
+///
+/// The shape is `core::task`'s: `poll_next` answers `Poll::Ready(Some(Ok(item)))`
+/// with the next element, `Poll::Ready(None)` once the stream ended,
+/// `Poll::Ready(Some(Err(Interrupted)))` to stop the stream before its end,
+/// and `Poll::Pending` when no element is ready yet, after it stored the
+/// waker of `cx` to be woken when one is. The pull shape is what lets a
+/// provider method stay synchronous on a target without `std`: the method
+/// returns the source, and the task that polls `serve` is the one that waits
+/// when the stream's window is full (ridl §12.2). After `Ready(None)` or
+/// `Ready(Some(Err(_)))` the source is not polled again.
+///
+/// The trait is object safe, so a driver may hold one as
+/// `&mut dyn Source<Item = T>`.
+///
+/// ```
+/// use core::task::{Context, Poll};
+/// use ridl_rt::face::{Interrupted, Source};
+///
+/// struct Countdown(u8);
+/// impl Source for Countdown {
+///     type Item = u8;
+///     fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<Result<u8, Interrupted>>> {
+///         if self.0 == 0 {
+///             return Poll::Ready(None);
+///         }
+///         self.0 -= 1;
+///         Poll::Ready(Some(Ok(self.0)))
+///     }
+/// }
+///
+/// let waker = core::task::Waker::noop();
+/// let mut cx = Context::from_waker(waker);
+/// let mut source = Countdown(2);
+/// assert_eq!(source.poll_next(&mut cx), Poll::Ready(Some(Ok(1))));
+/// assert_eq!(source.poll_next(&mut cx), Poll::Ready(Some(Ok(0))));
+/// assert_eq!(source.poll_next(&mut cx), Poll::Ready(None));
+/// ```
+pub trait Source {
+    /// The element type: the stream's declared element, as the generated
+    /// crate names it.
+    type Item;
+
+    /// Pulls the next element, under the contract above.
+    fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Interrupted>>>;
+}
+
+/// A [`Source`] stopped its stream before the end. The generated `serve`
+/// reports it to the caller as
+/// [`Transport::Interrupted`](crate::error::Transport::Interrupted), the
+/// outcome a producer stops a stream with (ridl §12).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Interrupted;
+
+#[cfg(test)]
+mod tests {
+    use super::{Interrupted, Source};
+    use core::task::{Context, Poll};
+
+    /// A source over a slice, written as a provider of a generated face
+    /// would write one: `core` only, no allocation.
+    struct Counter<'a> {
+        left: &'a [u8],
+        interrupt_at: Option<u8>,
+    }
+
+    impl Source for Counter<'_> {
+        type Item = u8;
+
+        fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<Result<u8, Interrupted>>> {
+            let Some((first, rest)) = self.left.split_first() else {
+                return Poll::Ready(None);
+            };
+            self.left = rest;
+            if self.interrupt_at == Some(*first) {
+                return Poll::Ready(Some(Err(Interrupted)));
+            }
+            Poll::Ready(Some(Ok(*first)))
+        }
+    }
+
+    /// Drains `source` into `out` through a trait object, the way a generic
+    /// driver with no knowledge of the provider's type does; returns how many
+    /// items were written and whether the source ended or interrupted.
+    fn drain(
+        source: &mut dyn Source<Item = u8>,
+        out: &mut [u8],
+    ) -> (usize, Result<(), Interrupted>) {
+        let waker = core::task::Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        let mut n = 0;
+        loop {
+            match source.poll_next(&mut cx) {
+                Poll::Ready(Some(Ok(item))) => {
+                    out[n] = item;
+                    n += 1;
+                }
+                Poll::Ready(Some(Err(Interrupted))) => return (n, Err(Interrupted)),
+                Poll::Ready(None) => return (n, Ok(())),
+                Poll::Pending => unreachable!("the counter is never pending"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_source_is_driven_through_a_trait_object_until_its_end() {
+        let mut source = Counter {
+            left: &[1, 2, 3],
+            interrupt_at: None,
+        };
+        let mut out = [0u8; 4];
+        assert_eq!(drain(&mut source, &mut out), (3, Ok(())));
+        assert_eq!(out, [1, 2, 3, 0]);
+    }
+
+    #[test]
+    fn a_source_that_interrupts_yields_the_items_before_the_interruption() {
+        let mut source = Counter {
+            left: &[1, 2, 3],
+            interrupt_at: Some(3),
+        };
+        let mut out = [0u8; 4];
+        assert_eq!(drain(&mut source, &mut out), (2, Err(Interrupted)));
+        assert_eq!(out, [1, 2, 0, 0]);
+    }
 }

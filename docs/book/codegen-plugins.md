@@ -319,8 +319,10 @@ every limit from the catalog.
 
 A member whose `Interaction.streams` is not empty has a request of its
 non-stream parameters only, and a plugin must not emit it as a plain call. The
-Rust backend leaves such a member out of the interaction face, and the
-TypeScript backend leaves it out of the codec module's interface table. This is
+Rust backend carries a query whose reply is a stream of named elements on the
+interaction face and leaves every other such member out of it, and the
+TypeScript backend leaves every such member out of the codec module's interface
+table. This is
 a change for a plugin written against an earlier model: a member with a stream
 parameter then had neither `request` nor `request_tuple`, so a plugin that does
 not read `Interaction.streams` emitted no call for it, and now sees what looks
