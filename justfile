@@ -3005,8 +3005,11 @@ _cabin-web-generate name:
 # for the fixture crates/ridl-backend-ts/tests/fixtures/codec-foreign-only,
 # a package whose only payload root is `ridl.std.Name`, so its module holds
 # an interface table over `ridl.std.codec.ts` and imports no barrel of its
-# own. `cabin-ws-demo` runs it once, after `_cabin-web-generate` has checked
-# the `flatc` and `deno` versions.
+# own. The same for crates/ridl-backend-ts/tests/fixtures/codec-open, whose
+# open enums and open enum sets keep a value the declaration does not name, and
+# crates/ridl-backend-ts/tests/fixtures/codec-strict, whose strict enums and
+# strict enum sets refuse one with the `variant` rule. `cabin-ws-demo` runs it
+# once, after `_cabin-web-generate` has checked the `flatc` and `deno` versions.
 [private]
 _codec-ts-check:
     #!/usr/bin/env bash

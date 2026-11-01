@@ -52,6 +52,9 @@ Its exports:
 - `PAYLOAD_TYPES` — the qualified names of the package's payload types, sorted.
 - `RULES` — the rule texts of the wasm module, `WASM_RULES`; rule code `n` is at
   index `n - 2`.
+- `RuleError` — the error class the converters throw for a value they refuse,
+  with the `rule` it breaks (an entry of `RULES`). It is written when the module
+  reaches an enum or an enum set.
 - `encode<Name>(value: Name): Uint8Array` and
   `decode<Name>(bytes: Uint8Array): Name` for every payload type — every
   FlatBuffers root of the package with a finite bound, the set that has a
@@ -110,11 +113,11 @@ carries the `.js` suffix (D-15). The only import from the runtime package is
 structurally. The names the file declares are checked before anything is
 written, and a second declaration of one is refused with an error that names
 both: an interface or an induced tuple named after a reserved name of the file
-(`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `PayloadCodec`, an
-import alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two
-foreign payload types whose `codec<Package><Name>` constants spell the same
-(`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
-spells a foreign one.
+(`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `PayloadCodec`,
+`RuleError` when the module reaches an enum or an enum set, an import alias
+`flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two foreign payload
+types whose `codec<Package><Name>` constants spell the same (`a.b` / `C` and `a`
+/ `BC`), and a local payload type whose `codec<Name>` spells a foreign one.
 
 ## The conversion rules
 
@@ -124,27 +127,31 @@ plain object to the tree and calls `pack(builder)`. One private `pack<Name>` and
 `unpack<Name>` pair is written per declaration a payload type reaches (D-3). The
 rule per typl kind (D-4):
 
-| typl kind                       | `flatc` object API form                           | Plain object form                    | Conversion                                                                                                                                                                |
-| ------------------------------- | ------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| named scalar as a payload       | `<Name>Box` table, `value`                        | the branded scalar                   | unbox or box                                                                                                                                                              |
-| named scalar as a field         | the backing scalar                                | the branded scalar                   | a type assertion                                                                                                                                                          |
-| enum                            | `bigint` field (the `.fbs` width is `long`)       | numeric `enum`                       | `BigInt` to pack; to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared value; as a payload, through `<Name>Box`                       |
-| enum set                        | integer field (`bigint` for a 64-bit width)       | branded `number` or `bigint`         | to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared bit (an `open` set keeps every bit); as a payload, through `<Name>Box`           |
-| struct                          | `<Name>T` class                                   | `interface` with named fields        | field by field; the `flatc` member is the lower camel case of `snake_case(declared)`, with the `_` `flatc` appends to a TypeScript keyword (`default_`, `new_`, `class_`) |
-| optional field                  | `null` when absent                                | absent property                      | `null` to absent, absent to `null`; an optional array, bytes or map field packs as `[]` when absent and reads back as present (known gaps)                                |
-| union                           | `<Name>T { valueType, value }`, scalar arms boxed | `{ kind, value }`                    | `kind` is the arm's declared name; a boxed arm is unboxed                                                                                                                 |
-| tuple                           | positional `field_1, field_2, …`                  | object with the declared field names | position to name, from the model's tuple fields                                                                                                                           |
-| array                           | `T[]`                                             | `readonly T[]`                       | element by element; an optional element, map key or map value is refused, as the Rust codec refuses it                                                                    |
-| map                             | `<path>EntryT[]` with `key` and `value`           | `ReadonlyArray<readonly [K, V]>`     | entry to pair and pair to entry, in order                                                                                                                                 |
-| string, bytes, boolean, float   | `string`, `Uint8Array`, `boolean`, `number`       | the same                             | none                                                                                                                                                                      |
-| induced tuple of an interaction | positional table named `InducedName.wire`         | `interface <InducedName.rust>`       | as a tuple                                                                                                                                                                |
+| typl kind                       | `flatc` object API form                           | Plain object form                                | Conversion                                                                                                                                                                                                                                                                    |
+| ------------------------------- | ------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| named scalar as a payload       | `<Name>Box` table, `value`                        | the branded scalar                               | unbox or box                                                                                                                                                                                                                                                                  |
+| named scalar as a field         | the backing scalar                                | the branded scalar                               | a type assertion                                                                                                                                                                                                                                                              |
+| enum                            | `bigint` field (the `.fbs` width is `long`)       | numeric `enum`; `<Name>Value` for an `open` enum | `BigInt` to pack; to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared value of a strict enum; an `open` enum unpacks an undeclared value to `{ unknown: n }` and refuses one beyond the safe integers; as a payload, through `<Name>Box` |
+| enum set                        | integer field (`bigint` for a 64-bit width)       | branded `number` or `bigint`                     | to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared bit of a strict set; an `open` set keeps every bit and refuses a value outside its width on encode (rule `range`); as a payload, through `<Name>Box`                                 |
+| struct                          | `<Name>T` class                                   | `interface` with named fields                    | field by field; the `flatc` member is the lower camel case of `snake_case(declared)`, with the `_` `flatc` appends to a TypeScript keyword (`default_`, `new_`, `class_`)                                                                                                     |
+| optional field                  | `null` when absent                                | absent property                                  | `null` to absent, absent to `null`; an optional array, bytes or map field packs as `[]` when absent and reads back as present (known gaps)                                                                                                                                    |
+| union                           | `<Name>T { valueType, value }`, scalar arms boxed | `{ kind, value }`                                | `kind` is the arm's declared name; a boxed arm is unboxed                                                                                                                                                                                                                     |
+| tuple                           | positional `field_1, field_2, …`                  | object with the declared field names             | position to name, from the model's tuple fields                                                                                                                                                                                                                               |
+| array                           | `T[]`                                             | `readonly T[]`                                   | element by element; an optional element, map key or map value is refused, as the Rust codec refuses it                                                                                                                                                                        |
+| map                             | `<path>EntryT[]` with `key` and `value`           | `ReadonlyArray<readonly [K, V]>`                 | entry to pair and pair to entry, in order                                                                                                                                                                                                                                     |
+| string, bytes, boolean, float   | `string`, `Uint8Array`, `boolean`, `number`       | the same                                         | none                                                                                                                                                                                                                                                                          |
+| induced tuple of an interaction | positional table named `InducedName.wire`         | `interface <InducedName.rust>`                   | as a tuple                                                                                                                                                                                                                                                                    |
 
 The `.fbs` enum width stays `long`; narrowing it is driftsys/ridl#1020, and the
 converters absorb that change when it lands.
 
-`decode<Name>` does not verify, and `encode<Name>` does not check a constraint
-(D-11): the checks run in the generated Rust, compiled into the wasm module
-(ADR-0020 decisions 2 and 7). `decode<Name>` is for bytes the codec has
+`decode<Name>` does not verify a constraint, and `encode<Name>` does not check
+one (D-11): the checks run in the generated Rust, compiled into the wasm module
+(ADR-0020 decisions 2 and 7). The one check `decode<Name>` makes is the declared
+values of a strict enum and the declared bits of a strict enum set, because the
+converter has to produce a typed value: it throws a `RuleError` whose `rule` is
+`variant` for an undeclared value or bit, and reports a value that an enum with
+no zero member leaves out as absent. `decode<Name>` is for bytes the codec has
 verified. `encode<Name>` builds what it is given, so that a payload the codec
 rejects can be built. A checking constructor for TypeScript is
 driftsys/ridl#923.
