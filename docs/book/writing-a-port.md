@@ -203,7 +203,7 @@ the [frame specification](reference/frame.md) carried over one transport. A
 binding is written from that specification, the [`ridl-rt` design record][ridl-rt]
 for the exact shape of each name, and the projection record of the encoding its
 path carries. Its own document states the
-nine items of [§10](reference/frame.md#10-what-a-binding-decides), each a
+ten items of [§10](reference/frame.md#10-what-a-binding-decides), each a
 choice the frame leaves to the transport:
 
 1. How a consumer reaches a provider, what opens and ends the session, and what
@@ -225,11 +225,14 @@ choice the frame leaves to the transport:
    The control plane is framed on every binding.
 9. The answer to a call that arrives faster than its rate floor, when the
    binding enforces one.
+10. Whether the binding carries the `publish` of a `fixed` in `block` frames,
+    which needs frame version 2, and if it does, the block size and when the
+    sender sends a `fixed` whole and when in blocks.
 
 A binding adds nothing to the frame. It does not change the field set, the
 meaning of a field, what a receiver does with a frame, the per-kind presence
 rules, the invalid payload rules, or the control-plane operations. [§11](reference/frame.md#11-the-bindings) names the bindings, and
-[§12](reference/frame.md#12-conformance) lists the sixteen statements a second
+[§12](reference/frame.md#12-conformance) lists the twenty-four statements a second
 implementation — a runtime, a binding, or both — shows with its own tests to
 conform.
 

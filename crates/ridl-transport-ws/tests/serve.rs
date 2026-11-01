@@ -19,7 +19,8 @@ use ridl_rt::port::{
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
-    decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Target,
+    decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Reason,
+    Target, BLOCK_BYTES, FRAME_VERSION, SUBPROTOCOL,
 };
 use ridl_transport_ws::{
     serve, Backend, Config, Connection, Described, Ended, MemberTable, Note, Polling, Scanning,
@@ -48,6 +49,11 @@ const QUERY: Target = Target {
     kind: Kind::Query,
     iface: IFACE,
     ord: Ordinal(4),
+};
+const FIXED: Target = Target {
+    kind: Kind::Fixed,
+    iface: IFACE,
+    ord: Ordinal(5),
 };
 
 /// The member table of the test catalog: signal 1, event 2, command 3, query
@@ -83,7 +89,7 @@ const UPGRADE_REQUEST: &[u8] = b"GET / HTTP/1.1\r\n\
     Connection: Upgrade\r\n\
     Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
     Sec-WebSocket-Version: 13\r\n\
-    Sec-WebSocket-Protocol: ridl-ws-v1\r\n\
+    Sec-WebSocket-Protocol: ridl-ws-v2\r\n\
     \r\n";
 
 /// How long a test waits on its peer before it fails instead of hanging.
@@ -200,7 +206,7 @@ fn recv_close(ws: &mut WebSocket<TcpStream>) -> Option<CloseCode> {
 
 /// Sends the matching `attach` and checks that it is accepted.
 fn attach(ws: &mut WebSocket<TcpStream>) {
-    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
     send(ws, Frame::Attach(attach));
     assert_eq!(
         decode(&recv(ws)).unwrap(),
@@ -226,7 +232,7 @@ fn serve_answers_attach_and_streams_a_signal_change() {
     let mut provider = rt.attach();
     let handle = spawn(server, Scanning(rt), config());
 
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     send(&mut ws, Frame::Subscribe(SIGNAL));
     assert_eq!(
@@ -257,13 +263,61 @@ fn serve_answers_attach_and_streams_a_signal_change() {
 fn a_rejected_handshake_returns_rejected() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    // Without `ridl-ws-v1` offered, the server answers 400, and the client
-    // reads that answer rather than a reset connection.
+    // Without `ridl-ws-v2` or `ridl-ws-v1` offered, the server answers 400,
+    // and the client reads that answer rather than a reset connection.
     match connect(client, "") {
         Err(tungstenite::Error::Http(response)) => assert_eq!(response.status(), 400),
         other => panic!("expected a 400 answer, got {:?}", other.map(|_| ())),
     }
     assert_eq!(handle.join().0, Ended::Rejected);
+}
+
+#[test]
+fn a_client_offering_both_versions_is_upgraded_with_v2_and_attached() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v2, ridl-ws-v1").unwrap();
+    let attach = Attach::new(2, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Accepted)
+    );
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+#[test]
+fn a_version_1_client_is_upgraded_with_ridl_ws_v1_and_its_attach_refused() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Refused(Reason::FrameVersionUnsupported))
+    );
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1000));
+}
+
+/// The session tests set the connection's frame version directly; this one
+/// checks that `serve` passes the version of the subprotocol it selected.
+#[test]
+fn an_attach_of_frame_version_2_on_a_ridl_ws_v1_connection_is_refused() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let attach = Attach::new(2, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Refused(Reason::FrameVersionUnsupported))
+    );
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1000));
 }
 
 #[test]
@@ -347,7 +401,7 @@ fn a_request_without_origin_passes_none_to_the_check() {
 #[test]
 fn a_handshake_that_does_not_finish_ends_at_the_liveness_timeout() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     let bound = config.liveness_timeout + Duration::from_millis(200);
     let (server, mut client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
@@ -370,7 +424,7 @@ fn a_handshake_that_does_not_finish_ends_at_the_liveness_timeout() {
 fn a_client_close_returns_client_closed_with_its_code() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(Some(CloseFrame {
         code: CloseCode::Library(4000),
@@ -388,7 +442,7 @@ fn a_client_close_returns_client_closed_with_its_code() {
 fn a_client_close_with_1008_is_answered_with_1008() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(Some(CloseFrame {
         code: CloseCode::Policy,
@@ -406,7 +460,7 @@ fn the_server_pings_every_ping_interval() {
     config.ping_interval = interval;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     let start = Instant::now();
     let mut pings = 0;
     while pings < 3 {
@@ -432,7 +486,7 @@ fn the_server_pings_every_ping_interval() {
 fn a_client_ping_is_answered_with_a_pong_carrying_its_payload() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     ws.send(Message::Ping(vec![1, 2, 3].into())).unwrap();
     let start = Instant::now();
     let pong = loop {
@@ -456,7 +510,7 @@ fn a_client_ping_is_answered_with_a_pong_carrying_its_payload() {
 fn a_silent_client_ends_the_session_at_the_liveness_timeout() {
     let mut config = config();
     config.poll_interval = Duration::from_millis(20);
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     let bound = config.liveness_timeout + config.poll_interval + Duration::from_millis(100);
     let liveness = config.liveness_timeout;
 
@@ -480,7 +534,7 @@ fn a_protocol_violation_closes_1002_and_records_a_note() {
     let (config, notes) = recording();
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // An empty message is shorter than any header.
     ws.send(Message::binary(Vec::new())).unwrap();
@@ -497,7 +551,7 @@ fn a_backend_that_detaches_closes_1001() {
     let (server, client) = pair();
     let (backend, _, _) = watched(true);
     let handle = spawn(server, backend, config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // The first tick after the `attach` reads the event queue, which fails.
     assert_eq!(recv_close(&mut ws), Some(CloseCode::Away));
@@ -509,7 +563,7 @@ fn the_end_of_a_session_forgets_each_call_in_flight_then_drops_the_backend() {
     let (server, client) = pair();
     let (backend, log, _) = watched(false);
     let handle = spawn(server, backend, config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // No handler serves the command, so its outcome stays unknown.
     send(
@@ -646,10 +700,13 @@ impl Caller for Watched {
 #[test]
 fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
-    // A full send buffer blocks a write for at most the liveness timeout,
-    // and the last message arrived at most one liveness timeout earlier.
-    let bound = 2 * config.liveness_timeout + Duration::from_millis(500);
+    config.liveness_timeout = Duration::from_secs(1);
+    // A full send buffer blocks a write for at most the liveness timeout, and
+    // the last message arrived at most one liveness timeout earlier. The
+    // margin is one second, so a loaded runner has room, and the bound stays
+    // below three liveness timeouts, so a write timeout that is a multiple of
+    // the liveness timeout fails the test.
+    let bound = 2 * config.liveness_timeout + Duration::from_secs(1);
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
@@ -660,7 +717,7 @@ fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let backend = Described::new(Scanning(rt), table(limit)).unwrap();
     provider.set_limit(IFACE, Ordinal(1), CALL_CEILING);
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     send(&mut ws, Frame::Subscribe(SIGNAL));
 
@@ -692,7 +749,7 @@ fn an_oversized_message_closes_1009_and_the_client_sees_it() {
     let config = config().with_max_message_bytes(1024).unwrap();
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.send(Message::binary(vec![0u8; 256 * 1024])).unwrap();
     // A reset, when there is one, arrives within this wait, before the
@@ -706,7 +763,7 @@ fn an_oversized_message_closes_1009_and_the_client_sees_it() {
 fn a_text_message_closes_1003_and_the_client_sees_it() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // A large message after the text one is still unread when the server
     // closes.
@@ -720,12 +777,12 @@ fn a_text_message_closes_1003_and_the_client_sees_it() {
 #[test]
 fn a_data_message_resets_the_liveness_clock() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     // No ping, so that the client sends no pong: only data messages arrive.
     config.ping_interval = TEST_LIMIT;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(900) {
@@ -744,7 +801,7 @@ fn the_server_pings_while_messages_keep_arriving() {
     config.ping_interval = interval;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // A message every 10 ms for 8 ping intervals.
     let start = Instant::now();
@@ -781,7 +838,7 @@ fn the_backend_is_polled_at_most_once_per_poll_interval_under_a_fast_sender() {
     let (server, client) = pair();
     let (backend, _, polls) = watched(false);
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     let messages = 300;
     for _ in 0..messages {
@@ -844,7 +901,7 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
     read_upgrade_answer(&mut client);
 
     // The attach, then the subscribe: three frames come back.
-    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
     client
         .write_all(&masked(&encode(Frame::Attach(attach))))
         .unwrap();
@@ -914,11 +971,11 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
 #[test]
 fn a_control_frame_resets_the_liveness_clock() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     config.ping_interval = TEST_LIMIT;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(900) {
@@ -934,7 +991,7 @@ fn a_control_frame_resets_the_liveness_clock() {
 fn a_client_that_closes_the_connection_without_a_close_frame_ends_with_eof() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     drop(ws);
     assert_eq!(
@@ -1073,7 +1130,7 @@ fn a_read_after_a_message_waits_only_until_the_next_poll_is_due() {
     config.poll_interval = Duration::from_millis(50);
     config.liveness_timeout = Duration::from_millis(150);
     let timeouts = Arc::new(Mutex::new(Vec::new()));
-    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
     let conn = Scripted {
         request: UPGRADE_REQUEST.to_vec(),
         message: masked(&encode(Frame::Attach(attach))),
@@ -1226,7 +1283,7 @@ fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let mut provider = rt.attach();
     provider.serve(IFACE, &[QUERY.ord]).unwrap();
     let handle = spawn(server, Scanning(rt), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // Each `request` of the query is settled with 4,005 bytes, and its
     // `response` is 4,041 bytes; four of them are 16,164 bytes, the cap, and
@@ -1284,7 +1341,7 @@ fn a_config_that_cannot_carry_a_member_is_refused_before_the_handshake() {
             needed: 36 + CALL_CEILING
         }]
     );
-    assert!(connect(client, "ridl-ws-v1").is_err());
+    assert!(connect(client, SUBPROTOCOL).is_err());
 }
 
 #[test]
@@ -1294,7 +1351,7 @@ fn a_config_that_carries_every_lowered_member_is_accepted() {
     let (server, client) = pair();
     let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| Some(900))).unwrap();
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(None).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
@@ -1322,11 +1379,11 @@ fn the_member_recorded_on_a_tie_is_the_first_in_key_order() {
             needed: 36 + 2000
         }]
     );
-    assert!(connect(client, "ridl-ws-v1").is_err());
+    assert!(connect(client, SUBPROTOCOL).is_err());
 }
 
-/// A `fixed` counts at most 16,128 bytes, what one message carries: the part
-/// above it is not counted, so a catalog with a `fixed` of the default limit,
+/// A `fixed` counts at most one block message, 4,130 bytes: a larger value
+/// crosses in blocks, so a catalog with a `fixed` of the default limit,
 /// 65,280 bytes, is served at the default `Config`.
 ///
 /// Mutation: count the fixed's whole limit.
@@ -1336,9 +1393,209 @@ fn the_default_config_is_accepted_for_a_catalog_with_a_fixed_of_default_limit() 
     let (server, client) = pair();
     let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| None)).unwrap();
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(None).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
     assert!(notes.lock().unwrap().is_empty());
+}
+
+/// The table of the next tests: every member but the `fixed` lowered to 900
+/// bytes, and the `fixed` given `fixed`, or the default ceiling of its kind.
+fn fixed_table(fixed: Option<u32>) -> Arc<MemberTable> {
+    table(move |t| {
+        if t.kind == Kind::Fixed {
+            fixed
+        } else {
+            Some(900)
+        }
+    })
+}
+
+/// Serves `table` under the message limit `max` and returns how the session
+/// ended and the notes: a session that passes the check is attached and
+/// closed by the client.
+fn served_under(max: usize, table: Arc<MemberTable>) -> (Ended, Vec<Note>) {
+    let (config, notes) = recording();
+    let config = config.with_max_message_bytes(max).unwrap();
+    let (server, client) = pair();
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table).unwrap();
+    let handle = spawn(server, backend, config);
+    if let Ok(mut ws) = connect(client, SUBPROTOCOL) {
+        attach(&mut ws);
+        ws.close(None).unwrap();
+    }
+    let ended = handle.join().0;
+    let notes = notes.lock().unwrap().clone();
+    (ended, notes)
+}
+
+/// A `fixed` of the default limit needs one block message, 4,130 bytes: a
+/// message limit one byte below cannot carry a block.
+///
+/// Mutation: count a `fixed` as 36 bytes plus 4,093.
+#[test]
+fn a_config_below_one_block_message_is_refused_for_a_fixed_of_default_limit() {
+    let (ended, notes) = served_under(4_129, fixed_table(None));
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: FIXED,
+            needed: 4_130
+        }]
+    );
+}
+
+#[test]
+fn a_config_of_one_block_message_is_accepted_for_a_fixed_of_default_limit() {
+    let (ended, notes) = served_under(4_130, fixed_table(None));
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+}
+
+/// A `fixed` below one block message counts 36 bytes plus its limit, the
+/// largest header with its envelope, as every member does: 9 bytes above the
+/// 27 that a `publish` needs.
+///
+/// Mutation: count a `fixed` as one block message always.
+#[test]
+fn a_fixed_below_one_block_message_is_counted_as_36_bytes_plus_its_limit() {
+    let (ended, notes) = served_under(3_035, fixed_table(Some(3_000)));
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: FIXED,
+            needed: 3_036
+        }]
+    );
+    let (ended, notes) = served_under(3_036, fixed_table(Some(3_000)));
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+}
+
+/// The largest limit a table can give a `fixed` still counts one block
+/// message. On a 64-bit host this pins the result of the clamp, not the order
+/// of the clamp and the addition: the order matters on a 32-bit `usize`,
+/// where the gates do not run this test; they run it on 64-bit hosts.
+///
+/// Mutation: count a `fixed` at its limit, with no clamp.
+#[test]
+fn a_fixed_of_the_largest_table_limit_is_counted_as_one_block_message() {
+    let (ended, notes) = served_under(4_130, fixed_table(Some(u32::MAX)));
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+    let (ended, notes) = served_under(4_129, fixed_table(Some(u32::MAX)));
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: FIXED,
+            needed: 4_130
+        }]
+    );
+}
+
+/// The `n` bytes whose byte `i` is `i mod 251`.
+fn pattern(len: usize) -> Vec<u8> {
+    (0..len).map(|i| (i % 251) as u8).collect()
+}
+
+/// The largest `fixed`, 65,280 bytes, crosses a real socket as 16 binary
+/// messages, 15 of 4,130 bytes and one of 3,874, whose payloads joined are
+/// the value.
+#[test]
+fn a_fixed_of_65_280_bytes_crosses_as_16_block_messages() {
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    let value = pattern(65_280);
+    rt.attach()
+        .provision_fixed(IFACE, FIXED.ord, &value)
+        .unwrap();
+    let handle = spawn(server, Scanning(rt), config());
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Read(FIXED));
+    let mut joined = Vec::new();
+    for k in 0..16u32 {
+        let m = recv(&mut ws);
+        assert_eq!(m.len(), if k < 15 { 4_130 } else { 3_874 }, "block {k}");
+        let Frame::Block {
+            target,
+            envelope,
+            total,
+            index,
+            payload,
+        } = decode(&m).unwrap()
+        else {
+            panic!("message {k} is not a block");
+        };
+        assert_eq!(target, FIXED);
+        assert_eq!(envelope.seq, 0);
+        assert_eq!(total, 65_280);
+        assert_eq!(index, k);
+        assert!(payload.len() <= BLOCK_BYTES);
+        joined.extend_from_slice(payload);
+    }
+    assert_eq!(joined, value);
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+/// A client that sends reads of a large `fixed` and reads nothing more ends
+/// the session at the liveness timeout: each `read` makes the server write
+/// 65,824 bytes in blocks, the socket buffers fill, and a write waits its
+/// whole write timeout. The first answer is read and checked to be a block,
+/// so that the test fails when the value is not sent in blocks.
+///
+/// Mutation: `run` sets no write timeout.
+///
+/// Mutation: answer the read with a frame that is not a block.
+#[test]
+fn a_client_that_reads_a_large_fixed_and_stops_reading_ends_at_the_liveness_timeout() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_secs(1);
+    // A full send buffer blocks a write for at most the liveness timeout, and
+    // the last message arrived at most one liveness timeout earlier. The
+    // margin is one second, so a loaded runner has room, and the bound stays
+    // below three liveness timeouts, so a write timeout that is a multiple of
+    // the liveness timeout fails the test.
+    let bound = 2 * config.liveness_timeout + Duration::from_secs(1);
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    rt.attach()
+        .provision_fixed(IFACE, FIXED.ord, &pattern(65_280))
+        .unwrap();
+    // The sender's last send, into a server that no longer reads, ends at
+    // this timeout.
+    client.set_write_timeout(Some(TEST_LIMIT)).unwrap();
+    let handle = spawn(server, Scanning(rt), config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Read(FIXED));
+    let first = recv(&mut ws);
+    assert!(
+        matches!(decode(&first).unwrap(), Frame::Block { .. }),
+        "the first answer is a block"
+    );
+
+    // The reads are sent from another thread, which reads nothing, so that
+    // the test thread waits only in `join`, which `TEST_LIMIT` bounds.
+    let (done, ended) = mpsc::channel::<()>();
+    let sender = thread::spawn(move || {
+        while let Err(TryRecvError::Empty) = ended.try_recv() {
+            if ws
+                .send(Message::binary(encode(Frame::Read(FIXED))))
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+    let (ended, elapsed) = handle.join();
+    done.send(()).ok();
+    sender.join().unwrap();
+    assert_eq!(ended, Ended::LivenessTimeout);
+    assert!(elapsed < bound, "ended after {elapsed:?}, over {bound:?}");
 }

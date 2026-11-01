@@ -28,9 +28,31 @@ pub const QUERY: Ordinal = Ordinal(4);
 pub const FIXED: Ordinal = Ordinal(5);
 /// The value the provider provisions for [`FIXED`].
 pub const FIXED_VALUE: &[u8] = &[0xf0, 0x0d];
+/// A `fixed` of 65,280 bytes, the largest a `fixed` may be, which crosses the
+/// binding in 16 blocks. Its value is `pattern(FIXED_LARGE_LEN)`.
+pub const FIXED_LARGE: Ordinal = Ordinal(7);
+/// The length of the value of [`FIXED_LARGE`].
+pub const FIXED_LARGE_LEN: usize = 65_280;
+/// A `fixed` of 16,137 bytes, the longest that one `publish` carries within
+/// the message limit of 16,164 bytes. Its value is `pattern(FIXED_WHOLE_LEN)`.
+pub const FIXED_WHOLE: Ordinal = Ordinal(8);
+/// The length of the value of [`FIXED_WHOLE`].
+pub const FIXED_WHOLE_LEN: usize = 16_137;
+/// A `fixed` of 16,138 bytes, one byte more than one `publish` carries, which
+/// crosses the binding in 4 blocks. Its value is `pattern(FIXED_SPLIT_LEN)`.
+pub const FIXED_SPLIT: Ordinal = Ordinal(9);
+/// The length of the value of [`FIXED_SPLIT`].
+pub const FIXED_SPLIT_LEN: usize = 16_138;
 
-/// The member table of [`CATALOG`]: the five members, the command and the query
-/// with a bound of 1 s. Ordinal 6 is reserved and has no entry.
+/// The `n` bytes whose byte `i` is `i mod 251`, so that a block placed at a
+/// wrong offset changes the bytes.
+pub fn pattern(n: usize) -> Vec<u8> {
+    (0..n).map(|i| (i % 251) as u8).collect()
+}
+
+/// The member table of [`CATALOG`]: the signal, the event, the command, the
+/// query and four `fixed` members, the command and the query with a bound of
+/// 1 s. Ordinal 6 is reserved and has no entry.
 pub fn member_table() -> MemberTable {
     let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
     let bound = Some(Duration::from_secs(1));
@@ -39,17 +61,29 @@ pub fn member_table() -> MemberTable {
     table.insert(IFACE, COMMAND, Kind::Command, bound);
     table.insert(IFACE, QUERY, Kind::Query, bound);
     table.insert(IFACE, FIXED, Kind::Fixed, None);
+    table.insert(IFACE, FIXED_LARGE, Kind::Fixed, None);
+    table.insert(IFACE, FIXED_WHOLE, Kind::Fixed, None);
+    table.insert(IFACE, FIXED_SPLIT, Kind::Fixed, None);
     table
 }
 
 /// The provider's runtime: a loopback on [`CATALOG`] that serves the command
-/// and the query, with [`FIXED`] provisioned to [`FIXED_VALUE`].
+/// and the query, with [`FIXED`] provisioned to [`FIXED_VALUE`] and the three
+/// large `fixed` members provisioned to their patterns.
 pub fn provider() -> Loopback {
     let mut rt = Loopback::new(CATALOG);
     rt.serve(IFACE, &[COMMAND, QUERY])
         .expect("the loopback serves");
     rt.provision_fixed(IFACE, FIXED, FIXED_VALUE)
         .expect("the loopback stores the fixed");
+    for (ord, len) in [
+        (FIXED_LARGE, FIXED_LARGE_LEN),
+        (FIXED_WHOLE, FIXED_WHOLE_LEN),
+        (FIXED_SPLIT, FIXED_SPLIT_LEN),
+    ] {
+        rt.provision_fixed(IFACE, ord, &pattern(len))
+            .expect("the loopback stores the large fixed");
+    }
     rt
 }
 

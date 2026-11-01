@@ -788,6 +788,22 @@ provenance. Nothing here is normative — the current references live in
   `docs/wip/2026-10-31-streams-design.md` and driftsys/ridl#1116, which stay in
   `docs/wip/`.
 
+- **2026-10-30-ws-blocks-design.md** — the design note for the `block` frames of
+  the WebSocket binding (frame version 2, binding version 2 under `ridl-ws-v2`):
+  the block form, the reassembly rules of the consumer, the block size and the
+  records to amend. Archived verbatim, on 2026-11-01, once the work landed in
+  driftsys/ridl#1169 (ADR-0030 decision 15, driftsys/ridl#1129). The durable
+  records are [the frame specification](../specification/frame-specification.md)
+  §4, §5.5, §11.1 and §12,
+  [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md),
+  [the WebSocket binding design](../design/ridl-transport-ws.md) and
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+
+- **2026-10-31-ws-blocks-plan.md** — the plan for the code of the WebSocket
+  blocks: the codec of both clients, the provider, the vectors, the freeze dump
+  and the end-to-end tests. Archived verbatim, on 2026-11-01, with the design
+  note above.
+
 - **2026-11-01-streams-stage-3-plan.md** — the plan for stage 3 of the streams
   work: the generated Rust face of a query whose reply is a stream of named
   elements, its caller side and its `serve`. Archived verbatim, on 2026-11-01,

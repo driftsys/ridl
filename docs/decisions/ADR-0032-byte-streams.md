@@ -218,7 +218,7 @@ order the questions were listed.
     meaning of acceptance (ridl §6.1, §9.3); the upload itself has no contract
     bound. A stream that stops in the middle is detected by the transport
     (decision 11), not by the response bound. No frozen surface carries a stream
-    today (frame version 1 has none), so no existing declaration changes
+    today (frame versions 1 and 2 have none), so no existing declaration changes
     meaning.
 
 14. **The interaction's limit bounds each chunk.** The interaction's resolved
