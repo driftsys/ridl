@@ -877,10 +877,11 @@ is the same with UTF-8 text, and a chunk never splits a code point. Anything
 about the transfer that the contract needs to say — a size, a content type, a
 digest — is an ordinary typed value, such as the reply of `describe` above.
 
-This is what the checker accepts today. The stream port of `ridl-rt` exists,
-and the in-process `ridl-loopback` implements it, but no frame encoding and no
-generated reader or writer exist, so a declared stream compiles and nothing over
-the code the CLI generates carries it yet. The specification's §12 and
+This is what the checker accepts today. The stream port of `ridl-rt` exists, and
+the in-process `ridl-loopback` implements it. The Rust that `ridl build` emits
+carries one stream form, a query whose reply is a stream of named elements; a
+stream of bytes or of text, like the ones above, and a stream parameter have no
+generated reader or writer yet (driftsys/ridl#1116). The specification's §12 and
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) record the contract a stream
 declares, including how a stream ends and what its response bound covers.
 

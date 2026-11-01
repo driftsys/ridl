@@ -212,11 +212,12 @@ consumer side is:
   the bounds computed from the interface's interaction kinds and no others:
   `SignalReader` when it declares a signal, `EventSource` when it declares an
   event, `Caller` and `Clock` when it declares a command or a query (`Clock` for
-  the call's deadline), and `Wakeable` when it declares an event, a command or a
-  query (for the wait). Each impl of `Client<P>` also carries the generated
-  `where` clause of the section "The encoding and the ports" below. This is
-  RA-19: a `Client` never carries a bound its own interface does not need. It is
-  proven, not merely asserted, by
+  the call's deadline), `Wakeable` when it declares an event, a command or a
+  query (for the wait), and `StreamCaller` when it declares a query whose reply
+  is a stream of named elements. Each impl of `Client<P>` also carries the
+  generated `where` clause of the section "The encoding and the ports" below.
+  This is RA-19: a `Client` never carries a bound its own interface does not
+  need. It is proven, not merely asserted, by
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` in
   `tests/interaction_face.rs`, which constructs the fixture's signal-only `Horn`
   interface's `Client` with a port implementing only `SignalReader`, `Attached`
@@ -263,10 +264,10 @@ consumer side is:
   the stream yields the error on its first poll. After the end or an error every
   later `poll_next` is `Ready(None)`. Dropping the stream forgets the call once,
   which interrupts a stream that has not ended. There is no `blocking` method
-  for a stream. `tests/stream_face.rs` covers each path over `ridl-loopback`.
+  for a stream. `tests/stream_face.rs` tests these paths over `ridl-loopback`.
   The veh-cluster corpus carries the form in `FaultLog`, and
-  `crates/ridlc/tests/veh_cluster_stream.rs` reads 64 of its elements, 67,328
-  bytes in FlatBuffers, which is more than one call of the interface may carry.
+  `crates/ridlc/tests/veh_cluster_stream.rs` reads 64 of its elements, about 67
+  KB in FlatBuffers, which is more than one call of the interface may carry.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
   section "The blocking module" below.
 - **`prelude`** — the module a consumer glob-imports,
@@ -512,8 +513,11 @@ with `Contract::InvalidValue` and is not sent. `Ready(None)` is `end_claim`,
 `Transport::Interrupted`, and a push answered `Failed(_)`, a caller that refused
 or stopped reading the stream, is `end_claim`, which settles the claim so that
 the caller's call slot is given back. The source is dropped with its slot.
-`ensure` is not evaluated on a streamed reply. `tests/stream_face.rs` covers
-each path over `ridl-loopback`.
+Dropping `Serve` stops every stream it still drives with `abort_claim` and
+`Transport::Interrupted` and drops its source, so that `blocking::serve`, which
+drops the future when its timeout passes, leaves no claim held. `ensure` is not
+evaluated on a streamed reply. `tests/stream_face.rs` tests these paths over
+`ridl-loopback`.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted,

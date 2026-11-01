@@ -1,12 +1,13 @@
-//! The traits a generated face implements: the fixed methods of the
-//! consumer and provider faces the Rust backend emits (ADR-0023 decision 7,
-//! ADR-0021 decision 19).
+//! The traits of the generated face: the fixed methods of the consumer and
+//! provider faces the Rust backend emits (ADR-0023 decision 7, ADR-0021
+//! decision 19), and [`Source`], which the application implements for a
+//! streamed reply.
 //!
 //! A generated `Client` or `Publisher` has two kinds of method. A member
 //! method is derived from the interface — one per signal, event, command and
 //! query, named after the member — and is an inherent method of the type. A
 //! fixed method is the emitter's own — `new`, `next_event`, `with_timeout`,
-//! `set_timeout`, `commit` — and is a method of one of the four traits here.
+//! `set_timeout`, `commit` — and is a method of one of the traits here.
 //! Rust gives one type one inherent namespace, so a member whose snake case
 //! is `new` or `commit` could not sit beside a fixed inherent method of that
 //! name (rustc E0592); a trait method lives in the trait's namespace, so the
@@ -46,10 +47,10 @@
 //!
 //! [`Timeout`] is under the `std` feature, because its only implementor is
 //! the generated `blocking` module, which the emitted crate's `std` feature
-//! enables together with this crate's. The other three traits are
+//! enables together with this crate's. Every other trait here is
 //! unconditional and `no_std`, like the rest of the crate. Nothing here is
 //! implemented by a runtime: a runtime implements the [`port`](crate::port)
-//! traits, and generated code implements these.
+//! traits, and generated code implements the traits of the fixed methods.
 //!
 //! [`Source`] is the one trait here that an application implements rather
 //! than generated code: a provider's method for a query whose reply is a

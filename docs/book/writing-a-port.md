@@ -47,8 +47,8 @@ them has a `&mut self` method, and checks this itself.
 | `ScannableSignals` | walks the signals that changed since a mark (extension)          | a consumer that scans a store; no generated face calls it               |
 | `CoherentSignals`  | reads several signals from one publication (extension)           | a consumer that needs one coherent set; no generated face calls it      |
 | `Wakeable`         | wakes a waiting task when a port may have changed (extension)    | a `Client` with events or calls, and `serve`                            |
-| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a consumer that streams; no generated face calls it yet                 |
-| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | a provider that streams; no generated face calls it yet                 |
+| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a `Client` with a query whose reply is a stream of named elements       |
+| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | `serve`, for a query whose reply is a stream of named elements          |
 
 **`Attached` and `Clock`.** `Attached` has one method, `catalog`, which returns
 the `CatalogRef` the port serves; every interaction port has it as a
