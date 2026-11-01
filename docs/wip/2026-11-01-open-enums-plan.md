@@ -42,8 +42,8 @@ its section numbers are cited below as "design §n").
   with the attribution line the session gives.
 - Implementers run the focused crate tests named in each task; CI runs the full
   gate.
-- The Task 13 issue number (`#T13` below) is supplied by the controller before
-  Task 3 starts; no commit contains the literal `#T13`.
+- The Task 13 issue is driftsys/ridl#1168; the podbuf refusal of Task 3 cites
+  it.
 
 ## Review Focus
 
@@ -295,7 +295,7 @@ fn an_unknown_outside_int32_is_refused_by_the_proto3_encoder() {
 #[test]
 fn an_open_enum_in_a_podbuf_package_is_refused() {
     // manifest [backend.rust] encodings = ["podbuf"], `open enum E { A = 0 }`
-    // `ridl build` exits 1; the diagnostic names E and #T13's issue number.
+    // `ridl build` exits 1; the diagnostic names E and #1168.
 }
 ```
 
