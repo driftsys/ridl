@@ -183,6 +183,18 @@ Deno.test("the server answers a read of a fixed in one publish up to 16,137 byte
     await new Promise((resolve) => setTimeout(resolve, 200));
     const split = received.slice(mark);
     assert.deepEqual(split.map((f) => f.form), Array(4).fill("block"));
+    const blocks = split.map((f) => {
+      assert.equal(f.form, "block");
+      return f as Extract<Frame, { form: "block" }>;
+    });
+    assert.deepEqual(blocks.map((b) => b.index), [0, 1, 2, 3]);
+    assert.deepEqual(blocks.map((b) => b.total), Array(4).fill(16138));
+    assert.deepEqual(blocks.map((b) => b.payload.length), [
+      4096,
+      4096,
+      4096,
+      3850,
+    ]);
   } finally {
     // Close the raw socket and wait for it to end before the server stops.
     if (raw !== undefined && raw.readyState !== WebSocket.CLOSED) {
