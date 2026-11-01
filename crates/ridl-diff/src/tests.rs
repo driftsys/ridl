@@ -4952,6 +4952,39 @@ mod enum_open {
         assert_eq!(report.verdict, Verdict::Compatible);
     }
 
+    /// An append to an open enum or enum set that still fits the podbuf
+    /// integer is compatible under podbuf, up to the last value of the width:
+    /// the enum goes from 255 to 256 values (0..=255, still `u8`) and the
+    /// enum set from 7 to 8 bits (0..=7, still `u8`). The report holds no
+    /// `podbuf_width_change` line and no `strict_enum_append` line.
+    #[test]
+    fn an_open_append_that_fits_the_podbuf_width_is_compatible() {
+        for (label, build) in shapes() {
+            let (old, new) = if label == "enum" {
+                (build(255, true), build(256, true))
+            } else {
+                (build(7, true), build(8, true))
+            };
+            let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+            assert_eq!(
+                report.verdict,
+                Verdict::Compatible,
+                "{label}: {}",
+                render_text(&report)
+            );
+            assert!(
+                of_category(&report, Category::PodbufWidthChange).is_empty(),
+                "{label}: {}",
+                render_text(&report)
+            );
+            assert!(
+                of_category(&report, Category::StrictEnumAppend).is_empty(),
+                "{label}: {}",
+                render_text(&report)
+            );
+        }
+    }
+
     /// An append to an open enum that widens the podbuf integer is still a
     /// width change under podbuf: `ridl diff` reads IR snapshots, whatever
     /// the build refuses.
