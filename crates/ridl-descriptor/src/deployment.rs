@@ -64,6 +64,9 @@ pub enum VerifyError {
         catalog: String,
         source: Box<crate::VerifyError>,
     },
+    /// The hash stored beside an embedded catalog is not the hash inside the
+    /// catalog. `catalog` is the name the deployment gives it.
+    CatalogHashMismatch { catalog: String },
     /// An `AttributeValue` list nests deeper than [`MAX_ATTRIBUTE_DEPTH`].
     TooDeep,
     /// The attribute values, counted with every repeated visit of a shared
@@ -98,6 +101,10 @@ impl fmt::Display for VerifyError {
             Self::EmbeddedCatalog { catalog, source } => {
                 write!(f, "embedded catalog `{catalog}` is refused: {source}")
             }
+            Self::CatalogHashMismatch { catalog } => write!(
+                f,
+                "the hash stored for embedded catalog `{catalog}` is not the hash inside the catalog"
+            ),
             Self::TooDeep => write!(
                 f,
                 "attribute values nest deeper than {MAX_ATTRIBUTE_DEPTH} levels"
@@ -146,17 +153,24 @@ pub fn verify(bytes: &[u8]) -> Result<DeploymentRef<'_>, VerifyError> {
     Ok(deployment)
 }
 
-/// Touches every field once, and verifies the embedded catalogs.
+/// Touches every field once, verifies the embedded catalogs, and checks the
+/// stored hash of each against the hash inside it.
 fn walk(deployment: DeploymentRef<'_>, budget: usize) -> Result<(), VerifyError> {
     walk_fields(deployment, &mut Budget(budget))?;
     for catalog in deployment.catalogs().map_err(VerifyError::Invalid)? {
         let catalog = catalog.map_err(VerifyError::Invalid)?;
         let name = catalog.name().map_err(VerifyError::Invalid)?;
         let bytes = catalog.bytes().map_err(VerifyError::Invalid)?;
-        crate::verify(bytes).map_err(|source| VerifyError::EmbeddedCatalog {
+        let embedded = crate::verify(bytes).map_err(|source| VerifyError::EmbeddedCatalog {
             catalog: name.to_string(),
             source: Box::new(source),
         })?;
+        let stored = catalog.hash().map_err(VerifyError::Invalid)?;
+        if embedded.hash().map_err(VerifyError::Invalid)? != stored {
+            return Err(VerifyError::CatalogHashMismatch {
+                catalog: name.to_string(),
+            });
+        }
     }
     Ok(())
 }

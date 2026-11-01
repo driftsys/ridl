@@ -545,6 +545,34 @@ fn describe_rejects_a_deployment_with_a_damaged_embedded_catalog() {
     assert_describe_rejects(&damaged, "veh.cabin");
 }
 
+/// The stored hash of a region differs from the hash inside the embedded
+/// catalog, and the file is otherwise sound.
+#[test]
+fn describe_refuses_a_stored_hash_mismatch() {
+    let out = TempDir::new("deployment-hash");
+    let (file, catalog) = build_cabin_deployment(out.path());
+    let mut bytes = std::fs::read(&file).unwrap();
+    let embedded = std::fs::read(&catalog).unwrap();
+    let hash = ridl_descriptor::verify(&embedded)
+        .unwrap()
+        .hash()
+        .unwrap()
+        .to_vec();
+    let start = bytes
+        .windows(embedded.len())
+        .position(|window| window == embedded)
+        .expect("the deployment embeds the catalog bytes");
+    let stored = bytes
+        .windows(hash.len())
+        .enumerate()
+        .position(|(at, window)| window == hash && (at < start || at >= start + embedded.len()))
+        .expect("the deployment stores the hash beside the catalog");
+    bytes[stored] ^= 1;
+    let damaged = out.path().join("mismatch.deployment.binfb");
+    std::fs::write(&damaged, &bytes).unwrap();
+    assert_describe_rejects(&damaged, "veh.cabin");
+}
+
 /// A reader that closes its end of the pipe before reading anything: every
 /// write of `ridl describe` to stdout then fails. The descriptor has 2000
 /// members, so its JSON view is far larger than a pipe buffer, and a write

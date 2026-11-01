@@ -440,9 +440,10 @@ facts. The chapter [The catalog descriptor](catalog-descriptor.md) describes
 the file for its readers, and the [catalog descriptor record][catalog] gives
 its byte-level details.
 
-The deployment descriptor, a file per deployment, carries the same facts to a
-runtime ([deployment descriptor record][deployment]). The request's deployment
-section carries them to a plugin at build time.
+The deployment descriptor, a file per deployment, carries the deployment's facts
+to a runtime ([deployment descriptor record][deployment]). The request's
+deployment section carries the same deployment's facts to a plugin at build
+time; the descriptor leaves out the sizing values that the section holds.
 
 ## What is not available yet
 

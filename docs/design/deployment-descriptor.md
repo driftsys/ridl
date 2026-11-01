@@ -147,18 +147,20 @@ generated interface crate stays independent of every deployment.
 
 `ridl_descriptor::deployment::verify` is the reader's first call. It checks the
 length, the file identifier (`RDLD`) and the version, walks every field, and
-verifies each embedded catalog with the catalog verifier. Attribute lists are
-verified to a depth of 16 (`MAX_ATTRIBUTE_DEPTH`), and the verifier visits at
-most `bytes.len() / 4` attribute values, counting every visit of a table that
-several lists share. It has its own `ridl_descriptor::deployment::VerifyError`
-(`TooShort`, `WrongIdentifier`, `WrongVersion`, `Invalid`, `EmbeddedCatalog`,
-`TooDeep`, `TooManyAttributeValues`); the catalog `VerifyError` is unchanged.
+verifies each embedded catalog with the catalog verifier, then compares the hash
+stored beside it with the hash inside it (`CatalogHashMismatch`). Attribute
+lists are verified to a depth of 16 (`MAX_ATTRIBUTE_DEPTH`), and the verifier
+visits at most `bytes.len() / 4` attribute values, counting every visit of a
+table that several lists share. It has its own
+`ridl_descriptor::deployment::VerifyError` (`TooShort`, `WrongIdentifier`,
+`WrongVersion`, `Invalid`, `EmbeddedCatalog`, `CatalogHashMismatch`, `TooDeep`,
+`TooManyAttributeValues`); the catalog `VerifyError` is unchanged.
 
 `ridl describe <file>` reads either descriptor and chooses by the file
 identifier. For a deployment descriptor it verifies the file and every embedded
 catalog, then prints the JSON view. A refusal exits 2 and names the embedded
-catalog. The command does not compare the stored hash of a region with the hash
-inside the embedded catalog; the lowering does that when it writes the file.
+catalog, including the case of a stored hash that differs from the catalog's
+own. The lowering checks the same hash when it writes the file.
 
 `DeploymentLowerError` has these variants: `UnknownDeployment`,
 `MissingCatalog`, `HashMismatch`, `InvalidCatalog` and `Internal` (a value in
@@ -186,10 +188,6 @@ code is the record.
 - The deployment verifier has its own `VerifyError`, and it bounds the attribute
   lists (depth 16, `bytes.len() / 4` values). The design reused the catalog
   verifier's error and set no bound.
-- `ridl describe` verifies the embedded catalogs but does not compare the stored
-  hash with the catalog's own hash. The design said a mismatch exits 2 with the
-  catalog named. The lowering performs the hash check, as a `HashMismatch`
-  error.
 - The design called a hash mismatch at lowering an internal error. It is the
   `HashMismatch` variant, beside `InvalidCatalog` for a catalog that fails the
   catalog verifier, and the CLI reports both with exit code 2.

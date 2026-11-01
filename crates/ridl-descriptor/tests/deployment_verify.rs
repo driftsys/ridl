@@ -49,6 +49,16 @@ fn an_embedded_catalog_that_is_not_a_catalog_is_refused() {
 }
 
 #[test]
+fn a_stored_hash_that_differs_from_the_embedded_catalog_is_refused() {
+    let mut owned = deployment(SCHEMA_VERSION, catalog_bytes());
+    owned.catalogs[0].hash[0] ^= 1;
+    match verify(&finish(&owned)) {
+        Err(VerifyError::CatalogHashMismatch { catalog }) => assert_eq!(catalog, "veh"),
+        other => panic!("expected a hash mismatch, got {other:?}"),
+    }
+}
+
+#[test]
 fn the_catalog_verifier_refuses_a_deployment_descriptor() {
     let bytes = finish(&valid());
     let err = ridl_descriptor::verify(&bytes).unwrap_err();
