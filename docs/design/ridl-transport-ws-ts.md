@@ -21,7 +21,7 @@ the generated codec module's, `<base>.codec.ts`
 ([`ts-codec-table.md`](ts-codec-table.md)); the generated faces over this
 package are not built. ADR-0020 decision 6 places the package; its dependency
 row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
-§3 to §9 and §11.1 (binding version 1).
+§3 to §9 and §11.1 (binding versions 1 and 2).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -321,17 +321,19 @@ codec, a text message (`text-message`), a server that selected no subprotocol
 (`no-subprotocol`, which Deno reports; a browser fails the handshake itself and
 the session ends with 1006, see D-8), or a form the provider must not send at
 that point (`unexpected-form`: a first message other than `attached`, a second
-`attached`, a consumer form), or a `block` that breaks the sequence rules of
-frame specification §5.5 (`block-sequence`), or a message whose form is 11 on a
-`ridl-ws-v1` connection (`unknown-code`) the session calls `close()` with no
-code, which sends a close frame with no status (the server sees 1005), records
-the violation through `onNote`, and ends with `violation` set in `Ended`. A
-message is not checked against a message limit: the platform sets the limit of
-the connection, and the client cannot close with 1009. What is checked is the
-length of each received payload against its member's limit (D-19), which refuses
-the payload and does not end the session; a payload in blocks is refused at its
-first block, from `total`. driftsys/ridl#991 asks the frame specification to
-state the close of a client that cannot choose a close code.
+`attached`, a consumer form), or a frame that breaks the reassembly rules of
+frame specification §5.5, a `block` out of sequence or a whole `publish` or
+`answer` of the `fixed` being reassembled (`block-sequence`), or a message whose
+form is 11 on a `ridl-ws-v1` connection (`unknown-code`) the session calls
+`close()` with no code, which sends a close frame with no status (the server
+sees 1005), records the violation through `onNote`, and ends with `violation`
+set in `Ended`. A message is not checked against a message limit: the platform
+sets the limit of the connection, and the client cannot close with 1009. What is
+checked is the length of each received payload against its member's limit
+(D-19), which refuses the payload and does not end the session; a payload in
+blocks is refused at its first block, from `total`. driftsys/ridl#991 asks the
+frame specification to state the close of a client that cannot choose a close
+code.
 
 **D-11. No client liveness timer.** §11.1 item 1 has either end treat no message
 of any kind within its liveness timeout as the end of the session. A browser's

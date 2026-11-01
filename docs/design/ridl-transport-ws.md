@@ -198,7 +198,7 @@ an `AttachError` (`Empty`, `TooLong { len }` or `UnknownEncoding(tag)`). That is
 the "reports an error when the session is opened and sends nothing" of §11.1
 item 2.
 
-**D-6. Every form in both directions.** The codec encodes and decodes all ten
+**D-6. Every form in both directions.** The codec encodes and decodes all eleven
 forms, whichever side calls it. The server uses half of each, and the test
 client uses the other half. "Adding the stand-in ports later" depends on this.
 
