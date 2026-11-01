@@ -17,7 +17,7 @@ the `descriptor` feature). ADR-0020 decision 7 and
 7 place the transport;
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) fixes the port
 contracts the server reads and calls. The wire rules are the frame specification
-§4 to §9 and §11.1 (binding version 1).
+§4 to §9 and §11.1 (binding versions 1 and 2).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -39,9 +39,9 @@ must be right.
 
 **What the crate does.**
 
-- Encodes and decodes every one of the ten forms of frame specification §4
-  exactly as §11.1 item 2 lays them out, and reproduces every test vector of
-  §11.1 byte for byte.
+- Encodes and decodes every one of the eleven forms of frame specification §4
+  exactly as §11.1 item 2 and "Binding version 2" lay them out, and reproduces
+  every test vector of §11.1 byte for byte.
 - Serves the observe-and-call ports — `SignalReader`, `EventSource`, `Caller` —
   plus `FixedReader` for a `read` of a `fixed`, over WebSocket.
 - Detects changed signals with `ScannableSignals` when the backend has it, and
@@ -128,9 +128,12 @@ carry no version, as in `ridl-loopback`.
 ## The codec (`frame`)
 
 The codec is `crates/ridl-transport-ws/src/frame.rs`. It also defines the
-constants `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`), `MIN_MESSAGE_LIMIT`
-(294, the largest `attach`) and `ENVELOPE_BYTES` (16), and `encoding_tag`, which
-maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
+constants `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`), `SUBPROTOCOL_V1`
+(`ridl-ws-v1`, selected only to refuse an `attach`, D-20), `MIN_MESSAGE_LIMIT`
+(294, the largest `attach`), `MAX_MESSAGE_LIMIT`, `ENVELOPE_BYTES` (16) and
+`BLOCK_BYTES` (4,096, the payload bytes of every `block` but the last), and
+`encoding_tag`, which maps an encoding name to the tag of §3: `flatbuffers` 1,
+`proto3` 2, `podbuf` 3.
 
 **D-3. One borrowed `Frame` enum, with the payload rules in the types.** A
 decoded frame borrows its payload and its unit name from the message. The
@@ -221,8 +224,9 @@ timeout to `liveness_timeout`, and a write that fails with `WouldBlock` or
 `TimedOut` ends the session as `Ended::LivenessTimeout`, because the client has
 stopped taking messages for the liveness period. The timeout bounds each write
 call, not a whole message: a client that keeps reading, however slowly, is not
-ended. A zero `poll_interval` or `liveness_timeout` is refused by the stream's
-setter, and `serve` returns `Ended::Io(InvalidInput)`.
+ended, which driftsys/ridl#1160 tracks. A zero `poll_interval` or
+`liveness_timeout` is refused by the stream's setter, and `serve` returns
+`Ended::Io(InvalidInput)`.
 
 The crate sets no socket option. Each frame the server sends is written with one
 write call (D-21), and the rustdoc of `Connection` says that an embedder may set
@@ -304,7 +308,8 @@ outlive its port value releases them in its own `Drop`.
 discarded frame included, is a protocol violation (close 1002). The server
 answers:
 
-- `frame_version` not 1: `refused(frame_version_unsupported)`;
+- `frame_version` not 2, or an `attach` on a `ridl-ws-v1` connection:
+  `refused(frame_version_unsupported)` (D-20);
 - the unit name differs from `Attached::catalog().name`:
   `refused(unknown_catalog)`;
 - the name matches and the hash is neither the catalog's own nor, with a member
@@ -578,18 +583,25 @@ one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
 `contract(UnknownInteraction)` (D-12). Through `Polling`, every `read` of a
 `fixed` is answered `contract(UnknownInteraction)`.
 
-A `fixed` that one message cannot carry — longer than `max_message_bytes` minus
-the 27-byte `publish` header, which at the default limit is every `fixed` above
-16,137 bytes although its default limit is 65,280 (D-26) — is not sent: the
-session records `ValueTooLarge` and answers the `read` with an `answer` carrying
-`contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read` and
-the same answer a `read` of a `fixed` with no value gets, so the client's read
-ends with `ReadError::Contract(UnknownInteraction)` instead of waiting until the
-session ends. The catalog is still attached and every other member is served.
-This is an interim rule until the binding carries such a `fixed` in blocks
-(driftsys/ridl#1129). A `fixed` longer than its member's limit, which a runtime
-that refuses on send never stores, is answered the same way, and so is a `read`
-of a signal whose value is longer than the signal's limit or than one message.
+A `fixed` that one `publish` carries — at most `max_message_bytes` minus the
+27-byte `publish` header, 16,137 bytes at the default limit — is sent whole. A
+longer `fixed` is sent as `block` frames of 4,096 bytes (`BLOCK_BYTES`), all in
+one step of the session, so no other frame comes between two blocks of one
+payload. The rules of the blocks are in frame specification §5.5 and §11.1
+"Binding version 2". The value is read up to the smaller of its member's limit
+and the default ceiling of a `fixed`, 65,280 bytes (D-26).
+
+When `max_message_bytes` is below one block message, 4,130 bytes, no `block` can
+be sent: the value is read only up to what one `publish` carries. A `fixed`
+above that cap is not sent: the session records `ValueTooLarge` and answers the
+`read` with an `answer` carrying `contract(UnknownInteraction)`, the one refusal
+§6.3 defines for a `read` and the same answer a `read` of a `fixed` with no
+value gets, so the client's read ends with
+`ReadError::Contract(UnknownInteraction)` instead of waiting until the session
+ends. The catalog is still attached and every other member is served. A `fixed`
+longer than its member's limit, which a runtime that refuses on send never
+stores, is answered the same way, and so is a `read` of a signal whose value is
+longer than the signal's limit or than one message.
 
 ### The end of a session
 
@@ -664,19 +676,21 @@ and the smallest `max_retained_bytes` accepted.
 
 **The `Config` check.** With a member table, `serve` first checks that
 `max_message_bytes` is at least 36 plus the largest limit over the members of
-what one message carries: each member's limit, and for a `fixed` at most 16,128
-bytes, because the part of a `fixed` above 16,128 is to be carried in blocks
-(driftsys/ridl#1129) and not in one message. A limit below that cannot carry a
-payload the catalog allows, which is a configuration error, not a session event:
-`serve` records `MessageLimitTooSmall` with the member and the limit it needs,
-returns `Ended::ConfigRefused` before the opening handshake without reading the
-connection, and the connection closes when it is dropped. No `attached` reason
-is added, because the frame has none for a configuration error and a new reason
-would change the frozen `wire` surface. The default `Config` carries every
-catalog, a catalog with a large `fixed` included, so a binding never refuses an
-allowed interaction at attach (ADR-0030 decision 20). Without a member table
-there is no `Config` check: the default ceiling of the frame's `kind`, under the
-message limit, bounds what the session sends and what a `request` carries.
+what one message carries: each member's limit, and for a `fixed` at most 4,130
+bytes minus 36, because a `fixed` that one message cannot carry crosses in
+blocks and a block message is at most 4,130 bytes (frame specification §11.1,
+"Binding version 2"). So a `fixed` counts the smaller of 36 plus its limit and
+4,130. A limit below that cannot carry a payload the catalog allows, which is a
+configuration error, not a session event: `serve` records `MessageLimitTooSmall`
+with the member and the limit it needs, returns `Ended::ConfigRefused` before
+the opening handshake without reading the connection, and the connection closes
+when it is dropped. No `attached` reason is added, because the frame has none
+for a configuration error and a new reason would change the frozen `wire`
+surface. The default `Config` carries every catalog, a catalog with a large
+`fixed` included, so a binding never refuses an allowed interaction at attach
+(ADR-0030 decision 20). Without a member table there is no `Config` check: the
+default ceiling of the frame's `kind`, under the message limit, bounds what the
+session sends and what a `request` carries.
 
 ## The WebSocket layer (`ws`)
 
@@ -705,14 +719,18 @@ address, which is the same for any web page a local browser loads, so a
 browser-facing embedder should set the check; the crate rustdoc says so, and
 that the crate authenticates no one.
 
-**D-20. The subprotocol.** The server selects `ridl-ws-v1` when the client
-offers it, in any position of `Sec-WebSocket-Protocol`. When the client does not
-offer it, the server answers `400 Bad Request` and does not upgrade. §11.1 says
-that the client fails a connection on which the server selected none; answering
-400 makes the failure visible at once, also to a client that does not check. The
-selection is a single comparison with `ridl-ws-v1`: a table from subprotocol
-name to session role would have one row, so it is left until the reversed role
-of "Adding the stand-in ports later" adds the second.
+**D-20. The subprotocol.** The server selects `ridl-ws-v2` when the client
+offers it, in any position of `Sec-WebSocket-Protocol`. When the client offers
+`ridl-ws-v1` and not `ridl-ws-v2`, the server selects `ridl-ws-v1`, refuses
+every `attach` on that connection `frame_version_unsupported` (D-11) and closes
+with 1000, so that a version 1 client learns the reason instead of a failed
+handshake. When the client offers neither, the server answers `400 Bad Request`
+and does not upgrade. §11.1 says that the client fails a connection on which the
+server selected none; answering 400 makes the failure visible at once, also to a
+client that does not check. The selection is two comparisons, with `ridl-ws-v2`
+and with `ridl-ws-v1`, and neither selects a role: a table from subprotocol name
+to session role would have no row to hold, so it is left until the reversed role
+of "Adding the stand-in ports later" adds one.
 
 **D-21. Messages.** Binary messages only; a text message closes with 1003.
 Fragmented messages are reassembled, also when a frame is split across socket
@@ -859,10 +877,10 @@ stand-in client is a session in the other direction: the WebSocket client
 provides, and the server consumes and forwards what it receives into the
 backend's `SignalWriter`, `EventSink` and `Handler`. The server sends `attach`,
 `subscribe` and `request`; the client sends `attached`, `publish`, `occurrence`
-and `response`. All ten forms exist already, so the frame does not change. What
-changes is the binding's item 1, by a new subprotocol name that selects the
-reversed roles, offered beside `ridl-ws-v1`, in an amendment of §11.1. The name
-is chosen with that amendment.
+and `response`. All eleven forms exist already, so the frame does not change.
+What changes is the binding's item 1, by a new subprotocol name that selects the
+reversed roles, offered beside `ridl-ws-v2` and `ridl-ws-v1`, in an amendment of
+§11.1. The name is chosen with that amendment.
 
 What the crate already does so that the addition is local:
 
