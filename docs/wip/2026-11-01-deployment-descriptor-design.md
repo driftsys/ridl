@@ -115,14 +115,14 @@ D-3 of the archived design):
    attributes }`,
    in closure order.
 6. `instances`: one
-   `Instance { component, instance, machine, attributes,
-   offers, maps }` per
-   placement, in placement order. `attributes` are the placement line's backend
-   keys. `offers` lists the interface keys (catalog, number) whose slots the
-   instance writes, read from the producers; `maps` lists the catalog names its
-   component's `requires` lines reach, read from the grant. These are the two
-   lists the codegen deployment section already computes, and the lowering uses
-   the same rule.
+   `Instance { component, instance, machine, external,
+   attributes, offers, maps }`
+   per placement, in placement order. `attributes` are the placement line's
+   backend keys. `offers` lists the interface keys (catalog, number) whose slots
+   the instance writes, read from the producers; `maps` lists the catalog names
+   its component's `requires` lines reach, read from the grant. These are the
+   two lists the codegen deployment section already computes, and the lowering
+   uses the same rule.
 7. `links`:
    `Link { catalog, number, service, consumer, producer, crossing,
    attributes }`,
@@ -162,8 +162,10 @@ of its namespace on the placement line, for example
 
 ```rsdl,ignore
 deployment Vehicle for VehicleSystem {
-  machine hpc
-  VehicleStateProvider on hpc @[shm.service = 3]
+  machine Hpc {
+    VehicleStateProvider [ shm.service = 3 ]
+    UiModel [ shm.service = 4 ]
+  }
 }
 ```
 
@@ -225,7 +227,9 @@ asks for it.
   `crates/ridl-descriptor/src/deployment/generated.rs` beside the catalog's, and
   the staleness test covers both.
 - `ridl_descriptor::deployment`: `finish`, `verify` (the `no_std` half) and,
-  under `std`, `lower(system, deployment_name, catalogs)` and `to_json`.
+  under `std`, `lower(system, deployment_name, packages, catalogs)`, which takes
+  each instance's `offers` and `maps` from `ridl_ir::codegen::lower_deployment`
+  so that the two emitters cannot disagree, and `to_json`.
 - `ridlc`: `Emit::Deployment`, written from the lowered system after the
   catalogs, one file per deployment in `System.deployments`. A deployment that
   an RSDL-7xx error blocked is absent from the IR and gets no file (ADR-0022
@@ -256,12 +260,12 @@ renumbered. `SCHEMA_VERSION` of the deployment schema is 1.
 - Round trip and the planus header behaviour, as for the catalog.
 - The verifier: short, foreign identifier, wrong version, truncated, a flipped
   byte inside an embedded catalog.
-- The lowering, over `crates/ridlc/tests/corpus/veh-cluster` (which declares a
-  system and a deployment): the instances' `offers` and `maps` equal the
-  deployment section's for the same deployment (one test asserts the two
-  emitters agree), the embedded catalogs equal the standalone files byte for
-  byte, a placement backend key is carried to the instance, and two builds write
-  the same bytes.
+- The lowering, over `examples/cabin` and
+  `crates/ridlc/tests/corpus/rsdl-appendix-a` (each declares a system and
+  deployments): the instances' `offers` and `maps` equal the deployment
+  section's for the same deployment (one test asserts the two emitters agree),
+  the embedded catalogs equal the standalone files byte for byte, a placement
+  backend key is carried to the instance, and two builds write the same bytes.
 - `ridlc` and `ridl build`: `--emit deployment` writes one file per deployment,
   none for a blocked deployment, none in single-file mode.
 - `ridl describe` on a deployment descriptor, and its hash mismatch exit.
