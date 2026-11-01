@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/open_enums.typl
 ---
-SourceFile@0..262
+SourceFile@0..379
   PackageDecl@0..16
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -122,5 +122,37 @@ SourceFile@0..262
           Ident@255..259 "bool"
     Whitespace@259..260 " "
     RBrace@260..261 "}"
-  Whitespace@261..262 "\n"
+  Whitespace@261..263 "\n\n"
+  LineComment@263..337 "// An identifier `ope ..."
+  Whitespace@337..338 "\n"
+  EnumSetDef@338..358
+    EnumsetKw@338..345 "enumset"
+    Whitespace@345..346 " "
+    Name@346..352
+      Ident@346..352 "Others"
+    Colon@352..353 ":"
+    Whitespace@353..354 " "
+    PathType@354..358
+      QualifiedName@354..358
+        Ident@354..358 "open"
+  Whitespace@358..359 "\n"
+  EnumDef@359..378
+    EnumKw@359..363 "enum"
+    Whitespace@363..364 " "
+    Name@364..368
+      Ident@364..368 "Next"
+    Whitespace@368..369 " "
+    LBrace@369..370 "{"
+    Whitespace@370..371 " "
+    EnumValue@371..376
+      Name@371..372
+        Ident@371..372 "A"
+      Whitespace@372..373 " "
+      Eq@373..374 "="
+      Whitespace@374..375 " "
+      Literal@375..376
+        IntNumber@375..376 "0"
+    Whitespace@376..377 " "
+    RBrace@377..378 "}"
+  Whitespace@378..379 "\n"
 errors: none

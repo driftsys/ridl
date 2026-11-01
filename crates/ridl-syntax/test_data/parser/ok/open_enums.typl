@@ -10,3 +10,7 @@ open enumset Warnings : Fault
 
 // `open` is an ordinary identifier outside a modifier position.
 struct S { open: bool }
+
+// An identifier `open` directly before a declaration is not the modifier.
+enumset Others: open
+enum Next { A = 0 }

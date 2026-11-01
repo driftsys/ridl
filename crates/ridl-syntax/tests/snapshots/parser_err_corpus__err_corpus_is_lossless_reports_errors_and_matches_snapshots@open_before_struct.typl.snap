@@ -27,4 +27,4 @@ SourceFile@0..93
     RBrace@91..92 "}"
   Whitespace@92..93 "\n"
 errors:
-  FORM-102 76..80 unexpected token after `open`: expected `enum` or `enumset`, because `open` modifies only an enum or an enumset definition
+  FORM-102 76..80 unexpected token after `open`: expected `enum` or `enumset`, because `open` modifies only an enum or an enumset definition and directly precedes its keyword
