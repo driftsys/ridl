@@ -121,11 +121,13 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
 
 Deno.test("the server answers a read of a fixed in one publish up to 16,137 bytes and in blocks above", async () => {
   const server = await startServer();
+  let raw: WebSocket | undefined;
   try {
     const socket = new WebSocket(
       `ws://127.0.0.1:${server.port}`,
       SUBPROTOCOL,
     );
+    raw = socket;
     socket.binaryType = "arraybuffer";
     const received: Frame[] = [];
     let wake: (() => void) | undefined;
@@ -181,8 +183,15 @@ Deno.test("the server answers a read of a fixed in one publish up to 16,137 byte
     await new Promise((resolve) => setTimeout(resolve, 200));
     const split = received.slice(mark);
     assert.deepEqual(split.map((f) => f.form), Array(4).fill("block"));
-    socket.close();
   } finally {
+    // Close the raw socket and wait for it to end before the server stops.
+    if (raw !== undefined && raw.readyState !== WebSocket.CLOSED) {
+      const closed = new Promise<void>((resolve) => {
+        raw!.onclose = () => resolve();
+      });
+      raw.close();
+      await closed;
+    }
     await server.stop();
   }
 });
