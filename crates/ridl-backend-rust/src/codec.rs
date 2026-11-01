@@ -341,6 +341,38 @@ impl Scalar {
         }
     }
 
+    /// The `encode` statement that refuses the domain value `__s` of an open
+    /// enum set whose integer does not fit the field's primitive, with the
+    /// contract error for an out-of-range value, naming the set. The
+    /// primitive is the width the highest declared bit infers, and
+    /// [`Scalar::raw`] narrows to it with `as`, which would drop the bits
+    /// above it in silence; an open enum set keeps every bit, so a value
+    /// outside the width can reach the encoder through `From<i64>` or from an
+    /// encoding of a wider scalar. Empty for every other scalar, and for a
+    /// 64-bit primitive, which holds every `i64`.
+    fn encode_check(&self) -> TokenStream {
+        let Repr::EnumSet { name, open: true } = &self.repr else {
+            return quote! {};
+        };
+        if matches!(self.prim, Prim::I64 | Prim::U64) {
+            return quote! {};
+        }
+        let ty = format_ident!("{}", self.prim.rust_name());
+        let type_name = name.rsplit('.').next().unwrap_or(name);
+        quote! {
+            if ::core::primitive::#ty::try_from(::core::primitive::i64::from(__s)).is_err() {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(
+                        ::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some(#type_name),
+                            rule: ::ridl_rt::payload::Rule::Range,
+                        },
+                    ),
+                );
+            }
+        }
+    }
+
     /// The `Result<prim, Malformed>` read of this scalar.
     fn read(&self, buf: &TokenStream, at: &TokenStream) -> TokenStream {
         let call = format_ident!("{}", self.prim.read_fn());
@@ -1282,12 +1314,19 @@ impl<'a> Codec<'a> {
                 }),
             ),
             Some(v1::declaration::Kind::Enum(def)) => {
-                let Some(first) = def.values.first() else {
-                    return Err(GenerateError {
-                        message: format!(
-                            "`{name}` declares no value, so no FlatBuffers codec can decode one"
-                        ),
-                    });
+                // A strict enum decodes a discharged read as its first
+                // variant, so it needs one. An open enum decodes every value
+                // through `From<i64>` and may declare none (TYPL-413 warns).
+                let first = match def.values.first() {
+                    Some(first) => pascal_of(first.name.as_ref()),
+                    None if def.open => String::new(),
+                    None => {
+                        return Err(GenerateError {
+                            message: format!(
+                                "`{name}` declares no value, so no FlatBuffers codec can decode one"
+                            ),
+                        });
+                    }
                 };
                 let zero = def
                     .zero_member
@@ -1304,7 +1343,7 @@ impl<'a> Codec<'a> {
                         name: owner.clone(),
                         // The variant `emit_enum` declared, which is the
                         // pinned `pascal_case` spelling.
-                        first: pascal_of(first.name.as_ref()),
+                        first,
                         zero,
                         open: def.open,
                     },
@@ -1829,12 +1868,14 @@ impl<'a> Codec<'a> {
                 let variant = format_ident!("{}", scalar.prim.field_variant());
                 let place = &expr.place;
                 let raw = scalar.raw(quote! { __s });
+                let check = scalar.encode_check();
                 // The value is bound before it is converted, so that a place
                 // like `*__v` never has a method call or a cast attached
                 // straight to it.
                 quote! {
                     {
                         let __s = #place;
+                        #check
                         ::ridl_rt::flatbuffers::Field::#variant(#raw)
                     }
                 }
@@ -1912,6 +1953,7 @@ impl<'a> Codec<'a> {
                 match element.as_ref() {
                     Wire::Scalar(scalar) => {
                         let raw = scalar.raw(quote! { __s });
+                        let check = scalar.encode_check();
                         // `scalar.raw` hands back a `bool` unchanged for a
                         // `boolean` backing, because the inline-scalar write
                         // site (`Field::Bool`) takes a `bool` directly. A
@@ -1938,6 +1980,7 @@ impl<'a> Codec<'a> {
                                     ::std::vec::Vec::with_capacity(#capacity);
                                 for __e in __c.iter() {
                                     let __s = *__e;
+                                    #check
                                     let __r = #raw;
                                     __bytes.extend_from_slice(&__r.to_le_bytes());
                                 }

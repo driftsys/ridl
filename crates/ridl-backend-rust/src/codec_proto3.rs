@@ -331,30 +331,37 @@ impl Scalar {
 
     /// The `encode` statement that refuses the domain value `__s` of an open
     /// enum whose integer does not fit the int32 proto3 carries an enum as,
-    /// with the contract error for an out-of-range value, naming the enum.
-    /// Such a value cannot come from the proto3 wire (`narrow_i32` refuses it
-    /// as structure); it comes from another encoding, through a transcode or
-    /// through `From<i64>`. Empty for every other scalar.
+    /// or of an open enum set whose integer does not fit the 32-bit scalar
+    /// its declared width maps to (`uint32` or `sint32`), with the contract
+    /// error for an out-of-range value, naming the declaration. Such a value
+    /// cannot come from the proto3 wire (`narrow_i32` and `narrow_u32` refuse
+    /// it as structure, and `zigzag32` would fold it); it comes from another
+    /// encoding, through a transcode or through `From<i64>`. Empty for every
+    /// other scalar, and for a 64-bit scalar, which holds every `i64`.
     fn encode_check(&self) -> TokenStream {
-        match &self.repr {
-            Repr::Enum {
-                name, open: true, ..
-            } => {
-                let type_name = name.rsplit('.').next().unwrap_or(name);
-                quote! {
-                    if ::core::primitive::i32::try_from(::core::primitive::i64::from(__s)).is_err() {
-                        return ::core::result::Result::Err(
-                            ::ridl_rt::payload::EncodeError::Contract(
-                                ::ridl_rt::payload::Violation {
-                                    type_name: ::core::option::Option::Some(#type_name),
-                                    rule: ::ridl_rt::payload::Rule::Range,
-                                },
-                            ),
-                        );
-                    }
-                }
+        let (name, ty) = match (&self.repr, self.scalar) {
+            (
+                Repr::Enum {
+                    name, open: true, ..
+                },
+                _,
+            ) => (name, quote! { i32 }),
+            (Repr::EnumSet { name, open: true }, pb::Scalar::Uint32) => (name, quote! { u32 }),
+            (Repr::EnumSet { name, open: true }, pb::Scalar::Sint32) => (name, quote! { i32 }),
+            _ => return quote! {},
+        };
+        let type_name = name.rsplit('.').next().unwrap_or(name);
+        quote! {
+            if ::core::primitive::#ty::try_from(::core::primitive::i64::from(__s)).is_err() {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(
+                        ::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some(#type_name),
+                            rule: ::ridl_rt::payload::Rule::Range,
+                        },
+                    ),
+                );
             }
-            _ => quote! {},
         }
     }
 
@@ -1510,12 +1517,19 @@ impl<'a> Codec<'a> {
                 }),
             ),
             Some(v1::declaration::Kind::Enum(def)) => {
-                let Some(first) = def.values.first() else {
-                    return Err(GenerateError {
-                        message: format!(
-                            "`{name}` declares no value, so no proto3 codec can decode one"
-                        ),
-                    });
+                // A strict enum decodes a discharged read as its first
+                // variant, so it needs one. An open enum decodes every value
+                // through `From<i64>` and may declare none (TYPL-413 warns).
+                let first = match def.values.first() {
+                    Some(first) => pascal_of(first.name.as_ref()),
+                    None if def.open => String::new(),
+                    None => {
+                        return Err(GenerateError {
+                            message: format!(
+                                "`{name}` declares no value, so no proto3 codec can decode one"
+                            ),
+                        });
+                    }
                 };
                 // proto3 enum and reserved values are int32; the proto
                 // backend refuses a value outside it, so the codec cannot
@@ -1553,7 +1567,7 @@ impl<'a> Codec<'a> {
                     zero_legal: zero.is_some() || def.open,
                     repr: Repr::Enum {
                         name: owner,
-                        first: pascal_of(first.name.as_ref()),
+                        first,
                         zero,
                         open: def.open,
                     },

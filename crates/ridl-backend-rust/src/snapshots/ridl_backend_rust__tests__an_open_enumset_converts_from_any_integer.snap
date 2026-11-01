@@ -65,6 +65,16 @@ pub(crate) fn __ridl_fb_encode_Flags(
                 offset: 4u16,
                 value: {
                     let __s = *value;
+                    if ::core::primitive::u8::try_from(::core::primitive::i64::from(__s))
+                        .is_err()
+                    {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                                type_name: ::core::option::Option::Some("Flags"),
+                                rule: ::ridl_rt::payload::Rule::Range,
+                            }),
+                        );
+                    }
                     ::ridl_rt::flatbuffers::Field::U8(
                         ::core::primitive::i64::from(__s) as ::core::primitive::u8,
                     )

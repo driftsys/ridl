@@ -2017,3 +2017,85 @@ fn main() {
         ),
     );
 }
+
+/// An open enum with no declared value generates, decodes every value as
+/// `Unknown`, and reads an absent field as `Unknown(0)`.
+#[test]
+fn an_empty_open_enum_round_trips_every_value_as_unknown() {
+    rustc::run_program(
+        "fb_empty_open_enum",
+        &open_program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+
+fn main() {
+    let sent = EmptyMsg { e: Empty::from(5) };
+    let mut out = [0u8; 64];
+    let bytes = Ref::<EmptyMsg, FlatBuffers>::encode(&sent, &mut out)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    let msg = Ref::<EmptyMsg, FlatBuffers>::verify(&bytes).expect("verify").decode();
+    assert!(matches!(msg.e, Empty::Unknown(unknown) if unknown.raw() == 5));
+    assert_eq!(i64::from(msg.e), 5);
+    // The view reads an absent slot as the default: `Unknown(0)`. A table
+    // with no slot is what a writer that omits defaults produces; here the
+    // vtable of an encoded message is emptied of its one slot.
+    let mut absent = bytes.clone();
+    let table = root(&absent);
+    let vtable = table - (i32::from_le_bytes(absent[table..table + 4].try_into().unwrap()) as usize);
+    let vtable_len = u16::from_le_bytes(absent[vtable..vtable + 2].try_into().unwrap());
+    assert!(vtable_len >= 6, "the vtable has the one slot");
+    absent[vtable + 4] = 0;
+    absent[vtable + 5] = 0;
+    let decoded = Ref::<EmptyMsg, FlatBuffers>::verify(&absent).expect("verify").decode();
+    assert!(matches!(decoded.e, Empty::Unknown(unknown) if unknown.raw() == 0));
+}
+
+fn root(bytes: &[u8]) -> usize {
+    u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize
+}
+"#,
+        ),
+    );
+}
+
+/// An open enum set keeps every bit, but its FlatBuffers field keeps the
+/// width inferred from the highest declared bit (8 bits for `Flags`), so the
+/// encoder refuses a value outside that width with `Rule::Range` rather than
+/// truncating it: 257 decoded from proto3, whose `uint32` carries it, must
+/// not become 1 on the FlatBuffers wire.
+#[test]
+fn an_open_enumset_value_outside_its_wire_width_is_refused() {
+    rustc::run_program(
+        "fb_open_enumset_outside_wire_width",
+        &open_program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{EncodeError, Ref, Rule};
+
+fn main() {
+    let mut out = [0u8; 64];
+    for raw in [257i64, -1i64, 1i64 << 40] {
+        let msg = OpenMsg { status: DtcStatus::from(0), flags: Flags::from(raw) };
+        match Ref::<OpenMsg, FlatBuffers>::encode(&msg, &mut out) {
+            Err(EncodeError::Contract(violation)) => {
+                assert_eq!(violation.rule, Rule::Range);
+                assert_eq!(violation.type_name, Some("Flags"));
+            }
+            Err(other) => panic!("expected a range violation for {raw}, got {other:?}"),
+            Ok(_) => panic!("expected a range violation for {raw}, got a success"),
+        }
+    }
+    // The width's own bounds are carried.
+    let full = OpenMsg { status: DtcStatus::from(0), flags: Flags::from(255) };
+    let bytes = Ref::<OpenMsg, FlatBuffers>::encode(&full, &mut out).expect("encode");
+    let back = Ref::<OpenMsg, FlatBuffers>::verify(bytes.bytes()).expect("verify").decode();
+    assert_eq!(i64::from(back.flags), 255);
+    assert_eq!(back.flags.unknown_bits(), 254);
+}
+"#,
+        ),
+    );
+}

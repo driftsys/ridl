@@ -579,7 +579,9 @@ fn a_podbuf_output_buffer_that_is_too_small_fails_with_a_capacity_error() {
 /// proto3 carries an enum as an int32, so an `Unknown` whose raw integer does
 /// not fit int32 can reach the proto3 encoder only from another encoding.
 /// The encoder refuses it with the contract error for an out-of-range value,
-/// `Rule::Range`, naming the enum; the transcode reports the same error.
+/// `Rule::Range`, naming the enum; the transcode reports the same error. An
+/// open enum set is refused the same way when its value is outside the
+/// wire width of the target encoding.
 #[test]
 fn an_unknown_outside_int32_is_refused_by_the_proto3_encoder() {
     let package = ir::compile_fixture("open_enums.ridl");
@@ -603,28 +605,45 @@ use ridl_rt::encoding::{FlatBuffers, Proto3};
 use ridl_rt::payload::{EncodeError, Ref, Rule, TranscodeError};
 
 fn main() {
-    let wide = OpenMsg { status: DtcStatus::from(1i64 << 40), flags: Flags::from(0) };
     let mut a = [0u8; 64];
-    let flatbuffers = Ref::<OpenMsg, FlatBuffers>::encode(&wide, &mut a)
-        .expect("a FlatBuffers long holds any i64")
-        .bytes()
-        .to_vec();
     let mut out = [0u8; 64];
-    match OpenMsg::transcode_flatbuffers_to_proto3(&flatbuffers, &mut out) {
+    // Above int32 and below it: both bounds are checked.
+    for raw in [1i64 << 40, i64::from(i32::MIN) - 1] {
+        let wide = OpenMsg { status: DtcStatus::from(raw), flags: Flags::from(0) };
+        let flatbuffers = Ref::<OpenMsg, FlatBuffers>::encode(&wide, &mut a)
+            .expect("a FlatBuffers long holds any i64")
+            .bytes()
+            .to_vec();
+        match OpenMsg::transcode_flatbuffers_to_proto3(&flatbuffers, &mut out) {
+            Err(TranscodeError::Encode(EncodeError::Contract(violation))) => {
+                assert_eq!(violation.rule, Rule::Range);
+                assert_eq!(violation.type_name, Some("DtcStatus"));
+            }
+            Err(other) => panic!("expected a range violation for {raw}, got {other:?}"),
+            Ok(_) => panic!("expected a range violation for {raw}, got a success"),
+        }
+        match Ref::<OpenMsg, Proto3>::encode(&wide, &mut out) {
+            Err(EncodeError::Contract(violation)) => {
+                assert_eq!(violation.rule, Rule::Range);
+                assert_eq!(violation.type_name, Some("DtcStatus"));
+            }
+            Err(other) => panic!("expected a range violation for {raw}, got {other:?}"),
+            Ok(_) => panic!("expected a range violation for {raw}, got a success"),
+        }
+    }
+    // An open enum set's proto3 `uint32` carries 257, which the 8-bit
+    // FlatBuffers field cannot hold: the transcode refuses it rather than
+    // truncating it to 1.
+    let proto3 = [0x10u8, 0x81, 0x02];
+    let decoded = Ref::<OpenMsg, Proto3>::verify(&proto3).expect("verify").decode();
+    assert_eq!(i64::from(decoded.flags), 257);
+    match OpenMsg::transcode_proto3_to_flatbuffers(&proto3, &mut out) {
         Err(TranscodeError::Encode(EncodeError::Contract(violation))) => {
             assert_eq!(violation.rule, Rule::Range);
-            assert_eq!(violation.type_name, Some("DtcStatus"));
+            assert_eq!(violation.type_name, Some("Flags"));
         }
-        Err(other) => panic!("expected a range violation, got {other:?}"),
-        Ok(_) => panic!("expected a range violation, got a success"),
-    }
-    match Ref::<OpenMsg, Proto3>::encode(&wide, &mut out) {
-        Err(EncodeError::Contract(violation)) => {
-            assert_eq!(violation.rule, Rule::Range);
-            assert_eq!(violation.type_name, Some("DtcStatus"));
-        }
-        Err(other) => panic!("expected a range violation, got {other:?}"),
-        Ok(_) => panic!("expected a range violation, got a success"),
+        Err(other) => panic!("expected a range violation for flags 257, got {other:?}"),
+        Ok(_) => panic!("expected a range violation for flags 257, got a success"),
     }
     // The int32 bounds themselves transcode.
     for raw in [i64::from(i32::MIN), i64::from(i32::MAX)] {

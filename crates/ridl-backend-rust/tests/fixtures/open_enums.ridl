@@ -38,3 +38,16 @@ struct OpenMsg {
   status : DtcStatus
   flags  : Flags
 }
+
+// An open enum with no declared value: every value is `Unknown`, and the
+// checker warns (TYPL-413).
+open enum Empty {}
+
+struct EmptyMsg {
+  e : Empty
+}
+
+// A packed collection of an open enum, for the element site of the codecs.
+struct OpenList {
+  statuses : [DtcStatus; 0..4]
+}

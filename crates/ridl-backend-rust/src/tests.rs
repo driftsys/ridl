@@ -2461,7 +2461,17 @@ fn an_open_enumset_converts_from_any_integer() {
         !source.contains("TryFrom<::core::primitive::i64> for Flags"),
         "{source}"
     );
-    assert!(!source.contains("try_from"), "{source}");
+    // The codec converts through `From`, with no value check in `verify`;
+    // the one `try_from` left is the encoder's width check, over the `u8`
+    // the highest declared bit infers.
+    assert!(
+        !source.contains("TryFrom<::core::primitive::i64>>::try_from"),
+        "{source}"
+    );
+    assert!(
+        source.contains("::core::primitive::u8::try_from(::core::primitive::i64::from(__s))"),
+        "{source}"
+    );
     assert!(!source.contains("non_exhaustive"), "{source}");
     insta::assert_snapshot!(source);
 }
