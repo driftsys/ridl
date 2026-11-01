@@ -1221,18 +1221,65 @@ fn a_streamed_reply_of_named_elements_gets_a_client_method_and_a_stream() {
         "dropping the stream forgets the call unless it is done:\n{stream}"
     );
 
-    // The provider side is not built: the trait carries the command and not
-    // the stream query, and the blocking module carries nothing for it.
-    let provider = between(&log, "pubtraitProvider{", "}");
-    assert!(
-        provider.contains("fnclear(&mutself,level:&super::Level);")
-            && !provider.contains("history"),
-        "the provider trait leaves the stream query out:\n{provider}"
-    );
+    // The blocking client carries nothing for the stream query.
     let blocking = between(&log, "pubmodblocking{", "pubfnserve<");
     assert!(
         !blocking.contains("history"),
         "the blocking module carries nothing for the stream query:\n{blocking}"
+    );
+}
+
+/// The provider side of a query whose reply is a stream of named elements:
+/// `Provider` names the source the method returns as an associated type, the
+/// method returns it, and `serve` registers the member and is bound on
+/// `StreamHandler`. The bound is added to the `serve` of the interface that
+/// declares the stream member, and to no other.
+#[test]
+fn a_streamed_reply_of_named_elements_gets_a_provider_source_and_a_serve_arm() {
+    let source = stream_face();
+    let log = dense(&module(&source, "log"));
+    let plain = dense(&module(&source, "plain"));
+
+    let provider = between(&log, "pubtraitProvider{", "pub(crate)fndispatch<");
+    assert!(
+        provider.contains("typeHistory:::ridl_rt::face::Source<Item=super::Reading>;"),
+        "the provider names the source of the stream as an associated type:\n{provider}"
+    );
+    assert!(
+        provider.contains("fnhistory(&mutself,limit:&super::Level)->Self::History;"),
+        "the provider method returns the source:\n{provider}"
+    );
+    assert!(
+        provider.contains("fnclear(&mutself,level:&super::Level);"),
+        "the command keeps its method:\n{provider}"
+    );
+
+    let handler_bounds = "H:::ridl_rt::port::Encoded+::ridl_rt::port::Handler\
+                          +::ridl_rt::port::Wakeable+::ridl_rt::port::StreamHandler,P:Provider";
+    assert!(
+        log.contains(&format!(
+            "pubfnserve<H,P>(muth:H,p:&mutP)->Serve<'_,H,P>where{handler_bounds}"
+        )),
+        "the serve of an interface with a stream member is bound on StreamHandler:\n{log}"
+    );
+    assert!(
+        log.contains(
+            "h.serve(<super::Logas::ridl_rt::contract::Interface>::NUMBER,\
+                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(1u32)],)"
+        ),
+        "serve registers the stream query beside the command:\n{log}"
+    );
+    let blocking_serve = between(&log, "pubmodblocking{", "letmut__serve=super::serve(h,p);");
+    assert!(
+        blocking_serve.contains(
+            "H:::ridl_rt::port::Encoded+::ridl_rt::port::Handler+::ridl_rt::port::Wakeable\
+             +::ridl_rt::port::StreamHandler,P:super::Provider,"
+        ),
+        "the blocking serve repeats the stream bound:\n{blocking_serve}"
+    );
+    assert!(
+        !plain.contains("StreamHandler") && !plain.contains("Source"),
+        "nothing in the face of an interface without a stream names StreamHandler or Source:\n{plain}"
     );
 }
 

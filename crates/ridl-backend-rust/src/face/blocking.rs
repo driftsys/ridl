@@ -97,6 +97,7 @@ pub(super) fn blocking(
             iface,
             iface_name,
             &encoding_bounds(&ident("H"), iface, payloads),
+            !streams.is_empty(),
         ));
     }
 
@@ -413,8 +414,11 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
 }
 
 /// `blocking::serve`: `block_on` over `serve`'s future, which never resolves
-/// to `Ok`, so `Ok(())` here means the timeout passed (note F-11).
-fn serve(iface: &Ident, iface_name: &str, encoding: &TokenStream) -> TokenStream {
+/// to `Ok`, so `Ok(())` here means the timeout passed (note F-11). The handler
+/// repeats `serve`'s bound on `StreamHandler` when the interface declares a
+/// stream member, which `serve` drives.
+fn serve(iface: &Ident, iface_name: &str, encoding: &TokenStream, streams: bool) -> TokenStream {
+    let stream_bound = streams.then(|| quote! { + ::ridl_rt::port::StreamHandler });
     let doc = format!(
         "Serves interface `{iface_name}`'s commands and queries with `p`, over \
          the handler port `h`, on the calling thread, until the handler port \
@@ -436,7 +440,8 @@ fn serve(iface: &Ident, iface_name: &str, encoding: &TokenStream) -> TokenStream
         where
             H: ::ridl_rt::port::Encoded
                 + ::ridl_rt::port::Handler
-                + ::ridl_rt::port::Wakeable,
+                + ::ridl_rt::port::Wakeable
+                #stream_bound,
             P: super::Provider,
             #encoding
         {

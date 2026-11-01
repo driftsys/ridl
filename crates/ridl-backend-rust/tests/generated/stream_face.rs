@@ -1738,12 +1738,29 @@ pub mod log {
         /// - `level`
         ///   - range 0 ..= 100
         fn clear(&mut self, level: &super::Level);
+        ///The source of query `history`'s reply stream, which `serve` polls for each `Reading` it sends.
+        type History: ::ridl_rt::face::Source<Item = super::Reading>;
+        /// The readings up to `limit`, oldest first.
+        ///
+        ///Serves query `history`, whose reply is a stream of `Reading`: it returns the source `serve` drives. `serve` polls the source at most once per poll of its own, and only while the stream's window has room; it checks each element against its type before it is sent and ends the stream with `Contract::InvalidValue` on the first one that fails, sends `Ready(None)` as the end of the stream, and an `Interrupted` as `Transport::Interrupted`. The source is dropped once the stream ended, failed, or the caller stopped reading it. `ensure` clauses are not evaluated on a streamed reply.
+        ///
+        /// # Rules
+        ///
+        /// - response within 200000 us
+        /// - require `limit > 0`
+        ///
+        /// # Parameters
+        ///
+        /// - `limit`
+        ///   - range 0 ..= 100
+        fn history(&mut self, limit: &super::Level) -> Self::History;
     }
     pub(crate) fn dispatch<H, P>(
         h: &mut H,
         p: &mut P,
         buf: &mut [u8],
         budget: &mut usize,
+        streams: &mut Streams<H, P>,
     ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
     where
         H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
@@ -1846,6 +1863,79 @@ pub mod log {
                                     }
                                 }
                             }
+                            ::ridl_rt::contract::Ordinal(1u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Level,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::LogHistory as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                if streams.history.is_some() {
+                                                    h.settle(
+                                                        claim.id,
+                                                        Err(
+                                                            ::ridl_rt::error::CallError::Transport(
+                                                                ::ridl_rt::error::Transport::Busy,
+                                                            ),
+                                                        ),
+                                                    )
+                                                } else {
+                                                    streams.history = Some(StreamSlot {
+                                                        claim: claim.id,
+                                                        source: p.history(&__arg),
+                                                        buffer: <super::Reading as ::ridl_rt::payload::Payload<
+                                                            H::Encoding,
+                                                        >>::BUFFER,
+                                                        held: None,
+                                                    });
+                                                    streams.__started = true;
+                                                    Ok(())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             _ => {
                                 h.settle(
                                     claim.id,
@@ -1868,16 +1958,189 @@ pub mod log {
         Ok(settled)
     }
     const SERVE_BUDGET: usize = 32;
+    type ElementBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
+        <H as ::ridl_rt::port::Encoded>::Encoding,
+    >>::Buffer;
+    struct StreamSlot<S, B> {
+        claim: ::ridl_rt::port::ClaimId,
+        source: S,
+        buffer: B,
+        held: ::core::option::Option<(usize, usize)>,
+    }
+    pub(crate) struct Streams<H, P>
+    where
+        H: ::ridl_rt::port::Encoded,
+        P: Provider,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        __started: bool,
+        history: ::core::option::Option<
+            StreamSlot<P::History, ElementBuffer<H, super::Reading>>,
+        >,
+    }
+    fn drive_stream<H, T, S>(
+        h: &mut H,
+        slot: &mut ::core::option::Option<StreamSlot<S, ElementBuffer<H, T>>>,
+        cx: &mut ::core::task::Context<'_>,
+        budget: &mut usize,
+    ) -> bool
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamHandler
+            + ::ridl_rt::port::Wakeable,
+        T: ::ridl_rt::payload::Payload<H::Encoding>,
+        S: ::ridl_rt::face::Source<Item = T>,
+    {
+        let Some(stream) = slot.as_mut() else {
+            return false;
+        };
+        let claim = stream.claim;
+        let interest = ::ridl_rt::port::Interest::ClaimStream(
+            claim,
+            ::ridl_rt::port::REPLY_STREAM,
+        );
+        if let Some((start, end)) = stream.held {
+            h.wake_on(interest, cx.waker());
+            let bytes = &::core::convert::AsRef::<
+                [u8],
+            >::as_ref(&stream.buffer)[start..end];
+            match h.push_claim(claim, ::ridl_rt::port::REPLY_STREAM, bytes) {
+                Ok(taken) if taken == bytes.len() => stream.held = None,
+                Ok(_) => return false,
+                Err(error) => {
+                    stop_stream(h, claim, error);
+                    *slot = None;
+                    return false;
+                }
+            }
+        }
+        if *budget == 0 {
+            return true;
+        }
+        *budget -= 1;
+        let element = match stream.source.poll_next(cx) {
+            ::core::task::Poll::Pending => return false,
+            ::core::task::Poll::Ready(None) => {
+                let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+                *slot = None;
+                return false;
+            }
+            ::core::task::Poll::Ready(Some(Err(::ridl_rt::face::Interrupted))) => {
+                let _ = h
+                    .abort_claim(
+                        claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                *slot = None;
+                return false;
+            }
+            ::core::task::Poll::Ready(Some(Ok(element))) => element,
+        };
+        let buf: &mut [u8] = ::core::convert::AsMut::as_mut(&mut stream.buffer);
+        let base = buf.as_ptr() as usize;
+        let checked = match ::ridl_rt::payload::Ref::<
+            T,
+            H::Encoding,
+        >::encode(&element, buf) {
+            Ok(encoded) => {
+                let bytes = encoded.bytes();
+                match ::ridl_rt::payload::Ref::<T, H::Encoding>::verify(bytes) {
+                    Ok(_) => {
+                        let start = bytes.as_ptr() as usize - base;
+                        Ok((start, start + bytes.len()))
+                    }
+                    Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                        Err(
+                            ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                            ),
+                        )
+                    }
+                    Err(_) => {
+                        Err(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Corrupt,
+                            ),
+                        )
+                    }
+                }
+            }
+            Err(::ridl_rt::payload::EncodeError::Contract(violation)) => {
+                Err(
+                    ::ridl_rt::error::CallError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                    ),
+                )
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding a stream element needs {} bytes and its buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding a stream element failed"),
+        };
+        let (start, end) = match checked {
+            Ok(range) => range,
+            Err(error) => {
+                let _ = h.abort_claim(claim, ::ridl_rt::port::REPLY_STREAM, error);
+                *slot = None;
+                return false;
+            }
+        };
+        h.wake_on(interest, cx.waker());
+        let bytes = &::core::convert::AsRef::<[u8]>::as_ref(&stream.buffer)[start..end];
+        match h.push_claim(claim, ::ridl_rt::port::REPLY_STREAM, bytes) {
+            Ok(taken) if taken == bytes.len() => true,
+            Ok(_) => {
+                stream.held = Some((start, end));
+                false
+            }
+            Err(error) => {
+                stop_stream(h, claim, error);
+                *slot = None;
+                false
+            }
+        }
+    }
+    fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
+        h: &mut H,
+        claim: ::ridl_rt::port::ClaimId,
+        error: ::ridl_rt::port::PushError,
+    ) {
+        match error {
+            ::ridl_rt::port::PushError::Failed(_) => {
+                let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+            }
+            ::ridl_rt::port::PushError::TooLarge { .. } => {
+                let _ = h
+                    .abort_claim(
+                        claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+            }
+            _ => {}
+        }
+    }
     /// Serves interface `Log`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
     ///
     /// # Panics
     ///
     /// Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Log as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Log` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
+    ///
+    /// # Streamed replies
+    ///
+    /// A query whose reply is a stream is served from the source its `Provider` method returns, once the arguments and the `require` clauses pass. Each poll of the future first drives every stream it holds, then takes claims: a stream whose last element found the window full pushes that element again, after it registered its interest in the stream, and polls its source only once the element was taken; otherwise the source is polled once, which counts as one of the 32 claims of the poll. An element is encoded into a buffer inline in the future and checked against its type before it is pushed; one that fails stops the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` ends the stream, and the claim is settled `Ok`; `Ready(Some(Err(Interrupted)))` stops it with `Transport::Interrupted`; a push above the member's limit (`PushError::TooLarge`) stops it with `Transport::Interrupted`; a push the caller refused or stopped reading (`PushError::Failed`) ends the claim. The source is dropped once its stream ended or stopped. The future drives one stream per member at a time: a call of a member whose stream is still running is settled `Transport::Busy`.
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
-            + ::ridl_rt::port::Wakeable,
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
         P: Provider,
         super::Log: ::ridl_rt::contract::Sizes<H::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
@@ -1887,7 +2150,7 @@ pub mod log {
         let state = match h
             .serve(
                 <super::Log as ::ridl_rt::contract::Interface>::NUMBER,
-                &[::ridl_rt::contract::Ordinal(2u32)],
+                &[::ridl_rt::contract::Ordinal(2u32), ::ridl_rt::contract::Ordinal(1u32)],
             )
         {
             Ok(()) => ServeState::Serving,
@@ -1898,6 +2161,10 @@ pub mod log {
             provider: p,
             buf: <super::Log as ::ridl_rt::contract::Sizes<H::Encoding>>::CLAIM_BUFFER,
             state,
+            streams: Streams {
+                __started: false,
+                history: None,
+            },
         }
     }
     ///The future `serve` returns over interface `Log`. It holds the handler, the provider, and the claim buffer of `<Log as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
@@ -1905,16 +2172,18 @@ pub mod log {
     pub struct Serve<
         'a,
         H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
-            + ::ridl_rt::port::Wakeable,
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
         P: Provider,
     >
     where
         super::Log: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         handler: H,
         provider: &'a mut P,
         buf: <super::Log as ::ridl_rt::contract::Sizes<H::Encoding>>::ClaimBuffer,
         state: ServeState,
+        streams: Streams<H, P>,
     }
     #[derive(Clone, Copy)]
     enum ServeState {
@@ -1927,7 +2196,7 @@ pub mod log {
     /// `Pin::new`.
     impl<
         H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
-            + ::ridl_rt::port::Wakeable,
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
         P: Provider,
     > ::core::marker::Unpin for Serve<'_, H, P>
     where
@@ -1937,7 +2206,7 @@ pub mod log {
     {}
     impl<
         H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
-            + ::ridl_rt::port::Wakeable,
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
         P: Provider,
     > ::core::future::Future for Serve<'_, H, P>
     where
@@ -1971,14 +2240,24 @@ pub mod log {
                             cx.waker(),
                         );
                     let mut budget = SERVE_BUDGET;
+                    let mut again = false;
+                    again
+                        |= drive_stream::<
+                            H,
+                            super::Reading,
+                            P::History,
+                        >(&mut this.handler, &mut this.streams.history, cx, &mut budget);
                     match dispatch(
                         &mut this.handler,
                         &mut *this.provider,
                         ::core::convert::AsMut::as_mut(&mut this.buf),
                         &mut budget,
+                        &mut this.streams,
                     ) {
                         Ok(_) => {
-                            if budget == 0 {
+                            if budget == 0 || again
+                                || ::core::mem::take(&mut this.streams.__started)
+                            {
                                 cx.waker().wake_by_ref();
                             }
                             ::core::task::Poll::Pending
@@ -2131,7 +2410,7 @@ pub mod log {
         ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
         where
             H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
-                + ::ridl_rt::port::Wakeable,
+                + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
             P: super::Provider,
             super::super::Log: ::ridl_rt::contract::Sizes<H::Encoding>,
             super::super::Level: ::ridl_rt::payload::Payload<H::Encoding>,

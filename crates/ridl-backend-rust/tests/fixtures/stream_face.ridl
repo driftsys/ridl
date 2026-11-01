@@ -1,10 +1,10 @@
-// The fixture of the caller side of a streamed reply of named elements
+// The fixture of a streamed reply of named elements
 // (docs/design/interaction-face.md). `Log` declares one query whose reply is
-// a stream of a named struct, beside a plain command, so its face carries a
-// `Provider` and a `serve` for the command while the stream query has the
-// client side alone. `Plain` declares one query with a named reply and no
-// stream, so its `Client` is the proof that the stream bound is added only
-// to an interface that declares a stream member.
+// a stream of a named struct, beside a plain command, so its face carries the
+// caller side of the stream and a `Provider` and a `serve` for both members.
+// `Plain` declares one query with a named reply and no stream, so its
+// `Client` and its `serve` are the proof that the stream bounds are added
+// only to an interface that declares a stream member.
 //
 // Kept self-contained, for the reason `interaction_face.ridl` gives.
 

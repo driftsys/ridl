@@ -25,8 +25,8 @@
 //!   verifies and decodes one element per chunk, and `async fn next` awaits
 //!   it. The `StreamCaller` bound joins the `Client`'s bounds only when the
 //!   interface declares such a member. Every other stream form is left out
-//!   of the face, with its descriptor written (driftsys/ridl#943), and so
-//!   are the provider side and the blocking client of this one;
+//!   of the face, with its descriptor written (driftsys/ridl#943), and so is
+//!   the blocking client of this one;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
 //! - the two per-interface traits, `Subscribe` (one `subscribe_<event>` per
@@ -40,7 +40,9 @@
 //!   derived method are written through the trait's path, so a member of
 //!   that name cannot capture them;
 //! - `Provider`, the trait the application implements, with one method per
-//!   command and query;
+//!   command and query; for a query whose reply is a stream of named
+//!   elements, an associated type named after the member, bound on
+//!   `ridl_rt::face::Source` of the element, which the method returns;
 //! - `check_catalog`, private, which panics unless a port's catalog is the
 //!   interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the
 //!   face, and `serve` where the interface emits one, call it once, before
@@ -48,7 +50,10 @@
 //!   async face;
 //! - `serve`, which registers the interface's calls with the handler and
 //!   returns the future that settles every claim, and resolves only when the
-//!   handler port fails;
+//!   handler port fails. For a query whose reply is a stream it keeps the
+//!   source the provider returned and drives it over the `StreamHandler`
+//!   port, which joins the handler's bounds only when the interface declares
+//!   such a member;
 //! - `blocking`, under the emitted crate's `std` feature, when the interface
 //!   declares an event, a command or a query: a `Client` that is the async
 //!   one with a timeout per client, each waiting method `block_on` over the
@@ -370,10 +375,12 @@ pub(crate) fn one_interface(
         }
         body.push(publisher(&iface, iface_name, &payloads, &signals, &events));
     }
-    if !commands.is_empty() || !queries.is_empty() {
-        body.push(provider(iface_name, &commands, &queries));
-        body.push(dispatch(&iface, &payloads, &commands, &queries));
-        body.push(serve(&iface, iface_name, &payloads, &commands, &queries));
+    if !commands.is_empty() || !queries.is_empty() || !streams.is_empty() {
+        body.push(provider(iface_name, &commands, &queries, &streams));
+        body.push(dispatch(&iface, &payloads, &commands, &queries, &streams));
+        body.push(serve(
+            &iface, iface_name, &payloads, &commands, &queries, &streams,
+        ));
     }
 
     if body.is_empty() {
@@ -1186,7 +1193,12 @@ fn publisher(
     }
 }
 
-fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStream {
+fn provider(
+    iface_name: &str,
+    commands: &[Call],
+    queries: &[Call],
+    streams: &[Call],
+) -> TokenStream {
     let command_methods = commands.iter().map(|call| {
         let member = &call.member;
         let method = &member.method;
@@ -1225,6 +1237,45 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
             fn #method(&mut self, #arg: &#path) -> #reply_path;
         }
     });
+    // A streamed reply: the method returns the source `serve` drives, whose
+    // type the application names through the associated type of the
+    // member's `camelCase` name.
+    let stream_methods = streams.iter().map(|call| {
+        let member = &call.member;
+        let method = &member.method;
+        let source = ident(member.camel);
+        let arg = &call.arg;
+        let path = ty(call.arg_type);
+        let element = call.reply_type.unwrap_or(call.arg_type);
+        let element_path = ty(element);
+        let type_doc = format!(
+            "The source of query `{}`'s reply stream, which `serve` polls \
+             for each `{element}` it sends.",
+            member.declared
+        );
+        let doc = format!(
+            "Serves query `{}`, whose reply is a stream of `{element}`: it \
+             returns the source `serve` drives. `serve` polls the source at \
+             most once per poll of its own, and only while the stream's window \
+             has room; it checks each element against its type before it is \
+             sent and ends the stream with `Contract::InvalidValue` on the \
+             first one that fails, sends `Ready(None)` as the end of the \
+             stream, and an `Interrupted` as `Transport::Interrupted`. The \
+             source is dropped once the stream ended, failed, or the caller \
+             stopped reading it. `ensure` clauses are not evaluated on a \
+             streamed reply.",
+            member.declared
+        );
+        let doc = call_doc(call, &doc);
+        let deprecated = deprecated_attr(member.deprecated);
+        quote! {
+            #[doc = #type_doc]
+            type #source: ::ridl_rt::face::Source<Item = #element_path>;
+            #doc
+            #deprecated
+            fn #method(&mut self, #arg: &#path) -> Self::#source;
+        }
+    });
     let doc = format!(
         "What an application implements to serve interface `{iface_name}`'s \
          calls.\n\nAn argument is taken by reference because `serve` reads \
@@ -1235,6 +1286,7 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
         pub trait Provider {
             #(#command_methods)*
             #(#query_methods)*
+            #(#stream_methods)*
         }
     }
 }
@@ -1312,7 +1364,7 @@ fn interface_number(iface: &Ident) -> TokenStream {
 /// emitted beside the face module, so it is reached through `super::`; a
 /// cross-package reference keeps the `crate::`-anchored path [`type_path`]
 /// builds.
-fn ty(reference: &str) -> TokenStream {
+pub(super) fn ty(reference: &str) -> TokenStream {
     if reference.contains('.') {
         type_path(reference)
     } else {

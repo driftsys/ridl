@@ -3,13 +3,19 @@
 //!
 //! It brings in the checked-in generated face of `tests/fixtures/stream_face.ridl`
 //! and drives the `Client` of `Log`, whose `history` replies with a stream of
-//! `Reading`. The provider side of such a query is not generated yet, so each
-//! test drives it by hand through the `StreamHandler` port of a loopback
-//! handler handle: it takes the claim, pushes encoded elements, and ends or
-//! aborts the stream. What the tests pin is the stream value's contract: the
+//! `Reading`. The tests of the caller side drive the provider by hand through
+//! the `StreamHandler` port of a loopback handler handle, so that each test
+//! chooses every push: it takes the claim, pushes encoded elements, and ends
+//! or aborts the stream. What they pin is the stream value's contract: the
 //! order of the elements and the end, the first chunk kept by the call's
 //! future, the registration of the waker, the refusal of an element that
-//! fails its check, and the one `forget` a drop or the end makes.
+//! fails its check, and the one `forget` a drop or the end makes. The tests of
+//! the provider side, at the end of the file, run the generated `serve` over a
+//! `Provider` whose sources follow a script: the order of the elements and
+//! the end, a source that is not ready, one source poll per poll of `serve`
+//! and its place in the budget, the element kept while the window is full,
+//! the interruption, the dropped stream, the second call of a running member,
+//! the check before the push, and the member's limit.
 //!
 //! The futures and the stream are polled by hand with
 //! `ridl_rt::task::noop_waker`, the way a frame loop polls, and the tests of
@@ -23,8 +29,10 @@
 )]
 mod support;
 
+use std::cell::Cell;
 use std::future::Future;
 use std::pin::{Pin, pin};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Wake, Waker};
@@ -33,10 +41,11 @@ use ridl_loopback::{HandlerHandle, Loopback};
 use ridl_rt::contract::{CatalogRef, Interaction, Interface, InterfaceNo, Ordinal, Sizes};
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::error::{CallError, ClientError, Contract, Transport};
+use ridl_rt::face::{Interrupted, Source};
 use ridl_rt::payload::{Ref, Rule, Violation};
 use ridl_rt::port::{
-    Attached, Caller, ClaimId, Clock, Correlation, Encoded, Handler, Interest, PushError,
-    REPLY_STREAM, ReadError, SendError, StreamHandler, Wakeable,
+    Attached, Caller, ClaimId, Clock, Correlation, Encoded, Handler, Interest, Pull, PushError,
+    REPLY_STREAM, ReadError, SendError, StreamCaller, StreamHandler, Wakeable,
 };
 use ridl_rt::sample::{Duration, Timestamp};
 use ridl_rt::trace::TraceContext;
@@ -108,9 +117,9 @@ fn reading(level: i64, flag: bool) -> Reading {
 }
 
 /// The provider of `history`, driven by hand over the `StreamHandler` port of
-/// a handler handle: the generated `serve` has no arm for a streamed reply
-/// yet. It serves `history` alone, takes the one claim a test sends, and
-/// pushes, ends or aborts the reply stream.
+/// a handler handle, so that a test chooses each push, including pushes the
+/// generated `serve` never makes. It serves `history` alone, takes the one
+/// claim a test sends, and pushes, ends or aborts the reply stream.
 struct Provider {
     handler: HandlerHandle,
     claim: Option<ClaimId>,
@@ -885,4 +894,589 @@ fn the_client_of_an_interface_without_a_stream_builds_over_a_port_without_the_ex
     assert!(poll_once(&mut call).is_pending());
     assert!(poll_once(&mut serve).is_pending());
     assert_eq!(poll_once(&mut call), Poll::Ready(Ok(reading(5, true))));
+}
+
+// ---------------------------------------------------------------------------
+// The provider side: the generated `serve` drives a `Source`.
+// ---------------------------------------------------------------------------
+
+/// What a `Scripted` source yields.
+#[derive(Clone, Default)]
+struct Script {
+    /// The elements, in order, before the end.
+    elements: Vec<Reading>,
+    /// Yield readings without end instead of `elements`.
+    endless: bool,
+    /// How many `Pending` answers come before each element.
+    pending_before_each: usize,
+    /// Stop with `Interrupted` after this many elements instead of the end.
+    interrupt_after: Option<usize>,
+}
+
+/// What the tests read from the sources and the provider while `serve`
+/// holds the provider.
+#[derive(Default)]
+struct Counters {
+    /// Calls of `Source::poll_next`, every source summed.
+    polls: Cell<usize>,
+    /// Sources the provider returned.
+    started: Cell<usize>,
+    /// Sources dropped.
+    dropped: Cell<usize>,
+}
+
+/// A source that follows its `Script`. It stores no waker on `Pending`: the
+/// tests poll `serve` by hand.
+struct Scripted {
+    script: Script,
+    yielded: usize,
+    pending_left: usize,
+    counters: Rc<Counters>,
+}
+
+impl Source for Scripted {
+    type Item = Reading;
+
+    fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<Result<Reading, Interrupted>>> {
+        self.counters.polls.set(self.counters.polls.get() + 1);
+        if self.pending_left > 0 {
+            self.pending_left -= 1;
+            return Poll::Pending;
+        }
+        if self.script.interrupt_after == Some(self.yielded) {
+            return Poll::Ready(Some(Err(Interrupted)));
+        }
+        let element = if self.script.endless {
+            reading(i64::try_from(self.yielded % 100).expect("below 100"), false)
+        } else {
+            match self.script.elements.get(self.yielded) {
+                Some(element) => *element,
+                None => return Poll::Ready(None),
+            }
+        };
+        self.yielded += 1;
+        self.pending_left = self.script.pending_before_each;
+        Poll::Ready(Some(Ok(element)))
+    }
+}
+
+impl Drop for Scripted {
+    fn drop(&mut self) {
+        self.counters.dropped.set(self.counters.dropped.get() + 1);
+    }
+}
+
+/// The generated `Provider` of `Log`: every `history` call gets a new source
+/// that follows `script`.
+struct Feed {
+    script: Script,
+    counters: Rc<Counters>,
+}
+
+impl Feed {
+    fn new(script: Script) -> (Self, Rc<Counters>) {
+        let counters = Rc::new(Counters::default());
+        (
+            Feed {
+                script,
+                counters: Rc::clone(&counters),
+            },
+            counters,
+        )
+    }
+}
+
+impl generated::log::Provider for Feed {
+    type History = Scripted;
+
+    fn clear(&mut self, _level: &Level) {}
+
+    fn history(&mut self, _limit: &Level) -> Scripted {
+        self.counters.started.set(self.counters.started.get() + 1);
+        Scripted {
+            pending_left: self.script.pending_before_each,
+            script: self.script.clone(),
+            yielded: 0,
+            counters: Rc::clone(&self.counters),
+        }
+    }
+}
+
+fn elements(count: i64) -> Vec<Reading> {
+    (1..=count).map(|i| reading(i, i % 2 == 0)).collect()
+}
+
+/// `history(3)` sent and its claim taken by `serve`, which starts the
+/// provider's source and polls it on no later poll than the next.
+fn sent<'a, P>(
+    client: &'a mut generated::log::Client<P>,
+    serve: &mut (impl Future + Unpin),
+) -> generated::log::HistoryCall<'a, P>
+where
+    P: Encoded<Encoding = FlatBuffers> + ridl_rt::port::StreamCaller + Clock + Wakeable,
+{
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending(), "the query was sent");
+    assert!(poll_once(serve).is_pending(), "serve took the claim");
+    call
+}
+
+#[test]
+fn serve_sends_a_sources_elements_in_order_then_the_end() {
+    let rt = loopback();
+    let script = Script {
+        elements: elements(3),
+        ..Script::default()
+    };
+    let (mut feed, counters) = Feed::new(script.clone());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = sent(&mut client, &mut serve);
+    assert_eq!(counters.started.get(), 1, "the provider returned a source");
+    assert_eq!(
+        counters.polls.get(),
+        0,
+        "the poll that started the stream polled no source"
+    );
+    for _ in 0..4 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    for element in &script.elements {
+        assert_eq!(next_once(&mut stream), Poll::Ready(Some(Ok(*element))));
+    }
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(None),
+        "Ready(None) is the end"
+    );
+    assert_eq!(counters.dropped.get(), 1, "the ended source was dropped");
+}
+
+#[test]
+fn serve_polls_a_pending_source_again_and_sends_each_element_once_it_is_ready() {
+    let rt = loopback();
+    let script = Script {
+        elements: elements(3),
+        pending_before_each: 2,
+        ..Script::default()
+    };
+    let (mut feed, counters) = Feed::new(script.clone());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = sent(&mut client, &mut serve);
+    // Two polls of `serve` answer `Pending` from the source, the third sends
+    // the element.
+    assert!(poll_once(&mut serve).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert!(
+        poll_once(&mut call).is_pending(),
+        "the source has given nothing yet"
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(Some(Ok(script.elements[0])))
+    );
+    for element in &script.elements[1..] {
+        assert!(poll_once(&mut serve).is_pending());
+        assert!(poll_once(&mut serve).is_pending());
+        assert!(
+            next_once(&mut stream).is_pending(),
+            "the source answered Pending"
+        );
+        assert!(poll_once(&mut serve).is_pending());
+        assert_eq!(next_once(&mut stream), Poll::Ready(Some(Ok(*element))));
+    }
+    assert!(poll_once(&mut serve).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    assert_eq!(
+        counters.polls.get(),
+        12,
+        "three Pending before each element and the end"
+    );
+}
+
+#[test]
+fn serve_polls_the_source_once_per_poll_of_its_own() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let _call = sent(&mut client, &mut serve);
+    for polls in 1..=3 {
+        assert!(poll_once(&mut serve).is_pending());
+        assert_eq!(
+            counters.polls.get(),
+            polls,
+            "one poll of serve polls the source once, although it has more ready"
+        );
+    }
+}
+
+/// A loopback handler with claims of its own added behind the runtime's:
+/// once the runtime has no claim waiting, it presents `extra` claims of
+/// ordinal 99, which no member of `Log` has, so `dispatch` settles each
+/// `Contract::UnknownInteraction`. The loopback's call table holds 16 calls,
+/// fewer than one poll of `serve` takes, so the budget is reached through
+/// these.
+struct Crowded {
+    inner: HandlerHandle,
+    extra: Rc<Cell<usize>>,
+    taken: Rc<Cell<usize>>,
+}
+
+/// The ids of the added claims, far above any id the loopback gives.
+const CROWD: u64 = 1 << 40;
+
+impl Attached for Crowded {
+    fn catalog(&self) -> &CatalogRef {
+        self.inner.catalog()
+    }
+}
+
+impl Encoded for Crowded {
+    type Encoding = FlatBuffers;
+}
+
+impl Handler for Crowded {
+    fn serve(
+        &mut self,
+        iface: InterfaceNo,
+        ords: &[Ordinal],
+    ) -> Result<(), ridl_rt::port::ServeError> {
+        self.inner.serve(iface, ords)
+    }
+
+    fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<ridl_rt::port::Claim>, ReadError> {
+        if let Some(claim) = self.inner.next_claim(out)? {
+            return Ok(Some(claim));
+        }
+        if self.extra.get() == 0 {
+            return Ok(None);
+        }
+        self.extra.set(self.extra.get() - 1);
+        self.taken.set(self.taken.get() + 1);
+        Ok(Some(ridl_rt::port::Claim {
+            id: ClaimId(CROWD + self.taken.get() as u64),
+            iface: LOG,
+            ord: Ordinal(99),
+            envelope: ridl_rt::sample::Envelope {
+                stamp: Timestamp(0),
+                seq: 0,
+            },
+            trace: None,
+            remaining: None,
+            len: 0,
+        }))
+    }
+
+    fn settle(
+        &mut self,
+        claim: ClaimId,
+        outcome: Result<&[u8], CallError>,
+    ) -> Result<(), ridl_rt::port::SettleError> {
+        if claim.0 > CROWD {
+            return Ok(());
+        }
+        self.inner.settle(claim, outcome)
+    }
+}
+
+impl StreamHandler for Crowded {
+    fn pull_claim(
+        &mut self,
+        claim: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+        out: &mut [u8],
+    ) -> Result<Pull, ReadError> {
+        self.inner.pull_claim(claim, s, out)
+    }
+
+    fn push_claim(
+        &mut self,
+        claim: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+        chunk: &[u8],
+    ) -> Result<usize, PushError> {
+        self.inner.push_claim(claim, s, chunk)
+    }
+
+    fn end_claim(
+        &mut self,
+        claim: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+    ) -> Result<(), PushError> {
+        self.inner.end_claim(claim, s)
+    }
+
+    fn abort_claim(
+        &mut self,
+        claim: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+        e: CallError,
+    ) -> Result<(), PushError> {
+        self.inner.abort_claim(claim, s, e)
+    }
+}
+
+impl Wakeable for Crowded {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        self.inner.wake_on(what, waker);
+    }
+}
+
+#[test]
+fn a_source_poll_counts_against_the_claims_one_poll_of_serve_takes() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let extra = Rc::new(Cell::new(0));
+    let taken = Rc::new(Cell::new(0));
+    let handler = Crowded {
+        inner: rt.handler(),
+        extra: Rc::clone(&extra),
+        taken: Rc::clone(&taken),
+    };
+    let mut serve = generated::log::serve(handler, &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let _call = sent(&mut client, &mut serve);
+
+    // 32 claims wait, the most one poll takes.
+    extra.set(32);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counters.polls.get(), 1, "the source was polled");
+    assert_eq!(
+        taken.get(),
+        31,
+        "the source poll counted as one of the 32 claims of the poll, so one claim waits"
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(taken.get(), 32, "the next poll takes it");
+}
+
+#[test]
+fn an_element_the_window_had_no_room_for_is_sent_on_a_later_poll_and_not_asked_for_again() {
+    let rt = loopback();
+    let script = Script {
+        elements: elements(10),
+        ..Script::default()
+    };
+    let (mut feed, counters) = Feed::new(script.clone());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = sent(&mut client, &mut serve);
+    assert!(poll_once(&mut serve).is_pending());
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    // The future pulled the first element; the window then takes four more,
+    // and the sixth finds it full and is held. Later polls push it again
+    // and do not poll the source.
+    for _ in 0..10 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    assert_eq!(
+        counters.polls.get(),
+        6,
+        "the source is not polled while its element waits for room in the window"
+    );
+    let mut received = Vec::new();
+    // Bounded, so that a stream that never ends fails the test instead of
+    // holding it.
+    for _ in 0..100 {
+        match next_once(&mut stream) {
+            Poll::Ready(Some(Ok(element))) => received.push(element),
+            Poll::Ready(None) => break,
+            Poll::Ready(Some(Err(error))) => panic!("the stream failed: {error:?}"),
+            Poll::Pending => assert!(poll_once(&mut serve).is_pending()),
+        }
+    }
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(None),
+        "the stream ended"
+    );
+    assert_eq!(received, script.elements, "every element, once, in order");
+    assert_eq!(
+        counters.polls.get(),
+        11,
+        "each element and the end were asked for once"
+    );
+}
+
+#[test]
+fn a_source_that_interrupts_after_three_elements_gives_them_then_the_interruption() {
+    let rt = loopback();
+    let script = Script {
+        elements: elements(5),
+        interrupt_after: Some(3),
+        ..Script::default()
+    };
+    let (mut feed, counters) = Feed::new(script.clone());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = sent(&mut client, &mut serve);
+    for _ in 0..4 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    for element in &script.elements[..3] {
+        assert_eq!(next_once(&mut stream), Poll::Ready(Some(Ok(*element))));
+    }
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(Some(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        ))))),
+        "the source's Interrupted reaches the consumer as Transport::Interrupted"
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    assert_eq!(
+        counters.dropped.get(),
+        1,
+        "the interrupted source was dropped"
+    );
+}
+
+#[test]
+fn a_dropped_stream_fails_the_next_push_and_serve_drops_the_source() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        pending_before_each: 1,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    // Every round sends a call, reads its first element, and drops the
+    // stream; `serve` reads `Failed(Transport(Interrupted))` from its next
+    // push, drops the source and settles the claim. One more round than the
+    // caller's call table holds shows that the claim of each dropped stream
+    // was settled, so its slot was given back, and that each source was
+    // dropped, so the member's slot in `serve` was free for the next call.
+    for round in 1..=Loopback::SLOTS + 1 {
+        let mut call = sent(&mut client, &mut serve);
+        assert!(poll_once(&mut serve).is_pending(), "Pending");
+        assert!(poll_once(&mut serve).is_pending(), "the first element");
+        let mut stream = resolved(poll_once(&mut call), "the first element");
+        assert!(next_once(&mut stream).is_ready());
+        drop(stream);
+        assert!(poll_once(&mut serve).is_pending(), "Pending");
+        assert_eq!(
+            counters.dropped.get(),
+            round - 1,
+            "the source is kept until a push fails"
+        );
+        assert!(poll_once(&mut serve).is_pending(), "the push that fails");
+        assert_eq!(counters.dropped.get(), round, "serve dropped the source");
+    }
+    assert_eq!(counters.started.get(), Loopback::SLOTS + 1);
+}
+
+#[test]
+fn a_second_call_while_the_members_stream_runs_is_settled_busy() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        pending_before_each: 1,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut first = generated::log::Client::new(rt.caller());
+    let mut second = generated::log::Client::new(rt.caller());
+
+    let _running = sent(&mut first, &mut serve);
+    let mut refused = sent(&mut second, &mut serve);
+    assert_eq!(
+        poll_once(&mut refused).map(|outcome| outcome.map(|_| ())),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Busy
+        )))),
+    );
+    assert_eq!(
+        counters.started.get(),
+        1,
+        "the provider was not called for it"
+    );
+}
+
+#[test]
+fn an_element_outside_its_range_stops_the_stream_before_it_is_sent() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        elements: vec![reading(1, false), reading(200, true), reading(2, false)],
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let invalid = CallError::Contract(Contract::InvalidValue(Violation {
+        type_name: Some("Level"),
+        rule: Rule::Range,
+    }));
+
+    // The reply stream is read through the bare port, so a chunk that
+    // crossed would be seen as a chunk, before any check of the consumer's.
+    let mut caller = rt.caller();
+    let correlation = generated::log::send_history(&mut caller, &Level::new_unchecked(3))
+        .expect("the query is sent")
+        .0;
+    for _ in 0..4 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut buf = [0u8; ELEMENT_MAX];
+    assert_eq!(
+        caller.pull(correlation, REPLY_STREAM, &mut buf),
+        Ok(Pull::Chunk(element_len())),
+        "the element in range was sent"
+    );
+    assert_eq!(
+        caller.pull(correlation, REPLY_STREAM, &mut buf),
+        Ok(Pull::Failed(invalid)),
+        "the element outside its range was not sent, and stopped the stream"
+    );
+    assert_eq!(counters.dropped.get(), 1, "the source was dropped");
+    assert_eq!(
+        counters.polls.get(),
+        2,
+        "the source was not polled after the refusal"
+    );
+}
+
+#[test]
+fn an_element_above_the_members_lowered_limit_is_refused_and_the_consumer_reads_interrupted() {
+    let mut rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        elements: elements(2),
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut call = sent(&mut client, &mut serve);
+    // The limit a `[limits.interaction]` entry would give `history`, one
+    // byte below one element's encoding. The argument and one element both
+    // encode to the same length in FlatBuffers, so no limit admits the call
+    // and refuses the element; the loopback applies the member's limit at
+    // each send, so the limit is lowered once the call was admitted.
+    rt.set_limit(LOG, HISTORY, element_len() - 1);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(
+        poll_once(&mut call).map(|outcome| outcome.map(|_| ())),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        )))),
+        "the push was refused TooLarge, and the stream stopped as interrupted"
+    );
+    assert_eq!(counters.dropped.get(), 1, "the source was dropped");
 }

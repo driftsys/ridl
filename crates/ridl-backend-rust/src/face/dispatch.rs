@@ -5,7 +5,7 @@
 
 use super::{
     Call, allow_deprecated, decode_args, encode_into_settled, encoding_bounds, ident,
-    interface_number,
+    interface_number, payload_buffer,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -22,6 +22,7 @@ pub(super) fn dispatch(
     payloads: &[&str],
     commands: &[Call],
     queries: &[Call],
+    streams: &[Call],
 ) -> TokenStream {
     let number = interface_number(iface);
     // The handler port states the encoding of the argument bytes this step
@@ -122,6 +123,61 @@ pub(super) fn dispatch(
         }
     });
 
+    // A query whose reply is a stream: once the arguments and `require`
+    // pass, the provider's method is called and its source is kept in the
+    // member's slot of `streams`, which `serve` drives on its later polls;
+    // nothing is settled here, because the stream's end or stop is the
+    // settlement. The face drives one stream per member at a time, so a
+    // second call of a member whose slot is held is settled
+    // `Transport::Busy`, the outcome of a call refused at admission that the
+    // caller may send again later; `require` is evaluated first, so a call
+    // that breaks it reads `PreconditionFailed` whatever the slot holds.
+    let stream_arms = streams.iter().map(|call| {
+        let member = &call.member;
+        let ordinal = &member.ordinal;
+        let method = &member.method;
+        let descriptor = &member.descriptor;
+        let decode = decode_args(call.arg_type, &port);
+        let buffer = payload_buffer(call.reply_type.unwrap_or(call.arg_type), &port);
+        quote! {
+            #ordinal => {
+                let decoded = #decode;
+                match decoded {
+                    Err(error) => h.settle(claim.id, Err(error)),
+                    Ok(__arg) => {
+                        match <#descriptor as ::ridl_rt::contract::Query>::require(&__arg) {
+                            Err(()) => h.settle(
+                                claim.id,
+                                Err(::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::PreconditionFailed,
+                                )),
+                            ),
+                            Ok(()) => {
+                                if streams.#method.is_some() {
+                                    h.settle(
+                                        claim.id,
+                                        Err(::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Busy,
+                                        )),
+                                    )
+                                } else {
+                                    streams.#method = Some(StreamSlot {
+                                        claim: claim.id,
+                                        source: p.#method(&__arg),
+                                        buffer: #buffer,
+                                        held: None,
+                                    });
+                                    streams.__started = true;
+                                    Ok(())
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
     // The step `serve` calls on each poll. It is an internal and carries
     // no doc; what it does, with `<Iface>` for the interface descriptor:
     //
@@ -160,7 +216,9 @@ pub(super) fn dispatch(
     //
     // Every claim that is taken is settled, including one whose interface
     // number or ordinal this interface does not recognise, which settles
-    // `Contract::UnknownInteraction`. A claim is counted only once
+    // `Contract::UnknownInteraction`. The one exception is a query whose
+    // reply is a stream and whose source was kept: `serve` settles it when it
+    // ends or stops the stream, and the pass counts it as settled. A claim is counted only once
     // `Handler::settle` has accepted it; a `SettleError` is left to the
     // handler, which already owns that claim's settlement, and the pass
     // continues with the next claim, except for an oversized claim, whose
@@ -175,7 +233,16 @@ pub(super) fn dispatch(
 
     // `dispatch` calls every `Provider` method, so it allows the lint when
     // one of them is deprecated.
-    let allow = allow_deprecated(commands.iter().chain(queries).map(|call| &call.member));
+    let allow = allow_deprecated(
+        commands
+            .iter()
+            .chain(queries)
+            .chain(streams)
+            .map(|call| &call.member),
+    );
+    // An interface with a stream member hands `dispatch` the slots its
+    // sources are kept in; any other keeps the four parameters.
+    let streams_param = (!streams.is_empty()).then(|| quote! { streams: &mut Streams<H, P>, });
     quote! {
         #allow
         pub(crate) fn dispatch<H, P>(
@@ -183,6 +250,7 @@ pub(super) fn dispatch(
             p: &mut P,
             buf: &mut [u8],
             budget: &mut usize,
+            #streams_param
         ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
         where
             H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
@@ -240,6 +308,7 @@ pub(super) fn dispatch(
                             match claim.ord {
                                 #(#command_arms)*
                                 #(#query_arms)*
+                                #(#stream_arms)*
                                 _ => h.settle(
                                     claim.id,
                                     Err(::ridl_rt::error::CallError::Contract(

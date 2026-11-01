@@ -467,6 +467,28 @@ rows are reachable only through the internal step directly, which is how
 `tests/interaction_face.rs` still exercises them — the test file is inside the
 crate that `include!`s the fixture, so `pub(crate)` reaches it.
 
+**A query whose reply is a stream of named elements** adds to the provider side.
+`Provider` gains `type <Name>: ridl_rt::face::Source<Item = T>` and
+`fn <name>(&mut self, ..) -> Self::<Name>`; `serve` registers the member with
+the others, and its `H`, and the blocking `serve`'s, add `StreamHandler`, only
+on an interface that declares such a member. `dispatch` checks the arguments and
+`require` as for any query, calls the method, and keeps the source in the
+member's slot of `Serve` without settling the claim; the face drives one stream
+per member at a time, and a call of a member whose slot is held is settled
+`Transport::Busy`. Each poll of `Serve` drives its streams before it takes
+claims. An element that found the stream's window full is kept, as a range of
+the element buffer inline in `Serve`, and pushed again on a later poll before
+the source is polled again; otherwise the source is polled at most once per
+poll, and that poll counts as one of the 32. An element is encoded and checked
+against its type before `push_claim`; one that fails stops the stream with
+`Contract::InvalidValue` and is not sent. `Ready(None)` is `end_claim`,
+`Err(Interrupted)` and a push refused `TooLarge` are `abort_claim` with
+`Transport::Interrupted`, and a push answered `Failed(_)`, a caller that refused
+or stopped reading the stream, is `end_claim`, which settles the claim so that
+the caller's call slot is given back. The source is dropped with its slot.
+`ensure` is not evaluated on a streamed reply. `tests/stream_face.rs` covers
+each path over `ridl-loopback`.
+
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
 the failure `serve` resolves to — and `Ok(0)` on a buffer shorter than
