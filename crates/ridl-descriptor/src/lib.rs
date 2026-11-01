@@ -106,12 +106,6 @@ pub enum VerifyError {
     /// The FlatBuffers structure is not sound: an offset or a length points
     /// outside the buffer, a required field is missing, an enum tag is unknown.
     Invalid(planus::Error),
-    /// A catalog embedded in a deployment descriptor failed the catalog
-    /// verifier. `catalog` is the name the deployment gives it.
-    EmbeddedCatalog {
-        catalog: String,
-        source: alloc::boxed::Box<VerifyError>,
-    },
 }
 
 impl fmt::Display for VerifyError {
@@ -131,21 +125,11 @@ impl fmt::Display for VerifyError {
                 "catalog descriptor version {v}; this toolchain reads version {SCHEMA_VERSION}"
             ),
             Self::Invalid(err) => write!(f, "catalog descriptor is malformed: {err}"),
-            Self::EmbeddedCatalog { catalog, source } => {
-                write!(f, "embedded catalog `{catalog}` is refused: {source}")
-            }
         }
     }
 }
 
-impl core::error::Error for VerifyError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            Self::EmbeddedCatalog { source, .. } => Some(source.as_ref()),
-            _ => None,
-        }
-    }
-}
+impl core::error::Error for VerifyError {}
 
 /// Checks the identifier and the version, then walks every table, vector
 /// and string once through the checked accessors so that a later read of

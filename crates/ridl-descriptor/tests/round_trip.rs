@@ -9,10 +9,11 @@
 //! then.
 
 use planus::ReadAsRoot;
+#[cfg(feature = "dedup")]
+use ridl_descriptor::EarlierCatalog;
 use ridl_descriptor::{
-    Catalog, CatalogRef, EarlierCatalog, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize,
-    Member, Payload, RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode,
-    UnboundedCause, finish,
+    Catalog, CatalogRef, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize, Member, Payload,
+    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause, finish,
 };
 
 fn sample() -> Catalog {

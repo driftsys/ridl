@@ -8,12 +8,11 @@
 //! needs no standard library.
 
 use alloc::boxed::Box;
-use alloc::string::ToString as _;
+use alloc::string::{String, ToString as _};
 use alloc::vec::Vec;
+use core::fmt;
 
 use planus::ReadAsRoot;
-
-use crate::VerifyError;
 
 pub mod generated;
 
@@ -34,6 +33,81 @@ pub const FILE_IDENTIFIER: [u8; 4] = *b"RDLD";
 
 /// The artifact suffix: `<deployment>.deployment.binfb`.
 pub const FILE_SUFFIX: &str = ".deployment.binfb";
+
+/// The deepest nesting of `AttributeValue` lists the verifier accepts.
+pub const MAX_ATTRIBUTE_DEPTH: usize = 16;
+
+/// Why a buffer is not a deployment descriptor this toolchain reads.
+#[derive(Debug)]
+pub enum VerifyError {
+    /// Fewer bytes than the root offset and the identifier need.
+    TooShort(usize),
+    /// Bytes 4..8 are not `FILE_IDENTIFIER`: another kind of file.
+    WrongIdentifier([u8; 4]),
+    /// A schema version this toolchain does not know.
+    WrongVersion(u32),
+    /// The FlatBuffers structure is not sound: an offset or a length points
+    /// outside the buffer, a required field is missing, an enum tag is unknown.
+    Invalid(planus::Error),
+    /// A catalog embedded in the deployment failed the catalog verifier.
+    /// `catalog` is the name the deployment gives it.
+    EmbeddedCatalog {
+        catalog: String,
+        source: Box<crate::VerifyError>,
+    },
+    /// An `AttributeValue` list nests deeper than [`MAX_ATTRIBUTE_DEPTH`].
+    TooDeep,
+    /// The attribute values, counted with every repeated visit of a shared
+    /// table, outnumber one for every 4 bytes of the buffer.
+    TooManyAttributeValues,
+}
+
+impl From<planus::Error> for VerifyError {
+    fn from(err: planus::Error) -> Self {
+        Self::Invalid(err)
+    }
+}
+
+impl fmt::Display for VerifyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TooShort(len) => write!(
+                f,
+                "{len} bytes is shorter than a deployment descriptor header"
+            ),
+            Self::WrongIdentifier(id) => write!(
+                f,
+                "not a deployment descriptor: file identifier {:?}, expected {:?}",
+                String::from_utf8_lossy(id),
+                String::from_utf8_lossy(&FILE_IDENTIFIER),
+            ),
+            Self::WrongVersion(v) => write!(
+                f,
+                "deployment descriptor version {v}; this toolchain reads version {SCHEMA_VERSION}"
+            ),
+            Self::Invalid(err) => write!(f, "deployment descriptor is malformed: {err}"),
+            Self::EmbeddedCatalog { catalog, source } => {
+                write!(f, "embedded catalog `{catalog}` is refused: {source}")
+            }
+            Self::TooDeep => write!(
+                f,
+                "attribute values nest deeper than {MAX_ATTRIBUTE_DEPTH} levels"
+            ),
+            Self::TooManyAttributeValues => {
+                write!(f, "the attribute values outnumber the size of the buffer")
+            }
+        }
+    }
+}
+
+impl core::error::Error for VerifyError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::EmbeddedCatalog { source, .. } => Some(source.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 /// Builds the descriptor buffer for `deployment`, with the header layout of
 /// [`crate::finish`]: the root offset at bytes 0..4, [`FILE_IDENTIFIER`] at
@@ -59,13 +133,13 @@ pub fn verify(bytes: &[u8]) -> Result<DeploymentRef<'_>, VerifyError> {
     if version != SCHEMA_VERSION {
         return Err(VerifyError::WrongVersion(version));
     }
-    walk(deployment)?;
+    walk(deployment, bytes.len() / 4)?;
     Ok(deployment)
 }
 
 /// Touches every field once, and verifies the embedded catalogs.
-fn walk(deployment: DeploymentRef<'_>) -> Result<(), VerifyError> {
-    walk_fields(deployment).map_err(VerifyError::Invalid)?;
+fn walk(deployment: DeploymentRef<'_>, budget: usize) -> Result<(), VerifyError> {
+    walk_fields(deployment, &mut Budget(budget))?;
     for catalog in deployment.catalogs().map_err(VerifyError::Invalid)? {
         let catalog = catalog.map_err(VerifyError::Invalid)?;
         let name = catalog.name().map_err(VerifyError::Invalid)?;
@@ -78,7 +152,12 @@ fn walk(deployment: DeploymentRef<'_>) -> Result<(), VerifyError> {
     Ok(())
 }
 
-fn walk_fields(deployment: DeploymentRef<'_>) -> planus::Result<()> {
+/// How many more `AttributeValue` tables the walk may visit. A table that
+/// several lists share is visited once per reference, so without a bound a
+/// small buffer can demand exponential work.
+struct Budget(usize);
+
+fn walk_fields(deployment: DeploymentRef<'_>, budget: &mut Budget) -> Result<(), VerifyError> {
     deployment.system()?;
     deployment.name()?;
     deployment.package()?;
@@ -102,7 +181,7 @@ fn walk_fields(deployment: DeploymentRef<'_>) -> planus::Result<()> {
         machine.name()?;
         machine.external()?;
         walk_strings(machine.labels()?)?;
-        walk_attributes(machine.attributes()?)?;
+        walk_attributes(machine.attributes()?, budget)?;
     }
     for component in deployment.components()? {
         let component = component?;
@@ -111,7 +190,7 @@ fn walk_fields(deployment: DeploymentRef<'_>) -> planus::Result<()> {
         component.external()?;
         walk_strings(component.instances()?)?;
         walk_strings(component.labels()?)?;
-        walk_attributes(component.attributes()?)?;
+        walk_attributes(component.attributes()?, budget)?;
     }
     for instance in deployment.instances()? {
         let instance = instance?;
@@ -119,7 +198,7 @@ fn walk_fields(deployment: DeploymentRef<'_>) -> planus::Result<()> {
         instance.instance()?;
         instance.machine()?;
         instance.external()?;
-        walk_attributes(instance.attributes()?)?;
+        walk_attributes(instance.attributes()?, budget)?;
         for key in instance.offers()? {
             let key = key?;
             key.catalog()?;
@@ -135,7 +214,7 @@ fn walk_fields(deployment: DeploymentRef<'_>) -> planus::Result<()> {
         walk_endpoint(link.consumer()?)?;
         walk_endpoint(link.producer()?)?;
         link.crossing()?;
-        walk_attributes(link.attributes()?)?;
+        walk_attributes(link.attributes()?, budget)?;
     }
     for route in deployment.routes()? {
         let route = route?;
@@ -154,8 +233,8 @@ fn walk_fields(deployment: DeploymentRef<'_>) -> planus::Result<()> {
         surface.link()?;
         surface.direction()?;
     }
-    walk_attributes(deployment.system_attributes()?)?;
-    walk_attributes(deployment.attributes()?)?;
+    walk_attributes(deployment.system_attributes()?, budget)?;
+    walk_attributes(deployment.attributes()?, budget)?;
     Ok(())
 }
 
@@ -175,23 +254,35 @@ fn walk_strings(strings: planus::Vector<'_, planus::Result<&str>>) -> planus::Re
 
 fn walk_attributes(
     attributes: planus::Vector<'_, planus::Result<AttributeRef<'_>>>,
-) -> planus::Result<()> {
+    budget: &mut Budget,
+) -> Result<(), VerifyError> {
     for attribute in attributes {
         let attribute = attribute?;
         attribute.ns()?;
         attribute.key()?;
         if let Some(value) = attribute.value()? {
-            walk_value(value)?;
+            walk_value(value, 1, budget)?;
         }
     }
     Ok(())
 }
 
-fn walk_value(value: AttributeValueRef<'_>) -> planus::Result<()> {
+fn walk_value(
+    value: AttributeValueRef<'_>,
+    depth: usize,
+    budget: &mut Budget,
+) -> Result<(), VerifyError> {
+    if depth > MAX_ATTRIBUTE_DEPTH {
+        return Err(VerifyError::TooDeep);
+    }
+    budget.0 = budget
+        .0
+        .checked_sub(1)
+        .ok_or(VerifyError::TooManyAttributeValues)?;
     value.scalar()?;
     if let Some(list) = value.list()? {
         for item in list {
-            walk_value(item?)?;
+            walk_value(item?, depth + 1, budget)?;
         }
     }
     Ok(())
