@@ -11,5 +11,7 @@ interface LaneAssist {
 service veh.diag.access {
   query readFaults(): FaultReport @[..100ms]
 }
+open enum Mode { OFF = 0, ON = 1 }
+internal open enum Gear { PARK = 0, DRIVE = 1 }
 
 component Lane { offers veh.adas.lane }

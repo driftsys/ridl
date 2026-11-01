@@ -109,7 +109,7 @@
       "name": "keyword.control.import.typl"
     },
     "keywords-modifier": {
-      "match": "\\binternal\\b",
+      "match": "\\b(?:internal\\b|open(?=\\s+enum(?:set)?\\b))",
       "name": "storage.modifier.typl"
     },
     "keywords-storage": {
