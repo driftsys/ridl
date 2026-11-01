@@ -112,7 +112,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "since": []
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     },
     {
@@ -198,7 +199,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "since": []
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     }
   ],
@@ -465,7 +467,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "since": []
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     }
   ],
