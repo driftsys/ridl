@@ -1114,7 +1114,14 @@ Rulings taken while the port was built. The source is the rustdoc of
 - A claim only offered through `ShortClaim` has no streams until it is taken.
 - The interaction's limit bounds every chunk in both directions.
 - A streamed reply reserves nothing in the codegen model.
-- No `Command` or `Query` impl is generated for a member that has a stream.
+- No `Command` or `Query` impl is generated for a member that has a stream
+  parameter, in either position of the call. A query whose reply is a stream of
+  named elements and whose only stream is that reply gets a `Query` impl with
+  `type Reply = ()`: the face's send evaluates `require` through it as for every
+  query, its settlement carries no reply bytes, because the elements travel on
+  the reply stream, so no payload type is claimed for a reply, and `()`
+  implements no `Payload`, so a generic caller cannot decode one from it; its
+  `ensure` is always `Ok`, because the checker refuses `result` on a stream.
 - A call table slot holds `Interest::Stream` wakers for four streams
   (`ridl_rt::correlate::STREAM_WAKERS`), not one per `(slot, StreamNo)` as R-6
   read; a waiter on a fifth stream of one call is handed back and woken at once
