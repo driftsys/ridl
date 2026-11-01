@@ -6656,6 +6656,21 @@ mod tests {
         assert!(!enum_set_def(&checked, "H").open);
     }
 
+    /// A derived enum set carries its own openness, not the one of its
+    /// backing enum, in both directions.
+    #[test]
+    fn a_derived_enum_set_carries_its_own_openness() {
+        let checked = check_source(
+            "p",
+            "package p\nopen enum O { A = 0 }\nenum S { A = 0 }\n\
+             open enumset OverStrict : S\nenumset StrictOverOpen : O\n",
+        );
+        assert!(enum_set_def(&checked, "OverStrict").open);
+        assert!(!enum_set_def(&checked, "StrictOverOpen").open);
+        assert!(enum_def(&checked, "O").open);
+        assert!(!enum_def(&checked, "S").open);
+    }
+
     #[test]
     fn an_open_enum_without_values_is_warned() {
         let empty = check_source("p", "package p\nopen enum E {}\n");

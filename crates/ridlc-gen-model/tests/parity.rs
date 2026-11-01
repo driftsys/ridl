@@ -138,7 +138,7 @@ fn the_model_carries_the_open_flag_of_an_enum_and_an_enum_set() {
     .expect("the manifest is written");
     std::fs::write(
         dir.path().join("p.typl"),
-        "package p\n\nopen enum Mode { OFF = 0, ON = 1 }\n\nopen enumset Flags : Mode\n\nenum Strict { A = 0 }\n\nenumset StrictFlags : Strict\n",
+        "package p\n\nopen enum Mode { OFF = 0, ON = 1 }\n\nopen enumset Flags : Mode\n\nenum Strict { A = 0 }\n\nenumset StrictFlags : Strict\n\nopen enumset OpenOverStrict : Strict\n\nenumset StrictOverOpen : Mode\n",
     )
     .expect("the source is written");
 
@@ -163,9 +163,12 @@ fn the_model_carries_the_open_flag_of_an_enum_and_an_enum_set() {
     assert_eq!(open_of("Flags"), (false, true));
     assert_eq!(open_of("Strict"), (false, false));
     assert_eq!(open_of("StrictFlags"), (false, false));
+    // A derived set carries its own openness, not the one of its enum.
+    assert_eq!(open_of("OpenOverStrict"), (false, true));
+    assert_eq!(open_of("StrictOverOpen"), (false, false));
 
     let json = codegen::to_json_pretty(model).expect("the model renders");
-    assert_eq!(json.matches("\"open\": true").count(), 2, "{json}");
+    assert_eq!(json.matches("\"open\": true").count(), 3, "{json}");
 }
 
 /// Every regular file under `dir`, keyed by its path relative to `dir`.
