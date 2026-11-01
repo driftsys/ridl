@@ -32,6 +32,19 @@ struct AB {
   c : (x: integer [0..10], y: integer [0..10])
 }
 
+// Two nested positions whose induced Rust names are one (`NBCDP`), of one
+// shape, whose wire names differ by the position: the declaring package gives
+// them one entry under the wire name of the first reached (`N.bC.1`,
+// `NBCField1`), and an importing package that reaches `NB` before `N` names
+// that same head for both.
+struct N {
+  bC : (dP : (x: integer [0..10], y: integer [0..10]))
+}
+
+struct NB {
+  cD : (q : integer [0..10], p : (x: integer [0..10], y: integer [0..10]))
+}
+
 // A tuple as the key and as the value of a map: the entry head and both
 // tuple heads are tail heads, which only the declaring header defines.
 struct Table {

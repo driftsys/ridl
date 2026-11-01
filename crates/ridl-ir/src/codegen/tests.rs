@@ -4001,6 +4001,136 @@ fn a_tuple_in_a_parameter_is_named_from_its_interaction() {
     );
 }
 
+/// A tuple of `Small` fields named `names`.
+fn tuple_of(names: &[&str]) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: names
+                .iter()
+                .map(|name| v2::TupleField {
+                    name: name.to_string(),
+                    r#type: Some(named("Small")),
+                })
+                .collect(),
+        })),
+        ..Default::default()
+    }
+}
+
+/// A tuple whose fields are `fields`.
+fn tuple(fields: Vec<v2::TupleField>) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType { fields })),
+        ..Default::default()
+    }
+}
+
+/// A public struct with one member, `name` of type `ty`.
+fn one_member_struct(name: &str, member_name: &str, ty: v2::FieldType) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![member(1, member_name, ty)],
+            ..Default::default()
+        })),
+        ..Default::default()
+    }
+}
+
+/// [`package_a`] with `struct A { bC : (dP : (x, y)) }` and
+/// `struct AB { cD : (q, p : (x, y)) }`: position 1 of the tuple at `A.bC`
+/// and position 2 of the tuple at `AB.cD` induce one Rust name, `ABCDP`,
+/// from one shape, so `a` gives them one entry under the wire name of the
+/// position it reaches first, `ABCField1`.
+fn shared_entry_package() -> v2::Package {
+    let mut a = package_a();
+    a.decls.push(one_member_struct(
+        "A",
+        "bC",
+        tuple(vec![v2::TupleField {
+            name: "dP".to_string(),
+            r#type: Some(tuple_of(&["x", "y"])),
+        }]),
+    ));
+    a.decls.push(one_member_struct(
+        "AB",
+        "cD",
+        tuple(vec![
+            v2::TupleField {
+                name: "q".to_string(),
+                r#type: Some(named("Small")),
+            },
+            v2::TupleField {
+                name: "p".to_string(),
+                r#type: Some(tuple_of(&["x", "y"])),
+            },
+        ]),
+    ));
+    a
+}
+
+/// The wire names of the heads of the tuples of another package that `model`
+/// lays out inline, sorted.
+fn nested_tuple_wires(model: &v1::Model) -> Vec<String> {
+    let mut wires: Vec<String> = model
+        .podbuf
+        .as_ref()
+        .expect("a podbuf projection")
+        .heads
+        .iter()
+        .filter_map(|head| match head.source.as_ref()? {
+            v1::podbuf_head::Source::NestedTuple(nested) => Some(nested.wire.clone()),
+            _ => None,
+        })
+        .collect();
+    wires.sort();
+    wires
+}
+
+/// An importing package names a foreign tuple's head by the wire name the
+/// declaring package gives it, whether it reaches `A` before `AB` or after:
+/// the shared entry is `ABCField1` in both orders, and no head is named
+/// `ABCDField2` (driftsys/ridl#1150).
+#[test]
+fn a_foreign_shared_entry_keeps_the_declaring_wire_name_in_either_order() {
+    let a = shared_entry_package();
+    for (order, members) in [
+        ("declaring order", ["a", "ab"]),
+        ("reverse order", ["ab", "a"]),
+    ] {
+        let b = v2::Package {
+            name: "b".to_string(),
+            decls: vec![v2::Decl {
+                name: "B".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: members
+                        .iter()
+                        .enumerate()
+                        .map(|(index, name)| {
+                            member(
+                                index as u32 + 1,
+                                name,
+                                named(&format!("a.{}", name.to_uppercase())),
+                            )
+                        })
+                        .collect(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let model = lower(&b, &[&a]);
+        assert_eq!(
+            nested_tuple_wires(&model),
+            ["ABC", "ABCD", "ABCField1"],
+            "{order}"
+        );
+    }
+}
+
 /// A call with two parameters induces one argument struct, with one field
 /// per parameter in declaration order (driftsys/ridl#713).
 #[test]

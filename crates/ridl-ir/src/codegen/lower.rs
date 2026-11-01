@@ -46,29 +46,9 @@ pub fn lower_with(
     compatible: &[[u8; 32]],
 ) -> v1::Model {
     let scope = Scope { package, others };
-    let mut lowering = Lowering {
-        scope,
-        deps: scope.packages().collect(),
-        sizes: Ctx::new(package, others),
-        inits: Inits::new(scope),
-        closures: Closures::new(scope),
-        foreign: Vec::new(),
-        foreign_at: HashMap::new(),
-        tuples: Vec::new(),
-        tuple_at: HashMap::new(),
-        collisions: Vec::new(),
-    };
+    let mut lowering = Lowering::new(scope);
 
-    let declarations: Vec<v1::Declaration> = package
-        .decls
-        .iter()
-        .enumerate()
-        .map(|(index, decl)| {
-            let path = Path::declaration(index as u32, decl, &decl.name);
-            lowering.declaration(package, decl, Some(path))
-        })
-        .collect();
-    lowering.drain_tuples();
+    let declarations = lowering.declarations();
 
     let interfaces = lowering.shapes();
     lowering.drain_tuples();
@@ -395,18 +375,72 @@ struct Lowering<'a> {
     foreign: Vec<v1::ForeignDeclaration>,
     foreign_at: HashMap<(String, String), u32>,
     tuples: Vec<TupleEntry<'a>>,
-    /// The entry each induced Rust name claims, by home package and name:
-    /// a position of the same shape that spells a claimed name reuses the
-    /// entry, in the lowered package and in a declaration of another package
-    /// alike, so that the two lowerings give one tuple one wire name.
+    /// The entry each induced Rust name claims, by home package and name, for
+    /// a position of the lowered package: a position of the same shape that
+    /// spells a claimed name reuses the entry.
     tuple_at: HashMap<(String, String), usize>,
+    /// The named tuples of another package's own lowering, by package name,
+    /// filled the first time a position inside one of its declarations is
+    /// reached. A position inside a declaration of another package takes its
+    /// entry and its wire name from these, so that the name is the one the
+    /// declaring package gives the tuple, whatever order this package reaches
+    /// that package's declarations in (driftsys/ridl#1150).
+    declaring_claims: HashMap<String, Vec<Claim>>,
+    /// The entry a position inside a declaration of another package was
+    /// lifted at, by the declaring package and the index of its claim.
+    foreign_tuple_at: HashMap<(String, u32), usize>,
     collisions: Vec<v1::TupleCollision>,
 }
 
+/// One named tuple of a package's own lowering, as an importing lowering
+/// reads it: the identity a position matches by, the wire name it takes, and
+/// the entry's index in the declaring package's `Model.tuples`.
+struct Claim {
+    rust: String,
+    source: v2::TupleType,
+    visibility: i32,
+    wire: String,
+    index: u32,
+}
+
 impl<'a> Lowering<'a> {
+    fn new(scope: Scope<'a>) -> Self {
+        Self {
+            scope,
+            deps: scope.packages().collect(),
+            sizes: Ctx::new(scope.package, scope.others),
+            inits: Inits::new(scope),
+            closures: Closures::new(scope),
+            foreign: Vec::new(),
+            foreign_at: HashMap::new(),
+            tuples: Vec::new(),
+            tuple_at: HashMap::new(),
+            declaring_claims: HashMap::new(),
+            foreign_tuple_at: HashMap::new(),
+            collisions: Vec::new(),
+        }
+    }
+
     // -----------------------------------------------------------------
     // Declarations
     // -----------------------------------------------------------------
+
+    /// The declarations of the lowered package, in order, and then every
+    /// tuple they reach.
+    fn declarations(&mut self) -> Vec<v1::Declaration> {
+        let package = self.scope.package;
+        let declarations = package
+            .decls
+            .iter()
+            .enumerate()
+            .map(|(index, decl)| {
+                let path = Path::declaration(index as u32, decl, &decl.name);
+                self.declaration(package, decl, Some(path))
+            })
+            .collect();
+        self.drain_tuples();
+        declarations
+    }
 
     fn declaration(
         &mut self,
@@ -758,11 +792,12 @@ impl<'a> Lowering<'a> {
     /// claim is reused. A position of this package whose claim is held by a
     /// tuple of a different shape or a different visibility is a collision,
     /// recorded as a fact for the printer to refuse with its own message. A
-    /// position inside a declaration of another package in the same case gets
-    /// a second entry and records nothing: the declaring package records that
-    /// collision, and the podbuf walk refuses the pair when it meets both
-    /// and their wire names are equal.
+    /// position inside a declaration of another package is matched against
+    /// that package's own claims instead (`foreign_tuple_ref`).
     fn tuple_ref(&mut self, home: &'a v2::Package, tuple: &v2::TupleType, at: &Path) -> u32 {
+        if !at.named {
+            return self.foreign_tuple_ref(home, tuple, at);
+        }
         let claim = (home.name.clone(), at.rust.clone());
         if let Some(index) = self.tuple_at.get(&claim).copied() {
             let existing = &self.tuples[index];
@@ -776,13 +811,6 @@ impl<'a> Lowering<'a> {
             if existing.source == *tuple && existing.path.visibility == at.visibility {
                 self.tuples[index].keys.extend(at.key.clone());
                 return index as u32;
-            }
-            // A collision inside a declaration of another package is that
-            // package's to record; here the two positions get two entries,
-            // and the podbuf walk refuses the pair when it meets both under
-            // one wire name.
-            if !at.named {
-                return self.lift(home, tuple, at, claim);
             }
             self.collisions.push(v1::TupleCollision {
                 name: at.rust.clone(),
@@ -799,32 +827,101 @@ impl<'a> Lowering<'a> {
                     .collect(),
             });
         }
-        self.lift(home, tuple, at, claim)
+        // A colliding entry keeps the claim.
+        let index = self.lift(home, tuple, at, at.wire.clone());
+        self.tuple_at.entry(claim).or_insert(index);
+        index as u32
     }
 
-    /// A new entry for the tuple at `at`, which claims `claim` unless a
-    /// colliding entry already holds it.
+    /// A position inside a declaration of another package, `home`. The tuple
+    /// there is one of `home`'s own named tuples, found among `home`'s claims
+    /// by the position's induced Rust name, its shape and its visibility, and
+    /// the entry takes that tuple's wire name. Two positions with one claim
+    /// are one tuple and share one entry; a collision between them is `home`'s
+    /// to record, and the podbuf walk refuses two entries of `home` under one
+    /// wire name when it meets both.
+    ///
+    /// Every position inside a declaration of `home` has a claim, because
+    /// `home`'s own lowering reaches the same positions under the same names.
+    /// A position with no claim is an internal error: its entry gets no wire
+    /// name, which the podbuf walk refuses, rather than a name derived here.
+    fn foreign_tuple_ref(
+        &mut self,
+        home: &'a v2::Package,
+        tuple: &v2::TupleType,
+        at: &Path,
+    ) -> u32 {
+        let claim = self
+            .declaring_claims(home)
+            .iter()
+            .find(|claim| {
+                claim.rust == at.rust && claim.source == *tuple && claim.visibility == at.visibility
+            })
+            .map(|claim| (claim.index, claim.wire.clone()));
+        let Some((claimed, wire)) = claim else {
+            return self.lift(home, tuple, at, String::new()) as u32;
+        };
+        let key = (home.name.clone(), claimed);
+        if let Some(index) = self.foreign_tuple_at.get(&key).copied() {
+            self.tuples[index].keys.extend(at.key.clone());
+            return index as u32;
+        }
+        let index = self.lift(home, tuple, at, wire);
+        self.foreign_tuple_at.insert(key, index);
+        index as u32
+    }
+
+    /// The claims of `declaring`: the named tuples of its own lowering, over
+    /// the rest of the scope, in `Model.tuples` order. Lowered once, the first
+    /// time a position inside one of its declarations is reached. Imports are
+    /// acyclic (ADR-0002), so lowering the declaring package ends.
+    fn declaring_claims(&mut self, declaring: &'a v2::Package) -> &[Claim] {
+        if !self.declaring_claims.contains_key(&declaring.name) {
+            let others = self.scope.projection_others(declaring);
+            let mut lowering = Lowering::new(Scope {
+                package: declaring,
+                others: &others,
+            });
+            lowering.declarations();
+            let claims = lowering
+                .tuples
+                .iter()
+                .enumerate()
+                .filter(|(_, entry)| entry.named)
+                .map(|(index, entry)| Claim {
+                    rust: entry.rust.clone(),
+                    source: entry.source.clone(),
+                    visibility: entry.path.visibility,
+                    wire: entry.wire.clone(),
+                    index: index as u32,
+                })
+                .collect();
+            self.declaring_claims.insert(declaring.name.clone(), claims);
+        }
+        &self.declaring_claims[&declaring.name]
+    }
+
+    /// A new entry for the tuple at `at`, under the wire name `wire`.
     fn lift(
         &mut self,
         home: &'a v2::Package,
         tuple: &v2::TupleType,
         at: &Path,
-        claim: (String, String),
-    ) -> u32 {
+        wire: String,
+    ) -> usize {
         let index = self.tuples.len();
-        self.tuple_at.entry(claim).or_insert(index);
         self.tuples.push(TupleEntry {
             source: tuple.clone(),
             home,
             path: at.clone(),
             rust: at.rust.clone(),
-            wire: at.wire.clone(),
+            wire,
             named: at.named,
             keys: at.key.clone().into_iter().collect(),
             docs: Vec::new(),
             lowered: None,
         });
-        index as u32
+        index
     }
 
     /// Lowers every tuple the walk reached, in discovery order; lowering one

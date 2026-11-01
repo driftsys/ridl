@@ -452,6 +452,23 @@ a field is appended.
    headers of two separate builds are not checked against each other;
    [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) lists the gap.
 
+   _Amended 2026-11-01, from driftsys/ridl#1150._ The wire name an importing
+   header gives a foreign tuple's head comes from the declaring package's own
+   lowering, not from the order the importing package reaches that package's
+   declarations in. The importing lowering lowers the declaring package once,
+   the first time it reaches a position inside one of its declarations, and
+   matches each such position to one named tuple of that lowering by its induced
+   Rust name, its shape and its visibility; the position takes that tuple's
+   entry and its wire name. Two positions of the declaring package that share
+   one entry across two declarations (`A.bC.1` and `AB.cD.2`, both `ABCDP`) are
+   named `ABCField1` in every header; before, an importing header that reached
+   `AB` first named them `ABCDField2`, and the text comparison of the 2026-10-31
+   amendment (driftsys/ridl#1153) refused a valid workspace. That comparison
+   stays: the two definitions of one identity are now expected to be equal, and
+   a disagreement between the two lowerings is refused rather than written. A
+   position no claim matches is an internal error, refused by the podbuf walk,
+   never a name derived by the importer.
+
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:
    1. The buffer start is 8-aligned and the length is at least 8. In the
@@ -949,6 +966,8 @@ stated in the decision above; this list is the index.
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                         |
 | [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
 

@@ -9,6 +9,8 @@ import pod.parts.Pair
 import pod.parts.Mount
 import pod.parts.A
 import pod.parts.AB
+import pod.parts.N
+import pod.parts.NB
 import pod.parts.Table
 
 struct Axle {
@@ -23,6 +25,10 @@ struct Axle {
   // `a` before `ab`: the order the declaring package lowers them in.
   a     : A
   ab    : AB
+  // `nb` before `n`: the reverse of the order the declaring package lowers
+  // them in.
+  nb    : NB
+  n     : N
   table : Table
   // The shape of `Pair.a`, local to this package: no foreign head uses it.
   own   : (x: integer [0..10], y: integer [0..10])

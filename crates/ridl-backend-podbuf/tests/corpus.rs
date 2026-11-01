@@ -203,6 +203,20 @@ fn two_positions_that_share_one_entry_share_one_head_in_both_headers() {
             1,
             "{name}: one definition of the shared head"
         );
+        // The nested pair `N.bC.1` and `NB.cD.2`, which `pod.vehicle` reaches
+        // in the reverse order: the shared head keeps the declaring package's
+        // wire name, and no head is named by the second position.
+        let nbc = head_body(&header, "pod_parts_nbc_head");
+        assert!(
+            nbc.contains("pod_parts_nbc_field1_head d_p;"),
+            "{name}: {nbc}"
+        );
+        let nbcd = head_body(&header, "pod_parts_nbcd_head");
+        assert!(
+            nbcd.contains("pod_parts_nbc_field1_head p;"),
+            "{name}: {nbcd}"
+        );
+        assert!(!header.contains("pod_parts_nbcd_field2_head"), "{name}");
     }
 }
 

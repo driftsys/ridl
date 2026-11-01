@@ -515,6 +515,18 @@ impl Walk<'_> {
                     wire,
                     entry,
                 } = tuple;
+                // Unreachable for checked input too: the lowering of the
+                // declaring package reaches every position of its
+                // declarations, so the importing lowering finds a claim for
+                // each. An entry with no wire name is a position no claim
+                // matched, and is refused rather than named here.
+                if wire.is_empty() {
+                    return Err(format!(
+                        "{at}: internal: the lowering of package {package} has no tuple with \
+                         the induced name and the shape of this position (the two lowerings \
+                         disagree)"
+                    ));
+                }
                 let identity = (package.clone(), wire.clone());
                 if let Some((index, known, first)) = self.nested.get(&identity) {
                     if known == entry {
