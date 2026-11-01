@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import {
   AttachError,
   AttachRefused,
+  BLOCK_BYTES,
   connect,
   decode,
   encode,
@@ -9,6 +11,7 @@ import {
   ProtocolError,
   SessionError,
   SUBPROTOCOL,
+  SUBPROTOCOL_V1,
 } from "../mod.ts";
 import type {
   ConnectOptions,
@@ -21,6 +24,15 @@ import type {
   Target,
 } from "../mod.ts";
 import { FakeSocket } from "./fake_socket.ts";
+import {
+  BLOCK_LAST,
+  BLOCK_ONE,
+  blockMessage,
+  blockViolations,
+  concat,
+  pattern,
+  sha256,
+} from "./block_vectors.ts";
 
 const HASH = Uint8Array.from({ length: 32 }, (_, i) => i);
 const SIGNAL: Target = { kind: Kind.Signal, iface: 1, ord: 2 };
@@ -56,10 +68,12 @@ function start(name = "veh.cabin", extra: Partial<ConnectOptions> = {}) {
   return { sockets, pending, notes, publishes, occurrences };
 }
 
-async function attached(): Promise<Harness & { session: Session }> {
+async function attached(
+  protocol = SUBPROTOCOL,
+): Promise<Harness & { session: Session }> {
   const h = start();
   const socket = h.sockets[0];
-  socket.open(SUBPROTOCOL);
+  socket.open(protocol);
   socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
   const session = await h.pending;
   return { ...h, socket, session };
@@ -134,15 +148,31 @@ async function subscribed(h: Harness & { session: Session }, t: Target) {
   await done;
 }
 
-Deno.test("connect sends attach with the catalog, frame version 1 and proto3", async () => {
+Deno.test("connect offers ridl-ws-v2 then ridl-ws-v1 and attaches with frame version 2 on ridl-ws-v2", async () => {
   const h = start();
   assert.equal(h.sockets.length, 1);
   const socket = h.sockets[0];
   assert.equal(socket.url, "ws://127.0.0.1:9000");
-  assert.deepEqual(socket.protocols, [SUBPROTOCOL]);
+  assert.deepEqual(socket.protocols, ["ridl-ws-v2", "ridl-ws-v1"]);
   assert.equal(socket.binaryType, "arraybuffer");
   assert.equal(socket.sent.length, 0);
-  socket.open(SUBPROTOCOL);
+  socket.open("ridl-ws-v2");
+  assert.deepEqual(frames(socket), [{
+    form: "attach",
+    frameVersion: 2,
+    encoding: 2,
+    hash: HASH,
+    name: "veh.cabin",
+  }]);
+  socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  await h.pending;
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("the session attaches with frame version 1 when the server selects ridl-ws-v1", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open("ridl-ws-v1");
   assert.deepEqual(frames(socket), [{
     form: "attach",
     frameVersion: 1,
@@ -169,6 +199,74 @@ Deno.test("connect rejects with no-subprotocol and closes without a code when th
     note: "violation",
     violation: "no-subprotocol",
   }]);
+});
+
+Deno.test("a server that selects ridl-ws-v3 is a no-subprotocol violation", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open("ridl-ws-v3");
+  await assert.rejects(
+    h.pending,
+    (e: unknown) => e instanceof ProtocolError && e.cause === "no-subprotocol",
+  );
+  assert.deepEqual(socket.closes, [{}]);
+  assert.equal(socket.sent.length, 0);
+  assert.deepEqual(h.notes, [{
+    note: "violation",
+    violation: "no-subprotocol",
+  }]);
+});
+
+Deno.test("a block on a frame version 1 session is an unknown-code violation", async () => {
+  const h = await attached(SUBPROTOCOL_V1);
+  const reading = h.session.read(FIXED);
+  // Handled now, so that a failed assertion below is reported as itself.
+  const down = assert.rejects(reading, isFailure("down"));
+  h.socket.deliver(BLOCK_ONE);
+  assert.deepEqual(h.socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{ note: "violation", violation: "unknown-code" }]);
+  await down;
+});
+
+Deno.test("a malformed form 11 message on a frame version 1 session is an unknown-code violation", async () => {
+  const lastLong = blockViolations().find((v) => v.id === "bad-last-long");
+  assert.ok(lastLong);
+  for (const message of [lastLong.message, Uint8Array.of(11)]) {
+    const h = await attached(SUBPROTOCOL_V1);
+    h.socket.deliver(message);
+    assert.deepEqual(h.socket.closes, [{}]);
+    assert.deepEqual(h.notes, [{
+      note: "violation",
+      violation: "unknown-code",
+    }]);
+  }
+  // Before `attached`: the block is refused as an unknown form, not as an
+  // unexpected one.
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL_V1);
+  socket.deliver(BLOCK_ONE);
+  await assert.rejects(
+    h.pending,
+    (e: unknown) => e instanceof ProtocolError && e.cause === "unknown-code",
+  );
+  assert.deepEqual(socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{ note: "violation", violation: "unknown-code" }]);
+});
+
+Deno.test("a malformed form 11 message on a frame version 2 session is the decoder's violation", async () => {
+  const lastLong = blockViolations().find((v) => v.id === "bad-last-long");
+  assert.ok(lastLong);
+  const cases: [Uint8Array, string][] = [
+    [lastLong.message, "bad-block"],
+    [Uint8Array.of(11), "too-short"],
+  ];
+  for (const [message, violation] of cases) {
+    const h = await attached(SUBPROTOCOL);
+    h.socket.deliver(message);
+    assert.deepEqual(h.socket.closes, [{}]);
+    assert.deepEqual(h.notes, [{ note: "violation", violation }]);
+  }
 });
 
 Deno.test("connect rejects with AttachRefused catalog-mismatch and closed reports the refusal", async () => {
@@ -1055,6 +1153,55 @@ Deno.test("the limit of a raised member is keyed by its kind: a read of a fixed 
   assert.equal((await reading).payload?.length, 65_280);
 });
 
+Deno.test("a limit above 65,280 is held only for a fixed: a signal with such a limit stays live up to it", async () => {
+  const h = await attachedWith({
+    interfaces: [{
+      iface: 1,
+      big: { iface: 1, ord: 2, kind: "signal", limit: 70_000 },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 65_281));
+  assert.equal(h.publishes[0].sample.provenance, "live");
+  assert.equal(h.publishes[0].sample.payload?.length, 65_281);
+  assert.equal(h.publishes[0].sample.detected, undefined);
+});
+
+Deno.test("a limit above 65,280 is held only for a fixed: an event with such a limit is delivered up to it", async () => {
+  const h = await attachedWith({
+    interfaces: [{
+      iface: 1,
+      big: { iface: 1, ord: 3, kind: "event", limit: 70_000 },
+    }],
+  });
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(65_281),
+  });
+  assert.equal(h.occurrences.length, 1);
+  assert.equal(h.occurrences[0].payload.length, 65_281);
+  assert.equal(h.occurrences[0].detected, undefined);
+});
+
+for (const kind of ["command", "query"] as const) {
+  Deno.test(`a limit above 65,280 is held only for a fixed: the arguments of a ${kind} are accepted up to it`, async () => {
+    const h = await attachedWith({
+      interfaces: [{
+        iface: 1,
+        big: { iface: 1, ord: 5, kind, limit: 70_000 },
+      }],
+    });
+    const call = h.session[kind](1, 5, new Uint8Array(65_281), { bound: 1000 });
+    const sent = h.socket.sent.length;
+    assert.ok(sent > 1, "the arguments are sent, as more than one message");
+    h.socket.serverClose(1000);
+    await assert.rejects(call, isFailure("down"));
+  });
+}
+
 Deno.test("an occurrence above the default ceiling of an event is delivered empty with detected corrupt", async () => {
   const h = await attached();
   await subscribed(h, EVENT);
@@ -1122,10 +1269,13 @@ Deno.test("an occurrence on an event the generated tables raise is delivered up 
 Deno.test("a read of a fixed above the default ceiling of a fixed rejects with corrupt", async () => {
   const h = await attached();
   const reading = h.session.read(FIXED);
-  h.socket.deliver(liveOf(FIXED, 0n, 65_281));
+  const frame = liveOf(FIXED, 0n, 65_281);
+  h.socket.deliver(frame);
   await assert.rejects(reading, isFailure("corrupt"));
   assert.deepEqual(h.publishes, []);
-  assert.deepEqual(h.notes, []);
+  assertNotes(h.notes, [
+    { note: "discarded", reason: "over-limit", frame },
+  ]);
 });
 
 Deno.test("a read of a signal answered by a publish above its limit rejects with corrupt, and a subscribed signal holds the invalid sample", async () => {
@@ -1188,4 +1338,472 @@ Deno.test("an occurrence on an event the generated tables lower is delivered up 
     [[100, undefined], [0, "corrupt"]],
   );
   assert.deepEqual(h.notes, []);
+});
+
+/**
+ * Returns `promise` with a rejection handler attached, so that a test that
+ * fails on an assertion before it awaits the promise reports that assertion
+ * and does not end the test file with an uncaught rejection.
+ */
+function handled<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => {});
+  return promise;
+}
+
+/** Each byte array of `value` as its length and first bytes. */
+function brief(value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    const first = [...value.subarray(0, 8)]
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+    return `${value.length} bytes ${first}`;
+  }
+  if (Array.isArray(value)) return value.map(brief);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, brief(v)]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Asserts that `actual` equals `expected` exactly; a difference is reported
+ * with each payload shortened, because the diff of a payload of thousands of
+ * bytes takes seconds to print.
+ */
+function assertNotes(actual: Note[], expected: Note[]): void {
+  assert.deepEqual(brief(actual), brief(expected));
+  assert.ok(isDeepStrictEqual(actual, expected), "the payload bytes differ");
+}
+
+/** Asserts that `actual` holds the bytes of `expected`. */
+function assertBytes(
+  actual: Uint8Array | null | undefined,
+  expected: Uint8Array,
+): void {
+  assert.ok(actual, "no payload");
+  assert.equal(actual.length, expected.length, "the payload length");
+  assert.equal(
+    actual.findIndex((b, i) => b !== expected[i]),
+    -1,
+    "the first byte that differs",
+  );
+}
+
+/** The envelope of every `block` the vectors and these tests carry. */
+const BLOCK_ENVELOPE = { stamp: 0x0123456789ABn, seq: 0n };
+
+/** The `block` frames of `payload` for `target`, in order. */
+function blocksOf(
+  target: Target,
+  payload: Uint8Array,
+  envelope = BLOCK_ENVELOPE,
+): Frame[] {
+  const count = Math.ceil(payload.length / BLOCK_BYTES);
+  return Array.from({ length: count }, (_, index): Frame => ({
+    form: "block",
+    target,
+    envelope,
+    total: payload.length,
+    index,
+    payload: payload.subarray(BLOCK_BYTES * index, BLOCK_BYTES * (index + 1)),
+  }));
+}
+
+/** The `publish` the session builds from the blocks of `payload`. */
+function reassembled(target: Target, payload: Uint8Array): Frame {
+  return {
+    form: "publish",
+    target,
+    envelope: BLOCK_ENVELOPE,
+    state: { provenance: "live", payload },
+  };
+}
+
+function deliverAll(socket: FakeSocket, list: Frame[]): void {
+  for (const frame of list) socket.deliver(frame);
+}
+
+/**
+ * The generated table of an interface whose `fixed` at ordinal 5 is lowered
+ * to 20,000 bytes.
+ */
+const BIG = {
+  iface: 1,
+  blob: { iface: 1, ord: 5, kind: "fixed", limit: 20000 },
+} as const;
+
+function overLimit(frame: Frame): Note {
+  return { note: "discarded", reason: "over-limit", frame };
+}
+
+Deno.test("a read of a fixed is settled by the shared block-first and block-last messages", async () => {
+  const h = await attached();
+  const reading = handled(h.session.read(FIXED));
+  h.socket.deliver(blockMessage(4098, 0, pattern(4096)));
+  h.socket.deliver(BLOCK_LAST);
+  assert.deepEqual(h.notes, []);
+  const sample = await reading;
+  assert.equal(sample.provenance, "live");
+  assert.deepEqual(sample.envelope, BLOCK_ENVELOPE);
+  assert.ok(sample.payload);
+  assert.equal(sample.payload.length, 4098);
+  assert.deepEqual(
+    sample.payload,
+    concat(pattern(4096), Uint8Array.of(0xab, 0xcd)),
+  );
+  assert.equal(
+    await sha256(sample.payload),
+    "8830a559eb9dfd3795c81b96aaa42875e12ce7fb6348fccf47757b55cfefc7fe",
+  );
+  assert.deepEqual(h.publishes, []);
+});
+
+Deno.test("a read of a 65,280-byte fixed is settled by its 16 blocks", async () => {
+  const h = await attached();
+  const reading = handled(h.session.read(FIXED));
+  const data = pattern(65_280);
+  const parts = blocksOf(FIXED, data);
+  assert.equal(parts.length, 16);
+  deliverAll(h.socket, parts);
+  assert.deepEqual(h.notes, []);
+  assertBytes((await reading).payload, data);
+});
+
+Deno.test("frames of other forms between two blocks are applied and the payload is still delivered", async () => {
+  const h = await attached();
+  await subscribed(h, EVENT);
+  const fixed6: Target = { kind: Kind.Fixed, iface: 1, ord: 6 };
+  const fixed7: Target = { kind: Kind.Fixed, iface: 1, ord: 7 };
+  // The numbers of the `fixed` being reassembled, under another kind.
+  const signal: Target = { kind: Kind.Signal, iface: 1, ord: 5 };
+  const reading = handled(h.session.read(FIXED));
+  const reading6 = handled(h.session.read(fixed6));
+  const reading7 = handled(h.session.read(fixed7));
+  const subscribing = handled(h.session.subscribe(signal));
+  const calling = handled(
+    h.session.command(1, 9, Uint8Array.of(1), { bound: 60_000 }),
+  );
+  const data = pattern(4098);
+  const [first, last] = blocksOf(FIXED, data);
+  h.socket.deliver(first);
+  h.socket.deliver(occurrence(EVENT, 1n, [1]));
+  h.socket.deliver(live(fixed6, 0n, [6]));
+  h.socket.deliver(refusedAnswer(fixed7));
+  h.socket.deliver(accepted(signal));
+  h.socket.deliver(live(signal, 1n, [2]));
+  h.socket.deliver({
+    form: "response",
+    target: { kind: Kind.Command, iface: 1, ord: 9 },
+    envelope: { stamp: 500n, seq: 1n },
+    correlation: 1n,
+    outcome: { outcome: "accepted" },
+  });
+  assert.deepEqual(h.socket.closes, []);
+  assert.deepEqual(h.notes, []);
+  assert.deepEqual(h.occurrences.map((o) => o.payload), [Uint8Array.of(1)]);
+  assert.deepEqual((await reading6).payload, Uint8Array.of(6));
+  await assert.rejects(reading7, unknownInteraction);
+  await subscribing;
+  assert.deepEqual(h.session.sample(1, 5)?.payload, Uint8Array.of(2));
+  await calling;
+  h.socket.deliver(last);
+  assert.deepEqual(h.notes, []);
+  assertBytes((await reading).payload, data);
+});
+
+Deno.test("a frame the codec discards between two blocks is recorded and the payload is still delivered", async () => {
+  const h = await attached();
+  const reading = handled(h.session.read(FIXED));
+  const data = pattern(4098);
+  const [first, last] = blocksOf(FIXED, data);
+  h.socket.deliver(first);
+  // An `Init` publish of the same `fixed`, which carries no payload, with
+  // one byte too many.
+  h.socket.deliver(
+    concat(
+      encode(publish(FIXED, 0n, { provenance: "init" })),
+      Uint8Array.of(0xee),
+    ),
+  );
+  h.socket.deliver(last);
+  assert.deepEqual(h.notes, [{
+    note: "discarded",
+    reason: "unexpected-payload",
+  }]);
+  assertBytes((await reading).payload, data);
+});
+
+Deno.test("a total above the lowered limit of a fixed rejects the read with corrupt before any copy and the session goes on", async () => {
+  const h = await attachedWith({ interfaces: [BIG] });
+  const first = handled(h.session.read(FIXED));
+  const second = handled(h.session.read(FIXED));
+  const over = blocksOf(FIXED, pattern(20_001));
+  assert.equal(over.length, 5);
+  h.socket.deliver(over[0]);
+  assertNotes(h.notes, [overLimit(over[0])]);
+  await assert.rejects(first, isFailure("corrupt"));
+  await assert.rejects(second, isFailure("corrupt"));
+  // A read sent while the refused payload is skipped waits for the next
+  // payload: the skipped blocks settle nothing and record nothing.
+  let settled = false;
+  const third = handled(h.session.read(FIXED));
+  third.then(() => settled = true, () => settled = true);
+  deliverAll(h.socket, over.slice(1));
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assertNotes(h.notes, [overLimit(over[0])]);
+  h.socket.deliver(live(FIXED, 0n, [1, 2, 3]));
+  assert.deepEqual((await third).payload, Uint8Array.of(1, 2, 3));
+  const fourth = handled(h.session.read(FIXED));
+  const data = pattern(20_000);
+  deliverAll(h.socket, blocksOf(FIXED, data));
+  assertBytes((await fourth).payload, data);
+  assertNotes(h.notes, [overLimit(over[0])]);
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("a whole publish of a fixed above its lowered limit rejects the read with corrupt and records over-limit", async () => {
+  const h = await attachedWith({ interfaces: [BIG] });
+  const reading = handled(h.session.read(FIXED));
+  const frame = liveOf(FIXED, 0n, 20_001);
+  h.socket.deliver(frame);
+  assertNotes(h.notes, [overLimit(frame)]);
+  await assert.rejects(reading, isFailure("corrupt"));
+  // With no read waiting: over-limit again, and no not-subscribed note.
+  h.socket.deliver(frame);
+  assertNotes(h.notes, [overLimit(frame), overLimit(frame)]);
+});
+
+Deno.test("on a frame version 1 session a whole publish of a fixed above its lowered limit is over-limit too", async () => {
+  const h = start("veh.cabin", { interfaces: [BIG] });
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL_V1);
+  socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  const session = await h.pending;
+  const reading = handled(session.read(FIXED));
+  const frame = liveOf(FIXED, 0n, 20_001);
+  socket.deliver(frame);
+  assertNotes(h.notes, [overLimit(frame)]);
+  await assert.rejects(reading, isFailure("corrupt"));
+});
+
+Deno.test("a total above the default ceiling of a fixed is over-limit without tables", async () => {
+  const h = await attached();
+  const over = blocksOf(FIXED, new Uint8Array(65_281));
+  assert.equal(over.length, 16);
+  deliverAll(h.socket, over);
+  assertNotes(h.notes, [overLimit(over[0])]);
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("a fixed above a hand-written limit gets the same report whole and in blocks", async () => {
+  const cases: [number, number][] = [[100_000, 70_000], [NaN, 5_000]];
+  for (const [limit, length] of cases) {
+    const table = {
+      iface: 1,
+      blob: { iface: 1, ord: 5, kind: "fixed", limit },
+    } as const;
+    const h = await attachedWith({ interfaces: [table] });
+    const whole = handled(h.session.read(FIXED));
+    const frame = liveOf(FIXED, 0n, length);
+    h.socket.deliver(frame);
+    await assert.rejects(whole, isFailure("corrupt"), `limit ${limit}`);
+    const split = handled(h.session.read(FIXED));
+    const parts = blocksOf(FIXED, new Uint8Array(length));
+    deliverAll(h.socket, parts);
+    await assert.rejects(split, isFailure("corrupt"), `limit ${limit}`);
+    assertNotes(h.notes, [overLimit(frame), overLimit(parts[0])]);
+  }
+});
+
+Deno.test("each block sequence error ends the session as block-sequence", async () => {
+  const data = pattern(8193);
+  const b = blocksOf(FIXED, data);
+  const at = (iface: number, ord: number): Target => ({
+    kind: Kind.Fixed,
+    iface,
+    ord,
+  });
+  const cases: [string, Frame[]][] = [
+    ["a missing block", [b[0], b[2]]],
+    ["a repeated block", [b[0], b[1], b[1]]],
+    ["a reordered block", [b[0], b[2], b[1]]],
+    ["an index above 0 with none in progress", [b[1]]],
+    ["two payloads interleaved", [b[0], blocksOf(at(1, 6), data)[0]]],
+    ["an index 0 of the same payload again", [b[0], b[0]]],
+    ["another interface", [b[0], blocksOf(at(2, 5), data)[1]]],
+    ["another ordinal", [b[0], blocksOf(at(1, 6), data)[1]]],
+    [
+      "another stamp",
+      [b[0], blocksOf(FIXED, data, { stamp: 1n, seq: 0n })[1]],
+    ],
+    [
+      "another seq",
+      [b[0], blocksOf(FIXED, data, { stamp: 0x0123456789ABn, seq: 1n })[1]],
+    ],
+    ["another total", [b[0], blocksOf(FIXED, pattern(8194))[1]]],
+    ["a whole publish of the fixed in progress", [b[0], live(FIXED, 0n, [1])]],
+    ["an answer of the fixed in progress", [b[0], refusedAnswer(FIXED)]],
+  ];
+  for (const [name, sequence] of cases) {
+    const h = await attached();
+    const downs = [h.session.read(FIXED), h.session.read(FIXED)].map((r) =>
+      assert.rejects(r, isFailure("down"), name)
+    );
+    deliverAll(h.socket, sequence);
+    assert.deepEqual(h.socket.closes, [{}], name);
+    assert.deepEqual(
+      h.notes,
+      [{ note: "violation", violation: "block-sequence" }],
+      name,
+    );
+    await Promise.all(downs);
+    h.socket.serverClose(1006);
+    assert.deepEqual(await h.session.closed, {
+      code: 1006,
+      reason: "",
+      violation: "block-sequence",
+    }, name);
+  }
+});
+
+Deno.test("a block the codec refuses ends the session as bad-block", async () => {
+  const lastLong = blockViolations().find((v) => v.id === "bad-last-long");
+  assert.ok(lastLong);
+  const h = await attached();
+  const down = assert.rejects(h.session.read(FIXED), isFailure("down"));
+  h.socket.deliver(lastLong.message);
+  assert.deepEqual(h.socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{ note: "violation", violation: "bad-block" }]);
+  await down;
+});
+
+Deno.test("a read waiting on a payload in progress rejects with down when the session ends", async () => {
+  const h = await attached();
+  const down = assert.rejects(h.session.read(FIXED), isFailure("down"));
+  const parts = blocksOf(FIXED, pattern(8193));
+  h.socket.deliver(parts[0]);
+  assert.deepEqual(h.notes, []);
+  h.socket.serverClose(1006);
+  await down;
+  deliverAll(h.socket, parts.slice(1));
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a read sent while a payload is collected waits for the next payload", async () => {
+  const h = await attached();
+  const first = handled(h.session.read(FIXED));
+  const data = pattern(8193);
+  const parts = blocksOf(FIXED, data);
+  h.socket.deliver(parts[0]);
+  let settled = false;
+  const second = handled(h.session.read(FIXED));
+  second.then(() => settled = true, () => settled = true);
+  deliverAll(h.socket, parts.slice(1));
+  assertBytes((await first).payload, data);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.deepEqual(h.notes, []);
+  // The provider's answer to the second read settles it and records nothing.
+  const next = pattern(5000);
+  deliverAll(h.socket, blocksOf(FIXED, next));
+  assertBytes((await second).payload, next);
+  assert.deepEqual(h.notes, []);
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("a read of a fixed is settled by the shared block-one message, a payload of one block", async () => {
+  const h = await attached();
+  const reading = handled(h.session.read(FIXED));
+  h.socket.deliver(BLOCK_ONE);
+  assert.deepEqual(h.notes, []);
+  const sample = await reading;
+  assert.equal(sample.provenance, "live");
+  assert.deepEqual(sample.envelope, BLOCK_ENVELOPE);
+  assert.deepEqual(sample.payload, Uint8Array.of(0xab));
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("a payload of one block above the lowered limit of a fixed rejects the read with corrupt and records over-limit", async () => {
+  const table = {
+    iface: 1,
+    blob: { iface: 1, ord: 5, kind: "fixed", limit: 100 },
+  } as const;
+  const h = await attachedWith({ interfaces: [table] });
+  const reading = handled(h.session.read(FIXED));
+  const parts = blocksOf(FIXED, pattern(101));
+  assert.equal(parts.length, 1);
+  h.socket.deliver(parts[0]);
+  await assert.rejects(reading, isFailure("corrupt"));
+  assertNotes(h.notes, [overLimit(parts[0])]);
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("blocks delivered after close are ignored", async () => {
+  const h = await attached();
+  const down = assert.rejects(h.session.read(FIXED), isFailure("down"));
+  h.session.close();
+  await down;
+  deliverAll(h.socket, blocksOf(FIXED, pattern(8193)));
+  h.socket.deliver(BLOCK_LAST);
+  assert.deepEqual(h.notes, []);
+  assert.deepEqual(h.socket.closes, [{ code: 1000 }]);
+});
+
+Deno.test("two reads of one fixed are settled by the first payload and the second is discarded not-subscribed", async () => {
+  const h = await attached();
+  const first = handled(h.session.read(FIXED));
+  const second = handled(h.session.read(FIXED));
+  const data = pattern(5000);
+  deliverAll(h.socket, blocksOf(FIXED, data));
+  assert.deepEqual(h.notes, []);
+  assertBytes((await first).payload, data);
+  assertBytes((await second).payload, data);
+  // The provider's answer to the second read.
+  deliverAll(h.socket, blocksOf(FIXED, data));
+  assertNotes(h.notes, [{
+    note: "discarded",
+    reason: "not-subscribed",
+    frame: reassembled(FIXED, data),
+  }]);
+  assert.deepEqual(h.socket.closes, []);
+});
+
+Deno.test("a block payload no read waits for is reassembled and discarded not-subscribed", async () => {
+  const h = await attached();
+  const data = pattern(5000);
+  deliverAll(h.socket, blocksOf(FIXED, data));
+  assertNotes(h.notes, [{
+    note: "discarded",
+    reason: "not-subscribed",
+    frame: reassembled(FIXED, data),
+  }]);
+  // Ordinal 2 is a signal the tables raise to 4,096 bytes; the `fixed` with
+  // the same numbers keeps the limit of a `fixed`.
+  const r = await attachedWith({ interfaces: [RAISED] });
+  const fixed2: Target = { kind: Kind.Fixed, iface: 1, ord: 2 };
+  const wide = new Uint8Array(5000).fill(7);
+  deliverAll(r.socket, blocksOf(fixed2, wide));
+  assertNotes(r.notes, [{
+    note: "discarded",
+    reason: "not-subscribed",
+    frame: reassembled(fixed2, wide),
+  }]);
+});
+
+Deno.test("a publish of a signal above its limit keeps its report and records no over-limit note", async () => {
+  const h = await attached();
+  const reading = handled(h.session.read(SIGNAL));
+  h.socket.deliver(liveOf(SIGNAL, 1n, 3_841));
+  await assert.rejects(reading, isFailure("corrupt"));
+  assert.deepEqual(h.notes, []);
+  // With no read waiting and no subscription: not-subscribed, as before.
+  const unsolicited = liveOf(SIGNAL, 2n, 3_841);
+  h.socket.deliver(unsolicited);
+  assertNotes(h.notes, [{
+    note: "discarded",
+    reason: "not-subscribed",
+    frame: unsolicited,
+  }]);
 });

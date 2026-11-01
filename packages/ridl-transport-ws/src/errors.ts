@@ -10,14 +10,20 @@ import type { Ended } from "./session.ts";
 /**
  * A reason the consumer ends a session: a {@link Violation} of the codec, a
  * text message, a server that selected no subprotocol (in Deno; a browser
- * fails the handshake itself), or a frame of a form the provider must not send
- * at that point.
+ * fails the handshake itself), a frame of a form the provider must not send
+ * at that point, or a `block` sequence error (`block-sequence`): a missing,
+ * repeated or reordered block, a block of index above 0 with no payload in
+ * progress, a block of index 0 while a payload is in progress, a block whose
+ * interface, ordinal, envelope or `total` differs from the payload in
+ * progress, or a whole `publish` or an `answer` of the `fixed` whose blocks
+ * are in progress.
  */
 export type SessionViolation =
   | Violation
   | "text-message"
   | "no-subprotocol"
-  | "unexpected-form";
+  | "unexpected-form"
+  | "block-sequence";
 
 /** The provider refused the `attach`: the session never opened. */
 export class AttachRefused extends Error {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { attach, AttachError, decode, encode, Kind } from "../mod.ts";
 import type { Violation } from "../mod.ts";
+import { blockMessage, blockViolations } from "./block_vectors.ts";
 
 const PUBLISH_LIVE = [
   0x07,
@@ -142,9 +143,31 @@ Deno.test("a subscribe with trailing bytes is control too long", () => {
   assert.equal(violation([...SUBSCRIBE, 0]), "control-too-long");
 });
 
-Deno.test("form 0 and form 11 are unknown codes", () => {
+Deno.test("form 0 and form 12 are unknown codes and a lone form 11 is too short", () => {
   assert.equal(violation([0]), "unknown-code");
-  assert.equal(violation([11]), "unknown-code");
+  assert.equal(violation([12]), "unknown-code");
+  assert.equal(violation([11]), "too-short");
+});
+
+Deno.test("every single-block error is a violation", () => {
+  const rows = blockViolations();
+  assert.equal(rows.length, 16);
+  for (const { id, message, violation: want } of rows) {
+    assert.deepEqual(
+      decode(message),
+      { ok: false, class: "violation", violation: want },
+      id,
+    );
+  }
+});
+
+Deno.test("a block whose index is the largest u32 is a bad block even with a full block of bytes", () => {
+  const message = blockMessage(4098, 0xffffffff, new Uint8Array(4096));
+  assert.deepEqual(decode(message), {
+    ok: false,
+    class: "violation",
+    violation: "bad-block",
+  });
 });
 
 Deno.test("kind 0 and kind 6 are unknown codes", () => {

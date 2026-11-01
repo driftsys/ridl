@@ -6,8 +6,9 @@
  * {@link Session} once the provider answers `attached(accepted)`. The session
  * applies the consumer's rules that need no payload decoding: the held sample
  * of each subscribed signal, the order of a signal's publications, the
- * sequence of an event's occurrences, the size of each received payload
- * against its member's limit, and the end of the session.
+ * sequence of an event's occurrences, the reassembly of the `block` frames of
+ * a `fixed`, the size of each received payload against its member's limit,
+ * and the end of the session.
  *
  * @module
  */
@@ -21,6 +22,7 @@ import {
   FRAME_VERSION,
   Kind,
   SUBPROTOCOL,
+  SUBPROTOCOL_V1,
 } from "./frame.ts";
 import type { EncodingName, Envelope, Frame, Reason, Target } from "./frame.ts";
 import {
@@ -29,7 +31,9 @@ import {
   SessionError,
   type SessionViolation,
 } from "./errors.ts";
+import { FORM_BLOCK } from "./blocks.ts";
 import { Calls } from "./calls.ts";
+import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
 /** The state of a signal or a `fixed`, as one `publish` carried it. */
 export interface Sample {
@@ -102,6 +106,12 @@ export type InterfaceTable = {
 /**
  * What the consumer records about the session. A `violation` ends the
  * session; a `discarded` frame and a `loss` do not.
+ *
+ * A `discarded` note with reason `over-limit` records a `live` payload of a
+ * `fixed` longer than the member's limit, whether it arrived in one `publish`
+ * or in `block` frames: `frame` is the `publish`, or the first block. The
+ * reads it answers reject with `corrupt`, and the note is recorded whether or
+ * not a read waited.
  */
 export type Note =
   | {
@@ -116,7 +126,8 @@ export type Note =
       | "not-subscribed"
       | "unknown-correlation"
       | "unexpected-outcome"
-      | "unexpected-answer";
+      | "unexpected-answer"
+      | "over-limit";
     /** The frame, when the codec could read it. */
     frame?: Frame;
   }
@@ -174,8 +185,12 @@ export interface Ended {
 
 /**
  * Opens a session: validates the catalog name and hash, opens the connection
- * with the subprotocol `ridl-ws-v1`, sends the `attach` and resolves once the
- * provider answers `attached(accepted)`.
+ * offering the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that order,
+ * sends the `attach` and resolves once the provider answers
+ * `attached(accepted)`. The `attach` carries the frame version of the
+ * subprotocol the server selected: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`. On a
+ * session of frame version 1, a message of the `block` form is a violation
+ * `unknown-code`, as an unknown form.
  *
  * The promise rejects with:
  * - an `AttachError` or a `RangeError` from `attach`, before any socket is
@@ -196,8 +211,10 @@ export function connect(
   url: string,
   options: ConnectOptions,
 ): Promise<Session> {
-  let first: Frame;
+  let first: ReturnType<typeof attach>;
   try {
+    // `attach` builds an `attach` frame; its frame version is replaced by the
+    // one of the selected subprotocol when the connection opens.
     first = attach(
       FRAME_VERSION,
       encodingTag(options.encoding ?? "proto3"),
@@ -211,7 +228,7 @@ export function connect(
     ((u: string, p: string[]) => new WebSocket(u, p));
   let socket: WebSocket;
   try {
-    socket = create(url, [SUBPROTOCOL]);
+    socket = create(url, [SUBPROTOCOL, SUBPROTOCOL_V1]);
   } catch (e) {
     // For example a `SyntaxError` for an invalid URL.
     return Promise.reject(e);
@@ -311,7 +328,13 @@ export class Session {
   #socket: WebSocket;
   #options: ConnectOptions;
   #opening: Opening | null;
-  #attachFrame: Frame;
+  #attachFrame: ReturnType<typeof attach>;
+  /**
+   * The frame version of the session: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`.
+   * It starts as the version of this binding and is set from the selected
+   * subprotocol when the connection opens.
+   */
+  #frameVersion = FRAME_VERSION;
   #attached = false;
   #ended = false;
   #closeSent = false;
@@ -332,11 +355,18 @@ export class Session {
   #calls = new Calls();
   /** The limits the generated tables record, keyed by member identity. */
   #limits: Map<string, number>;
+  /** The `block` payload being collected or skipped. */
+  #reassembly = new Reassembly();
+  /**
+   * The reads that the payload being collected answers: the reads at the
+   * head of the identity's queue when its first block arrived.
+   */
+  #collected: Extract<Waiting, { op: "read" }>[] = [];
 
   /** @internal Use {@link connect}. */
   constructor(
     socket: WebSocket,
-    attachFrame: Frame,
+    attachFrame: ReturnType<typeof attach>,
     options: ConnectOptions,
     opening: Opening,
   ) {
@@ -409,10 +439,13 @@ export class Session {
   /**
    * Reads a signal or a `fixed` once. Resolves with the sample of the next
    * `publish` of that interaction; rejects with a `contract`
-   * {@link SessionError} on a refusing `answer`. A read does not subscribe:
-   * the sample is held only when the signal is already subscribed. Rejects
-   * with a `RangeError`, and sends nothing, when the interface number or the
-   * ordinal is not an integer from 1 to 4294967295.
+   * {@link SessionError} on a refusing `answer`. On a session of frame
+   * version 2, the value of a `fixed` may arrive in `block` frames, which the
+   * session reassembles into one sample; a `fixed` longer than its limit, in
+   * one `publish` or in blocks, rejects with `corrupt`. A read does not
+   * subscribe: the sample is held only when the signal is already subscribed.
+   * Rejects with a `RangeError`, and sends nothing, when the interface number
+   * or the ordinal is not an integer from 1 to 4294967295.
    */
   read(target: Target): Promise<Sample> {
     return new Promise((resolve, reject) => {
@@ -530,10 +563,14 @@ export class Session {
 
   /**
    * The payload limit of a member, in bytes: the one the generated tables
-   * record for it, else the default ceiling of its kind.
+   * record for it, else the default ceiling of its kind. The limit of a
+   * `fixed` is held by `fixedLimit`, so that a whole `publish` and the blocks
+   * of a payload are compared with the same value.
    */
   #limitOf(target: Target): number {
-    return this.#limits.get(identity(target)) ?? defaultCeiling(target.kind);
+    const limit = this.#limits.get(identity(target)) ??
+      defaultCeiling(target.kind);
+    return target.kind === Kind.Fixed ? fixedLimit(limit) : limit;
   }
 
   /**
@@ -570,11 +607,18 @@ export class Session {
 
   #onOpen(): void {
     if (this.#ended) return;
-    if (this.#socket.protocol !== SUBPROTOCOL) {
-      this.#violate("no-subprotocol");
-      return;
+    switch (this.#socket.protocol) {
+      case SUBPROTOCOL:
+        this.#frameVersion = FRAME_VERSION;
+        break;
+      case SUBPROTOCOL_V1:
+        this.#frameVersion = 1;
+        break;
+      default:
+        this.#violate("no-subprotocol");
+        return;
     }
-    this.#send(this.#attachFrame);
+    this.#send({ ...this.#attachFrame, frameVersion: this.#frameVersion });
   }
 
   #onMessage(event: MessageEvent): void {
@@ -583,7 +627,14 @@ export class Session {
       this.#violate("text-message");
       return;
     }
-    const decoded = decode(new Uint8Array(event.data as ArrayBuffer));
+    const message = new Uint8Array(event.data as ArrayBuffer);
+    // Frame version 1 has no `block` form: the form code is unknown there,
+    // whatever follows it and whether or not the session is attached yet.
+    if (this.#frameVersion === 1 && message[0] === FORM_BLOCK) {
+      this.#violate("unknown-code");
+      return;
+    }
+    const decoded = decode(message);
     if (!decoded.ok) {
       if (decoded.class === "violation") {
         this.#violate(decoded.violation);
@@ -601,10 +652,20 @@ export class Session {
     }
     switch (frame.form) {
       case "answer":
-        this.#onAnswer(frame);
-        return;
       case "publish":
-        this.#onPublish(frame);
+        // The provider answers the reads of one identity in order, and
+        // answers one read with one `publish` or with its blocks: a frame of
+        // the `fixed` being reassembled is a defect of the sender.
+        if (this.#reassembly.holds(frame.target)) {
+          this.#violate("block-sequence");
+        } else if (frame.form === "answer") {
+          this.#onAnswer(frame);
+        } else {
+          this.#onPublish(frame);
+        }
+        return;
+      case "block":
+        this.#onBlock(frame);
         return;
       case "occurrence":
         this.#onOccurrence(frame);
@@ -674,7 +735,14 @@ export class Session {
     head.resolve();
   }
 
-  #onPublish(frame: Extract<Frame, { form: "publish" }>): void {
+  /**
+   * Applies one `publish`. `reads` are the reads it answers; by default,
+   * every `read` at the head of the identity's queue.
+   */
+  #onPublish(
+    frame: Extract<Frame, { form: "publish" }>,
+    reads: Extract<Waiting, { op: "read" }>[] = this.#takeReads(frame.target),
+  ): void {
     const t = frame.target;
     // A `live` payload longer than the member's limit never reaches the
     // application: the sample is invalid with `detected`, and a `read` it
@@ -693,15 +761,6 @@ export class Session {
         envelope: frame.envelope,
         payload: frame.state.provenance === "live" ? frame.state.payload : null,
       };
-    // Every `read` at the head of the identity's queue settles with this frame.
-    const reads: Extract<Waiting, { op: "read" }>[] = [];
-    const key = identity(t);
-    const queue = this.#waiting.get(key);
-    while (queue && queue[0]?.op === "read") {
-      const read = queue.shift();
-      if (read?.op === "read") reads.push(read);
-    }
-    if (queue && queue.length === 0) this.#waiting.delete(key);
     for (const r of reads) {
       if (oversized) r.reject(new SessionError({ category: "corrupt" }));
       else r.resolve(sample);
@@ -709,7 +768,9 @@ export class Session {
 
     const ch = channel(t.iface, t.ord);
     if (t.kind !== Kind.Signal || !this.#signals.has(ch)) {
-      if (reads.length === 0) {
+      if (oversized && t.kind === Kind.Fixed) {
+        this.#note({ note: "discarded", reason: "over-limit", frame });
+      } else if (reads.length === 0) {
         this.#note({ note: "discarded", reason: "not-subscribed", frame });
       }
       return;
@@ -731,6 +792,60 @@ export class Session {
     this.#held.set(ch, sample);
     const onPublish = this.#options.onPublish;
     if (onPublish) this.#listen(() => onPublish(t, sample));
+  }
+
+  /** Removes and returns every `read` at the head of the identity's queue. */
+  #takeReads(t: Target): Extract<Waiting, { op: "read" }>[] {
+    const reads: Extract<Waiting, { op: "read" }>[] = [];
+    const key = identity(t);
+    const queue = this.#waiting.get(key);
+    while (queue && queue[0]?.op === "read") {
+      const read = queue.shift();
+      if (read?.op === "read") reads.push(read);
+    }
+    if (queue && queue.length === 0) this.#waiting.delete(key);
+    return reads;
+  }
+
+  /**
+   * Applies one `block`. A completed payload is handled as a `live`
+   * `publish` that arrived whole, and settles the reads that were at the
+   * head of the identity's queue when its first block arrived: a read sent
+   * later waits for the next payload. A payload whose `total` is above the
+   * member's limit rejects the reads at the head of the identity's queue with
+   * `corrupt` at its first block, is recorded `over-limit`, and its other
+   * blocks change nothing. A sequence error ends the session.
+   */
+  #onBlock(frame: BlockFrame): void {
+    const t = frame.target;
+    const step = this.#reassembly.accept(frame, this.#limitOf(t));
+    switch (step.step) {
+      case "complete": {
+        const reads = frame.index === 0 ? this.#takeReads(t) : this.#collected;
+        this.#collected = [];
+        this.#onPublish({
+          form: "publish",
+          target: t,
+          envelope: frame.envelope,
+          state: { provenance: "live", payload: step.payload },
+        }, reads);
+        return;
+      }
+      case "over-limit":
+        for (const r of this.#takeReads(t)) {
+          r.reject(new SessionError({ category: "corrupt" }));
+        }
+        this.#note({ note: "discarded", reason: "over-limit", frame });
+        return;
+      case "sequence":
+        this.#violate("block-sequence");
+        return;
+      case "collecting":
+        if (frame.index === 0) this.#collected = this.#takeReads(t);
+        return;
+      case "skipping":
+        return;
+    }
   }
 
   #onOccurrence(
@@ -803,8 +918,10 @@ export class Session {
    */
   #fail(): void {
     this.#ended = true;
+    this.#reassembly.clear();
     this.#calls.fail();
-    const waiting = [...this.#waiting.values()].flat();
+    const waiting = [...this.#collected, ...this.#waiting.values()].flat();
+    this.#collected = [];
     this.#waiting.clear();
     this.#signals.clear();
     this.#held.clear();

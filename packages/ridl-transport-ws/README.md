@@ -1,9 +1,16 @@
 # @driftsys/ridl-transport-ws
 
 The client side of the WebSocket binding of the ridl frame. The package opens a
-WebSocket with the subprotocol `ridl-ws-v1`, sends and receives frames, and
-carries each payload as bytes without reading them. The caller encodes and
-decodes payloads.
+WebSocket that offers the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that
+order, sends and receives frames, and carries each payload as bytes without
+reading them. The caller encodes and decodes payloads.
+
+The session speaks the frame version of the subprotocol the server selects: 2 on
+`ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also attaches to a server
+that serves frame version 1 only. Frame version 2 is frame version 1 plus the
+`block` form, which carries a `fixed` payload that does not fit one message in
+parts (driftsys/ridl#1129). On a session of frame version 1, a `block` is a
+protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
 `WebSocket`, so it needs no other runtime. It is not yet published.
@@ -38,6 +45,51 @@ A received payload longer than its member's limit never reaches the application:
 The arguments of a command or a query longer than the member's limit reject the
 call with `SessionError` `corrupt` before anything is sent, the answer the
 provider gives a `request` above the limit.
+
+## A large `fixed`
+
+On a session of frame version 2, the provider sends the value of a `fixed` that
+does not fit one message as `block` frames of 4,096 bytes each, except the last
+one, which holds the rest of the value. The session reassembles them and settles
+the reads that were waiting when the first block arrived with one sample, as for
+a value that arrived in one `publish`. A read sent after the first block, while
+the value is still arriving, waits for the next value. The limit of a `fixed` is
+the one its interface table gives, else `FIXED_CEILING`, and never more than
+65,280 bytes: a table limit above 65,280 counts as 65,280, and one that is not a
+finite number counts as 0. Each reassembled value goes into a new buffer of its
+own length, which the session does not write to again.
+
+A value of a `fixed` longer than its limit, whether it arrived in one `publish`
+or in blocks, and on either frame version:
+
+- rejects every read waiting for it with `SessionError` `corrupt`;
+- is recorded once, through `onNote`, as
+  `{ note: "discarded", reason: "over-limit", frame }`, where `frame` is the
+  `publish` or the first block, also when no read waits for it. In blocks, it is
+  refused at the first block, before a byte is copied, and its other blocks are
+  skipped;
+- leaves the session open.
+
+The blocks of one value come in order, from index 0, with no blocks of another
+value between them. Each of these ends the session with the violation
+`block-sequence`, and every waiting operation then rejects with `down`:
+
+- a missing, a repeated or a reordered block;
+- a block of index above 0 with no value in progress, or a block of index 0
+  while a value is in progress;
+- a block whose interface, ordinal, envelope or total length differs from the
+  value in progress;
+- a whole `publish` or an `answer` of the `fixed` whose blocks are in progress.
+
+Frames of other interactions between two blocks are handled as usual, and so is
+a `publish` or an `answer` with the same interface and ordinal under another
+kind.
+
+Against a provider that serves frame version 1 only (`ridl-ws-v1` selected), a
+`fixed` larger than one message is not sent in blocks: the provider answers the
+read with `contract(UnknownInteraction)`, so the read rejects with
+`SessionError` `contract` `unknown-interaction`, the same error an unknown
+member gives.
 
 ## Limits
 

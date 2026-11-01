@@ -74,6 +74,14 @@ Deno.test("each data form code maps to its form", () => {
     correlation: 7n,
     outcome: { outcome: "accepted" },
   });
+  roundTrip([11, ...T(5), ...E, ...u32(1), ...u32(0), 0xab], {
+    form: "block",
+    target: target(Kind.Fixed),
+    envelope,
+    total: 1,
+    index: 0,
+    payload: new Uint8Array([0xab]),
+  });
 });
 
 Deno.test("each kind code maps to its kind", () => {
@@ -316,6 +324,7 @@ Deno.test("data payloads are views of the message", () => {
     [9, ...T(3), ...E, 5],
     [8, ...T(2), ...E, 5],
     [10, ...T(4), ...E, ...u64(7n), 2, 0, 5],
+    [11, ...T(5), ...E, ...u32(1), ...u32(0), 5],
   ];
   for (const bytes of cases) {
     const message = new Uint8Array(bytes);

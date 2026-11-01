@@ -6,13 +6,26 @@
  * fixed-width little-endian, a payload is every byte after the header, and
  * whether a frame carries a payload is decided from its header alone.
  *
+ * The `block` form (form code 11) belongs to binding version 2
+ * (driftsys/ridl#1129): one part of the payload of a `publish` of a `fixed`
+ * that does not fit one message. Every block but the last carries
+ * {@link BLOCK_BYTES} bytes. The codec reads and writes the form on any
+ * session; whether a session accepts it is the session's to decide.
+ *
  * @module
  */
 
+import { BLOCK_BYTES, blockCount, FORM_BLOCK } from "./blocks.ts";
+
 /** The frame version this binding carries. */
-export const FRAME_VERSION = 1;
-/** The WebSocket subprotocol name of binding version 1. */
-export const SUBPROTOCOL = "ridl-ws-v1";
+export const FRAME_VERSION = 2;
+/** The WebSocket subprotocol name of binding version 2. */
+export const SUBPROTOCOL = "ridl-ws-v2";
+/**
+ * The subprotocol name of binding version 1, which a server of frame version
+ * 1 selects.
+ */
+export const SUBPROTOCOL_V1 = "ridl-ws-v1";
 /**
  * The smallest message size limit a receiver may configure: the largest header
  * of any message, an `attach` with a 255-byte name.
@@ -20,6 +33,7 @@ export const SUBPROTOCOL = "ridl-ws-v1";
 export const MIN_MESSAGE_LIMIT = 294;
 /** The size of an encoded {@link Envelope} in bytes. */
 export const ENVELOPE_BYTES = 16;
+export { BLOCK_BYTES };
 
 /** The interaction kinds and their wire codes. */
 export const Kind = {
@@ -179,6 +193,17 @@ export type Frame =
     envelope: Envelope;
     correlation: bigint;
     outcome: ResponseOutcome;
+  }
+  | {
+    form: "block";
+    target: Target;
+    envelope: Envelope;
+    /** The length of the whole payload in bytes, 1 to 4294967295. */
+    total: number;
+    /** The position of the block in the payload, from 0. */
+    index: number;
+    /** The bytes of the block: a view of the message. */
+    payload: Uint8Array;
   };
 
 /**
@@ -195,7 +220,8 @@ export type Violation =
   | "nonzero-detail"
   | "zero-number"
   | "bad-name-length"
-  | "bad-name";
+  | "bad-name"
+  | "bad-block";
 
 /** The result of {@link decode}. */
 export type Decoded =
@@ -235,6 +261,8 @@ const ANSWER_LEN = COMMON + 2;
 const PUBLISH_LEN = COMMON + ENVELOPE_BYTES + 1;
 const DATA_LEN = COMMON + ENVELOPE_BYTES;
 const RESPONSE_LEN = COMMON + ENVELOPE_BYTES + 8 + 2;
+/** The header of a `block`: the common fields, the envelope, `total` and `index`. */
+const BLOCK_LEN = COMMON + ENVELOPE_BYTES + 4 + 4;
 /** `form`, `frame_version`, `encoding`, `hash` and `name_len`. */
 const ATTACH_FIXED = 1 + 4 + 1 + 32 + 1;
 
@@ -466,9 +494,44 @@ function decodeFrame(msg: Uint8Array): Frame {
       if (rest.length > 0) discard();
       return { form: "response", target, envelope, correlation, outcome };
     }
+    case FORM_BLOCK:
+      return decodeBlock(msg, view);
     default:
       return fail("unknown-code");
   }
+}
+
+/**
+ * Reads a `block` (binding version 2). Every error of the block alone is a
+ * violation, checked in this order after the header length, the kind range and
+ * the zero numbers: the `kind` is `Fixed`, `total` is at least 1, `index` is
+ * below the block count, and the bytes after the header are as many as the
+ * position of the block gives (4,096 for every block but the last, the rest of
+ * `total` for the last). The arithmetic stays in doubles: the largest value,
+ * `BLOCK_BYTES * index`, is below 2^32.
+ */
+function decodeBlock(msg: Uint8Array, view: DataView): Frame {
+  need(msg, BLOCK_LEN);
+  const target = targetAt(msg, view);
+  if (target.kind !== Kind.Fixed) fail("bad-block");
+  const envelope = envelopeAt(view, COMMON);
+  const total = view.getUint32(COMMON + ENVELOPE_BYTES, true);
+  const index = view.getUint32(COMMON + ENVELOPE_BYTES + 4, true);
+  if (total < 1) fail("bad-block");
+  const count = blockCount(total);
+  if (index >= count) fail("bad-block");
+  const expected = index < count - 1
+    ? BLOCK_BYTES
+    : total - BLOCK_BYTES * index;
+  if (msg.length - BLOCK_LEN !== expected) fail("bad-block");
+  return {
+    form: "block",
+    target,
+    envelope,
+    total,
+    index,
+    payload: msg.subarray(BLOCK_LEN),
+  };
 }
 
 function discard(): never {
@@ -530,7 +593,7 @@ export function attach(
   encoding: number,
   hash: Uint8Array,
   name: string,
-): Frame {
+): Extract<Frame, { form: "attach" }> {
   if (encoding < 1 || encoding > 3 || !Number.isInteger(encoding)) {
     throw new AttachError("unknown-encoding");
   }
@@ -571,6 +634,8 @@ function encodedLength(frame: Frame, nameBytes: Uint8Array): number {
     case "response":
       return RESPONSE_LEN +
         (frame.outcome.outcome === "reply" ? frame.outcome.payload.length : 0);
+    case "block":
+      return BLOCK_LEN + frame.payload.length;
   }
 }
 
@@ -683,6 +748,13 @@ export function encode(frame: Frame): Uint8Array {
       out[RESPONSE_LEN - 1] = detail;
       break;
     }
+    case "block":
+      targetBytes(out, view, FORM_BLOCK, frame.target);
+      writeEnvelope(view, frame.envelope);
+      view.setUint32(COMMON + ENVELOPE_BYTES, frame.total, true);
+      view.setUint32(COMMON + ENVELOPE_BYTES + 4, frame.index, true);
+      out.set(frame.payload, BLOCK_LEN);
+      break;
   }
   return out;
 }
