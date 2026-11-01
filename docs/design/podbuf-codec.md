@@ -37,11 +37,11 @@ the view in place
 | The `Sizes<Podbuf>` table and the aligned buffers                        | `crates/ridl-backend-rust/src/descriptors.rs`  |
 | The claim table entries for the generated names                          | `crates/ridl-backend-rust/src/claims.rs`       |
 | The C header emitter                                                     | `crates/ridl-backend-podbuf/src/lib.rs`        |
-| RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`      |
+| RIDL-153 to RIDL-155 and RIDL-158, the build-time errors                 | `crates/ridlc/src/design_lints/podbuf.rs`      |
 | RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
 | `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
 | `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |
-| `podbuf_strict_enum_append`, the strict-enum rule of `ridl diff`         | `crates/ridl-diff/src/walk.rs`                 |
+| `strict_enum_append`, the strict-enum rule of `ridl diff`                | `crates/ridl-diff/src/walk.rs`                 |
 | The `encodings` list (`WireEncoding`) the entry points take              | `crates/ridl-backend-rust/src/lib.rs`          |
 | The marker `Podbuf` and the `Payload`, `View` and `Malformed` it shares  | `crates/ridl-rt/src/encoding.rs`, `payload.rs` |
 
@@ -56,8 +56,8 @@ padding lint and the build-time errors. They read it from the codegen `Model`
 plugin reads the same numbers (ADR-0020 decisions 8 and 9; the model's layout is
 described in [`codegen-plugins.md`](codegen-plugins.md), "The podbuf
 projection"). Nothing in the projection spells a Rust or C name. The
-`podbuf_strict_enum_append` rule of `ridl diff` reads no layout, only the kind
-of the declaration.
+`strict_enum_append` rule of `ridl diff` reads no layout, only the kind of the
+declaration and whether it is `open`.
 
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.
@@ -326,7 +326,7 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 | Gap                                                                                                                                                                                                                                                                                                        | Issue                                                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                                                                                                                                                                                      | the typl change it depends on                                          |
+| The `open` keyword is built, and podbuf refuses an open enum or enum set with RIDL-158 until the podbuf codec carries one (ADR-0031 decision 12)                                                                                                                                                           | [driftsys/ridl#1168](https://github.com/driftsys/ridl/issues/1168)     |
 | A string that holds U+0000 cannot be encoded                                                                                                                                                                                                                                                               | a limit of the encoding                                                |
 | The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                                                                                                                                 | the check is per build                                                 |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                                                                                                                                | ADR-0020 decision 2                                                    |

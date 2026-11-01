@@ -1,6 +1,6 @@
-//! RIDL-153, RIDL-154 and RIDL-155: the build-time errors of the podbuf
-//! encoding. They run only when a `[backend.<name>]` table of the workspace
-//! manifest enables `podbuf`.
+//! RIDL-153, RIDL-154, RIDL-155 and RIDL-158: the build-time errors of the
+//! podbuf encoding. They run only when a `[backend.<name>]` table of the
+//! workspace manifest enables `podbuf`.
 //!
 //! - RIDL-153: a struct, a union, or a named tuple (the argument struct a
 //!   call with several parameters induces, or a tuple reply) whose largest
@@ -17,6 +17,10 @@
 //!   derivable init value, and whose type excludes 0. The encoder writes a
 //!   deprecated field's init value, so it has no valid value to write. It is
 //!   reported on the field.
+//! - RIDL-158: an `open` enum or `open` enum set. The podbuf codec and the C
+//!   header keep every enum strict until driftsys/ridl#1168 lands, so an open
+//!   declaration has no podbuf encoding yet. It is reported on the
+//!   declaration name.
 //!
 //! The limits and the sizes are the ones of [`ridl_ir::projection::podbuf`],
 //! the one definition of the layout.
@@ -63,6 +67,12 @@ pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -
             };
             let name = format!("{}.{}", package.name, declaration.name);
             match declaration.kind.as_ref() {
+                Some(decl::Kind::EnumDef(v2::EnumDef { open: true, .. })) => {
+                    diagnostics.push(open_under_podbuf(&name, "enum", site));
+                }
+                Some(decl::Kind::EnumSetDef(v2::EnumSetDef { open: true, .. })) => {
+                    diagnostics.push(open_under_podbuf(&name, "enum set", site));
+                }
                 Some(decl::Kind::StructDef(def)) => {
                     let head = struct_head(packages, &declaration.name, def);
                     diagnostics.extend(too_large(&name, site, packages, declaration, head));
@@ -187,6 +197,19 @@ fn tuple_field_limits<'a>(
             )
         })
     })
+}
+
+/// RIDL-158 for the open `what` (an enum or an enum set) named `name`.
+fn open_under_podbuf(name: &str, what: &str, site: Span) -> Diagnostic {
+    error(
+        DiagCode::RIDL_158,
+        site,
+        format!(
+            "`{name}` is an open {what}, which the podbuf encoding does not carry yet \
+             (driftsys/ridl#1168); remove `open`, or remove `podbuf` from the encodings of \
+             every `[backend.<name>]` table"
+        ),
+    )
 }
 
 fn error(code: DiagCode, primary: Span, message: String) -> Diagnostic {

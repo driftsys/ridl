@@ -533,6 +533,7 @@ fn package_items(
         recorded.push((WireEncoding::Proto3, owners));
     }
     if encodings.contains(&WireEncoding::Podbuf) {
+        refuse_open_under_podbuf(ctx)?;
         let (codec_items, owners) = codec_podbuf::package_items(ctx)?;
         items.extend(codec_items);
         recorded.push((WireEncoding::Podbuf, owners));
@@ -549,6 +550,32 @@ fn package_items(
         items.extend(transcode::package_items(&owners));
     }
     Ok(items)
+}
+
+/// Refuses the package when it declares an open enum or an open enum set and
+/// its encodings name podbuf. The podbuf codec and the C header keep every
+/// enum strict until driftsys/ridl#1168 lands, so an open declaration has no
+/// podbuf encoding yet, and emitting strict code for it would read an
+/// undeclared value as a contract violation that the declaration admits.
+/// `ridl build` refuses the package before this backend runs (RIDL-158); a
+/// codegen plugin that reaches this backend without `ridlc` is refused here.
+fn refuse_open_under_podbuf(ctx: &Ctx) -> Result<(), GenerateError> {
+    for decl in &ctx.model.declarations {
+        let what = match decl.kind.as_ref() {
+            Some(v1::declaration::Kind::Enum(ed)) if ed.open => "enum",
+            Some(v1::declaration::Kind::EnumSet(esd)) if esd.open => "enum set",
+            _ => continue,
+        };
+        let name = declared(decl.name.as_ref());
+        return Err(GenerateError {
+            message: format!(
+                "`{}.{name}` is an open {what}, which the podbuf encoding does not carry yet \
+                 (driftsys/ridl#1168); remove `open`, or remove `podbuf` from the encodings",
+                ctx.package_name()
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// A payload encoding a generated package carries a codec for, and that its
@@ -1937,15 +1964,28 @@ fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
     quote! { #attrs pub #field_name: #ty }
 }
 
-/// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
-/// Variant names are the pinned `pascal_case` of the typl name (ADR-0016,
-/// 2026-09-26 amendment), so `CHECK_ENGINE` becomes `CheckEngine`.
+/// The sentence the generated doc of an open enum carries (ADR-0028).
+const OPEN_ENUM_SENTENCE: &str =
+    "A value outside the declared ones is valid and is read as `Unknown`, which holds the integer.";
+
+/// The sentence the generated doc of an open enum set carries (ADR-0028).
+const OPEN_ENUM_SET_SENTENCE: &str =
+    "A bit outside the declared ones is valid and is kept; `unknown_bits` returns those bits.";
+
+/// A strict enum becomes `#[repr(i64)]` with the declared discriminants
+/// (typl §8). Variant names are the pinned `pascal_case` of the typl name
+/// (ADR-0016, 2026-09-26 amendment), so `CHECK_ENGINE` becomes `CheckEngine`.
+///
+/// An open enum (typl §8.1) is [`emit_open_enum`].
 fn emit_enum(
     ctx: &Ctx,
     decl: &v1::Declaration,
     ed: &v1::Enum,
     derived: &TokenStream,
 ) -> TokenStream {
+    if ed.open {
+        return emit_open_enum(ctx, decl, ed, derived);
+    }
     let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
@@ -2005,19 +2045,123 @@ fn emit_enum(
     }
 }
 
+/// An open enum (typl §8.1) becomes a `#[non_exhaustive]` enum with one
+/// variant per declared value and a last variant `Unknown(Unknown<Name>)`,
+/// which holds an undeclared value as the integer the wire carried. The
+/// newtype `Unknown<Name>` has a private field and a `raw` accessor, so only
+/// `From<i64>` builds one.
+///
+/// There is no `#[repr(i64)]` and no explicit discriminant: a variant with a
+/// field cannot carry an explicit discriminant without a `repr`, and an
+/// implicit one could collide with a declared value. Conversion goes through
+/// `From<i64>` and `From<Name> for i64` instead of `TryFrom<i64>`. `From<i64>`
+/// returns the declared variant for every declared value, so a value has one
+/// representation: `Unknown(1)` and a declared `Active = 1` cannot both
+/// exist.
+///
+/// `#[non_exhaustive]` makes a downstream crate keep a wildcard arm. Inside
+/// the generated crate an exhaustive `match` still compiles; the generated
+/// code matches `Unknown` explicitly.
+///
+/// The names `Unknown` (as a variant) and `Unknown<Name>` (as a type) are
+/// reserved by the checker: a value whose `pascal_case` spelling is `Unknown`
+/// and a declaration named `Unknown<Name>` in the same package draw RIDL-149.
+fn emit_open_enum(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    ed: &v1::Enum,
+    derived: &TokenStream,
+) -> TokenStream {
+    let type_name = declared(decl.name.as_ref());
+    let name = ident(type_name);
+    let unknown = ident(&format!("Unknown{type_name}"));
+    let attrs = decl_attrs_with_sentence(ctx, decl, derived, Some(OPEN_ENUM_SENTENCE));
+    let vis = vis_tokens(decl.visibility);
+
+    let variants = ed.values.iter().map(|value| {
+        let vname = ident(&pascal_of(value.name.as_ref()));
+        let vdoc = docs::doc_block(&docs::DocParts::enum_value(value), &ctx.links());
+        quote! { #vdoc #vname }
+    });
+    let from_arms = ed.values.iter().map(|value| {
+        let vname = ident(&pascal_of(value.name.as_ref()));
+        let disc = int_tokens(value.value);
+        quote! { #disc => Self::#vname }
+    });
+    let into_arms = ed.values.iter().map(|value| {
+        let vname = ident(&pascal_of(value.name.as_ref()));
+        let disc = int_tokens(value.value);
+        quote! { #name::#vname => #disc }
+    });
+    let unknown_doc = format!(
+        "An undeclared value of `{type_name}`: the integer the wire carried, which `raw` \
+         reads. Only `From<i64>` for `{type_name}` builds one, and it builds one for no \
+         declared value."
+    );
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
+
+    quote! {
+        #attrs
+        #[non_exhaustive]
+        #vis enum #name {
+            #(#variants,)*
+            /// An undeclared value, kept as the integer the wire carried.
+            Unknown(#unknown),
+        }
+
+        #[doc = #unknown_doc]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+        #vis struct #unknown(::core::primitive::i64);
+
+        impl #unknown {
+            /// The integer the wire carried.
+            #vis const fn raw(self) -> ::core::primitive::i64 { self.0 }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<::core::primitive::i64> for #name {
+            fn from(value: ::core::primitive::i64) -> Self {
+                match value {
+                    #(#from_arms,)*
+                    other => Self::Unknown(#unknown(other)),
+                }
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for ::core::primitive::i64 {
+            fn from(value: #name) -> Self {
+                match value {
+                    #(#into_arms,)*
+                    #name::Unknown(unknown) => unknown.0,
+                }
+            }
+        }
+    }
+}
+
 /// An enum set becomes a `#[repr(transparent)]` newtype over `i64` (the
 /// language layer width, Appendix D) with one associated bit constant per bit
 /// position (typl §9).
 ///
 /// The inner value is private, as a named scalar's is and for the same reason
-/// ([`emit_type_def`]): a raw bit pattern enters through `TryFrom<i64>`, which
-/// refuses a value carrying an undeclared bit. `From<_> for i64` reads it back.
+/// ([`emit_type_def`]). For a strict enum set a raw bit pattern enters through
+/// `TryFrom<i64>`, which refuses a value carrying an undeclared bit. For an
+/// open enum set (typl §9) it enters through `From<i64>`, which keeps every
+/// bit, and `unknown_bits` returns the bits outside the declared mask.
+/// `From<_> for i64` reads the whole value back in both forms.
 ///
-/// The inherent impl block holds the bit constants and nothing else. A bit
-/// name can be any identifier the lexer admits, so any other item in that
-/// block could carry the same name as a bit, and rustc refuses two associated
-/// items with one name (E0592, driftsys/ridl#562). The mask is therefore a
-/// local constant of `try_from`, and there is no `get` accessor.
+/// The inherent impl block holds the bit constants and, for an open enum set,
+/// `unknown_bits`, and nothing else. A bit name can be any identifier the
+/// lexer admits, so any other item in that block could carry the same name as
+/// a bit, and rustc refuses two associated items with one name (E0592,
+/// driftsys/ridl#562). The mask is therefore a local constant of `try_from`
+/// or of `unknown_bits`, there is no `get` accessor, and the checker refuses
+/// a bit of an open enum set named `unknown_bits` (RIDL-149).
 ///
 /// A deprecated declaration carries `#[allow(deprecated)]` over every impl
 /// block, because each one names the deprecated type. Without the allow the
@@ -2041,21 +2185,14 @@ fn emit_enum_set(
         quote! { #bdoc #vis const #bname: #name = #name(1 << #shift); }
     });
 
-    // Refusing a value that carries an undeclared bit is this backend's
-    // reading, not a rule the reference states. typl §9 fixes a bit's
-    // identity as its declared position and infers the width from the highest
-    // one; it says nothing about what an undeclared bit means. The reading is
-    // in tension with `ridl-diff`, whose `EnumSetDef` arm classifies an
-    // appended bit as compatible outright — it calls `appended_slot` with an
-    // empty retired set, so an enum set has no retired half the way an enum's
-    // values do (`crates/ridl-diff/src/classify.rs`). A producer that appends
-    // a bit on that advice sends a value an older consumer's `TryFrom` then
-    // refuses whole, rather than ignoring the bit it does not know. Whether
-    // an enum set is closed or open on the wire is recorded as an open
-    // question rather than settled here, because settling it changes that arm
-    // of `ridl-diff` as well as this backend. (Under `--encoding podbuf`
-    // `ridl-diff` already reports an appended bit as breaking, as
-    // `podbuf_strict_enum_append`, ADR-0031 decision 10.)
+    // Whether an undeclared bit is refused or kept is the declaration's
+    // choice (typl §9): a strict enum set's `TryFrom` refuses a value that
+    // carries one, and an open enum set's `From` keeps it, so a producer
+    // that appends a bit to an open enum set sends a value an older consumer
+    // reads with the bit in `unknown_bits`. `ridl diff` matches this choice:
+    // an appended bit is `strict_enum_append`, breaking for every encoding,
+    // on a strict enum set, and compatible on an open one (ADR-0031
+    // decision 12).
     //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside
@@ -2079,6 +2216,35 @@ fn emit_enum_set(
     } else {
         quote! {}
     };
+
+    if esd.open {
+        let attrs = decl_attrs_with_sentence(ctx, decl, derived, Some(OPEN_ENUM_SET_SENTENCE));
+        return quote! {
+            #attrs
+            #[repr(transparent)]
+            #vis struct #name(::core::primitive::i64);
+            #allow_deprecated
+            impl #name {
+                #(#bits)*
+                /// The bits of this value that no declared bit names: 0 when every set bit is declared.
+                #vis const fn unknown_bits(self) -> ::core::primitive::i64 {
+                    // The union of every declared bit.
+                    const DECLARED_MASK: ::core::primitive::i64 = #mask_lit;
+                    self.0 & !DECLARED_MASK
+                }
+            }
+
+            #allow_deprecated
+            impl ::core::convert::From<::core::primitive::i64> for #name {
+                fn from(value: ::core::primitive::i64) -> Self { Self(value) }
+            }
+
+            #allow_deprecated
+            impl ::core::convert::From<#name> for ::core::primitive::i64 {
+                fn from(value: #name) -> Self { value.0 }
+            }
+        };
+    }
 
     quote! {
         #attrs
@@ -2378,7 +2544,19 @@ pub(crate) enum ScalarBacking {
 /// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
 /// looks for the trait list first.
 fn decl_attrs(ctx: &Ctx, decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
-    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
+    decl_attrs_with_sentence(ctx, decl, derived, None)
+}
+
+/// [`decl_attrs`] with `sentence`, the backend's own text about the
+/// declaration, as its own paragraph of the doc (ADR-0028).
+fn decl_attrs_with_sentence(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    derived: &TokenStream,
+    sentence: Option<&str>,
+) -> TokenStream {
+    let doc =
+        docs::doc_block_with_sentence(&docs::DocParts::declaration(decl), &ctx.links(), sentence);
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     quote! { #doc #derived #deprecated }
 }

@@ -224,6 +224,7 @@ fn gear_position_decl() -> v2::Decl {
                 enum_value("NEUTRAL", 9),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )
 }
@@ -237,6 +238,7 @@ fn features_decl() -> v2::Decl {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )
 }
@@ -2089,6 +2091,7 @@ fn enum_with_discriminants() {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )];
     insta::assert_snapshot!(rust_with_codec(decls));
@@ -2104,6 +2107,7 @@ fn an_enum_variant_is_spelled_in_pascal_case() {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: warning_bits(),
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(source.contains("CheckEngine = 1"), "{source}");
@@ -2125,6 +2129,7 @@ fn an_empty_pascal_spelling_is_derived_from_snake() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: warning_bits(),
                 reserved: Vec::new(),
+                open: false,
             }),
         )],
     );
@@ -2177,6 +2182,7 @@ fn an_enum_value_outside_the_typl_convention_compiles() {
                 enum_value("VIEW", 4),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(rust_source.contains("Self_ = 0"), "{rust_source}");
@@ -2284,6 +2290,7 @@ fn an_enumset_bit_named_like_a_generated_item_compiles() {
                 enum_value("Error", 2),
             ],
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
 
@@ -2340,6 +2347,7 @@ fn enumset_standalone_form() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )];
     insta::assert_snapshot!(rust_with_codec(decls));
@@ -2377,6 +2385,167 @@ fn enum_set_rejects_bits_outside_the_declared_mask() {
     );
 }
 
+/// An open `DtcStatus`-like enum: two declared values and `open`.
+fn open_enum_decl() -> v2::Decl {
+    public_decl(
+        "DtcStatus",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![enum_value("INACTIVE", 0), enum_value("ACTIVE", 1)],
+            reserved: Vec::new(),
+            open: true,
+        }),
+    )
+}
+
+/// An open `Flags`-like enum set: one declared bit and `open`.
+fn open_enum_set_decl() -> v2::Decl {
+    public_decl(
+        "Flags",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("A", 0)],
+            width: v2::IntWidth::U8 as i32,
+            open: true,
+        }),
+    )
+}
+
+/// An open enum carries an `Unknown` variant over a generated newtype, is
+/// `#[non_exhaustive]`, has no `#[repr(i64)]` and converts through `From`
+/// in both directions; `TryFrom<i64>` is not emitted for it.
+#[test]
+fn an_open_enum_has_an_unknown_variant_and_is_non_exhaustive() {
+    let source = rust_with_codec(vec![open_enum_decl()]);
+    assert!(source.contains("#[non_exhaustive]"), "{source}");
+    assert!(source.contains("Unknown(UnknownDtcStatus)"), "{source}");
+    assert!(
+        source.contains("pub struct UnknownDtcStatus(::core::primitive::i64)"),
+        "{source}"
+    );
+    assert!(
+        source.contains("pub const fn raw(self) -> ::core::primitive::i64"),
+        "{source}"
+    );
+    assert!(
+        source.contains("impl ::core::convert::From<::core::primitive::i64> for DtcStatus"),
+        "{source}"
+    );
+    assert!(
+        source.contains("impl ::core::convert::From<DtcStatus> for ::core::primitive::i64"),
+        "{source}"
+    );
+    assert!(!source.contains("repr(i64)"), "{source}");
+    assert!(
+        !source.contains("TryFrom<::core::primitive::i64> for DtcStatus"),
+        "{source}"
+    );
+    // The codec converts through `From`, with no value check in `verify`.
+    assert!(!source.contains("try_from"), "{source}");
+    insta::assert_snapshot!(source);
+}
+
+/// An open enum set converts from any integer through `From<i64>`, keeps
+/// every bit, and reports the bits outside the declared mask.
+#[test]
+fn an_open_enumset_converts_from_any_integer() {
+    let source = rust_with_codec(vec![open_enum_set_decl()]);
+    assert!(
+        source.contains("impl ::core::convert::From<::core::primitive::i64> for Flags"),
+        "{source}"
+    );
+    assert!(
+        source.contains("pub const fn unknown_bits(self) -> ::core::primitive::i64"),
+        "{source}"
+    );
+    assert!(
+        !source.contains("TryFrom<::core::primitive::i64> for Flags"),
+        "{source}"
+    );
+    // The codec converts through `From`, with no value check in `verify`;
+    // the one `try_from` left is the encoder's width check, over the `u8`
+    // the highest declared bit infers.
+    assert!(
+        !source.contains("TryFrom<::core::primitive::i64>>::try_from"),
+        "{source}"
+    );
+    assert!(
+        source.contains("::core::primitive::u8::try_from(::core::primitive::i64::from(__s))"),
+        "{source}"
+    );
+    assert!(!source.contains("non_exhaustive"), "{source}");
+    insta::assert_snapshot!(source);
+}
+
+/// The generated code of an open enum and an open enum set compiles against
+/// `ridl-rt`, with the FlatBuffers and the proto3 codec over them.
+#[test]
+fn an_open_enum_and_enum_set_compile() {
+    let source = generate_pipeline(
+        &package("veh.common", vec![open_enum_decl(), open_enum_set_decl()]),
+        &[WireEncoding::FlatBuffers, WireEncoding::Proto3],
+        false,
+        &[],
+    )
+    .expect("generates")
+    .rust_source;
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("open_enums.rs");
+    let meta_path = dir.path().join("open_enums.rmeta");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "warnings",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(status.success(), "generated Rust must compile:\n{source}");
+}
+
+/// The podbuf codec keeps every enum strict until driftsys/ridl#1168, so an
+/// open declaration in a package whose encodings name podbuf is refused by
+/// the backend rather than emitted as strict code. `ridl build` refuses it
+/// before this backend is reached (RIDL-158); this is the plugin path.
+#[test]
+fn an_open_declaration_with_podbuf_among_the_encodings_is_refused() {
+    for decl in [open_enum_decl(), open_enum_set_decl()] {
+        let name = decl.name.clone();
+        let error = generate_pipeline(
+            &package("veh.common", vec![decl]),
+            &[WireEncoding::FlatBuffers, WireEncoding::Podbuf],
+            false,
+            &[],
+        )
+        .expect_err("an open declaration is refused under podbuf");
+        assert!(error.message.contains(&name), "{}", error.message);
+        assert!(
+            error.message.contains("driftsys/ridl#1168"),
+            "{}",
+            error.message
+        );
+    }
+    // Without podbuf among the encodings the same package generates.
+    generate_pipeline(
+        &package("veh.common", vec![open_enum_decl(), open_enum_set_decl()]),
+        &[WireEncoding::FlatBuffers, WireEncoding::Proto3],
+        false,
+        &[],
+    )
+    .expect("generates without podbuf");
+}
+
 #[test]
 fn a_bit_position_outside_the_int64_domain_does_not_panic_codegen() {
     // `ridl-sem` reports TYPL-111 for a position outside 0..=63 and still
@@ -2394,6 +2563,7 @@ fn a_bit_position_outside_the_int64_domain_does_not_panic_codegen() {
                 enum_value("NEGATIVE", -1),
             ],
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -2414,6 +2584,7 @@ fn the_highest_declared_bit_is_in_domain() {
             backing_enum: None,
             bits: vec![enum_value("TOP", 63)],
             width: v2::IntWidth::U64 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -2501,6 +2672,7 @@ fn enumset_derived_form() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: warning_bits(),
                 reserved: Vec::new(),
+                open: false,
             }),
         ),
         public_decl(
@@ -2509,6 +2681,7 @@ fn enumset_derived_form() {
                 backing_enum: Some("Warning".to_string()),
                 bits: warning_bits(),
                 width: v2::IntWidth::U8 as i32,
+                open: false,
             }),
         ),
     ];
@@ -3216,6 +3389,7 @@ fn enumset_default_is_the_empty_set() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -3232,6 +3406,7 @@ fn enum_default_prefers_the_zero_discriminant() {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: vec![enum_value("SLOW", 5), enum_value("FAST", 9)],
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(
@@ -3322,6 +3497,7 @@ fn appendix_b() -> v2::Package {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -3329,6 +3505,7 @@ fn appendix_b() -> v2::Package {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: warning_bits(),
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -3337,6 +3514,7 @@ fn appendix_b() -> v2::Package {
             backing_enum: Some("Warning".to_string()),
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     ));
 
@@ -7139,6 +7317,7 @@ fn doc_block_on_enum_values_and_union_arms() {
                 enum_value("DRIVE", 1),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     );
     let arm_doc = "A value in [Speed], see [Measurement.fault].";
@@ -7513,6 +7692,7 @@ fn an_enum_set_bit_carries_its_doc() {
             backing_enum: None,
             bits,
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(

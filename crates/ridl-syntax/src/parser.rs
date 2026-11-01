@@ -582,6 +582,13 @@ impl<'a> Parser<'a> {
                         self.definition();
                     }
                 }
+                Some(SyntaxKind::Ident) if self.current_text() == "open" => {
+                    if self.profile == Profile::Rsdl && self.open_modifier_at(0) {
+                        self.rsdl_foreign_declaration(1);
+                    } else {
+                        self.definition();
+                    }
+                }
                 Some(SyntaxKind::ServiceKw) => self.service_def(),
                 Some(SyntaxKind::SystemKw) => {
                     self.rsdl_container(SyntaxKind::SystemDef, RsdlBody::Members);
@@ -678,6 +685,9 @@ impl<'a> Parser<'a> {
             self.nth(modifiers),
             Some(SyntaxKind::InternalKw | SyntaxKind::ErrorKw)
         ) {
+            modifiers += 1;
+        }
+        if self.open_modifier_at(modifiers) {
             modifiers += 1;
         }
         if modifiers > 0 && self.nth(modifiers).is_some_and(is_rsdl_declaration_start) {
@@ -911,6 +921,25 @@ impl<'a> Parser<'a> {
         ) {
             n += 1;
         }
+        // `open` is the last modifier: it must directly precede `enum` or
+        // `enumset`. Any other `open` at a definition start is a misplaced
+        // modifier (`open struct`, `open error enum`, `open internal enum`).
+        if self.open_modifier_at(n) {
+            n += 1;
+        } else if self.nth(n) == Some(SyntaxKind::Ident) && self.nth_text(n) == "open" {
+            for _ in 0..n {
+                self.bump();
+            }
+            self.error_at_current(
+                "FORM-102",
+                "unexpected token after `open`: expected `enum` or `enumset`, because \
+                 `open` modifies only an enum or an enumset definition and directly \
+                 precedes its keyword"
+                    .to_string(),
+            );
+            self.recover(is_top_level_start);
+            return;
+        }
         match self.nth(n) {
             Some(SyntaxKind::TypeKw) => self.type_def(),
             Some(SyntaxKind::ConstKw) => self.const_def(),
@@ -923,13 +952,32 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Consumes the `internal`/`error` modifier run into the open node.
+    /// Whether the `n`-th significant token ahead is the contextual modifier
+    /// `open`: an identifier spelled `open` whose next significant token is
+    /// `enum` or `enumset`.
+    fn open_modifier_at(&self, n: usize) -> bool {
+        self.nth(n) == Some(SyntaxKind::Ident)
+            && self.nth_text(n) == "open"
+            && matches!(
+                self.nth(n + 1),
+                Some(SyntaxKind::EnumKw | SyntaxKind::EnumsetKw)
+            )
+    }
+
+    /// Consumes the `internal`/`error` modifier run, then the `open` modifier
+    /// as an [`SyntaxKind::OpenKw`] token, into the open node.
     fn modifiers(&mut self) {
         while matches!(
             self.current(),
             Some(SyntaxKind::InternalKw | SyntaxKind::ErrorKw)
         ) {
             self.bump();
+        }
+        if self.open_modifier_at(0) {
+            self.eat_trivia();
+            let token = &self.tokens[self.pos];
+            self.builder.token(SyntaxKind::OpenKw.into(), token.text);
+            self.pos += 1;
         }
     }
 

@@ -338,6 +338,12 @@ pub trait HasModifiers: AstNode {
     fn is_error(&self) -> bool {
         support::token(self.syntax(), SyntaxKind::ErrorKw).is_some()
     }
+
+    /// `true` when the definition carries the `open` modifier (valid on enum
+    /// and enumset definitions only).
+    fn is_open(&self) -> bool {
+        support::token(self.syntax(), SyntaxKind::OpenKw).is_some()
+    }
 }
 
 /// A node that doc comments attach to (typl reference §14). Doc comments

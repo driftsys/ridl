@@ -1472,9 +1472,10 @@ fn check_tells_a_misplaced_tombstone_and_a_last_member_from_a_retirement() {
 /// An enum value added or removed is `ridl diff`'s alone: RIDL-407 is about
 /// ordinals, and an enum value's identity is its explicit number (typl §8),
 /// so the desk check stays silent whatever the gate says about it. The append
-/// is compatible and so is filtered out before the desk reads the container;
+/// to a strict enum is breaking (`strict_enum_append`), and the desk reads
+/// only the ordinal-bearing categories, so it does not read it;
 /// `check_is_silent_for_an_enum_value_inserted_below_the_highest_number`
-/// covers the addition that the gate refuses.
+/// covers the addition below the highest number.
 #[test]
 fn check_is_silent_for_an_enum_value_added_or_removed() {
     for (label, edit, change, gate) in [
@@ -1487,8 +1488,8 @@ fn check_is_silent_for_an_enum_value_added_or_removed() {
         (
             "value-added",
             "  DRIVE = 1\n  REVERSE = 2\n",
-            "decl_added veh.cluster/Gear/REVERSE",
-            0,
+            "strict_enum_append veh.cluster/Gear",
+            1,
         ),
     ] {
         let dir = TempDir::new(label);
@@ -1504,7 +1505,7 @@ fn check_is_silent_for_an_enum_value_added_or_removed() {
         );
         assert_eq!(
             diff_code, gate,
-            "{label}: the gate refuses a removal and passes an append:\n{diff}"
+            "{label}: the gate refuses a removal and an append to a strict enum:\n{diff}"
         );
 
         let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);

@@ -161,21 +161,33 @@ common cases:
   arm or an enum value removed, an enum value renumbered, or an interface
   number changed (`decl_removed`, `member_reordered`,
   `interface_number_changed`).
+- **Breaking, for a declaration that is not `open`**: an enum value or an
+  enum-set flag appended to an enum or an enum set (`strict_enum_append`, once
+  per declaration, with the appended names). The rule applies to every enum and
+  enum set of the package, whether or not an interface reaches it and whether
+  or not it is `internal`. The Rust codecs built from the old declaration refuse
+  a value it does not name, under every encoding, so the verdict does not
+  depend on `--encoding`; the TypeScript codec does not check it yet
+  ([driftsys/ridl#1173](https://github.com/driftsys/ridl/issues/1173)). Declare the enum or the enum set
+  `open` to make the same append compatible. Closing an `open` declaration is
+  breaking (`enum_closed`), because a producer of the old version may still
+  send a value the new reader refuses.
+- **Compatible, for an `open` declaration**: an enum value or an enum-set flag
+  appended (no category of its own: the append is a compatible `decl_added`),
+  and the `open` keyword gained (`enum_opened`). Opening is a source break for
+  Rust callers: the generated enum gains an unknown variant and
+  `#[non_exhaustive]`, so a `match` over it needs a wildcard arm.
 - **Breaking under podbuf**: a struct field appended that grows the podbuf
   head of a struct another head of the old side holds inline
   (`podbuf_inline_append`; the line names each inline use); an enum value, an
   enum-set flag or a union arm appended after which the podbuf integer of the
   enum, the enum set or the union's tag is a different integer
   (`podbuf_width_change`, once per declaration with the old and the new
-  integer); and an enum value or an enum-set flag appended to an enum or an
-  enum set, which are all strict (`podbuf_strict_enum_append`, once per
-  declaration, unless the append also changes the integer, which draws only
-  the `podbuf_width_change` line). A snapshot does not record the encodings a
-  workspace builds, so the verdict follows `ridl diff --encoding podbuf`:
-  breaking with it, compatible without it, under the heading
-  `breaking under podbuf` either way. The three rules are stated in
-  [ADR-0031][adr-0031] decision 10, and `ridl diff --explain <category>`
-  states each in full.
+  integer). A snapshot does not record the encodings a workspace builds, so
+  the verdict follows `ridl diff --encoding podbuf`: breaking with it,
+  compatible without it, under the heading `breaking under podbuf` either way.
+  The two rules are stated in [ADR-0031][adr-0031] decision 10, and
+  `ridl diff --explain <category>` states each in full.
   A field removed from a struct, its slot held by a tombstone, is `decl_removed`,
   breaking under every encoding: the type is gone from the source, so its
   bytes cannot be kept.

@@ -1728,7 +1728,7 @@ fn is_line_comment(token: &ridl_syntax::SyntaxToken) -> bool {
     is_comment(token.kind()) && token.text().starts_with("//")
 }
 
-/// The prefix of `internal` / `error` modifiers, in source order, each with a
+/// The prefix of `internal` / `error` / `open` modifiers, in source order, each with a
 /// trailing space. Modifiers are surface, not wire identity, so source order is
 /// preserved rather than normalised.
 fn modifiers_prefix(node: &SyntaxNode) -> String {
@@ -1736,7 +1736,7 @@ fn modifiers_prefix(node: &SyntaxNode) -> String {
     for element in node.children_with_tokens() {
         if let NodeOrToken::Token(t) = element {
             match t.kind() {
-                SyntaxKind::InternalKw | SyntaxKind::ErrorKw => {
+                SyntaxKind::InternalKw | SyntaxKind::ErrorKw | SyntaxKind::OpenKw => {
                     out.push_str(t.text());
                     out.push(' ');
                 }
@@ -4348,5 +4348,23 @@ mod tests {
                 FormatOutcome::ParseErrors(_)
             ));
         }
+    }
+
+    #[test]
+    fn open_round_trips_in_modifier_order() {
+        assert_width_format(
+            "package p\ninternal   error open   enum E { A = 0 }\n",
+            "package p\n\ninternal error open enum E {\n  A = 0\n}\n",
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn open_is_kept_on_a_derived_enumset() {
+        assert_width_format(
+            "package p\nopen enumset W : E\n",
+            "package p\n\nopen enumset W: E\n",
+            &FormatOptions::default(),
+        );
     }
 }

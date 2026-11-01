@@ -630,6 +630,13 @@ diag_codes! {
         /// `ridl_core::lint::report_lint_directives`.
         TYPL_412 = "TYPL-412", Info,
             "malformed lint directive", lint = "malformed-lint-directive";
+
+        /// An `open enum` that declares no value, or an `open enumset` that
+        /// declares no bit (typl §8.1): nothing has a name, so every value is
+        /// unknown. Warning. Emitted by the checker
+        /// (`ridl_sem::check`).
+        TYPL_413 = "TYPL-413", Warning,
+            "open enum or enum set declares no value or bit", lint = "open-enum-without-values";
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -904,6 +911,17 @@ diag_codes! {
         /// `ridl build`, on the interaction.
         RIDL_157 = "RIDL-157", Error,
             "payload above the default ceiling of its kind or with no finite bound";
+
+        /// An `open` enum or `open` enum set in a package of a workspace
+        /// whose manifest enables `podbuf` in a `[backend.<name>]` table.
+        /// The podbuf codec and the C header keep every enum strict until
+        /// driftsys/ridl#1168 lands, so an open declaration has no podbuf
+        /// encoding yet. Error; as an error code it has no name and no
+        /// level. Emitted by `ridlc` when a `[backend.<name>]` table enables
+        /// `podbuf`, on the declaration. The message names the declaration
+        /// and the issue.
+        RIDL_158 = "RIDL-158", Error,
+            "open enum or enum set in a package that podbuf encodes";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
@@ -2491,6 +2509,7 @@ mod tests {
             ("TYPL-410", "doc-comment-style"),
             ("TYPL-411", "unused-lint-directive"),
             ("TYPL-412", "malformed-lint-directive"),
+            ("TYPL-413", "open-enum-without-values"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),

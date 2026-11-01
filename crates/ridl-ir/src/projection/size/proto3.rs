@@ -752,6 +752,7 @@ mod tests {
                     })
                     .collect(),
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }
@@ -789,6 +790,7 @@ mod tests {
                     })
                     .collect(),
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         });

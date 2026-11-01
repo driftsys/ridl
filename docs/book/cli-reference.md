@@ -1589,7 +1589,7 @@ category's classification rule without comparing anything.
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 `proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
 the encodings a workspace builds, so the command does not read them from a
-manifest. Only `podbuf` has rules of its own, three of them, each breaking
+manifest. Only `podbuf` has rules of its own, two of them, each breaking
 with `--encoding podbuf` and compatible without it, and each listed under the
 heading `breaking under podbuf` either way, so that a workspace that does not
 build podbuf still sees it. A struct field appended that grows the podbuf head
@@ -1602,12 +1602,13 @@ read as grown, and every append to that struct draws the line. An enum value, an
 enum-set flag or a union arm appended after which the podbuf integer of the
 enum, the enum set or the union's tag is a different integer is
 `podbuf_width_change`, reported once per declaration with the old and the new
-integer. An enum value or an enum-set flag appended is
-`podbuf_strict_enum_append`, reported once per declaration with the appended
-names, except that an enum or an enum set whose append changes the integer
-draws only the `podbuf_width_change` line. The three rules are stated in
-[ADR-0031][adr-0031] decision 10, and `ridl diff --explain <category>` states
-each in full. A name outside the three is a usage error, exit 2. With
+integer. The two rules are stated in [ADR-0031][adr-0031] decision 10, and
+`ridl diff --explain <category>` states each in full. An enum value or an
+enum-set flag appended to a declaration that is not `open` is
+`strict_enum_append`, reported once per declaration with the appended names and
+breaking under every encoding, with or without `--encoding`; the same append to
+an `open` declaration is compatible, and `enum_opened` and `enum_closed` report
+the keyword gained or lost. A name outside the three is a usage error, exit 2. With
 `Reading` held inline by `Bounds` and an eight-byte field appended to it,
 which grows its head:
 
@@ -1928,6 +1929,9 @@ the categories `ridl diff` reports are:
   podbuf_inline_append
   podbuf_width_change
   podbuf_strict_enum_append
+  strict_enum_append
+  enum_opened
+  enum_closed
 ```
 
 ### `ridl lock`

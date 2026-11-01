@@ -577,6 +577,7 @@ mod tests {
                 })
                 .collect(),
             reserved: Vec::new(),
+            open: false,
         }
     }
 

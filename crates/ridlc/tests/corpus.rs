@@ -664,6 +664,17 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-405", Showcase),
     ("RIDL-406", Showcase),
     (
+        "RIDL-158",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `an_open_enum_in_a_podbuf_package_is_refused` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
         "RIDL-407",
         Elsewhere {
             fixture: "crates/ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json",

@@ -344,6 +344,9 @@ message EnumDef {
   repeated EnumValue values = 1;
   // Retired values, never reused with a new meaning (typl §7.4).
   repeated Reserved reserved = 2;
+  // True for an open enum: a value the declaration does not name is valid
+  // (typl §8). False, the default, is a strict enum.
+  bool open = 3;
 }
 
 // One enum value (typl §8) — or one enum-set bit (typl §9.1).
@@ -377,6 +380,9 @@ message EnumSetDef {
   repeated EnumValue bits = 2;
   // Width inferred from the highest bit position (typl §9.3).
   IntWidth width = 3;
+  // True for an open enum set: a bit the declaration does not name is valid
+  // and kept (typl §9). False, the default, is a strict enum set.
+  bool open = 4;
 }
 
 // A discriminated (tagged) union — exactly one arm active (typl §10).

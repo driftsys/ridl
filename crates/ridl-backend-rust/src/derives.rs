@@ -207,7 +207,10 @@ fn decl_eligibility(ctx: &Ctx, decl: &v1::Declaration, seen: &mut HashSet<String
     let result = match decl.kind.as_ref() {
         Some(v1::declaration::Kind::Scalar(sc)) => scalar_eligibility(sc),
         // A fieldless `#[repr(i64)]` enum and a `#[repr(transparent)]` newtype
-        // over `i64` are both an integer at the leaf.
+        // over `i64` are both an integer at the leaf. An open enum's
+        // `Unknown` variant holds a generated newtype over `i64` that
+        // derives every conditional trait, so it is an integer at the leaf
+        // as well.
         Some(v1::declaration::Kind::Enum(_)) | Some(v1::declaration::Kind::EnumSet(_)) => {
             Eligibility::ALL
         }

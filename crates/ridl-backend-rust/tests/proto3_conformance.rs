@@ -38,6 +38,8 @@
 //! entry), and the determinism and bound cases pin one encoding, encode into
 //! a dirty buffer, and encode a worst-case value per message.
 
+#[path = "support/ir.rs"]
+mod ir;
 #[path = "support/proto3.rs"]
 mod proto3;
 #[path = "support/rustc.rs"]
@@ -3149,4 +3151,258 @@ fn the_worst_case_value_fits_max_size() {
         slack += max_size - written;
     }
     println!("slack over {} messages: {slack} bytes", messages.len());
+}
+
+// ---------------------------------------------------------------------------
+// Open enums and open enum sets
+// ---------------------------------------------------------------------------
+
+/// The generated proto3 codec for `tests/fixtures/open_enums.ridl`, with
+/// `main` appended. `StrictMsg` and `OpenMsg` have one layout, so bytes the
+/// open codec writes for an undeclared value are bytes the strict codec
+/// refuses, which is what shows that the wire carries the raw integer.
+fn open_program(main: &str) -> String {
+    let package = ir::compile_fixture("open_enums.ridl");
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::Proto3],
+        false,
+        &[],
+    )
+    .expect("the open enums fixture generates")
+    .rust_source;
+    format!("#![allow(dead_code)]\n{generated}\n{main}")
+}
+
+/// An undeclared value of an open enum is written as the proto3 varint of
+/// its integer, verified, decoded as `Unknown` holding that integer, and
+/// written back unchanged. A declared value has one representation.
+#[test]
+fn an_open_enum_round_trips_an_undeclared_value() {
+    rustc::run_program(
+        "pb_open_enum_undeclared_value",
+        &open_program(
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{Ref, Rule, VerifyError};
+
+fn main() {
+    // `DtcStatus` declares 0 and 1; 7 is undeclared. Field 1 varint 7, and
+    // the flags at 0 are omitted.
+    let sent = OpenMsg { status: DtcStatus::from(7), flags: Flags::from(0) };
+    let mut out = [0u8; 64];
+    let bytes = Ref::<OpenMsg, Proto3>::encode(&sent, &mut out)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    assert_eq!(bytes, [0x08, 0x07]);
+    assert!(matches!(
+        Ref::<StrictMsg, Proto3>::verify(&bytes),
+        Err(VerifyError::Contract(violation)) if violation.rule == Rule::Variant
+    ));
+    let msg = Ref::<OpenMsg, Proto3>::verify(&bytes)
+        .expect("an undeclared value verifies")
+        .decode();
+    assert!(matches!(msg.status, DtcStatus::Unknown(unknown) if unknown.raw() == 7));
+    let mut again = [0u8; 64];
+    let re_encoded = Ref::<OpenMsg, Proto3>::encode(&msg, &mut again)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    assert_eq!(re_encoded, bytes, "pass-through");
+    assert_eq!(DtcStatus::from(1), DtcStatus::Active);
+    // A negative undeclared value is a ten-byte varint, as any proto3 enum.
+    let negative = OpenMsg { status: DtcStatus::from(-1), flags: Flags::from(0) };
+    let bytes = Ref::<OpenMsg, Proto3>::encode(&negative, &mut out)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    assert_eq!(bytes.len(), 11);
+    let msg = Ref::<OpenMsg, Proto3>::verify(&bytes).expect("verify").decode();
+    assert!(matches!(msg.status, DtcStatus::Unknown(unknown) if unknown.raw() == -1));
+}
+"#,
+        ),
+    );
+}
+
+/// An undeclared bit of an open enum set is kept, reported by
+/// `unknown_bits`, and written back unchanged.
+#[test]
+fn an_open_enumset_keeps_an_undeclared_bit() {
+    rustc::run_program(
+        "pb_open_enumset_undeclared_bit",
+        &open_program(
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{Ref, Rule, VerifyError};
+
+fn main() {
+    // `Flags` declares bit 0 (`A`); bit 7 is undeclared. Field 2 varint 129.
+    let sent = OpenMsg { status: DtcStatus::from(0), flags: Flags::from(0b1000_0001) };
+    let mut out = [0u8; 64];
+    let bytes = Ref::<OpenMsg, Proto3>::encode(&sent, &mut out)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    assert_eq!(bytes, [0x10, 0x81, 0x01]);
+    assert!(matches!(
+        Ref::<StrictMsg, Proto3>::verify(&bytes),
+        Err(VerifyError::Contract(violation)) if violation.rule == Rule::Variant
+    ));
+    let msg = Ref::<OpenMsg, Proto3>::verify(&bytes)
+        .expect("an undeclared bit verifies")
+        .decode();
+    assert_eq!(i64::from(msg.flags), 0b1000_0001);
+    assert_eq!(msg.flags.unknown_bits(), 0b1000_0000);
+    let mut again = [0u8; 64];
+    let re_encoded = Ref::<OpenMsg, Proto3>::encode(&msg, &mut again)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    assert_eq!(re_encoded, bytes, "pass-through");
+}
+"#,
+        ),
+    );
+}
+
+/// A strict enum and a strict enum set keep refusing an undeclared value
+/// with `Rule::Variant` in `verify`.
+#[test]
+fn a_strict_enum_still_refuses_an_undeclared_value() {
+    rustc::run_program(
+        "pb_strict_enum_refuses_undeclared_value",
+        &open_program(
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{Ref, Rule, VerifyError};
+
+fn main() {
+    match Ref::<StrictMsg, Proto3>::verify(&[0x08, 0x07]) {
+        Err(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, Rule::Variant);
+            assert_eq!(violation.type_name, Some("Strict"));
+        }
+        Err(other) => panic!("expected a variant violation, got {other:?}"),
+        Ok(_) => panic!("expected a variant violation, got a success"),
+    }
+    match Ref::<StrictMsg, Proto3>::verify(&[0x10, 0x81, 0x01]) {
+        Err(VerifyError::Contract(violation)) => {
+            assert_eq!(violation.rule, Rule::Variant);
+            assert_eq!(violation.type_name, Some("StrictFlags"));
+        }
+        Err(other) => panic!("expected a variant violation, got {other:?}"),
+        Ok(_) => panic!("expected a variant violation, got a success"),
+    }
+    let msg = Ref::<StrictMsg, Proto3>::verify(&[0x08, 0x01]).expect("verify").decode();
+    assert_eq!(msg.status, Strict::Active);
+}
+"#,
+        ),
+    );
+}
+
+/// An open enum with no declared value generates, decodes every value as
+/// `Unknown`, and reads an absent field as `Unknown(0)`.
+#[test]
+fn an_empty_open_enum_round_trips_every_value_as_unknown() {
+    rustc::run_program(
+        "pb_empty_open_enum",
+        &open_program(
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::Ref;
+
+fn main() {
+    let sent = EmptyMsg { e: Empty::from(5) };
+    let mut out = [0u8; 64];
+    let bytes = Ref::<EmptyMsg, Proto3>::encode(&sent, &mut out)
+        .expect("encode")
+        .bytes()
+        .to_vec();
+    assert_eq!(bytes, [0x08, 0x05]);
+    let msg = Ref::<EmptyMsg, Proto3>::verify(&bytes).expect("verify").decode();
+    assert!(matches!(msg.e, Empty::Unknown(unknown) if unknown.raw() == 5));
+    // No field at all: the proto3 default, 0, is `Unknown(0)`.
+    let absent = Ref::<EmptyMsg, Proto3>::verify(&[]).expect("an absent field verifies").decode();
+    assert!(matches!(absent.e, Empty::Unknown(unknown) if unknown.raw() == 0));
+}
+"#,
+        ),
+    );
+}
+
+/// The int32 check of the proto3 encoder runs at the element site of a
+/// packed collection too, and on both bounds.
+#[test]
+fn an_unknown_outside_int32_in_a_packed_collection_is_refused() {
+    rustc::run_program(
+        "pb_open_enum_packed_outside_int32",
+        &open_program(
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{EncodeError, Ref, Rule};
+
+fn main() {
+    let mut out = [0u8; 128];
+    for raw in [1i64 << 40, i64::from(i32::MIN) - 1] {
+        let list = OpenList { statuses: vec![DtcStatus::from(1), DtcStatus::from(raw)] };
+        match Ref::<OpenList, Proto3>::encode(&list, &mut out) {
+            Err(EncodeError::Contract(violation)) => {
+                assert_eq!(violation.rule, Rule::Range);
+                assert_eq!(violation.type_name, Some("DtcStatus"));
+            }
+            Err(other) => panic!("expected a range violation for {raw}, got {other:?}"),
+            Ok(_) => panic!("expected a range violation for {raw}, got a success"),
+        }
+    }
+    let inside = OpenList {
+        statuses: vec![DtcStatus::from(i64::from(i32::MIN)), DtcStatus::from(i64::from(i32::MAX))],
+    };
+    let bytes = Ref::<OpenList, Proto3>::encode(&inside, &mut out).expect("the bounds encode");
+    let back = Ref::<OpenList, Proto3>::verify(bytes.bytes()).expect("verify").decode();
+    assert_eq!(i64::from(back.statuses[0]), i64::from(i32::MIN));
+    assert_eq!(i64::from(back.statuses[1]), i64::from(i32::MAX));
+}
+"#,
+        ),
+    );
+}
+
+/// An open enum set keeps every bit, but its proto3 wire scalar is the one
+/// of its declared width (`uint32` for a width of 8 bits), so the encoder
+/// refuses a value outside that scalar with `Rule::Range` rather than
+/// writing a varint the reader refuses.
+#[test]
+fn an_open_enumset_value_outside_its_wire_scalar_is_refused() {
+    rustc::run_program(
+        "pb_open_enumset_outside_wire_scalar",
+        &open_program(
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{EncodeError, Ref, Rule};
+
+fn main() {
+    let mut out = [0u8; 64];
+    for raw in [1i64 << 32, -1i64] {
+        let msg = OpenMsg { status: DtcStatus::from(0), flags: Flags::from(raw) };
+        match Ref::<OpenMsg, Proto3>::encode(&msg, &mut out) {
+            Err(EncodeError::Contract(violation)) => {
+                assert_eq!(violation.rule, Rule::Range);
+                assert_eq!(violation.type_name, Some("Flags"));
+            }
+            Err(other) => panic!("expected a range violation for {raw}, got {other:?}"),
+            Ok(_) => panic!("expected a range violation for {raw}, got a success"),
+        }
+    }
+    // Inside the uint32 scalar, above the declared 8-bit width: carried.
+    let wide = OpenMsg { status: DtcStatus::from(0), flags: Flags::from(1 << 20) };
+    let bytes = Ref::<OpenMsg, Proto3>::encode(&wide, &mut out).expect("encode");
+    let back = Ref::<OpenMsg, Proto3>::verify(bytes.bytes()).expect("verify").decode();
+    assert_eq!(i64::from(back.flags), 1 << 20);
+}
+"#,
+        ),
+    );
 }

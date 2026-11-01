@@ -6,6 +6,7 @@ syntax = "proto3";
 
 package veh.cruise;
 
+// strict: a value outside this list is not valid
 enum EngageState {
   ENGAGE_STATE_OFF = 0;
   ENGAGE_STATE_ARMED = 1;

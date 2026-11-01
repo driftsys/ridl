@@ -48,6 +48,7 @@ fn package() -> v2::Package {
                         name: None,
                         value: Some(7),
                     }],
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -456,6 +457,7 @@ fn package_a() -> v2::Package {
                 kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                     values: vec![value("PARK", 0), value("DRIVE", 1)],
                     reserved: vec![],
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -493,6 +495,7 @@ fn package_a() -> v2::Package {
                     backing_enum: Some("Gear".to_string()),
                     bits: vec![value("PARK", 0), value("DRIVE", 1)],
                     width: v2::IntWidth::U8 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -692,6 +695,7 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
                 kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                     values: vec![value("ONE", 0)],
                     reserved: vec![],
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -807,6 +811,7 @@ fn a_local_declaration_reaches_foreign_through_a_resolved_reference() {
                 kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                     values: vec![value("PARK", 0), value("DRIVE", 1)],
                     reserved: vec![],
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -957,6 +962,7 @@ fn a_self_qualified_reference_does_not_reach_foreign() {
                 kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                     values: vec![value("ONE", 0)],
                     reserved: vec![],
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -3363,6 +3369,7 @@ fn docs_package() -> v2::Package {
             }
         }],
         reserved: Vec::new(),
+        open: false,
     };
     let choice = v2::UnionDef {
         arms: vec![{

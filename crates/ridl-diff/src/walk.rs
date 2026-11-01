@@ -140,8 +140,19 @@ fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mu
         // interface reaches the enum, so the hash changes then; the change is
         // reported as `EnumReordered` on the container.
         (Some(Kind::EnumDef(a)), Some(Kind::EnumDef(b))) => {
+            emit_openness(changes, &path, a.open, b.open);
+            let (a, b) = (
+                v2::EnumDef {
+                    open: false,
+                    ..a.clone()
+                },
+                v2::EnumDef {
+                    open: false,
+                    ..b.clone()
+                },
+            );
             if a != b {
-                let (old_sorted, new_sorted) = (enum_ignoring_order(a), enum_ignoring_order(b));
+                let (old_sorted, new_sorted) = (enum_ignoring_order(&a), enum_ignoring_order(&b));
                 if old_sorted == new_sorted {
                     emit(changes, path, Category::EnumReordered, None, None);
                 } else {
@@ -167,9 +178,20 @@ fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mu
             }
         }
         (Some(Kind::EnumSetDef(a)), Some(Kind::EnumSetDef(b))) => {
+            emit_openness(changes, &path, a.open, b.open);
+            let (a, b) = (
+                v2::EnumSetDef {
+                    open: false,
+                    ..a.clone()
+                },
+                v2::EnumSetDef {
+                    open: false,
+                    ..b.clone()
+                },
+            );
             if a != b {
                 let (old_sorted, new_sorted) =
-                    (enum_set_ignoring_order(a), enum_set_ignoring_order(b));
+                    (enum_set_ignoring_order(&a), enum_set_ignoring_order(&b));
                 if old_sorted == new_sorted {
                     emit(changes, path, Category::EnumReordered, None, None);
                 } else {
@@ -248,6 +270,18 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
             Some(type_init_str(b)),
         );
     }
+}
+
+/// The [`Category::EnumOpened`] or [`Category::EnumClosed`] line of an enum or
+/// enum set whose `open` keyword differs between the two sides, at the
+/// declaration's path; nothing when it is the same.
+fn emit_openness(changes: &mut Vec<Change>, path: &str, old_open: bool, new_open: bool) {
+    let category = match (old_open, new_open) {
+        (false, true) => Category::EnumOpened,
+        (true, false) => Category::EnumClosed,
+        _ => return,
+    };
+    emit(changes, path.to_string(), category, None, None);
 }
 
 /// A coarse comparison of a composite type body (struct fields, enum values,
@@ -2149,56 +2183,64 @@ pub(crate) fn podbuf_width_changes(
     changes
 }
 
-/// The [`Category::PodbufStrictEnumAppend`] changes of one walked and
-/// classified package pair: one per enum or enum set of `new` to which `pair`
-/// appends a value or a flag compatibly, except a declaration that `widths`
-/// (the [`podbuf_width_changes`] of the same pair) already reports, so that
-/// one change draws one line. The verdict is the placeholder [`emit`] stamps;
-/// the classifier settles it from the encodings.
-pub(crate) fn podbuf_strict_enum_appends(
-    pair: &[Change],
+/// Replaces the [`Category::DeclAdded`] lines of the values or flags appended
+/// to a strict enum or enum set of `new` (one that is not `open`) with one
+/// [`Category::StrictEnumAppend`] line per declaration, at the position of the
+/// first replaced line, with the appended names in the detail. The verdict is
+/// the placeholder [`emit`] stamps; the classifier settles it. A value or flag
+/// that is not an append stays a `DeclAdded` line.
+pub(crate) fn fold_strict_enum_appends(
+    pair: Vec<Change>,
     old: &v2::Package,
     new: &v2::Package,
-    widths: &[Change],
 ) -> Vec<Change> {
-    let mut appended: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for (name, member) in compatible_member_appends(pair, new) {
-        appended.entry(name).or_default().push(member);
-    }
-    let mut changes = Vec::new();
-    for (name, members) in appended {
-        let path = format!("{}/{name}", new.name);
-        if widths.iter().any(|change| change.path == path) {
-            continue;
+    let strict_member = |change: &Change| -> Option<(String, String)> {
+        if change.category != Category::DeclAdded {
+            return None;
         }
-        let find = |pkg: &v2::Package| {
-            pkg.decls
-                .iter()
-                .find(|decl| decl.name == name)
-                .and_then(|decl| decl.kind.clone())
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(member), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            return None;
         };
-        let strict = matches!(
-            (find(old), find(new)),
-            (
-                Some(v2::decl::Kind::EnumDef(_)),
-                Some(v2::decl::Kind::EnumDef(_))
-            ) | (
-                Some(v2::decl::Kind::EnumSetDef(_)),
-                Some(v2::decl::Kind::EnumSetDef(_))
-            )
-        );
-        if !strict {
-            continue;
+        if package != new.name {
+            return None;
         }
-        emit(
-            &mut changes,
-            path,
-            Category::PodbufStrictEnumAppend,
-            None,
-            Some(members.join(", ")),
-        );
+        fn find<'p>(pkg: &'p v2::Package, name: &str) -> Option<&'p v2::Decl> {
+            pkg.decls.iter().find(|decl| decl.name == name)
+        }
+        crate::classify::is_strict_enum_append(find(old, name)?, find(new, name)?)
+            .then(|| (name.to_string(), member.to_string()))
+    };
+
+    let mut appended: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for change in &pair {
+        if let Some((name, member)) = strict_member(change) {
+            appended.entry(name).or_default().push(member);
+        }
     }
-    changes
+    let mut folded = Vec::with_capacity(pair.len());
+    for change in pair {
+        match strict_member(&change) {
+            None => folded.push(change),
+            Some((name, _)) => {
+                if let Some(members) = appended.remove(&name) {
+                    emit(
+                        &mut folded,
+                        format!("{}/{name}", new.name),
+                        Category::StrictEnumAppend,
+                        None,
+                        Some(members.join(", ")),
+                    );
+                }
+            }
+        }
+    }
+    folded
 }
 
 /// Every head of `holders` whose podbuf form holds the struct `package.name`

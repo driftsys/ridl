@@ -645,7 +645,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         ],
         "retired": [],
         "zeroMember": 0,
-        "initMember": 0
+        "initMember": 0,
+        "open": false
       }
     },
     {
@@ -741,7 +742,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         ],
         "width": "INT_WIDTH_U8",
-        "declaredMask": "19"
+        "declaredMask": "19",
+        "open": false
       }
     },
     {
@@ -815,7 +817,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         ],
         "retired": [],
         "zeroMember": 0,
-        "initMember": 0
+        "initMember": 0,
+        "open": false
       }
     },
     {

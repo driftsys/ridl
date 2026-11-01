@@ -22,7 +22,7 @@ mod root {
             /// The enum `Health` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Enum `Health` in the file `fb_demo.fbs:3`
+            /// * Enum `Health` in the file `fb_demo.fbs:4`
             #[derive(
                 Copy,
                 Clone,
@@ -202,7 +202,7 @@ mod root {
             /// The table `Inner` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `Inner` in the file `fb_demo.fbs:9`
+            /// * Table `Inner` in the file `fb_demo.fbs:10`
             #[derive(
                 Clone,
                 Debug,
@@ -518,7 +518,7 @@ mod root {
             /// The union `OutcomeUnion` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Union `OutcomeUnion` in the file `fb_demo.fbs:16`
+            /// * Union `OutcomeUnion` in the file `fb_demo.fbs:17`
             #[derive(
                 Clone,
                 Debug,
@@ -726,7 +726,7 @@ mod root {
             /// The table `Outcome` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `Outcome` in the file `fb_demo.fbs:18`
+            /// * Table `Outcome` in the file `fb_demo.fbs:19`
             #[derive(
                 Clone,
                 Debug,
@@ -1005,7 +1005,7 @@ mod root {
             /// The table `Report` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `Report` in the file `fb_demo.fbs:22`
+            /// * Table `Report` in the file `fb_demo.fbs:23`
             #[derive(
                 Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize,
             )]
@@ -2918,7 +2918,7 @@ mod root {
             /// The table `SpeedBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `SpeedBox` in the file `fb_demo.fbs:57`
+            /// * Table `SpeedBox` in the file `fb_demo.fbs:58`
             #[derive(
                 Clone,
                 Debug,
@@ -3180,7 +3180,7 @@ mod root {
             /// The table `CountBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `CountBox` in the file `fb_demo.fbs:62`
+            /// * Table `CountBox` in the file `fb_demo.fbs:63`
             #[derive(
                 Clone,
                 Debug,
@@ -3442,7 +3442,7 @@ mod root {
             /// The table `RatioBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `RatioBox` in the file `fb_demo.fbs:67`
+            /// * Table `RatioBox` in the file `fb_demo.fbs:68`
             #[derive(
                 Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize,
             )]
@@ -3698,7 +3698,7 @@ mod root {
             /// The table `LabelBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `LabelBox` in the file `fb_demo.fbs:72`
+            /// * Table `LabelBox` in the file `fb_demo.fbs:73`
             #[derive(
                 Clone,
                 Debug,
@@ -3969,7 +3969,7 @@ mod root {
             /// The table `BlobBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `BlobBox` in the file `fb_demo.fbs:77`
+            /// * Table `BlobBox` in the file `fb_demo.fbs:78`
             #[derive(
                 Clone,
                 Debug,
@@ -4235,7 +4235,7 @@ mod root {
             /// The table `EngagedBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `EngagedBox` in the file `fb_demo.fbs:82`
+            /// * Table `EngagedBox` in the file `fb_demo.fbs:83`
             #[derive(
                 Clone,
                 Debug,
@@ -4500,7 +4500,7 @@ mod root {
             /// The table `HealthBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `HealthBox` in the file `fb_demo.fbs:87`
+            /// * Table `HealthBox` in the file `fb_demo.fbs:88`
             #[derive(
                 Clone,
                 Debug,
@@ -4768,7 +4768,7 @@ mod root {
             /// The table `WarningFlagsBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `WarningFlagsBox` in the file `fb_demo.fbs:91`
+            /// * Table `WarningFlagsBox` in the file `fb_demo.fbs:92`
             #[derive(
                 Clone,
                 Debug,
@@ -5051,7 +5051,7 @@ mod root {
             /// The table `OutcomeBadBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `OutcomeBadBox` in the file `fb_demo.fbs:97`
+            /// * Table `OutcomeBadBox` in the file `fb_demo.fbs:98`
             #[derive(
                 Clone,
                 Debug,
@@ -5335,7 +5335,7 @@ mod root {
             /// The table `ReportRange` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportRange` in the file `fb_demo.fbs:101`
+            /// * Table `ReportRange` in the file `fb_demo.fbs:102`
             #[derive(
                 Clone,
                 Debug,
@@ -5669,7 +5669,7 @@ mod root {
             /// The table `ReportMetaEntry` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportMetaEntry` in the file `fb_demo.fbs:108`
+            /// * Table `ReportMetaEntry` in the file `fb_demo.fbs:109`
             #[derive(
                 Clone,
                 Debug,
@@ -6006,7 +6006,7 @@ mod root {
             /// The table `ReportPointsElement` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportPointsElement` in the file `fb_demo.fbs:115`
+            /// * Table `ReportPointsElement` in the file `fb_demo.fbs:116`
             #[derive(
                 Clone,
                 Debug,
@@ -6353,7 +6353,7 @@ mod root {
             /// The table `ReportPair` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportPair` in the file `fb_demo.fbs:122`
+            /// * Table `ReportPair` in the file `fb_demo.fbs:123`
             #[derive(
                 Clone,
                 Debug,

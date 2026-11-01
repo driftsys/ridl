@@ -1283,3 +1283,95 @@ fn a_package_with_stream_replies_is_accepted() {
         }
     }
 }
+
+/// The model of the fixture `tests/fixtures/codec-open`, package `open.demo`.
+fn open_model() -> v1::Model {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-open");
+    let output = ridlc::compile_workspace(&mut db, &entry)
+        .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    // TYPL-406 (`missing-docs`) and TYPL-413 (an open enum with no value) are
+    // the diagnostics the fixture draws.
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| matches!(diagnostic.code.as_str(), "TYPL-406" | "TYPL-413")),
+        "the fixture must compile with no error, got: {:?}",
+        output.diagnostics,
+    );
+    let package = output
+        .checked
+        .iter()
+        .find(|checked| checked.ir.name == "open.demo")
+        .expect("the fixture declares open.demo")
+        .ir
+        .clone();
+    codegen::lower(&package, &[&output.std_ir])
+}
+
+#[test]
+fn the_open_codec_module() {
+    let source = module(&open_model(), "open.demo");
+    // An open enum is converted by a pair of functions that keep every value
+    // and refuse a value outside the safe-integer range.
+    assert!(
+        source.contains("function unpackDtcStatus(raw: bigint | null): t.DtcStatusValue {"),
+        "an open enum must unpack to its value type, got:\n{source}"
+    );
+    assert!(
+        source.contains("function packDtcStatus(value: t.DtcStatusValue): bigint {"),
+        "an open enum must pack from its value type, got:\n{source}"
+    );
+    assert!(
+        source.contains("status: unpackDtcStatus(object.field1)")
+            || source.contains("status: unpackDtcStatus(object.status)"),
+        "a field of an open enum must use the unpack function, got:\n{source}"
+    );
+    // A required field of an open enum with no zero member is never absent.
+    assert!(
+        !source.contains("absent(\"open.demo.Report\", \"mode\")"),
+        "an open enum field must not throw when absent, got:\n{source}"
+    );
+    // A required open enum with no zero member in the position of an induced
+    // tuple is never absent either: the tuple converter unpacks it as a field.
+    assert!(
+        source.contains("mode: unpackMode(object.field2)"),
+        "a tuple position of an open enum must use the unpack function, got:\n{source}"
+    );
+    assert!(
+        !source.contains("absent(\"open.demo.ControlSelectParams\""),
+        "an open enum tuple position must not throw when absent, got:\n{source}"
+    );
+    insta::assert_snapshot!("open", source);
+}
+
+/// A field of an open enum set of another package is checked against the
+/// width of the set on encode, as a field of a local open set is; a strict
+/// foreign set converts by assertion.
+#[test]
+fn a_foreign_open_enum_set_is_checked_against_its_width() {
+    for (open, checked) in [(true, true), (false, false)] {
+        let mut model = open_model();
+        let reference = foreign_thing(
+            &mut model,
+            v1::declaration::Kind::EnumSet(v1::EnumSet {
+                open,
+                width: v1::IntWidth::U8 as i32,
+                ..Default::default()
+            }),
+        );
+        field(&mut model, "Report", 2).kind = Some(v1::r#type::Kind::Named(reference));
+        let source = module(&model, "open.demo");
+        assert_eq!(
+            source.contains("object.flags = pack_veh_other_Thing(value.flags);"),
+            checked,
+            "{source}"
+        );
+        assert_eq!(
+            source.contains("function pack_veh_other_Thing(value: veh_other.Thing): number {"),
+            checked,
+            "{source}"
+        );
+    }
+}

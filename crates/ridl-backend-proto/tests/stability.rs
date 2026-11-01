@@ -295,6 +295,9 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         } else {
             Vec::new()
         },
+        // Open, so that an appended value classifies compatible: an append to
+        // a strict enum is `strict_enum_append`, breaking for every encoding.
+        open: true,
     };
 
     let flags = v2::EnumSetDef {
@@ -310,6 +313,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
             })
             .collect(),
         width: v2::IntWidth::U32 as i32,
+        open: true,
     };
 
     let choice = v2::UnionDef {

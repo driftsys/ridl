@@ -290,16 +290,22 @@ enum Repr {
     Float,
     /// A named scalar over one of the three above.
     Named(NamedScalar),
-    /// A generated `#[repr(i64)]` enum. `first` is the variant a discharged
-    /// read decodes to; `zero` is the variant whose value is 0, which is what
-    /// an absent field reads as, when the enum declares one.
+    /// A generated enum. For a strict one, `#[repr(i64)]` with `TryFrom<i64>`:
+    /// `first` is the variant a discharged read decodes to, and `zero` is the
+    /// variant whose value is 0, which is what an absent field reads as, when
+    /// the enum declares one. An `open` one converts through `From<i64>`,
+    /// which is total: `verify` checks no value, and an absent field reads
+    /// as `From(0)`.
     Enum {
         name: String,
         first: String,
         zero: Option<String>,
+        open: bool,
     },
-    /// A generated enum set: a `#[repr(transparent)]` newtype over `i64`.
-    EnumSet { name: String },
+    /// A generated enum set: a `#[repr(transparent)]` newtype over `i64`,
+    /// which converts through `TryFrom<i64>` when strict and through
+    /// `From<i64>`, keeping every bit, when `open`.
+    EnumSet { name: String, open: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -331,6 +337,38 @@ impl Scalar {
             other => {
                 let ty = format_ident!("{}", other.rust_name());
                 quote! { #base as ::core::primitive::#ty }
+            }
+        }
+    }
+
+    /// The `encode` statement that refuses the domain value `__s` of an open
+    /// enum set whose integer does not fit the field's primitive, with the
+    /// contract error for an out-of-range value, naming the set. The
+    /// primitive is the width the highest declared bit infers, and
+    /// [`Scalar::raw`] narrows to it with `as`, which would drop the bits
+    /// above it in silence; an open enum set keeps every bit, so a value
+    /// outside the width can reach the encoder through `From<i64>` or from an
+    /// encoding of a wider scalar. Empty for every other scalar, and for a
+    /// 64-bit primitive, which holds every `i64`.
+    fn encode_check(&self) -> TokenStream {
+        let Repr::EnumSet { name, open: true } = &self.repr else {
+            return quote! {};
+        };
+        if matches!(self.prim, Prim::I64 | Prim::U64) {
+            return quote! {};
+        }
+        let ty = format_ident!("{}", self.prim.rust_name());
+        let type_name = name.rsplit('.').next().unwrap_or(name);
+        quote! {
+            if ::core::primitive::#ty::try_from(::core::primitive::i64::from(__s)).is_err() {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(
+                        ::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some(#type_name),
+                            rule: ::ridl_rt::payload::Rule::Range,
+                        },
+                    ),
+                );
             }
         }
     }
@@ -372,12 +410,20 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#zero) }
             }
-            Repr::Enum { name, first, zero } => {
+            Repr::Enum {
+                name, open: true, ..
+            } => {
+                let ty = type_path(name);
+                quote! { <#ty as ::core::convert::From<::core::primitive::i64>>::from(0i64) }
+            }
+            Repr::Enum {
+                name, first, zero, ..
+            } => {
                 let ty = type_path(name);
                 let variant = ident(zero.as_ref().unwrap_or(first));
                 quote! { #ty::#variant }
             }
-            Repr::EnumSet { name } => {
+            Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 quote! { #ty(0i64) }
             }
@@ -434,6 +480,15 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#widened) }
             }
+            Repr::Enum {
+                name, open: true, ..
+            }
+            | Repr::EnumSet { name, open: true } => {
+                let ty = type_path(name);
+                quote! {
+                    <#ty as ::core::convert::From<::core::primitive::i64>>::from(#widened)
+                }
+            }
             Repr::Enum { name, first, .. } => {
                 let ty = type_path(name);
                 let variant = ident(first);
@@ -442,7 +497,7 @@ impl Scalar {
                         .unwrap_or(#ty::#variant)
                 }
             }
-            Repr::EnumSet { name } => {
+            Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 quote! {
                     <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
@@ -1259,12 +1314,19 @@ impl<'a> Codec<'a> {
                 }),
             ),
             Some(v1::declaration::Kind::Enum(def)) => {
-                let Some(first) = def.values.first() else {
-                    return Err(GenerateError {
-                        message: format!(
-                            "`{name}` declares no value, so no FlatBuffers codec can decode one"
-                        ),
-                    });
+                // A strict enum decodes a discharged read as its first
+                // variant, so it needs one. An open enum decodes every value
+                // through `From<i64>` and may declare none (TYPL-413 warns).
+                let first = match def.values.first() {
+                    Some(first) => pascal_of(first.name.as_ref()),
+                    None if def.open => String::new(),
+                    None => {
+                        return Err(GenerateError {
+                            message: format!(
+                                "`{name}` declares no value, so no FlatBuffers codec can decode one"
+                            ),
+                        });
+                    }
                 };
                 let zero = def
                     .zero_member
@@ -1275,13 +1337,15 @@ impl<'a> Codec<'a> {
                     // Every typl enum is emitted at one underlying width,
                     // `long`, which is what the projection charges it.
                     prim: Prim::I64,
-                    zero_legal: zero.is_some(),
+                    // An open enum admits every integer, 0 included.
+                    zero_legal: zero.is_some() || def.open,
                     repr: Repr::Enum {
                         name: owner.clone(),
                         // The variant `emit_enum` declared, which is the
                         // pinned `pascal_case` spelling.
-                        first: pascal_of(first.name.as_ref()),
+                        first,
                         zero,
+                        open: def.open,
                     },
                 }))
             }
@@ -1292,6 +1356,7 @@ impl<'a> Codec<'a> {
                 })?,
                 repr: Repr::EnumSet {
                     name: owner.clone(),
+                    open: def.open,
                 },
                 zero_legal: true,
             })),
@@ -1803,12 +1868,14 @@ impl<'a> Codec<'a> {
                 let variant = format_ident!("{}", scalar.prim.field_variant());
                 let place = &expr.place;
                 let raw = scalar.raw(quote! { __s });
+                let check = scalar.encode_check();
                 // The value is bound before it is converted, so that a place
                 // like `*__v` never has a method call or a cast attached
                 // straight to it.
                 quote! {
                     {
                         let __s = #place;
+                        #check
                         ::ridl_rt::flatbuffers::Field::#variant(#raw)
                     }
                 }
@@ -1886,6 +1953,7 @@ impl<'a> Codec<'a> {
                 match element.as_ref() {
                     Wire::Scalar(scalar) => {
                         let raw = scalar.raw(quote! { __s });
+                        let check = scalar.encode_check();
                         // `scalar.raw` hands back a `bool` unchanged for a
                         // `boolean` backing, because the inline-scalar write
                         // site (`Field::Bool`) takes a `bool` directly. A
@@ -1912,6 +1980,7 @@ impl<'a> Codec<'a> {
                                     ::std::vec::Vec::with_capacity(#capacity);
                                 for __e in __c.iter() {
                                     let __s = *__e;
+                                    #check
                                     let __r = #raw;
                                     __bytes.extend_from_slice(&__r.to_le_bytes());
                                 }
@@ -2022,7 +2091,14 @@ impl<'a> Codec<'a> {
             Wire::Scalar(scalar) => {
                 let read = scalar.read(&buf, at);
                 match &scalar.repr {
-                    Repr::Enum { name, .. } | Repr::EnumSet { name } => {
+                    // An open enum or enum set admits every value, so the
+                    // read is checked for its structure alone.
+                    Repr::Enum { open: true, .. } | Repr::EnumSet { open: true, .. } => {
+                        quote! {
+                            #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        }
+                    }
+                    Repr::Enum { name, .. } | Repr::EnumSet { name, .. } => {
                         let ty = type_path(name);
                         let widened = scalar.widen(quote! { __raw });
                         quote! {

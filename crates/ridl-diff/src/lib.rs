@@ -279,17 +279,30 @@ declare_categories! {
         /// judged for, compatible otherwise. Reported once per declaration,
         /// at `<package>/<decl>`, with the old and the new integer.
         PodbufWidthChange,
-        /// An enum value or an enum-set flag appended, compatible under the
-        /// generic rule, to an enum or an enum set that is strict (ADR-0031
-        /// decisions 10 and 12): the `verify` of an older reader refuses a
-        /// value or a bit the declaration it was built from does not name.
-        /// Every enum and enum set is strict today. Breaking when `podbuf`
-        /// is among the encodings the comparison is judged for; compatible
-        /// otherwise. Reported once per declaration, at `<package>/<decl>`,
-        /// with the appended names in the detail. An enum or an enum set whose
-        /// append also changes the podbuf integer draws only the
-        /// [`Category::PodbufWidthChange`] line.
+        /// Superseded by [`Category::StrictEnumAppend`], which is breaking for
+        /// every encoding. The variant stays so that a report or a consumer
+        /// that names the category still compiles; `ridl diff` no longer
+        /// reports it.
         PodbufStrictEnumAppend,
+        /// An enum value or an enum-set flag appended to an enum or an enum
+        /// set that is not `open` (ADR-0031 decision 12). A reader built from
+        /// the old declaration refuses a value or a flag it does not name, in
+        /// the `verify` of podbuf and in the codec of every other encoding
+        /// that checks the declaration, so the append is breaking for every
+        /// encoding. Reported once per declaration, at `<package>/<decl>`,
+        /// with the appended names in the detail. The same append to an
+        /// `open` declaration is compatible.
+        StrictEnumAppend,
+        /// An enum or an enum set that gained the `open` keyword: every
+        /// reader of the old declaration already accepts the values it
+        /// named, so the change is compatible. Reported at
+        /// `<package>/<decl>`.
+        EnumOpened,
+        /// An enum or an enum set that lost the `open` keyword: a reader of
+        /// the new declaration refuses a value that a producer of the old one
+        /// may still send, so the change is breaking. Reported at
+        /// `<package>/<decl>`.
+        EnumClosed,
     }
 }
 
@@ -427,6 +440,7 @@ pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let matching = walk::Matching::new(&[old], &[new]);
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &matching, &mut changes);
+    let mut changes = walk::fold_strict_enum_appends(changes, old, new);
     classify_all(&mut changes, old, new, &[], &[]);
     report(changes)
 }
@@ -474,12 +488,12 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 ///
 /// Only `podbuf` has rules of its own: a struct field appended that does not
 /// fit inside the old head of a struct another head of the old side holds
-/// inline is [`Category::PodbufInlineAppend`], an enum value, an enum-set
+/// inline is [`Category::PodbufInlineAppend`], and an enum value, an enum-set
 /// flag or a union arm appended that changes the integer of the enum or the
-/// enum set or the union's tag is [`Category::PodbufWidthChange`], and an
-/// enum value or an enum-set flag appended is
-/// [`Category::PodbufStrictEnumAppend`]; each is breaking when `podbuf` is in
-/// `encodings` and compatible otherwise. An
+/// enum set or the union's tag is [`Category::PodbufWidthChange`]; each is
+/// breaking when `podbuf` is in `encodings` and compatible otherwise. An enum
+/// value or an enum-set flag appended to a declaration that is not `open` is
+/// [`Category::StrictEnumAppend`], breaking under every list. An
 /// enum-set flag that widens the integer also widens its FlatBuffers scalar,
 /// which no rule under `flatbuffers` reports yet (driftsys/ridl#1120). Every
 /// other category is judged the same under every list, and a name that is
@@ -528,16 +542,13 @@ pub fn diff_refs_with(
             Some(new_pkg) => {
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, new_pkg, &matching, &mut pair);
+                let mut pair = walk::fold_strict_enum_appends(pair, old_pkg, new_pkg);
                 classify_all(&mut pair, old_pkg, new_pkg, &scope, encodings);
                 // The podbuf rule reads the settled verdicts of the pair and
                 // the heads of both whole sides, so it runs after the walk
                 // and the classifier of the pair.
                 let mut podbuf = walk::podbuf_inline_appends(&pair, old, &old_scope, &scope);
-                let mut widths = walk::podbuf_width_changes(&pair, old_pkg, new_pkg);
-                podbuf.append(&mut walk::podbuf_strict_enum_appends(
-                    &pair, old_pkg, new_pkg, &widths,
-                ));
-                podbuf.append(&mut widths);
+                podbuf.append(&mut walk::podbuf_width_changes(&pair, old_pkg, new_pkg));
                 classify_all(&mut podbuf, old_pkg, new_pkg, &scope, encodings);
                 pair.append(&mut podbuf);
                 changes.append(&mut pair);
@@ -686,6 +697,9 @@ pub fn category_word(category: Category) -> &'static str {
         Category::PodbufInlineAppend => "podbuf_inline_append",
         Category::PodbufWidthChange => "podbuf_width_change",
         Category::PodbufStrictEnumAppend => "podbuf_strict_enum_append",
+        Category::StrictEnumAppend => "strict_enum_append",
+        Category::EnumOpened => "enum_opened",
+        Category::EnumClosed => "enum_closed",
     }
 }
 
@@ -748,6 +762,9 @@ pub fn heading(category: Category) -> Option<&'static str> {
         | Category::ReservedNameRedeclared
         | Category::ServiceChanged
         | Category::ServiceInterfaceAdded
+        | Category::StrictEnumAppend
+        | Category::EnumOpened
+        | Category::EnumClosed
         | Category::DocOnly
         | Category::VisibilityChanged => None,
     }

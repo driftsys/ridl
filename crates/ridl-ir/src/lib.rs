@@ -1509,6 +1509,7 @@ mod v2_round_trip {
                 name: None,
                 value: Some(7),
             }],
+            open: false,
         };
 
         // enumset Warnings { LOW_FUEL = 0  ICE_RISK = 33 } — the standalone
@@ -1534,6 +1535,7 @@ mod v2_round_trip {
                 },
             ],
             width: v2::IntWidth::U64 as i32,
+            open: false,
         };
 
         // type PlateText : string [1..86] — character length bounds, two

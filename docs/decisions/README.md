@@ -588,24 +588,26 @@ other entry below is Accepted.
   to zero every pad; the evolution rules (an append that reads as 0 is
   compatible, an append that grows a struct held inline is a break, a field
   removal breaks under every encoding); strict and open enums, decided, with the
-  typl `open` keyword not built; the `podbuf_inline_append`,
-  `podbuf_width_change` and `podbuf_strict_enum_append` diff categories and
-  RIDL-156 `podbuf-padding-order`; and what the backend generates and exposes in
-  the codegen model. It lists where it departs from the design it restates,
-  which is archived, and carries five open items. Amends ADR-0020 decision 4 and
-  closes its open item 1. Amended 2026-10-30 by ADR-0030: `verify` no longer
-  refuses a buffer longer than its own `MAX_SIZE`, which closes open item 2, and
-  RIDL-157 replaces RIDL-150; built 2026-10-30 (driftsys/ridl#1128). Amended
-  2026-10-31, decision 13: `ridl build` and `ridl baseline` judge the catalog
-  history for the root manifest's encodings, which closes open item 3
-  (driftsys/ridl#1095). Amended 2026-10-31, decision 7: the C header reads a
-  boxed root, which closes open item 4 (driftsys/ridl#1096). Amended 2026-10-31,
-  decision 13: the remote packages a side compiled are the context of
-  `ridl diff`, `ridl build` and `ridl baseline`, so an inline append whose head
-  reaches a remote type is judged by the layout, and a head no side can lay out
-  is read as grown (driftsys/ridl#1141). Amended 2026-11-01, decision 7: an
-  importing header names a foreign tuple's head by the declaring package's own
-  lowering, whatever order the importer reaches that package's declarations in
+  typl `open` keyword built 2026-11-01 (an open declaration is refused under
+  podbuf until driftsys/ridl#1168); the `podbuf_inline_append` and
+  `podbuf_width_change` diff categories, `strict_enum_append` (breaking for
+  every encoding) and RIDL-156 `podbuf-padding-order`; and what the backend
+  generates and exposes in the codegen model. It lists where it departs from the
+  design it restates, which is archived, and carries five open items. Amends
+  ADR-0020 decision 4 and closes its open item 1. Amended 2026-10-30 by
+  ADR-0030: `verify` no longer refuses a buffer longer than its own `MAX_SIZE`,
+  which closes open item 2, and RIDL-157 replaces RIDL-150; built 2026-10-30
+  (driftsys/ridl#1128). Amended 2026-10-31, decision 13: `ridl build` and
+  `ridl baseline` judge the catalog history for the root manifest's encodings,
+  which closes open item 3 (driftsys/ridl#1095). Amended 2026-10-31, decision 7:
+  the C header reads a boxed root, which closes open item 4
+  (driftsys/ridl#1096). Amended 2026-10-31, decision 13: the remote packages a
+  side compiled are the context of `ridl diff`, `ridl build` and
+  `ridl baseline`, so an inline append whose head reaches a remote type is
+  judged by the layout, and a head no side can lay out is read as grown
+  (driftsys/ridl#1141). Amended 2026-11-01, decision 7: an importing header
+  names a foreign tuple's head by the declaring package's own lowering, whatever
+  order the importer reaches that package's declarations in
   (driftsys/ridl#1150).
 
 - **ADR-0032 — Byte streams.** Fourteen decisions: the use case is a file or

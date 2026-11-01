@@ -672,6 +672,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-413",
+              "name": "open-enum-without-values",
+              "shortDescription": {
+                "text": "open enum or enum set declares no value or bit"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RIDL-100",
               "name": "missing-timing",
               "shortDescription": {
@@ -895,6 +905,15 @@ expression: log
               "id": "RIDL-157",
               "shortDescription": {
                 "text": "payload above the default ceiling of its kind or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-158",
+              "shortDescription": {
+                "text": "open enum or enum set in a package that podbuf encodes"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1785,7 +1804,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 71,
+          "ruleIndex": 72,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1850,7 +1869,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 181,
+          "ruleIndex": 183,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

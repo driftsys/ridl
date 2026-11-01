@@ -361,6 +361,7 @@ fn enum_with_discriminants() {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )];
     insta::assert_snapshot!(ts_for(decls));
@@ -374,6 +375,7 @@ fn enumset_standalone_form() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )];
     insta::assert_snapshot!(ts_for(decls));
@@ -390,6 +392,7 @@ fn enumset_derived_form() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: warning_bits(),
                 reserved: Vec::new(),
+                open: false,
             }),
         ),
         public_decl(
@@ -398,6 +401,7 @@ fn enumset_derived_form() {
                 backing_enum: Some("Warning".to_string()),
                 bits: warning_bits(),
                 width: v2::IntWidth::U8 as i32,
+                open: false,
             }),
         ),
     ];
@@ -415,6 +419,7 @@ fn enumset_u64_width_brands_bigint() {
             backing_enum: None,
             bits: vec![enum_value("LOW", 0), enum_value("TOP", 63)],
             width: v2::IntWidth::U64 as i32,
+            open: false,
         }),
     )];
     let source = ts_for(decls);
@@ -873,6 +878,7 @@ fn enum_init_prefers_the_zero_discriminant() {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: vec![enum_value("SLOW", 5), enum_value("FAST", 9)],
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(
@@ -889,6 +895,7 @@ fn enumset_init_is_the_empty_set() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -912,6 +919,7 @@ fn enum_discriminant_beyond_2_53_is_unrepresentable() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: vec![enum_value("TOO_BIG", 9_007_199_254_740_993)],
                 reserved: Vec::new(),
+                open: false,
             }),
         )],
     ));
@@ -937,6 +945,7 @@ fn enumset_bit_beyond_31_needs_a_64_bit_width() {
                 backing_enum: None,
                 bits: vec![enum_value("WAY_UP", 40)],
                 width: v2::IntWidth::U8 as i32,
+                open: false,
             }),
         )],
     ));
@@ -1111,6 +1120,7 @@ fn appendix_b() -> v2::Package {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -1118,6 +1128,7 @@ fn appendix_b() -> v2::Package {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: warning_bits(),
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -1126,6 +1137,7 @@ fn appendix_b() -> v2::Package {
             backing_enum: Some("Warning".to_string()),
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     ));
 
@@ -1620,6 +1632,7 @@ fn documented_members() -> Vec<v2::Decl> {
                 enum_value("DRIVE", 1),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     );
     let low_fuel_doc = "Raised with [Warnings.DOOR_OPEN] off.";
@@ -1640,6 +1653,7 @@ fn documented_members() -> Vec<v2::Decl> {
             backing_enum: None,
             bits,
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     );
     let arm_doc = "A value in [Speed], see [Measurement.fault].";
@@ -2364,4 +2378,165 @@ fn ts_docs_carry_no_issue_reference() {
         read += 1;
     }
     assert!(read > 0, "no snapshot was read from {}", dir.display());
+}
+
+fn dtc_status_decl(open: bool) -> v2::Decl {
+    public_decl(
+        "DtcStatus",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![enum_value("INACTIVE", 0), enum_value("ACTIVE", 1)],
+            reserved: Vec::new(),
+            open,
+        }),
+    )
+}
+
+#[test]
+fn an_open_enum_emits_a_value_type_with_an_unknown_case() {
+    let source = ts_for(vec![dtc_status_decl(true)]);
+    assert!(
+        source.contains("export type DtcStatusValue = DtcStatus | { readonly unknown: number };"),
+        "an open enum must emit its value type, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_strict_enum_emits_no_value_type() {
+    let source = ts_for(vec![dtc_status_decl(false)]);
+    assert!(
+        !source.contains("DtcStatusValue"),
+        "a strict enum must not emit a value type, got:\n{source}"
+    );
+}
+
+#[test]
+fn a_field_of_an_open_enum_is_typed_with_the_value_type() {
+    let decls = vec![
+        dtc_status_decl(true),
+        public_decl(
+            "Report",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "status",
+                    1,
+                    "DtcStatus",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        ),
+    ];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("status: DtcStatusValue;"),
+        "a field of an open enum must use the value type, got:\n{source}"
+    );
+}
+
+/// A field typed with an open enum of an imported package is spelled with
+/// that package's value type; a strict one keeps its plain name.
+#[test]
+fn a_field_of_a_foreign_open_enum_is_typed_with_the_foreign_value_type() {
+    for (open, expected) in [
+        (true, "status: other_pkg.DtcStatusValue;"),
+        (false, "status: other_pkg.DtcStatus;"),
+    ] {
+        let other = package("other.pkg", vec![dtc_status_decl(open)]);
+        let holder = v2::StructDef {
+            members: vec![field_member(named_field(
+                "status",
+                1,
+                "other.pkg.DtcStatus",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        };
+        let local = package(
+            "veh.common",
+            vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+        );
+        let model = ridl_ir::codegen::lower(&local, &[&other]);
+        let source = super::generate_with(&local, &model)
+            .expect("generation succeeds")
+            .source;
+        assert!(source.contains(expected), "open {open}, got:\n{source}");
+    }
+}
+
+#[test]
+fn an_open_enumset_adds_the_unknown_bits_function() {
+    let decls = vec![public_decl(
+        "Flags",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("A", 0), enum_value("B", 1)],
+            width: v2::IntWidth::U8 as i32,
+            open: true,
+        }),
+    )];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("unknownBits(value: Flags): Flags {"),
+        "an open enumset must emit unknownBits, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn an_open_wide_enumset_keeps_the_bigint_form() {
+    let decls = vec![public_decl(
+        "WideFlags",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("LOW", 0), enum_value("TOP", 63)],
+            width: v2::IntWidth::I64 as i32,
+            open: true,
+        }),
+    )];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("unknownBits(value: WideFlags): WideFlags {"),
+        "an open enumset must emit unknownBits, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn an_empty_open_enum_inits_to_unknown_zero_and_so_does_a_struct_holding_it() {
+    let decls = vec![
+        public_decl(
+            "Empty",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: Vec::new(),
+                reserved: Vec::new(),
+                open: true,
+            }),
+        ),
+        public_decl(
+            "Holder",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "value",
+                    1,
+                    "Empty",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        ),
+    ];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("export function initEmpty(): EmptyValue {\n  return { unknown: 0 };\n}"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("export function initHolder(): Holder {"),
+        "got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
 }
