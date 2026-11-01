@@ -1394,6 +1394,10 @@ of frame version 2, such as binding version 2 of §11.1, whose block size of
     with `kind` `Fixed`, the same `interface`, `ordinal`, envelope (`seq` 0) and
     `total`, every block but the last holding 4,096 bytes; the consumer delivers
     one sample whose payload is the provisioned value, byte for byte (§5.5).
+    This holds when the provider's message limit is at least one block message,
+    4,130 bytes; below that limit the provider sends no `block`, and answers a
+    `read` of a `fixed` that does not fit one `publish` with
+    `contract(UnknownInteraction)` (§11.1, "Binding version 2").
 19. A frame of another form, other than a whole `publish` or an `answer` of the
     interaction being reassembled, sent between two blocks of one payload is
     handled as if no reassembly were in progress, and the payload is still
