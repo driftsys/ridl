@@ -1,0 +1,220 @@
+---
+source: crates/ridl-backend-ts/tests/codec.rs
+expression: source
+---
+import * as flatbuffers from "flatbuffers";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
+import type * as t from "./strict.demo.js";
+// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
+// of this file.
+import * as fb from "./strict/demo.js";
+
+/** Throws for a required field the buffer leaves out. */
+function absent(type: string, field: string): never {
+  throw new RangeError(`field ${field} of ${type} is absent`);
+}
+
+/** Thrown for a value the codec refuses, with the text of the rule it breaks. */
+export class RuleError extends RangeError {
+  readonly rule: (typeof RULES)[number];
+  constructor(rule: (typeof RULES)[number], message: string) {
+    super(message);
+    this.name = "RuleError";
+    this.rule = rule;
+  }
+}
+
+/** The name of the catalog unit this package belongs to. */
+export const CATALOG_NAME = "strict.demo";
+/** The hash of the catalog unit, which the wasm module carries. */
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([63, 130, 95, 30, 79, 135, 237, 137, 93, 25, 138, 95, 19, 187, 177, 145, 31, 73, 127, 161, 38, 124, 231, 129, 89, 10, 17, 187, 254, 215, 178, 70]);
+/** The qualified names of the payload types of this package, which name the wasm type ids. */
+export const PAYLOAD_TYPES = [
+  "strict.demo.ControlSelectParams",
+  "strict.demo.DtcStatus",
+  "strict.demo.Flags",
+  "strict.demo.Mode",
+  "strict.demo.Pick",
+  "strict.demo.Report",
+  "strict.demo.WideFlags",
+] as const;
+/** The text of each rule code the wasm module reports, rule code n at index n - 2. */
+export const RULES = ["length", "pattern", "range", "step", "unique", "variant"] as const;
+
+/** The induced tuple of `Control.select`. */
+export interface ControlSelectParams {
+  status: t.DtcStatus;
+  mode: t.Mode;
+}
+
+/** Encodes a `strict.demo.DtcStatus` payload. */
+export function encodeDtcStatus(value: t.DtcStatus): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.DtcStatusBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.DtcStatus` payload the codec has verified. */
+export function decodeDtcStatus(bytes: Uint8Array): t.DtcStatus {
+  return unpackDtcStatus(fb.DtcStatusBox.getRootAsDtcStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackDtcStatus(raw: number | bigint | null): t.DtcStatus {
+  const value = raw ?? 0;
+  const n = Number(value);
+  if (!([0, 1] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${value} is not a value of strict.demo.DtcStatus`);
+  }
+  return n as t.DtcStatus;
+}
+
+/** Encodes a `strict.demo.Mode` payload. */
+export function encodeMode(value: t.Mode): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.ModeBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.Mode` payload the codec has verified. */
+export function decodeMode(bytes: Uint8Array): t.Mode {
+  return unpackMode(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackMode(raw: number | bigint | null): t.Mode {
+  const value = raw ?? 0;
+  const n = Number(value);
+  if (!([1, 2] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${value} is not a value of strict.demo.Mode`);
+  }
+  return n as t.Mode;
+}
+
+/** Encodes a `strict.demo.Flags` payload. */
+export function encodeFlags(value: t.Flags): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.FlagsBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.Flags` payload the codec has verified. */
+export function decodeFlags(bytes: Uint8Array): t.Flags {
+  return unpackFlags(fb.FlagsBox.getRootAsFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackFlags(value: number): t.Flags {
+  if ((value & ~11) !== 0) {
+    throw new RuleError("variant", `value ${value} has a bit that strict.demo.Flags does not declare`);
+  }
+  return value as t.Flags;
+}
+
+/** Encodes a `strict.demo.WideFlags` payload. */
+export function encodeWideFlags(value: t.WideFlags): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.WideFlagsBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.WideFlags` payload the codec has verified. */
+export function decodeWideFlags(bytes: Uint8Array): t.WideFlags {
+  return unpackWideFlags(fb.WideFlagsBox.getRootAsWideFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackWideFlags(value: bigint): t.WideFlags {
+  if ((BigInt.asUintN(64, value) & ~1099511627777n) !== 0n) {
+    throw new RuleError("variant", `value ${value} has a bit that strict.demo.WideFlags does not declare`);
+  }
+  return value as t.WideFlags;
+}
+
+/** Encodes a `strict.demo.Report` payload. */
+export function encodeReport(value: t.Report): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packReport(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.Report` payload the codec has verified. */
+export function decodeReport(bytes: Uint8Array): t.Report {
+  return unpackReport(fb.Report.getRootAsReport(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packReport(value: t.Report): fb.ReportT {
+  const object = new fb.ReportT();
+  object.status = BigInt(value.status);
+  object.mode = BigInt(value.mode);
+  object.flags = value.flags;
+  object.wide = value.wide;
+  object.list = value.list.map((element) => BigInt(element));
+  object.sets = [...value.sets];
+  object.maybe = value.maybe === undefined ? null : BigInt(value.maybe);
+  object.maybeFlags = value.maybeFlags === undefined ? null : value.maybeFlags;
+  return object;
+}
+function unpackReport(object: fb.ReportT): t.Report {
+  const result: t.Report = {
+    status: unpackDtcStatus(object.status),
+    mode: object.mode === null ? absent("strict.demo.Report", "mode") : unpackMode(object.mode),
+    flags: unpackFlags(object.flags),
+    wide: unpackWideFlags(object.wide),
+    list: object.list.map((element) => unpackDtcStatus(element)),
+    sets: object.sets.map((element) => unpackFlags(element)),
+  };
+  if (object.maybe !== null) result.maybe = unpackDtcStatus(object.maybe);
+  if (object.maybeFlags !== null) result.maybeFlags = unpackFlags(object.maybeFlags);
+  return result;
+}
+
+/** Encodes a `strict.demo.Pick` payload. */
+export function encodePick(value: t.Pick): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packPick(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.Pick` payload the codec has verified. */
+export function decodePick(bytes: Uint8Array): t.Pick {
+  return unpackPick(fb.Pick.getRootAsPick(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packPick(value: t.Pick): fb.PickT {
+  switch (value.kind) {
+    case "status":
+      return new fb.PickT(fb.PickUnion.status, new fb.PickStatusBoxT(BigInt(value.value)));
+    case "flags":
+      return new fb.PickT(fb.PickUnion.flags, new fb.PickFlagsBoxT(value.value));
+  }
+}
+function unpackPick(object: fb.PickT): t.Pick {
+  switch (object.valueType) {
+    case fb.PickUnion.status:
+      return { kind: "status", value: unpackDtcStatus((object.value as fb.PickStatusBoxT).value) };
+    case fb.PickUnion.flags:
+      return { kind: "flags", value: unpackFlags((object.value as fb.PickFlagsBoxT).value) };
+    default:
+      throw new RangeError("union strict.demo.Pick carries no arm");
+  }
+}
+
+/** Encodes a `strict.demo.ControlSelectParams` payload. */
+export function encodeControlSelectParams(value: ControlSelectParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packControlSelectParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.ControlSelectParams` payload the codec has verified. */
+export function decodeControlSelectParams(bytes: Uint8Array): ControlSelectParams {
+  return unpackControlSelectParams(fb.ControlSelectParams.getRootAsControlSelectParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packControlSelectParams(value: ControlSelectParams): fb.ControlSelectParamsT {
+  const tuple = new fb.ControlSelectParamsT();
+  tuple.field1 = BigInt(value.status);
+  tuple.field2 = BigInt(value.mode);
+  return tuple;
+}
+function unpackControlSelectParams(object: fb.ControlSelectParamsT): ControlSelectParams {
+  return { status: unpackDtcStatus(object.field1), mode: object.field2 === null ? absent("strict.demo.ControlSelectParams", "mode") : unpackMode(object.field2) };
+}
+
+const codecControlSelectParams: PayloadCodec<ControlSelectParams> = { type: "strict.demo.ControlSelectParams", encode: encodeControlSelectParams, decode: decodeControlSelectParams };
+
+/** The members of interface `Control`, interface number `1`. */
+export const Control = {
+  iface: 1,
+  select: { iface: 1, ord: 1, kind: "command", request: codecControlSelectParams },
+} as const;

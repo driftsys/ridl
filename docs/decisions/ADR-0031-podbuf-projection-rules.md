@@ -762,8 +762,10 @@ a field is appended.
       when a user declaration takes them.
     - The audit before the change found that `ridl diff` reported an append as
       compatible outside podbuf while every Rust codec refused the new value,
-      and that the TypeScript codec checks no enum value; the first is the
-      reason for Q-1, the second is driftsys/ridl#1173.
+      and that the TypeScript codec checked no enum value; the first is the
+      reason for Q-1, the second was driftsys/ridl#1173, which the TypeScript
+      codec now closes by refusing an undeclared value of a strict enum and an
+      undeclared bit of a strict enum set with the variant rule.
 
     **Alternatives considered.** `#[non_exhaustive]` alone, with no unknown
     variant: a reader could not hold a value it does not know, so it would have

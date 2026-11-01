@@ -165,10 +165,9 @@ common cases:
   enum-set flag appended to an enum or an enum set (`strict_enum_append`, once
   per declaration, with the appended names). The rule applies to every enum and
   enum set of the package, whether or not an interface reaches it and whether
-  or not it is `internal`. The Rust codecs built from the old declaration refuse
-  a value it does not name, under every encoding, so the verdict does not
-  depend on `--encoding`; the TypeScript codec does not check it yet
-  ([driftsys/ridl#1173](https://github.com/driftsys/ridl/issues/1173)). Declare the enum or the enum set
+  or not it is `internal`. The Rust codecs and the TypeScript codec built from the
+  old declaration refuse a value it does not name, under every encoding, so the
+  verdict does not depend on `--encoding`. Declare the enum or the enum set
   `open` to make the same append compatible. Closing an `open` declaration is
   breaking (`enum_closed`), because a producer of the old version may still
   send a value the new reader refuses.

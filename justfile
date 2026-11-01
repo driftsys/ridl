@@ -3046,6 +3046,17 @@ _codec-ts-check:
     deno lint --config "$open/deno.json" "$open/open.demo.codec.ts"
     deno check --config "$open/deno.json" "$open/open.demo.codec.ts" "$open/open.demo.ts"
     deno test --config "$open/deno.json" "$open/open_test.ts"
+    # The fourth fixture: strict enums and strict enum sets, which the codec
+    # refuses a value of that the declaration does not name.
+    strict="$tmp/strict"
+    mkdir -p "$strict"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-strict --emit typescript --emit flatbuffers --out-dir "$strict"
+    flatc --ts --gen-object-api -I "$strict" -o "$strict" "$strict/strict.demo.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-strict/deno.json > "$strict/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-strict/strict_test.ts "$strict/strict_test.ts"
+    deno lint --config "$strict/deno.json" "$strict/strict.demo.codec.ts"
+    deno check --config "$strict/deno.json" "$strict/strict.demo.codec.ts" "$strict/strict.demo.ts"
+    deno test --config "$strict/deno.json" "$strict/strict_test.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because

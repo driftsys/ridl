@@ -128,8 +128,8 @@ rule per typl kind (D-4):
 | ------------------------------- | ------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | named scalar as a payload       | `<Name>Box` table, `value`                        | the branded scalar                   | unbox or box                                                                                                                                                              |
 | named scalar as a field         | the backing scalar                                | the branded scalar                   | a type assertion                                                                                                                                                          |
-| enum                            | `bigint` field (the `.fbs` width is `long`)       | numeric `enum`                       | `BigInt` to pack, `Number` to unpack; as a payload, through `<Name>Box`                                                                                                   |
-| enum set                        | integer field (`bigint` for a 64-bit width)       | branded `number` or `bigint`         | a type assertion; as a payload, through `<Name>Box`                                                                                                                       |
+| enum                            | `bigint` field (the `.fbs` width is `long`)       | numeric `enum`                       | `BigInt` to pack; to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared value; as a payload, through `<Name>Box`                       |
+| enum set                        | integer field (`bigint` for a 64-bit width)       | branded `number` or `bigint`         | to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared bit (an `open` set keeps every bit); as a payload, through `<Name>Box`           |
 | struct                          | `<Name>T` class                                   | `interface` with named fields        | field by field; the `flatc` member is the lower camel case of `snake_case(declared)`, with the `_` `flatc` appends to a TypeScript keyword (`default_`, `new_`, `class_`) |
 | optional field                  | `null` when absent                                | absent property                      | `null` to absent, absent to `null`; an optional array, bytes or map field packs as `[]` when absent and reads back as present (known gaps)                                |
 | union                           | `<Name>T { valueType, value }`, scalar arms boxed | `{ kind, value }`                    | `kind` is the arm's declared name; a boxed arm is unboxed                                                                                                                 |
@@ -154,9 +154,11 @@ driftsys/ridl#923.
 - A payload type that reaches a struct, a union or an enum of another package is
   refused, with a message that names the payload type, the field, arm or element
   (or the interaction) that reaches it, and the foreign declaration.
-- A foreign named scalar or enum set at a field, arm or element position is
-  converted by a type assertion; the file imports that package's `.js` module as
-  a type namespace.
+- A foreign named scalar at a field, arm or element position is converted by a
+  type assertion; a foreign enum set is converted by a function of the file that
+  checks the value (a strict set refuses an undeclared bit on read, an `open`
+  set refuses a value outside its width on encode). The file imports that
+  package's `.js` module as a type namespace.
 - A foreign named scalar or enum set used as a payload root goes through its own
   package's codec file, because its `<Name>Box` table exists only in that
   package's schema: the file imports `./<package>.codec.js` and its table entry

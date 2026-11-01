@@ -1,0 +1,51 @@
+package strict.demo
+
+/// A strict enum with a zero member.
+enum DtcStatus {
+  INACTIVE = 0
+  ACTIVE   = 1
+}
+
+/// A strict enum with no zero member, so an absent field reads as 0.
+enum Mode {
+  LOW  = 1
+  HIGH = 2
+}
+
+/// A strict enum set of a narrow width.
+enumset Flags {
+  A = 0
+  B = 1
+  D = 3
+}
+
+/// A strict enum set of a wide width.
+enumset WideFlags {
+  LOW = 0
+  TOP = 40
+}
+
+/// A struct that holds every kind of field of the types above.
+struct Report {
+  status : DtcStatus
+  mode   : Mode
+  flags  : Flags
+  wide   : WideFlags
+  list   : [DtcStatus; 0..4]
+  sets   : [Flags; 0..4]
+  maybe  : DtcStatus?
+  maybeFlags : Flags?
+}
+
+/// A union with a strict enum arm and a strict enum set arm.
+union Pick {
+  status : DtcStatus
+  flags  : Flags
+}
+
+/// An interface whose command takes strict enums as parameters, so the
+/// converter of its request tuple holds a strict enum in a tuple position.
+interface Control {
+  /// Selects a status and a mode.
+  command select(status: DtcStatus, mode: Mode) @[..50ms]
+}

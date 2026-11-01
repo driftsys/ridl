@@ -485,8 +485,9 @@ array, bytes or map field reads back as empty, because the object API cannot
 leave a vector out of the buffer), and an induced tuple of an interaction,
 which the codec file exports as an `interface` (`export type X = Record<string,
 never>` for one with no field). An optional array element, map
-key or map value is refused, as the Rust codec refuses it. A named scalar or an
-enum set of another package converts by a type assertion, and a payload type of
+key or map value is refused, as the Rust codec refuses it. A named scalar of another
+package converts by a type assertion, an enum set of another package through a
+checking function of the file, and a payload type of
 another package that is one goes through that package's own codec file; a
 payload type that reaches a struct, a union or an enum of another package is
 refused with an error that names both. An internal payload type has no
@@ -510,10 +511,11 @@ is `range`.
 The `.proto` and `.fbs` files that the build writes carry one comment line above
 each enum that states the rule of its declaration: `// strict: a value outside
 this list is not valid` or `// open: a value outside this list is valid and is
-kept`. The comment states the rule, not who enforces it. The Rust codecs refuse
-a value outside the list of a strict enum, and the TypeScript codec does not
-check it yet ([driftsys/ridl#1173](https://github.com/driftsys/ridl/issues/1173)).
-The enum type itself is the same in both cases.
+kept`. The comment states the rule, not who enforces it. The Rust codecs and
+the TypeScript codec refuse a value outside the list of a strict enum, and a
+bit outside the declared bits of a strict enum set, when they read it. The
+TypeScript codec throws a `RuleError` whose `rule` is `variant`. The enum type
+itself is the same in both cases.
 
 ## Documentation in the generated code
 

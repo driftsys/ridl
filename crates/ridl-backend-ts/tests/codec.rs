@@ -551,7 +551,7 @@ fn the_common_codec_module() {
         "{source}"
     );
     // The required enum with no zero member reads as absent.
-    assert!(source.contains("mode: object.mode === null ? absent(\"veh.common.Setting\", \"mode\") : Number(object.mode) as t.Mode,"), "{source}");
+    assert!(source.contains("mode: object.mode === null ? absent(\"veh.common.Setting\", \"mode\") : unpackMode(object.mode),"), "{source}");
     // The induced tuples of the interactions are exported interfaces.
     let set_limit = induced_name(&model, "setLimit", "Params");
     assert!(
@@ -910,7 +910,7 @@ fn the_extras_and_pick_conversions() {
         "  object.readings = value.readings.map((element) => packSensorReading(element));",
         "    readings: object.readings.map((element) => unpackSensorReading(element)),",
         "  object.gears = value.gears.map((element) => BigInt(element));",
-        "    gears: object.gears.map((element) => Number(element) as t.GearPosition),",
+        "    gears: object.gears.map((element) => unpackGearPosition(element)),",
         "  object.maybe = value.maybe === undefined ? [] : [...value.maybe];",
         "    maybe: object.maybe.map((element) => element as t.Speed),",
         "  object.tag = value.tag === undefined ? [] : Array.from(value.tag);",
@@ -923,7 +923,7 @@ fn the_extras_and_pick_conversions() {
         "      return new fb.PickT(fb.PickUnion.speed, new fb.PickSpeedBoxT(value.value));",
         "      return { kind: \"speed\", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };",
         "      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(BigInt(value.value)));",
-        "      return { kind: \"gear\", value: Number((object.value as fb.PickGearBoxT).value) as t.GearPosition };",
+        "      return { kind: \"gear\", value: unpackGearPosition((object.value as fb.PickGearBoxT).value) };",
     ] {
         assert!(source.contains(line), "no `{line}` in:\n{source}");
     }
@@ -1374,4 +1374,88 @@ fn a_foreign_open_enum_set_is_checked_against_its_width() {
             "{source}"
         );
     }
+}
+
+/// The model of the fixture `tests/fixtures/codec-strict`, package
+/// `strict.demo`.
+fn strict_model() -> v1::Model {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-strict");
+    let output = ridlc::compile_workspace(&mut db, &entry)
+        .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
+        "the fixture must compile with no error, got: {:?}",
+        output.diagnostics,
+    );
+    let package = output
+        .checked
+        .iter()
+        .find(|checked| checked.ir.name == "strict.demo")
+        .expect("the fixture declares strict.demo")
+        .ir
+        .clone();
+    codegen::lower(&package, &[&output.std_ir])
+}
+
+/// A strict enum and a strict enum set unpack through a function that throws
+/// a `RuleError` with the `variant` rule, in every position a type can stand.
+#[test]
+fn the_strict_codec_module() {
+    let source = module(&strict_model(), "strict.demo");
+    assert!(
+        source.contains("function unpackDtcStatus(raw: number | bigint | null): t.DtcStatus {"),
+        "a strict enum must unpack through a checking function, got:\n{source}"
+    );
+    assert!(
+        source.contains("throw new RuleError(\"variant\""),
+        "a strict value must be refused with the variant rule, got:\n{source}"
+    );
+    assert!(
+        source.contains("function unpackFlags(value: number): t.Flags {"),
+        "a narrow strict set must check its declared bits, got:\n{source}"
+    );
+    assert!(
+        source.contains("function unpackWideFlags(value: bigint): t.WideFlags {"),
+        "a wide strict set must check its declared bits, got:\n{source}"
+    );
+    assert!(
+        !source.contains("Number(object.") && !source.contains("Number(element)"),
+        "no strict enum may be read by an unchecked cast, got:\n{source}"
+    );
+    assert!(
+        source.contains("unpackDtcStatus(fb.DtcStatusBox"),
+        "a strict enum payload must unpack through the checking function, got:\n{source}"
+    );
+    insta::assert_snapshot!("strict", source);
+}
+
+/// A field of a strict enum set of another package is checked against the
+/// declared bits through a function of the module.
+#[test]
+fn a_foreign_strict_enum_set_is_checked_against_its_bits() {
+    let mut model = strict_model();
+    let reference = foreign_thing(
+        &mut model,
+        v1::declaration::Kind::EnumSet(v1::EnumSet {
+            open: false,
+            width: v1::IntWidth::U8 as i32,
+            declared_mask: 0b101,
+            ..Default::default()
+        }),
+    );
+    field(&mut model, "Report", 2).kind = Some(v1::r#type::Kind::Named(reference));
+    let source = module(&model, "strict.demo");
+    assert!(
+        source.contains("function unpack_veh_other_Thing(value: number): veh_other.Thing {"),
+        "{source}"
+    );
+    assert!(source.contains("(value & ~5) !== 0"), "{source}");
+    assert!(
+        source.contains("flags: unpack_veh_other_Thing(object.flags)"),
+        "{source}"
+    );
 }
