@@ -100,32 +100,13 @@ member gives.
 On a session of frame version 3,
 `session.queryStream(iface, ord, args, {
 bound })` sends a query whose reply is
-a stream and returns a `ReadableStream<Uint8Array>` whose items are the bytes of
-each `chunk` in order. The stream holds up to 4 chunks that the reader has not
-read, the initial credit. When the reader has room for more chunks than the
-session has granted and not yet received, the session sends `stream_credit` for
-the difference, so the reader's pace is the server's. Cancelling the stream
-sends `stream_end interrupted` and forgets the call.
-
-The stream closes when the server ends the reply. It errors with a
-`SessionError` of the category:
-
-- `contract`, `corrupt` or `busy`, as the server's `stream_end` states, or as a
-  `response` that refuses the call before its first chunk states, which a server
-  that does not know the member sends; the session stays open;
-- `interrupted`, as the server's `stream_end` states, or when a `seq` is
-  missing;
-- `corrupt`, when a chunk is longer than the member's limit; the client then
-  sends `stream_end corrupt`;
-- `timeout`, when `bound` milliseconds pass with no `chunk` and no `stream_end`;
-  the client then sends `stream_end interrupted`;
-- `down`, when the session has ended or ends first;
-- `unsupported`, on a session of frame version 1 or 2, which has no stream
-  forms; nothing is sent.
-
-A `response` with `reply` or `accepted`, or one that follows a chunk, a
-`stream_credit`, a chunk beyond the granted credit, and a stream frame on a
-stream other than 0, end the session with the violation `unexpected-form`.
+a stream and returns a `ReadableStream<Uint8Array>` of the payloads of the
+`chunk` frames, in order. The reader's pace sets the server's: the session
+grants credit as the reader reads, and cancelling the stream stops the call. The
+stream errors with a `SessionError` whose category is `contract`, `corrupt`,
+`busy`, `interrupted`, `timeout`, `down` or, on a session of frame version 1 or
+2, `unsupported`, in which case nothing is sent. The rules are in
+[the package's design record](../../docs/design/ridl-transport-ws-ts.md), D-20.
 
 ## Limits
 

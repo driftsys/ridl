@@ -1220,8 +1220,8 @@ The reply stream over WebSocket, in `ridl-transport-ws` and
   call at once. `Timeout`, `Undelivered` and `Down` from the provider cross as
   `stream_end interrupted`. The design's `Transport::Down` on the backend is not
   reachable through the port, so it is not built.
-- The binding row of the codegen model is version 3, with a frame header of at
-  most 21 bytes (a `stream_end` is 37 bytes with its 16-byte envelope).
+- The binding row of the codegen model is version 3; its frame header stays at
+  most 20 bytes, because the field bounds the messages that carry a payload.
 
 ## Trace
 

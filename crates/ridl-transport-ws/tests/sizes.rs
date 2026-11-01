@@ -5,8 +5,8 @@ use ridl_ir::codegen::known_bindings;
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    Attach, Frame, PublishState, ResponseOutcome, StreamOutcome, Target, BLOCK_BYTES,
-    ENVELOPE_BYTES, FRAME_VERSION_3, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
+    Attach, Frame, PublishState, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
+    FRAME_VERSION_3, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
 };
 
 /// The frame header maximum and the envelope size of the `websocket` row.
@@ -48,21 +48,23 @@ fn envelope() -> Envelope {
 }
 
 #[test]
-fn the_largest_data_plane_message_is_header_plus_envelope() {
+fn the_largest_data_plane_message_is_header_plus_envelope_plus_payload() {
     let (header, envelope_bytes) = row();
     assert_eq!(envelope_bytes, ENVELOPE_BYTES);
-    let frame = Frame::StreamEnd {
-        target: target(Kind::Query),
-        envelope: envelope(),
-        correlation: 5,
-        stream: 0,
-        outcome: StreamOutcome::End,
-    };
-    assert_eq!(written_len(&frame), header + envelope_bytes);
+    for len in [0usize, 1, 255] {
+        let payload = vec![0u8; len];
+        let frame = Frame::Response {
+            target: target(Kind::Query),
+            envelope: envelope(),
+            correlation: 5,
+            outcome: ResponseOutcome::Reply(&payload),
+        };
+        assert_eq!(written_len(&frame), header + envelope_bytes + len);
+    }
 }
 
 #[test]
-fn every_other_data_plane_form_is_no_larger() {
+fn every_other_form_that_carries_a_payload_is_no_larger() {
     let (header, envelope_bytes) = row();
     for len in [0usize, 1, 255] {
         let payload = vec![0u8; len];
@@ -89,12 +91,6 @@ fn every_other_data_plane_form_is_no_larger() {
                 total: len.max(1) as u32,
                 index: 0,
                 payload: &payload,
-            },
-            Frame::Response {
-                target: target(Kind::Query),
-                envelope: envelope(),
-                correlation: 5,
-                outcome: ResponseOutcome::Reply(&payload),
             },
             Frame::Chunk {
                 target: target(Kind::Query),

@@ -130,9 +130,10 @@ pub enum Ended {
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
     /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it offered
-    /// none of `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`; or `403
-    /// Forbidden`, because the check set by [`Config::with_origin_check`]
-    /// refused its `Origin`.
+    /// no subprotocol this server serves (`ridl-ws-v3` counts only when the
+    /// backend serves streams and holds a member table); or `403 Forbidden`,
+    /// because the check set by [`Config::with_origin_check`] refused its
+    /// `Origin`.
     Rejected,
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
@@ -276,8 +277,8 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, mut backend: B, config: &Co
 }
 
 /// The member of `table` whose messages need the most bytes, with that
-/// number, when it is above `limit`: the largest data-plane header and
-/// envelope plus the member's limit. A `fixed` needs at most one block
+/// number, when it is above `limit`: the largest header and envelope of a
+/// message that carries a payload, plus the member's limit. A `fixed` needs at most one block
 /// message, 4,130 bytes, because a value that one `publish` does not carry
 /// crosses in blocks: the smaller of 36 bytes plus its limit and 4,130. The
 /// code clamps the limit of a `fixed` before it adds the header and adds with
@@ -304,8 +305,8 @@ fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     largest.filter(|(_, needed)| *needed > limit)
 }
 
-/// The size of the largest data-plane header with its envelope: a
-/// `response` under `reply` with an empty payload, 36 bytes.
+/// The size of the largest header with its envelope of a message that carries
+/// a payload: a `response` under `reply` with an empty payload, 36 bytes.
 fn largest_header() -> usize {
     let header = Frame::Response {
         target: Target {

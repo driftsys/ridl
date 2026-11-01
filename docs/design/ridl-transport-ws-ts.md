@@ -478,17 +478,17 @@ is the following.
 - **`unsupported`.** On a session of frame version 1 or 2, `queryStream` sends
   nothing and returns a stream that errors with a `SessionError` of the category
   `unsupported`. A missing capability is not a defect of the peer, so it does
-  not end the session. The categories `interrupted` and `unsupported` are new in
-  `CallFailure`.
+  not end the session. `CallFailure` has the categories `interrupted` and
+  `unsupported`.
 - **Cancel.** Cancelling the stream sends `stream_end interrupted` and forgets
   the call.
 - **Errors.** The stream errors with the category of the server's `stream_end`:
   `contract`, `corrupt`, `busy` or `interrupted`. A gap in the stream's `seq`, a
-  `chunk` or a `stream_end` that skips a value, errors it `interrupted`. A chunk
-  longer than the member's limit errors it `corrupt` and sends
-  `stream_end corrupt`. When `bound` milliseconds pass with neither a `chunk`
-  nor a `stream_end`, it errors `timeout` and the client sends
-  `stream_end interrupted`; the bound ends at the first frame, as
+  `chunk` or a `stream_end` that skips a value, errors it `interrupted` and the
+  client sends `stream_end interrupted`. A chunk longer than the member's limit
+  errors it `corrupt` and sends `stream_end corrupt`. When `bound` milliseconds
+  pass with neither a `chunk` nor a `stream_end`, it errors `timeout` and the
+  client sends `stream_end interrupted`; the bound ends at the first frame, as
   [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13 states. When the
   session ends, an open stream errors `down`. An argument longer than the
   member's limit errors the stream `corrupt`, and a bound or a number that

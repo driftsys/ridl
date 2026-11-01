@@ -14,8 +14,9 @@ pub struct Known {
     pub name: &'static str,
     /// The version of the binding document the overheads come from.
     pub version: &'static str,
-    /// The largest frame header the binding adds to a data-plane message,
-    /// without the envelope, in bytes.
+    /// The largest frame header, without the envelope, of a data-plane message
+    /// that carries a payload, in bytes. A form that carries no payload
+    /// (`stream_end`, `stream_credit`) is outside this field.
     /// `None` when the binding states no frame header.
     pub frame_header_max_bytes: Option<u32>,
     /// The bytes the binding's envelope adds to a message. `None` when the
@@ -31,7 +32,7 @@ pub struct Known {
 pub const KNOWN: &[Known] = &[Known {
     name: "websocket",
     version: "3",
-    frame_header_max_bytes: Some(21),
+    frame_header_max_bytes: Some(20),
     envelope_bytes: Some(16),
 }];
 

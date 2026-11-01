@@ -333,14 +333,14 @@ fn a_layout_plugin_computes_cabin_from_the_request_alone() {
     assert_eq!(actual, fixture());
 
     // The request carries the `websocket` row of the frame specification
-    // §11.1, so `Cabin.warning`'s `max_message_bytes` is 21 + 16 + 8.
+    // §11.1, so `Cabin.warning`'s `max_message_bytes` is 20 + 16 + 8.
     let deployment = request.deployment.as_ref().expect("a deployment");
     assert_eq!(
         deployment.bindings,
         vec![v1::Binding {
             name: "websocket".to_string(),
             version: "3".to_string(),
-            frame_header_max_bytes: Some(21),
+            frame_header_max_bytes: Some(20),
             envelope_bytes: Some(16),
         }]
     );
@@ -463,13 +463,11 @@ fn the_websocket_row_is_derived_from_the_frame_specification_header_table() {
         "response",
         "block",
         "chunk",
-        "stream_end",
-        "stream_credit",
     ]
     .iter()
     .map(|form| sizes[*form])
     .max()
-    .expect("the data-plane forms");
+    .expect("the data-plane forms that carry a payload");
     let (request, _) = request_for(&cabin(), "veh.cabin");
     let deployment = request.deployment.as_ref().expect("a deployment");
     let row = deployment

@@ -549,7 +549,11 @@ call is a `stream_end` outcome:
 - `end` when the stream finished;
 - `busy`, `contract(c)` or `corrupt`, with `seq` 1 and no `chunk` before it,
   when the provider refused the call at admission or at dispatch;
-- `interrupted` when the provider stopped the stream without an end.
+- `contract(c)`, `corrupt` or `busy` under the next stream `seq`, after one or
+  more chunks, when the provider failed the stream with that outcome, or when a
+  chunk was longer than the member's limit (`corrupt`);
+- `interrupted` when the provider stopped the stream without an end, or when its
+  port reported `Timeout`, `Undelivered` or `Down` for the stream (§9.6).
 
 A `response` that answers a call the provider presented as a streamed reply is a
 protocol violation of the provider. A provider that does not know the member
@@ -867,15 +871,16 @@ settled call's response for a call with a response bound until that bound has
 passed, measured from the request's `stamp`; for a call with no response bound,
 the binding fixes the retention and states it.
 
-**A retransmitted `request` of a streamed reply** is answered with one
-`stream_end` whose outcome is `interrupted` and whose `seq` is 1, and the
-provider presents the call no second time. The provider keeps that one frame as
-its kept response for the call, whatever the outcome of the first answer was,
-including a refusal at dispatch, and not the chunks it sent: a provider cannot
-keep a streamed reply whole. It keeps the frame until the bound has passed, as
-for any response. A consumer that lost chunks asks again with an `offset`
-parameter, as [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 5
-states.
+**A retransmitted `request` of a streamed reply** is answered, once the stream
+has ended, with one `stream_end` whose outcome is `interrupted` and whose `seq`
+is 1, and the provider presents the call no second time. While the stream is
+still open, the retransmit is dropped and nothing is sent. The provider keeps
+that one frame as its kept response for the call, whatever the outcome of the
+first answer was, including a refusal at dispatch, and not the chunks it sent: a
+provider cannot keep a streamed reply whole. It keeps the frame until the bound
+has passed, as for any response. A consumer that lost chunks asks again with an
+`offset` parameter, as [ADR-0032](../decisions/ADR-0032-byte-streams.md)
+decision 5 states.
 
 The retransmission budget is bounded by the response bound
 ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
@@ -910,11 +915,11 @@ failure outside this document (ridl §10.4).
 covers the start of the reply and not the whole stream
 ([ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13): the **calling**
 runtime reports `Transport::Timeout` when neither a `chunk` nor a `stream_end`
-of the reply arrived within `max` of the request's stamp, and it sends nothing
-more for the call. After the first frame the bound no longer applies, and what
-stops a stalled stream is the provider's own abandonment of a call, which a
-binding states; `ridl-transport-ws` restarts its clock at each `chunk` sent and
-each `stream_credit` received (its design record, D-27).
+of the reply arrived within `max` of the request's stamp, and it stops the
+stream with `stream_end` `interrupted` (§5.4). After the first frame the bound
+no longer applies, and what stops a stalled stream is the provider's own
+abandonment of a call, which a binding states (the design record of
+`ridl-transport-ws`, D-27).
 
 Under `@Xms`, the strict period, the providing runtime publishes the signal
 every `X` whether or not it changed, which is a `touch` when nothing changed
@@ -1205,38 +1210,40 @@ bytes long — a proto3 value whose fields all hold their defaults encodes to no
 bytes — and is handed to the generated binding as it is.
 
 **The sizes.** The envelope is 16 bytes. The largest data-plane header without
-its envelope is 20 bytes (`response`) in versions 1 and 2, so a data-plane
-message is at most 36 bytes plus the payload bound; version 3 adds the
-`stream_end`, whose header is 21 bytes, so a message is at most 37 bytes plus
-the payload bound ("Binding version 3"). The largest header of any message is
-the `attach` at 39 + 255 = 294 bytes; it carries no payload, so a receiver's
-message size limit admits at least 294 bytes. A payload is bounded by its
-interaction's limit: the limit a `[limits]` entry of the catalog's manifest
-gives it, or the default ceiling of its kind, 3,840 bytes for a signal and an
-event, 16,128 for a command and a query, and 65,280 for a `fixed`
+its envelope is 20 bytes (`response`) among the forms that carry a payload, so a
+data-plane message that carries a payload is at most 36 bytes plus the payload
+bound; this holds in every version, because the largest header of a form added
+by version 2 or 3 is smaller. A `stream_end` and a `stream_credit` carry no
+payload and are outside this bound. The largest header of any message is the
+`attach` at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message
+size limit admits at least 294 bytes. A payload is bounded by its interaction's
+limit: the limit a `[limits]` entry of the catalog's manifest gives it, or the
+default ceiling of its kind, 3,840 bytes for a signal and an event, 16,128 for a
+command and a query, and 65,280 for a `fixed`
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
 16). The largest payload one message carries is 16,128 bytes, so the largest
 data-plane message is 36 + 16,128 = 16,164 bytes. The Rust provider
-`ridl-transport-ws` serves binding version 2. It limits a message to 16,164
-bytes by default and refuses a configured limit above it (ADR-0030 decision 10);
-with a member table it also refuses, before the opening handshake, a configured
-limit below what one message of a member of the catalog needs: 36 bytes plus the
-member's limit, where a `fixed` counts the smaller of 36 bytes plus its limit
-and 4,130 bytes, one block message of binding version 2. So a limit the provider
-accepts carries every payload the catalog allows, whole or in blocks. The check
-counts the 36-byte header of a `response` for every member, although a signal
-and a `fixed` cross in a 27-byte `publish`, so it can refuse a limit that is up
-to 9 bytes larger than such a member needs. A `fixed` above the message limit
-minus the 27-byte `publish` header, 16,137 bytes at the default limit, crosses
-in blocks (binding version 2). A provider whose message limit is below 4,130
-bytes sends no block: it sends a `fixed` that fits one `publish`, records a
-larger value and answers its `read` with an `answer` carrying
-`contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read`, so
-that the read ends instead of waiting until the session ends; with a member
-table, the check above admits such a limit only when every `fixed` of the
-catalog fits one message. The Rust provider answers a `read` of a signal or of a
-`fixed` whose value is above the member's limit the same way, so that no read
-waits on a value that is not sent. The codegen model carries the data-plane
+`ridl-transport-ws` serves binding version 3 when its backend carries streams
+and it holds a member table, else binding version 2 (its design record, D-27).
+It limits a message to 16,164 bytes by default and refuses a configured limit
+above it (ADR-0030 decision 10); with a member table it also refuses, before the
+opening handshake, a configured limit below what one message of a member of the
+catalog needs: 36 bytes plus the member's limit, where a `fixed` counts the
+smaller of 36 bytes plus its limit and 4,130 bytes, one block message of binding
+version 2. So a limit the provider accepts carries every payload the catalog
+allows, whole or in blocks. The check counts the 36-byte header of a `response`
+for every member, although a signal and a `fixed` cross in a 27-byte `publish`,
+so it can refuse a limit that is up to 9 bytes larger than such a member needs.
+A `fixed` above the message limit minus the 27-byte `publish` header, 16,137
+bytes at the default limit, crosses in blocks (binding version 2). A provider
+whose message limit is below 4,130 bytes sends no block: it sends a `fixed` that
+fits one `publish`, records a larger value and answers its `read` with an
+`answer` carrying `contract(UnknownInteraction)`, the one refusal §6.3 defines
+for a `read`, so that the read ends instead of waiting until the session ends;
+with a member table, the check above admits such a limit only when every `fixed`
+of the catalog fits one message. The Rust provider answers a `read` of a signal
+or of a `fixed` whose value is above the member's limit the same way, so that no
+read waits on a value that is not sent. The codegen model carries the data-plane
 numbers as the `websocket` row, binding version `"3"`, `frame_header_max_bytes`
 21, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
 derived from this layout: the layout is frozen through the vectors below, and
@@ -1427,10 +1434,9 @@ table (item 4).
 A chunk's payload is every byte after its header. A `stream_end` and a
 `stream_credit` carry no payload. The largest data-plane message is a `chunk`
 with 16,128 bytes of payload, 16,163 bytes, which is below the limit of 16,164
-bytes of item 2, so that limit holds unchanged. The largest header without its
-envelope is the `stream_end`'s, 21 bytes, and the `chunk`'s is 19 bytes, so a
-`chunk` is at most 35 bytes plus its payload. The row of item 2 states these
-numbers.
+bytes of item 2, so that limit holds unchanged. A `chunk`'s header without its
+envelope is 19 bytes, below the `response`'s 20, so "The sizes" of item 2 holds
+unchanged.
 
 **Initial credit.** The sender of a stream may send 4 chunks before it has
 received a `stream_credit` for that stream. Each `stream_credit` adds its
