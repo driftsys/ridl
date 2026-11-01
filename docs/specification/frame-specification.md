@@ -1206,9 +1206,10 @@ version; streams (ridl §12, driftsys/ridl#336) arrive as version 3 the same way
 
 **Test vectors.** Each line is one complete message in hexadecimal, spaces for
 reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
-column, which is stable and never renamed. The stamp in every data-plane vector
-is `0x0123456789AB` microseconds (and `0x0123456789AC` on the responses), chosen
-to show the byte order; the hash in `attach` is the bytes `00` to `1f`; the unit
+column, which is stable and never renamed, and it reads the table of "Binding
+version 2" the same way. The stamp in every data-plane vector is
+`0x0123456789AB` microseconds (and `0x0123456789AC` on the responses), chosen to
+show the byte order; the hash in `attach` is the bytes `00` to `1f`; the unit
 name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell names as
 `` payload `<hex>` `` and fails a row whose bytes after the header differ from
 it, or from no bytes when the cell names none; it decides from the header
