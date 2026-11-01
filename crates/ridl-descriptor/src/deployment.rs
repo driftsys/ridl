@@ -14,7 +14,16 @@ use core::fmt;
 
 use planus::ReadAsRoot;
 
+#[cfg(feature = "std")]
+mod describe;
 pub mod generated;
+#[cfg(feature = "std")]
+mod lower;
+
+#[cfg(feature = "std")]
+pub use describe::to_json;
+#[cfg(feature = "std")]
+pub use lower::{DeploymentLowerError, lower};
 
 pub use generated::ridl::deployment::{
     Attribute, AttributeRef, AttributeValue, AttributeValueRef, Component, ComponentRef, Crossing,
