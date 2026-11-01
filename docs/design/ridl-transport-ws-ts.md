@@ -4,13 +4,14 @@
 TypeScript side of the WebSocket binding that
 [the frame specification](../specification/frame-specification.md) §11.1
 defines. It is the **consuming side** of a frame session, for Deno and for the
-browser: it opens one WebSocket offering the subprotocols `ridl-ws-v2` and
-`ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`, `read` and `request`,
-and applies the consumer's rules that need no payload decoding. It carries
-payload bytes without reading them: a payload is a `Uint8Array` that the package
-hands to its caller as it arrived, and sends as the caller gave it. The one
-thing it checks of a payload is its length, against the member's limit from the
-generated interface tables (D-19).
+browser: it opens one WebSocket offering the subprotocols `ridl-ws-v3`,
+`ridl-ws-v2` and `ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`,
+`read`, `request` and the stream forms of a streamed reply, and applies the
+consumer's rules that need no payload decoding. It carries payload bytes without
+reading them: a payload is a `Uint8Array` that the package hands to its caller
+as it arrived, and sends as the caller gave it. The one thing it checks of a
+payload is its length, against the member's limit from the generated interface
+tables (D-19).
 
 The Rust crate `ridl-transport-ws` is the providing side of the same binding;
 its as-built record is [`ridl-transport-ws.md`](ridl-transport-ws.md), which
@@ -21,7 +22,7 @@ the generated codec module's, `<base>.codec.ts`
 ([`ts-codec-table.md`](ts-codec-table.md)); the generated faces over this
 package are not built. ADR-0020 decision 6 places the package; its dependency
 row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
-§3 to §9 and §11.1 (binding versions 1 and 2).
+§3 to §9 and §11.1 (binding versions 1, 2 and 3).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -39,13 +40,13 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 
 **What the package does.**
 
-- Encodes and decodes every one of the eleven forms of frame specification §4
-  exactly as §11.1 item 2 and "Binding version 2" lay them out, and reproduces
-  every test vector of §11.1 byte for byte, read from the same table the crate's
-  tests read.
+- Encodes and decodes every one of the fourteen forms of frame specification §4
+  exactly as §11.1 item 2, "Binding version 2" and "Binding version 3" lay them
+  out, and reproduces every test vector of §11.1 byte for byte, read from the
+  same table the crate's tests read.
 - Opens a consuming session over one `WebSocket`: `attach`, `subscribe`,
-  `unsubscribe`, `read` (signal and `fixed`), `command` and `query`, and the end
-  of the session.
+  `unsubscribe`, `read` (signal and `fixed`), `command`, `query` and
+  `queryStream` (a query whose reply is a stream), and the end of the session.
 - Runs unchanged in Deno and in a browser: the package's own code uses only web
   platform APIs.
 
@@ -137,6 +138,7 @@ the runtime package holds them.
 session file at a readable size.
 
 The codec defines `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`),
+`FRAME_VERSION_3` (3), `SUBPROTOCOL_V3` (`ridl-ws-v3`), `INITIAL_CREDIT` (4),
 `SUBPROTOCOL_V1` (`ridl-ws-v1`), `MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES`
 (16), the `Kind` codes, `encodingTag`, which maps `flatbuffers`, `proto3` and
 `podbuf` to 1, 2 and 3, and the three default ceilings of a payload with
@@ -194,18 +196,18 @@ unit tests use to pass a fake one; the default is
 
 - `connect` validates the name, the encoding and the hash with `attach` before
   any socket is created, and rejects with that `AttachError` or `RangeError`. It
-  then opens the connection offering `ridl-ws-v2` and then `ridl-ws-v1`, sends
-  the `attach` with the frame version of the subprotocol the server selected (2
-  or 1) once the connection is open, and resolves with a `Session` on
-  `attached(accepted)`. It rejects with `AttachRefused` (carrying the `reason`
-  and a `closed` promise) on `attached(refused)`; with `ProtocolError` when the
-  server broke the binding before `attached`; and with `SessionError` `down`
-  when the connection closed or failed first. A server that selected no
-  subprotocol is seen differently on the two platforms: in Deno, `connect`
-  rejects with `ProtocolError('no-subprotocol')`; in a browser, the platform
-  fails the handshake itself, so `connect` rejects with `SessionError` `down`
-  (close 1006). A URL the platform refuses rejects the promise; `connect` does
-  not throw.
+  then opens the connection offering `ridl-ws-v3`, `ridl-ws-v2` and then
+  `ridl-ws-v1`, sends the `attach` with the frame version of the subprotocol the
+  server selected (3, 2 or 1) once the connection is open, and resolves with a
+  `Session` on `attached(accepted)`. It rejects with `AttachRefused` (carrying
+  the `reason` and a `closed` promise) on `attached(refused)`; with
+  `ProtocolError` when the server broke the binding before `attached`; and with
+  `SessionError` `down` when the connection closed or failed first. A server
+  that selected no subprotocol is seen differently on the two platforms: in
+  Deno, `connect` rejects with `ProtocolError('no-subprotocol')`; in a browser,
+  the platform fails the handshake itself, so `connect` rejects with
+  `SessionError` `down` (close 1006). A URL the platform refuses rejects the
+  promise; `connect` does not throw.
 - `subscribe(target)` resolves on `answer(accepted)` and rejects with a
   `contract` `SessionError` on a refusing `answer`. `unsubscribe(target)` sends
   the frame and drops what the session held for the interaction. `read(target)`
@@ -457,6 +459,56 @@ kind settles or shifts another queue and cannot change the reads that the blocks
 answer. A frame the codec discards for bytes after its header is recorded and
 the reassembly goes on.
 
+**D-20. A streamed reply.** `queryStream(iface, ord, args, { bound })` returns a
+`ReadableStream<Uint8Array>` whose items are the payloads of the `chunk` frames
+in order; the stream machinery is in `src/calls.ts`. The rules of the wire are
+frame specification §5.4 and §11.1 "Binding version 3". What the client decides
+is the following.
+
+- **The credit is the stream's `pull`.** The stream has a high-water mark of 4
+  chunks, the initial credit. The session tracks `granted`, the chunks it has
+  granted, and `received`. On each `pull` it computes
+  `room = desiredSize − (granted − received)`, and when `room` is above 0 it
+  adds `room` to `granted` and sends `stream_credit` for `room`. So the server
+  may send what the reader's queue can still hold and no more, and the
+  platform's backpressure and the frame's credit are one mechanism, and the
+  session needs no second queue. The technote
+  [`websocket-binding-rationale.md`](../technotes/websocket-binding-rationale.md)
+  gives the alternatives.
+- **`unsupported`.** On a session of frame version 1 or 2, `queryStream` sends
+  nothing and returns a stream that errors with a `SessionError` of the category
+  `unsupported`. A missing capability is not a defect of the peer, so it does
+  not end the session. The categories `interrupted` and `unsupported` are new in
+  `CallFailure`.
+- **Cancel.** Cancelling the stream sends `stream_end interrupted` and forgets
+  the call.
+- **Errors.** The stream errors with the category of the server's `stream_end`:
+  `contract`, `corrupt`, `busy` or `interrupted`. A gap in the stream's `seq`, a
+  `chunk` or a `stream_end` that skips a value, errors it `interrupted`. A chunk
+  longer than the member's limit errors it `corrupt` and sends
+  `stream_end corrupt`. When `bound` milliseconds pass with neither a `chunk`
+  nor a `stream_end`, it errors `timeout` and the client sends
+  `stream_end interrupted`; the bound ends at the first frame, as
+  [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13 states. When the
+  session ends, an open stream errors `down`. An argument longer than the
+  member's limit errors the stream `corrupt`, and a bound or a number that
+  `command` refuses errors it with a `RangeError`, in both cases with nothing
+  sent. The client's `stream_end` carries `seq` 1.
+- **A refusing `response`.** A `response` for the call whose outcome is
+  `contract`, `corrupt` or `busy`, received before the stream's first frame, is
+  that stream's refusal: the stream errors with the category and the session
+  stays open. A server that does not know a member's stream cannot answer with a
+  `stream_end`, and answers `contract(UnknownInteraction)` (frame specification
+  §5.4), so one wrong ordinal must not end a session. After a `chunk`, the same
+  `response` is the violation `unexpected-form`, because the reason holds only
+  before the reply starts. A `response` with `reply` or `accepted`, a
+  `stream_credit` from the server, a chunk beyond the credit granted, and a
+  stream frame on a stream other than 0 are the violation `unexpected-form` as
+  well, and a violation errors every open stream with `down`.
+- **The frame version is private.** The session holds the version the server
+  selected and exposes no accessor for it; a caller learns that the server does
+  not stream from `unsupported`.
+
 ## The end-to-end tests
 
 **D-13. The test server is a cargo example in the crate.**
@@ -464,14 +516,14 @@ the reassembly goes on.
 catalog (`test.ws`, the provider of `tests/support/provider.rs`, included by
 path so the catalog is defined once) on `127.0.0.1:0`, prints `port <n>`, serves
 each connection on its own thread with its own
-`Described::new(Scanning(loopback.attach()), table)` backend, where `table` is
-the hand-built member table of the test catalog, steps the provider every 5 ms
-on its own thread, and exits with status 0 when its standard input ends. It
-declares `required-features = ["server"]`, and the crate's `exclude` leaves out
-`examples/`, as it leaves out `tests/`, because the example includes a file from
-`tests/` and uses the dev-dependency `ridl-loopback`. `serve` is unchanged; the
-example only wraps its backend in a member table. The crate's record lists the
-example under its tests.
+`Described::new(Streaming(Scanning(loopback.attach())), table)` backend, where
+`table` is the hand-built member table of the test catalog, steps the provider
+every 5 ms on its own thread, and exits with status 0 when its standard input
+ends. It declares `required-features = ["server"]`, and the crate's `exclude`
+leaves out `examples/`, as it leaves out `tests/`, because the example includes
+a file from `tests/` and uses the dev-dependency `ridl-loopback`. `serve` is
+unchanged; the example only wraps its backend in a member table and in
+`Streaming`. The crate's record lists the example under its tests.
 
 **D-14. How the proof runs.** "A Deno program and a browser page each receive a
 live signal from the Rust server" is read as: the client attaches, subscribes a
@@ -492,18 +544,24 @@ bytes are the value the provider set.
   test opens a raw socket without the package's `Session`, sends `attach` and
   waits for `attached`, reads the `fixed` of 16,137 bytes and gets one
   `publish`, reads the `fixed` of 16,138 bytes and gets four `block` frames; the
-  crate's scenario has no such test.
+  crate's scenario has no such test. A third test,
+  `queryStream_receives_64_elements_over_loopback_server`, sends the streamed
+  query (ordinal 10 of `e2e/catalog.ts`, an argument `n` and a reply of `n`
+  chunks of 1,024 bytes of the value `i`) with `n` 64, which is more than the
+  initial credit of 4, so the reply arrives in full only if the credit the
+  reader grants reaches the server. It checks the count and the bytes of each
+  chunk, with a time limit of 5 s, and that no note was recorded.
 - **The browser** (`e2e/browser_test.ts`, `e2e/page.ts`, `e2e/browser.ts`). The
   test bundles `e2e/page.ts` with `deno bundle --platform=browser`, serves the
   bundle and a page from `Deno.serve` on `127.0.0.1`, starts a headless
   Chromium-family browser with a temporary profile and a DevTools port, opens
   the page through the DevTools Protocol, and evaluates the promise the page
   exposes. The page runs the signal half of the sequence (attach, subscribe,
-  command, `live` publish with `2a 07`) and resolves with what it received. The
-  browser is `RIDL_BROWSER`, then `google-chrome`, `google-chrome-stable`,
-  `chromium` and `chromium-browser` on `PATH`, then the Google Chrome
-  application on macOS. On Linux, `RIDL_BROWSER_NO_SANDBOX=1` adds
-  `--no-sandbox`.
+  command, `live` publish with `2a 07`) and the streamed reply of 64 elements,
+  and resolves with what it received. The browser is `RIDL_BROWSER`, then
+  `google-chrome`, `google-chrome-stable`, `chromium` and `chromium-browser` on
+  `PATH`, then the Google Chrome application on macOS. On Linux,
+  `RIDL_BROWSER_NO_SANDBOX=1` adds `--no-sandbox`.
 - **The encoding.** The tests attach with `flatbuffers`, because the example
   serves `ridl-loopback`, whose encoding is FlatBuffers, and the server refuses
   any other tag with `encoding-unsupported` (the crate's D-11). The client's
@@ -536,6 +594,11 @@ bytes are the value the provider set.
 - **The calls** (`calls_test.ts`). The call rules of D-9, with Deno's op
   sanitizer turned on in every test, because Deno 2.9 leaves it off by default;
   a call's timer left running fails the test.
+- **The streamed reply** (`calls_test.ts`, `session_test.ts`). The credit
+  formula of D-20, the outcomes and categories, a refusing `response` before and
+  after a chunk, the bound, the cancel, `unsupported` below version 3, and the
+  offer of the three subprotocols. The vectors of binding version 3 are in
+  `vectors_test.ts`.
 - **The version** (`version_test.ts`). `deno.json`'s version equals the
   `[workspace.package]` version.
 
@@ -593,6 +656,9 @@ generated code uses it yet.
   it, and the generated codec module that decodes and encodes a payload are
   built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
   this package by hand.
+- A parameter stream on a command or a query (`commandStream` and
+  `queryWithUpload` of the working design), a byte stream, and the UTF-8 check
+  of a `<string>` chunk.
 - The providing side in TypeScript, an emulator (driftsys/ridl#290), and the
   stand-in roles of the crate's "Adding the stand-in ports later".
 - Reading a catalog descriptor: the `kind` check, the response bound, the

@@ -465,6 +465,8 @@ runtime's local name for the outcome it will read back through `Caller::ack`; a
 runtime may use the request's `seq` as its value, and nothing on the frame
 depends on that choice.
 
+A command with a stream parameter is carried by no binding yet (§13).
+
 **What the provider does.** A providing runtime that cannot admit the call — no
 slot, no budget, or a call faster than the member's `min` (§8) — does not
 present it and answers with a `response` whose outcome is `busy`. Otherwise, on
@@ -535,6 +537,40 @@ bytes for `reply`, `Err(CallError::Contract(c))` for `contract(c)`,
 `Err(CallError::Transport(Busy))` for `busy`. The generated binding verifies the
 reply bytes (§9.3). No `response` within the query's response bound is
 `Transport::Timeout` (§8), detected by the caller's runtime.
+
+**A query whose reply is a stream** is answered by the frames of its stream and
+never by a `response`. The `request` is as above and `correlation` on every
+frame of the reply is the request's `seq`. The provider sends the elements as
+`chunk` frames on stream 0, each carrying one chunk of at most the member's
+limit (§9), and one `stream_end` that takes the next stream `seq` (§4). The
+reply opens with its first `chunk` or its `stream_end`. Every outcome of the
+call is a `stream_end` outcome:
+
+- `end` when the stream finished;
+- `busy`, `contract(c)` or `corrupt`, with `seq` 1 and no `chunk` before it,
+  when the provider refused the call at admission or at dispatch;
+- `interrupted` when the provider stopped the stream without an end.
+
+A `response` that answers a call the provider presented as a streamed reply is a
+protocol violation of the provider. A provider that does not know the member
+answers `response` `contract(UnknownInteraction)` (§6.4), because it cannot know
+which members stream. A consumer of a streamed reply therefore takes a
+`response` whose outcome is `contract`, `corrupt` or `busy` before the first
+`chunk` or `stream_end` as that stream's refusal, with that outcome, and the
+session continues. A `response` after the first frame of the reply, or one whose
+outcome is `reply` or `accepted`, is a protocol violation of item 4.
+
+**Flow of a streamed reply.** The consumer grants the provider credit with
+`stream_credit` on stream 0, as it hands chunks to its application and frees its
+buffer; the initial credit is 4 chunks (§11.1, "Binding version 3"). A `chunk`
+beyond the credit granted is a protocol violation of the consumer's peer. The
+consumer stops the stream by sending `stream_end` against its direction with
+`interrupted` when it cancels, `contract(c)` when it refused a chunk at its
+boundary, or `corrupt` when it could not decode a chunk or the chunk was longer
+than the member's limit. A consumer's `stream_end` with `end` or `busy` is a
+protocol violation of item 4: a receiver cancels a stream and does not end it.
+After the provider receives a consumer's `stream_end`, it sends nothing more for
+the call.
 
 ### 5.5 Fixed
 
@@ -810,6 +846,9 @@ scope depends on the kind:
   decision 5), and it is what a `response` echoes as `correlation`.
 - **A provider's responses have one counter** per session, starting at 1. It
   orders the responses; nothing depends on it beyond that.
+- **A stream has one counter per direction**, starting at 1, over the `chunk`
+  frames of the stream and its `stream_end` (§4). A streamed reply's frames do
+  not use the provider's counter of responses.
 
 **Ordering on a signal.** A consuming runtime accepts a `publish` for a channel
 only when its `seq` is greater than the one it holds for that channel (§5.1). So
@@ -827,6 +866,16 @@ has not. Two callers are never merged, even under one `seq`. A provider keeps a
 settled call's response for a call with a response bound until that bound has
 passed, measured from the request's `stamp`; for a call with no response bound,
 the binding fixes the retention and states it.
+
+**A retransmitted `request` of a streamed reply** is answered with one
+`stream_end` whose outcome is `interrupted` and whose `seq` is 1, and the
+provider presents the call no second time. The provider keeps that one frame as
+its kept response for the call, whatever the outcome of the first answer was,
+including a refusal at dispatch, and not the chunks it sent: a provider cannot
+keep a streamed reply whole. It keeps the frame until the bound has passed, as
+for any response. A consumer that lost chunks asks again with an `offset`
+parameter, as [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 5
+states.
 
 The retransmission budget is bounded by the response bound
 ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
@@ -856,6 +905,16 @@ failure outside this document (ridl §10.4).
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max`, staleness bound | the **consuming** runtime computes `Freshness` on every read: `Fresh` while `now − stamp ≤ max`, else `Stale { by: now − stamp − max }`; `Unbounded` with no `max` | the **consuming** runtime discards an occurrence with `now − stamp > max` inside `EventSource::next` | the **calling** runtime reports `Transport::Undelivered` (command) or `Transport::Timeout` (query) through `ack` or `reply` once `now − request stamp > max` with no `response`; the **providing** runtime presents `Claim.remaining = max − (now − request stamp)`, `None` with no `max` |
 | `min`, rate floor      | the **providing** runtime coalesces a faster `set` into the next publication                                                                                       | the **providing** runtime refuses a faster `raise` with `RaiseError::Busy`, or delays it             | the **providing** runtime may refuse a faster call at admission, and answers with `busy`                                                                                                                                                                                                  |
+
+**A streamed reply.** The response bound of a query whose reply is a stream
+covers the start of the reply and not the whole stream
+([ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13): the **calling**
+runtime reports `Transport::Timeout` when neither a `chunk` nor a `stream_end`
+of the reply arrived within `max` of the request's stamp, and it sends nothing
+more for the call. After the first frame the bound no longer applies, and what
+stops a stalled stream is the provider's own abandonment of a call, which a
+binding states; `ridl-transport-ws` restarts its clock at each `chunk` sent and
+each `stream_credit` received (its design record, D-27).
 
 Under `@Xms`, the strict period, the providing runtime publishes the signal
 every `X` whether or not it changed, which is a `touch` when nothing changed
@@ -976,14 +1035,18 @@ as §3 states.
 
 ### 9.6 Which failures cross
 
-Of the five `Transport` variants, exactly two cross a boundary, each as a
-`response` outcome: **`Corrupt`**, because the provider detected it, and
-**`Busy`**, because the provider refused the call at admission. `Timeout`,
-`Undelivered` and `Down` are the **absence** of a frame, detected by the
-caller's runtime against its own clock and its binding's session state, and
-never sent by anyone. Of the four `Contract` categories, every one may cross as
-a `response` or `answer` outcome. `Detected(_)` never crosses: it is the
-consumer's own finding about bytes it received.
+Of the five `Transport` variants, exactly three cross a boundary: **`Corrupt`**,
+because the provider detected it, and **`Busy`**, because the provider refused
+the call at admission, each as a `response` outcome (or, for a streamed reply, a
+`stream_end` outcome); and **`Interrupted`**, which crosses only as a
+`stream_end` outcome, because a stream that stopped without an end would
+otherwise wait with no bound, and a receiver that cancels a stream states it.
+`Timeout`, `Undelivered` and `Down` are the **absence** of a frame, detected by
+the caller's runtime against its own clock and its binding's session state, and
+never sent by anyone. A provider whose port reports one of them for a streamed
+reply sends `stream_end` `interrupted`. Of the four `Contract` categories, every
+one may cross as a `response` or `answer` outcome. `Detected(_)` never crosses:
+it is the consumer's own finding about bytes it received.
 
 **What a violation carries.** `contract(InvalidValue(violation))` crosses as the
 violation's `Rule` alone; the name of the typl type whose constraint failed does
@@ -1142,13 +1205,15 @@ bytes long — a proto3 value whose fields all hold their defaults encodes to no
 bytes — and is handed to the generated binding as it is.
 
 **The sizes.** The envelope is 16 bytes. The largest data-plane header without
-its envelope is 20 bytes (`response`), so a data-plane message is at most 36
-bytes plus the payload bound. The largest header of any message is the `attach`
-at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
-limit admits at least 294 bytes. A payload is bounded by its interaction's
-limit: the limit a `[limits]` entry of the catalog's manifest gives it, or the
-default ceiling of its kind, 3,840 bytes for a signal and an event, 16,128 for a
-command and a query, and 65,280 for a `fixed`
+its envelope is 20 bytes (`response`) in versions 1 and 2, so a data-plane
+message is at most 36 bytes plus the payload bound; version 3 adds the
+`stream_end`, whose header is 21 bytes, so a message is at most 37 bytes plus
+the payload bound ("Binding version 3"). The largest header of any message is
+the `attach` at 39 + 255 = 294 bytes; it carries no payload, so a receiver's
+message size limit admits at least 294 bytes. A payload is bounded by its
+interaction's limit: the limit a `[limits]` entry of the catalog's manifest
+gives it, or the default ceiling of its kind, 3,840 bytes for a signal and an
+event, 16,128 for a command and a query, and 65,280 for a `fixed`
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
 16). The largest payload one message carries is 16,128 bytes, so the largest
 data-plane message is 36 + 16,128 = 16,164 bytes. The Rust provider
@@ -1172,8 +1237,8 @@ table, the check above admits such a limit only when every `fixed` of the
 catalog fits one message. The Rust provider answers a `read` of a signal or of a
 `fixed` whose value is above the member's limit the same way, so that no read
 waits on a value that is not sent. The codegen model carries the data-plane
-numbers as the `websocket` row, binding version `"2"`, `frame_header_max_bytes`
-20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
+numbers as the `websocket` row, binding version `"3"`, `frame_header_max_bytes`
+21, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
 derived from this layout: the layout is frozen through the vectors below, and
 the row is a derived value, corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
@@ -1362,7 +1427,10 @@ table (item 4).
 A chunk's payload is every byte after its header. A `stream_end` and a
 `stream_credit` carry no payload. The largest data-plane message is a `chunk`
 with 16,128 bytes of payload, 16,163 bytes, which is below the limit of 16,164
-bytes of item 2, so that limit holds unchanged.
+bytes of item 2, so that limit holds unchanged. The largest header without its
+envelope is the `stream_end`'s, 21 bytes, and the `chunk`'s is 19 bytes, so a
+`chunk` is at most 35 bytes plus its payload. The row of item 2 states these
+numbers.
 
 **Initial credit.** The sender of a stream may send 4 chunks before it has
 received a `stream_credit` for that stream. Each `stream_credit` adds its
@@ -1514,9 +1582,13 @@ Each item is left out on purpose, with the record that takes it.
 
 - **Streams.** `<T>` on a call's parameter or return (ridl §12) has no frame in
   version 1 or version 2: `ridl-rt` 0.1 leaves streams out (driftsys/ridl#336).
-  They arrive as frame version 3, negotiated as §11.1 "Later versions" states,
-  so that a version 1 or a version 2 peer is unchanged. Frame version 2 holds
-  the blocks of a `fixed` (§4, §5.5).
+  Frame version 3 holds the reply stream of a query (§5.4), negotiated as §11.1
+  "Later versions" states, so that a version 1 or a version 2 peer is unchanged.
+  A parameter stream on a command or a query is not built: no frame direction
+  carries a consumer's `chunk` yet, and a `chunk` from the consumer is refused.
+  A `<string>` stream has no UTF-8 check on the frame yet; the `Rule` that names
+  it arrives with the parameter streams. Frame version 2 holds the blocks of a
+  `fixed` (§4, §5.5).
 - **The family.** Which of ridl §3.2's five boundaries an interaction sits on is
   not on the frame, because `ridl-rt` 0.1 carries no `Family` and the IR has no
   family field yet; it returns as a `Member` field, a breaking change under

@@ -25,8 +25,9 @@ use super::members::MemberTable;
 /// that an embedder can serve a runtime type it does not own: the orphan rule
 /// forbids implementing this trait on another crate's type, and [`Polling`]
 /// and [`Scanning`] cover the two common cases with no code. A backend with
-/// one optional capability and not the other implements the three methods
-/// itself.
+/// one optional capability and not the other implements the optional methods
+/// itself. [`Streaming`] wraps a backend whose ports are a [`StreamCaller`]
+/// and serves streams, for example `Streaming(Scanning(rt))`.
 pub trait Backend {
     /// The port set every session needs.
     type Ports: Attached + Encoded + Clock + SignalReader + EventSource + Caller;

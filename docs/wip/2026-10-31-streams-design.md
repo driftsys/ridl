@@ -388,6 +388,11 @@ limit, since such a stream can never carry that element.
 
 ## 5. Frame version 2
 
+> Stage 4 built this section as frame version 3: the blocks work took frame
+> version 2 before it. Every "frame version 2" and `ridl-ws-v2` in this section
+> reads "frame version 3" and `ridl-ws-v3`, and the form codes are `chunk` 12,
+> `stream_end` 13 and `stream_credit` 14. "As built (stage 4)" lists the rest.
+
 Frame version 2 carries every form of version 1 unchanged, byte for byte, and
 adds three forms, two outcome codes and one `Rule` code. The WebSocket binding
 offers it as `ridl-ws-v2`, beside `ridl-ws-v1`; a client lists `ridl-ws-v2`
@@ -1159,6 +1164,64 @@ Rulings taken while the port was built. The source is the rustdoc of
 - `settle(Ok(&[]))` after the caller refused the reply stream records `Ok` and
   leaves the refusal on the stream; `end_claim` there answers `Failed(e)` and
   records `Err(e)`.
+
+## As built (stage 4)
+
+The reply stream over WebSocket, in `ridl-transport-ws` and
+`@driftsys/ridl-transport-ws`. The records are frame specification §5.4, §7, §8,
+§9.6 and §11.1 "Binding version 3", the design records `ridl-transport-ws.md`
+(D-27) and `ridl-transport-ws-ts.md` (D-20), and the technote
+`websocket-binding-rationale.md`. This list names the rulings of the stage.
+
+- S4-1. Streams are frame version 3, `ridl-ws-v3`; form codes `chunk` 12,
+  `stream_end` 13, `stream_credit` 14, because the design's codes collide with
+  `block` 11. Bytes after a `stream_end` or a `stream_credit` header are a
+  protocol violation (close 1002), not a discard.
+- S4-2. The server selects `ridl-ws-v3` when the client offers it, the backend
+  answers `streams()` with `Some`, and there is a member table; otherwise the
+  newest version it serves without streams. This amends R-18, which fell back to
+  version 1. A public wrapper `Streaming<B>` serves streams:
+  `Described::new(Streaming(Scanning(rt)), table)`. `Polling` and `Scanning`
+  answer `streams()` with `None`. An `attach` names the version the handshake
+  selected.
+- S4-3. `FRAME_VERSION` and `SUBPROTOCOL` keep meaning version 2; version 3 adds
+  `FRAME_VERSION_3` and `SUBPROTOCOL_V3`, in Rust and in TypeScript, because the
+  crate is in the `runtime-crates` freeze row.
+- S4-4. `Rule::Utf8` (R-15) is not added. No `<string>` stream exists before
+  stage 5, which adds `detail` code 7 to version 3 if it is not released, else
+  to version 4. The UTF-8 difference of section 12 is deferred with it.
+- S4-5. In TypeScript, `queryStream` on a version 1 or 2 session sends nothing
+  and errors the stream with the `SessionError` category `unsupported`, in place
+  of R-19's `ProtocolError("streams-unsupported")`. The categories `interrupted`
+  and `unsupported` join `CallFailure`. The credit of R-19 is
+  `room = desiredSize − (granted − received)`, sent as `stream_credit` when
+  above 0.
+- S4-6. The abandonment clock of a streamed call restarts at each `chunk` sent
+  and each `stream_credit` received; when it passes, the server sends
+  `stream_end interrupted`. With credit 0 the server pulls once into a one-chunk
+  hold per stream: an end or a failure is sent at once, a held chunk waits for
+  credit. At most 64 chunks per tick for one stream (`CHUNKS_PER_TICK`).
+- S4-7. A client `chunk` on stream 0 is `UnexpectedDirection`, on another stream
+  `StreamCreditExceeded`, each close 1002. A client `stream_end` with `end` or
+  `busy` closes 1002. A client `stream_credit` or `stream_end` on a stream other
+  than 0, or for a call that no longer streams, is ignored.
+- S4-8. A refusal at dispatch is `stream_end <outcome>` with `seq` 1; the kept
+  frame for a retransmit is `stream_end interrupted` with `seq` 1. R-13 holds
+  for the members the server knows: a server that does not know a member answers
+  `response contract(UnknownInteraction)`, and the TypeScript client takes a
+  refusing `response` (`contract`, `corrupt`, `busy`) before the first chunk as
+  that stream's refusal and keeps the session open; after a chunk it is a
+  protocol violation.
+- S4-9. A request for a streamed-reply member on a version 1 or 2 session is
+  answered `response contract(UnknownInteraction)` with
+  `Note::UnknownInteraction`.
+- S4-10. When the session ends, or the client stops a stream, the provider reads
+  `Interrupted`, not `Down` and not the client's verdict: the server forgets the
+  call at once. `Timeout`, `Undelivered` and `Down` from the provider cross as
+  `stream_end interrupted`. The design's `Transport::Down` on the backend is not
+  reachable through the port, so it is not built.
+- The binding row of the codegen model is version 3, with a frame header of at
+  most 21 bytes (a `stream_end` is 37 bytes with its 16-byte envelope).
 
 ## Trace
 

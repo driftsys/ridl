@@ -760,14 +760,14 @@ mod tests {
     #[test]
     fn the_binding_list_is_the_known_table_in_name_order() {
         // The one row is the WebSocket binding of the frame specification
-        // §11.1: a data-plane header of at most 20 bytes and a 16-byte
+        // §11.1: a data-plane header of at most 21 bytes and a 16-byte
         // envelope.
         assert_eq!(
             bindings(),
             vec![v1::Binding {
                 name: "websocket".to_string(),
-                version: "2".to_string(),
-                frame_header_max_bytes: Some(20),
+                version: "3".to_string(),
+                frame_header_max_bytes: Some(21),
                 envelope_bytes: Some(16),
             }]
         );

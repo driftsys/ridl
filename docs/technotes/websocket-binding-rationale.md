@@ -281,15 +281,58 @@ already has, so additions need no new mechanism. A client that supports all
 three offers `ridl-ws-v3, ridl-ws-v2, ridl-ws-v1`, a server that serves version
 2 selects `ridl-ws-v2`, and the client uses no stream form on that session.
 Version 1's layout, codes and vectors are never edited, which is what ADR-0029
-asks of a frozen surface. A consumer given a contract that declares a stream
-over a session of frame version 1 or 2 reports the call through a new
-`Transport` variant (additive, because `Transport` is `#[non_exhaustive]`), not
-as `UnknownInteraction`, which would misname a disagreement about the catalog.
-Alternative: add stream forms to version 1 as forms an old peer discards,
-rejected because an unknown form is a protocol violation and an old provider
-cannot know the new consumer will never subscribe a stream. Cost if wrong: a
-newer peer carries two layouts for a while; no break for the older one. The same
-path serves a new `Rule` code, a new form or a new field.
+asks of a frozen surface. Version 3 is built for the reply stream of a query:
+the forms `chunk`, `stream_end` and `stream_credit`, the outcomes `end` and
+`interrupted`, and the server's and the client's rules of frame specification
+§5.4 and §11.1. A server selects version 3 only when its backend carries streams
+and it holds a member table, because without the table it cannot know which
+members stream; otherwise it selects version 2 as it did before. Alternative:
+add stream forms to version 1 as forms an old peer discards, rejected because an
+unknown form is a protocol violation and an old provider cannot know the new
+consumer will never subscribe a stream. Cost if wrong: a newer peer carries two
+layouts for a while; no break for the older one. The same path serves a new
+`Rule` code, a new form or a new field.
+
+**A consumer given a contract that declares a stream over a session of frame
+version 1 or 2** cannot use it, and the TypeScript client reports `unsupported`,
+a category of its own, and sends nothing. This is not `UnknownInteraction`,
+which would misname a disagreement about the catalog, and not a protocol
+violation, because a missing capability is not a defect of the peer, so the
+session continues. A server that receives such a request anyway answers
+`contract(UnknownInteraction)`, because version 2 has no outcome that names a
+missing capability.
+
+**`interrupted` crosses the frame.** Frame specification §9.6 had two
+`Transport` variants cross, each as a `response` outcome. A stream whose sender
+stops without an end would otherwise wait with no bound, because the response
+bound covers only the start of a streamed reply. So `Interrupted` is a third
+variant that crosses, as a `stream_end` outcome, and a receiver states it when
+it cancels. `Timeout`, `Undelivered` and `Down` from the provider's own port
+still never cross; a provider that holds one sends `interrupted`, since an
+absent frame is not available to a stream that must end.
+
+**The credit is a window of 4 chunks, granted by the receiver.** One WebSocket
+connection carries every signal, event and call of a session, so a slow reader
+of one stream must not stall the others. A window of chunks per stream and
+direction bounds what a sender may have in flight, and a chunk is the unit
+everywhere and is bounded by the member's limit, so a credit in chunks also
+bounds bytes: 4 chunks of at most 16,128 bytes are about 64 KiB per stream. The
+receiver sends `stream_credit` as it hands chunks to its application and frees
+its buffer. The TypeScript client sends it from the `pull` of the
+`ReadableStream`, for the room the reader has less the chunks already granted
+and not yet received. Alternatives: rely on the transport's flow control,
+rejected because TCP would stall the whole session behind one slow reader, which
+is head-of-line blocking; a credit in bytes, rejected because the sender would
+have to split a chunk, which it may not do for a stream of elements. Cost if
+wrong: the initial credit of 4 is a constant of version 3, so another value is a
+new version; the credit a receiver grants after it is free to choose.
+
+**A refusal is a `stream_end`, and a retransmit is answered `interrupted`.** A
+streamed reply is never answered by a `response`, so a consumer's state machine
+has one branch per member. The provider does not keep the chunks of a streamed
+reply, because it cannot keep it whole, so a retransmitted `request` is answered
+`stream_end interrupted` and a consumer that lost chunks asks again from an
+`offset`.
 
 ### The vectors are frozen now
 

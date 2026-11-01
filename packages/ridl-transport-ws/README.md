@@ -1,16 +1,18 @@
 # @driftsys/ridl-transport-ws
 
 The client side of the WebSocket binding of the ridl frame. The package opens a
-WebSocket that offers the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that
-order, sends and receives frames, and carries each payload as bytes without
-reading them. The caller encodes and decodes payloads.
+WebSocket that offers the subprotocols `ridl-ws-v3`, `ridl-ws-v2` and
+`ridl-ws-v1`, in that order, sends and receives frames, and carries each payload
+as bytes without reading them. The caller encodes and decodes payloads.
 
-The session speaks the frame version of the subprotocol the server selects: 2 on
-`ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also attaches to a server
-that serves frame version 1 only. Frame version 2 is frame version 1 plus the
-`block` form, which carries a `fixed` payload that does not fit one message in
-parts (frame specification §11.1, binding version 2). On a session of frame
-version 1, a `block` is a protocol violation.
+The session speaks the frame version of the subprotocol the server selects: 3 on
+`ridl-ws-v3`, 2 on `ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also
+attaches to a server that serves frame version 1 only. Frame version 2 is frame
+version 1 plus the `block` form, which carries a `fixed` payload that does not
+fit one message in parts (frame specification §11.1, binding version 2). Frame
+version 3 is frame version 2 plus the forms `chunk`, `stream_end` and
+`stream_credit`, which carry the reply stream of a query (binding version 3). On
+a session of frame version 1, a `block` is a protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
 `WebSocket`, so it needs no other runtime. The npm release workflow
@@ -92,6 +94,38 @@ Against a provider that serves frame version 1 only (`ridl-ws-v1` selected), a
 read with `contract(UnknownInteraction)`, so the read rejects with
 `SessionError` `contract` `unknown-interaction`, the same error an unknown
 member gives.
+
+## A streamed reply
+
+On a session of frame version 3,
+`session.queryStream(iface, ord, args, {
+bound })` sends a query whose reply is
+a stream and returns a `ReadableStream<Uint8Array>` whose items are the bytes of
+each `chunk` in order. The stream holds up to 4 chunks that the reader has not
+read, the initial credit. When the reader has room for more chunks than the
+session has granted and not yet received, the session sends `stream_credit` for
+the difference, so the reader's pace is the server's. Cancelling the stream
+sends `stream_end interrupted` and forgets the call.
+
+The stream closes when the server ends the reply. It errors with a
+`SessionError` of the category:
+
+- `contract`, `corrupt` or `busy`, as the server's `stream_end` states, or as a
+  `response` that refuses the call before its first chunk states, which a server
+  that does not know the member sends; the session stays open;
+- `interrupted`, as the server's `stream_end` states, or when a `seq` is
+  missing;
+- `corrupt`, when a chunk is longer than the member's limit; the client then
+  sends `stream_end corrupt`;
+- `timeout`, when `bound` milliseconds pass with no `chunk` and no `stream_end`;
+  the client then sends `stream_end interrupted`;
+- `down`, when the session has ended or ends first;
+- `unsupported`, on a session of frame version 1 or 2, which has no stream
+  forms; nothing is sent.
+
+A `response` with `reply` or `accepted`, or one that follows a chunk, a
+`stream_credit`, a chunk beyond the granted credit, and a stream frame on a
+stream other than 0, end the session with the violation `unexpected-form`.
 
 ## Limits
 
