@@ -222,7 +222,7 @@ fn a_streamed_reply_above_one_call_limit_arrives_in_order_over_the_loopback() {
         .parse()
         .expect("a number");
     assert!(
-        (67_000..=69_000).contains(&bytes),
-        "the 64 elements encode to about 68 KB, they encode to {bytes} bytes"
+        (66_000..=68_000).contains(&bytes),
+        "the 64 elements encode to about 67 KB, they encode to {bytes} bytes"
     );
 }

@@ -1665,11 +1665,12 @@ fn veh_common_generated_rust_compiles_with_rustc() {
 
 /// The Rust the pipeline emits for `ir` when the package's `encodings` names
 /// `flatbuffers`: the domain types, the FlatBuffers codec over them, and the
-/// interaction-face descriptors and face. The corpus snapshots and the rustc
-/// proofs below go through this rather than `generate`, which emits the domain
-/// types only, so that the codec and the face stay covered over the corpus.
-/// The `others` list is empty, so a type that reaches another package gets no
-/// codec; the snapshots carry a `__RIDL_FB_NO_CODEC_*` note for each such type.
+/// interaction-face descriptors and face. The corpus snapshots go through this
+/// rather than `generate`, which emits the domain types only, so that the codec
+/// and the face stay covered over the corpus; the composed rustc proofs below go
+/// through [`generate_rust_beside`]. The `others` list is empty, so a type that
+/// reaches another package gets no codec; the snapshots carry a
+/// `__RIDL_FB_NO_CODEC_*` note for each such type.
 fn generate_rust(
     ir: &ridl_ir::v2::Package,
 ) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
@@ -1939,9 +1940,10 @@ fn composed_source(entry: &Path) -> String {
 /// The generated Rust for `veh-cluster` compiles.
 ///
 /// `veh-cluster` is the entry that exercises the interaction layer. Its source
-/// is composed through [`generate_rust`], so rustc checks the domain types, the
-/// FlatBuffers codec over the types that reach no other package, and the
-/// descriptors and face of each interface the face can carry (`WheelHistory`, `WheelSummary`). A text snapshot records
+/// is composed through [`generate_rust_beside`], so rustc checks the domain
+/// types, the FlatBuffers codec over them, and the descriptors and face of each
+/// interface the face can carry (`FaultLog`, `WheelHistory`, `WheelSummary`).
+/// A text snapshot records
 /// what was emitted; this proof checks that it is valid Rust.
 ///
 /// It also carries a **tuple under an `internal` declaration**, in both layers
