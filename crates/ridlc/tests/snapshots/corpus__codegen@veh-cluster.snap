@@ -5126,6 +5126,97 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "kind": "DECL_KIND_SCALAR"
         }
       }
+    },
+    {
+      "name": {
+        "declared": "FaultResult",
+        "snake": "fault_result",
+        "camel": "FaultResult",
+        "screaming": "FAULT_RESULT",
+        "pascal": "FaultResult"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "One element of the fault stream: a single event, or a whole page of them.\n`FaultEvent` and `FaultPage` are the types `getFaultPage` replies with.",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": true,
+        "reachesCollection": true,
+        "reachesForeign": true,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": false,
+        "source": "INIT_SOURCE_NONE",
+        "oneLevel": false
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 14661
+      },
+      "podbuf": {
+        "bounded": 14718
+      },
+      "union": {
+        "arms": [
+          {
+            "name": {
+              "declared": "single",
+              "snake": "single",
+              "camel": "Single",
+              "screaming": "SINGLE",
+              "pascal": "Single"
+            },
+            "ordinal": 1,
+            "type": {
+              "reference": "FaultEvent",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 2,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "One stored fault.",
+            "discriminant": 1,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          },
+          {
+            "name": {
+              "declared": "page",
+              "snake": "page",
+              "camel": "Page",
+              "screaming": "PAGE",
+              "pascal": "Page"
+            },
+            "ordinal": 2,
+            "type": {
+              "reference": "FaultPage",
+              "resolved": true,
+              "package": "veh.cluster",
+              "foreign": false,
+              "index": 4,
+              "kind": "DECL_KIND_STRUCT"
+            },
+            "doc": "A page of stored faults.",
+            "discriminant": 2,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
+          }
+        ],
+        "retired": [],
+        "isResult": false
+      }
     }
   ],
   "tuples": [
@@ -5213,7 +5304,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 9,
+      "flatbuffersTable": 10,
       "declaration": {
         "declaration": 6,
         "segments": [
@@ -5305,7 +5396,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 10,
+      "flatbuffersTable": 11,
       "declaration": {
         "declaration": 6,
         "segments": [
@@ -5335,7 +5426,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 14,
+      "flatbuffersTable": 15,
       "interaction": {
         "interface": 2,
         "slot": 2,
@@ -5365,7 +5456,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 15,
+      "flatbuffersTable": 16,
       "interaction": {
         "interface": 2,
         "slot": 4,
@@ -5458,7 +5549,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 16,
+      "flatbuffersTable": 17,
       "interaction": {
         "interface": 2,
         "slot": 4,
@@ -5551,7 +5642,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 17,
+      "flatbuffersTable": 18,
       "interaction": {
         "interface": 2,
         "slot": 5,
@@ -5582,9 +5673,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 18,
+      "flatbuffersTable": 19,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 8,
         "segments": [
           "Params"
@@ -5612,9 +5703,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 19,
+      "flatbuffersTable": 20,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 10,
         "segments": [
           "Params"
@@ -5642,9 +5733,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 20,
+      "flatbuffersTable": 21,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 11,
         "segments": [
           "Params"
@@ -5735,9 +5826,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 21,
+      "flatbuffersTable": 22,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 11,
         "segments": [
           "Reply"
@@ -5765,9 +5856,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 22,
+      "flatbuffersTable": 23,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 13,
         "segments": [
           "Params"
@@ -5795,9 +5886,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 23,
+      "flatbuffersTable": 24,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 14,
         "segments": [
           "Params"
@@ -5825,9 +5916,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 24,
+      "flatbuffersTable": 25,
       "interaction": {
-        "interface": 5,
+        "interface": 6,
         "slot": 19,
         "segments": [
           "Params"
@@ -5837,7 +5928,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "interfaces": [
     {
-      "number": 1,
+      "number": 2,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "Main vehicle status interface.",
@@ -6968,7 +7059,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "number": 3,
+      "number": 4,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "Retired members in a named interface. Ordinals 2 and 4 can never be\nreissued; `wheelSlipRate` is ordinal 5, not ordinal 3.",
@@ -7251,7 +7342,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "number": 2,
+      "number": 3,
       "provisional": true,
       "visibility": "VISIBILITY_INTERNAL",
       "doc": "A package-private contract shape: realized inside this package, never part\nof the cross-package surface.",
@@ -7791,7 +7882,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "number": 4,
+      "number": 5,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "A public shape beside it, so the generated output shows the two side by\nside and the difference is readable in one snapshot.",
@@ -7900,7 +7991,202 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "number": 5,
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The fault history as a stream of `FaultResult`. It is a top-level\ninterface with a stream in return position, which the Rust face carries,\nbeside the inline shape below, whose face the Rust backend skips.",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "faults",
+              "snake": "faults",
+              "camel": "Faults",
+              "screaming": "FAULTS",
+              "pascal": "Faults"
+            },
+            "kind": "KIND_QUERY",
+            "row": 0,
+            "doc": "The stored faults matching `filter`, oldest first.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "265"
+              },
+              "flatbuffers": {
+                "bytes": "324"
+              },
+              "podbuf": {
+                "bytes": "281"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "FaultResult",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_UNION"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 14661
+                  },
+                  "flatbuffers": {
+                    "bounded": 15544
+                  },
+                  "podbuf": {
+                    "bounded": 14718
+                  }
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "filter",
+                    "snake": "filter",
+                    "camel": "Filter",
+                    "screaming": "FILTER",
+                    "pascal": "Filter"
+                  },
+                  "type": {
+                    "optional": false,
+                    "named": {
+                      "reference": "DiagFilter",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 1,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
+                }
+              ],
+              "request": {
+                "type": {
+                  "reference": "DiagFilter",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 1,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "flatbuffersMaxSize": 324,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 265
+                  },
+                  "flatbuffers": {
+                    "bounded": 324
+                  },
+                  "podbuf": {
+                    "bounded": 281
+                  }
+                }
+              },
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "FaultResult",
+                      "resolved": true,
+                      "package": "veh.cluster",
+                      "foreign": false,
+                      "index": 17,
+                      "kind": "DECL_KIND_UNION"
+                    }
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 265
+                },
+                "flatbuffers": {
+                  "bounded": 324
+                },
+                "podbuf": {
+                  "bounded": 281
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "tableBudget": {
+        "proto3": {
+          "bytes": "265"
+        },
+        "flatbuffers": {
+          "bytes": "324"
+        },
+        "podbuf": {
+          "bytes": "281"
+        }
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "declared": {
+        "declared": "FaultLog",
+        "snake": "fault_log",
+        "camel": "FaultLog",
+        "screaming": "FAULT_LOG",
+        "pascal": "FaultLog"
+      }
+    },
+    {
+      "number": 6,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -8103,7 +8389,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "number": 6,
+      "number": 7,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -10285,7 +10571,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The same two forms inside a service's inline shape.",
       "labels": [],
       "interfaceRefs": [],
-      "inlineShape": 4,
+      "inlineShape": 5,
       "links": [],
       "see": [],
       "since": [],
@@ -10353,7 +10639,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "PRIVATE"
       ],
       "interfaceRefs": [],
-      "inlineShape": 5,
+      "inlineShape": 6,
       "links": [],
       "see": [],
       "since": [],
@@ -10362,7 +10648,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "2I5UdFilDoaHjp/lzAKvhoQVk/7XdDGSImgTNPbKDUw=",
+    "hash": "R9pVsGSot78dgnuul3MP0HATeiZ/U2Ykfz+xxditCOI=",
     "retired": [],
     "compatible": []
   },
@@ -10427,6 +10713,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "declaration": 14,
         "root": "FB_ROOT_KIND_BOX",
         "maxSize": 186
+      },
+      {
+        "declaration": 17,
+        "root": "FB_ROOT_KIND_UNION_WRAPPER",
+        "maxSize": 15544
       },
       {
         "declaration": 0,
@@ -10609,7 +10900,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           {
             "id": 0,
             "wire": {
-              "table": 9
+              "table": 10
             },
             "needsNullDefault": false,
             "field": 0
@@ -10619,7 +10910,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "wire": {
               "vector": {
                 "element": {
-                  "table": 10
+                  "table": 11
                 },
                 "min": "2",
                 "max": "2"
@@ -10700,6 +10991,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         ],
         "vtableSlots": 3,
         "structDeclaration": 9
+      },
+      {
+        "name": "FaultResult",
+        "slots": [
+          {
+            "id": 1,
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 2,
+        "unionWrapper": 17
       },
       {
         "name": "DiagErrorBox",
@@ -12081,7 +12384,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "size": 8,
             "align": 8,
             "form": {
-              "inlineHead": 7
+              "inlineHead": 8
             }
           },
           {
@@ -12098,7 +12401,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "form": {
               "inlineArray": {
                 "element": {
-                  "inlineHead": 8
+                  "inlineHead": 9
                 },
                 "count": 2
               }
@@ -12214,6 +12517,63 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         ],
         "declaration": 9
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "tag": true
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "arm": true
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "arms": {
+                  "arms": [
+                    {
+                      "ordinal": 1,
+                      "head": 21
+                    },
+                    {
+                      "ordinal": 2,
+                      "head": 22
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 17
       },
       {
         "size": 8,
@@ -12474,6 +12834,117 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "fields": [],
         "pads": [],
         "tuple": 12
+      },
+      {
+        "size": 24,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "256"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "timestamp",
+                "ordinal": 3
+              }
+            },
+            "offset": 16,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U64",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 17,
+          "arm": 1
+        }
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "faults",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "inlineHead": 2
+                  },
+                  "elemSize": 24,
+                  "min": "0",
+                  "max": "14"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "arm": {
+          "declaration": 17,
+          "arm": 2
+        }
       }
     ],
     "refused": [],

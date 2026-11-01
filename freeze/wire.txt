@@ -706,8 +706,12 @@ fbs veh-cluster/veh.cluster.fbs [FaultEvent] code: ushort (id: 0);
 fbs veh-cluster/veh.cluster.fbs [FaultEvent] message: string (id: 1);
 fbs veh-cluster/veh.cluster.fbs [FaultEvent] timestamp: ulong (id: 2);
 fbs veh-cluster/veh.cluster.fbs [FaultEvent] }
+fbs veh-cluster/veh.cluster.fbs [FaultLogOrdinal] FAULTS = 1,
+fbs veh-cluster/veh.cluster.fbs [FaultLogOrdinal] }
 fbs veh-cluster/veh.cluster.fbs [FaultPage] faults: [FaultEvent] (id: 0);
 fbs veh-cluster/veh.cluster.fbs [FaultPage] }
+fbs veh-cluster/veh.cluster.fbs [FaultResult] value: FaultResultUnion (id: 1);
+fbs veh-cluster/veh.cluster.fbs [FaultResult] }
 fbs veh-cluster/veh.cluster.fbs [FilterState] clogged: bool (id: 1);
 fbs veh-cluster/veh.cluster.fbs [FilterState] hours_run: ushort (id: 0);
 fbs veh-cluster/veh.cluster.fbs [FilterState] }
@@ -792,6 +796,7 @@ fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] }
 fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] WHEEL_HEALTH = 1,
 fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] }
 fbs veh-cluster/veh.cluster.fbs enum DiagError : long {
+fbs veh-cluster/veh.cluster.fbs enum FaultLogOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum HvacError : long {
 fbs veh-cluster/veh.cluster.fbs enum VehClusterWheelsOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum VehHvacCabinOrdinal : uint {
@@ -808,6 +813,7 @@ fbs veh-cluster/veh.cluster.fbs table FanLevelBox {
 fbs veh-cluster/veh.cluster.fbs table FanTagBox {
 fbs veh-cluster/veh.cluster.fbs table FaultEvent {
 fbs veh-cluster/veh.cluster.fbs table FaultPage {
+fbs veh-cluster/veh.cluster.fbs table FaultResult {
 fbs veh-cluster/veh.cluster.fbs table FilterState {
 fbs veh-cluster/veh.cluster.fbs table HvacErrorBox {
 fbs veh-cluster/veh.cluster.fbs table RawTickCountBox {
@@ -825,6 +831,7 @@ fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadSpanParams {
 fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadSpanReply {
 fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadTicksParams {
 fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsTickBoundsElement {
+fbs veh-cluster/veh.cluster.fbs union FaultResultUnion { single: FaultEvent, page: FaultPage }
 fbs veh-cluster/veh.common.fbs [CounterBox] value: ushort (id: 0);
 fbs veh-cluster/veh.common.fbs [CounterBox] }
 fbs veh-cluster/veh.common.fbs [DriverProfile] gears: ubyte (id: 3);
@@ -1774,6 +1781,8 @@ podbuf veh.cluster.FaultEvent code 0 2
 podbuf veh.cluster.FaultEvent message 4 8
 podbuf veh.cluster.FaultEvent timestamp 16 8
 podbuf veh.cluster.FaultPage faults 0 8
+podbuf veh.cluster.FaultResult arm 4 8
+podbuf veh.cluster.FaultResult tag 0 1
 podbuf veh.cluster.FilterState clogged 2 1
 podbuf veh.cluster.FilterState hoursRun 0 2
 podbuf veh.cluster.RawWheelSpan bursts 8 16
@@ -3552,8 +3561,16 @@ proto veh-cluster/veh.cluster.proto [FaultEvent] string message = 2;
 proto veh-cluster/veh.cluster.proto [FaultEvent] uint32 code = 1;
 proto veh-cluster/veh.cluster.proto [FaultEvent] uint64 timestamp = 3;
 proto veh-cluster/veh.cluster.proto [FaultEvent] }
+proto veh-cluster/veh.cluster.proto [FaultLogOrdinal] FAULT_LOG_ORDINAL_FAULTS = 1;
+proto veh-cluster/veh.cluster.proto [FaultLogOrdinal] FAULT_LOG_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [FaultLogOrdinal] }
 proto veh-cluster/veh.cluster.proto [FaultPage] repeated FaultEvent faults = 1;
 proto veh-cluster/veh.cluster.proto [FaultPage] }
+proto veh-cluster/veh.cluster.proto [FaultResult.value] FaultEvent single = 1;
+proto veh-cluster/veh.cluster.proto [FaultResult.value] FaultPage page = 2;
+proto veh-cluster/veh.cluster.proto [FaultResult.value] }
+proto veh-cluster/veh.cluster.proto [FaultResult] oneof value {
+proto veh-cluster/veh.cluster.proto [FaultResult] }
 proto veh-cluster/veh.cluster.proto [FilterState] bool clogged = 2;
 proto veh-cluster/veh.cluster.proto [FilterState] uint32 hours_run = 1;
 proto veh-cluster/veh.cluster.proto [FilterState] }
@@ -3650,6 +3667,7 @@ proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] WHEEL_SUMMARY_ORDINAL_
 proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] WHEEL_SUMMARY_ORDINAL_WHEEL_HEALTH = 1;
 proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] }
 proto veh-cluster/veh.cluster.proto enum DiagError {
+proto veh-cluster/veh.cluster.proto enum FaultLogOrdinal {
 proto veh-cluster/veh.cluster.proto enum HvacError {
 proto veh-cluster/veh.cluster.proto enum VehClusterWheelsOrdinal {
 proto veh-cluster/veh.cluster.proto enum VehHvacCabinOrdinal {
@@ -3665,6 +3683,7 @@ proto veh-cluster/veh.cluster.proto message FanLevelBox {
 proto veh-cluster/veh.cluster.proto message FanTagBox {
 proto veh-cluster/veh.cluster.proto message FaultEvent {
 proto veh-cluster/veh.cluster.proto message FaultPage {
+proto veh-cluster/veh.cluster.proto message FaultResult {
 proto veh-cluster/veh.cluster.proto message FilterState {
 proto veh-cluster/veh.cluster.proto message HvacErrorBox {
 proto veh-cluster/veh.cluster.proto message RawTickCountBox {

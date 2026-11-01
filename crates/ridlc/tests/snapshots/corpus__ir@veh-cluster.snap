@@ -1562,6 +1562,41 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "typeRef": "FanTag",
         "value": "cabin-fan"
       }
+    },
+    {
+      "name": "FaultResult",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "One element of the fault stream: a single event, or a whole page of them.\n`FaultEvent` and `FaultPage` are the types `getFaultPage` replies with.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "unionDef": {
+        "arms": [
+          {
+            "name": "single",
+            "ordinal": 1,
+            "typeRef": "FaultEvent",
+            "doc": "One stored fault.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "page",
+            "ordinal": 2,
+            "typeRef": "FaultPage",
+            "doc": "A page of stored faults.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "isResult": false,
+        "reserved": []
+      }
     }
   ],
   "interfaces": [
@@ -1915,7 +1950,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 1,
+      "number": 2,
       "provisional": true,
       "links": [],
       "see": [],
@@ -2033,7 +2068,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 3,
+      "number": 4,
       "provisional": true,
       "links": [],
       "see": [],
@@ -2238,7 +2273,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 2,
+      "number": 3,
       "provisional": true,
       "links": [],
       "see": [],
@@ -2276,7 +2311,61 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 4,
+      "number": 5,
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
+    },
+    {
+      "name": "FaultLog",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "The fault history as a stream of `FaultResult`. It is a top-level\ninterface with a stream in return position, which the Rust face carries,\nbeside the inline shape below, whose face the Rust backend skips.",
+      "labels": [],
+      "interactions": [
+        {
+          "name": "faults",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "The stored faults matching `filter`, oldest first.",
+          "labels": [],
+          "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [
+              {
+                "name": "filter",
+                "type": {
+                  "optional": false,
+                  "named": "DiagFilter"
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "stream": {
+                  "named": "FaultResult"
+                }
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        }
+      ],
+      "number": 1,
       "provisional": true,
       "links": [],
       "see": [],
@@ -2377,7 +2466,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
-            "number": 5,
+            "number": 6,
             "provisional": true,
             "links": [],
             "see": [],
@@ -3101,7 +3190,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
-            "number": 6,
+            "number": 7,
             "provisional": true,
             "links": [],
             "see": [],

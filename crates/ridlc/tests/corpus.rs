@@ -1673,11 +1673,21 @@ fn veh_common_generated_rust_compiles_with_rustc() {
 fn generate_rust(
     ir: &ridl_ir::v2::Package,
 ) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
+    generate_rust_beside(ir, &[])
+}
+
+/// [`generate_rust`] with the other packages of the entry given, as `ridl
+/// build` gives them, so that a type which reaches another package gets its
+/// codec. The composed proofs need it for a face whose payload is such a type.
+fn generate_rust_beside(
+    ir: &ridl_ir::v2::Package,
+    others: &[&ridl_ir::v2::Package],
+) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
     ridl_backend_rust::generate_pipeline(
         ir,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
         false,
-        &[],
+        others,
     )
 }
 
@@ -1696,15 +1706,36 @@ fn generated_packages(entry: &Path) -> Vec<(String, String)> {
     let packages: Vec<Package> = workspace.packages(&db).clone();
 
     let std_checked = check_package(&db, workspace, std, std);
-    let std_generated =
-        generate_rust(&std_checked.ir).expect("the standard package generates Rust");
+    let checked: Vec<_> = packages
+        .iter()
+        .map(|pkg| {
+            (
+                pkg.name(&db).clone(),
+                check_package(&db, workspace, *pkg, std),
+            )
+        })
+        .collect();
+    // Each package is generated beside every other one, the standard package
+    // included, the way `ridl build` generates it.
+    let beside = |skip: Option<usize>| -> Vec<&ridl_ir::v2::Package> {
+        std::iter::once(&std_checked.ir)
+            .chain(
+                checked
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| Some(*index) != skip)
+                    .map(|(_, (_, package))| &package.ir),
+            )
+            .collect()
+    };
+    let std_generated = generate_rust_beside(&std_checked.ir, &beside(None)[1..])
+        .expect("the standard package generates Rust");
     let mut generated = vec![("ridl.std".to_string(), std_generated.rust_source)];
 
-    generated.extend(packages.iter().map(|pkg| {
-        let name = pkg.name(&db).clone();
-        let checked = check_package(&db, workspace, *pkg, std);
-        let pkg_generated = generate_rust(&checked.ir).expect("a clean entry's IR generates Rust");
-        (name, pkg_generated.rust_source)
+    generated.extend(checked.iter().enumerate().map(|(index, (name, package))| {
+        let pkg_generated = generate_rust_beside(&package.ir, &beside(Some(index)))
+            .expect("a clean entry's IR generates Rust");
+        (name.clone(), pkg_generated.rust_source)
     }));
     generated
 }

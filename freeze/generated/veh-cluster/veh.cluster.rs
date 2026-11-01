@@ -423,6 +423,16 @@ impl ::core::default::Default for FanTag {
 pub const FAN_TAG: &::core::primitive::str = "cabin-fan";
 /// The same label, reached through the constant above.
 pub const FAN_LABEL: &::core::primitive::str = "cabin-fan";
+/// One element of the fault stream: a single event, or a whole page of them.
+/// `FaultEvent` and `FaultPage` are the types `getFaultPage` replies with.
+#[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
+pub enum FaultResult {
+    /// One stored fault.
+    Single(FaultEvent),
+    /// A page of stored faults.
+    Page(FaultPage),
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct RawWheelSpanSpan {
@@ -2613,6 +2623,178 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_FanTag(__view.buf, __view.table)
+    }
+}
+/// A `FaultResult` value in FlatBuffers bytes, read in place without copying it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct FaultResultFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for FaultResultFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> FaultResultFbView<'a> {
+    /// The value the bytes hold. A union's arms have no one view type, so this decodes `FaultResult` rather than borrowing it.
+    pub fn value(&self) -> FaultResult {
+        __ridl_fb_decode_FaultResult(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_FaultResult(
+    value: &FaultResult,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let (__d, __v) = match value {
+        FaultResult::Single(__a) => (1u8, __ridl_fb_encode_FaultEvent(__a, builder)?),
+        FaultResult::Page(__a) => (2u8, __ridl_fb_encode_FaultPage(__a, builder)?),
+    };
+    let __fields = [
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 4u16,
+            value: ::ridl_rt::flatbuffers::Field::U8(__d),
+        },
+        ::ridl_rt::flatbuffers::TableField {
+            slot: 1u16,
+            offset: 8u16,
+            value: ::ridl_rt::flatbuffers::Field::Offset(__v),
+        },
+    ];
+    builder.push_table(12usize, 4usize, 2u16, &__fields)
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_FaultResult(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let __dp = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    let __vp = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    let (__d, __value) = match (__dp, __vp) {
+        (::core::option::Option::Some(__d), ::core::option::Option::Some(__value)) => {
+            (
+                ::ridl_rt::flatbuffers::read_u8(buf, __d)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                __value,
+            )
+        }
+        _ => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::Union,
+                ),
+            );
+        }
+    };
+    match __d {
+        1u8 => {
+            let __t = ::ridl_rt::flatbuffers::follow(buf, __value)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            __ridl_fb_verify_FaultEvent(buf, __t)?;
+        }
+        2u8 => {
+            let __t = ::ridl_rt::flatbuffers::follow(buf, __value)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            __ridl_fb_verify_FaultPage(buf, __t)?;
+        }
+        _ => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::Union,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_FaultResult(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> FaultResult {
+    let __d = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize)
+        .unwrap_or(::core::option::Option::None)
+        .map(|__p| ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8))
+        .unwrap_or(0u8);
+    let __value = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .unwrap_or(::core::option::Option::None)
+        .unwrap_or(0usize);
+    match __d {
+        1u8 => {
+            FaultResult::Single(
+                __ridl_fb_decode_FaultEvent(
+                    buf,
+                    ::ridl_rt::flatbuffers::follow(buf, __value).unwrap_or(0usize),
+                ),
+            )
+        }
+        2u8 => {
+            FaultResult::Page(
+                __ridl_fb_decode_FaultPage(
+                    buf,
+                    ::ridl_rt::flatbuffers::follow(buf, __value).unwrap_or(0usize),
+                ),
+            )
+        }
+        _ => {
+            FaultResult::Single(
+                __ridl_fb_decode_FaultEvent(
+                    buf,
+                    ::ridl_rt::flatbuffers::follow(buf, __value).unwrap_or(0usize),
+                ),
+            )
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultResult {
+    /// The largest FlatBuffers buffer any legal `FaultResult` encodes to: 15544 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 15544usize;
+    type Buffer = [::core::primitive::u8; 15544usize];
+    const BUFFER: Self::Buffer = [0u8; 15544usize];
+    type View<'a> = FaultResultFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, FaultResultFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_FaultResult(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: FaultResultFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<FaultResultFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_FaultResult(buf, table)?;
+        ::core::result::Result::Ok(FaultResultFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_FaultResult(__view.buf, __view.table)
     }
 }
 /// A `WheelDiagnosticsReadTicksParams` value in FlatBuffers bytes, read in place without copying it.
@@ -6119,6 +6301,184 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for FanTag {
     }
 }
 #[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_FaultResult(
+    value: &FaultResult,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    match value {
+        FaultResult::Single(__a) => {
+            let __l = __ridl_pb_len_FaultEvent(__a);
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+        FaultResult::Page(__a) => {
+            let __l = __ridl_pb_len_FaultPage(__a);
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_FaultResult(
+    value: &FaultResult,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    match value {
+        FaultResult::Single(__a) => {
+            let __l = __ridl_pb_len_FaultEvent(__a);
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            __ridl_pb_encode_FaultEvent(__a, writer)?;
+        }
+        FaultResult::Page(__a) => {
+            let __l = __ridl_pb_len_FaultPage(__a);
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            __ridl_pb_encode_FaultPage(__a, writer)?;
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_verify_FaultResult(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __arm = false;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __arm {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __arm = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        __ridl_pb_verify_FaultEvent(__b)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __arm {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __arm = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        __ridl_pb_verify_FaultPage(__b)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !__arm {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_decode_FaultResult(
+    buf: &[::core::primitive::u8],
+) -> FaultResult {
+    let mut __out = FaultResult::Single(__ridl_pb_decode_FaultEvent(&[]));
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __out = FaultResult::Single(__ridl_pb_decode_FaultEvent(__b));
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __out = FaultResult::Page(__ridl_pb_decode_FaultPage(__b));
+                }
+            }
+            _ => {}
+        }
+    }
+    __out
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for FaultResult {
+    /// The largest proto3 message any legal `FaultResult` encodes to: 14661 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 14661usize;
+    type Buffer = [::core::primitive::u8; 14661usize];
+    const BUFFER: Self::Buffer = [0u8; 14661usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_FaultResult(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_FaultResult(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_FaultResult(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    #[allow(clippy::collapsible_if)]
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_FaultResult(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_pb_len_WheelDiagnosticsReadTicksParams(
     _value: &WheelDiagnosticsReadTicksParams,
@@ -9024,6 +9384,320 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for ClimateReport 
         Self::__ridl_podbuf_decode(r.into_view())
     }
 }
+/// The podbuf head of `FaultResult`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 16 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct FaultResultPodbufHead {
+    pub tag: ::core::primitive::u8,
+    pub _pad1: [::core::primitive::u8; 3],
+    pub arm: ::ridl_rt::podbuf::Desc,
+    pub _pad12: [::core::primitive::u8; 4],
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < FaultResultPodbufHead > () == 16usize);
+    assert!(::core::mem::align_of:: < FaultResultPodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(FaultResultPodbufHead, tag) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u8 > () == 1usize);
+    assert!(::core::mem::offset_of!(FaultResultPodbufHead, _pad1) == 1usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 3] > () == 3usize);
+    assert!(::core::mem::offset_of!(FaultResultPodbufHead, arm) == 4usize);
+    assert!(::core::mem::size_of:: < ::ridl_rt::podbuf::Desc > () == 8usize);
+    assert!(::core::mem::offset_of!(FaultResultPodbufHead, _pad12) == 12usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 4] > () == 4usize);
+};
+#[allow(deprecated)]
+impl FaultResult {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(16u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        match self {
+            FaultResult::Single(__a) => {
+                w.put_u8(__at, 1u8);
+                let __off = w.tail(24u64, 8usize)?;
+                w.put_desc(
+                    __at + 4usize,
+                    ::ridl_rt::podbuf::Desc {
+                        off: __off as ::core::primitive::u32,
+                        len: 24u32,
+                    },
+                );
+                FaultEvent::__ridl_podbuf_encode_at(__a, w, __off)?;
+            }
+            FaultResult::Page(__a) => {
+                w.put_u8(__at, 2u8);
+                let __off = w.tail(8u64, 8usize)?;
+                w.put_desc(
+                    __at + 4usize,
+                    ::ridl_rt::podbuf::Desc {
+                        off: __off as ::core::primitive::u32,
+                        len: 8u32,
+                    },
+                );
+                FaultPage::__ridl_podbuf_encode_at(__a, w, __off)?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `FaultResult` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct FaultResultPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for FaultResultPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> FaultResultPodbufView<'a> {
+    /// Reads `FaultResult`'s `arm` field in place.
+    pub fn arm(&self) -> FaultResultPodbufArm<'a> {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        let __d = ::ridl_rt::podbuf::Desc::read(
+            &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+            4usize,
+        );
+        match ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+        ) {
+            1i64 => {
+                FaultResultPodbufArm::Single(FaultEventPodbufView {
+                    buf: __b,
+                    at: __d.off as ::core::primitive::usize,
+                    size: __d.len as ::core::primitive::usize,
+                })
+            }
+            2i64 => {
+                FaultResultPodbufArm::Page(FaultPagePodbufView {
+                    buf: __b,
+                    at: __d.off as ::core::primitive::usize,
+                    size: __d.len as ::core::primitive::usize,
+                })
+            }
+            _ => {
+                FaultResultPodbufArm::Single(FaultEventPodbufView {
+                    buf: __b,
+                    at: __d.off as ::core::primitive::usize,
+                    size: __d.len as ::core::primitive::usize,
+                })
+            }
+        }
+    }
+}
+/// The arms of `FaultResult` as a view reads them: the active arm's view, or its value for a scalar, enum or enum set arm.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub enum FaultResultPodbufArm<'a> {
+    /// The `single` arm.
+    Single(FaultEventPodbufView<'a>),
+    /// The `page` arm.
+    Page(FaultPagePodbufView<'a>),
+}
+#[allow(deprecated)]
+impl FaultResult {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        FaultResultPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(FaultResultPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        __tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        let __d = ::ridl_rt::podbuf::Desc::read(
+            &::ridl_rt::podbuf::Region::new(buf, at, size),
+            4usize,
+        );
+        if !__d.len.is_multiple_of(8u32) {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::Union,
+                ),
+            );
+        }
+        match ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(buf, at, size).u8_at(0usize),
+        ) {
+            1i64 => {
+                if __d.len == 0 {
+                    if __d.off != 0 {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::OutOfBounds,
+                            ),
+                        );
+                    }
+                } else {
+                    ::ridl_rt::podbuf::tail_range(
+                        __d.off,
+                        ::core::primitive::u64::from(__d.len),
+                        buf.len(),
+                        __tail,
+                        8usize,
+                    )?;
+                }
+                FaultEvent::__ridl_podbuf_verify_at(
+                    buf,
+                    __d.off as ::core::primitive::usize,
+                    __d.len as ::core::primitive::usize,
+                    __tail,
+                )?;
+            }
+            2i64 => {
+                if __d.len == 0 {
+                    if __d.off != 0 {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::OutOfBounds,
+                            ),
+                        );
+                    }
+                } else {
+                    ::ridl_rt::podbuf::tail_range(
+                        __d.off,
+                        ::core::primitive::u64::from(__d.len),
+                        buf.len(),
+                        __tail,
+                        8usize,
+                    )?;
+                }
+                FaultPage::__ridl_podbuf_verify_at(
+                    buf,
+                    __d.off as ::core::primitive::usize,
+                    __d.len as ::core::primitive::usize,
+                    __tail,
+                )?;
+            }
+            _ => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Union,
+                    ),
+                );
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl FaultResult {
+    pub(crate) fn __ridl_podbuf_decode(view: FaultResultPodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        let __d = ::ridl_rt::podbuf::Desc::read(
+            &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+            4usize,
+        );
+        match ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+        ) {
+            1i64 => {
+                FaultResult::Single(
+                    FaultEvent::__ridl_podbuf_decode(FaultEventPodbufView {
+                        buf: __b,
+                        at: __d.off as ::core::primitive::usize,
+                        size: __d.len as ::core::primitive::usize,
+                    }),
+                )
+            }
+            2i64 => {
+                FaultResult::Page(
+                    FaultPage::__ridl_podbuf_decode(FaultPagePodbufView {
+                        buf: __b,
+                        at: __d.off as ::core::primitive::usize,
+                        size: __d.len as ::core::primitive::usize,
+                    }),
+                )
+            }
+            _ => {
+                FaultResult::Single(
+                    FaultEvent::__ridl_podbuf_decode(FaultEventPodbufView {
+                        buf: __b,
+                        at: __d.off as ::core::primitive::usize,
+                        size: __d.len as ::core::primitive::usize,
+                    }),
+                )
+            }
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FaultResult {
+    /// The largest podbuf buffer any legal `FaultResult` encodes to: 14718 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 14718usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 14718usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 14718usize],
+    >::zeroed();
+    type View<'a> = FaultResultPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, FaultResultPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: FaultResultPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 16usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        FaultResultPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
 /// The podbuf head of `RawWheelSpanSpan`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 8 bytes.
 #[allow(deprecated)]
 #[derive(Clone, Copy, Debug)]
@@ -11632,11 +12306,11 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            216, 142, 84, 116, 88, 165, 14, 134, 135, 142, 159, 229, 204, 2, 175, 134,
-            132, 21, 147, 254, 215, 116, 49, 146, 34, 104, 19, 52, 246, 202, 13, 76,
+            71, 218, 85, 176, 100, 168, 183, 191, 29, 130, 123, 174, 151, 115, 15, 208,
+            112, 19, 122, 38, 127, 83, 102, 36, 127, 63, 177, 197, 216, 173, 8, 226,
         ]),
     };
-    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
     const PROVISIONAL: ::core::primitive::bool = true;
     const NAME: &'static ::core::primitive::str = "WheelHistory";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
@@ -12315,11 +12989,11 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            216, 142, 84, 116, 88, 165, 14, 134, 135, 142, 159, 229, 204, 2, 175, 134,
-            132, 21, 147, 254, 215, 116, 49, 146, 34, 104, 19, 52, 246, 202, 13, 76,
+            71, 218, 85, 176, 100, 168, 183, 191, 29, 130, 123, 174, 151, 115, 15, 208,
+            112, 19, 122, 38, 127, 83, 102, 36, 127, 63, 177, 197, 216, 173, 8, 226,
         ]),
     };
-    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
     const PROVISIONAL: ::core::primitive::bool = true;
     const NAME: &'static ::core::primitive::str = "WheelSummary";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
@@ -12644,5 +13318,1194 @@ pub mod wheel_summary {
         pub use ::ridl_rt::face::Bind;
         pub use ::ridl_rt::face::Publish;
         pub use super::Invalidate as _;
+    }
+}
+/// Descriptor for interface `FaultLog`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<FaultLog as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in proto3 is `<FaultLog as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in podbuf is `<FaultLog as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+pub struct FaultLog;
+impl ::ridl_rt::contract::Interface for FaultLog {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "veh.cluster",
+        hash: ::ridl_rt::contract::CatalogHash([
+            71, 218, 85, 176, 100, 168, 183, 191, 29, 130, 123, 174, 151, 115, 15, 208,
+            112, 19, 122, 38, 127, 83, 102, 36, 127, 63, 177, 197, 216, 173, 8, 226,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "FaultLog";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "faults",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "DiagFilter",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "<FaultResult>",
+                },
+            ],
+            streams: &[
+                ::ridl_rt::contract::StreamInfo {
+                    no: ::ridl_rt::contract::StreamNo(0),
+                    form: ::ridl_rt::contract::StreamForm::Elements,
+                    element: "veh.cluster.FaultResult",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for FaultLog {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <DiagFilter as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <DiagFilter as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3> for FaultLog {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <DiagFilter as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::Proto3,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <DiagFilter as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Proto3,
+            >>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Podbuf> for FaultLog {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <DiagFilter as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::Podbuf,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <DiagFilter as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = ::ridl_rt::podbuf::Aligned<
+        [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::Podbuf,
+        >>::MAX_BUFFER_SIZE],
+    >;
+    type EventBuffer = ::ridl_rt::podbuf::Aligned<
+        [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::Podbuf,
+        >>::EVENT_SOURCE_BUFFER_SIZE],
+    >;
+    const CLAIM_BUFFER: Self::ClaimBuffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::Podbuf,
+        >>::MAX_BUFFER_SIZE],
+    >::zeroed();
+    const EVENT_BUFFER: Self::EventBuffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::Podbuf,
+        >>::EVENT_SOURCE_BUFFER_SIZE],
+    >::zeroed();
+}
+#[doc(hidden)]
+pub struct FaultLogFaults;
+impl ::ridl_rt::contract::Interaction for FaultLogFaults {
+    type Iface = FaultLog;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<FaultLog as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Query for FaultLogFaults {
+    type Args = DiagFilter;
+    type Reply = ();
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(_args: &Self::Args, _reply: &()) -> ::core::result::Result<(), ()> {
+        Ok(())
+    }
+}
+/// The fault history as a stream of `FaultResult`. It is a top-level
+/// interface with a stream in return position, which the Rust face carries,
+/// beside the inline shape below, whose face the Rust backend skips.
+///
+///The generated interaction face of interface `FaultLog`.
+#[allow(clippy::module_inception)]
+pub mod fault_log {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct FaultsCorrelation(pub ::ridl_rt::port::Correlation);
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::FaultLog as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `FaultLog` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `FaultLog`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: P,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > Client<P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        /// The stored faults matching `filter`, oldest first.
+        ///
+        /// Sends query `faults` and returns its future, which resolves to the reply stream, `FaultsStream`, once the first element or the end of the stream arrived, and to `Transport::Timeout` when the bound passes before either. The call is sent when this method runs, not when the future is first polled. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+        ///
+        /// The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `filter`
+        pub fn faults(&mut self, filter: super::DiagFilter) -> FaultsCall<'_, P> {
+            let __arg = filter;
+            let deadline = <super::FaultLogFaults as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_faults(&mut self.port, &__arg) {
+                Ok(correlation) => FaultsPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => FaultsPhase::Unsent(__arg),
+                Err(error) => FaultsPhase::Failed(error),
+            };
+            FaultsCall {
+                port: Some(&mut self.port),
+                phase,
+                deadline,
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Port = P;
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <FaultLog as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `FaultLog` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum StreamState {
+        First(usize),
+        Open,
+        Refused(::ridl_rt::error::CallError),
+        Stopped,
+        Done,
+    }
+    ///The future of query `faults`, returned by `Client::faults`. It resolves to `FaultsStream`, the reply stream, once its first element or its end arrived; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; to `Transport::Timeout` when the call was sent and its bound passed before the first element or the end; and to the outcome the provider settled when it failed the call before any element. A first chunk that is no legal element resolves it to the stream, which yields the refusal, `Transport::Corrupt`, as its one error. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits calls `Caller::forget` on the call, which interrupts the stream; a future that resolved to an error has already done so, and one that resolved to the stream handed the call to it. Polling it again after it resolved panics.
+    #[must_use = "the query was sent, or waits for a slot; its stream is taken only when the future is polled"]
+    pub struct FaultsCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: ::core::option::Option<&'a mut P>,
+        phase: FaultsPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum FaultsPhase {
+        Unsent(super::DiagFilter),
+        Waiting(FaultsCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > FaultsCall<'_, P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            match (&self.port, self.deadline) {
+                (Some(port), Some(deadline)) => port.now() > deadline,
+                _ => false,
+            }
+        }
+        fn port(&mut self) -> &mut P {
+            match self.port.as_deref_mut() {
+                Some(port) => port,
+                None => panic!("`FaultsCall` polled after completion"),
+            }
+        }
+    }
+    impl<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for FaultsCall<'a, P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            FaultsStream<'a, P>,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, FaultsPhase::Done) {
+                    FaultsPhase::Done => panic!("`FaultsCall` polled after completion"),
+                    FaultsPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    FaultsPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        let port = this.port();
+                        port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_faults(port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = FaultsPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = FaultsPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    FaultsPhase::Waiting(correlation) => {
+                        let expired = this.expired();
+                        let port = this.port();
+                        port.wake_on(
+                            ::ridl_rt::port::Interest::Stream(
+                                correlation.0,
+                                ::ridl_rt::port::REPLY_STREAM,
+                            ),
+                            cx.waker(),
+                        );
+                        let mut __buf = <super::FaultResult as ::ridl_rt::payload::Payload<
+                            P::Encoding,
+                        >>::BUFFER;
+                        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                            &mut __buf,
+                        );
+                        let state = match port
+                            .pull(correlation.0, ::ridl_rt::port::REPLY_STREAM, buf)
+                        {
+                            Ok(::ridl_rt::port::Pull::Chunk(len)) => {
+                                StreamState::First(len)
+                            }
+                            Ok(::ridl_rt::port::Pull::Pending) => {
+                                if !expired {
+                                    this.phase = FaultsPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(
+                                        ::ridl_rt::error::ClientError::Call(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Timeout,
+                                            ),
+                                        ),
+                                    ),
+                                );
+                            }
+                            Ok(::ridl_rt::port::Pull::End) => {
+                                port.forget(correlation.0);
+                                StreamState::Done
+                            }
+                            Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Call(error)),
+                                );
+                            }
+                            Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                                let error = ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                );
+                                let _ = port
+                                    .abort(correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+                                StreamState::Refused(error)
+                            }
+                            Err(error) => {
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Read(error)),
+                                );
+                            }
+                        };
+                        let port = match this.port.take() {
+                            Some(port) => port,
+                            None => panic!("`FaultsCall` polled after completion"),
+                        };
+                        return ::core::task::Poll::Ready(
+                            Ok(FaultsStream {
+                                port,
+                                correlation,
+                                buffer: __buf,
+                                state,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for FaultsCall<'_, P> {
+        fn drop(&mut self) {
+            if let (Some(port), FaultsPhase::Waiting(correlation)) = (
+                &mut self.port,
+                &self.phase,
+            ) {
+                port.forget(correlation.0);
+            }
+        }
+    }
+    ///The reply stream of query `faults`, which `FaultsCall` resolves to. `poll_next` is the pull API, the whole face on a target without `std`: it registers the stream's interest, pulls one chunk, and verifies and decodes it as one element; `next` awaits it. An element that fails its check refuses the stream with `Contract::InvalidValue`, and a chunk that is no well-formed element, or longer than any legal one, refuses it with `Transport::Corrupt`: the stream is aborted with that outcome, which the provider reads from its next push, and the refusal is the one error the stream yields; the call is kept until the stream is dropped. A stream the provider stopped yields its outcome, `Transport::Interrupted` for a stop on purpose, as its one error, and the call is forgotten at once, as it is after the end. After the end or an error every later `poll_next` is `Ready(None)`. Dropping the stream forgets the call, once, unless the end or the provider's failure already did; before the end that interrupts the stream (ridl §12).
+    #[must_use = "dropping the stream before its end interrupts it"]
+    pub struct FaultsStream<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    >
+    where
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        port: &'a mut P,
+        correlation: FaultsCorrelation,
+        buffer: <super::FaultResult as ::ridl_rt::payload::Payload<P::Encoding>>::Buffer,
+        state: StreamState,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > FaultsStream<'_, P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        /// Pulls the next element: `Ready(Some(Ok(element)))` with the
+        /// next element, `Ready(None)` once the stream ended,
+        /// `Ready(Some(Err(error)))` once and then `Ready(None)` when
+        /// the stream stopped or was refused, and `Pending` while no
+        /// chunk is waiting, after the waker of `cx` was registered
+        /// under `Interest::Stream`. A refused stream keeps its call
+        /// until this value is dropped.
+        pub fn poll_next(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<
+            ::core::option::Option<
+                ::core::result::Result<super::FaultResult, ::ridl_rt::error::ClientError>,
+            >,
+        > {
+            let len = match self.state {
+                StreamState::Done | StreamState::Stopped => {
+                    return ::core::task::Poll::Ready(None);
+                }
+                StreamState::Refused(error) => {
+                    self.state = StreamState::Stopped;
+                    return ::core::task::Poll::Ready(
+                        Some(Err(::ridl_rt::error::ClientError::Call(error))),
+                    );
+                }
+                StreamState::First(len) => {
+                    self.state = StreamState::Open;
+                    len
+                }
+                StreamState::Open => {
+                    self.port
+                        .wake_on(
+                            ::ridl_rt::port::Interest::Stream(
+                                self.correlation.0,
+                                ::ridl_rt::port::REPLY_STREAM,
+                            ),
+                            cx.waker(),
+                        );
+                    match self
+                        .port
+                        .pull(
+                            self.correlation.0,
+                            ::ridl_rt::port::REPLY_STREAM,
+                            ::core::convert::AsMut::as_mut(&mut self.buffer),
+                        )
+                    {
+                        Ok(::ridl_rt::port::Pull::Chunk(len)) => len,
+                        Ok(::ridl_rt::port::Pull::Pending) => {
+                            return ::core::task::Poll::Pending;
+                        }
+                        Ok(::ridl_rt::port::Pull::End) => {
+                            self.finish();
+                            return ::core::task::Poll::Ready(None);
+                        }
+                        Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                            self.finish();
+                            return ::core::task::Poll::Ready(
+                                Some(Err(::ridl_rt::error::ClientError::Call(error))),
+                            );
+                        }
+                        Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                            return ::core::task::Poll::Ready(
+                                Some(
+                                    Err(
+                                        self
+                                            .refuse(
+                                                ::ridl_rt::error::CallError::Transport(
+                                                    ::ridl_rt::error::Transport::Corrupt,
+                                                ),
+                                            ),
+                                    ),
+                                ),
+                            );
+                        }
+                        Err(error) => {
+                            self.finish();
+                            return ::core::task::Poll::Ready(
+                                Some(Err(::ridl_rt::error::ClientError::Read(error))),
+                            );
+                        }
+                    }
+                }
+            };
+            let buf: &[::core::primitive::u8] = ::core::convert::AsRef::as_ref(
+                &self.buffer,
+            );
+            let element = match ::ridl_rt::payload::Ref::<
+                super::FaultResult,
+                P::Encoding,
+            >::verify(&buf[..len]) {
+                Ok(checked) => Ok(checked.decode()),
+                Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                    Err(
+                        ::ridl_rt::error::CallError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(violation),
+                        ),
+                    )
+                }
+                Err(_) => {
+                    Err(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Corrupt,
+                        ),
+                    )
+                }
+            };
+            ::core::task::Poll::Ready(
+                Some(
+                    match element {
+                        Ok(element) => Ok(element),
+                        Err(error) => Err(self.refuse(error)),
+                    },
+                ),
+            )
+        }
+        /// Awaits the next element: `poll_next` as a future.
+        pub async fn next(
+            &mut self,
+        ) -> ::core::option::Option<
+            ::core::result::Result<super::FaultResult, ::ridl_rt::error::ClientError>,
+        > {
+            ::core::future::poll_fn(|cx| self.poll_next(cx)).await
+        }
+        fn finish(&mut self) {
+            self.state = StreamState::Done;
+            self.port.forget(self.correlation.0);
+        }
+        fn refuse(
+            &mut self,
+            error: ::ridl_rt::error::CallError,
+        ) -> ::ridl_rt::error::ClientError {
+            let _ = self
+                .port
+                .abort(self.correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+            self.state = StreamState::Stopped;
+            ::ridl_rt::error::ClientError::Call(error)
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for FaultsStream<'_, P>
+    where
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn drop(&mut self) {
+            if self.state != StreamState::Done {
+                self.port.forget(self.correlation.0);
+            }
+        }
+    }
+    pub(crate) fn send_faults<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        filter: &super::DiagFilter,
+    ) -> ::core::result::Result<FaultsCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = filter;
+        <super::FaultLogFaults as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::DiagFilter as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::DiagFilter,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `DiagFilter` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `DiagFilter` failed"),
+        };
+        __port
+            .query(
+                <super::FaultLog as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(FaultsCorrelation)
+    }
+    /// What an application implements to serve interface `FaultLog`'s calls.
+    ///
+    /// An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.
+    pub trait Provider {
+        ///The source of query `faults`'s reply stream, which `serve` polls for each `FaultResult` it sends.
+        type Faults: ::ridl_rt::face::Source<Item = super::FaultResult>;
+        /// The stored faults matching `filter`, oldest first.
+        ///
+        ///Serves query `faults`, whose reply is a stream of `FaultResult`: it returns the source `serve` drives. `serve` polls the source at most once per poll of its own, and only while the stream's window has room; it checks each element against its type before it is sent and ends the stream with `Contract::InvalidValue` on the first one that fails, sends `Ready(None)` as the end of the stream, and an `Interrupted` as `Transport::Interrupted`. The source is dropped once the stream ended, failed, or the caller stopped reading it. `ensure` clauses are not evaluated on a streamed reply.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `filter`
+        fn faults(&mut self, filter: &super::DiagFilter) -> Self::Faults;
+    }
+    pub(crate) fn dispatch<H, P>(
+        h: &mut H,
+        p: &mut P,
+        buf: &mut [u8],
+        budget: &mut usize,
+        streams: &mut Streams<H, P>,
+    ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
+        P: Provider,
+        super::FaultLog: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        if buf.len()
+            < <super::FaultLog as ::ridl_rt::contract::Sizes<
+                H::Encoding,
+            >>::MAX_BUFFER_SIZE
+        {
+            return Ok(0);
+        }
+        let mut settled = 0usize;
+        while *budget > 0 {
+            let settlement = match h.next_claim(buf) {
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_err() {
+                        return Ok(settled);
+                    }
+                    settlement
+                }
+                Err(error) => return Err(error),
+                Ok(Some(claim)) => {
+                    if claim.iface
+                        != <super::FaultLog as ::ridl_rt::contract::Interface>::NUMBER
+                    {
+                        h.settle(
+                            claim.id,
+                            Err(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::UnknownInteraction,
+                                ),
+                            ),
+                        )
+                    } else {
+                        match claim.ord {
+                            ::ridl_rt::contract::Ordinal(1u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::DiagFilter,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::FaultLogFaults as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                if streams.faults.is_some() {
+                                                    h.settle(
+                                                        claim.id,
+                                                        Err(
+                                                            ::ridl_rt::error::CallError::Transport(
+                                                                ::ridl_rt::error::Transport::Busy,
+                                                            ),
+                                                        ),
+                                                    )
+                                                } else {
+                                                    streams.faults = Some(StreamSlot {
+                                                        claim: claim.id,
+                                                        source: p.faults(&__arg),
+                                                        buffer: <super::FaultResult as ::ridl_rt::payload::Payload<
+                                                            H::Encoding,
+                                                        >>::BUFFER,
+                                                        held: None,
+                                                    });
+                                                    streams.__started = true;
+                                                    Ok(())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                h.settle(
+                                    claim.id,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::UnknownInteraction,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            };
+            *budget -= 1;
+            if settlement.is_ok() {
+                settled += 1;
+            }
+        }
+        Ok(settled)
+    }
+    const SERVE_BUDGET: usize = 32;
+    type ElementBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
+        <H as ::ridl_rt::port::Encoded>::Encoding,
+    >>::Buffer;
+    struct StreamSlot<S, B> {
+        claim: ::ridl_rt::port::ClaimId,
+        source: S,
+        buffer: B,
+        held: ::core::option::Option<(usize, usize)>,
+    }
+    pub(crate) struct Streams<H, P>
+    where
+        H: ::ridl_rt::port::Encoded,
+        P: Provider,
+        super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        __started: bool,
+        faults: ::core::option::Option<
+            StreamSlot<P::Faults, ElementBuffer<H, super::FaultResult>>,
+        >,
+    }
+    fn drive_stream<H, T, S>(
+        h: &mut H,
+        slot: &mut ::core::option::Option<StreamSlot<S, ElementBuffer<H, T>>>,
+        cx: &mut ::core::task::Context<'_>,
+        budget: &mut usize,
+    ) -> bool
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamHandler
+            + ::ridl_rt::port::Wakeable,
+        T: ::ridl_rt::payload::Payload<H::Encoding>,
+        S: ::ridl_rt::face::Source<Item = T>,
+    {
+        let Some(stream) = slot.as_mut() else {
+            return false;
+        };
+        let claim = stream.claim;
+        let interest = ::ridl_rt::port::Interest::ClaimStream(
+            claim,
+            ::ridl_rt::port::REPLY_STREAM,
+        );
+        if let Some((start, end)) = stream.held {
+            h.wake_on(interest, cx.waker());
+            let bytes = &::core::convert::AsRef::<
+                [u8],
+            >::as_ref(&stream.buffer)[start..end];
+            match h.push_claim(claim, ::ridl_rt::port::REPLY_STREAM, bytes) {
+                Ok(taken) if taken == bytes.len() => stream.held = None,
+                Ok(_) => return false,
+                Err(error) => {
+                    stop_stream(h, claim, error);
+                    *slot = None;
+                    return false;
+                }
+            }
+        }
+        if *budget == 0 {
+            return true;
+        }
+        *budget -= 1;
+        let element = match stream.source.poll_next(cx) {
+            ::core::task::Poll::Pending => return false,
+            ::core::task::Poll::Ready(None) => {
+                let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+                *slot = None;
+                return false;
+            }
+            ::core::task::Poll::Ready(Some(Err(::ridl_rt::face::Interrupted))) => {
+                let _ = h
+                    .abort_claim(
+                        claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                *slot = None;
+                return false;
+            }
+            ::core::task::Poll::Ready(Some(Ok(element))) => element,
+        };
+        let buf: &mut [u8] = ::core::convert::AsMut::as_mut(&mut stream.buffer);
+        let base = buf.as_ptr() as usize;
+        let checked = match ::ridl_rt::payload::Ref::<
+            T,
+            H::Encoding,
+        >::encode(&element, buf) {
+            Ok(encoded) => {
+                let bytes = encoded.bytes();
+                match ::ridl_rt::payload::Ref::<T, H::Encoding>::verify(bytes) {
+                    Ok(_) => {
+                        let start = bytes.as_ptr() as usize - base;
+                        Ok((start, start + bytes.len()))
+                    }
+                    Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                        Err(
+                            ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                            ),
+                        )
+                    }
+                    Err(_) => {
+                        Err(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Corrupt,
+                            ),
+                        )
+                    }
+                }
+            }
+            Err(::ridl_rt::payload::EncodeError::Contract(violation)) => {
+                Err(
+                    ::ridl_rt::error::CallError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                    ),
+                )
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding a stream element needs {} bytes and its buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding a stream element failed"),
+        };
+        let (start, end) = match checked {
+            Ok(range) => range,
+            Err(error) => {
+                let _ = h.abort_claim(claim, ::ridl_rt::port::REPLY_STREAM, error);
+                *slot = None;
+                return false;
+            }
+        };
+        h.wake_on(interest, cx.waker());
+        let bytes = &::core::convert::AsRef::<[u8]>::as_ref(&stream.buffer)[start..end];
+        match h.push_claim(claim, ::ridl_rt::port::REPLY_STREAM, bytes) {
+            Ok(taken) if taken == bytes.len() => true,
+            Ok(_) => {
+                stream.held = Some((start, end));
+                false
+            }
+            Err(error) => {
+                stop_stream(h, claim, error);
+                *slot = None;
+                false
+            }
+        }
+    }
+    fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
+        h: &mut H,
+        claim: ::ridl_rt::port::ClaimId,
+        error: ::ridl_rt::port::PushError,
+    ) {
+        match error {
+            ::ridl_rt::port::PushError::Failed(_) => {
+                let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+            }
+            ::ridl_rt::port::PushError::TooLarge { .. } => {
+                let _ = h
+                    .abort_claim(
+                        claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+            }
+            _ => {}
+        }
+    }
+    /// Serves interface `FaultLog`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <FaultLog as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `FaultLog` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
+    ///
+    /// # Streamed replies
+    ///
+    /// A query whose reply is a stream is served from the source its `Provider` method returns, once the arguments and the `require` clauses pass. Each poll of the future first drives every stream it holds, then takes claims: a stream whose last element found the window full pushes that element again, after it registered its interest in the stream, and polls its source only once the element was taken; otherwise the source is polled once, which counts as one of the 32 claims of the poll. An element is encoded into a buffer inline in the future and checked against its type before it is pushed; one that fails stops the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` ends the stream, and the claim is settled `Ok`; `Ready(Some(Err(Interrupted)))` stops it with `Transport::Interrupted`; a push above the member's limit (`PushError::TooLarge`) stops it with `Transport::Interrupted`; a push the caller refused or stopped reading (`PushError::Failed`) ends the claim. The source is dropped once its stream ended or stopped. The future drives one stream per member at a time: a call of a member whose stream is still running is settled `Transport::Busy`. The handler port gives the future no signal when a caller forgets the call, by its bound passing or by dropping its stream: the future reads the forget from its next push. So while a member's source answers `Pending`, a caller that stopped keeps the member busy until the source yields its next element, whose push fails, and only then is the source dropped and the member free for a new call.
+    #[track_caller]
+    pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+        super::FaultLog: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        check_catalog(::ridl_rt::port::Attached::catalog(&h));
+        let state = match h
+            .serve(
+                <super::FaultLog as ::ridl_rt::contract::Interface>::NUMBER,
+                &[::ridl_rt::contract::Ordinal(1u32)],
+            )
+        {
+            Ok(()) => ServeState::Serving,
+            Err(error) => ServeState::Refused(error),
+        };
+        Serve {
+            handler: h,
+            provider: p,
+            buf: <super::FaultLog as ::ridl_rt::contract::Sizes<
+                H::Encoding,
+            >>::CLAIM_BUFFER,
+            state,
+            streams: Streams {
+                __started: false,
+                faults: None,
+            },
+        }
+    }
+    ///The future `serve` returns over interface `FaultLog`. It holds the handler, the provider, and the claim buffer of `<FaultLog as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
+    #[must_use = "claims are served only while the future is polled"]
+    pub struct Serve<
+        'a,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    >
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        handler: H,
+        provider: &'a mut P,
+        buf: <super::FaultLog as ::ridl_rt::contract::Sizes<H::Encoding>>::ClaimBuffer,
+        state: ServeState,
+        streams: Streams<H, P>,
+    }
+    #[derive(Clone, Copy)]
+    enum ServeState {
+        Refused(::ridl_rt::port::ServeError),
+        Serving,
+        Done,
+    }
+    /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
+    /// frame loop that stores it in its own state polls it through
+    /// `Pin::new`.
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    > ::core::marker::Unpin for Serve<'_, H, P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
+    {}
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    > ::core::future::Future for Serve<'_, H, P>
+    where
+        super::FaultLog: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::DiagFilter: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            ::core::convert::Infallible,
+            ::ridl_rt::error::ProviderError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            match this.state {
+                ServeState::Done => panic!("`Serve` polled after completion"),
+                ServeState::Refused(error) => {
+                    this.state = ServeState::Done;
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ProviderError::Serve(error)),
+                    )
+                }
+                ServeState::Serving => {
+                    this.handler
+                        .wake_on(
+                            ::ridl_rt::port::Interest::Claim(
+                                <super::FaultLog as ::ridl_rt::contract::Interface>::NUMBER,
+                            ),
+                            cx.waker(),
+                        );
+                    let mut budget = SERVE_BUDGET;
+                    let mut again = false;
+                    again
+                        |= drive_stream::<
+                            H,
+                            super::FaultResult,
+                            P::Faults,
+                        >(&mut this.handler, &mut this.streams.faults, cx, &mut budget);
+                    match dispatch(
+                        &mut this.handler,
+                        &mut *this.provider,
+                        ::core::convert::AsMut::as_mut(&mut this.buf),
+                        &mut budget,
+                        &mut this.streams,
+                    ) {
+                        Ok(_) => {
+                            if budget == 0 || again
+                                || ::core::mem::take(&mut this.streams.__started)
+                            {
+                                cx.waker().wake_by_ref();
+                            }
+                            ::core::task::Poll::Pending
+                        }
+                        Err(error) => {
+                            this.state = ServeState::Done;
+                            ::core::task::Poll::Ready(
+                                Err(::ridl_rt::error::ProviderError::Claim(error)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ///The traits a consumer of interface `FaultLog`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
     }
 }
