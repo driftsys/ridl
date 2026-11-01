@@ -251,14 +251,31 @@ export class Calls {
    * whose payload is longer than the limit the query was started with
    * rejects the query with `corrupt` and is not handed out. The limit is the
    * call's, not one taken from `frame.target`, for the reason given below.
-   * A `response` for a query whose reply is a stream returns
-   * `unexpected-form`: such a query is answered only by its stream.
+   * A `response` for a query whose reply is a stream errors its stream and
+   * forgets the call when the outcome is a refusal (`contract`, `corrupt`,
+   * `busy`): a server that does not serve the member cannot know that its
+   * reply is a stream, and answers `contract(UnknownInteraction)`. Any other
+   * outcome for such a query returns `unexpected-form`, because a served
+   * streamed query is answered only by its stream.
    */
   settle(frame: Response): Unused | null {
     const call = this.#inFlight.get(frame.correlation);
     if (!call) return "unknown-correlation";
-    if (call.kind === "stream") return "unexpected-form";
     const outcome = frame.outcome;
+    if (call.kind === "stream") {
+      if (outcome.outcome === "accepted" || outcome.outcome === "reply") {
+        return "unexpected-form";
+      }
+      this.#forget(frame.correlation, call);
+      call.reject(
+        new SessionError(
+          outcome.outcome === "contract"
+            ? { category: "contract", contract: outcome.contract }
+            : { category: outcome.outcome },
+        ),
+      );
+      return null;
+    }
     // The outcome is compared with the call's kind, not with
     // `frame.target.kind`: §6.4 lets a contract(UnknownInteraction) response
     // echo another kind.

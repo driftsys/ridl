@@ -729,6 +729,62 @@ test("queryStream_response_is_a_protocol_error", async () => {
   await assert.rejects(reader.read(), isFailure("down"));
 });
 
+test("a_refusal_response_errors_the_stream_and_keeps_the_session", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  socket.deliver(
+    response(STREAMED, 1n, {
+      outcome: "contract",
+      contract: { category: "unknown-interaction" },
+    }),
+  );
+  await assert.rejects(
+    reader.read(),
+    (e: unknown) =>
+      e instanceof SessionError && e.failure.category === "contract" &&
+      e.failure.contract.category === "unknown-interaction",
+  );
+  // The call is forgotten, and the stream ended at the server: nothing is
+  // sent back, and a later frame of the call is discarded.
+  assert.deepEqual(sentOf(socket, "stream_end"), []);
+  socket.deliver(streamEnd(1n, 1n, { kind: "end" }));
+  assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
+    "unknown-correlation",
+  ]);
+  assert.deepEqual(socket.closes, []);
+  // The session goes on.
+  const call = session.query(1, 7, Uint8Array.of(1), BOUND);
+  socket.deliver(
+    response(QUERY, 2n, { outcome: "reply", payload: Uint8Array.of(2) }),
+  );
+  assert.deepEqual(await call, Uint8Array.of(2));
+});
+
+test("a corrupt or busy response errors the stream with that category", async () => {
+  for (const outcome of ["corrupt", "busy"] as const) {
+    const { socket, session, notes } = await attachedV3();
+    const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+      .getReader();
+    socket.deliver(response(STREAMED, 1n, { outcome }));
+    await assert.rejects(reader.read(), isFailure(outcome));
+    assert.deepEqual(notes, []);
+    assert.deepEqual(socket.closes, []);
+  }
+});
+
+test("an accepted response for a streamed query is a protocol error", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  socket.deliver(response(STREAMED, 1n, { outcome: "accepted" }));
+  assert.deepEqual(notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+  await assert.rejects(reader.read(), isFailure("down"));
+});
+
 test("a_chunk_for_a_plain_query_is_a_protocol_error", async () => {
   const { socket, session, notes } = await attachedV3();
   const call = session.query(1, 7, Uint8Array.of(1), BOUND);

@@ -555,8 +555,11 @@ export class Session {
    * sent, on a session of frame version 1 or 2, which has no stream forms;
    * `corrupt`, with nothing sent, when `args` is longer than the member's
    * limit. It errors with a `RangeError`, and sends nothing, for a bound or
-   * numbers {@link Session.command} refuses. A `response` to the call, a
-   * `stream_credit` for it, a chunk beyond the granted credit, a stream frame
+   * numbers {@link Session.command} refuses. A refusing `response` to the
+   * call (`contract`, `corrupt` or `busy`), which a server that does not serve
+   * the member sends, errors the stream with that category and leaves the
+   * session open. A `response` with `reply` or `accepted`, a `stream_credit`
+   * for the call, a chunk beyond the granted credit, a stream frame
    * on a stream other than 0, or a stream frame for a call that is not a
    * streamed reply, ends the session with the violation `unexpected-form`.
    */
