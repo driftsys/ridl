@@ -7,7 +7,7 @@
 
 use ridl_ir::v2;
 
-use crate::{Category, Change, DiffReport, Verdict, diff_packages};
+use crate::{Category, Change, DiffReport, Verdict, classify::classify, diff_packages};
 
 // --------------------------------------------------------------------------
 // Builders.
@@ -1969,9 +1969,9 @@ fn a_new_package_level_declaration_is_compatible() {
 // ==========================================================================
 
 /// An open enum accepts any integer, so an appended value is compatible. The
-/// walk folds the same append to a strict enum into `strict_enum_append`
-/// before the classifier runs; a `decl_added` line for a strict enum that
-/// reaches the classifier is breaking.
+/// same append to a strict enum is one `strict_enum_append` line, breaking, and
+/// the classifier alone judges a `decl_added` line of a strict declaration
+/// breaking too.
 #[test]
 fn an_enum_value_appended_is_compatible_only_when_the_enum_is_open() {
     let with_open = |values: Vec<v2::EnumValue>, open: bool| {
@@ -1992,8 +1992,61 @@ fn an_enum_value_appended_is_compatible_only_when_the_enum_is_open() {
     assert_row(
         &with_open(old_values(), false),
         &with_open(new_values(), false),
-        Category::DeclAdded,
+        Category::StrictEnumAppend,
         Verdict::Breaking,
+    );
+    // The `decl_added` line of the open diff, judged against the strict pair.
+    let report = diff_packages(
+        &with_open(old_values(), true),
+        &with_open(new_values(), true),
+    );
+    let line = row(&report, Category::DeclAdded);
+    assert_eq!(
+        classify(
+            line,
+            &with_open(old_values(), false),
+            &with_open(new_values(), false)
+        ),
+        Verdict::Breaking
+    );
+}
+
+/// The enum-set counterpart of the test above.
+#[test]
+fn an_enum_set_flag_appended_is_compatible_only_when_the_set_is_open() {
+    let with_open = |bits: Vec<v2::EnumValue>, open: bool| {
+        let mut decl = enum_decl("E", bits.clone(), vec![]);
+        decl.kind = Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            bits,
+            width: v2::IntWidth::U8 as i32,
+            open,
+            ..Default::default()
+        }));
+        decl_pkg(vec![decl])
+    };
+    let old_bits = || vec![enum_value("A", 0), enum_value("B", 1)];
+    let new_bits = || vec![enum_value("A", 0), enum_value("B", 1), enum_value("C", 2)];
+    assert_row(
+        &with_open(old_bits(), true),
+        &with_open(new_bits(), true),
+        Category::DeclAdded,
+        Verdict::Compatible,
+    );
+    assert_row(
+        &with_open(old_bits(), false),
+        &with_open(new_bits(), false),
+        Category::StrictEnumAppend,
+        Verdict::Breaking,
+    );
+    let report = diff_packages(&with_open(old_bits(), true), &with_open(new_bits(), true));
+    let line = row(&report, Category::DeclAdded);
+    assert_eq!(
+        classify(
+            line,
+            &with_open(old_bits(), false),
+            &with_open(new_bits(), false)
+        ),
+        Verdict::Breaking
     );
 }
 
