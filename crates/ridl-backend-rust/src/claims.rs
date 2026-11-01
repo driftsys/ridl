@@ -31,7 +31,7 @@
 //! whose message named neither (X-11).
 
 use crate::descriptors::{self, declared_name, interactions};
-use crate::face::{self, CALL_SUFFIXES};
+use crate::face::{self, CALL_SUFFIXES, STREAM_SUFFIX};
 use crate::{
     Ctx, GenerateError, WireEncoding, camel_of, declared, ident, snake_of, tuple_collision,
     tuple_name,
@@ -257,7 +257,11 @@ fn face_module(
         let camel = camel_of(interaction.name.as_ref());
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Command(_) | v1::interaction::Shape::Query(_)) => {
-                for suffix in CALL_SUFFIXES {
+                // A query with a streamed reply adds its stream value; the
+                // table claims only what the face emits, so a plain call
+                // claims none.
+                let stream = descriptors::named_stream_reply(interaction).then_some(STREAM_SUFFIX);
+                for suffix in CALL_SUFFIXES.into_iter().chain(stream) {
                     types.claim(
                         &face::call_type_ident(camel, suffix),
                         format!(

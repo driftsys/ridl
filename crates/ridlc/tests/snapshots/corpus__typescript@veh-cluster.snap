@@ -503,3 +503,17 @@ export const FAN_TAG = 'cabin-fan' as const;
  * The same label, reached through the constant above.
  */
 export const FAN_LABEL = 'cabin-fan' as const;
+
+/**
+ * One element of the fault stream: a single event, or a whole page of them.
+ * `FaultEvent` and `FaultPage` are the types `getFaultPage` replies with.
+ */
+export type FaultResult =
+  /**
+   * One stored fault.
+   */
+  | { kind: 'single'; value: FaultEvent }
+  /**
+   * A page of stored faults.
+   */
+  | { kind: 'page'; value: FaultPage };

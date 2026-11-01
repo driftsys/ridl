@@ -78,6 +78,25 @@ const FAN_TAG   : FanTag = "cabin-fan"
 /// The same label, reached through the constant above.
 const FAN_LABEL : FanTag = FAN_TAG
 
+// --- a streamed reply of named elements (ridl §12.1) ---
+
+/// One element of the fault stream: a single event, or a whole page of them.
+/// `FaultEvent` and `FaultPage` are the types `getFaultPage` replies with.
+union FaultResult {
+  /// One stored fault.
+  single : FaultEvent
+  /// A page of stored faults.
+  page   : FaultPage
+}
+
+/// The fault history as a stream of `FaultResult`. It is a top-level
+/// interface with a stream in return position, which the Rust face carries,
+/// beside the inline shape below, whose face the Rust backend skips.
+interface FaultLog {
+  /// The stored faults matching `filter`, oldest first.
+  query faults(filter: DiagFilter): <FaultResult> @[..1s]
+}
+
 // --- the named-reference form (ridl §14.5) ---
 
 /// The cluster's published vehicle-status contract.

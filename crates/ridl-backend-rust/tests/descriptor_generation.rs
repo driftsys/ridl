@@ -1661,7 +1661,9 @@ fn a_member_row_lists_its_streams() {
     assert!(!source.contains("type_name:\"<veh.hvac"), "{face}");
 
     // A member with a stream has its row and its `Interaction` impl, and no
-    // `Command` or `Query` impl, whichever position the stream is in.
+    // `Command` or `Query` impl, whichever position the stream is in — except
+    // the one form the face carries, a streamed reply of named elements with
+    // no stream parameter, whose `Query` impl names no reply payload.
     for streamed in [
         "CabinReplayTrace",
         "CabinPutBlob",
@@ -1677,12 +1679,24 @@ fn a_member_row_lists_its_streams() {
             "{streamed} has an Interaction impl:\n{face}"
         );
         for kind in ["Command", "Query"] {
-            assert!(
-                !source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{")),
-                "{streamed} has no {kind} impl:\n{face}"
+            let has_impl =
+                source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{"));
+            let expected = kind == "Query" && streamed == "CabinStreamFilterHistory";
+            assert_eq!(
+                has_impl,
+                expected,
+                "{streamed} {} a {kind} impl:\n{face}",
+                if expected { "has" } else { "has no" }
             );
         }
     }
+    assert!(
+        source.contains(
+            "impl::ridl_rt::contract::QueryforCabinStreamFilterHistory{\
+             typeArgs=FanLevel;typeReply=();"
+        ),
+        "the streamed reply's Query impl has no reply payload:\n{face}"
+    );
 
     assert!(
         source.contains("structCabinReplayTraceParams{}"),

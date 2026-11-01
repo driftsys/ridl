@@ -24,9 +24,10 @@
 //! arrived from generated code can find the port under it. The crate-level
 //! documentation has the whole table, and
 //! `docs/technotes/ridl-rt-by-example.md` in this repository walks it against
-//! concrete generated code. The generated face does not call
-//! [`StreamCaller`] or [`StreamHandler`] yet: a member with a stream has no
-//! generated method.
+//! concrete generated code. The generated face calls [`StreamCaller`] and
+//! [`StreamHandler`] for one stream form, a query whose reply is a stream of
+//! named elements; a member with a stream in any other form has no generated
+//! method yet (driftsys/ridl#1116).
 
 use core::task::Waker;
 

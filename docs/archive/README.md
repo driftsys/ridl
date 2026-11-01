@@ -803,3 +803,10 @@ provenance. Nothing here is normative — the current references live in
   blocks: the codec of both clients, the provider, the vectors, the freeze dump
   and the end-to-end tests. Archived verbatim, on 2026-11-01, with the design
   note above.
+
+- **2026-11-01-streams-stage-3-plan.md** — the plan for stage 3 of the streams
+  work: the generated Rust face of a query whose reply is a stream of named
+  elements, its caller side and its `serve`. Archived verbatim, on 2026-11-01,
+  with the pull request that builds it (driftsys/ridl#1171). The durable record
+  is [`../design/interaction-face.md`](../design/interaction-face.md). Stages 4
+  to 6 continue from `docs/wip/2026-10-31-streams-design.md`.
