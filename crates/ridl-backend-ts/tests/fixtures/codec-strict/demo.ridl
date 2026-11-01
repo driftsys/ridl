@@ -25,6 +25,9 @@ enumset WideFlags {
   TOP = 40
 }
 
+/// A map key.
+type Key : string [0..8]
+
 /// A struct that holds every kind of field of the types above.
 struct Report {
   status : DtcStatus
@@ -35,6 +38,7 @@ struct Report {
   sets   : [Flags; 0..4]
   maybe  : DtcStatus?
   maybeFlags : Flags?
+  table  : [Key : Mode; 0..3]
 }
 
 /// A union with a strict enum arm and a strict enum set arm.

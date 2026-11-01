@@ -33,6 +33,7 @@ export const PAYLOAD_TYPES = [
   "strict.demo.ControlSelectParams",
   "strict.demo.DtcStatus",
   "strict.demo.Flags",
+  "strict.demo.Key",
   "strict.demo.Mode",
   "strict.demo.Pick",
   "strict.demo.Report",
@@ -123,6 +124,17 @@ function unpackWideFlags(value: bigint): t.WideFlags {
   return value as t.WideFlags;
 }
 
+/** Encodes a `strict.demo.Key` payload. */
+export function encodeKey(value: t.Key): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.KeyBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `strict.demo.Key` payload the codec has verified. */
+export function decodeKey(bytes: Uint8Array): t.Key {
+  return fb.KeyBox.getRootAsKeyBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Key;
+}
+
 /** Encodes a `strict.demo.Report` payload. */
 export function encodeReport(value: t.Report): Uint8Array {
   const builder = new flatbuffers.Builder();
@@ -144,6 +156,7 @@ function packReport(value: t.Report): fb.ReportT {
   object.sets = [...value.sets];
   object.maybe = value.maybe === undefined ? null : BigInt(value.maybe);
   object.maybeFlags = value.maybeFlags === undefined ? null : value.maybeFlags;
+  object.table = value.table.map(([key, value]) => { const entry = new fb.ReportTableEntryT(); entry.key = key; entry.value = BigInt(value); return entry; });
   return object;
 }
 function unpackReport(object: fb.ReportT): t.Report {
@@ -154,6 +167,7 @@ function unpackReport(object: fb.ReportT): t.Report {
     wide: unpackWideFlags(object.wide),
     list: object.list.map((element) => unpackDtcStatus(element)),
     sets: object.sets.map((element) => unpackFlags(element)),
+    table: object.table.map((entry) => [entry.key as t.Key, unpackMode(entry.value)] as const),
   };
   if (object.maybe !== null) result.maybe = unpackDtcStatus(object.maybe);
   if (object.maybeFlags !== null) result.maybeFlags = unpackFlags(object.maybeFlags);

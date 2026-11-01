@@ -37,6 +37,7 @@ const report = (overrides: Partial<t.Report> = {}): t.Report => ({
   wide: 1n as t.WideFlags,
   list: [],
   sets: [],
+  table: [],
   ...overrides,
 });
 
@@ -168,4 +169,27 @@ Deno.test("an absent strict enum with no zero member is still reported as absent
     () => codec.decodeReport(bytes),
     (error: unknown) => error instanceof RangeError && !(error instanceof codec.RuleError),
   );
+});
+
+Deno.test("a map value of a strict enum refuses an undeclared value", () => {
+  // A map key is a string or a primitive (TYPL-209), so only a value is an enum.
+  const entry = (key: string, value: bigint) => {
+    const object = new fb.ReportTableEntryT();
+    object.key = key;
+    object.value = value;
+    return object;
+  };
+  const ok = reportBytes({ table: [entry("a", 1n), entry("b", 2n)] });
+  assert.deepEqual(codec.decodeReport(ok).table, [["a", 1], ["b", 2]]);
+  assert.throws(
+    () => codec.decodeReport(reportBytes({ table: [entry("a", 5n)] })),
+    variantError,
+  );
+});
+
+Deno.test("an absent strict enum payload with no zero member is refused with the variant rule", () => {
+  const box = new fb.ModeBoxT();
+  assert.equal(box.value, null);
+  assert.throws(() => codec.decodeMode(pack(box)), variantError);
+  assert.equal(codec.decodeMode(pack(new fb.ModeBoxT(1n))), t.Mode.LOW);
 });
