@@ -987,6 +987,14 @@ mod tests {
                     check_vector(&short, payload, binding_version).is_err(),
                     "{name} one byte below {size}"
                 );
+                // One byte below the header, whatever the bytes are.
+                let mut under = valid.clone();
+                under.truncate(size - 1);
+                let err = check_vector(&under, payload, binding_version)
+                    .expect_err(&format!("{name} cut to {}", size - 1));
+                if form != 1 {
+                    assert!(err.contains("below the"), "{name}: {err}");
+                }
             }
         }
         seen.sort_unstable();
@@ -1263,6 +1271,12 @@ mod tests {
             assert!(err.contains("blk"), "{why}: {err}");
             assert!(err.contains(why), "{why}: {err}");
         }
+        // A total that is a multiple of 4,096 ends on a full block.
+        assert!(ok(&block("05", "00100000", "00000000", &full), &full).is_ok());
+        let err = ok(&block("05", "00100000", "00000000", ""), "").expect_err("total 4,096");
+        assert!(err.contains("0 bytes after the header of block 0"), "{err}");
+        assert!(ok(&block("05", "00200000", "01000000", &full), &full).is_ok());
+        assert!(ok(&block("05", "00200000", "01000000", "ab"), "ab").is_err());
         // A block with more than 4,096 bytes is wrong by the same rule.
         let long = "ab".repeat(4097);
         assert!(ok(&block("05", "02100000", "00000000", &long), &long).is_err());
