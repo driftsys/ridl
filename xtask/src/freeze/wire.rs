@@ -1181,16 +1181,14 @@ mod tests {
         // 4,097 bytes make two blocks, so index 1 is the last.
         assert!(ok(&block("05", "01100000", "01000000")).is_ok());
         for (hex, why) in [
-            (block("04", "01000000", "00000000"), "kind is not Fixed"),
+            (block("04", "01000000", "00000000"), "kind 4"),
             (block("05", "00000000", "00000000"), "total 0"),
-            (block("05", "01000000", "01000000"), "index 1 of 1 block"),
-            (
-                block("05", "00100000", "01000000"),
-                "index 1 of 1 block at 4,096",
-            ),
+            (block("05", "01000000", "01000000"), "index 1 is not below"),
+            (block("05", "00100000", "01000000"), "index 1 is not below"),
         ] {
             let err = ok(&hex).expect_err(why);
             assert!(err.contains("blk"), "{why}: {err}");
+            assert!(err.contains(why), "{why}: {err}");
         }
     }
 

@@ -44,6 +44,19 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
     assert.deepEqual(fixed.payload, catalog.FIXED_VALUE);
     assert.equal(fixed.envelope.seq, 0n);
 
+    // The large values cross in blocks or whole, and every byte is checked.
+    for (const [ord, length] of catalog.FIXED_LENGTHS) {
+      const large = await session.read({
+        kind: Kind.Fixed,
+        iface: catalog.IFACE,
+        ord,
+      });
+      assert.equal(large.provenance, "live");
+      assert.equal(large.payload?.length, length);
+      assert.deepEqual(large.payload, catalog.pattern(length));
+    }
+    assert.deepEqual(notes.filter((n) => n.note === "discarded"), []);
+
     init.start();
     await session.subscribe({
       kind: Kind.Signal,

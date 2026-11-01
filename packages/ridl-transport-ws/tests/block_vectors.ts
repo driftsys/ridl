@@ -1,7 +1,8 @@
 /**
  * The byte vectors of `block` messages (frame version 2) that the decoder,
- * the encoder and the session tests share (frame specification §11.1, binding version 2). Each hex
- * string is one whole message; spaces are for reading only.
+ * the encoder and the session tests share (frame specification §11.1, binding
+ * version 2). Each hex string is one whole message; spaces are for reading
+ * only.
  */
 
 import type { Violation } from "../mod.ts";
