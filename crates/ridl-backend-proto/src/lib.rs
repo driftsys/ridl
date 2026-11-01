@@ -369,9 +369,9 @@ fn emit_root_boxes(
 /// same for both: this target keeps any integer on the wire.
 fn strictness_comment(open: bool) -> &'static str {
     if open {
-        "// open: a value outside this list is kept"
+        "// open: a value outside this list is valid and is kept"
     } else {
-        "// strict: a value outside this list is refused by RIDL codecs"
+        "// strict: a value outside this list is not valid"
     }
 }
 

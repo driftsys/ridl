@@ -506,9 +506,12 @@ does not fit the width of the set, on encode, with a `RuleError` whose `rule`
 is `range`.
 
 The `.proto` and `.fbs` files that the build writes carry one comment line above
-each enum that states the rule the RIDL codecs apply to it: `// strict: a value
-outside this list is refused by RIDL codecs` or `// open: a value outside this
-list is kept`. The enum type itself is the same in both cases.
+each enum that states the rule of its declaration: `// strict: a value outside
+this list is not valid` or `// open: a value outside this list is valid and is
+kept`. The comment states the rule, not who enforces it. The Rust codecs refuse
+a value outside the list of a strict enum, and the TypeScript codec does not
+check it yet ([driftsys/ridl#1173](https://github.com/driftsys/ridl/issues/1173)).
+The enum type itself is the same in both cases.
 
 ## Documentation in the generated code
 

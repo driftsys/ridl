@@ -2379,11 +2379,11 @@ fn an_enum_states_whether_it_is_strict_or_open() {
     for (open, comment) in [
         (
             false,
-            "// strict: a value outside this list is refused by RIDL codecs\nenum Gear : long {",
+            "// strict: a value outside this list is not valid\nenum Gear : long {",
         ),
         (
             true,
-            "// open: a value outside this list is kept\nenum Gear : long {",
+            "// open: a value outside this list is valid and is kept\nenum Gear : long {",
         ),
     ] {
         let mut package = enum_package("Gear", vec![("PARK", 0)]);

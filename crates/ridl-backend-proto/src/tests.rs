@@ -2599,11 +2599,11 @@ fn an_enum_states_whether_it_is_strict_or_open() {
     for (open, comment) in [
         (
             false,
-            "// strict: a value outside this list is refused by RIDL codecs\nenum Gear {",
+            "// strict: a value outside this list is not valid\nenum Gear {",
         ),
         (
             true,
-            "// open: a value outside this list is kept\nenum Gear {",
+            "// open: a value outside this list is valid and is kept\nenum Gear {",
         ),
     ] {
         let package = v2::Package {
