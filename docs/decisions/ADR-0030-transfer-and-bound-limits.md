@@ -82,6 +82,14 @@ decisions 11 and 16 are changed in place. Data larger than one transfer is a
 byte stream or a stream of bounded elements, and the interaction's limit bounds
 each chunk or element of a stream. No number changes.
 
+Amended 2026-11-01 from the code of driftsys/ridl#1129: decision 15 is changed
+in place. The threshold above which the WebSocket binding sends a fixed in
+blocks is what one `publish` carries, 16,137 bytes at the message limit of
+16,164 bytes, where the decision said 16,128, and the layout of the blocks,
+which the decision left to a design note, is in the frame specification (frame
+version 2, binding version 2 under `ridl-ws-v2`, blocks of 4,096 bytes). No
+other number changes.
+
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
@@ -115,14 +123,25 @@ Built 2026-10-30 (driftsys/ridl#1108, driftsys/ridl#1128): the amendments of
   the generated codec module and rejects a received payload above it before
   `verify`, and the codegen model carries the limit.
 
-What waits for driftsys/ridl#1129 (decisions 15 and 20): the WebSocket blocks.
-Until then, a fixed whose payload is above one message (16,137 bytes at the
-default message limit) and within its limit is not carried over WebSocket: the
-session records `ValueTooLarge` and sends no `publish`, nothing is refused at
-attach, and the WebSocket provider answers a `read` of it with `answer` and
-`contract(UnknownInteraction)`; the TypeScript client rejects a payload above
-the limit as `corrupt`. The fixed itself is accepted by the catalog and by the
-loopback.
+Built 2026-11-01 (driftsys/ridl#1129): the WebSocket blocks of decisions 15 and
+20. The binding carries frame version 2 under the subprotocol `ridl-ws-v2`
+(frame specification §11.1, "Binding version 2"). The Rust provider serves frame
+version 2 only, and refuses every `attach` on a `ridl-ws-v1` connection with
+`frame_version_unsupported`. It sends a fixed whole when the payload fits one
+`publish`, 16,137 bytes at the default message limit, and otherwise in `block`
+frames of 4,096 bytes, up to 65,280 bytes. Its `Config` check counts a fixed as
+the smaller of 36 bytes plus its limit and 4,130 bytes, one block message, so
+nothing is refused at attach for its size. The TypeScript client offers
+`ridl-ws-v2, ridl-ws-v1`, attaches with the frame version of the subprotocol the
+server selected, and reassembles the blocks into a buffer bounded by the
+member's limit from the generated codec module, at most 65,280 bytes; a `total`
+above that limit is refused at the first block, and the read rejects with
+`corrupt`. A provider whose message limit is below 4,130 bytes, which the
+`Config` check admits only when every fixed of the member table fits one message
+or when the provider holds no member table, sends no block: it answers a `read`
+of a fixed above one `publish` with `answer` and `contract(UnknownInteraction)`
+and records `ValueTooLarge`. The fixed itself is accepted by the catalog and by
+the loopback.
 
 Departure from decision 19, on the providing side of the WebSocket binding: a
 `read` of a signal or of a fixed whose value is above the member's limit is
@@ -675,20 +694,24 @@ When accepted, these records gain a dated note or are changed in place:
       (decision 10). A payload that fits one message is carried whole, as today.
       Blocks are used only for a payload larger than one message. With a message
       limit of 16,164 bytes, a signal, an event, a command and a query always
-      fit one message, even when raised (decision 18), so today only a fixed
-      above 16,128 bytes, of up to 65,280 bytes, is sent in blocks, in one
-      direction: the provider splits the payload, and the consumer reassembles
-      the blocks into a buffer sized from the catalog's limit, then verifies the
-      payload. The provider never reassembles. The size of a block is settled in
-      the design note of driftsys/ridl#1129.
+      fit one message, even when raised (decision 18), so only a fixed above
+      what one `publish` carries, 16,137 bytes at the 16,164-byte message limit,
+      of up to 65,280 bytes, is sent in blocks, in one direction: the provider
+      splits the payload, and the consumer reassembles the blocks into a buffer
+      sized from the catalog's limit, then verifies the payload. The provider
+      never reassembles. A block carries 4,096 bytes of the payload, and the
+      last block the rest (frame specification §11.1, "Binding version 2").
     - Blocks need a new frame version, because the header's field set is closed
       (frame specification §4), carried by a new binding version offered beside
       version 1 (§11.1 "Later versions"). The blocks need: a part index or a
       last-block flag; a bound on reassembly for each session; a rule for a
       missing, repeated or out-of-order block, and for a total above the
       member's limit; and a rule on whether the blocks of one payload may
-      interleave with other frames. The layout is left to a design note of the
-      frame specification, tracked in driftsys/ridl#1129.
+      interleave with other frames. The layout is frame version 2 of the frame
+      specification: the `block` form and its fields `total` and `index` (§4),
+      the receiver's rules (§5.5, §6.3 and §9.4), and binding version 2 under
+      `ridl-ws-v2` (§11.1). The Rust provider serves version 2 only, and the
+      TypeScript client offers version 2 beside version 1.
     - This replaces the rule of 2026-10-28 that the WebSocket binding refuses at
       attach a catalog whose fixed is larger than its message limit, and the
       rule that one payload travels in one message as a rule of the WebSocket
@@ -914,9 +937,11 @@ When accepted, these records gain a dated note or are changed in place:
   kind, RIDL-150 retired, and the size checks in the language server (decisions
   7, 17 and 21). The codec records and the frame specification §9: `verify`
   without a length check and the transport's refusal (decisions 4 and 19). The
-  frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the blocks
-  of the WebSocket binding (decisions 15 and 20), once the design note of
-  driftsys/ridl#1129 fixes their layout.
+  frame specification §4, §5.5, §6.1, §6.3, §9.4, §10 item 10, §11.1 "Binding
+  version 2" and §12 items 17 to 24, `docs/design/ridl-transport-ws.md` and
+  `docs/design/ridl-transport-ws-ts.md`: the blocks of the WebSocket binding
+  (decisions 15 and 20), stated when their code landed on 2026-11-01
+  (driftsys/ridl#1129).
 
 ## Alternatives considered
 
@@ -1164,9 +1189,11 @@ When accepted, these records gain a dated note or are changed in place:
   `EncodeError::TooLarge`, which the Consequences of 2026-10-21 announced; it
   gains the three default ceilings (decision 16 as amended). A WebSocket payload
   larger than one message travels in blocks, a new frame version and binding
-  version (decision 15, driftsys/ridl#1129); until it is built, such a fixed
-  cannot be served over WebSocket, and the refusal at attach of 2026-10-28 is
-  not built either.
+  version (decision 15, driftsys/ridl#1129), built on 2026-11-01: a fixed of up
+  to 65,280 bytes is served over WebSocket, and the refusal at attach of
+  2026-10-28 was never built. The blocks are a breaking change of both WebSocket
+  packages: the Rust provider refuses a version 1 client at attach, and the
+  TypeScript client offers version 2 first.
 
 ## References
 
