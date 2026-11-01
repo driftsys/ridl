@@ -26,22 +26,22 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::path::{Root as PathRoot, Step};
 use super::resolve::Scope;
 use super::{flatbuffers, v1};
 use crate::projection::flatbuffers::Packages;
 use crate::projection::podbuf::{self, DescriptorKind, Form, Head, Inlined, Source};
 use crate::v2;
 
-/// The tuple at each position the walk can reach, by the walk's path to it:
-/// the root (`Decl`, `tuple N` or `pkg.Decl`), then a struct field's name, a
-/// tuple field's position, `key` or `value`.
+/// The tuple at each position the walk can reach, by the walk's path to it
+/// (`super::path`).
 #[derive(Default)]
 pub(crate) struct TupleKeys {
     /// The index in `Model.tuples` of a named tuple.
-    pub local: HashMap<Vec<String>, u32>,
+    pub local: HashMap<Vec<Step>, u32>,
     /// A tuple inside a declaration of another package, which `Model.tuples`
     /// does not hold.
-    pub foreign: HashMap<Vec<String>, ForeignTuple>,
+    pub foreign: HashMap<Vec<Step>, ForeignTuple>,
 }
 
 /// One tuple of another package, as the lowering lifted it.
@@ -183,8 +183,8 @@ fn boxes(scope: Scope<'_>) -> Vec<v1::PodbufBox> {
             foreign: HashMap::new(),
             refused: HashSet::new(),
         };
-        let root = std::slice::from_ref(&decl.name);
-        if walk.fill(0, &head, root, root, Owner::None).is_ok() {
+        let root = PathRoot::Declaration(decl.name.clone());
+        if walk.fill_root(0, &head, root, Owner::None).is_ok() {
             out.push(v1::PodbufBox {
                 declaration: index as u32,
                 head: walk.heads.pop(),
@@ -271,9 +271,9 @@ enum Owner {
     Foreign(u32),
 }
 
-/// A root to fill: its position, its head slot, its layout, the path to it and
-/// the declaration index it belongs to.
-type Pending<'a> = (usize, u32, &'a Head, Vec<String>, Owner);
+/// A root to fill: its position, its head slot, its layout, the root of the
+/// path to it and the declaration index it belongs to.
+type Pending<'a> = (usize, u32, &'a Head, PathRoot, Owner);
 
 /// One walk over every root that is not excluded. An error names the root
 /// whose fields cannot all be named and the cause.
@@ -315,12 +315,12 @@ fn attempt(
             v1::podbuf_refused::Source::Declaration(index) => (
                 v1::podbuf_head::Source::Declaration(*index),
                 Owner::Declaration(*index),
-                root.name.clone().unwrap_or_default(),
+                PathRoot::Declaration(root.name.clone().unwrap_or_default()),
             ),
             v1::podbuf_refused::Source::Tuple(index) => (
                 v1::podbuf_head::Source::Tuple(*index),
                 Owner::None,
-                format!("tuple {index}"),
+                PathRoot::Tuple(*index),
             ),
         };
         let index = walk.push(source);
@@ -333,10 +333,10 @@ fn attempt(
             }
             _ => {}
         }
-        pending.push((at, index, head, vec![path], declaration));
+        pending.push((at, index, head, path, declaration));
     }
-    for (at, index, head, path, declaration) in pending {
-        walk.fill(index, head, &path, &path, declaration)
+    for (at, index, head, root, declaration) in pending {
+        walk.fill_root(index, head, root, declaration)
             .map_err(|cause| (at, cause))?;
     }
     Ok(walk.heads)
@@ -380,28 +380,41 @@ impl Walk<'_> {
         (self.heads.len() - 1) as u32
     }
 
+    /// Fills the head of a root: the path to it and its key both start at
+    /// `root`.
+    fn fill_root(
+        &mut self,
+        index: u32,
+        head: &Head,
+        root: PathRoot,
+        declaration: Owner,
+    ) -> Result<(), String> {
+        let root = Step::Root(root);
+        self.fill(index, head, &[root.to_string()], &[root], declaration)
+    }
+
     /// Writes the size, the fields and the pads of `head` into slot `index`.
     /// `declaration` is the union or struct the walk started from, which names
     /// the arms of a union. `path` is the declaration name followed by the
-    /// names of the fields that lead to `head`. `key` is the same path as the
-    /// lowering spells it ([`TupleKeys`]): the two differ inside an arm of a
-    /// union, whose head is a copy of the arm type's head, so the key starts
-    /// again at that type.
+    /// names of the fields that lead to `head`, for an error message. `key` is
+    /// the same path as the lowering spells it ([`TupleKeys`]): the two differ
+    /// inside an arm of a union, whose head is a copy of the arm type's head,
+    /// so the key starts again at that type.
     fn fill(
         &mut self,
         index: u32,
         head: &Head,
         path: &[String],
-        key: &[String],
+        key: &[Step],
         declaration: Owner,
     ) -> Result<(), String> {
         let mut fields = Vec::with_capacity(head.fields.len());
         for placement in &head.fields {
             let mut at = path.to_vec();
             let mut key_at = key.to_vec();
-            if let Some(segment) = segment(&placement.source) {
-                at.push(segment.clone());
-                key_at.push(segment);
+            if let Some(step) = Step::of(&placement.source) {
+                at.push(step.to_string());
+                key_at.push(step);
             }
             fields.push(v1::PodbufField {
                 source: Some(source(&placement.source)),
@@ -434,7 +447,7 @@ impl Walk<'_> {
         &mut self,
         form: &Form,
         path: &[String],
-        key: &[String],
+        key: &[Step],
         declaration: Owner,
     ) -> Result<v1::PodbufForm, String> {
         use v1::podbuf_form::Kind;
@@ -483,7 +496,7 @@ impl Walk<'_> {
         head: &Head,
         of: &Inlined,
         path: &[String],
-        key: &[String],
+        key: &[Step],
         declaration: Owner,
     ) -> Result<u32, String> {
         let at = path.join(".");
@@ -515,6 +528,18 @@ impl Walk<'_> {
                     wire,
                     entry,
                 } = tuple;
+                // Unreachable for checked input too: the lowering of the
+                // declaring package reaches every position of its
+                // declarations, so the importing lowering finds a claim for
+                // each. An entry with no wire name is a position no claim
+                // matched, and is refused rather than named here.
+                if wire.is_empty() {
+                    return Err(format!(
+                        "{at}: internal: the lowering of package {package} has no tuple with \
+                         the induced name and the shape of this position (the two lowerings \
+                         disagree)"
+                    ));
+                }
                 let identity = (package.clone(), wire.clone());
                 if let Some((index, known, first)) = self.nested.get(&identity) {
                     if known == entry {
@@ -562,8 +587,11 @@ impl Walk<'_> {
                     .ok_or_else(|| format!("{at}: {package}.{name} is not in the foreign list"))?;
                 let index = self.push(v1::podbuf_head::Source::Foreign(declaration));
                 self.foreign.insert(key, index);
-                let root = [format!("{package}.{name}")];
-                self.fill(index, head, &root, &root, Owner::Foreign(declaration))?;
+                let root = PathRoot::Foreign {
+                    package: package.clone(),
+                    name: name.clone(),
+                };
+                self.fill_root(index, head, root, Owner::Foreign(declaration))?;
                 Ok(index)
             }
         }
@@ -573,7 +601,7 @@ impl Walk<'_> {
         &mut self,
         descriptor: &DescriptorKind,
         path: &[String],
-        key: &[String],
+        key: &[Step],
         declaration: Owner,
     ) -> Result<v1::PodbufDescriptor, String> {
         use v1::podbuf_descriptor::Kind;
@@ -640,19 +668,23 @@ impl Walk<'_> {
                         foreign,
                     }));
                     let mut at = path.to_vec();
-                    at.push(ordinal.to_string());
+                    at.push(Step::Arm(*ordinal).to_string());
                     // The arm's head is a copy of the arm type's head, so a
                     // tuple inside it is the one the lowering reached under
                     // that type, and when that type is a union, its arms
                     // belong to it, not to the union being filled.
                     let (key_at, owner) = match self.arm_type(declaration, *ordinal) {
                         Some((target, declaring)) => (
-                            vec![self.root_of(target, declaring)],
+                            vec![Step::Root(PathRoot::of(
+                                target,
+                                declaring,
+                                self.scope.package,
+                            ))],
                             self.owner_of(target, declaring)?.unwrap_or(declaration),
                         ),
                         None => {
                             let mut key_at = key.to_vec();
-                            key_at.push(ordinal.to_string());
+                            key_at.push(Step::Arm(*ordinal));
                             (key_at, declaration)
                         }
                     };
@@ -704,17 +736,6 @@ impl<'a> Walk<'a> {
         self.scope.resolve(home, &arm.type_ref)
     }
 
-    /// The root of the lowering's path to `decl` of `declaring`: its bare
-    /// name for a type of this package, its qualified name for one of another
-    /// package.
-    fn root_of(&self, decl: &v2::Decl, declaring: &v2::Package) -> String {
-        if declaring.name == self.scope.package.name {
-            decl.name.clone()
-        } else {
-            format!("{}.{}", declaring.name, decl.name)
-        }
-    }
-
     /// The owner a head copied from `decl` of `declaring` names for its arms:
     /// the union itself, when `decl` is one; `None` for any other declaration.
     /// A foreign union the lowering did not reach is an error: the lowering
@@ -752,17 +773,6 @@ impl<'a> Walk<'a> {
     }
 }
 
-/// The path segment a field adds, when it has a name.
-fn segment(source: &Source) -> Option<String> {
-    match source {
-        Source::Field { name, .. } => Some(name.clone()),
-        Source::Position { position, .. } => Some(position.to_string()),
-        Source::Key => Some("key".to_string()),
-        Source::Value => Some("value".to_string()),
-        Source::Flags { .. } | Source::Tag | Source::Arm => None,
-    }
-}
-
 fn source(source: &Source) -> v1::PodbufSource {
     use v1::podbuf_source::Kind;
     let kind = match source {
@@ -791,11 +801,11 @@ fn source(source: &Source) -> v1::PodbufSource {
 mod tests {
     use super::*;
 
-    /// A named tuple whose root is excluded from the walk is a refused head:
-    /// the position that lays it out inline names it as the cause, as a
-    /// refused declaration is named, instead of getting a head of its own.
+    /// A foreign entry with no wire name is a position the lowering matched
+    /// to no claim of its package: the walk refuses it as an internal error
+    /// rather than naming it, and pushes no head.
     #[test]
-    fn an_inline_position_of_an_excluded_tuple_is_refused() {
+    fn a_foreign_entry_with_no_wire_name_is_refused() {
         let package = v2::Package {
             name: "p.a".to_string(),
             ..Default::default()
@@ -804,9 +814,23 @@ mod tests {
             package: &package,
             others: &[],
         };
-        let path = vec!["Holder".to_string(), "t".to_string()];
+        let key = vec![
+            Step::Root(PathRoot::Foreign {
+                package: "a".to_string(),
+                name: "Holder".to_string(),
+            }),
+            Step::Field("t".to_string()),
+        ];
+        let path: Vec<String> = key.iter().map(ToString::to_string).collect();
         let mut keys = TupleKeys::default();
-        keys.local.insert(path.clone(), 3);
+        keys.foreign.insert(
+            key.clone(),
+            ForeignTuple {
+                package: "a".to_string(),
+                wire: String::new(),
+                entry: 0,
+            },
+        );
         let no_heads = HashMap::new();
         let mut walk = Walk {
             scope,
@@ -827,7 +851,56 @@ mod tests {
             pads: Vec::new(),
         };
         let error = walk
-            .inline(&head, &Inlined::Tuple, &path, &path, Owner::None)
+            .inline(&head, &Inlined::Tuple, &path, &key, Owner::None)
+            .expect_err("the unnamed entry is refused");
+        assert!(
+            error.starts_with("a.Holder.t: internal: the lowering of package a has no tuple"),
+            "{error}"
+        );
+        assert!(walk.heads.is_empty(), "no head was pushed");
+    }
+
+    /// A named tuple whose root is excluded from the walk is a refused head:
+    /// the position that lays it out inline names it as the cause, as a
+    /// refused declaration is named, instead of getting a head of its own.
+    #[test]
+    fn an_inline_position_of_an_excluded_tuple_is_refused() {
+        let package = v2::Package {
+            name: "p.a".to_string(),
+            ..Default::default()
+        };
+        let scope = Scope {
+            package: &package,
+            others: &[],
+        };
+        let key = vec![
+            Step::Root(PathRoot::Declaration("Holder".to_string())),
+            Step::Field("t".to_string()),
+        ];
+        let path: Vec<String> = key.iter().map(ToString::to_string).collect();
+        let mut keys = TupleKeys::default();
+        keys.local.insert(key.clone(), 3);
+        let no_heads = HashMap::new();
+        let mut walk = Walk {
+            scope,
+            foreign_at: &no_heads,
+            foreign_names: HashMap::new(),
+            keys: &keys,
+            heads: Vec::new(),
+            declared: HashMap::new(),
+            tuples: HashMap::new(),
+            nested: HashMap::new(),
+            arms: HashMap::new(),
+            foreign: HashMap::new(),
+            refused: HashSet::new(),
+        };
+        let head = Head {
+            size: 0,
+            fields: Vec::new(),
+            pads: Vec::new(),
+        };
+        let error = walk
+            .inline(&head, &Inlined::Tuple, &path, &key, Owner::None)
             .expect_err("the excluded tuple is refused");
         assert_eq!(error, "Holder.t: needs the refused head of tuple 3");
         assert!(walk.heads.is_empty(), "no head was pushed");

@@ -347,9 +347,11 @@ struct Claim {
 
 impl Claim {
     /// Whether two claims of one name stand for one entity: equal identities
-    /// and, for a head or a guard, equal definitions. An importing lowering
-    /// can give a nested tuple of another package the wire name that package
-    /// gives a different tuple, so the identity alone is not trusted.
+    /// and, for a head or a guard, equal definitions. The importing lowering
+    /// takes a nested tuple's wire name from the declaring package's own
+    /// lowering, so the two definitions of one identity are expected to be
+    /// equal; a disagreement between the two lowerings is refused here rather
+    /// than written into two headers that define one head two ways.
     fn same_entity(&self, other: &Claim) -> bool {
         self.identity == other.identity && self.definition == other.definition
     }

@@ -366,14 +366,15 @@ fn a_head_name_equal_to_a_ridl_std_head_is_refused() {
     assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
 }
 
-/// Two headers that claim one head name for one identity are refused when
-/// their definitions differ. The importing lowering names the tuple at
-/// position 1 of `a.A.bX` by that position (`a.A.bX.1`, wire name
-/// `ABXField1`), the wire name `a` gives the tuple at `AB.xField1`, so `b.h`
-/// defines `a_abx_field1_head` with the members of the first and `a.h` with
-/// the member of the second, behind one guard.
+/// The importing lowering names a nested tuple of another package by the
+/// wire name the declaring package gives it, not by the position it reaches
+/// the tuple at. Position 1 of `a.A.bX` and `a.AB.xY` are one tuple, `ABXY`,
+/// whose wire name in `a` is `ABXY`; `a.AB.xField1` is another tuple, under
+/// the wire name `ABXField1` that the position `a.A.bX.1` would spell. `b.h`
+/// defines `a_abxy_head`, as `a.h` does, and no `a_abx_field1_head`, so the
+/// build writes both headers (driftsys/ridl#1150).
 #[test]
-fn one_identity_with_two_definitions_is_refused() {
+fn a_nested_tuple_takes_the_declaring_wire_name_not_its_position() {
     let (diagnostics, out) = build(
         &[
             (
@@ -388,19 +389,134 @@ fn one_identity_with_two_definitions_is_refused() {
         ],
         &[Emit::Podbuf],
     );
-    let error = error_naming(&diagnostics, "a_abx_field1_head");
     assert!(
-        error
-            .message
-            .contains("the head of the tuple at `AB.xField1` in the header of `a`")
-            && error
-                .message
-                .contains("the head of the tuple at `a.A.bX.1` in the header of `b`"),
-        "{}",
-        error.message
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
     );
-    error_naming(&diagnostics, "A_ABX_FIELD1_HEAD_DEFINED");
-    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+    assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
+    let a = std::fs::read_to_string(out.path().join("a.h")).unwrap();
+    assert!(a.contains("typedef struct a_abxy_head {"), "{a}");
+    assert!(a.contains("typedef struct a_abx_field1_head {"), "{a}");
+    let b = std::fs::read_to_string(out.path().join("b.h")).unwrap();
+    assert!(b.contains("typedef struct a_abxy_head {"), "{b}");
+    assert!(!b.contains("a_abx_field1_head"), "{b}");
+}
+
+/// `package a`, where position 1 of the tuple at `A.bC` and position 2 of the
+/// tuple at `AB.cD` induce one Rust name (`ABCDP`) from one shape, so the
+/// declaring package gives them one entry under the wire name of the first,
+/// `ABCField1`.
+const SHARED_ENTRY_PACKAGE: &str = "package a\n\
+     struct A { bC : (dP : (x: integer [0..10], y: integer [0..10])) }\n\
+     struct AB { cD : (q : integer [0..10], p : (x: integer [0..10], y: integer [0..10])) }\n";
+
+/// Builds `package b` with the members `members` over [`SHARED_ENTRY_PACKAGE`]
+/// and asserts that both headers are written and define the shared head
+/// `a_abc_field1_head`, and that neither defines a head under the wire name
+/// of the second position.
+fn assert_shared_entry_has_one_head(members: &str) {
+    let (diagnostics, out) = build(
+        &[
+            ("a", "a", SHARED_ENTRY_PACKAGE),
+            (
+                "b",
+                "b",
+                &format!("package b\nimport a.A\nimport a.AB\nstruct B {{\n{members}}}\n"),
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
+    for name in ["a.h", "b.h"] {
+        let header = std::fs::read_to_string(out.path().join(name)).unwrap();
+        assert!(
+            header.contains("typedef struct a_abc_field1_head {"),
+            "{name}: {header}"
+        );
+        assert!(!header.contains("a_abcd_field2_head"), "{name}: {header}");
+    }
+}
+
+/// An importing package that reaches `AB` before `A` names the shared entry
+/// by the declaring package's wire name, not by the position it reaches
+/// first: `b.h` defines `a_abc_field1_head`, as `a.h` does, and the build
+/// writes both headers (driftsys/ridl#1150).
+#[test]
+fn an_importer_that_reaches_the_shared_entry_in_reverse_order_names_it_once() {
+    assert_shared_entry_has_one_head("  ab : AB\n  a : A\n");
+}
+
+/// The same pair reached in the declaring package's order: the headers are
+/// as they were before the importing lowering took its claims from the
+/// declaring package.
+#[test]
+fn an_importer_that_reaches_the_shared_entry_in_declaring_order_names_it_once() {
+    assert_shared_entry_has_one_head("  a : A\n  ab : AB\n");
+}
+
+/// `package a` and `package b` reference each other by qualified name, with no
+/// import: `a.S` holds `b.T` and `b.U` holds `a.V`, each of which holds a
+/// tuple. The workspace checks, and the lowering of each package names the
+/// other's tuples by that package's own lowering without lowering it again
+/// for its own foreign positions, so the build ends (driftsys/ridl#1150).
+const QUALIFIED_CYCLE: [(&str, &str, &str); 2] = [
+    (
+        "a",
+        "a",
+        "package a\nstruct S { x : b.T }\nstruct V { v : (p: integer [0..10], q: integer [0..10]) }\n",
+    ),
+    (
+        "b",
+        "b",
+        "package b\nstruct T { t : (p: integer [0..10], q: integer [0..10]) }\nstruct U { y : a.V }\n",
+    ),
+];
+
+/// The cycle builds with the podbuf emit: both headers are written, each
+/// defines the other package's tuple head under that package's name, and the
+/// build-wide check found the two texts of each head equal.
+#[test]
+fn two_packages_referencing_each_other_by_qualified_name_build_the_headers() {
+    let (diagnostics, out) = build(&QUALIFIED_CYCLE, &[Emit::Podbuf]);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
+    for name in ["a.h", "b.h"] {
+        let header = std::fs::read_to_string(out.path().join(name)).unwrap();
+        assert!(
+            header.contains("typedef struct a_vv_head {"),
+            "{name}: {header}"
+        );
+        assert!(
+            header.contains("typedef struct b_tt_head {"),
+            "{name}: {header}"
+        );
+    }
+}
+
+/// The same cycle builds with the Rust emit.
+#[test]
+fn two_packages_referencing_each_other_by_qualified_name_build_the_rust_modules() {
+    let (diagnostics, out) = build(&QUALIFIED_CYCLE, &[Emit::Rust]);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "rs"), vec!["a.rs", "b.rs", "lib.rs"]);
 }
 
 /// Two entities whose heads render to one text are still two entities:

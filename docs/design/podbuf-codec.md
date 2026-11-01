@@ -210,13 +210,16 @@ tuple, and so one head, is stated in
 [ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md)
 (amendment of 2026-10-31). The importing header names a foreign tuple's head by
 the declaring package's induced name, so the two headers define the head under
-one guard with one text. Two tuples of one package that induce one wire name (a
-struct field `sizeField2` next to position 2 of the tuple at `size`), whatever
-their layouts, are refused in both headers: the declaring header through its C
-name claim, an importing header by refusing the head that reaches them, with a
-cause that names both paths. A head reached only through a tail descriptor, an
-array element or a map entry, is not laid out inline, so an importing header
-does not define it.
+one guard with one text. The importing lowering reads that name from the
+declaring package's own lowering, so a tuple two positions share is named the
+same whatever order the importing package reaches the two positions in
+(amendment of 2026-11-01). Two tuples of one package that induce one wire name
+(a struct field `sizeField2` next to position 2 of the tuple at `size`),
+whatever their layouts, are refused in both headers: the declaring header
+through its C name claim, an importing header by refusing the head that reaches
+them, with a cause that names both paths. A head reached only through a tail
+descriptor, an array element or a map entry, is not laid out inline, so an
+importing header does not define it.
 
 The header also holds a head for each named scalar, enum and enum set the
 package declares that can be laid out (`PodbufProjection.boxes`), whether or not
@@ -263,11 +266,11 @@ name in its package, a tuple by its wire name in the package that declares it
 (`NestedTuple.package` and `NestedTuple.wire` for a tuple of another package); a
 union arm and a map entry are reached through a descriptor, so no importing
 header defines their heads. The claim of a head and of its guard also carries
-the text of the guarded definition, because the importing lowering can give a
-nested tuple of another package the wire name that package gives a different
-tuple (`a_abx_field1_head`, the tuple at position 1 of `a.A.bX`, which the
-importer names `a.A.bX.1`, and the tuple at `a.AB.xField1`). Two headers claim
-one name for one entity only when the identities are equal and, for a head or a
+the text of the guarded definition, so that a disagreement between the two
+lowerings of one tuple
+([ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md),
+amendment of 2026-11-01) is refused rather than written. Two headers claim one
+name for one entity only when the identities are equal and, for a head or a
 guard, the definitions are equal: the second definition of a head one package
 declares and another lays out inline is accepted only when its text is identical
 to the first, and equal identities with two texts are refused. A name claimed
