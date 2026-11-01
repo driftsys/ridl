@@ -4611,7 +4611,9 @@ mod podbuf_width {
 mod enum_open {
     use ridl_ir::v2;
 
-    use crate::{Category, Change, DiffReport, Verdict, diff_packages, diff_refs_with, explain, render_text};
+    use crate::{
+        Category, Change, DiffReport, Verdict, diff_packages, diff_refs_with, explain, render_text,
+    };
 
     fn values(count: i64) -> Vec<v2::EnumValue> {
         (0..count)
@@ -4843,6 +4845,94 @@ mod enum_open {
     fn the_strict_append_explanation_names_the_open_keyword() {
         assert!(explain(Category::StrictEnumAppend).contains("open enum"));
         assert!(explain(Category::StrictEnumAppend).contains("breaking"));
+    }
+
+    /// A package holding `Mode` as an enum of the given `(name, number)`
+    /// values.
+    fn enum_with(open: bool, numbered: &[(&str, i64)]) -> v2::Package {
+        package(v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: numbered
+                .iter()
+                .map(|(name, value)| v2::EnumValue {
+                    name: (*name).to_string(),
+                    value: *value,
+                    ..Default::default()
+                })
+                .collect(),
+            open,
+            ..Default::default()
+        }))
+    }
+
+    fn added(path: &str) -> Change {
+        Change {
+            path: path.to_string(),
+            category: Category::DeclAdded,
+            verdict: Verdict::Compatible,
+            before: None,
+            after: None,
+        }
+    }
+
+    /// The folded line takes the place of the first replaced line, so the
+    /// lines around it keep their order.
+    #[test]
+    fn the_folded_line_sits_at_the_position_of_the_first_replaced_line() {
+        let (old, new) = (enum_of(3, false), enum_of(5, false));
+        let pair = vec![
+            added("veh.cluster/Before"),
+            added("veh.cluster/Mode/V3"),
+            added("veh.cluster/Between"),
+            added("veh.cluster/Mode/V4"),
+            added("veh.cluster/After"),
+        ];
+        let folded = crate::walk::fold_strict_enum_appends(pair, &old, &new);
+        let shape: Vec<(&str, Category)> = folded
+            .iter()
+            .map(|change| (change.path.as_str(), change.category))
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                ("veh.cluster/Before", Category::DeclAdded),
+                ("veh.cluster/Mode", Category::StrictEnumAppend),
+                ("veh.cluster/Between", Category::DeclAdded),
+                ("veh.cluster/After", Category::DeclAdded),
+            ]
+        );
+        assert_eq!(folded[1].after.as_deref(), Some("V3, V4"));
+    }
+
+    /// A value inserted below the highest number is not an append, so the
+    /// strict rule does not fold it and it stays a breaking `decl_added`.
+    #[test]
+    fn a_strict_insert_below_the_highest_number_stays_decl_added() {
+        let old = enum_with(false, &[("A", 0), ("C", 2)]);
+        let new = enum_with(false, &[("A", 0), ("B", 1), ("C", 2)]);
+        let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+        assert!(
+            of_category(&report, Category::StrictEnumAppend).is_empty(),
+            "{}",
+            render_text(&report)
+        );
+        let lines = of_category(&report, Category::DeclAdded);
+        assert_eq!(lines.len(), 1, "{}", render_text(&report));
+        assert_eq!(lines[0].verdict, Verdict::Breaking);
+    }
+
+    /// An append of a negative value to an open enum that held none changes
+    /// the signedness of the podbuf integer, so it draws a width change under
+    /// podbuf even though the width of the integer stays the same.
+    #[test]
+    fn an_open_append_of_a_negative_value_is_a_podbuf_width_change() {
+        let old = enum_with(true, &[]);
+        let new = enum_with(true, &[("Below", -1)]);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        let lines = of_category(&report, Category::PodbufWidthChange);
+        assert_eq!(lines.len(), 1, "{}", render_text(&report));
+        assert_eq!(lines[0].verdict, Verdict::Breaking);
+        let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+        assert_eq!(report.verdict, Verdict::Compatible);
     }
 
     /// An append to an open enum that widens the podbuf integer is still a
