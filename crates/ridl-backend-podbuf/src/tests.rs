@@ -834,3 +834,32 @@ fn a_package_whose_projection_refuses_a_head_is_left_out_of_the_check() {
     );
     assert_eq!(crate::check_c_names(&packages), Ok(()));
 }
+
+/// A strict enum, an open enum, a strict enum set and an open enum set.
+const STRICTNESS: &str = "package veh.common\n\
+enum Gear {\n  PARK = 0\n  DRIVE = 1\n}\n\
+open enum DtcStatus {\n  INACTIVE = 0\n  ACTIVE = 1\n}\n\
+enumset Warnings {\n  LOW_FUEL = 0\n}\n\
+open enumset Lamps {\n  LOW_BEAM = 0\n}\n";
+
+/// The constants of each enum and enum set follow a comment that states
+/// whether a value outside them is valid: the rule the reader applies, in
+/// the wording of the `.proto` and `.fbs` output.
+#[test]
+fn the_header_states_whether_an_enum_or_an_enum_set_is_strict_or_open() {
+    let h = generate_fixture(STRICTNESS).header_source;
+    for expected in [
+        "/* strict: a value outside these constants is not valid */\n\
+         #define VEH_COMMON_GEAR_PARK 0\n\
+         #define VEH_COMMON_GEAR_DRIVE 1\n",
+        "/* open: a value outside these constants is valid and is kept */\n\
+         #define VEH_COMMON_DTC_STATUS_INACTIVE 0\n\
+         #define VEH_COMMON_DTC_STATUS_ACTIVE 1\n",
+        "/* strict: a bit outside these constants is not valid */\n\
+         #define VEH_COMMON_WARNINGS_LOW_FUEL (UINT64_C(1) << 0)\n",
+        "/* open: a bit outside these constants is valid and is kept */\n\
+         #define VEH_COMMON_LAMPS_LOW_BEAM (UINT64_C(1) << 0)\n",
+    ] {
+        assert!(h.contains(expected), "{expected}\nnot in:\n{h}");
+    }
+}
