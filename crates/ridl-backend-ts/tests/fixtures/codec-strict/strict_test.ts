@@ -48,17 +48,9 @@ Deno.test("a declared value decodes to the member and encodes back", () => {
 });
 
 Deno.test("an undeclared enum value is refused on decode with the variant rule", () => {
-  for (const raw of [2n, -1n, 7n, 2n ** 53n, 2n ** 63n - 1n, -(2n ** 63n)]) {
+  for (const raw of [2n, -1n, 7n, 2n ** 53n, 2n ** 53n + 1n, 2n ** 63n - 1n, -(2n ** 63n)]) {
     assert.throws(() => codec.decodeDtcStatus(pack(new fb.DtcStatusBoxT(raw))), variantError);
   }
-});
-
-Deno.test("an enum value that rounds to a declared number is still refused", () => {
-  // 2^53 + 1 is not a safe integer; as a double it is 2^53, never declared.
-  assert.throws(
-    () => codec.decodeDtcStatus(pack(new fb.DtcStatusBoxT(2n ** 53n + 1n))),
-    variantError,
-  );
 });
 
 Deno.test("a struct field of a strict enum refuses an undeclared value", () => {
@@ -187,9 +179,18 @@ Deno.test("a map value of a strict enum refuses an undeclared value", () => {
   );
 });
 
-Deno.test("an absent strict enum payload with no zero member is refused with the variant rule", () => {
+const absentError = (error: unknown) =>
+  error instanceof RangeError && !(error instanceof codec.RuleError);
+
+Deno.test("an absent strict enum value with no zero member is reported as absent", () => {
   const box = new fb.ModeBoxT();
   assert.equal(box.value, null);
-  assert.throws(() => codec.decodeMode(pack(box)), variantError);
+  assert.throws(() => codec.decodeMode(pack(box)), absentError);
   assert.equal(codec.decodeMode(pack(new fb.ModeBoxT(1n))), t.Mode.LOW);
+  assert.throws(() => codec.decodeMode(pack(new fb.ModeBoxT(0n))), variantError);
+  // A map value of the same enum is reported the same way.
+  const entry = new fb.ReportTableEntryT();
+  entry.key = "a";
+  assert.equal(entry.value, null);
+  assert.throws(() => codec.decodeReport(reportBytes({ table: [entry] })), absentError);
 });

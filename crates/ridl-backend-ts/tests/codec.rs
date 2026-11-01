@@ -1407,7 +1407,7 @@ fn strict_model() -> v1::Model {
 fn the_strict_codec_module() {
     let source = module(&strict_model(), "strict.demo");
     assert!(
-        source.contains("function unpackDtcStatus(raw: number | bigint | null): t.DtcStatus {"),
+        source.contains("function unpackDtcStatus(raw: number | bigint): t.DtcStatus {"),
         "a strict enum must unpack through a checking function, got:\n{source}"
     );
     assert!(
@@ -1456,6 +1456,133 @@ fn a_foreign_strict_enum_set_is_checked_against_its_bits() {
     assert!(source.contains("(value & ~5) !== 0"), "{source}");
     assert!(
         source.contains("flags: unpack_veh_other_Thing(object.flags)"),
+        "{source}"
+    );
+}
+
+/// A foreign enum set `name` of `package`, with a one-byte width.
+fn foreign_set(model: &mut v1::Model, package: &str, name: &str, open: bool) -> v1::TypeRef {
+    let index = model.foreign.len() as u32;
+    model.foreign.push(v1::ForeignDeclaration {
+        package: package.to_string(),
+        declaration: Some(v1::Declaration {
+            name: Some(v1::Spellings {
+                declared: name.to_string(),
+                ..Default::default()
+            }),
+            visibility: v1::Visibility::Public as i32,
+            kind: Some(v1::declaration::Kind::EnumSet(v1::EnumSet {
+                open,
+                width: v1::IntWidth::U8 as i32,
+                declared_mask: 1,
+                ..Default::default()
+            })),
+            ..Default::default()
+        }),
+    });
+    v1::TypeRef {
+        reference: format!("{package}.{name}"),
+        resolved: true,
+        package: package.to_string(),
+        foreign: true,
+        index,
+        kind: v1::DeclKind::Unspecified as i32,
+    }
+}
+
+/// The model of a package `only` with one struct, `Holder`, of two fields, and
+/// no enum or enum set of its own.
+fn holder_model() -> v1::Model {
+    let output = ridlc::compile(
+        "only.ridl",
+        "package only\n\n/// A struct.\nstruct Holder {\n  /// A value.\n  a : integer [0..9]\n  /// A value.\n  b : integer [0..9]\n}\n",
+    );
+    codegen::lower(&output.package, &[])
+}
+
+/// A module whose only enum reach is a strict enum set of another package
+/// still exports `RuleError`, because the checking function throws it.
+#[test]
+fn a_foreign_strict_set_alone_exports_the_rule_error() {
+    let mut model = holder_model();
+    let reference = foreign_set(&mut model, "veh.other", "Thing", false);
+    field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(reference));
+    let source = module(&model, "only");
+    assert!(
+        source.contains("export class RuleError extends RangeError {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function unpack_veh_other_Thing(value: number): veh_other.Thing {"),
+        "{source}"
+    );
+}
+
+/// Two sets of other packages whose alias and name spell one function name
+/// are refused, for a strict set and for an open set.
+#[test]
+fn two_foreign_sets_that_spell_one_function_are_refused() {
+    for open in [false, true] {
+        let mut model = holder_model();
+        let first = foreign_set(&mut model, "veh.body", "door_flags", open);
+        let second = foreign_set(&mut model, "veh.body.door", "flags", open);
+        field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(first));
+        field(&mut model, "Holder", 1).kind = Some(v1::r#type::Kind::Named(second));
+        assert_eq!(
+            refusal(&model),
+            "`veh.body.door_flags` in package `only` collides with `veh.body.door.flags`, which the codec module also declares"
+        );
+    }
+}
+
+/// `RuleError` is a name of the file whenever a strict enum is reached, so an
+/// interface of that name is refused.
+#[test]
+fn an_interface_named_rule_error_beside_a_strict_enum_is_refused() {
+    let mut model = strict_model();
+    interface(&mut model, "Control").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "RuleError".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`RuleError` in package `strict.demo` collides with `RuleError`, which the codec module also declares"
+    );
+}
+
+/// The unpack function of a strict enum is a name of the file, so an
+/// interface of that name is refused.
+#[test]
+fn an_interface_named_as_the_unpack_of_a_strict_enum_is_refused() {
+    let mut model = strict_model();
+    interface(&mut model, "Control").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "unpackDtcStatus".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`unpackDtcStatus` in package `strict.demo` collides with `DtcStatus`, which the codec module also declares"
+    );
+}
+
+/// An enum with no zero member is held as `T | null` by `flatc`, so its
+/// unpack reports a value the buffer leaves out as absent; an enum with a zero
+/// member never receives `null`.
+#[test]
+fn a_strict_enum_with_no_zero_member_reports_an_absent_value() {
+    let source = module(&strict_model(), "strict.demo");
+    assert!(
+        source.contains("function unpackMode(raw: number | bigint | null): t.Mode {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("raw === null ? absent(\"strict.demo.Mode\", \"value\") : Number(raw)"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function unpackDtcStatus(raw: number | bigint): t.DtcStatus {"),
         "{source}"
     );
 }

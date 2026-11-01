@@ -155,11 +155,10 @@ export function decodeGearPosition(bytes: Uint8Array): t.GearPosition {
   return unpackGearPosition(fb.GearPositionBox.getRootAsGearPositionBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackGearPosition(raw: number | bigint | null): t.GearPosition {
-  const value = raw ?? 0;
-  const n = Number(value);
+function unpackGearPosition(raw: number | bigint): t.GearPosition {
+  const n = Number(raw);
   if (!([0, 1, 2, 3] as readonly number[]).includes(n)) {
-    throw new RuleError("variant", `value ${value} is not a value of veh.common.GearPosition`);
+    throw new RuleError("variant", `value ${raw} is not a value of veh.common.GearPosition`);
   }
   return n as t.GearPosition;
 }
@@ -175,11 +174,10 @@ export function decodeWarning(bytes: Uint8Array): t.Warning {
   return unpackWarning(fb.WarningBox.getRootAsWarningBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackWarning(raw: number | bigint | null): t.Warning {
-  const value = raw ?? 0;
-  const n = Number(value);
+function unpackWarning(raw: number | bigint): t.Warning {
+  const n = Number(raw);
   if (!([0, 1, 2, 3] as readonly number[]).includes(n)) {
-    throw new RuleError("variant", `value ${value} is not a value of veh.common.Warning`);
+    throw new RuleError("variant", `value ${raw} is not a value of veh.common.Warning`);
   }
   return n as t.Warning;
 }
@@ -373,10 +371,9 @@ export function decodeMode(bytes: Uint8Array): t.Mode {
 }
 
 function unpackMode(raw: number | bigint | null): t.Mode {
-  const value = raw ?? 0;
-  const n = Number(value);
+  const n = raw === null ? absent("veh.common.Mode", "value") : Number(raw);
   if (!([1, 2] as readonly number[]).includes(n)) {
-    throw new RuleError("variant", `value ${value} is not a value of veh.common.Mode`);
+    throw new RuleError("variant", `value ${raw} is not a value of veh.common.Mode`);
   }
   return n as t.Mode;
 }

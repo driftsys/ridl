@@ -59,11 +59,10 @@ export function decodeDtcStatus(bytes: Uint8Array): t.DtcStatus {
   return unpackDtcStatus(fb.DtcStatusBox.getRootAsDtcStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackDtcStatus(raw: number | bigint | null): t.DtcStatus {
-  const value = raw ?? 0;
-  const n = Number(value);
+function unpackDtcStatus(raw: number | bigint): t.DtcStatus {
+  const n = Number(raw);
   if (!([0, 1] as readonly number[]).includes(n)) {
-    throw new RuleError("variant", `value ${value} is not a value of strict.demo.DtcStatus`);
+    throw new RuleError("variant", `value ${raw} is not a value of strict.demo.DtcStatus`);
   }
   return n as t.DtcStatus;
 }
@@ -80,10 +79,9 @@ export function decodeMode(bytes: Uint8Array): t.Mode {
 }
 
 function unpackMode(raw: number | bigint | null): t.Mode {
-  const value = raw ?? 0;
-  const n = Number(value);
+  const n = raw === null ? absent("strict.demo.Mode", "value") : Number(raw);
   if (!([1, 2] as readonly number[]).includes(n)) {
-    throw new RuleError("variant", `value ${value} is not a value of strict.demo.Mode`);
+    throw new RuleError("variant", `value ${raw} is not a value of strict.demo.Mode`);
   }
   return n as t.Mode;
 }
