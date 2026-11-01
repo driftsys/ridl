@@ -65,6 +65,7 @@ mod facts;
 mod flatbuffers;
 mod lower;
 mod names;
+mod path;
 mod podbuf;
 mod resolve;
 mod unbounded;

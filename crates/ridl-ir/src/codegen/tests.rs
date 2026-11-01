@@ -5275,3 +5275,63 @@ fn a_string_stream_is_a_text_stream() {
     assert_eq!(stream.form, v1::StreamForm::Text as i32);
     assert!(stream.element.is_none());
 }
+
+/// The lowering and the podbuf walk spell one position by one path: every
+/// kind of step the lowering builds from a position (`lower::Path`) is the
+/// step the walk builds from the same position's source (`Step::of`), and
+/// the root of each kind is the same variant from both sides.
+#[test]
+fn both_walks_spell_every_step_the_same_way() {
+    use super::lower::Path;
+    use super::path::{Root, Step};
+    use crate::projection::podbuf::Source;
+
+    let a = package_a();
+    let decl = &a.decls[3]; // `Pair`
+    let b = v2::Package {
+        name: "b".to_string(),
+        ..Default::default()
+    };
+
+    // The roots: a local declaration, a foreign declaration, a named tuple.
+    let local = Path::declaration(3, decl, &decl.name);
+    assert_eq!(
+        local.key.as_deref(),
+        Some([Step::Root(Root::of(decl, &a, &a))].as_slice())
+    );
+    let foreign = Path::foreign(&a.name, &decl.name, decl.visibility);
+    assert_eq!(
+        foreign.key.as_deref(),
+        Some([Step::Root(Root::of(decl, &a, &b))].as_slice())
+    );
+    assert_eq!(Step::Root(Root::Tuple(3)).to_string(), "tuple 3");
+
+    // The steps: a struct field, a tuple position, a map key and value.
+    let at = local
+        .field("small")
+        .tuple_field("lo", 2)
+        .step("Key")
+        .step("Value")
+        .step("Element");
+    let from_sources: Vec<Step> = [
+        Source::Field {
+            name: "small".to_string(),
+            ordinal: 1,
+        },
+        Source::Position {
+            position: 2,
+            name: "lo".to_string(),
+        },
+        Source::Key,
+        Source::Value,
+        Source::Flags { index: 0 },
+        Source::Tag,
+        Source::Arm,
+    ]
+    .iter()
+    .filter_map(Step::of)
+    .collect();
+    let mut expected = vec![Step::Root(Root::Declaration("Pair".to_string()))];
+    expected.extend(from_sources);
+    assert_eq!(at.key.as_deref(), Some(expected.as_slice()));
+}

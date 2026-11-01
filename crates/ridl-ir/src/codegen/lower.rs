@@ -22,6 +22,7 @@ use super::docs::{doc_links, model_rules};
 use super::facts::{Closures, Inits, scalar_class};
 use super::flatbuffers;
 use super::names::{dotted_name, joined_camel, spellings};
+use super::path::{Root, Step};
 use super::resolve::{Scope, is_foreign};
 use super::v1;
 use crate::name::camel_case;
@@ -157,16 +158,15 @@ fn root_tuples(model: &v1::Model) -> HashSet<u32> {
 /// The path that reached one type position: where the model records the
 /// origin of a tuple found there, and the two induced names it would take.
 #[derive(Clone)]
-struct Path {
+pub(super) struct Path {
     base: Base,
     segments: Vec<String>,
-    /// The position as the podbuf walk spells it: the root it starts from,
-    /// then a struct field's name, a tuple field's position, `key` or
-    /// `value`. An array element adds nothing. The walk looks a tuple up by
-    /// this path (`super::podbuf::TupleKeys`). `None` for a position reached
-    /// from an interaction, where the walk starts at no root: the tuples it
-    /// reaches there are keyed under the induced tuple (`drain_tuples`).
-    key: Option<Vec<String>>,
+    /// The position as the podbuf walk spells it too (`super::path`). The
+    /// walk looks a tuple up by this path (`super::podbuf::TupleKeys`).
+    /// `None` for a position reached from an interaction, where the walk
+    /// starts at no root: the tuples it reaches there are keyed under the
+    /// induced tuple (`drain_tuples`).
+    pub(super) key: Option<Vec<Step>>,
     rust: String,
     wire: String,
     visibility: i32,
@@ -185,11 +185,11 @@ enum Base {
 }
 
 impl Path {
-    fn declaration(index: u32, decl: &v2::Decl, owner: &str) -> Self {
+    pub(super) fn declaration(index: u32, decl: &v2::Decl, owner: &str) -> Self {
         Self {
             base: Base::Declaration(index),
             segments: Vec::new(),
-            key: Some(vec![owner.to_string()]),
+            key: Some(vec![Step::Root(Root::Declaration(owner.to_string()))]),
             rust: camel_case(owner),
             wire: owner.to_string(),
             visibility: decl.visibility,
@@ -199,11 +199,14 @@ impl Path {
 
     /// A declaration of another package. The podbuf walk reaches it under
     /// its qualified name.
-    fn foreign(package: &str, owner: &str, visibility: i32) -> Self {
+    pub(super) fn foreign(package: &str, owner: &str, visibility: i32) -> Self {
         Self {
             base: Base::Foreign,
             segments: Vec::new(),
-            key: Some(vec![format!("{package}.{owner}")]),
+            key: Some(vec![Step::Root(Root::Foreign {
+                package: package.to_string(),
+                name: owner.to_string(),
+            })]),
             rust: camel_case(owner),
             wire: owner.to_string(),
             visibility,
@@ -241,10 +244,10 @@ impl Path {
     }
 
     /// A struct field, where both induced names begin.
-    fn field(&self, name: &str) -> Self {
+    pub(super) fn field(&self, name: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(name.to_string());
-        let key = self.key_with(Some(name.to_string()));
+        let key = self.key_with(Some(Step::Field(name.to_string())));
         Self {
             base: self.base,
             segments,
@@ -260,12 +263,12 @@ impl Path {
     /// role word. The walk path takes a map's `key` and `value`, and nothing
     /// for an array element or a role word (an interaction position has no
     /// walk path).
-    fn step(&self, word: &str) -> Self {
+    pub(super) fn step(&self, word: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(word.to_string());
         let key = self.key_with(match word {
-            "Key" => Some("key".to_string()),
-            "Value" => Some("value".to_string()),
+            "Key" => Some(Step::Key),
+            "Value" => Some(Step::Value),
             _ => None,
         });
         Self {
@@ -279,21 +282,21 @@ impl Path {
         }
     }
 
-    /// This position's walk path extended by `segment`, if it has one.
-    fn key_with(&self, segment: Option<String>) -> Option<Vec<String>> {
+    /// This position's walk path extended by `step`, if it has one.
+    fn key_with(&self, step: Option<Step>) -> Option<Vec<Step>> {
         self.key.as_ref().map(|key| {
             let mut key = key.clone();
-            key.extend(segment);
+            key.extend(step);
             key
         })
     }
 
     /// A tuple field: the Rust name extends by the field's CamelCase, the
     /// wire name by the position (design note D-2).
-    fn tuple_field(&self, name: &str, position: usize) -> Self {
+    pub(super) fn tuple_field(&self, name: &str, position: usize) -> Self {
         let mut segments = self.segments.clone();
         segments.push(name.to_string());
-        let key = self.key_with(Some(position.to_string()));
+        let key = self.key_with(Some(Step::Position(position as u32)));
         Self {
             base: self.base,
             segments,
@@ -336,7 +339,7 @@ struct TupleEntry<'a> {
     /// Every walk path that reaches this tuple (`Path::key`): the path it was
     /// lifted at, and the path of each position whose claim it serves again.
     /// A position reached from an interaction has no walk path and adds none.
-    keys: Vec<Vec<String>>,
+    keys: Vec<Vec<Step>>,
     /// What each field is documented with, in declaration order. Empty for
     /// every tuple but an induced argument struct, whose fields stand for the
     /// parameters of a call.
@@ -973,7 +976,7 @@ impl<'a> Lowering<'a> {
             // tuple inside it is reached under that root; a tuple inside a
             // foreign declaration's tuple is reached under the declaration.
             if named {
-                path.key = Some(vec![format!("tuple {index}")]);
+                path.key = Some(vec![Step::Root(Root::Tuple(index as u32))]);
             }
             let docs = self.tuples[index].docs.clone();
             let (rust, wire) = (
