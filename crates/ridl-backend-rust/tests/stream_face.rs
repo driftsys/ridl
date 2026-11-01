@@ -1561,6 +1561,48 @@ fn serve_wakes_itself_after_the_window_took_an_element() {
 }
 
 #[test]
+fn serve_does_not_wake_itself_on_the_poll_after_one_that_started_a_stream_and_used_the_budget() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        pending_before_each: 5,
+        ..Script::default()
+    });
+    let extra = Rc::new(Cell::new(0));
+    let handler = Crowded {
+        inner: rt.handler(),
+        extra: Rc::clone(&extra),
+        taken: Rc::new(Cell::new(0)),
+    };
+    let mut serve = generated::log::serve(handler, &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending());
+
+    // The first poll starts the stream and takes 32 claims, so it uses the
+    // whole budget and wakes itself for two reasons at once.
+    extra.set(31);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counters.started.get(), 1);
+
+    // The second poll has no claim to take, and the source answers `Pending`:
+    // the start of the stream was already answered by the first wake.
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    assert!(poll_with(&mut serve, &waker).is_pending());
+    assert_eq!(
+        counters.polls.get(),
+        1,
+        "the source was polled and was not ready"
+    );
+    assert_eq!(
+        wakes.count(),
+        0,
+        "the start of a stream is answered once, even when the budget was used up"
+    );
+}
+
+#[test]
 fn serve_is_woken_when_room_frees_after_its_element_found_the_window_full() {
     let rt = loopback();
     let (mut feed, counters) = Feed::new(Script {
@@ -2038,6 +2080,11 @@ fn a_blocking_serve_that_times_out_interrupts_its_running_stream_and_frees_the_m
         ))))),
         "the consumer reads the interruption after the elements already pushed"
     );
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(None),
+        "the interrupted stream is over: the drop of `Serve` released the old claim"
+    );
     drop(stream);
     drop(call);
 
@@ -2145,4 +2192,99 @@ fn serve_drives_the_source_of_each_streamed_query_of_an_interface() {
         vec![1, 2],
         "the second member's source was driven too"
     );
+}
+
+/// Two calls, one per streamed query of `Twin`, with `serve` polled until
+/// both streams run. `left_limit` and `right_limit` are the values of the
+/// sources.
+macro_rules! twin_streams {
+    ($rt:ident, $handler:ident, $serve:ident, $left:ident, $right:ident, $left_limit:expr, $right_limit:expr) => {
+        let mut provider = Pair;
+        // The handler is lent, so it outlives `serve`: a stream is interrupted
+        // only if the drop of `serve` aborts it.
+        let mut $handler = $rt.handler();
+        let mut $serve = generated::twin::serve(&mut $handler, &mut provider);
+        let mut left_client = generated::twin::Client::new($rt.caller());
+        let mut right_client = generated::twin::Client::new($rt.caller());
+        let mut $left = left_client.left(Level::new_unchecked($left_limit));
+        let mut $right = right_client.right(Level::new_unchecked($right_limit));
+        assert!(poll_once(&mut $left).is_pending());
+        assert!(poll_once(&mut $right).is_pending());
+    };
+}
+
+#[test]
+fn dropping_serve_interrupts_the_running_stream_of_every_member() {
+    let rt = loopback();
+    twin_streams!(rt, handler, serve, left_call, right_call, 100, 100);
+    for _ in 0..3 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    // Both streams run and neither has ended: the sources hold 100 values.
+    drop(serve);
+
+    let waker = ridl_rt::task::noop_waker();
+    let mut cx = Context::from_waker(&waker);
+    let interrupted = ClientError::Call(CallError::Transport(Transport::Interrupted));
+
+    let mut left = match poll_once(&mut left_call) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("`left` has its first element"),
+    };
+    let mut outcome = None;
+    for _ in 0..100 {
+        match left.poll_next(&mut cx) {
+            Poll::Ready(Some(Ok(_))) => {}
+            other => {
+                outcome = Some(other);
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        outcome,
+        Some(Poll::Ready(Some(Err(interrupted)))),
+        "`left` reads Interrupted"
+    );
+
+    let mut right = match poll_once(&mut right_call) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("`right` has its first element"),
+    };
+    let mut outcome = None;
+    for _ in 0..100 {
+        match right.poll_next(&mut cx) {
+            Poll::Ready(Some(Ok(_))) => {}
+            other => {
+                outcome = Some(other);
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        outcome,
+        Some(Poll::Ready(Some(Err(interrupted)))),
+        "`right` reads Interrupted"
+    );
+}
+
+#[test]
+fn serve_wakes_itself_when_only_the_second_member_pushed() {
+    let rt = loopback();
+    // `left` has no value and ends at its first drive; `right` has many.
+    twin_streams!(rt, handler, serve, left_call, right_call, 0, 100);
+    // The first poll starts both streams; the second ends `left`'s and
+    // pushes the first element of `right`.
+    for _ in 0..2 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    assert!(poll_with(&mut serve, &waker).is_pending());
+    assert_eq!(
+        wakes.count(),
+        1,
+        "only `right` took an element, and that alone wakes the future"
+    );
+    drop((left_call, right_call));
 }
