@@ -943,6 +943,85 @@ impl ::core::default::Default for Failure {
         Failure::Busy
     }
 }
+/// A lamp state that a newer producer may extend.
+///
+///A value outside the declared ones is valid and is read as `Unknown`, which holds the integer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Lamp {
+    /// Off.
+    Off,
+    /// On.
+    On,
+    /// An undeclared value, kept as the integer the wire carried.
+    Unknown(UnknownLamp),
+}
+///An undeclared value of `Lamp`: the integer the wire carried, which `raw` reads. Only `From<i64>` for `Lamp` builds one, and it builds one for no declared value.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub struct UnknownLamp(::core::primitive::i64);
+impl UnknownLamp {
+    /// The integer the wire carried.
+    pub const fn raw(self) -> ::core::primitive::i64 {
+        self.0
+    }
+}
+impl ::core::convert::From<::core::primitive::i64> for Lamp {
+    fn from(value: ::core::primitive::i64) -> Self {
+        match value {
+            0 => Self::Off,
+            1 => Self::On,
+            other => Self::Unknown(UnknownLamp(other)),
+        }
+    }
+}
+impl ::core::convert::From<Lamp> for ::core::primitive::i64 {
+    fn from(value: Lamp) -> Self {
+        match value {
+            Lamp::Off => 0,
+            Lamp::On => 1,
+            Lamp::Unknown(unknown) => unknown.0,
+        }
+    }
+}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for Lamp {
+    fn default() -> Self {
+        Lamp::Off
+    }
+}
+/// Lamps that a newer producer may extend.
+///
+///A bit outside the declared ones is valid and is kept; `unknown_bits` returns those bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Lamps(::core::primitive::i64);
+impl Lamps {
+    /// The low beam.
+    pub const LOW: Lamps = Lamps(1 << 0);
+    /// The high beam.
+    pub const HIGH: Lamps = Lamps(1 << 1);
+    /// The bits of this value that no declared bit names: 0 when every set bit is declared.
+    pub const fn unknown_bits(self) -> ::core::primitive::i64 {
+        const DECLARED_MASK: ::core::primitive::i64 = 3;
+        self.0 & !DECLARED_MASK
+    }
+}
+impl ::core::convert::From<::core::primitive::i64> for Lamps {
+    fn from(value: ::core::primitive::i64) -> Self {
+        Self(value)
+    }
+}
+impl ::core::convert::From<Lamps> for ::core::primitive::i64 {
+    fn from(value: Lamps) -> Self {
+        value.0
+    }
+}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for Lamps {
+    fn default() -> Self {
+        Lamps(0)
+    }
+}
 /// A struct that nests inside `Panel`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Inner {
@@ -1054,6 +1133,26 @@ pub struct Panel {
     /// - range 0 ..= 200
     #[deprecated(note = "read `count`")]
     pub legacy: ::core::option::Option<Count>,
+}
+/// An open enum and an open enum set, alone and in an array.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Lights {
+    pub lamp: Lamp,
+    pub lamps: Lamps,
+    /// # Rules
+    ///
+    /// - count 0 ..= 4
+    pub trail: ::std::vec::Vec<Lamp>,
+}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for Lights {
+    fn default() -> Self {
+        Lights {
+            lamp: <Lamp as ::core::default::Default>::default(),
+            lamps: <Lamps as ::core::default::Default>::default(),
+            trail: ::std::vec::Vec::new(),
+        }
+    }
 }
 /// A union with data arms only.
 #[derive(Debug, Clone, PartialEq)]
@@ -2503,6 +2602,246 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Failure {
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_Failure(__view.buf, __view.table)
+    }
+}
+/// A `Lamp` value in FlatBuffers bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct LampFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for LampFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> LampFbView<'a> {
+    /// The value the bytes hold. `Lamp` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Lamp {
+        __ridl_fb_decode_Lamp(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Lamp(
+    value: &Lamp,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 8u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                },
+            },
+        ];
+        builder.push_table(16usize, 8usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Lamp(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Lamp(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Lamp {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            <Lamp as ::core::convert::From<
+                ::core::primitive::i64,
+            >>::from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+        }
+        _ => <Lamp as ::core::convert::From<::core::primitive::i64>>::from(0i64),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Lamp {
+    /// The largest FlatBuffers buffer any legal `Lamp` encodes to: 50 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
+    type View<'a> = LampFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, LampFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Lamp(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: LampFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<LampFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Lamp(buf, table)?;
+        ::core::result::Result::Ok(LampFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Lamp(__view.buf, __view.table)
+    }
+}
+/// A `Lamps` value in FlatBuffers bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct LampsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for LampsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> LampsFbView<'a> {
+    /// The value the bytes hold. `Lamps` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Lamps {
+        __ridl_fb_decode_Lamps(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Lamps(
+    value: &Lamps,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    if ::core::primitive::u8::try_from(::core::primitive::i64::from(__s))
+                        .is_err()
+                    {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                                type_name: ::core::option::Option::Some("Lamps"),
+                                rule: ::ridl_rt::payload::Rule::Range,
+                            }),
+                        );
+                    }
+                    ::ridl_rt::flatbuffers::Field::U8(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::u8,
+                    )
+                },
+            },
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Lamps(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Lamps(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Lamps {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            <Lamps as ::core::convert::From<
+                ::core::primitive::i64,
+            >>::from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                ),
+            )
+        }
+        _ => Lamps(0i64),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Lamps {
+    /// The largest FlatBuffers buffer any legal `Lamps` encodes to: 43 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
+    type View<'a> = LampsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, LampsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Lamps(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: LampsFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<LampsFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Lamps(buf, table)?;
+        ::core::result::Result::Ok(LampsFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Lamps(__view.buf, __view.table)
     }
 }
 /// A `Inner` value in FlatBuffers bytes, read in place without copying it.
@@ -4250,6 +4589,299 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Panel {
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_Panel(__view.buf, __view.table)
+    }
+}
+/// A `Lights` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct LightsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for LightsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> LightsFbView<'a> {
+    /// Reads `Lights`'s `lamp` field in place.
+    pub fn lamp(&self) -> Lamp {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 8usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                <Lamp as ::core::convert::From<
+                    ::core::primitive::i64,
+                >>::from(::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64))
+            }
+            _ => <Lamp as ::core::convert::From<::core::primitive::i64>>::from(0i64),
+        }
+    }
+    /// Reads `Lights`'s `lamps` field in place.
+    pub fn lamps(&self) -> Lamps {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 1usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                <Lamps as ::core::convert::From<
+                    ::core::primitive::i64,
+                >>::from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8),
+                    ),
+                )
+            }
+            _ => Lamps(0i64),
+        }
+    }
+    /// Reads `Lights`'s `trail` field in place.
+    pub fn trail(&self) -> ::std::vec::Vec<Lamp> {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 2u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        {
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 8usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            let mut __out = ::std::vec::Vec::with_capacity(__v.len);
+            for __i in 0..__v.len {
+                let __at = __v.element(__i, 8usize);
+                __out
+                    .push(
+                        <Lamp as ::core::convert::From<
+                            ::core::primitive::i64,
+                        >>::from(
+                            ::ridl_rt::flatbuffers::read_i64(self.buf, __at)
+                                .unwrap_or(0i64),
+                        ),
+                    );
+            }
+            __out
+        }
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Lights(
+    value: &Lights,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 3usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 8u16,
+        value: {
+            let __s = value.lamp;
+            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 16u16,
+        value: {
+            let __s = value.lamps;
+            if ::core::primitive::u8::try_from(::core::primitive::i64::from(__s))
+                .is_err()
+            {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Lamps"),
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    }),
+                );
+            }
+            ::ridl_rt::flatbuffers::Field::U8(
+                ::core::primitive::i64::from(__s) as ::core::primitive::u8,
+            )
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 2u16,
+        offset: 20u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __c = &value.trail;
+            if __c.len() > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Lights"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
+                __c.len() * 8usize,
+            );
+            for __e in __c.iter() {
+                let __s = *__e;
+                let __r = ::core::primitive::i64::from(__s);
+                __bytes.extend_from_slice(&__r.to_le_bytes());
+            }
+            builder.push_vector(&__bytes, 8usize)?
+        }),
+    };
+    __n += 1;
+    builder.push_table(24usize, 8usize, 3u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Lights(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            8usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::ridl_rt::flatbuffers::read_i64(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 2u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 8usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            if __v.len > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Lights"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            for __i in 0..__v.len {
+                let __at = __v.element(__i, 8usize);
+                ::ridl_rt::flatbuffers::read_i64(buf, __at)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            }
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Lights(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Lights {
+    Lights {
+        lamp: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                <Lamp as ::core::convert::From<
+                    ::core::primitive::i64,
+                >>::from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            }
+            _ => <Lamp as ::core::convert::From<::core::primitive::i64>>::from(0i64),
+        },
+        lamps: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 1usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                <Lamps as ::core::convert::From<
+                    ::core::primitive::i64,
+                >>::from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                    ),
+                )
+            }
+            _ => Lamps(0i64),
+        },
+        trail: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 2u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            {
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 8usize)
+                    .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                        len: 0,
+                        first: 0,
+                    });
+                let mut __out = ::std::vec::Vec::with_capacity(__v.len);
+                for __i in 0..__v.len {
+                    let __at = __v.element(__i, 8usize);
+                    __out
+                        .push(
+                            <Lamp as ::core::convert::From<
+                                ::core::primitive::i64,
+                            >>::from(
+                                ::ridl_rt::flatbuffers::read_i64(buf, __at).unwrap_or(0i64),
+                            ),
+                        );
+                }
+                __out
+            }
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Lights {
+    /// The largest FlatBuffers buffer any legal `Lights` encodes to: 116 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 116usize;
+    type Buffer = [::core::primitive::u8; 116usize];
+    const BUFFER: Self::Buffer = [0u8; 116usize];
+    type View<'a> = LightsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, LightsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Lights(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: LightsFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<LightsFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Lights(buf, table)?;
+        ::core::result::Result::Ok(LightsFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Lights(__view.buf, __view.table)
     }
 }
 /// A `Outcome` value in FlatBuffers bytes, read in place without copying it.
