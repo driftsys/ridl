@@ -6,9 +6,10 @@
 //! is every FlatBuffers root of the package with a finite bound, except an
 //! internal one, whose type `<base>.ts` does not export. A private converter
 //! pair `pack<Name>` and `unpack<Name>` is written for each struct, union and
-//! induced tuple a payload type reaches, and an `unpack<Name>` that refuses a
-//! value the declaration does not name for each strict enum and strict enum
-//! set it reaches. An induced tuple of an interaction
+//! induced tuple a payload type reaches. Each strict enum and strict enum set
+//! it reaches gets an `unpack<Name>` that refuses a value the declaration does
+//! not name, and each open enum and open enum set gets a pair `pack<Name>` and
+//! `unpack<Name>` that keeps every value. An induced tuple of an interaction
 //! is exported as an `interface`, or as the type alias
 //! `Record<string, never>` when it has no field. The module also exports the
 //! `RuleError` class when it reaches an enum or an enum set, the catalog's name

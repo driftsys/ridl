@@ -189,6 +189,8 @@ function packPick(value: t.Pick): fb.PickT {
       return new fb.PickT(fb.PickUnion.status, new fb.PickStatusBoxT(BigInt(value.value)));
     case "flags":
       return new fb.PickT(fb.PickUnion.flags, new fb.PickFlagsBoxT(value.value));
+    case "mode":
+      return new fb.PickT(fb.PickUnion.mode, new fb.PickModeBoxT(BigInt(value.value)));
   }
 }
 function unpackPick(object: fb.PickT): t.Pick {
@@ -197,6 +199,8 @@ function unpackPick(object: fb.PickT): t.Pick {
       return { kind: "status", value: unpackDtcStatus((object.value as fb.PickStatusBoxT).value) };
     case fb.PickUnion.flags:
       return { kind: "flags", value: unpackFlags((object.value as fb.PickFlagsBoxT).value) };
+    case fb.PickUnion.mode:
+      return { kind: "mode", value: unpackMode((object.value as fb.PickModeBoxT).value) };
     default:
       throw new RangeError("union strict.demo.Pick carries no arm");
   }

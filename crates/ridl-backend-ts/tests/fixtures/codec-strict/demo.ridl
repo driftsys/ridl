@@ -6,7 +6,7 @@ enum DtcStatus {
   ACTIVE   = 1
 }
 
-/// A strict enum with no zero member, so an absent field reads as 0.
+/// A strict enum with no zero member, so an absent value is reported as absent.
 enum Mode {
   LOW  = 1
   HIGH = 2
@@ -45,6 +45,7 @@ struct Report {
 union Pick {
   status : DtcStatus
   flags  : Flags
+  mode   : Mode
 }
 
 /// An interface whose command takes strict enums as parameters, so the
