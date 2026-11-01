@@ -361,6 +361,7 @@ fn enum_with_discriminants() {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )];
     insta::assert_snapshot!(ts_for(decls));
@@ -374,6 +375,7 @@ fn enumset_standalone_form() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )];
     insta::assert_snapshot!(ts_for(decls));
@@ -390,6 +392,7 @@ fn enumset_derived_form() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: warning_bits(),
                 reserved: Vec::new(),
+                open: false,
             }),
         ),
         public_decl(
@@ -398,6 +401,7 @@ fn enumset_derived_form() {
                 backing_enum: Some("Warning".to_string()),
                 bits: warning_bits(),
                 width: v2::IntWidth::U8 as i32,
+                open: false,
             }),
         ),
     ];
@@ -415,6 +419,7 @@ fn enumset_u64_width_brands_bigint() {
             backing_enum: None,
             bits: vec![enum_value("LOW", 0), enum_value("TOP", 63)],
             width: v2::IntWidth::U64 as i32,
+            open: false,
         }),
     )];
     let source = ts_for(decls);
@@ -873,6 +878,7 @@ fn enum_init_prefers_the_zero_discriminant() {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: vec![enum_value("SLOW", 5), enum_value("FAST", 9)],
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(
@@ -889,6 +895,7 @@ fn enumset_init_is_the_empty_set() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -912,6 +919,7 @@ fn enum_discriminant_beyond_2_53_is_unrepresentable() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: vec![enum_value("TOO_BIG", 9_007_199_254_740_993)],
                 reserved: Vec::new(),
+                open: false,
             }),
         )],
     ));
@@ -937,6 +945,7 @@ fn enumset_bit_beyond_31_needs_a_64_bit_width() {
                 backing_enum: None,
                 bits: vec![enum_value("WAY_UP", 40)],
                 width: v2::IntWidth::U8 as i32,
+                open: false,
             }),
         )],
     ));
@@ -1111,6 +1120,7 @@ fn appendix_b() -> v2::Package {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -1118,6 +1128,7 @@ fn appendix_b() -> v2::Package {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: warning_bits(),
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -1126,6 +1137,7 @@ fn appendix_b() -> v2::Package {
             backing_enum: Some("Warning".to_string()),
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     ));
 
@@ -1620,6 +1632,7 @@ fn documented_members() -> Vec<v2::Decl> {
                 enum_value("DRIVE", 1),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     );
     let low_fuel_doc = "Raised with [Warnings.DOOR_OPEN] off.";
@@ -1640,6 +1653,7 @@ fn documented_members() -> Vec<v2::Decl> {
             backing_enum: None,
             bits,
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     );
     let arm_doc = "A value in [Speed], see [Measurement.fault].";

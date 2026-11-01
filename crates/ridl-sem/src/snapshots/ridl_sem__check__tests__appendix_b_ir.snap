@@ -265,7 +265,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
             "since": []
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     },
     {
@@ -313,7 +314,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
             "since": []
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     },
     {
@@ -362,7 +364,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
             "since": []
           }
         ],
-        "width": "INT_WIDTH_U8"
+        "width": "INT_WIDTH_U8",
+        "open": false
       }
     },
     {

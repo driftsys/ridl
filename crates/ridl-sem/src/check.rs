@@ -3350,7 +3350,18 @@ impl Checker<'_> {
                 since: doc_info.since,
             });
         }
-        v2::EnumDef { values, reserved }
+        if decl.is_open() && values.is_empty() {
+            self.warning(
+                DiagCode::TYPL_413,
+                name_range(decl),
+                "open enum declares no value: every value is unknown".to_owned(),
+            );
+        }
+        v2::EnumDef {
+            values,
+            reserved,
+            open: decl.is_open(),
+        }
     }
 
     fn lower_enum_set(&mut self, decl: &ast::EnumSetDef) -> v2::EnumSetDef {
@@ -3492,6 +3503,7 @@ impl Checker<'_> {
             backing_enum,
             bits,
             width: v2::IntWidth::from(enumset_width(highest)) as i32,
+            open: decl.is_open(),
         }
     }
 
@@ -6542,6 +6554,35 @@ mod tests {
             panic!("`{name}` is not an enum def");
         };
         def
+    }
+
+    fn enum_set_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::EnumSetDef {
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(checked, name).kind else {
+            panic!("`{name}` is not an enum set def");
+        };
+        def
+    }
+
+    #[test]
+    fn open_is_lowered_on_enum_and_enumset() {
+        let checked = check_source(
+            "p",
+            "package p\nopen enum E { A = 0 }\nopen enumset F : E\nenum G { A = 0 }\nenumset H : G\n",
+        );
+        assert!(enum_def(&checked, "E").open);
+        assert!(enum_set_def(&checked, "F").open);
+        assert!(!enum_def(&checked, "G").open);
+        assert!(!enum_set_def(&checked, "H").open);
+    }
+
+    #[test]
+    fn an_open_enum_without_values_is_warned() {
+        let empty = check_source("p", "package p\nopen enum E {}\n");
+        assert_eq!(codes(&empty), ["TYPL-413"]);
+        let named = check_source("p", "package p\nopen enum E { A = 0 }\n");
+        assert_eq!(codes(&named), Vec::<&str>::new());
+        let strict = check_source("p", "package p\nenum E {}\n");
+        assert_eq!(codes(&strict), Vec::<&str>::new());
     }
 
     fn union_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::UnionDef {

@@ -189,3 +189,4 @@ TYPL-409 warning lint=malformed-doc-tag default=warn
 TYPL-410 warning lint=doc-comment-style default=allow
 TYPL-411 info lint=unused-lint-directive default=info
 TYPL-412 info lint=malformed-lint-directive default=info
+TYPL-413 warning lint=open-enum-without-values default=warn

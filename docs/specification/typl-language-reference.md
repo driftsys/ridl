@@ -993,6 +993,45 @@ enum GearPosition {
 - First value conventionally `= 0` for proto3 compatibility
 - String-backed enums are not supported in v0.1; planned for v0.2 (§17.1)
 
+### 8.1 Strict and open enums
+
+An `enum` is **strict** by default: a value that the declaration does not name
+is invalid. The modifier `open` before `enum` makes it **open**:
+
+```ridl
+open enum DtcStatus {
+  INACTIVE = 0
+  ACTIVE   = 1
+}
+```
+
+- An open enum accepts any value that fits the integer of its encoding. A value
+  that the declaration does not name is the **unknown** case and carries the raw
+  integer.
+- The language layer integer is `int64`, as for every enum. On a wire, the
+  integer is the one the encoding carries (for example `int32` for proto3).
+- The init value does not change: the member whose value is 0, else the lowest
+  declared value. An unknown value is never an init value.
+- An open enum that declares no value draws TYPL-413
+  (`open-enum-without-values`, a warning): no value has a name, so every value
+  is unknown.
+- `open` is a contextual keyword; it is recognised only directly before `enum`
+  or `enumset`.
+
+**Evolution.**
+
+- Appending a value to an open enum is compatible.
+- Appending a value to a strict enum is breaking for every encoding, because a
+  reader that was built before the append refuses the new value.
+- Removing a value, or giving a value another number, is breaking, open or
+  strict.
+- Changing a strict enum to an open enum is compatible on the wire, because
+  every value that was valid stays valid. A consumer that matches the enum
+  exhaustively in a language with exhaustive matching must handle the unknown
+  case.
+- Changing an open enum to a strict enum is breaking, because a producer may
+  already send a value that the strict reader refuses.
+
 **Identity is the value, not the position.** An `enum` value's wire identity is
 the explicit number it declares, and nothing about it depends on where the value
 sits in the body. Reordering the members of an `enum` body therefore changes
@@ -1023,6 +1062,14 @@ An `enumset` bit's identity is the bit position it declares, not its position in
 the body, so reordering the members of an `enumset` body changes nothing on any
 wire, and `ridl diff` reports it as `enum_reordered`, compatible — the same rule
 as §8's, for the same reason.
+
+An `enumset` is **strict** by default: a bit that the declaration does not name
+is invalid. The modifier `open` before `enumset` makes it **open**: any bit that
+fits the width is valid, an undeclared bit is kept, and the named flags are the
+declared bits that are set. The rules of §8.1 for evolution apply to bits in
+place of values: appending a bit to an open enumset is compatible, appending a
+bit to a strict enumset is breaking for every encoding, and removing a bit or
+moving it to another position is breaking.
 
 ### 9.1 Standalone Form
 
@@ -1480,6 +1527,7 @@ a `.ridl` file, as its row says:
 | TYPL-410 | doc comment written as `/** */` — `allow` by default                                                                                                                     | warning  |
 | TYPL-411 | lint directive allows a lint that no diagnostic in its scope raises                                                                                                      | info     |
 | TYPL-412 | malformed lint directive — a word other than `allow`, no lint name, a name that is not a lint name, a name of a directive lint, no reason, or no declaration to apply to | info     |
+| TYPL-413 | open enum that declares no value — no value has a name, so every value is unknown                                                                                        | warning  |
 
 ---
 

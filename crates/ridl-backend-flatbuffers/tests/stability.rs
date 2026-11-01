@@ -341,6 +341,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         } else {
             Vec::new()
         },
+        open: false,
     };
 
     let flags = v2::EnumSetDef {
@@ -356,6 +357,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
             })
             .collect(),
         width: v2::IntWidth::U32 as i32,
+        open: false,
     };
 
     let choice = v2::UnionDef {

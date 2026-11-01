@@ -630,6 +630,12 @@ diag_codes! {
         /// `ridl_core::lint::report_lint_directives`.
         TYPL_412 = "TYPL-412", Info,
             "malformed lint directive", lint = "malformed-lint-directive";
+
+        /// An `open enum` that declares no value (typl §8): no value has a
+        /// name, so every value is unknown. Warning. Emitted by the checker
+        /// (`ridl_sem::check`).
+        TYPL_413 = "TYPL-413", Warning,
+            "open enum declares no value", lint = "open-enum-without-values";
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -2491,6 +2497,7 @@ mod tests {
             ("TYPL-410", "doc-comment-style"),
             ("TYPL-411", "unused-lint-directive"),
             ("TYPL-412", "malformed-lint-directive"),
+            ("TYPL-413", "open-enum-without-values"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),

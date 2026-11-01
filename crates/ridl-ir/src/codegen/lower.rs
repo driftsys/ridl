@@ -648,6 +648,7 @@ impl<'a> Lowering<'a> {
             bits: def.bits.iter().map(enum_value).collect(),
             width: def.width,
             declared_mask: mask,
+            open: def.open,
         }
     }
 
@@ -2010,6 +2011,7 @@ fn enum_body(def: &v2::EnumDef) -> v1::Enum {
         retired: def.reserved.iter().map(retired).collect(),
         zero_member: zero.map(|index| index as u32),
         init_member: zero.or(lowest).map(|index| index as u32),
+        open: def.open,
     }
 }
 

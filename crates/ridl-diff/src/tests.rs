@@ -2206,6 +2206,7 @@ fn enum_with_reserved(members: &[(&str, i64)], retired: &[i64]) -> v2::decl::Kin
                 ..Default::default()
             })
             .collect(),
+        open: false,
     })
 }
 

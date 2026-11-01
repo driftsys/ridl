@@ -670,6 +670,7 @@ fn a_union_arm_typed_by_an_enum_set_gets_a_wrapper_table() {
                     backing_enum: None,
                     bits: enum_values(vec![("LOW_FUEL", 0)]),
                     width: v2::IntWidth::U8 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -1073,6 +1074,7 @@ fn enum_package(name: &str, values: Vec<(&str, i64)>) -> v2::Package {
             kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: enum_values(values),
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -1110,6 +1112,7 @@ fn enum_set_and_field(name: &str, bits: Vec<(&str, i64)>) -> v2::Package {
                     backing_enum: None,
                     bits: enum_values(bits),
                     width: v2::IntWidth::U8 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },

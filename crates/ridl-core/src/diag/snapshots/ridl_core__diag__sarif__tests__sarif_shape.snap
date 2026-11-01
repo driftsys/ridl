@@ -672,6 +672,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-413",
+              "name": "open-enum-without-values",
+              "shortDescription": {
+                "text": "open enum declares no value"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RIDL-100",
               "name": "missing-timing",
               "shortDescription": {
@@ -1785,7 +1795,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 71,
+          "ruleIndex": 72,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1850,7 +1860,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 181,
+          "ruleIndex": 182,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

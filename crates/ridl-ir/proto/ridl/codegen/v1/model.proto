@@ -289,6 +289,8 @@ message Enum {
   optional uint32 zero_member = 3;
   // Index: the zero member, else the lowest value (typl §5.8).
   optional uint32 init_member = 4;
+  // `EnumDef.open`.
+  bool open = 5;
 }
 
 message EnumValue {
@@ -312,6 +314,8 @@ message EnumSet {
   IntWidth width = 3;
   // OR of `1 << bit` over the bits in 0..=63.
   int64 declared_mask = 4;
+  // `EnumSetDef.open`.
+  bool open = 5;
 }
 
 message Union {

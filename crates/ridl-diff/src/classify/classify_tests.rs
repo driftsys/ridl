@@ -306,6 +306,7 @@ fn enum_decl(name: &str, values: Vec<v2::EnumValue>, reserved: Vec<i64>) -> v2::
                     value: Some(value),
                 })
                 .collect(),
+            open: false,
         }),
     )
 }
@@ -2206,6 +2207,7 @@ fn enum_set_decl(name: &str) -> v2::Decl {
             backing_enum: None,
             bits: vec![enum_value("A", 0), enum_value("B", 1)],
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )
 }

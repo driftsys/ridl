@@ -224,6 +224,7 @@ fn gear_position_decl() -> v2::Decl {
                 enum_value("NEUTRAL", 9),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )
 }
@@ -237,6 +238,7 @@ fn features_decl() -> v2::Decl {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )
 }
@@ -2089,6 +2091,7 @@ fn enum_with_discriminants() {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )];
     insta::assert_snapshot!(rust_with_codec(decls));
@@ -2104,6 +2107,7 @@ fn an_enum_variant_is_spelled_in_pascal_case() {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: warning_bits(),
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(source.contains("CheckEngine = 1"), "{source}");
@@ -2125,6 +2129,7 @@ fn an_empty_pascal_spelling_is_derived_from_snake() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: warning_bits(),
                 reserved: Vec::new(),
+                open: false,
             }),
         )],
     );
@@ -2177,6 +2182,7 @@ fn an_enum_value_outside_the_typl_convention_compiles() {
                 enum_value("VIEW", 4),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(rust_source.contains("Self_ = 0"), "{rust_source}");
@@ -2284,6 +2290,7 @@ fn an_enumset_bit_named_like_a_generated_item_compiles() {
                 enum_value("Error", 2),
             ],
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
 
@@ -2340,6 +2347,7 @@ fn enumset_standalone_form() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )];
     insta::assert_snapshot!(rust_with_codec(decls));
@@ -2394,6 +2402,7 @@ fn a_bit_position_outside_the_int64_domain_does_not_panic_codegen() {
                 enum_value("NEGATIVE", -1),
             ],
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -2414,6 +2423,7 @@ fn the_highest_declared_bit_is_in_domain() {
             backing_enum: None,
             bits: vec![enum_value("TOP", 63)],
             width: v2::IntWidth::U64 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -2501,6 +2511,7 @@ fn enumset_derived_form() {
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: warning_bits(),
                 reserved: Vec::new(),
+                open: false,
             }),
         ),
         public_decl(
@@ -2509,6 +2520,7 @@ fn enumset_derived_form() {
                 backing_enum: Some("Warning".to_string()),
                 bits: warning_bits(),
                 width: v2::IntWidth::U8 as i32,
+                open: false,
             }),
         ),
     ];
@@ -3216,6 +3228,7 @@ fn enumset_default_is_the_empty_set() {
             backing_enum: None,
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
@@ -3232,6 +3245,7 @@ fn enum_default_prefers_the_zero_discriminant() {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: vec![enum_value("SLOW", 5), enum_value("FAST", 9)],
             reserved: Vec::new(),
+            open: false,
         }),
     )]);
     assert!(
@@ -3322,6 +3336,7 @@ fn appendix_b() -> v2::Package {
                 enum_value("NEUTRAL", 3),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -3329,6 +3344,7 @@ fn appendix_b() -> v2::Package {
         v2::decl::Kind::EnumDef(v2::EnumDef {
             values: warning_bits(),
             reserved: Vec::new(),
+            open: false,
         }),
     ));
     decls.push(public_decl(
@@ -3337,6 +3353,7 @@ fn appendix_b() -> v2::Package {
             backing_enum: Some("Warning".to_string()),
             bits: warning_bits(),
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     ));
 
@@ -7139,6 +7156,7 @@ fn doc_block_on_enum_values_and_union_arms() {
                 enum_value("DRIVE", 1),
             ],
             reserved: Vec::new(),
+            open: false,
         }),
     );
     let arm_doc = "A value in [Speed], see [Measurement.fault].";
@@ -7513,6 +7531,7 @@ fn an_enum_set_bit_carries_its_doc() {
             backing_enum: None,
             bits,
             width: v2::IntWidth::U8 as i32,
+            open: false,
         }),
     )]);
     assert!(
