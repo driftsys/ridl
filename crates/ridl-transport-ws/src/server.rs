@@ -17,13 +17,15 @@ use std::time::{Duration, Instant};
 use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
 use ridl_rt::sample::{Envelope, Timestamp};
 
-pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
+pub use backend::{Backend, Described, Polling, Scanning, Streaming, TableMismatch};
 pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
 #[cfg(feature = "descriptor")]
 pub use descriptor::DescriptorError;
 pub use members::MemberTable;
 
-use crate::frame::{Frame, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES};
+use crate::frame::{
+    Frame, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES, FRAME_VERSION, FRAME_VERSION_3,
+};
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
 
@@ -248,7 +250,7 @@ const LINGER: Duration = Duration::from_millis(100);
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
-pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config) -> Ended {
+pub fn serve<C: Connection, B: Backend>(mut conn: C, mut backend: B, config: &Config) -> Ended {
     if let Some((target, needed)) = backend
         .members()
         .and_then(|table| limit_short(table, config.max_message_bytes()))
@@ -258,8 +260,16 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config
         }
         return Ended::ConfigRefused;
     }
+    // Frame version 3 carries streams, so the server offers it only when it
+    // can serve them: the ports carry streams and a member table says which
+    // members reply with one.
+    let max_version = if backend.streams().is_some() && backend.members().is_some() {
+        FRAME_VERSION_3
+    } else {
+        FRAME_VERSION
+    };
     let mut session = Session::new(backend, config);
-    let ended = run(&mut conn, &mut session, config);
+    let ended = run(&mut conn, &mut session, config, max_version);
     session.close();
     ended
 }
@@ -341,13 +351,18 @@ fn run<C: Connection, B: Backend>(
     conn: &mut C,
     session: &mut Session<B>,
     config: &Config,
+    max_version: u32,
 ) -> Ended {
     if let Err(e) = conn.set_write_timeout(Some(config.liveness_timeout)) {
         return Ended::Io(e.kind());
     }
     let deadline = Instant::now() + config.liveness_timeout;
     let accept_origin = |origin: Option<&str>| config.origin_accepted(origin);
-    match ws::handshake(&mut Deadline { conn, at: deadline }, accept_origin) {
+    match ws::handshake(
+        &mut Deadline { conn, at: deadline },
+        max_version,
+        accept_origin,
+    ) {
         Ok(Upgrade::Accepted(frame_version)) => session.upgraded(frame_version),
         Ok(Upgrade::Rejected | Upgrade::Forbidden) => {
             linger(conn);

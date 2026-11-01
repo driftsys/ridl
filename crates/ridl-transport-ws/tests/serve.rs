@@ -20,10 +20,11 @@ use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
     decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Reason,
-    Target, BLOCK_BYTES, FRAME_VERSION, SUBPROTOCOL,
+    StreamOutcome, Target, BLOCK_BYTES, FRAME_VERSION, FRAME_VERSION_3, SUBPROTOCOL,
 };
 use ridl_transport_ws::{
     serve, Backend, Config, Connection, Described, Ended, MemberTable, Note, Polling, Scanning,
+    Streaming,
 };
 use tungstenite::client::IntoClientRequest;
 use tungstenite::protocol::frame::coding::CloseCode;
@@ -164,6 +165,24 @@ fn connect(stream: TcpStream, protocol: &str) -> Result<WebSocket<TcpStream>, tu
             tungstenite::HandshakeError::Failure(e) => e,
             tungstenite::HandshakeError::Interrupted(_) => panic!("a blocking stream"),
         })
+}
+
+/// The same, with the subprotocol the server selected.
+fn connect_selected(stream: TcpStream, protocol: &str) -> (WebSocket<TcpStream>, Option<String>) {
+    let mut request = "ws://localhost/".into_client_request().unwrap();
+    request
+        .headers_mut()
+        .insert("Sec-WebSocket-Protocol", protocol.parse().unwrap());
+    match tungstenite::client(request, stream) {
+        Ok((ws, response)) => {
+            let selected = response
+                .headers()
+                .get("Sec-WebSocket-Protocol")
+                .map(|v| v.to_str().unwrap().to_owned());
+            (ws, selected)
+        }
+        Err(_) => panic!("the handshake failed"),
+    }
 }
 
 fn encode(frame: Frame<'_>) -> Vec<u8> {
@@ -1598,4 +1617,97 @@ fn a_client_that_reads_a_large_fixed_and_stops_reading_ends_at_the_liveness_time
     sender.join().unwrap();
     assert_eq!(ended, Ended::LivenessTimeout);
     assert!(elapsed < bound, "ended after {elapsed:?}, over {bound:?}");
+}
+
+const ALL_VERSIONS: &str = "ridl-ws-v3, ridl-ws-v2, ridl-ws-v1";
+
+/// A client that offers every version against `backend`: the subprotocol
+/// the server selects, after the client attaches with the frame version of
+/// that subprotocol.
+fn selected_against<B: Backend + Send + 'static>(backend: B) -> Option<String> {
+    let (server, client) = pair();
+    let handle = spawn(server, backend, config());
+    let (mut ws, selected) = connect_selected(client, ALL_VERSIONS);
+    let version = match selected.as_deref() {
+        Some("ridl-ws-v3") => FRAME_VERSION_3,
+        Some("ridl-ws-v2") => FRAME_VERSION,
+        other => panic!("unexpected subprotocol {other:?}"),
+    };
+    let attach = Attach::new(version, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Accepted)
+    );
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    selected
+}
+
+/// A backend that serves streams and has a member table.
+fn streams_backend() -> Described<Streaming<Scanning<Loopback>>> {
+    Described::new(Streaming(Scanning(Loopback::new(CATALOG))), table(|_| None)).unwrap()
+}
+
+#[test]
+fn a_v2_client_against_a_streams_server_is_served_v2() {
+    let (server, client) = pair();
+    let handle = spawn(server, streams_backend(), config());
+    let (mut ws, selected) = connect_selected(client, "ridl-ws-v2, ridl-ws-v1");
+    assert_eq!(selected.as_deref(), Some("ridl-ws-v2"));
+    attach(&mut ws);
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+#[test]
+fn a_v3_client_against_a_backend_without_streams_is_selected_v2() {
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| None)).unwrap();
+    assert_eq!(selected_against(backend).as_deref(), Some("ridl-ws-v2"));
+}
+
+#[test]
+fn a_v3_client_against_a_backend_without_a_table_is_selected_v2() {
+    let backend = Streaming(Scanning(Loopback::new(CATALOG)));
+    assert_eq!(selected_against(backend).as_deref(), Some("ridl-ws-v2"));
+}
+
+#[test]
+fn a_v3_client_against_a_streams_server_is_selected_v3() {
+    assert_eq!(
+        selected_against(streams_backend()).as_deref(),
+        Some("ridl-ws-v3")
+    );
+}
+
+#[test]
+fn a_stream_form_on_a_v2_session_closes_1002() {
+    let (server, client) = pair();
+    let (config, notes) = recording();
+    let handle = spawn(server, streams_backend(), config);
+    let (mut ws, selected) =
+        connect_selected(client, ALL_VERSIONS.replace("ridl-ws-v3, ", "").as_str());
+    assert_eq!(selected.as_deref(), Some("ridl-ws-v2"));
+    attach(&mut ws);
+    send(
+        &mut ws,
+        Frame::StreamEnd {
+            target: QUERY,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 0,
+            },
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::End,
+        },
+    );
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Protocol));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1002));
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::Violation(ProtocolViolation::UnknownCode)]
+    );
 }

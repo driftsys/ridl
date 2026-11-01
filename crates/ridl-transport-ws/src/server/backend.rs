@@ -7,7 +7,7 @@ use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::Contract;
 use ridl_rt::port::{
     Attached, Caller, Clock, Encoded, EventSource, FixedReader, ReadError, ScannableSignals,
-    SignalReader,
+    SignalReader, StreamCaller,
 };
 
 use super::members::MemberTable;
@@ -38,6 +38,14 @@ pub trait Backend {
     /// `Some`, a tick with no change costs one `scan` call; with `None`, a
     /// tick reads every subscribed signal.
     fn scannable(&self) -> Option<&dyn ScannableSignals> {
+        None
+    }
+
+    /// The ports as a [`StreamCaller`], when the runtime carries streams.
+    /// With `Some` and a member table, the server selects frame version 3
+    /// when the client offers it. The default is `None`: the server then
+    /// selects frame version 2 at most.
+    fn streams(&mut self) -> Option<&mut dyn StreamCaller> {
         None
     }
 
@@ -112,9 +120,49 @@ where
     }
 }
 
+/// A backend whose ports also carry streams: it forwards every method of the
+/// backend it wraps and answers [`Backend::streams`] with those ports.
+///
+/// [`Polling`] and [`Scanning`] cannot do this themselves, because their port
+/// type is not required to implement [`StreamCaller`].
+pub struct Streaming<B>(pub B);
+
+impl<B> Backend for Streaming<B>
+where
+    B: Backend,
+    B::Ports: StreamCaller,
+{
+    type Ports = B::Ports;
+
+    fn ports(&mut self) -> &mut B::Ports {
+        self.0.ports()
+    }
+
+    fn scannable(&self) -> Option<&dyn ScannableSignals> {
+        self.0.scannable()
+    }
+
+    fn streams(&mut self) -> Option<&mut dyn StreamCaller> {
+        Some(self.0.ports())
+    }
+
+    fn read_fixed(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError> {
+        self.0.read_fixed(iface, ord, out)
+    }
+
+    fn members(&self) -> Option<&MemberTable> {
+        self.0.members()
+    }
+}
+
 /// A backend paired with the member table of the catalog its ports serve.
 ///
-/// It forwards the ports, the scannable view and `read_fixed` of the backend
+/// It forwards the ports, the scannable view, the stream port and `read_fixed` of the backend
 /// it wraps, and returns the table from [`Backend::members`], so the server
 /// refuses an interaction the catalog does not hold.
 pub struct Described<B: Backend> {
@@ -151,6 +199,10 @@ impl<B: Backend> Backend for Described<B> {
 
     fn scannable(&self) -> Option<&dyn ScannableSignals> {
         self.inner.scannable()
+    }
+
+    fn streams(&mut self) -> Option<&mut dyn StreamCaller> {
+        self.inner.streams()
     }
 
     fn read_fixed(

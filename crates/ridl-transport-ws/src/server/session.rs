@@ -18,8 +18,8 @@ use super::calls::{Calls, InFlight, Seen};
 use super::config::Record;
 use super::{Backend, Config, Note};
 use crate::frame::{
-    self, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, PublishState, Reason,
-    ResponseOutcome, Target, BLOCK_BYTES, FRAME_VERSION,
+    self, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, ProtocolViolation,
+    PublishState, Reason, ResponseOutcome, Target, BLOCK_BYTES, FRAME_VERSION, FRAME_VERSION_3,
 };
 use crate::ws::CloseCode;
 
@@ -111,7 +111,8 @@ pub(crate) struct Session<B: Backend> {
     call_abandon_after: Duration,
     record: Option<Record>,
     /// The frame version of the subprotocol the opening handshake selected:
-    /// `FRAME_VERSION` for `ridl-ws-v2`, 1 for `ridl-ws-v1`.
+    /// `FRAME_VERSION_3` for `ridl-ws-v3`, `FRAME_VERSION` for `ridl-ws-v2`,
+    /// 1 for `ridl-ws-v1`.
     frame_version: u32,
     /// Whether an `attach` has been accepted.
     attached: bool,
@@ -280,10 +281,21 @@ impl<B: Backend> Session<B> {
             | Frame::Publish { .. }
             | Frame::Occurrence { .. }
             | Frame::Response { .. }
-            | Frame::Block { .. }
-            | Frame::Chunk { .. }
-            | Frame::StreamEnd { .. }
-            | Frame::StreamCredit { .. } => {
+            | Frame::Block { .. } => {
+                self.note(Note::UnexpectedDirection);
+                Step::Close(CloseCode::PROTOCOL.0)
+            }
+            // The stream forms are a code outside the table below frame
+            // version 3.
+            Frame::Chunk { .. } | Frame::StreamEnd { .. } | Frame::StreamCredit { .. }
+                if self.frame_version < FRAME_VERSION_3 =>
+            {
+                self.note(Note::Violation(ProtocolViolation::UnknownCode));
+                Step::Close(CloseCode::PROTOCOL.0)
+            }
+            // The server does not act on a stream form yet: it closes the
+            // session as for a frame that has the wrong direction.
+            Frame::Chunk { .. } | Frame::StreamEnd { .. } | Frame::StreamCredit { .. } => {
                 self.note(Note::UnexpectedDirection);
                 Step::Close(CloseCode::PROTOCOL.0)
             }
@@ -523,13 +535,12 @@ impl<B: Backend> Session<B> {
 
     /// Checks an `attach` in the order of its refusal reasons, so that one
     /// reason is given: frame version, unit name, hash, encoding. The frame
-    /// version is refused when the `attach` names another one or when the
-    /// handshake selected the subprotocol of another one: the provider
-    /// serves frame version 2 only, so every `attach` on a `ridl-ws-v1`
-    /// connection is refused.
+    /// version is refused when the `attach` names another one than the
+    /// handshake selected: the provider serves frame versions 2 and 3, so
+    /// every `attach` on a `ridl-ws-v1` connection is refused.
     fn attach(&mut self, attach: Attach<'_>, out: &mut Vec<Vec<u8>>) -> Step {
         let refusal =
-            if attach.frame_version() != FRAME_VERSION || self.frame_version != FRAME_VERSION {
+            if attach.frame_version() != self.frame_version || self.frame_version < FRAME_VERSION {
                 Some(Reason::FrameVersionUnsupported)
             } else if attach.name() != self.catalog.name {
                 Some(Reason::UnknownCatalog)
@@ -1239,8 +1250,9 @@ mod tests {
 
     use super::{Session, Step};
     use crate::frame::{
-        decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
-        Target, BLOCK_BYTES, FRAME_VERSION,
+        decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState,
+        Reason, ResponseOutcome, StreamOutcome, Target, BLOCK_BYTES, FRAME_VERSION,
+        FRAME_VERSION_3,
     };
     use crate::server::{
         Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
@@ -1582,6 +1594,99 @@ mod tests {
                 correlation: 17,
                 outcome: ResponseOutcome::Contract(Contract::UnknownInteraction),
             }
+        );
+    }
+
+    /// One of each stream form, addressed to a query.
+    fn stream_forms() -> [Frame<'static>; 3] {
+        let target = Target {
+            kind: Kind::Query,
+            iface: InterfaceNo(1),
+            ord: Ordinal(4),
+        };
+        let envelope = Envelope {
+            stamp: Timestamp(0),
+            seq: 0,
+        };
+        [
+            Frame::Chunk {
+                target,
+                envelope,
+                correlation: 1,
+                stream: 0,
+                payload: &[1],
+            },
+            Frame::StreamEnd {
+                target,
+                envelope,
+                correlation: 1,
+                stream: 0,
+                outcome: StreamOutcome::End,
+            },
+            Frame::StreamCredit {
+                target,
+                correlation: 1,
+                stream: 0,
+                credit: 1,
+            },
+        ]
+    }
+
+    #[test]
+    fn a_stream_form_on_a_session_below_version_3_is_an_unknown_code() {
+        for version in [1, FRAME_VERSION] {
+            for frame in stream_forms() {
+                let (mut s, _p, notes) = scanning();
+                open(&mut s);
+                s.upgraded(version);
+                let (step, out) = send(&mut s, &msg(frame));
+                assert_eq!(step, Step::Close(1002), "version {version}");
+                assert!(out.is_empty());
+                assert_eq!(
+                    *notes.lock().unwrap(),
+                    vec![Note::Violation(ProtocolViolation::UnknownCode)],
+                    "version {version}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_stream_form_on_a_version_3_session_closes_with_1002() {
+        for frame in stream_forms() {
+            let (mut s, _p, notes) = scanning();
+            s.upgraded(FRAME_VERSION_3);
+            let (step, _) = send(
+                &mut s,
+                &attach_msg(FRAME_VERSION_3, 1, [7u8; 32], "ws.test"),
+            );
+            assert_eq!(step, Step::Continue);
+            let (step, out) = send(&mut s, &msg(frame));
+            assert_eq!(step, Step::Close(1002));
+            assert!(out.is_empty());
+            assert_eq!(*notes.lock().unwrap(), vec![Note::UnexpectedDirection]);
+        }
+    }
+
+    #[test]
+    fn an_attach_must_name_the_frame_version_of_a_version_3_connection() {
+        let (mut s, _p, _n) = scanning();
+        s.upgraded(FRAME_VERSION_3);
+        let (step, out) = send(
+            &mut s,
+            &attach_msg(FRAME_VERSION_3, 1, [7u8; 32], "ws.test"),
+        );
+        assert_eq!(step, Step::Continue);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Attached(AttachOutcome::Accepted)
+        );
+        let (mut s, _p, _n) = scanning();
+        s.upgraded(FRAME_VERSION_3);
+        refused(
+            &mut s,
+            &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"),
+            Reason::FrameVersionUnsupported,
         );
     }
 

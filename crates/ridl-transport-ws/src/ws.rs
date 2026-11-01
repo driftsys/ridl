@@ -39,8 +39,9 @@ const FORBIDDEN: &[u8] =
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Upgrade {
     /// `101 Switching Protocols`; the value is the frame version of the
-    /// subprotocol selected: `FRAME_VERSION` for `ridl-ws-v2`, 1 for
-    /// `ridl-ws-v1`. The stream now carries WebSocket frames.
+    /// subprotocol selected: 3 for `ridl-ws-v3`, `FRAME_VERSION` for
+    /// `ridl-ws-v2`, 1 for `ridl-ws-v1`. The stream now carries WebSocket
+    /// frames.
     Accepted(u32),
     /// The server answered `400 Bad Request`. The caller closes the stream.
     Rejected,
@@ -54,17 +55,18 @@ pub(crate) enum Upgrade {
 /// The request is upgraded when it is a `GET` with a `Host` header,
 /// `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`,
 /// one `Sec-WebSocket-Key` that decodes from base64 to 16 bytes, and
-/// `ridl-ws-v2` or `ridl-ws-v1` in any position of any
+/// `ridl-ws-v3`, `ridl-ws-v2` or `ridl-ws-v1` in any position of any
 /// `Sec-WebSocket-Protocol` header (RFC 6455 §4.2.1), and when
 /// `accept_origin` accepts its `Origin` header, which is `None` when the
-/// request has none. The `101` selects `ridl-ws-v2` when it is offered, else
-/// `ridl-ws-v1`, whatever the order of the offer. This provider serves no
+/// request has none. The `101` selects the newest subprotocol that is offered
+/// and whose frame version is at most `max_version`, whatever the order of the
+/// offer; the caller passes 3 when it serves streams and 2 otherwise. This provider serves no
 /// attach of frame version 1, but it selects `ridl-ws-v1` for a client that
 /// offers only that, so that the client receives an explicit refusal reason
 /// at the attach and not a failed handshake. The path, the query and every
 /// other header are ignored. A request head over 8 KiB, a malformed request,
 /// a request with more than one `Origin` header, or a request that offers
-/// neither subprotocol is answered `400 Bad Request` and returns
+/// no subprotocol up to `max_version` is answered `400 Bad Request` and returns
 /// [`Upgrade::Rejected`]; when the request is well formed and its version is
 /// not 13, whatever its other headers, the `400` names the version the server
 /// speaks in a `Sec-WebSocket-Version: 13` header (RFC 6455 §4.2.2 item 4).
@@ -80,12 +82,13 @@ pub(crate) enum Upgrade {
 /// head does.
 pub(crate) fn handshake<S: Read + Write>(
     stream: &mut S,
+    max_version: u32,
     accept_origin: impl FnOnce(Option<&str>) -> bool,
 ) -> io::Result<Upgrade> {
     let Some(head) = read_head(stream)? else {
         return reject(stream, BAD_REQUEST);
     };
-    let request = match upgrade_request(&head) {
+    let request = match upgrade_request(&head, max_version) {
         Ok(request) => request,
         Err(Reject::BadRequest) => return reject(stream, BAD_REQUEST),
         Err(Reject::Version) => return reject(stream, BAD_VERSION),
@@ -159,7 +162,7 @@ enum Reject {
 
 /// Returns the key, the origin and the subprotocol selected of `head` when
 /// `head` is an upgrade request this server accepts, and why not otherwise.
-fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
+fn upgrade_request(head: &[u8], max_version: u32) -> Result<UpgradeRequest<'_>, Reject> {
     let head = std::str::from_utf8(head).map_err(|_| Reject::BadRequest)?;
     let head = head.strip_suffix("\r\n\r\n").ok_or(Reject::BadRequest)?;
     let mut lines = head.split("\r\n");
@@ -203,6 +206,7 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
     let mut connection = false;
     // Each `Sec-WebSocket-Protocol` line is read by itself, so the offers of
     // every line are collected before one is selected.
+    let mut offers_v3 = false;
     let mut offers_v2 = false;
     let mut offers_v1 = false;
     let mut key = None;
@@ -216,6 +220,7 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
             connection |= has_token(value, "upgrade");
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Protocol") {
             for offer in value.split(',').map(|p| p.trim_matches([' ', '\t'])) {
+                offers_v3 |= offer == frame::SUBPROTOCOL_V3;
                 offers_v2 |= offer == frame::SUBPROTOCOL;
                 offers_v1 |= offer == frame::SUBPROTOCOL_V1;
             }
@@ -237,7 +242,9 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
     if !(host && upgrade && connection) {
         return Err(Reject::BadRequest);
     }
-    let (subprotocol, frame_version) = if offers_v2 {
+    let (subprotocol, frame_version) = if offers_v3 && max_version >= frame::FRAME_VERSION_3 {
+        (frame::SUBPROTOCOL_V3, frame::FRAME_VERSION_3)
+    } else if offers_v2 {
         (frame::SUBPROTOCOL, frame::FRAME_VERSION)
     } else if offers_v1 {
         (frame::SUBPROTOCOL_V1, FRAME_VERSION_V1)
@@ -616,7 +623,7 @@ mod tests {
             client(ws)
         });
         assert_eq!(
-            handshake(&mut server, |_| true).unwrap(),
+            handshake(&mut server, 3, |_| true).unwrap(),
             Upgrade::Accepted(frame::FRAME_VERSION)
         );
         (server, handle)
@@ -704,7 +711,7 @@ mod tests {
             input: head.as_bytes(),
             output: Vec::new(),
         };
-        let upgrade = handshake(&mut mem, accept_origin).unwrap();
+        let upgrade = handshake(&mut mem, 3, accept_origin).unwrap();
         (upgrade, String::from_utf8(mem.output).unwrap())
     }
 
@@ -754,9 +761,15 @@ mod tests {
     /// [`handshake`], and returns the server's result and the subprotocol the
     /// client saw selected, `None` when the client's handshake failed.
     fn offer(protocols: &'static str) -> (Upgrade, Option<String>) {
+        offer_up_to(protocols, 3)
+    }
+
+    /// The same against a server that serves frame versions up to
+    /// `max_version`.
+    fn offer_up_to(protocols: &'static str, max_version: u32) -> (Upgrade, Option<String>) {
         let (mut server, client_end) = pair();
         let client = thread::spawn(move || connect(client_end, protocols).map(|(_, p)| p));
-        let upgrade = handshake(&mut server, |_| true).unwrap();
+        let upgrade = handshake(&mut server, max_version, |_| true).unwrap();
         (upgrade, client.join().unwrap().ok().flatten())
     }
 
@@ -777,6 +790,38 @@ mod tests {
                 "offer {protocols:?}"
             );
         }
+    }
+
+    #[test]
+    fn offers_v3_v2_v1_with_max_3_selects_v3() {
+        for protocols in [
+            "ridl-ws-v3, ridl-ws-v2, ridl-ws-v1",
+            "ridl-ws-v1, ridl-ws-v2, ridl-ws-v3",
+            "ridl-ws-v3",
+        ] {
+            assert_eq!(
+                offer_up_to(protocols, 3),
+                (Upgrade::Accepted(3), Some("ridl-ws-v3".to_owned())),
+                "offer {protocols:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn offers_v3_v2_v1_with_max_2_selects_v2() {
+        assert_eq!(
+            offer_up_to("ridl-ws-v3, ridl-ws-v2, ridl-ws-v1", 2),
+            (Upgrade::Accepted(2), Some("ridl-ws-v2".to_owned()))
+        );
+        assert_eq!(
+            offer_up_to("ridl-ws-v3, ridl-ws-v1", 2),
+            (Upgrade::Accepted(1), Some("ridl-ws-v1".to_owned()))
+        );
+    }
+
+    #[test]
+    fn an_offer_of_ridl_ws_v3_only_with_max_2_is_rejected() {
+        assert_eq!(offer_up_to("ridl-ws-v3", 2), (Upgrade::Rejected, None));
     }
 
     #[test]
@@ -809,7 +854,10 @@ mod tests {
     fn a_client_offering_no_subprotocol_gets_400() {
         let (mut server, client_end) = pair();
         let client = thread::spawn(move || connect(client_end, "").map(|(_, p)| p));
-        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Rejected);
+        assert_eq!(
+            handshake(&mut server, 3, |_| true).unwrap(),
+            Upgrade::Rejected
+        );
         match client.join().unwrap() {
             Err(tungstenite::Error::Http(response)) => assert_eq!(response.status(), 400),
             other => panic!("expected a 400 response, got {other:?}"),
@@ -842,7 +890,7 @@ mod tests {
 
     #[test]
     fn a_malformed_request_gets_400_before_the_origin_check() {
-        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v3");
+        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v4");
         let (upgrade, _) = handshake_checked(&head, |_| panic!("the check is not called"));
         assert_eq!(upgrade, Upgrade::Rejected);
     }
@@ -858,7 +906,7 @@ mod tests {
 
     #[test]
     fn a_client_offering_only_another_subprotocol_gets_400() {
-        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v3");
+        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v4");
         assert_eq!(
             handshake_on(&head),
             (
@@ -879,7 +927,10 @@ mod tests {
             client.read_exact(&mut response).unwrap();
             response
         });
-        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Rejected);
+        assert_eq!(
+            handshake(&mut server, 3, |_| true).unwrap(),
+            Upgrade::Rejected
+        );
         // The server end stays open until the client has read the response:
         // closing a socket with unread input resets the connection.
         assert_eq!(writer.join().unwrap(), BAD_REQUEST);
@@ -984,7 +1035,7 @@ mod tests {
             );
         }
         // Any other refusal does not name the version.
-        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v3");
+        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v4");
         assert_eq!(
             handshake_on(&head),
             (
@@ -1033,7 +1084,7 @@ mod tests {
             output: Vec::new(),
         };
         assert_eq!(
-            handshake(&mut stream, |_| true).unwrap(),
+            handshake(&mut stream, 3, |_| true).unwrap(),
             Upgrade::Accepted(2)
         );
         assert!(stream.interrupted);
