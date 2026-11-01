@@ -8,8 +8,9 @@
 //! pair `pack<Name>` and `unpack<Name>` is written for each struct, union and
 //! induced tuple a payload type reaches. Each strict enum and strict enum set
 //! it reaches gets an `unpack<Name>` that refuses a value the declaration does
-//! not name, and each open enum and open enum set gets a pair `pack<Name>` and
-//! `unpack<Name>` that keeps every value. An induced tuple of an interaction
+//! not name. Each open enum gets a pair `pack<Name>` and `unpack<Name>` that
+//! keeps every value, and each open enum set gets a `pack<Name>` that refuses a
+//! value outside the width of the set with the `range` rule. An induced tuple of an interaction
 //! is exported as an `interface`, or as the type alias
 //! `Record<string, never>` when it has no field. The module also exports the
 //! `RuleError` class when it reaches an enum or an enum set, the catalog's name

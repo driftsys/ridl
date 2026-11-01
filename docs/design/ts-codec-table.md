@@ -154,11 +154,12 @@ values of a strict enum and the declared bits of a strict enum set, because the
 converter has to produce a typed value: it throws a `RuleError` whose `rule` is
 `variant` for an undeclared value or bit, and a strict enum with no zero member
 reports a value the buffer leaves out as absent. An `open` enum keeps an
-undeclared value, decodes an absent value to `{ unknown: 0 }`, and throws the
-same `variant` error only for a value beyond the safe integers. `decode<Name>`
-is for bytes the codec has verified. `encode<Name>` builds what it is given, so
-that a payload the codec rejects can be built. A checking constructor for
-TypeScript is driftsys/ridl#923.
+undeclared value, decodes an absent value to its zero member when it declares
+one and to `{ unknown: 0 }` when it does not, and throws the same `variant`
+error only for a value beyond the safe integers. `decode<Name>` is for bytes the
+codec has verified. `encode<Name>` builds what it is given, so that a payload
+the codec rejects can be built. A checking constructor for TypeScript is
+driftsys/ridl#923.
 
 ## Foreign declarations (D-14)
 

@@ -1636,9 +1636,9 @@ fn foreign_sets_of_one_name_get_a_function_and_a_mask_each() {
 }
 
 /// The model of a package with an interface named `RuleError` and no enum.
-fn rule_error_model(extra: &str) -> v1::Model {
+fn rule_error_model(declarations: &str, extra: &str) -> v1::Model {
     let text = format!(
-        "package only\n\n/// A struct.\nstruct Holder {{\n  /// A value.\n  a : integer [0..9]\n{extra}}}\n\n/// An interface.\ninterface RuleError {{\n  /// Sends.\n  command send(holder: Holder) @[..50ms]\n}}\n"
+        "package only\n\n{declarations}/// A struct.\nstruct Holder {{\n  /// A value.\n  a : integer [0..9]\n{extra}}}\n\n/// An interface.\ninterface RuleError {{\n  /// Sends.\n  command send(holder: Holder) @[..50ms]\n}}\n"
     );
     let output = ridlc::compile("only.ridl", &text);
     codegen::lower(&output.package, &[])
@@ -1649,7 +1649,7 @@ fn rule_error_model(extra: &str) -> v1::Model {
 /// the name.
 #[test]
 fn rule_error_is_not_reserved_without_an_enum() {
-    let source = module(&rule_error_model(""), "only");
+    let source = module(&rule_error_model("", ""), "only");
     assert!(source.contains("export const RuleError = {"), "{source}");
     assert!(!source.contains("class RuleError"), "{source}");
 }
@@ -1678,5 +1678,49 @@ fn a_strict_enum_reached_alone_emits_the_absent_function() {
     assert!(
         map.contains("function absent(type: string, field: string): never {"),
         "{map}"
+    );
+}
+
+/// `RuleError` is reserved when the module reaches an open enum, so an
+/// interface of that name is refused there too.
+#[test]
+fn an_interface_named_rule_error_beside_an_open_enum_is_refused() {
+    let model = rule_error_model(
+        "/// An open enum.\nopen enum Kind {\n  /// A.\n  A = 1\n}\n\n",
+        "  /// A kind.\n  kind : Kind\n",
+    );
+    assert_eq!(
+        refusal(&model),
+        "`RuleError` in package `only` collides with `RuleError`, which the codec module also declares"
+    );
+}
+
+/// Two open sets of other packages that share a name but not a width each get
+/// a `pack_<alias>_<Name>` with the width check of their own declaration.
+#[test]
+fn foreign_open_sets_of_one_name_check_their_own_width() {
+    let mut model = holder_model();
+    let first = foreign_set(&mut model, "veh.a", "Flags", true, 1);
+    let second = foreign_set(&mut model, "veh.b", "Flags", true, 1);
+    for (index, width) in [(0, v1::IntWidth::U8), (1, v1::IntWidth::U16)] {
+        let Some(v1::declaration::Kind::EnumSet(shape)) = model.foreign[index]
+            .declaration
+            .as_mut()
+            .and_then(|declaration| declaration.kind.as_mut())
+        else {
+            panic!("the foreign declaration is an enum set");
+        };
+        shape.width = width as i32;
+    }
+    field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(first));
+    field(&mut model, "Holder", 1).kind = Some(v1::r#type::Kind::Named(second));
+    let source = module(&model, "only");
+    assert!(
+        source.contains("function pack_veh_a_Flags(value: veh_a.Flags): number {\n  if (!Number.isInteger(value) || value < 0 || value > 255) {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function pack_veh_b_Flags(value: veh_b.Flags): number {\n  if (!Number.isInteger(value) || value < 0 || value > 65535) {"),
+        "{source}"
     );
 }
