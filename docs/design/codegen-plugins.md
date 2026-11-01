@@ -664,7 +664,9 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   the arm ordinal (and, for a union of another package, the index into
   `Model.foreign`), an index into `Model.foreign`, or a `NestedTuple`, a tuple
   written inside a struct of another package, with the `package` that declares
-  it and the induced `wire` name that package gives it.
+  it and the induced `wire` name that package gives it. `wire` is always the
+  name the declaring package's own lowering gives the tuple, whatever order the
+  importing package reaches that package's declarations in.
 - **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
   head. A head with no field has size 0.
 - **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law

@@ -4001,6 +4001,357 @@ fn a_tuple_in_a_parameter_is_named_from_its_interaction() {
     );
 }
 
+/// A tuple of `Small` fields named `names`.
+fn tuple_of(names: &[&str]) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: names
+                .iter()
+                .map(|name| v2::TupleField {
+                    name: name.to_string(),
+                    r#type: Some(named("Small")),
+                })
+                .collect(),
+        })),
+        ..Default::default()
+    }
+}
+
+/// A tuple whose fields are `fields`.
+fn tuple(fields: Vec<v2::TupleField>) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType { fields })),
+        ..Default::default()
+    }
+}
+
+/// A public struct with one member, `name` of type `ty`.
+fn one_member_struct(name: &str, member_name: &str, ty: v2::FieldType) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![member(1, member_name, ty)],
+            ..Default::default()
+        })),
+        ..Default::default()
+    }
+}
+
+/// [`package_a`] with `struct A { bC : (dP : (x, y)) }` and
+/// `struct AB { cD : (q, p : (x, y)) }`: position 1 of the tuple at `A.bC`
+/// and position 2 of the tuple at `AB.cD` induce one Rust name, `ABCDP`,
+/// from one shape, so `a` gives them one entry under the wire name of the
+/// position it reaches first, `ABCField1`.
+fn shared_entry_package() -> v2::Package {
+    shared_entry_package_in("a", "A")
+}
+
+/// [`shared_entry_package`] as the package `name`, with the pair named from
+/// `prefix`: `<prefix> { bC : (dP : (x, y)) }` and
+/// `<prefix>B { cD : (q, p : (x, y)) }`, which induce one Rust name,
+/// `<prefix>BCDP`, and the shared wire name `<prefix>BCField1`.
+fn shared_entry_package_in(name: &str, prefix: &str) -> v2::Package {
+    let mut a = package_a();
+    a.name = name.to_string();
+    a.decls.push(one_member_struct(
+        prefix,
+        "bC",
+        tuple(vec![v2::TupleField {
+            name: "dP".to_string(),
+            r#type: Some(tuple_of(&["x", "y"])),
+        }]),
+    ));
+    a.decls.push(one_member_struct(
+        &format!("{prefix}B"),
+        "cD",
+        tuple(vec![
+            v2::TupleField {
+                name: "q".to_string(),
+                r#type: Some(named("Small")),
+            },
+            v2::TupleField {
+                name: "p".to_string(),
+                r#type: Some(tuple_of(&["x", "y"])),
+            },
+        ]),
+    ));
+    a
+}
+
+/// A package `name` with one public struct `B` whose members are `fields`,
+/// each a `(name, type)` pair, in order.
+fn struct_package(name: &str, fields: &[(&str, v2::FieldType)]) -> v2::Package {
+    v2::Package {
+        name: name.to_string(),
+        decls: vec![v2::Decl {
+            name: "B".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: fields
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (name, ty))| member(index as u32 + 1, name, ty.clone()))
+                    .collect(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+/// The wire names of the heads of the tuples of another package that `model`
+/// lays out inline, sorted.
+fn nested_tuple_wires(model: &v1::Model) -> Vec<String> {
+    let mut wires: Vec<String> = model
+        .podbuf
+        .as_ref()
+        .expect("a podbuf projection")
+        .heads
+        .iter()
+        .filter_map(|head| match head.source.as_ref()? {
+            v1::podbuf_head::Source::NestedTuple(nested) => Some(nested.wire.clone()),
+            _ => None,
+        })
+        .collect();
+    wires.sort();
+    wires
+}
+
+/// An importing package names a foreign tuple's head by the wire name the
+/// declaring package gives it, whether it reaches `A` before `AB` or after:
+/// the shared entry is `ABCField1` in both orders, and no head is named
+/// `ABCDField2` (driftsys/ridl#1150).
+#[test]
+fn a_foreign_shared_entry_keeps_the_declaring_wire_name_in_either_order() {
+    let a = shared_entry_package();
+    for (order, members) in [
+        ("declaring order", ["a", "ab"]),
+        ("reverse order", ["ab", "a"]),
+    ] {
+        let fields: Vec<(&str, v2::FieldType)> = members
+            .iter()
+            .map(|name| (*name, named(&format!("a.{}", name.to_uppercase()))))
+            .collect();
+        let b = struct_package("b", &fields);
+        let model = lower(&b, &[&a]);
+        assert_eq!(
+            nested_tuple_wires(&model),
+            ["ABC", "ABCD", "ABCField1"],
+            "{order}"
+        );
+    }
+}
+
+/// The claims are read per declaring package: an importer that reaches the
+/// shared pairs of two packages, `a` and `b`, each in the reverse order,
+/// names each pair by its own package's wire name.
+#[test]
+fn an_importer_reads_the_claims_of_each_declaring_package() {
+    let a = shared_entry_package_in("a", "A");
+    let b = shared_entry_package_in("b", "Y");
+    let c = struct_package(
+        "c",
+        &[
+            ("yb", named("b.YB")),
+            ("y", named("b.Y")),
+            ("ab", named("a.AB")),
+            ("a", named("a.A")),
+        ],
+    );
+    let model = lower(&c, &[&a, &b]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["ABC", "ABCD", "ABCField1", "YBC", "YBCD", "YBCField1"]
+    );
+}
+
+/// A position matches a claim by its visibility too. In `a`, `AB` is
+/// `internal`, so its position 2 of `cD` and position 1 of `A.bC` spell one
+/// Rust name from one shape with two visibilities: a collision in `a`, which
+/// every backend refuses, so no build reaches this lowering; the lowering of
+/// an importer still gives each position the wire name of its own claim,
+/// `ABCField1` for the public one and `ABCDField2` for the internal one.
+#[test]
+fn a_foreign_position_matches_a_claim_of_its_own_visibility() {
+    let mut a = shared_entry_package();
+    a.decls
+        .iter_mut()
+        .find(|decl| decl.name == "AB")
+        .expect("AB")
+        .visibility = v2::Visibility::Internal as i32;
+    assert_eq!(lower(&a, &[]).tuple_collisions.len(), 1);
+    let b = struct_package("b", &[("ab", named("a.AB")), ("a", named("a.A"))]);
+    let model = lower(&b, &[&a]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["ABC", "ABCD", "ABCDField2", "ABCField1"]
+    );
+}
+
+/// The claims of a package are its own named tuples only. `a.H` holds `z.Z`,
+/// so `a`'s lowering lifts the entries of `z` before its own `ZT`, with no
+/// wire name, as a claims-only lowering lifts every foreign entry. `z.Z.t.1`
+/// and `a.ZT.x.1` both spell the Rust name `ZTXY`, so an importer of `a.ZT`
+/// that read the entries of `z` as claims of `a` would match the first, take
+/// its empty wire name, and have the head refused instead of named
+/// `ZTXField1`.
+#[test]
+fn the_claims_of_a_package_leave_out_the_entries_of_other_packages() {
+    let mut z = package_a();
+    z.name = "z".to_string();
+    z.decls.push(one_member_struct(
+        "Z",
+        "t",
+        tuple(vec![v2::TupleField {
+            name: "xY".to_string(),
+            r#type: Some(tuple_of_in("z", &["u"])),
+        }]),
+    ));
+    let mut a = struct_package("a", &[("z", named("z.Z"))]);
+    a.decls[0].name = "H".to_string();
+    a.decls.push(one_member_struct(
+        "ZT",
+        "x",
+        tuple(vec![v2::TupleField {
+            name: "y".to_string(),
+            r#type: Some(tuple_of_in("z", &["u"])),
+        }]),
+    ));
+    let b = struct_package("b", &[("zt", named("a.ZT"))]);
+    let model = lower(&b, &[&a, &z]);
+    assert_eq!(nested_tuple_wires(&model), ["ZTX", "ZTXField1"]);
+}
+
+/// A tuple of `<package>.Small` fields named `names`.
+fn tuple_of_in(package: &str, names: &[&str]) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: names
+                .iter()
+                .map(|name| v2::TupleField {
+                    name: name.to_string(),
+                    r#type: Some(named(&format!("{package}.Small"))),
+                })
+                .collect(),
+        })),
+        ..Default::default()
+    }
+}
+
+/// The entries lifted for the positions of other packages are kept apart by
+/// package: `a.S.t` and `b.S.t` spell one Rust name, `ST`, from one shape,
+/// and are two tuples with two heads, one per package, in an importer that
+/// holds both.
+#[test]
+fn foreign_positions_of_two_packages_under_one_rust_name_are_two_entries() {
+    let same = |name: &str| {
+        let mut package = package_a();
+        package.name = name.to_string();
+        package
+            .decls
+            .push(one_member_struct("S", "t", tuple_of(&["x", "y"])));
+        package
+    };
+    let (a, b) = (same("a"), same("b"));
+    let c = struct_package("c", &[("a", named("a.S")), ("b", named("b.S"))]);
+    let model = lower(&c, &[&a, &b]);
+    let mut nested: Vec<(String, String)> = model
+        .podbuf
+        .as_ref()
+        .expect("a projection")
+        .heads
+        .iter()
+        .filter_map(|head| match head.source.as_ref()? {
+            v1::podbuf_head::Source::NestedTuple(nested) => {
+                Some((nested.package.clone(), nested.wire.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    nested.sort();
+    assert_eq!(
+        nested,
+        [
+            ("a".to_string(), "ST".to_string()),
+            ("b".to_string(), "ST".to_string())
+        ]
+    );
+}
+
+/// A position matches a claim by its shape too. With `AB.cD.2` a tuple of
+/// three fields, it and `A.bC.1` spell one Rust name from two shapes: a
+/// collision in `a`, which every backend refuses; the lowering of an importer
+/// still gives each position the wire name of its own claim.
+#[test]
+fn a_foreign_position_matches_a_claim_of_its_own_shape() {
+    let mut a = shared_entry_package();
+    let ab = a
+        .decls
+        .iter_mut()
+        .find(|decl| decl.name == "AB")
+        .expect("AB");
+    let Some(v2::decl::Kind::StructDef(def)) = ab.kind.as_mut() else {
+        panic!("a struct");
+    };
+    let Some(v2::struct_member::Member::Field(field)) = def.members[0].member.as_mut() else {
+        panic!("a field");
+    };
+    let Some(v2::field_type::Kind::Tuple(outer)) =
+        field.r#type.as_mut().and_then(|ty| ty.kind.as_mut())
+    else {
+        panic!("a tuple");
+    };
+    outer.fields[1].r#type = Some(tuple_of(&["x", "y", "z"]));
+    assert_eq!(lower(&a, &[]).tuple_collisions.len(), 1);
+    let b = struct_package("b", &[("ab", named("a.AB")), ("a", named("a.A"))]);
+    let model = lower(&b, &[&a]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["ABC", "ABCD", "ABCDField2", "ABCField1"]
+    );
+}
+
+/// A package `name` with
+/// `struct <NAME> { t : (x), t2 : (x, y), below : <below>.<BELOW> }`, the
+/// struct named after the package in upper case: two tuples, so that an
+/// importer reads the package's claims twice, and a field that reaches the
+/// layer below.
+fn layer(name: &str, below: Option<&str>) -> v2::Package {
+    let mut fields = vec![
+        ("t", tuple_of_in("a", &["x"])),
+        ("t2", tuple_of_in("a", &["x", "y"])),
+    ];
+    if let Some(below) = below {
+        fields.push(("below", named(&format!("{below}.{}", below.to_uppercase()))));
+    }
+    let mut package = struct_package(name, &fields);
+    package.decls[0].name = name.to_uppercase();
+    package
+}
+
+/// One call of `lower` lowers each declaring package at most once: the
+/// lowering of `d` reaches two tuple positions in each of `c`, `b` and `a`,
+/// and the lowerings it starts for them, in claims-only mode, start none, so
+/// three declaring lowerings run, not six.
+#[test]
+fn each_declaring_package_is_lowered_once_per_lowering() {
+    let mut a = package_a();
+    a.decls.push(layer("a", None).decls.remove(0));
+    let b = layer("b", Some("a"));
+    let c = layer("c", Some("b"));
+    let d = layer("d", Some("c"));
+    let before = super::lower::DECLARING_LOWERINGS.with(|count| count.get());
+    let model = lower(&d, &[&c, &b, &a]);
+    let after = super::lower::DECLARING_LOWERINGS.with(|count| count.get());
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["AT", "AT2", "BT", "BT2", "CT", "CT2"]
+    );
+    assert_eq!(after - before, 3);
+}
+
 /// A call with two parameters induces one argument struct, with one field
 /// per parameter in declaration order (driftsys/ridl#713).
 #[test]
@@ -5047,4 +5398,214 @@ fn a_string_stream_is_a_text_stream() {
     };
     assert_eq!(stream.form, v1::StreamForm::Text as i32);
     assert!(stream.element.is_none());
+}
+
+/// The lowering and the podbuf walk spell one position by one path: every
+/// kind of step the lowering builds from a position (`lower::Path`) is the
+/// step the walk builds from the same position's source (`Step::of`), and
+/// the root of each kind is the same variant from both sides.
+#[test]
+fn both_walks_spell_every_step_the_same_way() {
+    use super::lower::Path;
+    use super::path::{Root, Step};
+    use crate::projection::podbuf::Source;
+
+    let a = package_a();
+    let decl = &a.decls[3]; // `Pair`
+    let b = v2::Package {
+        name: "b".to_string(),
+        ..Default::default()
+    };
+
+    // The roots: a local declaration, a foreign declaration, a named tuple.
+    let local = Path::declaration(3, decl, &decl.name);
+    assert_eq!(
+        local.key.as_deref(),
+        Some([Step::Root(Root::of(decl, &a, &a))].as_slice())
+    );
+    let foreign = Path::foreign(&a.name, &decl.name, decl.visibility);
+    assert_eq!(
+        foreign.key.as_deref(),
+        Some([Step::Root(Root::of(decl, &a, &b))].as_slice())
+    );
+
+    // The spelling of each step in an error message.
+    let spelled: Vec<String> = [
+        Step::Root(Root::Declaration("Pair".to_string())),
+        Step::Root(Root::Foreign {
+            package: "a".to_string(),
+            name: "Pair".to_string(),
+        }),
+        Step::Root(Root::Tuple(3)),
+        Step::Field("small".to_string()),
+        Step::Position(2),
+        Step::Key,
+        Step::Value,
+        Step::Arm(4),
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
+    assert_eq!(
+        spelled,
+        [
+            "Pair", "a.Pair", "tuple 3", "small", "2", "key", "value", "4"
+        ]
+    );
+
+    // The steps: a struct field, a tuple position, a map key and value.
+    let at = local
+        .field("small")
+        .tuple_field("lo", 2)
+        .step("Key")
+        .step("Value")
+        .step("Element");
+    let from_sources: Vec<Step> = [
+        Source::Field {
+            name: "small".to_string(),
+            ordinal: 1,
+        },
+        Source::Position {
+            position: 2,
+            name: "lo".to_string(),
+        },
+        Source::Key,
+        Source::Value,
+        Source::Flags { index: 0 },
+        Source::Tag,
+        Source::Arm,
+    ]
+    .iter()
+    .filter_map(Step::of)
+    .collect();
+    let mut expected = vec![Step::Root(Root::Declaration("Pair".to_string()))];
+    expected.extend(from_sources);
+    assert_eq!(at.key.as_deref(), Some(expected.as_slice()));
+}
+
+/// A tuple inside a named tuple is reached under that tuple's root on both
+/// sides: the lowering keys it under `Root::Tuple` of the induced argument
+/// struct, and the walk fills that struct as a root under the same
+/// `Root::Tuple`, so the nested tuple gets a head and nothing is refused.
+#[test]
+fn a_tuple_inside_a_named_tuple_is_found_under_the_tuple_root() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "withSpan",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![v2::Param {
+                name: "span".to_string(),
+                r#type: Some(tuple(vec![v2::TupleField {
+                    name: "lo".to_string(),
+                    r#type: Some(tuple(vec![v2::TupleField {
+                        name: "p".to_string(),
+                        r#type: Some(named("Pair")),
+                    }])),
+                }])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let projection = model.podbuf.as_ref().expect("a projection");
+    // The fixture has a declaration the projection refuses on its own; no
+    // tuple is refused.
+    assert!(
+        !projection
+            .refused
+            .iter()
+            .any(|refused| matches!(refused.source, Some(v1::podbuf_refused::Source::Tuple(_)))),
+        "{:?}",
+        projection.refused
+    );
+    let nested = model
+        .tuples
+        .iter()
+        .position(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsWithSpanParamSpanLo")
+        })
+        .expect("the nested tuple") as u32;
+    assert!(
+        projection.heads.iter().any(|head| matches!(
+            head.source,
+            Some(v1::podbuf_head::Source::Tuple(index)) if index == nested
+        )),
+        "the nested tuple has a head"
+    );
+}
+
+/// A refusal raised inside the head of a union arm names the arm by its
+/// ordinal in the path. `a.H` holds two tuples that induce one wire name
+/// (`size.2` and `sizeField2`, both `HSizeField2`), which the walk refuses
+/// where it meets the second; under the arm `1` of `b.W`, a copy of `H`'s
+/// head, that is at `W.1.sizeField2`.
+#[test]
+fn a_refusal_inside_an_arm_head_names_the_arm_in_its_path() {
+    let mut a = package_a();
+    a.decls.push(v2::Decl {
+        name: "H".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![
+                member(
+                    1,
+                    "size",
+                    tuple(vec![
+                        v2::TupleField {
+                            name: "w".to_string(),
+                            r#type: Some(named("Small")),
+                        },
+                        v2::TupleField {
+                            name: "inner".to_string(),
+                            r#type: Some(tuple_of(&["p", "q"])),
+                        },
+                    ]),
+                ),
+                member(2, "sizeField2", tuple_of(&["x", "y", "z"])),
+            ],
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let b = v2::Package {
+        name: "b".to_string(),
+        decls: vec![v2::Decl {
+            name: "W".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                arms: vec![v2::UnionArm {
+                    name: "h".to_string(),
+                    ordinal: 1,
+                    type_ref: "a.H".to_string(),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
+                }],
+                is_result: false,
+                reserved: vec![],
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&b, &[&a]);
+    let causes: Vec<&str> = model
+        .podbuf
+        .as_ref()
+        .expect("a projection")
+        .refused
+        .iter()
+        .map(|refused| refused.cause.as_str())
+        .collect();
+    assert!(
+        causes.iter().any(|cause| cause.starts_with(
+            "W.1.sizeField2: the tuple at W.1.size.2 and the tuple at W.1.sizeField2 of package a"
+        )),
+        "{causes:?}"
+    );
 }

@@ -13,13 +13,16 @@
 //! `Package::shapes()`, a `Struct.slots[j]` from `StructDef.members[j]`, an
 //! `Interface.slots[j]` from `Interface.interactions[j]`.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use super::clauses;
 use super::docs::{doc_links, model_rules};
 use super::facts::{Closures, Inits, scalar_class};
 use super::flatbuffers;
 use super::names::{dotted_name, joined_camel, spellings};
+use super::path::{Root, Step};
 use super::resolve::{Scope, is_foreign};
 use super::v1;
 use crate::name::camel_case;
@@ -33,6 +36,11 @@ use crate::v2;
 /// The scope is part of the model: the output of every backend depends on it,
 /// and a plugin must be able to tell "this reference names a package I was
 /// not given" from "this reference names nothing".
+///
+/// A tuple inside a declaration of another package is named as that package
+/// names it, so the lowering also lowers each package in which it reaches
+/// such a position, once, in claims-only mode: only the names of that
+/// package's own tuples are kept (`Lowering::claims_of`).
 pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
     lower_with(package, others, &[])
 }
@@ -46,29 +54,9 @@ pub fn lower_with(
     compatible: &[[u8; 32]],
 ) -> v1::Model {
     let scope = Scope { package, others };
-    let mut lowering = Lowering {
-        scope,
-        deps: scope.packages().collect(),
-        sizes: Ctx::new(package, others),
-        inits: Inits::new(scope),
-        closures: Closures::new(scope),
-        foreign: Vec::new(),
-        foreign_at: HashMap::new(),
-        tuples: Vec::new(),
-        tuple_at: HashMap::new(),
-        collisions: Vec::new(),
-    };
+    let mut lowering = Lowering::new(scope);
 
-    let declarations: Vec<v1::Declaration> = package
-        .decls
-        .iter()
-        .enumerate()
-        .map(|(index, decl)| {
-            let path = Path::declaration(index as u32, decl, &decl.name);
-            lowering.declaration(package, decl, Some(path))
-        })
-        .collect();
-    lowering.drain_tuples();
+    let declarations = lowering.declarations();
 
     let interfaces = lowering.shapes();
     lowering.drain_tuples();
@@ -175,16 +163,15 @@ fn root_tuples(model: &v1::Model) -> HashSet<u32> {
 /// The path that reached one type position: where the model records the
 /// origin of a tuple found there, and the two induced names it would take.
 #[derive(Clone)]
-struct Path {
+pub(super) struct Path {
     base: Base,
     segments: Vec<String>,
-    /// The position as the podbuf walk spells it: the root it starts from,
-    /// then a struct field's name, a tuple field's position, `key` or
-    /// `value`. An array element adds nothing. The walk looks a tuple up by
-    /// this path (`super::podbuf::TupleKeys`). `None` for a position reached
-    /// from an interaction, where the walk starts at no root: the tuples it
-    /// reaches there are keyed under the induced tuple (`drain_tuples`).
-    key: Option<Vec<String>>,
+    /// The position as the podbuf walk spells it too (`super::path`). The
+    /// walk looks a tuple up by this path (`super::podbuf::TupleKeys`).
+    /// `None` for a position reached from an interaction, where the walk
+    /// starts at no root: the tuples it reaches there are keyed under the
+    /// induced tuple (`drain_tuples`).
+    pub(super) key: Option<Vec<Step>>,
     rust: String,
     wire: String,
     visibility: i32,
@@ -203,11 +190,11 @@ enum Base {
 }
 
 impl Path {
-    fn declaration(index: u32, decl: &v2::Decl, owner: &str) -> Self {
+    pub(super) fn declaration(index: u32, decl: &v2::Decl, owner: &str) -> Self {
         Self {
             base: Base::Declaration(index),
             segments: Vec::new(),
-            key: Some(vec![owner.to_string()]),
+            key: Some(vec![Step::Root(Root::Declaration(owner.to_string()))]),
             rust: camel_case(owner),
             wire: owner.to_string(),
             visibility: decl.visibility,
@@ -217,11 +204,14 @@ impl Path {
 
     /// A declaration of another package. The podbuf walk reaches it under
     /// its qualified name.
-    fn foreign(package: &str, owner: &str, visibility: i32) -> Self {
+    pub(super) fn foreign(package: &str, owner: &str, visibility: i32) -> Self {
         Self {
             base: Base::Foreign,
             segments: Vec::new(),
-            key: Some(vec![format!("{package}.{owner}")]),
+            key: Some(vec![Step::Root(Root::Foreign {
+                package: package.to_string(),
+                name: owner.to_string(),
+            })]),
             rust: camel_case(owner),
             wire: owner.to_string(),
             visibility,
@@ -259,10 +249,10 @@ impl Path {
     }
 
     /// A struct field, where both induced names begin.
-    fn field(&self, name: &str) -> Self {
+    pub(super) fn field(&self, name: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(name.to_string());
-        let key = self.key_with(Some(name.to_string()));
+        let key = self.key_with(Some(Step::Field(name.to_string())));
         Self {
             base: self.base,
             segments,
@@ -278,12 +268,12 @@ impl Path {
     /// role word. The walk path takes a map's `key` and `value`, and nothing
     /// for an array element or a role word (an interaction position has no
     /// walk path).
-    fn step(&self, word: &str) -> Self {
+    pub(super) fn step(&self, word: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(word.to_string());
         let key = self.key_with(match word {
-            "Key" => Some("key".to_string()),
-            "Value" => Some("value".to_string()),
+            "Key" => Some(Step::Key),
+            "Value" => Some(Step::Value),
             _ => None,
         });
         Self {
@@ -297,21 +287,21 @@ impl Path {
         }
     }
 
-    /// This position's walk path extended by `segment`, if it has one.
-    fn key_with(&self, segment: Option<String>) -> Option<Vec<String>> {
+    /// This position's walk path extended by `step`, if it has one.
+    fn key_with(&self, step: Option<Step>) -> Option<Vec<Step>> {
         self.key.as_ref().map(|key| {
             let mut key = key.clone();
-            key.extend(segment);
+            key.extend(step);
             key
         })
     }
 
     /// A tuple field: the Rust name extends by the field's CamelCase, the
     /// wire name by the position (design note D-2).
-    fn tuple_field(&self, name: &str, position: usize) -> Self {
+    pub(super) fn tuple_field(&self, name: &str, position: usize) -> Self {
         let mut segments = self.segments.clone();
         segments.push(name.to_string());
-        let key = self.key_with(Some(position.to_string()));
+        let key = self.key_with(Some(Step::Position(position as u32)));
         Self {
             base: self.base,
             segments,
@@ -354,7 +344,7 @@ struct TupleEntry<'a> {
     /// Every walk path that reaches this tuple (`Path::key`): the path it was
     /// lifted at, and the path of each position whose claim it serves again.
     /// A position reached from an interaction has no walk path and adds none.
-    keys: Vec<Vec<String>>,
+    keys: Vec<Vec<Step>>,
     /// What each field is documented with, in declaration order. Empty for
     /// every tuple but an induced argument struct, whose fields stand for the
     /// parameters of a call.
@@ -395,18 +385,97 @@ struct Lowering<'a> {
     foreign: Vec<v1::ForeignDeclaration>,
     foreign_at: HashMap<(String, String), u32>,
     tuples: Vec<TupleEntry<'a>>,
-    /// The entry each induced Rust name claims, by home package and name:
-    /// a position of the same shape that spells a claimed name reuses the
-    /// entry, in the lowered package and in a declaration of another package
-    /// alike, so that the two lowerings give one tuple one wire name.
+    /// The entry each induced Rust name claims, by home package and name, for
+    /// a position of the lowered package: a position of the same shape that
+    /// spells a claimed name reuses the entry.
     tuple_at: HashMap<(String, String), usize>,
+    /// The named tuples of another package's own lowering, by package name,
+    /// filled the first time a position inside one of its declarations is
+    /// reached. A position inside a declaration of another package takes its
+    /// wire name from these, so that the name is the one the declaring
+    /// package gives the tuple, whatever order this package reaches that
+    /// package's declarations in (driftsys/ridl#1150).
+    claims_memo: Memo,
+    /// Whether this lowering computes the claims of its own package for
+    /// another lowering (`claims_of`). A foreign position is then lifted
+    /// with no wire name and no package is lowered for it, so a lowering in
+    /// this mode starts none: two packages that reference each other by
+    /// qualified name would otherwise be lowered without end.
+    claims_only: bool,
+    /// The entries lifted for the positions inside declarations of other
+    /// packages, by declaring package and induced Rust name. A position of
+    /// the same shape and visibility as a listed entry is the same tuple and
+    /// reuses the entry; a collision between two such positions is the
+    /// declaring package's to record, so each shape gets its own entry here.
+    foreign_tuple_at: HashMap<(String, String), Vec<usize>>,
     collisions: Vec<v1::TupleCollision>,
 }
 
+/// One named tuple of a package's own lowering, as an importing lowering
+/// reads it: the shape and the visibility a position matches by, under the
+/// induced Rust name the claims are keyed by, and the wire name it takes.
+struct TupleClaim {
+    source: v2::TupleType,
+    visibility: i32,
+    wire: String,
+}
+
+/// The claims of one package, by induced Rust name.
+type Claims = HashMap<String, Vec<TupleClaim>>;
+
+/// The claims of every declaring package lowered so far by one lowering.
+type Memo = Rc<RefCell<HashMap<String, Rc<Claims>>>>;
+
+#[cfg(test)]
+thread_local! {
+    /// How many lowerings of a declaring package this thread has started:
+    /// one per package reached, when the memo holds.
+    pub(super) static DECLARING_LOWERINGS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 impl<'a> Lowering<'a> {
+    fn new(scope: Scope<'a>) -> Self {
+        Self::with_mode(scope, false)
+    }
+
+    fn with_mode(scope: Scope<'a>, claims_only: bool) -> Self {
+        Self {
+            scope,
+            deps: scope.packages().collect(),
+            sizes: Ctx::new(scope.package, scope.others),
+            inits: Inits::new(scope),
+            closures: Closures::new(scope),
+            foreign: Vec::new(),
+            foreign_at: HashMap::new(),
+            tuples: Vec::new(),
+            tuple_at: HashMap::new(),
+            claims_memo: Memo::default(),
+            claims_only,
+            foreign_tuple_at: HashMap::new(),
+            collisions: Vec::new(),
+        }
+    }
+
     // -----------------------------------------------------------------
     // Declarations
     // -----------------------------------------------------------------
+
+    /// The declarations of the lowered package, in order, and then every
+    /// tuple they reach.
+    fn declarations(&mut self) -> Vec<v1::Declaration> {
+        let package = self.scope.package;
+        let declarations = package
+            .decls
+            .iter()
+            .enumerate()
+            .map(|(index, decl)| {
+                let path = Path::declaration(index as u32, decl, &decl.name);
+                self.declaration(package, decl, Some(path))
+            })
+            .collect();
+        self.drain_tuples();
+        declarations
+    }
 
     fn declaration(
         &mut self,
@@ -758,11 +827,12 @@ impl<'a> Lowering<'a> {
     /// claim is reused. A position of this package whose claim is held by a
     /// tuple of a different shape or a different visibility is a collision,
     /// recorded as a fact for the printer to refuse with its own message. A
-    /// position inside a declaration of another package in the same case gets
-    /// a second entry and records nothing: the declaring package records that
-    /// collision, and the podbuf walk refuses the pair when it meets both
-    /// and their wire names are equal.
+    /// position inside a declaration of another package is matched against
+    /// that package's own claims instead (`foreign_tuple_ref`).
     fn tuple_ref(&mut self, home: &'a v2::Package, tuple: &v2::TupleType, at: &Path) -> u32 {
+        if !at.named {
+            return self.foreign_tuple_ref(home, tuple, at);
+        }
         let claim = (home.name.clone(), at.rust.clone());
         if let Some(index) = self.tuple_at.get(&claim).copied() {
             let existing = &self.tuples[index];
@@ -776,13 +846,6 @@ impl<'a> Lowering<'a> {
             if existing.source == *tuple && existing.path.visibility == at.visibility {
                 self.tuples[index].keys.extend(at.key.clone());
                 return index as u32;
-            }
-            // A collision inside a declaration of another package is that
-            // package's to record; here the two positions get two entries,
-            // and the podbuf walk refuses the pair when it meets both under
-            // one wire name.
-            if !at.named {
-                return self.lift(home, tuple, at, claim);
             }
             self.collisions.push(v1::TupleCollision {
                 name: at.rust.clone(),
@@ -799,32 +862,119 @@ impl<'a> Lowering<'a> {
                     .collect(),
             });
         }
-        self.lift(home, tuple, at, claim)
+        // A colliding entry keeps the claim.
+        let index = self.lift(home, tuple, at, at.wire.clone());
+        self.tuple_at.entry(claim).or_insert(index);
+        index as u32
     }
 
-    /// A new entry for the tuple at `at`, which claims `claim` unless a
-    /// colliding entry already holds it.
+    /// A position inside a declaration of another package, `home`. The tuple
+    /// there is one of `home`'s own named tuples, found among `home`'s claims
+    /// by the position's induced Rust name, its shape and its visibility, and
+    /// the entry takes that tuple's wire name. Two positions of one shape and
+    /// one visibility under one Rust name are one tuple and share one entry;
+    /// a collision between them is `home`'s to record, and the podbuf walk
+    /// refuses two entries of `home` under one wire name when it meets both.
+    ///
+    /// Every position inside a declaration of `home` has a claim, because
+    /// `home`'s own lowering reaches the same positions under the same names.
+    /// A position with no claim is an internal error: its entry gets no wire
+    /// name, which the podbuf walk refuses, rather than a name derived here.
+    /// In claims-only mode no claim is looked up, and every such entry has no
+    /// wire name.
+    fn foreign_tuple_ref(
+        &mut self,
+        home: &'a v2::Package,
+        tuple: &v2::TupleType,
+        at: &Path,
+    ) -> u32 {
+        let key = (home.name.clone(), at.rust.clone());
+        let existing = self.foreign_tuple_at.get(&key).and_then(|entries| {
+            entries.iter().copied().find(|&index| {
+                let entry = &self.tuples[index];
+                entry.source == *tuple && entry.path.visibility == at.visibility
+            })
+        });
+        if let Some(index) = existing {
+            self.tuples[index].keys.extend(at.key.clone());
+            return index as u32;
+        }
+        let wire = if self.claims_only {
+            None
+        } else {
+            self.claims_of(home)
+                .get(&at.rust)
+                .and_then(|claims| {
+                    claims
+                        .iter()
+                        .find(|claim| claim.source == *tuple && claim.visibility == at.visibility)
+                })
+                .map(|claim| claim.wire.clone())
+        };
+        let index = self.lift(home, tuple, at, wire.unwrap_or_default());
+        self.foreign_tuple_at.entry(key).or_default().push(index);
+        index as u32
+    }
+
+    /// The claims of `declaring`: the named tuples of its own lowering, over
+    /// the rest of the scope. Lowered once per memo, in claims-only mode, the
+    /// first time a position inside one of its declarations is reached. The
+    /// entries of other packages that lowering lifts are left out: they are
+    /// not `declaring`'s tuples, and in claims-only mode they carry no name.
+    fn claims_of(&mut self, declaring: &'a v2::Package) -> Rc<Claims> {
+        if let Some(claims) = self.claims_memo.borrow().get(&declaring.name) {
+            return Rc::clone(claims);
+        }
+        #[cfg(test)]
+        DECLARING_LOWERINGS.with(|count| count.set(count.get() + 1));
+        let others = self.scope.projection_others(declaring);
+        let mut lowering = Lowering::with_mode(
+            Scope {
+                package: declaring,
+                others: &others,
+            },
+            true,
+        );
+        lowering.declarations();
+        let mut claims = Claims::new();
+        for entry in lowering.tuples.iter().filter(|entry| entry.named) {
+            claims
+                .entry(entry.rust.clone())
+                .or_default()
+                .push(TupleClaim {
+                    source: entry.source.clone(),
+                    visibility: entry.path.visibility,
+                    wire: entry.wire.clone(),
+                });
+        }
+        let claims = Rc::new(claims);
+        self.claims_memo
+            .borrow_mut()
+            .insert(declaring.name.clone(), Rc::clone(&claims));
+        claims
+    }
+
+    /// A new entry for the tuple at `at`, under the wire name `wire`.
     fn lift(
         &mut self,
         home: &'a v2::Package,
         tuple: &v2::TupleType,
         at: &Path,
-        claim: (String, String),
-    ) -> u32 {
+        wire: String,
+    ) -> usize {
         let index = self.tuples.len();
-        self.tuple_at.entry(claim).or_insert(index);
         self.tuples.push(TupleEntry {
             source: tuple.clone(),
             home,
             path: at.clone(),
             rust: at.rust.clone(),
-            wire: at.wire.clone(),
+            wire,
             named: at.named,
             keys: at.key.clone().into_iter().collect(),
             docs: Vec::new(),
             lowered: None,
         });
-        index as u32
+        index
     }
 
     /// Lowers every tuple the walk reached, in discovery order; lowering one
@@ -845,7 +995,7 @@ impl<'a> Lowering<'a> {
             // tuple inside it is reached under that root; a tuple inside a
             // foreign declaration's tuple is reached under the declaration.
             if named {
-                path.key = Some(vec![format!("tuple {index}")]);
+                path.key = Some(vec![Step::Root(Root::Tuple(index as u32))]);
             }
             let docs = self.tuples[index].docs.clone();
             let (rust, wire) = (
@@ -2004,5 +2154,49 @@ pub(super) fn absent_cause(cause: AbsentCause) -> v1::AbsentCause {
         AbsentCause::NoBound => v1::AbsentCause::NoBound,
         AbsentCause::Overflow => v1::AbsentCause::Overflow,
         AbsentCause::Unresolved => v1::AbsentCause::Unresolved,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A position inside a declaration of another package that matches no
+    /// claim of that package keeps an empty wire name: the name the importer
+    /// would derive for it (`ST`) is never used. No input to `lower` reaches
+    /// this case, because the declaring package's own lowering reaches every
+    /// position under the same name, shape and visibility; the rule is
+    /// pinned on the function.
+    #[test]
+    fn a_foreign_position_with_no_claim_keeps_an_empty_wire_name() {
+        let a = v2::Package {
+            name: "a".to_string(),
+            decls: vec![v2::Decl {
+                name: "S".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef::default())),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let b = v2::Package {
+            name: "b".to_string(),
+            ..Default::default()
+        };
+        let others = [&a];
+        let mut lowering = Lowering::new(Scope {
+            package: &b,
+            others: &others,
+        });
+        let at = Path::foreign("a", "S", v2::Visibility::Public as i32).field("t");
+        assert_eq!(at.wire, "ST");
+        let tuple = v2::TupleType {
+            fields: vec![v2::TupleField {
+                name: "x".to_string(),
+                r#type: None,
+            }],
+        };
+        let index = lowering.foreign_tuple_ref(&a, &tuple, &at) as usize;
+        assert_eq!(lowering.tuples[index].wire, "");
     }
 }
