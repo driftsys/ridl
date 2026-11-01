@@ -782,7 +782,7 @@ All under `crates/ridl-transport-ws/`.
   lengths 0, 1 and 255, a `response` under `reply` encodes to exactly
   `frame_header_max_bytes + envelope_bytes + len` bytes, read from the
   `websocket` row of `ridl_ir::codegen::known_bindings()`, and the row's version
-  is the binding version 1; every other data-plane form encodes to no more; an
+  is the binding version 2; every other data-plane form encodes to no more; an
   `attach` with a 255-byte name is 294 bytes. `known_bindings()` is a public
   function added to `ridl-ir` for this test, because the only other public route
   to the row needs a whole lowered system.
