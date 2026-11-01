@@ -203,19 +203,27 @@ set is closed: a binding carries exactly these fields, adds none, and omits none
 that the form requires. Header fields have no default: a field the form requires
 is present on every frame of that form.
 
-| Field         | Domain                                                        | Present on                                     |
-| ------------- | ------------------------------------------------------------- | ---------------------------------------------- |
-| `form`        | one of the ten forms below                                    | every frame                                    |
-| `interface`   | `InterfaceNo`, `u32`, never 0                                 | every frame but `attach` and `attached`        |
-| `ordinal`     | `Ordinal`, `u32`, never 0                                     | every frame but `attach` and `attached`        |
-| `kind`        | `Kind`, values 1 to 5                                         | every frame but `attach` and `attached`        |
-| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                          | `publish`, `occurrence`, `request`, `response` |
-| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                         | `publish`                                      |
-| `correlation` | `u64`: the `seq` of the request answered                      | `response`                                     |
-| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries | `response`, `attached`, `answer`               |
-| `payload`     | bytes in the session's encoding                               | as §5 states per form and per kind             |
+| Field         | Domain                                                                                  | Present on                                              |
+| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `form`        | one of the eleven forms below                                                           | every frame                                             |
+| `interface`   | `InterfaceNo`, `u32`, never 0                                                           | every frame but `attach` and `attached`                 |
+| `ordinal`     | `Ordinal`, `u32`, never 0                                                               | every frame but `attach` and `attached`                 |
+| `kind`        | `Kind`, values 1 to 5                                                                   | every frame but `attach` and `attached`                 |
+| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                                                    | `publish`, `occurrence`, `request`, `response`, `block` |
+| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                                                   | `publish`                                               |
+| `correlation` | `u64`: the `seq` of the request answered                                                | `response`                                              |
+| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries                           | `response`, `attached`, `answer`                        |
+| `total`       | `u32`: the length in bytes of the whole payload that the block is a part of, at least 1 | `block`                                                 |
+| `index`       | `u32`: the position of the block in that payload, counted from 0                        | `block`                                                 |
+| `payload`     | bytes in the session's encoding                                                         | as §5 states per form and per kind                      |
 
-**The ten forms**, by plane and direction:
+**Frame versions.** This document defines **frame version 2**: frame version 1
+and the `block` form with its two fields `total` and `index`. Frame version 1 is
+the same frame without them, ten forms and no `total` and no `index`. Every
+other field, code and rule is the same in both versions. A session carries one
+frame version, which its `attach` names (§6.1).
+
+**The eleven forms**, by plane and direction:
 
 | Form          | Plane   | Direction           | Meaning                                                                      |
 | ------------- | ------- | ------------------- | ---------------------------------------------------------------------------- |
@@ -229,18 +237,35 @@ is present on every frame of that form.
 | `occurrence`  | data    | provider → consumer | one occurrence of an event (§5.2)                                            |
 | `request`     | data    | consumer → provider | one call of a command or a query (§5.3, §5.4)                                |
 | `response`    | data    | provider → consumer | the acknowledgment of a command, or the reply of a query (§5.3, §5.4)        |
+| `block`       | data    | provider → consumer | one part of a `publish` of a `fixed` that is sent in parts (§5.5)            |
 
 **The codes.** A binding that carries a field as a numeric code uses these
 values. `form`: `attach` 1, `attached` 2, `subscribe` 3, `answer` 4,
 `unsubscribe` 5, `read` 6, `publish` 7, `occurrence` 8, `request` 9, `response`
-10 — the order of the table above. `provenance`: `Init` 1, `Live` 2,
-`Invalid(Declared)` 3. `outcome`: `accepted` 1, `reply` 2,
-`contract(InvalidValue)` 3, `contract(PreconditionFailed)` 4,
-`contract(ContractBroken)` 5, `contract(UnknownInteraction)` 6, `corrupt` 7,
-`busy` 8, `refused` 9. A `refused` reason: `unknown_catalog` 1,
-`catalog_mismatch` 2, `encoding_unsupported` 3, `frame_version_unsupported` 4,
-`range` 5. The `Rule` of an `InvalidValue`: §9.6. A new value in any of these
-tables is a new frame version.
+10, `block` 11 — the order of the table above; `block` 11 is a code of frame
+version 2 only. `provenance`: `Init` 1, `Live` 2, `Invalid(Declared)` 3.
+`outcome`: `accepted` 1, `reply` 2, `contract(InvalidValue)` 3,
+`contract(PreconditionFailed)` 4, `contract(ContractBroken)` 5,
+`contract(UnknownInteraction)` 6, `corrupt` 7, `busy` 8, `refused` 9. A
+`refused` reason: `unknown_catalog` 1, `catalog_mismatch` 2,
+`encoding_unsupported` 3, `frame_version_unsupported` 4, `range` 5. The `Rule`
+of an `InvalidValue`: §9.6. A new value in any of these tables is a new frame
+version.
+
+**The `block` form.** A `block` is one part of a `publish` of a `fixed` under
+`Live`, sent when a binding carries that `publish` in parts (§5.5, §10 item 10).
+It carries `interface`, `ordinal`, `kind` and `envelope`, as that `publish`
+does, the two fields `total` and `index`, and a payload: the bytes of its part.
+It carries no `provenance`, because only a `publish` under `Live` of a `fixed`
+is sent in parts, and no `correlation` and no `outcome`. Every block of one
+payload carries the same `interface`, `ordinal`, `kind`, `envelope` and `total`.
+In frame version 2 the `kind` of a `block` is `Fixed`; any other kind is a value
+outside the form's table. Every block but the last carries the binding's block
+size in bytes, and the last carries the rest, so a payload of `total` bytes has
+`n = ceil(total / block size)` blocks, with `index` from 0 to n − 1. A block
+whose `kind` is not `Fixed`, whose `total` is 0, whose `index` is n or more, or
+whose number of payload bytes is not the one its `index` and `total` give is not
+a frame the receiver can read (§9.5): the check needs no session state.
 
 **Why `kind` is on the frame at all.** Both sides hold the catalog, so either
 could look the kind up from the ordinal. It crosses because a relay, a recorder
@@ -483,7 +508,8 @@ reply bytes (§9.3). No `response` within the query's response bound is
 A `fixed` is provisioned outside the contract and immutable for the lifetime of
 the software instance (ridl §8). It is not published and not called; it crosses
 **at most once per read**, provider to consumer, as a `publish` frame in answer
-to a `read` (§6.3).
+to a `read` (§6.3), or as the `block` frames of that `publish` when the binding
+carries it in parts (below).
 
 | Field        | On a `publish` of a `fixed`                                                                        |
 | ------------ | -------------------------------------------------------------------------------------------------- |
@@ -500,18 +526,68 @@ session reads it again, because the provider may be a new instance. There is no
 `UnknownInteraction` (§6.2). There is no provider-side port: the value is
 provisioned into the providing runtime, not published by application code.
 
+**A `fixed` in blocks.** A binding that carries frame version 2 may send the
+`publish` of a `fixed` as `block` frames (§4) when its payload does not fit one
+unit of the transport; the block size, and when the sender splits, are the
+binding's (§10 item 10). Only a `fixed` crosses in blocks, and only from
+provider to consumer. The provider never reassembles: a `block` it receives is a
+protocol violation, and the session ends (§3). The provider sends the blocks of
+one payload in `index` order, and every block of one payload before the first
+block of another. Frames of other forms may come between two blocks of one
+payload.
+
+**What the consumer does with blocks.** The consumer holds at most one
+reassembly per session: one interaction, one envelope, one `total` and the next
+expected `index`. A reassembly is in progress from the first block of a payload
+to its last, whether its blocks are copied or only checked. The consumer sizes
+it from the catalog's limit of the interaction, never from the sender: the limit
+in the descriptor's limit column, or the default ceiling of the `fixed` kind,
+65,280 bytes, when the column holds none
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
+16). Its memory is therefore at most one buffer of 65,280 bytes.
+
+| Case                                                                                                                  | What the consumer does                                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a `block` with `index` 0, no reassembly in progress, and a `total` within the limit                                   | starts a reassembly and copies the block                                                                                                                                                                                                                                |
+| the next `block`, with the expected `index` and the same `interface`, `ordinal`, `envelope` and `total`               | copies it; after the last block, the reassembled frame, a `publish` under `Live` with the blocks' envelope and the `total` bytes, is handled as a `publish` of a `fixed` that arrived whole (§6.3, §6.4, §9.4)                                                          |
+| a `block` with `index` 0 and a `total` above the limit                                                                | refuses the payload before a byte is copied (ADR-0030 decision 19): every `read` it answers reports the structure failure of §9.4, and the refusal is recorded. The remaining blocks of that payload are checked for their sequence and not copied. The session goes on |
+| a `block` with `index` 0 naming an `(interface, ordinal)` that the consumer's catalog does not hold as a `fixed`      | discarded and recorded (§6.4); the remaining blocks are checked and not copied, as above. A consumer that holds no member table cannot tell: it reassembles within the default ceiling of a `fixed` and handles the result as a `publish` that no `read` asked for      |
+| a `block` whose `index` is not the next expected: a missing, a repeated or a reordered block                          | a protocol violation: the session ends (§3), and every waiting `read` reports `Down`                                                                                                                                                                                    |
+| a `block` with `index` above 0 and no reassembly in progress                                                          | a protocol violation, as above                                                                                                                                                                                                                                          |
+| a `block` with `index` 0 while another reassembly is in progress                                                      | a protocol violation, as above                                                                                                                                                                                                                                          |
+| a `block` whose `interface`, `ordinal`, `envelope` or `total` differs from the reassembly in progress                 | a protocol violation, as above                                                                                                                                                                                                                                          |
+| a whole `publish` whose `kind` is `Fixed` and whose `interface` and `ordinal` are those of the reassembly in progress | a protocol violation, as above: the provider answers one `read` with one `publish` or with its blocks, never both (§6.3)                                                                                                                                                |
+| an `answer` whose `kind` is `Fixed` and whose `interface` and `ordinal` are those of the reassembly in progress       | a protocol violation, as above: the provider answers the `read`s of one interaction in the order it receives them (§6.3), so such an `answer` can only be a defect of the sender                                                                                        |
+| a `block` that is wrong by itself (§4, "The `block` form")                                                            | a frame the receiver cannot read (§9.5), found with no session state                                                                                                                                                                                                    |
+| the session ends with a reassembly in progress                                                                        | the reassembly is dropped with the rest of the session's state (§3); every waiting `read` reports `Down`                                                                                                                                                                |
+
+A frame of another form between two blocks is handled as if no reassembly were
+in progress, except a whole `publish` and an `answer` of the interaction being
+reassembled, the two rows above. Both exceptions name that interaction by
+`(kind, interface, ordinal)`: a `publish` or an `answer` with the same
+`interface` and `ordinal` under another `kind` names another interaction for the
+receiver (§4), and is applied. Both apply only to a frame the receiver decodes:
+a frame that the binding discards without ending the session (§9.5; on §11.1, a
+`publish` or a `response` with bytes after a header that carries no payload) is
+recorded, and the reassembly goes on.
+
+**Which `read`s a payload in blocks answers.** A payload in blocks answers the
+`read`s of its `fixed` that were waiting when its first block arrived. A `read`
+of that `fixed` that the consumer sends while the payload is being reassembled
+is not answered by it: it waits for the provider's answer to it.
+
 ### 5.6 The field table, by kind
 
 The same facts in one table. "—" is absent; the parenthesised form is the frame
 the column describes.
 
-| Kind      | Frames                 | `envelope`                              | `provenance`                          | `correlation`     | `outcome`                                     | `payload`                   |
-| --------- | ---------------------- | --------------------------------------- | ------------------------------------- | ----------------- | --------------------------------------------- | --------------------------- |
-| `signal`  | `publish`              | provider stamp, channel `seq`           | `Init` / `Live` / `Invalid(Declared)` | —                 | —                                             | under `Live` only           |
-| `event`   | `occurrence`           | provider stamp, channel `seq`           | —                                     | —                 | —                                             | always                      |
-| `command` | `request` / `response` | caller stamp, caller `seq` / provider's | —                                     | — / request `seq` | — / `accepted`, `contract`, `corrupt`, `busy` | always / —                  |
-| `query`   | `request` / `response` | caller stamp, caller `seq` / provider's | —                                     | — / request `seq` | — / `reply`, `contract`, `corrupt`, `busy`    | always / under `reply` only |
-| `fixed`   | `publish` (on `read`)  | provider stamp, `seq` 0                 | `Live`                                | —                 | —                                             | always                      |
+| Kind      | Frames                                       | `envelope`                              | `provenance`                            | `correlation`     | `outcome`                                     | `payload`                         |
+| --------- | -------------------------------------------- | --------------------------------------- | --------------------------------------- | ----------------- | --------------------------------------------- | --------------------------------- |
+| `signal`  | `publish`                                    | provider stamp, channel `seq`           | `Init` / `Live` / `Invalid(Declared)`   | —                 | —                                             | under `Live` only                 |
+| `event`   | `occurrence`                                 | provider stamp, channel `seq`           | —                                       | —                 | —                                             | always                            |
+| `command` | `request` / `response`                       | caller stamp, caller `seq` / provider's | —                                       | — / request `seq` | — / `accepted`, `contract`, `corrupt`, `busy` | always / —                        |
+| `query`   | `request` / `response`                       | caller stamp, caller `seq` / provider's | —                                       | — / request `seq` | — / `reply`, `contract`, `corrupt`, `busy`    | always / under `reply` only       |
+| `fixed`   | `publish` (on `read`), or its `block` frames | provider stamp, `seq` 0                 | `Live` on the `publish`; — on a `block` | —                 | —                                             | always; a part of it on a `block` |
 
 ## 6. The Control Plane
 
@@ -525,11 +601,11 @@ a buffer and one that frames it.
 
 `attach` opens the session. It carries:
 
-| Field           | Domain                                                  |
-| --------------- | ------------------------------------------------------- |
-| `frame_version` | `u32`: the version of this document's frame; **1** here |
-| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash        |
-| `encoding`      | the encoding tag (§3)                                   |
+| Field           | Domain                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| `frame_version` | `u32`: the version of the frame the session carries, **1** or **2**; this document defines version 2 (§4) |
+| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash                                                          |
+| `encoding`      | the encoding tag (§3)                                                                                     |
 
 `attached` answers with an `outcome`:
 
@@ -630,16 +706,26 @@ subscribe every signal of an interface at attach.
 
 `read` names one `(interface, ordinal)` whose `kind` is `Signal` or `Fixed`, and
 is answered with one `publish` (§5.1, §5.5) carrying the current state or the
-provisioned value. A `read` of a signal does not subscribe it: nothing follows
-the one `publish`. A `read` of any other kind is refused with an `answer`
-carrying the `read`'s identity and `contract(UnknownInteraction)` — a `publish`
-cannot carry an `outcome` — which the consuming runtime maps to
-`ReadError::Contract(UnknownInteraction)`. A fulfilled `read` has no `answer`:
-the `publish` is its answer.
+provisioned value, or, for a `fixed` that the binding carries in parts, with the
+`block` frames of that `publish` (§5.5). A `read` of a signal does not subscribe
+it: nothing follows the one `publish`. A `read` of any other kind is refused
+with an `answer` carrying the `read`'s identity and
+`contract(UnknownInteraction)` — a `publish` cannot carry an `outcome` — which
+the consuming runtime maps to `ReadError::Contract(UnknownInteraction)`. A
+fulfilled `read` has no `answer`: the `publish` is its answer.
 
 Because two reads of one `fixed` return one value, and two reads of one signal
 are ordered by `seq` (§7), a `read` needs no correlation of its own: its answer
 is identified by `(interface, ordinal)` and applied by the rules of §5.1.
+
+**The order of the answers.** A provider answers the `read`s of one interaction
+in the order it receives them, and sends the whole answer of one `read`, its
+`publish`, its `answer` or every one of its blocks, before the first frame of
+the answer of the next. So between two blocks of one payload of a `fixed`, a
+whole `publish` or an `answer` of that `fixed`, named by its `kind`, `interface`
+and `ordinal`, can only be a defect of the sender, and the consumer ends the
+session on it (§5.5). Every other frame of another form between two blocks is
+applied, an `answer` or a `publish` of another interaction included.
 
 ### 6.4 An unknown interaction
 
@@ -834,6 +920,16 @@ fetched it. A value that fails its check is not cached and the read reports the
 detection to the application; a provisioned constant that fails its own type's
 constraints is a provisioning defect, and the runtime records it.
 
+A value that crosses in blocks (§5.5) is verified once, as one payload, after
+its last block, and the read it answers reports the result as for a value that
+crossed whole. A payload of a `fixed` above its interaction's limit is refused
+before `verify` (§9), whether it crosses whole or in blocks: in blocks it is
+refused at the block with `index` 0, from its `total`, before a byte is copied.
+The `read` it answers reports the structure failure, `Detected(Corrupt)`, no
+byte of it is delivered, and the refusal is recorded, whether or not a `read`
+waits for it, so that what is recorded does not depend on whether the provider
+split the value. The session goes on.
+
 ### 9.5 A frame the binding cannot read
 
 A frame whose header the binding cannot decode — an unknown `form`, a `kind`
@@ -907,6 +1003,12 @@ leaves one unstated is incomplete.
    which fields of §4 are carried in the mapped region's own layout and which in
    a frame beside it. The control plane is framed on every binding.
 9. **The rate-floor answer** on a call (§8), when the binding enforces one.
+10. **Parts of a payload.** Whether the binding carries the `publish` of a
+    `fixed` in `block` frames (§4, §5.5), which needs frame version 2; when it
+    does, two facts and no more: the block size, the number of payload bytes in
+    every block but the last, and when the sender sends a `fixed` whole and when
+    in blocks. The `block` form, its fields and what the receiver does with
+    blocks are this document's.
 
 A binding does not decide: the field set, the meaning of any field, what a
 receiver does with a frame, the per-kind presence rules of §5, the invalid
@@ -931,9 +1033,13 @@ decision 6) is its Rust crate, and `@driftsys/ridl-transport-ws`
 (`packages/ridl-transport-ws/`, decision 7) is the same binding for Deno and the
 browser; it carries payload bytes without decoding them, so the two ends of one
 connection may be a Rust runtime and a TypeScript one. This section is the
-binding document: it states the nine items of §10 and adds nothing to the frame.
-The binding is **version 1** and carries frame version 1. The reasoning behind
-each rule, with the alternatives considered, is in
+binding document: it states the ten items of §10 and adds nothing to the frame.
+It specifies two binding versions: **version 1**, under the subprotocol
+`ridl-ws-v1`, carries frame version 1, and **version 2**, under `ridl-ws-v2`,
+carries frame version 2. Items 1 to 10 hold for both versions, the test vectors
+below are version 1's, and version 2 adds what "Binding version 2", at the end
+of this section, states. The reasoning behind each rule, with the alternatives
+considered, is in
 [the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
 **1. The transport and the session.** One WebSocket connection carries one
@@ -1005,26 +1111,30 @@ command and a query, and 65,280 for a `fixed`
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
 16). The largest payload one message carries is 16,128 bytes, so the largest
 data-plane message is 36 + 16,128 = 16,164 bytes. The Rust provider
-`ridl-transport-ws` limits a message to 16,164 bytes by default and refuses a
-configured limit above it (ADR-0030 decision 10); with a member table it also
-refuses, before the opening handshake, a configured limit below what one message
-of a member of the catalog needs, 36 bytes plus the member's limit, at most
-16,128 for a `fixed`, so a limit the provider accepts carries every payload the
-catalog allows in one message. Until the binding carries a `fixed` in blocks
-(driftsys/ridl#1129), a `fixed` above the message limit minus the 27-byte
-`publish` header, 16,137 bytes at the default limit, within its limit, is not
-served over this binding: the Rust provider sends no `publish` for it, records
-the value, and answers the `read` with an `answer` carrying
+`ridl-transport-ws` serves binding version 2. It limits a message to 16,164
+bytes by default and refuses a configured limit above it (ADR-0030 decision 10);
+with a member table it also refuses, before the opening handshake, a configured
+limit below what one message of a member of the catalog needs: 36 bytes plus the
+member's limit, where a `fixed` counts the smaller of 36 bytes plus its limit
+and 4,130 bytes, one block message of binding version 2. So a limit the provider
+accepts carries every payload the catalog allows, whole or in blocks. The check
+counts the 36-byte header of a `response` for every member, although a signal
+and a `fixed` cross in a 27-byte `publish`, so it can refuse a limit that is up
+to 9 bytes larger than such a member needs. A `fixed` above the message limit
+minus the 27-byte `publish` header, 16,137 bytes at the default limit, crosses
+in blocks (binding version 2). A provider whose message limit is below 4,130
+bytes sends no block: it sends a `fixed` that fits one `publish`, records a
+larger value and answers its `read` with an `answer` carrying
 `contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read`, so
-that the read ends instead of waiting until the session ends; every other member
-of the catalog is served, and the catalog is attached. The Rust provider answers
-a `read` of a signal or of a `fixed` whose value is above the member's limit the
-same way, so that no read waits on a value that is not sent. The codegen model
-carries the data-plane numbers as the `websocket` row, binding version `"1"`,
-`frame_header_max_bytes` 20, `envelope_bytes` 16
-(`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
-the layout is frozen through the vectors below, and the row is a derived value,
-corrected in a patch release if it is wrong
+that the read ends instead of waiting until the session ends; with a member
+table, the check above admits such a limit only when every `fixed` of the
+catalog fits one message. The Rust provider answers a `read` of a signal or of a
+`fixed` whose value is above the member's limit the same way, so that no read
+waits on a value that is not sent. The codegen model carries the data-plane
+numbers as the `websocket` row, binding version `"2"`, `frame_header_max_bytes`
+20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
+derived from this layout: the layout is frozen through the vectors below, and
+the row is a derived value, corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the
@@ -1080,10 +1190,15 @@ a runtime over this binding does not present `CoherentSignals`.
 **9. The rate-floor answer** is §8's: a call faster than the member's `min` may
 be refused at admission and answered `busy`. The binding adds nothing.
 
+**10. Parts of a payload.** Version 1 carries every payload whole, one frame in
+one message, and has no `block` form. Version 2 carries a `fixed` that does not
+fit one message in blocks of 4,096 bytes, as "Binding version 2" states.
+
 **Later versions.** An addition to the frame — a form, a field, a code — is a
-new frame version carried by a new binding version, offered beside this one in
-the subprotocol list. Version 1's layout, codes and vectors are never edited.
-Streams (ridl §12, driftsys/ridl#336) arrive this way.
+new frame version carried by a new binding version, offered beside the earlier
+ones in the subprotocol list. Version 1's layout, codes and vectors are never
+edited, and neither are version 2's. Binding version 2, below, is the first such
+version; streams (ridl §12, driftsys/ridl#336) arrive as version 3 the same way.
 
 **Test vectors.** Each line is one complete message in hexadecimal, spaces for
 reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
@@ -1108,13 +1223,82 @@ payload" above.
 | `response-accepted`  | `response` command accepted, correlation 1, provider seq 1      | `0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01 00`                      |
 | `response-violation` | `response` query `contract(InvalidValue(Range))`, correlation 2 | `0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 03 01`                      |
 
+#### Binding version 2
+
+Binding version 2 carries frame version 2 (§4) under the subprotocol
+`ridl-ws-v2`. It is version 1 with the `block` form: every layout, code, rule
+and vector of version 1 holds unchanged, `attach` included, whose
+`frame_version` carries 2.
+
+**The subprotocol and the frame version.** A client that speaks both versions
+offers `ridl-ws-v2, ridl-ws-v1`, newest first, as item 1 states, and sends
+`attach` with the frame version of the subprotocol the server selected: 2 on
+`ridl-ws-v2`, 1 on `ridl-ws-v1`. On a `ridl-ws-v2` connection,
+`attach.frame_version` is 2 or the `attach` is refused
+`frame_version_unsupported`. On a version 1 session no `block` crosses, and a
+message whose `form` is 11 there is a code outside its table (item 4). The Rust
+provider serves frame version 2 only. It selects `ridl-ws-v2` when the client
+offers it; when the client offers `ridl-ws-v1` and not `ridl-ws-v2`, it selects
+`ridl-ws-v1`, refuses every `attach` on that connection
+`frame_version_unsupported`, whatever its `frame_version`, and closes with 1000
+(item 4); a handshake that offers neither is answered `400 Bad Request`.
+
+**The header encoding.** Version 2 adds one row to the table of item 2:
+
+| Form    | Bytes                                                                | Header size |
+| ------- | -------------------------------------------------------------------- | ----------- |
+| `block` | the common 10, then `stamp` i64, `seq` u64, `total` u32, `index` u32 | 34          |
+
+A block's payload is every byte after its header. The largest data-plane header
+without its envelope is still the `response`'s, 20 bytes, so "The sizes" of item
+2 holds unchanged.
+
+**Blocks.** Every block but the last carries **4,096 bytes** of the payload, and
+the last carries the rest, `total − 4,096 × index` bytes, from 1 to 4,096. A
+payload of `total` bytes has `n = ceil(total / 4,096)` blocks, and a block
+message is at most 34 + 4,096 = 4,130 bytes. The block size is a constant of
+binding version 2, not a configuration value, so the two ends never disagree on
+it; another block size is another binding version. The provider sends a `fixed`
+whole, in one `publish`, when that `publish` fits its message limit, that is
+when the payload is at most the limit minus 27 bytes, 16,137 bytes at 16,164;
+otherwise it sends blocks. That rule is the sender's alone: the consumer does
+not know the provider's message limit, accepts blocks for any `total` from 1,
+and checks `total` against the catalog's limit only (§5.5).
+
+| `total` | Blocks | Message lengths        | Bytes on the wire |
+| ------- | ------ | ---------------------- | ----------------- |
+| 16,138  | 4      | 3 × 4,130, then 3,884  | 16,274            |
+| 32,768  | 8      | 8 × 4,130              | 33,040            |
+| 65,280  | 16     | 15 × 4,130, then 3,874 | 65,824            |
+
+**Framing.** A `block` that is wrong by itself (§4, "The `block` form") is a
+protocol violation of item 4, and so is each sequence error of §5.5 and a
+`block` that a provider receives: the receiver records it and closes with 1002,
+and the session ends as §3 states. With the block size of 4,096 bytes, a block
+is wrong by itself when its `kind` is not `Fixed`, its `total` is 0, its `index`
+is n or more, or the number of bytes after its header is not 4,096 for an
+`index` below n − 1 and not `total − 4,096 × index` for the last; a block with
+no byte after its header, and one with more than 4,096, are wrong by that rule.
+
+**Version 2 test vectors.** Each line is one complete message in hexadecimal,
+spaces for reading only, with the stamp, the hash and the unit name of the
+version 1 table. Every `block` vector is of `kind` `Fixed`, interface 1, ordinal
+5 and `seq` 0. A block that is not the last holds 4,096 bytes, too long for a
+row, so no such block is a vector of this table.
+
+| Id           | Vector                                                                             | Hex                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `attach-2`   | `attach` frame 2, FlatBuffers, `veh.cabin`                                         | `01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `block-last` | `block` fixed, interface 1, ordinal 5, seq 0, total 4,098, index 1, payload `abcd` | `0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd`                      |
+| `block-one`  | `block` fixed, interface 1, ordinal 5, seq 0, total 1, index 0, payload `ab`       | `0b 05 01000000 05000000 ab89674523010000 0000000000000000 01000000 00000000 ab`                        |
+
 ### 11.2 Binder on Android
 
 On Android, a runtime binds the ports over its own binder contract, which may be
 one generic, versioned AIDL interface serving every catalog. ridl specifies no
 Binder layout and no transaction code: the contract's methods, and whether it
 carries an ordinal as a transaction code or as a field, are the runtime's. Such
-a binding is written from this document like any other: it states the nine items
+a binding is written from this document like any other: it states the ten items
 of §10 for Binder, adds nothing to the frame, and follows §4 where it carries an
 interface number or an ordinal in a field narrower than 32 bits. Its path is
 "passed within a node", so its payload encoding is **FlatBuffers** (encoding tag
@@ -1184,20 +1368,59 @@ so that each catches one way of being wrong.
 13. A `request` naming an ordinal the catalog does not hold, or holding it under
     another kind, is answered `contract(UnknownInteraction)` (§6.4).
 14. A `read` of a `fixed` is answered with one `publish` of `kind` `Fixed`,
-    `seq` 0 and the value; a `subscribe` to it is refused (§5.5, §6.2).
+    `seq` 0 and the value, or under binding version 2 its `block` frames when it
+    does not fit one message (item 18); a `subscribe` to it is refused (§5.5,
+    §6.2).
 15. The frames of one commit carry one `stamp` (§5.1).
 16. No frame carries a timing bound, an init value, a `ClaimId`, a `Correlation`
     as the port hands it out, a `Detected(_)` provenance, or a `Timeout`,
     `Undelivered` or `Down` outcome (§8, §5.1, §2, §9.6).
+
+Items 17 to 24 hold for a binding that carries a `fixed` in blocks, on a session
+of frame version 2, such as binding version 2 of §11.1, whose block size of
+4,096 bytes they use.
+
+17. A `read` of a `fixed` whose payload fits one `publish` within the provider's
+    message limit is answered with one `publish`, and with no `block` (§11.1,
+    "Binding version 2").
+18. A `read` of a `fixed` whose payload does not fit one `publish` is answered
+    with `ceil(total / 4,096)` `block` frames, `index` 0 to n − 1 in order, each
+    with `kind` `Fixed`, the same `interface`, `ordinal`, envelope (`seq` 0) and
+    `total`, every block but the last holding 4,096 bytes; the consumer delivers
+    one sample whose payload is the provisioned value, byte for byte (§5.5).
+19. A frame of another form, other than a whole `publish` or an `answer` of the
+    interaction being reassembled, sent between two blocks of one payload is
+    applied, and the payload is still delivered (§5.5).
+20. Each sequence error of §5.5 — a missing, a repeated and a reordered block,
+    an `index` above 0 with no reassembly, an `index` 0 during another
+    reassembly, a block whose identity, envelope or `total` differs, a whole
+    `publish` of the interaction being reassembled, and an `answer` of the
+    interaction being reassembled — ends the session as a protocol violation.
+    The whole `publish` and the `answer` are each a decoded frame whose `kind`,
+    `interface` and `ordinal` are those of the reassembly in progress (§5.5,
+    §6.3).
+21. Each single-block error — `kind` not `Fixed`, `total` 0, no bytes, more than
+    4,096 bytes, `index` ≥ n, a short block that is not the last, a last block
+    of the wrong length — is a protocol violation (§4, §11.1).
+22. A `block` with `index` 0 whose `total` is above the member's limit makes the
+    waiting `read` report the structure failure of §9.4, no byte of it is
+    delivered, and a later `read` on the same session is answered (§5.5, §9.4).
+23. A `block` received by a provider ends the session as a protocol violation
+    (§5.5).
+24. An `attach` with `frame_version` 1 to a provider that serves version 2 only
+    is refused `frame_version_unsupported`; a consumer that offers
+    `ridl-ws-v2, ridl-ws-v1` to a version 1 provider attaches with
+    `frame_version` 1 (§6.1, §11.1).
 
 ## 13. Not in This Version
 
 Each item is left out on purpose, with the record that takes it.
 
 - **Streams.** `<T>` on a call's parameter or return (ridl §12) has no frame in
-  version 1: `ridl-rt` 0.1 leaves streams out (driftsys/ridl#336). They arrive
-  as frame version 2, negotiated as §11.1 "Later versions" states, so that a
-  version 1 peer is unchanged.
+  version 1 or version 2: `ridl-rt` 0.1 leaves streams out (driftsys/ridl#336).
+  They arrive as frame version 3, negotiated as §11.1 "Later versions" states,
+  so that a version 1 or a version 2 peer is unchanged. Frame version 2 holds
+  the blocks of a `fixed` (§4, §5.5).
 - **The family.** Which of ridl §3.2's five boundaries an interaction sits on is
   not on the frame, because `ridl-rt` 0.1 carries no `Family` and the IR has no
   family field yet; it returns as a `Member` field, a breaking change under
