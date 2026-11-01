@@ -778,3 +778,12 @@ provenance. Nothing here is normative — the current references live in
   work landed. The durable records are
   [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md) and
   [the lints chapter](../book/lints.md).
+
+- **2026-10-31-streams-stages-1-2-plan.md** — the plan for stages 1 and 2 of the
+  streams work: the `streams` list in the catalog descriptor, and the stream
+  port of `ridl-rt` with its loopback implementation and conformance tests.
+  Archived verbatim, on 2026-11-01, once the work landed in driftsys/ridl#1154
+  (squash `ed336b98`, 2026-10-31); the `runtime-crates` freeze row came back in
+  driftsys/ridl#1159. Stages 3 to 6 continue from
+  `docs/wip/2026-10-31-streams-design.md` and driftsys/ridl#1116, which stay in
+  `docs/wip/`.
