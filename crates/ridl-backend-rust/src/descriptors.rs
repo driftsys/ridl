@@ -691,7 +691,7 @@ fn stream_element(stream: &v1::StreamShape) -> String {
 /// has no payload type, so it has no `Reply` and no row of the size table.
 /// The element is spelled as the IR reference text, as a payload is.
 fn stream_reply(interaction: &v1::Interaction) -> Option<String> {
-    let stream = interaction.streams.iter().find(|stream| stream.no == 0)?;
+    let stream = reply_stream(interaction)?;
     let inner = match v1::StreamForm::try_from(stream.form) {
         Ok(v1::StreamForm::Bytes) => "bytes".to_string(),
         Ok(v1::StreamForm::Text) => "string".to_string(),
@@ -702,6 +702,19 @@ fn stream_reply(interaction: &v1::Interaction) -> Option<String> {
             .unwrap_or_default(),
     };
     Some(format!("<{inner}>"))
+}
+
+/// The number of a query's reply stream, which the generated face names as
+/// `ridl_rt::port::REPLY_STREAM`. The backend does not link `ridl-rt`, so the
+/// value is written here.
+const REPLY_STREAM_NO: u32 = 0;
+
+/// A query's reply stream, or `None` when the interaction has none.
+fn reply_stream(interaction: &v1::Interaction) -> Option<&v1::StreamShape> {
+    interaction
+        .streams
+        .iter()
+        .find(|stream| stream.no == REPLY_STREAM_NO)
 }
 
 /// One row of the size table: the sum, as a `u64`, of the `MAX_SIZE` paths
@@ -973,14 +986,11 @@ pub(crate) fn has_stream_reply(interaction: &v1::Interaction) -> bool {
 /// a named type. It is the one stream form the face carries; the element is
 /// what [`query_reply_type`] returns for the query.
 pub(crate) fn named_stream_reply(interaction: &v1::Interaction) -> bool {
-    match interaction.streams.as_slice() {
-        [stream] => {
-            stream.no == 0
-                && v1::StreamForm::try_from(stream.form) == Ok(v1::StreamForm::Elements)
+    interaction.streams.len() == 1
+        && reply_stream(interaction).is_some_and(|stream| {
+            v1::StreamForm::try_from(stream.form) == Ok(v1::StreamForm::Elements)
                 && stream.element.is_some()
-        }
-        _ => false,
-    }
+        })
 }
 
 /// Why a call has no argument type: a parameter with no declared type.

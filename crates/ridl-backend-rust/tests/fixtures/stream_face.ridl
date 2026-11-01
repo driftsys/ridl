@@ -4,7 +4,9 @@
 // caller side of the stream and a `Provider` and a `serve` for both members.
 // `Plain` declares one query with a named reply and no stream, so its
 // `Client` and its `serve` are the proof that the stream bounds are added
-// only to an interface that declares a stream member.
+// only to an interface that declares a stream member. `Twin` declares two
+// queries whose replies are streams, so its face holds one stream slot per
+// member and its `serve` drives both sources.
 //
 // Kept self-contained, for the reason `interaction_face.ridl` gives.
 
@@ -34,4 +36,13 @@ interface Log {
 interface Plain {
   /// The latest reading.
   query latest(limit: Level): Reading @[..200ms]
+}
+
+/// Two streamed replies on one interface, for the test that `serve` drives
+/// the source of each. Named to sort after `Plain`.
+interface Twin {
+  /// The readings up to `limit`, oldest first.
+  query left(limit: Level): <Reading> @[..200ms]
+  /// The levels up to `limit`, oldest first.
+  query right(limit: Level): <Level> @[..200ms]
 }

@@ -2,7 +2,9 @@
 //! The face as a whole is described in the documentation of the parent
 //! module, `face.rs`.
 
-use super::{Call, catalog_panics_doc, encoding_bounds, ident, interface_number, ty};
+use super::{
+    Call, catalog_panics_doc, encode_failure_arms, encoding_bounds, ident, interface_number, ty,
+};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
 
@@ -91,9 +93,43 @@ pub(super) fn serve(
         quote! { budget == 0 }
     } else {
         quote! {
-            budget == 0 || again || ::core::mem::take(&mut this.streams.__started)
+            ::core::mem::take(&mut this.streams.__started) || budget == 0 || again
         }
     };
+
+    // A `Drop` impl must repeat its type's bounds exactly, so it carries the
+    // struct's `where` clause and no other. Dropping the future while a
+    // stream runs, as `blocking::serve` does when its timeout passes, stops
+    // each running stream with `Transport::Interrupted`, so that its claim is
+    // settled and the caller reads the interruption, and drops its source
+    // with the slot. The result of `abort_claim` is not read: a claim the
+    // port no longer holds leaves nothing to settle.
+    let serve_drop = (!streams.is_empty()).then(|| {
+        let slots = streams.iter().map(|call| {
+            let method = &call.member.method;
+            quote! {
+                if let Some(stream) = self.streams.#method.take() {
+                    let _ = self.handler.abort_claim(
+                        stream.claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                }
+            }
+        });
+        quote! {
+            impl<#bounds> ::core::ops::Drop for Serve<'_, H, P>
+            where
+                #buffer_bound
+            {
+                fn drop(&mut self) {
+                    #(#slots)*
+                }
+            }
+        }
+    });
 
     let serve_doc = format!(
         "Serves interface `{iface_name}`'s commands and queries with `p`, over \
@@ -150,7 +186,9 @@ pub(super) fn serve(
              push. So while a member's source answers `Pending`, a caller \
              that stopped keeps the member busy until the source yields its \
              next element, whose push fails, and only then is the source \
-             dropped and the member free for a new call."
+             dropped and the member free for a new call. Dropping the future \
+             stops every stream it still drives with `Transport::Interrupted` \
+             and drops its source."
         )
     };
     let future_doc = format!(
@@ -290,6 +328,8 @@ pub(super) fn serve(
                 }
             }
         }
+
+        #serve_drop
     }
 }
 
@@ -362,6 +402,9 @@ fn stream_items(streams: &[Call]) -> TokenStream {
             #method: ::core::option::Option<StreamSlot<P::#source, ElementBuffer<H, #path>>>,
         }
     });
+    // `drive_stream` is generic over the element, so its failure arms name
+    // no type.
+    let failures = encode_failure_arms("a stream element", "its buffer");
     quote! {
         type ElementBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
             <H as ::ridl_rt::port::Encoded>::Encoding,
@@ -467,13 +510,7 @@ fn stream_items(streams: &[Call]) -> TokenStream {
                         ::ridl_rt::error::Contract::InvalidValue(violation),
                     ))
                 }
-                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
-                    unreachable!(
-                        "encoding a stream element needs {} bytes and its buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
-                        needed, available
-                    )
-                }
-                Err(_) => unreachable!("encoding a stream element failed"),
+                #failures
             };
             let (start, end) = match checked {
                 Ok(range) => range,

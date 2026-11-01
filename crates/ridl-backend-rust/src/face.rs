@@ -1551,13 +1551,20 @@ fn encode_into_settled(
 /// The violation's binding carries the emitter-owned name `__violation`, which
 /// no ridl identifier can be, so a ridl parameter cannot shadow it.
 fn encode_failures(type_name: &str, target_name: &str) -> TokenStream {
+    encode_failure_arms(&format!("`{type_name}`"), target_name)
+}
+
+/// The arms of [`encode_failures`] with the encoded value named by
+/// `subject`, for a call site that is generic over the type it encodes, as
+/// `serve`'s stream step is.
+fn encode_failure_arms(subject: &str, target_name: &str) -> TokenStream {
     let capacity = format!(
-        "encoding `{type_name}` needs {{}} bytes and {target_name} has {{}}; a legal value \
+        "encoding {subject} needs {{}} bytes and {target_name} has {{}}; a legal value \
          cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value \
          breaks a constraint the encoder does not check or its `Payload` implementation does \
          not honor `MAX_SIZE`"
     );
-    let other = format!("encoding `{type_name}` failed");
+    let other = format!("encoding {subject} failed");
     quote! {
         Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
             unreachable!(#capacity, needed, available)

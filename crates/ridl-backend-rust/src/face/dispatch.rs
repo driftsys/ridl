@@ -187,8 +187,8 @@ pub(super) fn dispatch(
     // no doc; what it does, with `<Iface>` for the interface descriptor:
     //
     // Settles the claims of interface `<Iface>` that are waiting, up to
-    // `budget` of them, and returns how many were settled, or the handler
-    // port's failure. It is the one-pass step `serve` calls on each poll.
+    // `budget` of them, and returns how many were settled or kept as a
+    // running stream, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
     //
     // It does not wait: it makes one pass over the claims the handler already
     // has and returns. `budget` is decreased by one for each claim taken from
@@ -223,8 +223,10 @@ pub(super) fn dispatch(
     // number or ordinal this interface does not recognise, which settles
     // `Contract::UnknownInteraction`. The one exception is a query whose
     // reply is a stream and whose source was kept: `serve` settles it when it
-    // ends or stops the stream, and the pass counts it as settled. A claim is counted only once
-    // `Handler::settle` has accepted it; a `SettleError` is left to the
+    // ends or stops the stream, and the pass counts it with the settled
+    // claims although `Handler::settle` was not called for it. Every other
+    // claim is counted only once `Handler::settle` has accepted it; a
+    // `SettleError` is left to the
     // handler, which already owns that claim's settlement, and the pass
     // continues with the next claim, except for an oversized claim, whose
     // refused settlement ends the pass as stated above.

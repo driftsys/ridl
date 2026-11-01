@@ -24,10 +24,12 @@
 //! The module is emitted only when the interface declares something that
 //! waits — an event, a command or a query; a signal-only interface's `Client`
 //! never blocks, so it gets no `blocking` module. A query with a streamed
-//! reply adds nothing to it: the stream's pull API has no blocking form yet,
-//! so an interface whose only waiting member is such a query gets no
-//! `blocking` module either, while its `Client` repeats the async client's
-//! bounds, the stream extension included.
+//! reply adds no method to it: the stream's pull API has no blocking form
+//! yet, so an interface whose only waiting member is such a query gets no
+//! `blocking` module either. When the module is emitted for an interface
+//! that also has such a query, its `Client` repeats the async client's
+//! bounds, the stream extension included, and its `serve` repeats `serve`'s
+//! bound on `StreamHandler`.
 
 use super::{
     Call, Member, allow_deprecated, call_doc, catalog_panics_doc, client_bounds, deprecated_attr,

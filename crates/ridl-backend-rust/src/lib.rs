@@ -468,8 +468,10 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
         // The face leaves a member with a stream out, in every form but a
         // streamed reply of named elements, but its descriptor is still
         // written, and refuses the same request and reply shapes as any
-        // other member's. A streamed reply has no reply type, so only its
-        // request is checked.
+        // other member's. A streamed reply's reply check is skipped: for a
+        // stream of bytes or of text `query_reply_type` refuses the reply,
+        // which names no type, and for a stream of named elements it returns
+        // the element type. Only the request of such a query is checked.
         let member = declared(interaction.name.as_ref());
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Command(command)) => {

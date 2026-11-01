@@ -15,7 +15,12 @@
 //! the end, a source that is not ready, one source poll per poll of `serve`
 //! and its place in the budget, the element kept while the window is full,
 //! the interruption, the dropped stream, the second call of a running member,
-//! the check before the push, and the member's limit.
+//! the check before the push, and the member's limit. The tests after them
+//! pin the forgets of a call that ends or fails before any element and of a
+//! stream the provider interrupts, a malformed chunk, a call that waits for a
+//! slot, what `serve` checks before it starts a source, the held element under
+//! Proto3, the drop of `Serve` while a stream runs, and an interface with two
+//! streamed queries, `Twin`.
 //!
 //! The futures and the stream are polled by hand with
 //! `ridl_rt::task::noop_waker`, the way a frame loop polls, and the tests of
@@ -39,7 +44,7 @@ use std::task::{Context, Poll, Wake, Waker};
 
 use ridl_loopback::{HandlerHandle, Loopback};
 use ridl_rt::contract::{CatalogRef, Interaction, Interface, InterfaceNo, Ordinal, Sizes};
-use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::encoding::{FlatBuffers, Proto3};
 use ridl_rt::error::{CallError, ClientError, Contract, Transport};
 use ridl_rt::face::{Interrupted, Source};
 use ridl_rt::payload::{Ref, Rule, Violation};
@@ -923,6 +928,8 @@ struct Counters {
     started: Cell<usize>,
     /// Sources dropped.
     dropped: Cell<usize>,
+    /// The `limit` the provider's last `history` call received.
+    limit: Cell<Option<i64>>,
 }
 
 /// A source that follows its `Script`. It stores no waker on `Pending`: the
@@ -991,8 +998,9 @@ impl generated::log::Provider for Feed {
 
     fn clear(&mut self, _level: &Level) {}
 
-    fn history(&mut self, _limit: &Level) -> Scripted {
+    fn history(&mut self, limit: &Level) -> Scripted {
         self.counters.started.set(self.counters.started.get() + 1);
+        self.counters.limit.set(Some(limit.get()));
         Scripted {
             pending_left: self.script.pending_before_each,
             script: self.script.clone(),
@@ -1693,4 +1701,448 @@ fn a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_ne
     let mut stream = resolved(poll_once(&mut call), "the first element");
     assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
     assert_eq!(counters.started.get(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// The forgets of the call future and of a stopped stream.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_call_that_ends_before_any_element_forgets_its_call_once() {
+    let rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::log::Client::new(ports);
+
+    let mut call = client.history(Level::new_unchecked(3));
+    let c = the_one_send(&log);
+    assert!(poll_once(&mut call).is_pending());
+    assert_eq!(provider.end(), Ok(()));
+    let mut stream = resolved(poll_once(&mut call), "the end");
+    assert_eq!(
+        doubles::forgets(&log),
+        vec![c],
+        "the future that read the end forgot the call"
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    drop(stream);
+    drop(call);
+    assert_eq!(
+        doubles::forgets(&log),
+        vec![c],
+        "and nothing forgets it again"
+    );
+}
+
+#[test]
+fn a_call_that_fails_before_any_element_forgets_its_call_once() {
+    let rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::log::Client::new(ports);
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+
+    let mut call = client.history(Level::new_unchecked(3));
+    let c = the_one_send(&log);
+    assert!(poll_once(&mut call).is_pending());
+    assert_eq!(provider.abort(refusal), Ok(()));
+    assert_eq!(
+        poll_once(&mut call).map(|outcome| outcome.map(|_| ())),
+        Poll::Ready(Err(ClientError::Call(refusal)))
+    );
+    assert_eq!(
+        doubles::forgets(&log),
+        vec![c],
+        "the future that read the failure forgot the call"
+    );
+    drop(call);
+    assert_eq!(doubles::forgets(&log), vec![c], "and the drop does not");
+}
+
+#[test]
+fn a_stream_the_provider_interrupts_forgets_its_call_at_once() {
+    let rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::log::Client::new(ports);
+    let interrupted = CallError::Transport(Transport::Interrupted);
+
+    let mut stream = started(&mut client, &mut provider, &reading(1, false));
+    let c = the_send_so_far(&log);
+    assert_eq!(provider.abort(interrupted), Ok(()));
+    assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(Some(Err(ClientError::Call(interrupted))))
+    );
+    assert_eq!(
+        doubles::forgets(&log),
+        vec![c],
+        "the poll that read the interruption forgot the call, before any drop"
+    );
+    drop(stream);
+    assert_eq!(
+        doubles::forgets(&log),
+        vec![c],
+        "the drop forgets nothing more"
+    );
+}
+
+#[test]
+fn a_malformed_first_chunk_refuses_the_stream_as_corrupt() {
+    let mut rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let mut client = generated::log::Client::new(&mut rt);
+
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending());
+    let claim = provider.claim();
+    // Three bytes that fit the element buffer and are no FlatBuffers table.
+    let malformed = [0xff_u8; 3];
+    assert_eq!(
+        provider.handler.push_claim(claim, REPLY_STREAM, &malformed),
+        Ok(malformed.len())
+    );
+    let mut stream = resolved(poll_once(&mut call), "the malformed first chunk");
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(Some(Err(ClientError::Call(CORRUPT)))),
+        "a chunk that is no well-formed element is refused as corrupt"
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    assert_eq!(
+        provider.push(&reading(1, false)),
+        Err(PushError::Failed(CORRUPT)),
+        "the provider reads the refusal from its next push"
+    );
+}
+
+#[test]
+fn a_call_with_no_free_slot_waits_then_expires_unsent_as_busy() {
+    let mut rt = loopback();
+    let _provider = Provider::new(&rt);
+    // Every slot of the call table is held by a call nobody serves.
+    let mut crowd = rt.caller();
+    for _ in 0..Loopback::SLOTS {
+        generated::log::send_history(&mut crowd, &Level::new_unchecked(3)).expect("a slot is free");
+    }
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(
+        poll_once(&mut call).is_pending(),
+        "a send the port answers Busy waits for a slot"
+    );
+    rt.advance(Duration(HISTORY_MAX.0 + 1));
+    assert_eq!(
+        poll_once(&mut call).map(|outcome| outcome.map(|_| ())),
+        Poll::Ready(Err(ClientError::Send(SendError::Busy))),
+        "a call still unsent at its bound is Send(Busy)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// What `serve` checks before it starts a stream.
+// ---------------------------------------------------------------------------
+
+/// Sends `history(limit)` through the bare caller port, with no `require`
+/// evaluated on the caller's side, and answers the correlation.
+fn send_unchecked(caller: &mut ridl_loopback::CallerHandle, limit: i64) -> Correlation {
+    let mut buf = [0u8; CLAIM_MAX];
+    let bytes = Ref::<Level, FlatBuffers>::encode(&Level::new_unchecked(limit), &mut buf)
+        .expect("encode")
+        .bytes();
+    caller
+        .query(LOG, HISTORY, bytes, None)
+        .expect("the query is sent")
+}
+
+#[test]
+fn serve_refuses_a_streamed_call_that_breaks_require_without_starting_a_source() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        elements: elements(2),
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut caller = rt.caller();
+
+    // `history` requires `limit > 0`; 0 is inside `Level`'s range.
+    let c = send_unchecked(&mut caller, 0);
+    assert!(poll_once(&mut serve).is_pending());
+    let mut buf = [0u8; ELEMENT_MAX];
+    assert_eq!(
+        caller.pull(c, REPLY_STREAM, &mut buf),
+        Ok(Pull::Failed(CallError::Contract(
+            Contract::PreconditionFailed
+        ))),
+        "serve evaluates require on its own side"
+    );
+    assert_eq!(counters.started.get(), 0, "the provider was not called");
+}
+
+#[test]
+fn serve_evaluates_require_before_it_reads_the_members_slot() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        pending_before_each: 1,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let _running = sent(&mut client, &mut serve);
+
+    let mut caller = rt.caller();
+    let c = send_unchecked(&mut caller, 0);
+    assert!(poll_once(&mut serve).is_pending());
+    let mut buf = [0u8; ELEMENT_MAX];
+    assert_eq!(
+        caller.pull(c, REPLY_STREAM, &mut buf),
+        Ok(Pull::Failed(CallError::Contract(
+            Contract::PreconditionFailed
+        ))),
+        "a call that breaks require reads PreconditionFailed, not Busy, while the member runs"
+    );
+    assert_eq!(counters.started.get(), 1);
+}
+
+#[test]
+fn serve_settles_a_streamed_call_whose_arguments_do_not_decode_as_corrupt() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script::default());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut caller = rt.caller();
+
+    let c = caller
+        .query(LOG, HISTORY, &[0xff; 3], None)
+        .expect("the query is sent");
+    assert!(poll_once(&mut serve).is_pending());
+    let mut buf = [0u8; ELEMENT_MAX];
+    assert_eq!(
+        caller.pull(c, REPLY_STREAM, &mut buf),
+        Ok(Pull::Failed(CORRUPT)),
+        "argument bytes that are no well-formed `Level` settle the claim as corrupt"
+    );
+    assert_eq!(counters.started.get(), 0, "the provider was not called");
+}
+
+#[test]
+fn the_provider_receives_the_callers_argument() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script::default());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = client.history(Level::new_unchecked(42));
+    assert!(poll_once(&mut call).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counters.limit.get(), Some(42));
+}
+
+// ---------------------------------------------------------------------------
+// The held element under Proto3, whose encoder fills the buffer from its
+// start, where FlatBuffers fills it from its end.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn under_proto3_an_element_the_window_had_no_room_for_is_sent_on_a_later_poll() {
+    let rt = Loopback::<Proto3>::with_encoding(CATALOG);
+    let script = Script {
+        elements: elements(10),
+        ..Script::default()
+    };
+    let (mut feed, counters) = Feed::new(script.clone());
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let waker = ridl_rt::task::noop_waker();
+    let mut cx = Context::from_waker(&waker);
+
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(Pin::new(&mut call).poll(&mut cx).is_pending());
+    for _ in 0..12 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    assert_eq!(
+        counters.polls.get(),
+        5,
+        "four elements fill the window and the fifth is held"
+    );
+    let mut stream = match Pin::new(&mut call).poll(&mut cx) {
+        Poll::Ready(Ok(stream)) => stream,
+        Poll::Ready(Err(error)) => panic!("the call failed: {error:?}"),
+        Poll::Pending => panic!("the first element resolves the call"),
+    };
+    let mut received = Vec::new();
+    for _ in 0..100 {
+        match stream.poll_next(&mut cx) {
+            Poll::Ready(Some(Ok(element))) => received.push(element),
+            Poll::Ready(None) => break,
+            Poll::Ready(Some(Err(error))) => panic!("the stream failed: {error:?}"),
+            Poll::Pending => assert!(poll_once(&mut serve).is_pending()),
+        }
+    }
+    assert_eq!(received, script.elements, "every element, once, in order");
+}
+
+// ---------------------------------------------------------------------------
+// Dropping `Serve` while a stream runs.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_blocking_serve_that_times_out_interrupts_its_running_stream_and_frees_the_member() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut handler = rt.handler();
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending());
+    // The handler is lent, so it outlives the future `blocking::serve`
+    // drops at its timeout.
+    assert_eq!(
+        generated::log::blocking::serve(
+            &mut handler,
+            &mut feed,
+            Some(std::time::Duration::from_millis(20)),
+        ),
+        Ok(())
+    );
+    assert_eq!(counters.started.get(), 1);
+    assert_eq!(
+        counters.dropped.get(),
+        1,
+        "the drop of `Serve` dropped the source"
+    );
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    let mut outcome = None;
+    for _ in 0..100 {
+        match next_once(&mut stream) {
+            Poll::Ready(Some(Ok(_))) => {}
+            other => {
+                outcome = Some(other);
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        outcome,
+        Some(Poll::Ready(Some(Err(ClientError::Call(
+            CallError::Transport(Transport::Interrupted)
+        ))))),
+        "the consumer reads the interruption after the elements already pushed"
+    );
+    drop(stream);
+    drop(call);
+
+    // The member is free: a new `serve` over the same handler starts a new
+    // source for a new call.
+    let mut serve = generated::log::serve(&mut handler, &mut feed);
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending());
+    for _ in 0..2 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut stream = resolved(poll_once(&mut call), "the first element of a fresh call");
+    assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
+    assert_eq!(counters.started.get(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Two streamed queries on one interface.
+// ---------------------------------------------------------------------------
+
+/// A source of `count` values built by `make`, then the end.
+struct Counted<T> {
+    next: i64,
+    count: i64,
+    make: fn(i64) -> T,
+}
+
+impl<T> Source for Counted<T> {
+    type Item = T;
+
+    fn poll_next(&mut self, _cx: &mut Context<'_>) -> Poll<Option<Result<T, Interrupted>>> {
+        if self.next == self.count {
+            return Poll::Ready(None);
+        }
+        self.next += 1;
+        Poll::Ready(Some(Ok((self.make)(self.next))))
+    }
+}
+
+/// The provider of `Twin`: `left` gives readings, `right` gives levels.
+struct Pair;
+
+impl generated::twin::Provider for Pair {
+    type Left = Counted<Reading>;
+    type Right = Counted<Level>;
+
+    fn left(&mut self, limit: &Level) -> Counted<Reading> {
+        Counted {
+            next: 0,
+            count: limit.get(),
+            make: |i| reading(i, true),
+        }
+    }
+
+    fn right(&mut self, limit: &Level) -> Counted<Level> {
+        Counted {
+            next: 0,
+            count: limit.get(),
+            make: Level::new_unchecked,
+        }
+    }
+}
+
+#[test]
+fn serve_drives_the_source_of_each_streamed_query_of_an_interface() {
+    let rt = loopback();
+    let mut provider = Pair;
+    let mut serve = generated::twin::serve(rt.handler(), &mut provider);
+    let mut left_client = generated::twin::Client::new(rt.caller());
+    let mut right_client = generated::twin::Client::new(rt.caller());
+
+    let mut left = left_client.left(Level::new_unchecked(3));
+    let mut right = right_client.right(Level::new_unchecked(2));
+    assert!(poll_once(&mut left).is_pending());
+    assert!(poll_once(&mut right).is_pending());
+    for _ in 0..6 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let waker = ridl_rt::task::noop_waker();
+    let mut cx = Context::from_waker(&waker);
+
+    let mut left = match poll_once(&mut left) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("`left`'s source was driven to its first element"),
+    };
+    let mut got_left = Vec::new();
+    while let Poll::Ready(Some(element)) = left.poll_next(&mut cx) {
+        got_left.push(element.expect("an element"));
+    }
+    assert_eq!(
+        got_left,
+        vec![reading(1, true), reading(2, true), reading(3, true)]
+    );
+
+    let mut right = match poll_once(&mut right) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("`right`'s source was driven to its first element"),
+    };
+    let mut got_right = Vec::new();
+    while let Poll::Ready(Some(element)) = right.poll_next(&mut cx) {
+        got_right.push(element.expect("an element").get());
+    }
+    assert_eq!(
+        got_right,
+        vec![1, 2],
+        "the second member's source was driven too"
+    );
 }
