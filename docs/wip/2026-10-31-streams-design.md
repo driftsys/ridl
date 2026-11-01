@@ -1138,7 +1138,7 @@ Rulings taken while the port was built. The source is the rustdoc of
   concurrent call `Transport::Busy`. The port gives no signal of a forget except
   through the next push, so a caller that leaves while the source answers
   `Pending` keeps the member busy until the next element. A port signal for it
-  is tracked by a follow-up issue.
+  is tracked by driftsys/ridl#1170.
 - The frozen veh-cluster copy has no cabin face, because a service's inline
   shape is skipped, so the design's `stream_filter_history` is not in a dump.
   The first dump change of stage 3 is `FaultLog`. Adding it renumbers the
