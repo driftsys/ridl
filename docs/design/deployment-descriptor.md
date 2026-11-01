@@ -182,6 +182,61 @@ never renumbered. A reader built against an older schema ignores fields it does
 not know. Regenerate the accessors after every edit with
 `cargo xtask descriptor-codegen`; the staleness test covers both schemas.
 
+## Decisions and alternatives considered
+
+The choices below were taken under delegation from the owner, each with its
+reason. They bind later changes to the artifact.
+
+- **One file per deployment, with its own name and identifier.** The file is
+  `<package>.<Name>.deployment.binfb` with identifier `RDLD`. The lowered IR
+  already uses `<pkg.Name>.system.{json,txtpb,binpb}` for the whole `System`, so
+  a `.system.binfb` would differ from the IR artifact by its last extension only
+  and name a different thing. Rejected: the identifier `RDLS` with the name
+  `<pkg.System>.<deployment>.system.binfb`, because its suffix collides in form
+  with the IR artifact; one file per system that holds every deployment, because
+  a node reads one deployment.
+- **The file embeds the catalogs it reaches.** A node configures a deployment
+  from one file, and the embedded bytes are identical to the standalone
+  `.catalog.binfb` that a client includes, so both sides compare one hash. The
+  catalogs and the deployment come from one build, so a hash that differs is a
+  defect of the build and not of the input.
+- **No number for an instance in ridl.** A runtime that needs an integer
+  declares it as a backend key on the placement line. The language already has
+  the site and the carrier, and a number is a fact of one runtime's wire, which
+  rsdl section 1.3 keeps out of the toolchain's identities. Rejected: a lock
+  file of instance numbers, as `interfaces.lock` numbers interfaces, because it
+  adds a second lock with its resolver and baseline rules for one runtime's
+  integer, and a backend key written once in source is as stable; a key owned by
+  rsdl (`id = 3`), because it changes the language for one runtime's need,
+  against the family rule that a backend's fact is a backend key; a number
+  derived from placement order, because it changes when a source is reordered.
+- **The codegen deployment section carries the placement's backend keys**
+  (`Instance.attributes`), so that a plugin generates a client's bring-up code
+  from the same key the node reads and no program writes the number by hand. The
+  field is additive under the IR specification section 6.
+- **No deployment module in the Rust backend.** A deployment module in a
+  generated crate would bind the crate to one deployment, which is the problem
+  that the catalog hash exists to avoid. A runtime that wants generated identity
+  code writes a plugin over the deployment section. Rejected: a `deployment`
+  module per deployment with each instance's names and attributes as constants;
+  it can return as an opt-in option when a second runtime asks for it.
+- **The descriptor and the deployment section share one rule** for `offers` and
+  `maps`, by calling `lower_deployment`; a test asserts that the two agree.
+- **The verifier is bounded, and the writer never emits what the reader
+  refuses.** The attribute walk is limited in depth and in visits because a
+  hostile buffer can share one subtree many times. The lowering applies the same
+  depth limit, returns `AttributeTooDeep` for a deeper value, and verifies the
+  buffer it wrote before it returns it. A stored hash that differs from the
+  embedded catalog's hash is refused by `verify`, because a node that reads the
+  file needs the check and not only the `describe` command.
+- **The lowering fails instead of choosing a default.** A value that the schema
+  cannot express (an unspecified crossing or direction, a surface entry with no
+  equal link, an attribute value with neither scalar nor list) is an `Internal`
+  error, because a default would write a wrong descriptor that a node trusts.
+- **Errors are separate types.** The deployment verifier has its own
+  `VerifyError`, because adding a variant to the published, exhaustive catalog
+  enum is a semver break that the catalog reader does not need.
+
 ## Differences from the design
 
 The working design for this artifact differed from the code in these points. The
