@@ -37,7 +37,7 @@ adds:
 | `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                                |
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                                                                          |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                                                                           |
-| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                                                                                                             |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements; `Source` and `Interrupted`, the producer of a streamed reply an application implements — the section "The face traits" below                                                                                    |
 | `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                                                                                                    |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                                                                                                       |
 | `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                                                                                                   |
@@ -98,6 +98,25 @@ uses, and rustc reports a prelude as an unused import when the other imported
 preludes already bring every item it would add. No runtime implements anything
 here, so `ridl-rt-conformance` does not test it; the generated face's own tests
 do (`crates/ridl-backend-rust/tests/face_compile.rs` and `face_generation.rs`).
+
+`Source` is the one trait of the module an application implements. A `Provider`
+method for a query whose reply is a stream of named elements returns a `Source`
+of those elements, and the generated `serve` drives it over the `StreamHandler`
+port, one element per poll:
+
+```rust,ignore
+pub trait Source {
+    type Item;
+    fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Interrupted>>>;
+}
+pub struct Interrupted;
+```
+
+`Ready(Some(Ok(item)))` is the next element, `Ready(None)` the end,
+`Ready(Some(Err(Interrupted)))` stops the stream before its end, which the
+caller reads as `Transport::Interrupted`, and `Pending` stores the waker. The
+pull shape keeps a provider method synchronous on a target without `std`: the
+task that polls `serve` is the one that waits when the stream's window is full.
 
 ## Identity
 
