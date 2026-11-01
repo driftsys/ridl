@@ -182,7 +182,8 @@ once the codec landed;
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 and open item 1) and
 [the podbuf codec design record](../design/podbuf-codec.md) are its durable
-records. Its plan (`2026-10-24-podbuf-plan.md`) is not archived; see below.
+records. Its plan (`2026-10-24-podbuf-plan.md`) was archived on 2026-11-02, once
+the open enums and enum sets landed in podbuf (#1168).
 
 The open enums design and plan (`2026-11-01-open-enums-{design,plan}.md`) were
 archived on 2026-11-01, once the `open` keyword landed (#1121);
@@ -420,11 +421,3 @@ and was not archived. The reason is stated once per file or group.
   (driftsys/ridl#1084).
 
   or superseded.
-
-## Files that stay after the podbuf pass (2026-10-27)
-
-- **2026-10-24-podbuf-plan.md** — Tasks 1 to 12, 15 and 16 are built, but Tasks
-  13 (open enums and enum sets in podbuf) and 14 (the `ridl diff` rule for an
-  open enum that changes width) are open: both wait for the typl `open` keyword,
-  which no record specifies yet. A note at the top of the plan says so. It is
-  archived with the work that builds them.
