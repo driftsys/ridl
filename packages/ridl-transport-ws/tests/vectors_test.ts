@@ -142,10 +142,10 @@ function block(total: number, index: number, payload: Uint8Array): Frame {
 }
 
 /**
- * The bytes of one row of the version 2 vector table of the frame
- * specification, by its `Id`.
+ * Every row of the version 2 vector table of the frame specification, as
+ * `[Id, bytes]` in the table's order.
  */
-async function specVersion2Vector(id: string): Promise<Uint8Array> {
+async function specVersion2Vectors(): Promise<[string, Uint8Array][]> {
   const text = await Deno.readTextFile(
     new URL(
       "../../../docs/specification/frame-specification.md",
@@ -154,38 +154,57 @@ async function specVersion2Vector(id: string): Promise<Uint8Array> {
   );
   const start = text.indexOf("**Version 2 test vectors.**");
   assert.ok(start >= 0, "no version 2 vector paragraph");
-  for (const line of text.slice(start).split("\n")) {
-    const cells = line.split("|").map((c) => c.trim());
-    if (line.startsWith("|") && cells[1] === `\`${id}\``) return hex(cells[3]);
+  const lines = text.slice(start).split("\n");
+  const first = lines.findIndex((l) => l.startsWith("|"));
+  assert.ok(first >= 0, "no version 2 vector table");
+  const rows: [string, Uint8Array][] = [];
+  for (let i = first + 2; i < lines.length && lines[i].startsWith("|"); i++) {
+    const cells = lines[i].split("|").map((c) => c.trim());
+    rows.push([cells[1].replace(/`/g, ""), hex(cells[3])]);
   }
-  throw new Error(`no version 2 vector ${id} in the specification`);
+  assert.ok(rows.length > 0, "no version 2 vector rows found");
+  return rows;
 }
 
-Deno.test("every version 2 vector decodes and re-encodes byte for byte", async () => {
+const KNOWN_2 = ["attach-2", "block-last", "block-one"];
+
+function expected2(id: string): Frame | undefined {
   const hash = new Uint8Array(32);
   for (let i = 0; i < 32; i++) hash[i] = i;
-  const vectors: [string, Uint8Array, Frame][] = [
-    [
-      "attach-2",
-      await specVersion2Vector("attach-2"),
-      {
+  switch (id) {
+    case "attach-2":
+      return {
         form: "attach",
         frameVersion: 2,
         encoding: 1,
         hash,
         name: "veh.cabin",
-      },
-    ],
-    [
-      "block-last",
-      await specVersion2Vector("block-last"),
-      block(4098, 1, Uint8Array.of(0xab, 0xcd)),
-    ],
-    [
-      "block-one",
-      await specVersion2Vector("block-one"),
-      block(1, 0, Uint8Array.of(0xab)),
-    ],
+      };
+    case "block-last":
+      return block(4098, 1, Uint8Array.of(0xab, 0xcd));
+    case "block-one":
+      return block(1, 0, Uint8Array.of(0xab));
+    default:
+      return undefined;
+  }
+}
+
+Deno.test("every version 2 spec vector decodes and re-encodes byte for byte", async () => {
+  const seen: string[] = [];
+  for (const [id, bytes] of await specVersion2Vectors()) {
+    const want = expected2(id);
+    assert.ok(want, `version 2 vector ${id} is not known to this test`);
+    const got = decode(bytes);
+    assert.ok(got.ok, `vector ${id} did not decode`);
+    assert.deepEqual(got.frame, want, `vector ${id}`);
+    assert.deepEqual(encode(want), bytes, `encoding of ${id}`);
+    seen.push(id);
+  }
+  assert.deepEqual([...seen].sort(), [...KNOWN_2].sort());
+});
+
+Deno.test("every version 2 test constant decodes and re-encodes byte for byte", () => {
+  const vectors: [string, Uint8Array, Frame][] = [
     [
       "block-first",
       blockMessage(4098, 0, pattern(4096)),
@@ -202,8 +221,8 @@ Deno.test("every version 2 vector decodes and re-encodes byte for byte", async (
       block(0xffffffff, 0xfffff, new Uint8Array(4095)),
     ],
   ];
-  assert.equal(vectors[3][1].length, 4130);
-  assert.equal(vectors[5][1].length, 4129);
+  assert.equal(vectors[0][1].length, 4130);
+  assert.equal(vectors[2][1].length, 4129);
   for (const [id, bytes, want] of vectors) {
     const got = decode(bytes);
     assert.ok(got.ok, `vector ${id} did not decode`);
@@ -213,8 +232,9 @@ Deno.test("every version 2 vector decodes and re-encodes byte for byte", async (
 });
 
 Deno.test("the shared block-last and block-one constants are the specification's bytes", async () => {
-  assert.deepEqual(BLOCK_LAST, await specVersion2Vector("block-last"));
-  assert.deepEqual(BLOCK_ONE, await specVersion2Vector("block-one"));
+  const rows = new Map(await specVersion2Vectors());
+  assert.deepEqual(BLOCK_LAST, rows.get("block-last"));
+  assert.deepEqual(BLOCK_ONE, rows.get("block-one"));
 });
 
 Deno.test("the first block of a 4,098-byte payload carries 4,096 bytes of the pattern", async () => {

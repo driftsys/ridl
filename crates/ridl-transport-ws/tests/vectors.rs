@@ -131,8 +131,8 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
 
 // -- Frame version 2 (frame specification §11.1, binding version 2) ----------
 //
-// `attach-2`, `block-last` and `block-one` are read from the version 2 table of
-// the frame specification. The other block vectors are test constants: they
+// Every row of the version 2 table of the frame specification is read and
+// decoded; a row this test does not know fails it. The other block vectors are test constants: they
 // are 4,096 bytes or more, or they are violations. Every hex string is one
 // whole message.
 
@@ -160,9 +160,9 @@ fn block_message(total_hex: &str, index_hex: &str, payload: &[u8]) -> Vec<u8> {
     m
 }
 
-/// The bytes of one row of the version 2 vector table of the frame
-/// specification, by its `Id`.
-fn spec_version_2_vector(id: &str) -> Vec<u8> {
+/// The `Id` and the bytes of every row of the version 2 vector table of the
+/// frame specification, in the table's order.
+fn spec_version_2_vectors() -> Vec<(String, Vec<u8>)> {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/specification/frame-specification.md"
@@ -171,13 +171,34 @@ fn spec_version_2_vector(id: &str) -> Vec<u8> {
     let start = text
         .find("**Version 2 test vectors.**")
         .expect("version 2 vectors paragraph");
-    text[start..]
+    let rows: Vec<(String, Vec<u8>)> = text[start..]
         .lines()
-        .filter(|l| l.starts_with('|'))
-        .map(|l| l.split('|').map(str::trim).collect::<Vec<_>>())
-        .find(|cells| cells[1].trim_matches('`') == id)
-        .map(|cells| hex(cells[3]))
-        .unwrap_or_else(|| panic!("no version 2 vector {id} in the specification"))
+        .skip_while(|l| !l.starts_with('|'))
+        .take_while(|l| l.starts_with('|'))
+        .skip(2)
+        .map(|l| {
+            let cells: Vec<&str> = l.split('|').map(str::trim).collect();
+            (cells[1].trim_matches('`').to_string(), hex(cells[3]))
+        })
+        .collect();
+    assert!(!rows.is_empty(), "no version 2 vector rows found");
+    rows
+}
+
+const KNOWN_2: [&str; 3] = ["attach-2", "block-last", "block-one"];
+
+/// The frame a row of the version 2 table describes, by its `Id`.
+fn expected_2(id: &str) -> Option<Frame<'static>> {
+    let mut hash = [0u8; 32];
+    for (i, b) in hash.iter_mut().enumerate() {
+        *b = i as u8;
+    }
+    Some(match id {
+        "attach-2" => Frame::Attach(Attach::new(2, 1, CatalogHash(hash), "veh.cabin").unwrap()),
+        "block-last" => fixed_block(4_098, 1, &[0xab, 0xcd]),
+        "block-one" => fixed_block(1, 0, &[0xab]),
+        _ => return None,
+    })
 }
 
 fn assert_round_trip(id: &str, want: Frame<'_>, bytes: &[u8]) {
@@ -191,29 +212,20 @@ fn assert_round_trip(id: &str, want: Frame<'_>, bytes: &[u8]) {
 
 #[test]
 fn every_version_2_vector_decodes_and_reencodes_byte_for_byte() {
-    let mut hash = [0u8; 32];
-    for (i, b) in hash.iter_mut().enumerate() {
-        *b = i as u8;
+    let mut seen = Vec::new();
+    for (id, bytes) in spec_version_2_vectors() {
+        let want = expected_2(&id)
+            .unwrap_or_else(|| panic!("version 2 vector {id} is not known to this test"));
+        assert_round_trip(&id, want, &bytes);
+        seen.push(id);
     }
-    let attach_2 = spec_version_2_vector("attach-2");
-    assert_eq!(attach_2.len(), 48);
-    assert_round_trip(
-        "attach-2",
-        Frame::Attach(Attach::new(2, 1, CatalogHash(hash), "veh.cabin").unwrap()),
-        &attach_2,
+    seen.sort();
+    let mut known: Vec<String> = KNOWN_2.iter().map(|s| s.to_string()).collect();
+    known.sort();
+    assert_eq!(
+        seen, known,
+        "the version 2 table and this test disagree on the vectors"
     );
-
-    let block_last = spec_version_2_vector("block-last");
-    assert_eq!(block_last.len(), 36);
-    assert_round_trip(
-        "block-last",
-        fixed_block(4_098, 1, &[0xab, 0xcd]),
-        &block_last,
-    );
-
-    let block_one = spec_version_2_vector("block-one");
-    assert_eq!(block_one.len(), 35);
-    assert_round_trip("block-one", fixed_block(1, 0, &[0xab]), &block_one);
 }
 
 #[test]
