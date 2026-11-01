@@ -92,6 +92,13 @@ inline append whose head reaches a remote type is judged by the layout, and a
 head no side can lay out is read as grown; decision 13 carries the dated note
 and its known limit, and the known gap it recorded goes.
 
+**Amended 2026-11-01 — decision 7, the wire name of a shared foreign tuple head,
+from driftsys/ridl#1150.** An importing header names a foreign tuple's head by
+the declaring package's own lowering, which the importing lowering runs once in
+claims-only mode, so two positions that share one entry across two declarations
+are named the same whatever order the importer reaches them in; decision 7
+carries the dated note.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a

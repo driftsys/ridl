@@ -4190,18 +4190,98 @@ fn a_foreign_position_matches_a_claim_of_its_own_visibility() {
     );
 }
 
-/// A package `name` with `struct <NAME> { t : (x), below : <below>.<BELOW> }`,
-/// the struct named after the package in upper case: a tuple, so that an
-/// importer reads the package's claims, and a field that reaches the layer
-/// below.
-fn layer(name: &str, below: Option<&str>) -> v2::Package {
-    let mut fields = vec![(
+/// The claims of a package are its own named tuples only. `a.H` holds `z.Z`,
+/// so `a`'s lowering lifts the entries of `z` before its own `ZT`. `z.Z.t`
+/// spells the Rust name `ZT` and `z.Z.t.1` spells `ZTXY`; `a.ZT.x` spells
+/// `ZTX` and `a.ZT.x.1` spells `ZTXY` too, with the wire names `ZTField1` and
+/// `ZTXField1`. An importer of `a.ZT` that read the entries of `z` as claims
+/// of `a` would take the first, and name the head `ZTField1`.
+#[test]
+fn the_claims_of_a_package_leave_out_the_entries_of_other_packages() {
+    let mut z = package_a();
+    z.name = "z".to_string();
+    z.decls.push(one_member_struct(
+        "Z",
         "t",
         tuple(vec![v2::TupleField {
-            name: "x".to_string(),
-            r#type: Some(named("a.Small")),
+            name: "xY".to_string(),
+            r#type: Some(tuple_of_in("z", &["u"])),
         }]),
-    )];
+    ));
+    let mut a = struct_package("a", &[("z", named("z.Z"))]);
+    a.decls[0].name = "H".to_string();
+    a.decls.push(one_member_struct(
+        "ZT",
+        "x",
+        tuple(vec![v2::TupleField {
+            name: "y".to_string(),
+            r#type: Some(tuple_of_in("z", &["u"])),
+        }]),
+    ));
+    let b = struct_package("b", &[("zt", named("a.ZT"))]);
+    let model = lower(&b, &[&a, &z]);
+    assert_eq!(nested_tuple_wires(&model), ["ZTX", "ZTXField1"]);
+}
+
+/// A tuple of `<package>.Small` fields named `names`.
+fn tuple_of_in(package: &str, names: &[&str]) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: names
+                .iter()
+                .map(|name| v2::TupleField {
+                    name: name.to_string(),
+                    r#type: Some(named(&format!("{package}.Small"))),
+                })
+                .collect(),
+        })),
+        ..Default::default()
+    }
+}
+
+/// A position matches a claim by its shape too. With `AB.cD.2` a tuple of
+/// three fields, it and `A.bC.1` spell one Rust name from two shapes: a
+/// collision in `a`, which every backend refuses; the lowering of an importer
+/// still gives each position the wire name of its own claim.
+#[test]
+fn a_foreign_position_matches_a_claim_of_its_own_shape() {
+    let mut a = shared_entry_package();
+    let ab = a
+        .decls
+        .iter_mut()
+        .find(|decl| decl.name == "AB")
+        .expect("AB");
+    let Some(v2::decl::Kind::StructDef(def)) = ab.kind.as_mut() else {
+        panic!("a struct");
+    };
+    let Some(v2::struct_member::Member::Field(field)) = def.members[0].member.as_mut() else {
+        panic!("a field");
+    };
+    let Some(v2::field_type::Kind::Tuple(outer)) =
+        field.r#type.as_mut().and_then(|ty| ty.kind.as_mut())
+    else {
+        panic!("a tuple");
+    };
+    outer.fields[1].r#type = Some(tuple_of(&["x", "y", "z"]));
+    assert_eq!(lower(&a, &[]).tuple_collisions.len(), 1);
+    let b = struct_package("b", &[("ab", named("a.AB")), ("a", named("a.A"))]);
+    let model = lower(&b, &[&a]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["ABC", "ABCD", "ABCDField2", "ABCField1"]
+    );
+}
+
+/// A package `name` with
+/// `struct <NAME> { t : (x), t2 : (x, y), below : <below>.<BELOW> }`, the
+/// struct named after the package in upper case: two tuples, so that an
+/// importer reads the package's claims twice, and a field that reaches the
+/// layer below.
+fn layer(name: &str, below: Option<&str>) -> v2::Package {
+    let mut fields = vec![
+        ("t", tuple_of_in("a", &["x"])),
+        ("t2", tuple_of_in("a", &["x", "y"])),
+    ];
     if let Some(below) = below {
         fields.push(("below", named(&format!("{below}.{}", below.to_uppercase()))));
     }
@@ -4211,9 +4291,9 @@ fn layer(name: &str, below: Option<&str>) -> v2::Package {
 }
 
 /// One call of `lower` lowers each declaring package at most once: the
-/// lowering of `d` reaches `c`, `b` and `a`, and the lowering it starts for
-/// `c` reaches `b` and `a` through one memo shared with it, so three
-/// declaring lowerings run, not six.
+/// lowering of `d` reaches two tuple positions in each of `c`, `b` and `a`,
+/// and the lowerings it starts for them, in claims-only mode, start none, so
+/// three declaring lowerings run, not six.
 #[test]
 fn each_declaring_package_is_lowered_once_per_lowering() {
     let mut a = package_a();
@@ -4224,7 +4304,10 @@ fn each_declaring_package_is_lowered_once_per_lowering() {
     let before = super::lower::DECLARING_LOWERINGS.with(|count| count.get());
     let model = lower(&d, &[&c, &b, &a]);
     let after = super::lower::DECLARING_LOWERINGS.with(|count| count.get());
-    assert_eq!(nested_tuple_wires(&model), ["AT", "BT", "CT"]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["AT", "AT2", "BT", "BT2", "CT", "CT2"]
+    );
     assert_eq!(after - before, 3);
 }
 
@@ -5304,7 +5387,30 @@ fn both_walks_spell_every_step_the_same_way() {
         foreign.key.as_deref(),
         Some([Step::Root(Root::of(decl, &a, &b))].as_slice())
     );
-    assert_eq!(Step::Root(Root::Tuple(3)).to_string(), "tuple 3");
+
+    // The spelling of each step in an error message.
+    let spelled: Vec<String> = [
+        Step::Root(Root::Declaration("Pair".to_string())),
+        Step::Root(Root::Foreign {
+            package: "a".to_string(),
+            name: "Pair".to_string(),
+        }),
+        Step::Root(Root::Tuple(3)),
+        Step::Field("small".to_string()),
+        Step::Position(2),
+        Step::Key,
+        Step::Value,
+        Step::Arm(4),
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
+    assert_eq!(
+        spelled,
+        [
+            "Pair", "a.Pair", "tuple 3", "small", "2", "key", "value", "4"
+        ]
+    );
 
     // The steps: a struct field, a tuple position, a map key and value.
     let at = local
@@ -5334,4 +5440,59 @@ fn both_walks_spell_every_step_the_same_way() {
     let mut expected = vec![Step::Root(Root::Declaration("Pair".to_string()))];
     expected.extend(from_sources);
     assert_eq!(at.key.as_deref(), Some(expected.as_slice()));
+}
+
+/// A tuple inside a named tuple is reached under that tuple's root on both
+/// sides: the lowering keys it under `Root::Tuple` of the induced argument
+/// struct, and the walk fills that struct as a root under the same
+/// `Root::Tuple`, so the nested tuple gets a head and nothing is refused.
+#[test]
+fn a_tuple_inside_a_named_tuple_is_found_under_the_tuple_root() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "withSpan",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![v2::Param {
+                name: "span".to_string(),
+                r#type: Some(tuple(vec![v2::TupleField {
+                    name: "lo".to_string(),
+                    r#type: Some(tuple(vec![v2::TupleField {
+                        name: "p".to_string(),
+                        r#type: Some(named("Pair")),
+                    }])),
+                }])),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let projection = model.podbuf.as_ref().expect("a projection");
+    // The fixture has a declaration the projection refuses on its own; no
+    // tuple is refused.
+    assert!(
+        !projection
+            .refused
+            .iter()
+            .any(|refused| matches!(refused.source, Some(v1::podbuf_refused::Source::Tuple(_)))),
+        "{:?}",
+        projection.refused
+    );
+    let nested = model
+        .tuples
+        .iter()
+        .position(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsWithSpanParamSpanLo")
+        })
+        .expect("the nested tuple") as u32;
+    assert!(
+        projection.heads.iter().any(|head| matches!(
+            head.source,
+            Some(v1::podbuf_head::Source::Tuple(index)) if index == nested
+        )),
+        "the nested tuple has a head"
+    );
 }

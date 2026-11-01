@@ -36,6 +36,11 @@ use crate::v2;
 /// The scope is part of the model: the output of every backend depends on it,
 /// and a plugin must be able to tell "this reference names a package I was
 /// not given" from "this reference names nothing".
+///
+/// A tuple inside a declaration of another package is named as that package
+/// names it, so the lowering also lowers each package in which it reaches
+/// such a position, once, in claims-only mode: only the names of that
+/// package's own tuples are kept (`Lowering::claims_of`).
 pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
     lower_with(package, others, &[])
 }
@@ -387,47 +392,53 @@ struct Lowering<'a> {
     /// The named tuples of another package's own lowering, by package name,
     /// filled the first time a position inside one of its declarations is
     /// reached. A position inside a declaration of another package takes its
-    /// entry and its wire name from these, so that the name is the one the
-    /// declaring package gives the tuple, whatever order this package reaches
-    /// that package's declarations in (driftsys/ridl#1150). One memo is shared
-    /// with every lowering this one starts for a declaring package, so that
-    /// one call of [`lower`] lowers each package at most once.
-    declaring_claims: Memo,
-    /// The entry a position inside a declaration of another package was
-    /// lifted at, by the declaring package and the index of its claim.
-    foreign_tuple_at: HashMap<(String, u32), usize>,
+    /// wire name from these, so that the name is the one the declaring
+    /// package gives the tuple, whatever order this package reaches that
+    /// package's declarations in (driftsys/ridl#1150).
+    claims_memo: Memo,
+    /// Whether this lowering computes the claims of its own package for
+    /// another lowering (`claims_of`). A foreign position is then lifted
+    /// with no wire name and no package is lowered for it, so a lowering in
+    /// this mode starts none: two packages that reference each other by
+    /// qualified name would otherwise be lowered without end.
+    claims_only: bool,
+    /// The entries lifted for the positions inside declarations of other
+    /// packages, by declaring package and induced Rust name. A position of
+    /// the same shape and visibility as a listed entry is the same tuple and
+    /// reuses the entry; a collision between two such positions is the
+    /// declaring package's to record, so each shape gets its own entry here.
+    foreign_tuple_at: HashMap<(String, String), Vec<usize>>,
     collisions: Vec<v1::TupleCollision>,
 }
 
 /// One named tuple of a package's own lowering, as an importing lowering
-/// reads it: the identity a position matches by, the wire name it takes, and
-/// the entry's index in the declaring package's `Model.tuples`.
-struct Claim {
-    rust: String,
+/// reads it: the shape and the visibility a position matches by, under the
+/// induced Rust name the claims are keyed by, and the wire name it takes.
+struct TupleClaim {
     source: v2::TupleType,
     visibility: i32,
     wire: String,
-    index: u32,
 }
 
-/// The claims of every declaring package lowered so far, shared by the
-/// lowering of a package and the lowerings it starts for the packages it
-/// reaches, which in turn share it with theirs.
-type Memo = Rc<RefCell<HashMap<String, Rc<Vec<Claim>>>>>;
+/// The claims of one package, by induced Rust name.
+type Claims = HashMap<String, Vec<TupleClaim>>;
+
+/// The claims of every declaring package lowered so far by one lowering.
+type Memo = Rc<RefCell<HashMap<String, Rc<Claims>>>>;
 
 #[cfg(test)]
 thread_local! {
     /// How many lowerings of a declaring package this thread has started:
-    /// one per package reached, when the memo is shared as intended.
+    /// one per package reached, when the memo holds.
     pub(super) static DECLARING_LOWERINGS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl<'a> Lowering<'a> {
     fn new(scope: Scope<'a>) -> Self {
-        Self::with_memo(scope, Memo::default())
+        Self::with_mode(scope, false)
     }
 
-    fn with_memo(scope: Scope<'a>, declaring_claims: Memo) -> Self {
+    fn with_mode(scope: Scope<'a>, claims_only: bool) -> Self {
         Self {
             scope,
             deps: scope.packages().collect(),
@@ -438,7 +449,8 @@ impl<'a> Lowering<'a> {
             foreign_at: HashMap::new(),
             tuples: Vec::new(),
             tuple_at: HashMap::new(),
-            declaring_claims,
+            claims_memo: Memo::default(),
+            claims_only,
             foreign_tuple_at: HashMap::new(),
             collisions: Vec::new(),
         }
@@ -859,77 +871,84 @@ impl<'a> Lowering<'a> {
     /// A position inside a declaration of another package, `home`. The tuple
     /// there is one of `home`'s own named tuples, found among `home`'s claims
     /// by the position's induced Rust name, its shape and its visibility, and
-    /// the entry takes that tuple's wire name. Two positions with one claim
-    /// are one tuple and share one entry; a collision between them is `home`'s
-    /// to record, and the podbuf walk refuses two entries of `home` under one
-    /// wire name when it meets both.
+    /// the entry takes that tuple's wire name. Two positions of one shape and
+    /// one visibility under one Rust name are one tuple and share one entry;
+    /// a collision between them is `home`'s to record, and the podbuf walk
+    /// refuses two entries of `home` under one wire name when it meets both.
     ///
     /// Every position inside a declaration of `home` has a claim, because
     /// `home`'s own lowering reaches the same positions under the same names.
     /// A position with no claim is an internal error: its entry gets no wire
     /// name, which the podbuf walk refuses, rather than a name derived here.
+    /// In claims-only mode no claim is looked up, and every such entry has no
+    /// wire name.
     fn foreign_tuple_ref(
         &mut self,
         home: &'a v2::Package,
         tuple: &v2::TupleType,
         at: &Path,
     ) -> u32 {
-        let claim = self
-            .declaring_claims(home)
-            .iter()
-            .find(|claim| {
-                claim.rust == at.rust && claim.source == *tuple && claim.visibility == at.visibility
+        let key = (home.name.clone(), at.rust.clone());
+        let existing = self.foreign_tuple_at.get(&key).and_then(|entries| {
+            entries.iter().copied().find(|&index| {
+                let entry = &self.tuples[index];
+                entry.source == *tuple && entry.path.visibility == at.visibility
             })
-            .map(|claim| (claim.index, claim.wire.clone()));
-        let Some((claimed, wire)) = claim else {
-            return self.lift(home, tuple, at, String::new()) as u32;
-        };
-        let key = (home.name.clone(), claimed);
-        if let Some(index) = self.foreign_tuple_at.get(&key).copied() {
+        });
+        if let Some(index) = existing {
             self.tuples[index].keys.extend(at.key.clone());
             return index as u32;
         }
-        let index = self.lift(home, tuple, at, wire);
-        self.foreign_tuple_at.insert(key, index);
+        let wire = if self.claims_only {
+            None
+        } else {
+            self.claims_of(home)
+                .get(&at.rust)
+                .and_then(|claims| {
+                    claims
+                        .iter()
+                        .find(|claim| claim.source == *tuple && claim.visibility == at.visibility)
+                })
+                .map(|claim| claim.wire.clone())
+        };
+        let index = self.lift(home, tuple, at, wire.unwrap_or_default());
+        self.foreign_tuple_at.entry(key).or_default().push(index);
         index as u32
     }
 
     /// The claims of `declaring`: the named tuples of its own lowering, over
-    /// the rest of the scope, in `Model.tuples` order. Lowered once per memo,
-    /// the first time a position inside one of its declarations is reached
-    /// by this lowering or by one that shares the memo. Imports are acyclic
-    /// (ADR-0002), so lowering the declaring package ends.
-    fn declaring_claims(&mut self, declaring: &'a v2::Package) -> Rc<Vec<Claim>> {
-        if let Some(claims) = self.declaring_claims.borrow().get(&declaring.name) {
+    /// the rest of the scope. Lowered once per memo, in claims-only mode, the
+    /// first time a position inside one of its declarations is reached. The
+    /// entries of other packages that lowering lifts are left out: they are
+    /// not `declaring`'s tuples, and in claims-only mode they carry no name.
+    fn claims_of(&mut self, declaring: &'a v2::Package) -> Rc<Claims> {
+        if let Some(claims) = self.claims_memo.borrow().get(&declaring.name) {
             return Rc::clone(claims);
         }
         #[cfg(test)]
         DECLARING_LOWERINGS.with(|count| count.set(count.get() + 1));
         let others = self.scope.projection_others(declaring);
-        let mut lowering = Lowering::with_memo(
+        let mut lowering = Lowering::with_mode(
             Scope {
                 package: declaring,
                 others: &others,
             },
-            Rc::clone(&self.declaring_claims),
+            true,
         );
         lowering.declarations();
-        let claims = Rc::new(
-            lowering
-                .tuples
-                .iter()
-                .enumerate()
-                .filter(|(_, entry)| entry.named)
-                .map(|(index, entry)| Claim {
-                    rust: entry.rust.clone(),
+        let mut claims = Claims::new();
+        for entry in lowering.tuples.iter().filter(|entry| entry.named) {
+            claims
+                .entry(entry.rust.clone())
+                .or_default()
+                .push(TupleClaim {
                     source: entry.source.clone(),
                     visibility: entry.path.visibility,
                     wire: entry.wire.clone(),
-                    index: index as u32,
-                })
-                .collect::<Vec<Claim>>(),
-        );
-        self.declaring_claims
+                });
+        }
+        let claims = Rc::new(claims);
+        self.claims_memo
             .borrow_mut()
             .insert(declaring.name.clone(), Rc::clone(&claims));
         claims

@@ -668,7 +668,7 @@ impl Walk<'_> {
                         foreign,
                     }));
                     let mut at = path.to_vec();
-                    at.push(ordinal.to_string());
+                    at.push(Step::Arm(*ordinal).to_string());
                     // The arm's head is a copy of the arm type's head, so a
                     // tuple inside it is the one the lowering reached under
                     // that type, and when that type is a union, its arms
@@ -800,6 +800,65 @@ fn source(source: &Source) -> v1::PodbufSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A foreign entry with no wire name is a position the lowering matched
+    /// to no claim of its package: the walk refuses it as an internal error
+    /// rather than naming it, and pushes no head.
+    #[test]
+    fn a_foreign_entry_with_no_wire_name_is_refused() {
+        let package = v2::Package {
+            name: "p.a".to_string(),
+            ..Default::default()
+        };
+        let scope = Scope {
+            package: &package,
+            others: &[],
+        };
+        let key = vec![
+            Step::Root(PathRoot::Foreign {
+                package: "a".to_string(),
+                name: "Holder".to_string(),
+            }),
+            Step::Field("t".to_string()),
+        ];
+        let path: Vec<String> = key.iter().map(ToString::to_string).collect();
+        let mut keys = TupleKeys::default();
+        keys.foreign.insert(
+            key.clone(),
+            ForeignTuple {
+                package: "a".to_string(),
+                wire: String::new(),
+                entry: 0,
+            },
+        );
+        let no_heads = HashMap::new();
+        let mut walk = Walk {
+            scope,
+            foreign_at: &no_heads,
+            foreign_names: HashMap::new(),
+            keys: &keys,
+            heads: Vec::new(),
+            declared: HashMap::new(),
+            tuples: HashMap::new(),
+            nested: HashMap::new(),
+            arms: HashMap::new(),
+            foreign: HashMap::new(),
+            refused: HashSet::new(),
+        };
+        let head = Head {
+            size: 0,
+            fields: Vec::new(),
+            pads: Vec::new(),
+        };
+        let error = walk
+            .inline(&head, &Inlined::Tuple, &path, &key, Owner::None)
+            .expect_err("the unnamed entry is refused");
+        assert!(
+            error.starts_with("a.Holder.t: internal: the lowering of package a has no tuple"),
+            "{error}"
+        );
+        assert!(walk.heads.is_empty(), "no head was pushed");
+    }
 
     /// A named tuple whose root is excluded from the walk is a refused head:
     /// the position that lays it out inline names it as the cause, as a

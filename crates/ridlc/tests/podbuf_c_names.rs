@@ -462,6 +462,63 @@ fn an_importer_that_reaches_the_shared_entry_in_declaring_order_names_it_once() 
     assert_shared_entry_has_one_head("  a : A\n  ab : AB\n");
 }
 
+/// `package a` and `package b` reference each other by qualified name, with no
+/// import: `a.S` holds `b.T` and `b.U` holds `a.V`, each of which holds a
+/// tuple. The workspace checks, and the lowering of each package names the
+/// other's tuples by that package's own lowering without lowering it again
+/// for its own foreign positions, so the build ends (driftsys/ridl#1150).
+const QUALIFIED_CYCLE: [(&str, &str, &str); 2] = [
+    (
+        "a",
+        "a",
+        "package a\nstruct S { x : b.T }\nstruct V { v : (p: integer [0..10], q: integer [0..10]) }\n",
+    ),
+    (
+        "b",
+        "b",
+        "package b\nstruct T { t : (p: integer [0..10], q: integer [0..10]) }\nstruct U { y : a.V }\n",
+    ),
+];
+
+/// The cycle builds with the podbuf emit: both headers are written, each
+/// defines the other package's tuple head under that package's name, and the
+/// build-wide check found the two texts of each head equal.
+#[test]
+fn two_packages_referencing_each_other_by_qualified_name_build_the_headers() {
+    let (diagnostics, out) = build(&QUALIFIED_CYCLE, &[Emit::Podbuf]);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
+    for name in ["a.h", "b.h"] {
+        let header = std::fs::read_to_string(out.path().join(name)).unwrap();
+        assert!(
+            header.contains("typedef struct a_vv_head {"),
+            "{name}: {header}"
+        );
+        assert!(
+            header.contains("typedef struct b_tt_head {"),
+            "{name}: {header}"
+        );
+    }
+}
+
+/// The same cycle builds with the Rust emit.
+#[test]
+fn two_packages_referencing_each_other_by_qualified_name_build_the_rust_modules() {
+    let (diagnostics, out) = build(&QUALIFIED_CYCLE, &[Emit::Rust]);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(files_with(out.path(), "rs"), vec!["a.rs", "b.rs", "lib.rs"]);
+}
+
 /// Two entities whose heads render to one text are still two entities:
 /// `veh.CommonSpeed` and `veh.common.Speed { value }` both define
 /// `veh_common_speed_head` with one `uint8_t value`, and are refused.

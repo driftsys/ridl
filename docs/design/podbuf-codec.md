@@ -266,24 +266,23 @@ name in its package, a tuple by its wire name in the package that declares it
 (`NestedTuple.package` and `NestedTuple.wire` for a tuple of another package); a
 union arm and a map entry are reached through a descriptor, so no importing
 header defines their heads. The claim of a head and of its guard also carries
-the text of the guarded definition: the importing lowering takes a nested
-tuple's wire name from the declaring package's own lowering, so the two
-definitions of one identity are expected to be equal, and a disagreement between
-the two lowerings is refused rather than written into two headers that define
-one head two ways. Two headers claim one name for one entity only when the
-identities are equal and, for a head or a guard, the definitions are equal: the
-second definition of a head one package declares and another lays out inline is
-accepted only when its text is identical to the first, and equal identities with
-two texts are refused. A name claimed for two or more entities is one detached
-error, which names one claimant per entity and its package; on any clash no `.h`
-is written for the build, the per-package files of the other emits are still
-written (the generated crate's `lib.rs` and `Cargo.toml` are not, as on any
-error of a build), and the build exits 1. A package whose own header is refused
-is skipped by the check, because its own generation reports that refusal; in a
-run that found a clash the podbuf backend is not called, so that refusal is
-reported only once the clash is repaired. The check runs after the deployment is
-selected, so a clash together with a deployment no source declares is still a
-usage error.
+the text of the guarded definition, so that a disagreement between the two
+lowerings of one tuple
+([ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md),
+amendment of 2026-11-01) is refused rather than written. Two headers claim one
+name for one entity only when the identities are equal and, for a head or a
+guard, the definitions are equal: the second definition of a head one package
+declares and another lays out inline is accepted only when its text is identical
+to the first, and equal identities with two texts are refused. A name claimed
+for two or more entities is one detached error, which names one claimant per
+entity and its package; on any clash no `.h` is written for the build, the
+per-package files of the other emits are still written (the generated crate's
+`lib.rs` and `Cargo.toml` are not, as on any error of a build), and the build
+exits 1. A package whose own header is refused is skipped by the check, because
+its own generation reports that refusal; in a run that found a clash the podbuf
+backend is not called, so that refusal is reported only once the clash is
+repaired. The check runs after the deployment is selected, so a clash together
+with a deployment no source declares is still a usage error.
 
 ## Determinism
 
