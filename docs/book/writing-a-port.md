@@ -203,7 +203,7 @@ the [frame specification](reference/frame.md) carried over one transport. A
 binding is written from that specification, the [`ridl-rt` design record][ridl-rt]
 for the exact shape of each name, and the projection record of the encoding its
 path carries. Its own document states the
-nine items of [§10](reference/frame.md#10-what-a-binding-decides), each a
+ten items of [§10](reference/frame.md#10-what-a-binding-decides), each a
 choice the frame leaves to the transport:
 
 1. How a consumer reaches a provider, what opens and ends the session, and what

@@ -566,10 +566,10 @@ in progress, except a whole `publish` and an `answer` of the interaction being
 reassembled, the two rows above. Both exceptions name that interaction by
 `(kind, interface, ordinal)`: a `publish` or an `answer` with the same
 `interface` and `ordinal` under another `kind` names another interaction for the
-receiver (§4), and is applied. Both apply only to a frame the receiver decodes:
-a frame that the binding discards without ending the session (§9.5; on §11.1, a
-`publish` or a `response` with bytes after a header that carries no payload) is
-recorded, and the reassembly goes on.
+receiver (§4), and is handled as if no reassembly were in progress. Both apply
+only to a frame the receiver decodes: a frame that the binding discards without
+ending the session (§9.5; on §11.1, a `publish` or a `response` with bytes after
+a header that carries no payload) is recorded, and the reassembly goes on.
 
 **Which `read`s a payload in blocks answers.** A payload in blocks answers the
 `read`s of its `fixed` that were waiting when its first block arrived. A `read`
@@ -725,7 +725,8 @@ the answer of the next. So between two blocks of one payload of a `fixed`, a
 whole `publish` or an `answer` of that `fixed`, named by its `kind`, `interface`
 and `ordinal`, can only be a defect of the sender, and the consumer ends the
 session on it (§5.5). Every other frame of another form between two blocks is
-applied, an `answer` or a `publish` of another interaction included.
+handled as if no reassembly were in progress, an `answer` or a `publish` of
+another interaction included.
 
 ### 6.4 An unknown interaction
 
@@ -1005,10 +1006,10 @@ leaves one unstated is incomplete.
 9. **The rate-floor answer** on a call (§8), when the binding enforces one.
 10. **Parts of a payload.** Whether the binding carries the `publish` of a
     `fixed` in `block` frames (§4, §5.5), which needs frame version 2; when it
-    does, two facts and no more: the block size, the number of payload bytes in
-    every block but the last, and when the sender sends a `fixed` whole and when
-    in blocks. The `block` form, its fields and what the receiver does with
-    blocks are this document's.
+    does, two facts and no more: the block size, which is the number of payload
+    bytes in every block but the last; and when the sender sends a `fixed` whole
+    and when in blocks. The `block` form, its fields and what the receiver does
+    with blocks are this document's.
 
 A binding does not decide: the field set, the meaning of any field, what a
 receiver does with a frame, the per-kind presence rules of §5, the invalid
@@ -1054,12 +1055,15 @@ data or control, within its liveness timeout as the end of the session. The
 provider pings because a browser client cannot. A consumer that needs two
 catalogs opens two connections.
 
-**The subprotocol.** The client offers `ridl-ws-v1` in `Sec-WebSocket-Protocol`;
-a client offering several versions lists the newest first, and the server
-selects the newest it serves. When the server selects none, the client fails the
-connection; a client that can choose a close code uses 1002. On a `ridl-ws-v1`
-connection, `attach.frame_version` is 1 or the `attach` is refused
-`frame_version_unsupported`.
+**The subprotocol.** The client offers the subprotocol of each binding version
+it speaks, `ridl-ws-v1` for version 1, in `Sec-WebSocket-Protocol`; a client
+offering several versions lists the newest first, and the server selects the
+newest it serves. A server may select a subprotocol whose frame version it does
+not serve only in order to refuse every `attach` on that connection
+`frame_version_unsupported` ("Binding version 2"). When the server selects none,
+the client fails the connection; a client that can choose a close code
+uses 1002. On a `ridl-ws-v1` connection, `attach.frame_version` is 1 or the
+`attach` is refused `frame_version_unsupported`.
 
 **2. The header encoding.** Every integer is fixed-width little-endian; `stamp`
 is a two's-complement `i64`. There is no padding and no alignment, and no field
@@ -1226,9 +1230,8 @@ payload" above.
 #### Binding version 2
 
 Binding version 2 carries frame version 2 (§4) under the subprotocol
-`ridl-ws-v2`. It is version 1 with the `block` form: every layout, code, rule
-and vector of version 1 holds unchanged, `attach` included, whose
-`frame_version` carries 2.
+`ridl-ws-v2`. It is version 1 with the `block` form: every layout, code and rule
+of version 1 holds unchanged; an `attach` carries `frame_version` 2.
 
 **The subprotocol and the frame version.** A client that speaks both versions
 offers `ridl-ws-v2, ridl-ws-v1`, newest first, as item 1 states, and sends
@@ -1390,7 +1393,8 @@ of frame version 2, such as binding version 2 of §11.1, whose block size of
     one sample whose payload is the provisioned value, byte for byte (§5.5).
 19. A frame of another form, other than a whole `publish` or an `answer` of the
     interaction being reassembled, sent between two blocks of one payload is
-    applied, and the payload is still delivered (§5.5).
+    handled as if no reassembly were in progress, and the payload is still
+    delivered (§5.5).
 20. Each sequence error of §5.5 — a missing, a repeated and a reordered block,
     an `index` above 0 with no reassembly, an `index` 0 during another
     reassembly, a block whose identity, envelope or `total` differs, a whole
