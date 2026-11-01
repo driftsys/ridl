@@ -42,6 +42,24 @@ fn door(sensor_id: i64, is_open: bool) -> DoorPayload {
     DoorPayload { sensor_id, is_open }
 }
 
+fn dtc(status: DtcStatus, flags: OpenFlags) -> Dtc {
+    Dtc { status, flags }
+}
+
+/// `OK`, or the declaration and the `Rule` of the `Contract` error the
+/// encoder returns for `value`.
+fn encode_rule(value: Dtc) -> String {
+    let mut out = Aligned([0u8; 4096]);
+    let mut writer = Writer::new(&mut out.0);
+    match value.__ridl_podbuf_encode(&mut writer) {
+        Ok(()) => "OK".to_string(),
+        Err(ridl_rt::payload::EncodeError::Contract(violation)) => {
+            format!("{} {:?}", violation.type_name.unwrap_or("-"), violation.rule)
+        }
+        Err(other) => format!("{other:?}"),
+    }
+}
+
 fn map(pairs: &[(&str, i64)]) -> Vec<(Name, Weight)> {
     pairs
         .iter()
@@ -254,6 +272,106 @@ fn a_boolean_above_1_a_strict_enum_value_not_declared_and_an_undeclared_bit_are_
         ],
     );
     assert_eq!(out, ["Contract", "Contract", "Contract", "OK"]);
+}
+
+/// §7 rule 2 for an open declaration (ADR-0031 decision 12): an open enum
+/// accepts a value it does not declare, and the view and `decode` read it as
+/// the `Unknown` variant that holds the integer; an open enum set accepts a
+/// bit it does not declare and keeps it. `Dtc` holds the open enum at head
+/// offset 0 (buffer 8) and the open enum set at head offset 1 (buffer 9).
+#[test]
+fn an_open_enum_and_an_open_enum_set_accept_undeclared_values_and_read_them() {
+    let out = run(
+        "podbuf_open_rule_2",
+        &[
+            r#"check!(Dtc, patch(enc!(dtc(DtcStatus::Active, OpenFlags::A)), 8, 7))"#,
+            r#"check!(Dtc, patch(enc!(dtc(DtcStatus::Active, OpenFlags::A)), 9, 0x81))"#,
+            r#"{
+                let bytes = patch(patch(enc!(dtc(DtcStatus::Active, OpenFlags::A)), 8, 7), 9, 0x81);
+                let buf = aligned(&bytes);
+                let v = Dtc::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                let status = match v.status() {
+                    DtcStatus::Unknown(u) => format!("Unknown({})", u.raw()),
+                    _ => "declared".to_string(),
+                };
+                let flags = v.flags();
+                format!("{status} {:#x} {:#x}", i64::from(flags), flags.unknown_bits())
+            }"#,
+            r#"{
+                let bytes = patch(patch(enc!(dtc(DtcStatus::Active, OpenFlags::A)), 8, 7), 9, 0x81);
+                let buf = aligned(&bytes);
+                let v = Dtc::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                let d = Dtc::__ridl_podbuf_decode(v);
+                let status = match d.status {
+                    DtcStatus::Unknown(u) => format!("Unknown({})", u.raw()),
+                    _ => "declared".to_string(),
+                };
+                format!("{status} {:#x} {:#x}", i64::from(d.flags), d.flags.unknown_bits())
+            }"#,
+            // A declared value is read as its own variant, not as `Unknown`.
+            r#"{
+                let bytes = patch(enc!(dtc(DtcStatus::Active, OpenFlags::A)), 8, 2);
+                let buf = aligned(&bytes);
+                let v = Dtc::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                matches!(Dtc::__ridl_podbuf_decode(v).status, DtcStatus::Pending).to_string()
+            }"#,
+        ],
+    );
+    assert_eq!(
+        out,
+        [
+            "OK",
+            "OK",
+            "Unknown(7) 0x81 0x80",
+            "Unknown(7) 0x81 0x80",
+            "true"
+        ]
+    );
+}
+
+/// An open enum and an open enum set decoded from undeclared values encode
+/// back to the same bytes: the `Unknown` variant writes the integer it holds,
+/// and the enum set writes every bit it keeps.
+#[test]
+fn an_undeclared_value_of_an_open_declaration_reencodes_unchanged() {
+    let out = run(
+        "podbuf_open_reencode",
+        &[r#"{
+            let bytes = patch(patch(enc!(dtc(DtcStatus::Active, OpenFlags::A)), 8, 7), 9, 0x81);
+            let buf = aligned(&bytes);
+            let v = Dtc::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+            (enc!(Dtc::__ridl_podbuf_decode(v)) == bytes).to_string()
+        }"#],
+    );
+    assert_eq!(out, ["true"]);
+}
+
+/// The encoder refuses an open enum or an open enum set whose integer does
+/// not fit the width the declared values infer, with the contract error for
+/// an out-of-range value naming the declaration: the narrowing cast would
+/// otherwise drop the bits above the width without an error. Such a value
+/// reaches the encoder through `From<i64>` or from an encoding of a wider
+/// integer.
+#[test]
+fn the_encoder_refuses_an_open_value_outside_the_inferred_width() {
+    let out = run(
+        "podbuf_open_width",
+        &[
+            r#"encode_rule(dtc(DtcStatus::from(300), OpenFlags::A))"#,
+            r#"encode_rule(dtc(DtcStatus::from(-1), OpenFlags::A))"#,
+            r#"encode_rule(dtc(DtcStatus::Active, OpenFlags::from(0x100)))"#,
+            r#"encode_rule(dtc(DtcStatus::from(255), OpenFlags::from(0xff)))"#,
+        ],
+    );
+    assert_eq!(
+        out,
+        [
+            "DtcStatus Range",
+            "DtcStatus Range",
+            "OpenFlags Range",
+            "OK"
+        ]
+    );
 }
 
 /// §7 rule 2: an absent optional whose descriptor bytes are not zero is
@@ -959,4 +1077,74 @@ fn main() {
              {HELPERS}\n{main}"
         ),
     );
+}
+
+/// An open enum and an open enum set at the element site of an array, and
+/// an open enum with no declared value, over `open_enums.ridl`: the elements
+/// keep their undeclared values through encode, verify and decode, and every
+/// value of the empty enum is `Unknown`. `OpenMsg` and `StrictMsg` have one
+/// layout, so the bytes of an undeclared open value are refused as a strict
+/// one, which shows that the wire carries the raw integer.
+#[test]
+fn open_declarations_round_trip_at_the_element_site_and_with_no_value() {
+    let package = ir::compile_fixture("open_enums.ridl");
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::Podbuf],
+        false,
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
+    let program = r#"
+use ridl_rt::payload::VerifyError;
+use ridl_rt::podbuf::{Aligned, Writer};
+
+macro_rules! round_trip {
+    ($ty:ty, $value:expr) => {{
+        let value: $ty = $value;
+        let mut out = Aligned([0u8; 4096]);
+        let mut writer = Writer::new(&mut out.0);
+        value.__ridl_podbuf_encode(&mut writer).expect("the encoder accepts the value");
+        let bytes = writer.finish().expect("the buffer finishes").to_vec();
+        let mut buf = Aligned([0u8; 4096]);
+        buf.0[..bytes.len()].copy_from_slice(&bytes);
+        let view = <$ty>::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+        (<$ty>::__ridl_podbuf_decode(view), bytes)
+    }};
+}
+
+fn main() {
+    let (list, _) = round_trip!(OpenList, OpenList {
+        statuses: vec![DtcStatus::Active, DtcStatus::from(9)],
+    });
+    let raw: Vec<i64> = list.statuses.iter().map(|s| i64::from(*s)).collect();
+    println!("{raw:?} {}", matches!(list.statuses[1], DtcStatus::Unknown(u) if u.raw() == 9));
+
+    let (sets, _) = round_trip!(FlagsList, FlagsList { sets: vec![Flags::from(0x81)] });
+    println!("{:#x}", sets.sets[0].unknown_bits());
+
+    let (empty, _) = round_trip!(EmptyMsg, EmptyMsg { e: Empty::from(0) });
+    println!("{}", matches!(empty.e, Empty::Unknown(u) if u.raw() == 0));
+
+    let (_, bytes) = round_trip!(OpenMsg, OpenMsg {
+        status: DtcStatus::from(5),
+        flags: Flags::A,
+    });
+    let mut buf = Aligned([0u8; 4096]);
+    buf.0[..bytes.len()].copy_from_slice(&bytes);
+    let strict = match StrictMsg::__ridl_podbuf_verify(&buf.0[..bytes.len()]) {
+        Err(VerifyError::Contract(_)) => "Contract",
+        Ok(_) => "OK",
+        Err(_) => "other",
+    };
+    println!("{strict}");
+}
+"#;
+    let source = format!(
+        "#![allow(dead_code, deprecated, unused_imports, unused_macros)]\n{generated}\n{program}"
+    );
+    let out = rustc::run_program_capturing_stdout("podbuf_open_elements", &source);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines, ["[1, 9] true", "0x80", "true", "Contract"]);
 }

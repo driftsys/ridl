@@ -136,6 +136,25 @@ struct Warnings {
   flags : WarningFlags
 }
 
+/// An open enum, one byte wide: 7 is not declared and is valid.
+open enum DtcStatus {
+  INACTIVE = 0
+  ACTIVE   = 1
+  PENDING  = 2
+}
+
+/// An open enum set, one byte wide: bit 7 is not declared and is kept.
+open enumset OpenFlags {
+  A = 0
+  B = 1
+}
+
+/// An open enum at head offset 0 and an open enum set at head offset 1.
+struct Dtc {
+  status : DtcStatus
+  flags  : OpenFlags
+}
+
 /// Two descriptors, at 0..8 and 8..16.
 struct TwoStrings {
   a : string [0..8]

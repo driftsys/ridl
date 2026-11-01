@@ -960,7 +960,9 @@ impl<'a> Codec<'a> {
                         reference: &reference.reference,
                     }),
                     Some(v1::declaration::Kind::Enum(ed)) => Ok(ScalarShape::Enum(ed, path)),
-                    Some(v1::declaration::Kind::EnumSet(_)) => Ok(ScalarShape::EnumSet(path)),
+                    Some(v1::declaration::Kind::EnumSet(esd)) => {
+                        Ok(ScalarShape::EnumSet(esd, path))
+                    }
                     _ => fail(format!(
                         "`{}` is not a scalar, an enum or an enum set",
                         reference.reference
@@ -996,7 +998,7 @@ impl<'a> Codec<'a> {
                 return fail("a string or bytes has no language-layer number".to_string());
             }
             ScalarShape::Named { .. } => quote! { #receiver.get() },
-            ScalarShape::Enum(..) | ScalarShape::EnumSet(_) => {
+            ScalarShape::Enum(..) | ScalarShape::EnumSet(..) => {
                 quote! { ::core::primitive::i64::from(#place) }
             }
             ScalarShape::Inline(..) => quote! { #place },
@@ -1328,17 +1330,14 @@ impl<'a> Codec<'a> {
                 let raw = prim.cast(self.lang(ty, operand)?);
                 quote! { w.#put(#at, #raw); }
             }
-            Some(Form::Enum(value)) => {
-                let prim = Prim::of_int(value.width)?;
+            Some(Form::Enum(v1::PodbufEnum { width, .. }))
+            | Some(Form::EnumSet(v1::PodbufEnumSet { width, .. })) => {
+                let prim = Prim::of_int(*width)?;
                 let put = prim.put();
-                let raw = prim.cast(self.lang(ty, operand)?);
-                quote! { w.#put(#at, #raw); }
-            }
-            Some(Form::EnumSet(value)) => {
-                let prim = Prim::of_int(value.width)?;
-                let put = prim.put();
-                let raw = prim.cast(self.lang(ty, operand)?);
-                quote! { w.#put(#at, #raw); }
+                let lang = self.lang(ty, operand)?;
+                let check = self.open_width_check(ty, prim, &lang)?;
+                let raw = prim.cast(lang);
+                quote! { #check w.#put(#at, #raw); }
             }
             Some(Form::InlineHead(index)) => {
                 if self
@@ -1698,7 +1697,7 @@ impl<'a> Codec<'a> {
         })?;
         let backing = match shape {
             ScalarShape::Named { backing, .. } | ScalarShape::Inline(backing, _) => Some(backing),
-            ScalarShape::Enum(..) | ScalarShape::EnumSet(_) => None,
+            ScalarShape::Enum(..) | ScalarShape::EnumSet(..) => None,
         };
         Ok(match backing {
             Some(ScalarBacking::String) => {
@@ -2393,6 +2392,41 @@ impl<'a> Codec<'a> {
         })
     }
 
+    /// The `encode` statement that refuses the language-layer value `lang`
+    /// of an open enum or an open enum set whose integer does not fit
+    /// `prim`, the width the declared values infer, with the contract error
+    /// for an out-of-range value naming the declaration. The write narrows
+    /// to `prim` with `as`, which would drop the bits above it in silence;
+    /// an open declaration admits every `i64` through `From<i64>`, so such
+    /// a value can reach the encoder from the caller or from an encoding of
+    /// a wider integer. Empty for a strict declaration, whose values fit the
+    /// width by construction, and for a 64-bit primitive.
+    fn open_width_check(
+        &self,
+        ty: &v1::Type,
+        prim: Prim,
+        lang: &TokenStream,
+    ) -> Result<TokenStream, GenerateError> {
+        let open = match self.scalar_of(ty)? {
+            ScalarShape::Enum(ed, _) => ed.open,
+            ScalarShape::EnumSet(esd, _) => esd.open,
+            _ => false,
+        };
+        let Some(v1::r#type::Kind::Named(reference)) = ty.kind.as_ref() else {
+            return Ok(TokenStream::new());
+        };
+        if !open || matches!(prim.0, "i64" | "u64") {
+            return Ok(TokenStream::new());
+        }
+        let name = reference.reference.as_str();
+        let type_name = name.rsplit('.').next().unwrap_or(name);
+        let wire = prim.ty();
+        let refused = contract_error(type_name, "Range");
+        Ok(quote! {
+            if #wire::try_from(#lang).is_err() { #refused }
+        })
+    }
+
     /// The domain value of the scalar, enum or enum set `form` at `off` of
     /// `place`.
     fn scalar_read(
@@ -2426,6 +2460,13 @@ impl<'a> Codec<'a> {
                 let (path, ctor) = shape.ctor().unwrap_or_else(|| unreachable!());
                 quote! { #path::#ctor(#widened) }
             }
+            // An open enum or enum set reads every value: `From<i64>` builds
+            // the declared variant, or `Unknown` with the integer, and keeps
+            // every bit of a set (ADR-0031 decision 12).
+            ScalarShape::Enum(v1::Enum { open: true, .. }, path)
+            | ScalarShape::EnumSet(v1::EnumSet { open: true, .. }, path) => quote! {
+                <#path as ::core::convert::From<::core::primitive::i64>>::from(#widened)
+            },
             ScalarShape::Enum(ed, path) => {
                 let first = ed.values.first().ok_or_else(|| GenerateError {
                     message: "an enum with no value cannot be read".to_string(),
@@ -2436,7 +2477,7 @@ impl<'a> Codec<'a> {
                         .unwrap_or(#path::#first)
                 }
             }
-            ScalarShape::EnumSet(path) => quote! {
+            ScalarShape::EnumSet(_, path) => quote! {
                 <#path as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
                     .unwrap_or(#path(0i64))
             },
@@ -2945,7 +2986,11 @@ impl<'a> Codec<'a> {
                 let named = shape.named_scalar().unwrap_or_else(|| unreachable!());
                 named_scalar_check(&named, quote! { &(#widened) }).unwrap_or_default()
             }
-            ScalarShape::Enum(_, path) | ScalarShape::EnumSet(path) => quote! {
+            // An open enum accepts every value of its width, and an open enum
+            // set every bit (ADR-0031 decision 12): no check.
+            ScalarShape::Enum(v1::Enum { open: true, .. }, _)
+            | ScalarShape::EnumSet(v1::EnumSet { open: true, .. }, _) => TokenStream::new(),
+            ScalarShape::Enum(_, path) | ScalarShape::EnumSet(_, path) => quote! {
                 <#path as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
                     .map_err(::ridl_rt::payload::VerifyError::Contract)?;
             },
@@ -3666,7 +3711,7 @@ enum ScalarShape<'a> {
         reference: &'a str,
     },
     Enum(&'a v1::Enum, TokenStream),
-    EnumSet(TokenStream),
+    EnumSet(&'a v1::EnumSet, TokenStream),
     Inline(ScalarBacking, Option<&'a v1::Scalar>),
 }
 
