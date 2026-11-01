@@ -1,0 +1,37 @@
+// The fixture of the caller side of a streamed reply of named elements
+// (docs/design/interaction-face.md). `Log` declares one query whose reply is
+// a stream of a named struct, beside a plain command, so its face carries a
+// `Provider` and a `serve` for the command while the stream query has the
+// client side alone. `Plain` declares one query with a named reply and no
+// stream, so its `Client` is the proof that the stream bound is added only
+// to an interface that declares a stream member.
+//
+// Kept self-contained, for the reason `interaction_face.ridl` gives.
+
+package face.stream
+
+/// A control level.
+type Level : integer [0..100]
+
+/// One reading of the log.
+struct Reading {
+  level : Level
+  flag  : boolean
+}
+
+/// A log of readings, read as a stream.
+interface Log {
+  /// The readings up to `limit`, oldest first.
+  query history(limit: Level): <Reading> @[..200ms] [
+    require limit > 0
+  ]
+  /// Clears the log.
+  command clear(level: Level) @[..50ms]
+}
+
+/// An interface with no stream, for the port-bound test. Named to sort after
+/// `Log`: provisional interface numbers follow the sorted names.
+interface Plain {
+  /// The latest reading.
+  query latest(limit: Level): Reading @[..200ms]
+}

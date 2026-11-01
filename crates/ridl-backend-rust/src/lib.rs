@@ -198,7 +198,8 @@ pub fn generate_with(
 ///
 /// **Why an interface is skipped and not refused** (design rule 2): the clause
 /// translator accepts one narrow form, and a multi-parameter call and a stream
-/// have no face at all. Refusing would make `--emit rust` reject legal ridl
+/// in a form other than a streamed reply of named elements have no face at
+/// all. Refusing would make `--emit rust` reject legal ridl
 /// over a gap with two follow-ups — driftsys/ridl#704 replaces the translator, and the
 /// multi-parameter argument struct is driftsys/ridl#713 — and would
 /// put a codegen error where a source diagnostic belongs. So the package keeps
@@ -464,10 +465,11 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
         return FaceGap::Clause;
     }
     for (_, interaction) in descriptors::interactions(interface) {
-        // The face leaves a member with a stream out, but its descriptor is
-        // still written, and refuses the same request and reply shapes as
-        // any other member's. A streamed reply has no reply type, so only
-        // its request is checked.
+        // The face leaves a member with a stream out, in every form but a
+        // streamed reply of named elements, but its descriptor is still
+        // written, and refuses the same request and reply shapes as any
+        // other member's. A streamed reply has no reply type, so only its
+        // request is checked.
         let member = declared(interaction.name.as_ref());
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Command(command)) => {

@@ -18,6 +18,15 @@
 //!   resolves on the outcome or at the member's bound, and forgets its call
 //!   when it leaves the waiting phase, on drop included; and `NextEvent`,
 //!   the event future;
+//! - for a query whose reply is a stream of named elements, `query f(..): <T>`
+//!   with `T` named and no stream parameter, the same `<Name>Call`, which
+//!   resolves to `<Name>Stream` once the first element or the end arrived,
+//!   and `<Name>Stream`, the pull API over the `StreamCaller` port: `poll_next`
+//!   verifies and decodes one element per chunk, and `async fn next` awaits
+//!   it. The `StreamCaller` bound joins the `Client`'s bounds only when the
+//!   interface declares such a member. Every other stream form is left out
+//!   of the face, with its descriptor written (driftsys/ridl#943), and so
+//!   are the provider side and the blocking client of this one;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
 //! - the two per-interface traits, `Subscribe` (one `subscribe_<event>` per
@@ -105,8 +114,8 @@
 //! its future, and `blocking` the `blocking` module.
 
 use crate::descriptors::{
-    declared_name, descriptor_ident, has_stream, interactions, query_param_type, query_reply_type,
-    single_param_type,
+    declared_name, descriptor_ident, has_stream, interactions, named_stream_reply,
+    query_param_type, query_reply_type, single_param_type,
 };
 use crate::docs::{self, DocLines, DocParts, Links};
 use crate::{
@@ -252,10 +261,14 @@ pub(crate) fn one_interface(
     let mut commands: Vec<Call> = Vec::new();
     let mut queries: Vec<Call> = Vec::new();
 
+    // The queries whose reply is a stream of named elements: the caller side
+    // alone, which is why they are kept apart from `queries`.
+    let mut streams: Vec<Call> = Vec::new();
+
     for (ordinal, interaction) in interactions(interface) {
-        // The face carries no method for a call with a stream; its descriptor
-        // is emitted all the same.
-        if has_stream(interaction) {
+        // The face carries a call with a stream in one form, a streamed reply
+        // of named elements; its descriptor is emitted whatever the form.
+        if has_stream(interaction) && !named_stream_reply(interaction) {
             continue;
         }
         let name = declared(interaction.name.as_ref());
@@ -298,13 +311,20 @@ pub(crate) fn one_interface(
                 });
             }
             Some(v1::interaction::Shape::Query(query)) => {
-                queries.push(Call {
+                let call = Call {
                     arg_type: query_param_type(ctx, query, name)?,
                     arg: call_arg_name(&query.params, query.request.is_some()),
                     member,
+                    // For a streamed reply, the element type: what the stream
+                    // value decodes, and what the face's bounds name.
                     reply_type: Some(query_reply_type(ctx, query, name)?),
                     params: docs::parameter_lines(&query.params, &member_links),
-                });
+                };
+                if named_stream_reply(interaction) {
+                    streams.push(call);
+                } else {
+                    queries.push(call);
+                }
             }
             // A `fixed` is provisioned, not interacted with, so the MVP's face
             // carries no method for it; its descriptor is emitted all the
@@ -317,9 +337,14 @@ pub(crate) fn one_interface(
     // The payload types the face encodes or decodes, collected once: every
     // item of the face is bounded on the `Payload` of each in the encoding its
     // port carries.
-    let payloads = payload_types(&signals, &events, &commands, &queries);
-    body.extend(correlations(&commands, &queries));
-    if !signals.is_empty() || !events.is_empty() || !commands.is_empty() || !queries.is_empty() {
+    let payloads = payload_types(&signals, &events, &commands, &queries, &streams);
+    body.extend(correlations(&commands, &queries, &streams));
+    if !signals.is_empty()
+        || !events.is_empty()
+        || !commands.is_empty()
+        || !queries.is_empty()
+        || !streams.is_empty()
+    {
         // Every interface that gets a `Client` gets `check_catalog`: the
         // client's `Bind::new` calls it, as do `Publisher`'s and `serve`.
         body.push(check_catalog(&iface, iface_name));
@@ -327,16 +352,18 @@ pub(crate) fn one_interface(
             body.push(subscribe_trait(iface_name, &events));
         }
         body.push(client(
-            &iface, iface_name, &payloads, &signals, &events, &commands, &queries,
+            &iface, iface_name, &payloads, &signals, &events, &commands, &queries, &streams,
         ));
     }
     if !events.is_empty() {
         body.push(event_enum(ctx, iface_name, &events, &event_payloads));
     }
     body.extend(futures(
-        &iface, iface_name, &payloads, &events, &commands, &queries,
+        &iface, iface_name, &payloads, &events, &commands, &queries, &streams,
     ));
-    body.extend(plumbing(&iface, &payloads, &events, &commands, &queries));
+    body.extend(plumbing(
+        &iface, &payloads, &events, &commands, &queries, &streams,
+    ));
     if !signals.is_empty() || !events.is_empty() {
         if !signals.is_empty() {
             body.push(invalidate_trait(iface_name, &signals));
@@ -354,9 +381,9 @@ pub(crate) fn one_interface(
     }
 
     // The prelude follows every trait it re-exports, and the blocking module
-    // stays the module's last item.
+    // stays the module's last item. A stream member adds nothing to it.
     let blocking = blocking(
-        &iface, iface_name, &payloads, &signals, &events, &commands, &queries,
+        &iface, iface_name, &payloads, &signals, &events, &commands, &queries, &streams,
     );
     body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
     body.extend(blocking);
@@ -395,9 +422,9 @@ fn correlation_type(call: &Call) -> Ident {
 /// 2026-09-20 amendment). What the newtype buys is that a query's correlation
 /// cannot be passed to `poll_<name>_ack` and a command's cannot be passed to
 /// `poll_<name>_reply`.
-fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
+fn correlations(commands: &[Call], queries: &[Call], streams: &[Call]) -> Vec<TokenStream> {
     let mut items = Vec::new();
-    for call in commands.iter().chain(queries) {
+    for call in commands.iter().chain(queries).chain(streams) {
         let name = correlation_type(call);
         // The correlation identifies one sent call to its caller. It is
         // returned by the internal send and accepted by that call's own
@@ -414,14 +441,17 @@ fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
 /// interactions need (RA-19), over `Encoded`, which every port of a face
 /// carries because the face reads the encoding of its bytes from it. The
 /// blocking client repeats them, because it is the async client and its
-/// timeout and nothing more.
+/// timeout and nothing more. `StreamCaller` is the extension a runtime may
+/// lack, so it joins the bounds only when the interface declares a member
+/// with a streamed reply.
 fn client_bounds(
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
+    streams: &[Call],
 ) -> Vec<TokenStream> {
-    let has_calls = !commands.is_empty() || !queries.is_empty();
+    let has_calls = !commands.is_empty() || !queries.is_empty() || !streams.is_empty();
     let mut bounds: Vec<TokenStream> = vec![quote! { ::ridl_rt::port::Encoded }];
     if !signals.is_empty() {
         bounds.push(quote! { ::ridl_rt::port::SignalReader });
@@ -431,6 +461,11 @@ fn client_bounds(
     }
     if has_calls {
         bounds.push(quote! { ::ridl_rt::port::Caller });
+    }
+    if !streams.is_empty() {
+        bounds.push(quote! { ::ridl_rt::port::StreamCaller });
+    }
+    if has_calls {
         // A call's future measures the member's bound on the port's clock
         // (the async face design, note F-2).
         bounds.push(quote! { ::ridl_rt::port::Clock });
@@ -444,6 +479,7 @@ fn client_bounds(
     bounds
 }
 
+#[allow(clippy::too_many_arguments)]
 fn client(
     iface: &Ident,
     iface_name: &str,
@@ -452,9 +488,10 @@ fn client(
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
+    streams: &[Call],
 ) -> TokenStream {
     let number = interface_number(iface);
-    let bounds = client_bounds(signals, events, commands, queries);
+    let bounds = client_bounds(signals, events, commands, queries, streams);
     let port = ident("P");
     let encoding = encoding_bounds(&port, iface, payloads);
 
@@ -531,6 +568,10 @@ fn client(
 
     for call in queries {
         methods.push(call_method(call, "query"));
+    }
+
+    for call in streams {
+        methods.push(stream_call_method(call));
     }
 
     // The member methods above are inherent; the fixed methods `new` and
@@ -785,9 +826,18 @@ fn phase_type(call: &Call) -> Ident {
 /// The suffixes of the three types the face module holds per command and per
 /// query: the future `<Name>Call`, the phase enum `<Name>Phase` and the
 /// correlation newtype `<Name>Correlation`. No fixed type name of the face
-/// module ends with one of them, so a name spelled here can meet only another
-/// name spelled here.
+/// module ends with one of them, nor with [`STREAM_SUFFIX`], so a name
+/// spelled from a member can meet only another name spelled from a member.
 pub(crate) const CALL_SUFFIXES: [&str; 3] = ["Call", "Phase", "Correlation"];
+
+/// The suffix of the fourth type a query with a streamed reply adds, the
+/// stream value `<Name>Stream`.
+pub(crate) const STREAM_SUFFIX: &str = "Stream";
+
+/// The name of one streamed query's stream value, `<Name>Stream`.
+fn stream_type(call: &Call) -> Ident {
+    call_type_ident(call.member.camel, STREAM_SUFFIX)
+}
 
 /// One call's type of the face module: the member's `camel_case` followed by
 /// one of [`CALL_SUFFIXES`]. The claim table (`crate::claims`) claims the
@@ -806,16 +856,17 @@ pub(crate) fn is_internal(interface: &v1::Interface) -> bool {
 }
 
 /// The interaction kinds the face module carries: a signal, an event, a
-/// command and a query. An interface that declares at least one live member
+/// command and a query, a query with a streamed reply of named elements
+/// included. An interface that declares at least one live member
 /// of those kinds gets a face module when its face is emitted, and one that
-/// declares none (only `fixed` members, members with a stream, or no member)
-/// gets none, which is
+/// declares none (only `fixed` members, members with a stream in another
+/// form, or no member) gets none, which is
 /// when [`one_interface`] returns `None`. An `internal` interface gets none
 /// either (see [`is_internal`]).
 pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
     !is_internal(interface)
         && interactions(interface).iter().any(|(_, interaction)| {
-            !has_stream(interaction)
+            (!has_stream(interaction) || named_stream_reply(interaction))
                 && matches!(
                     interaction.shape.as_ref(),
                     Some(
@@ -864,6 +915,45 @@ fn read_fn(call: &Call) -> Ident {
 /// name, for the same reason, and the internal send names its port parameter
 /// `__port`. `dispatch` binds the decoded argument as `__arg` too.
 fn call_method(call: &Call, kind: &str) -> TokenStream {
+    let doc = format!(
+        "Sends {kind} `{}` and returns its future. The call is sent when this \
+         method runs, not when the future is first polled, and the future \
+         resolves on the outcome. {}",
+        call.member.declared, CALL_METHOD_DOC_TAIL,
+    );
+    call_method_with(call, &doc, quote! { &mut self.port })
+}
+
+/// The second half of a call method's generated sentence, shared by a plain
+/// call and a streamed query.
+const CALL_METHOD_DOC_TAIL: &str = "A `require` clause that fails, or a send \
+    failure other than `SendError::Busy`, is a future that is ready with \
+    `ClientError::Send` and sends nothing. `SendError::Busy` is a future that \
+    waits for a free slot and sends on a later poll.\n\nThe call's bound is \
+    the member's `max`, measured from the port's clock when this method runs; \
+    a member with no `max` waits without a bound. The future holds this \
+    client's port until it is dropped.";
+
+/// [`call_method`] for a query whose reply is a stream: the same send, and a
+/// future that resolves to the stream value rather than to a reply. The
+/// future holds its port as an `Option`, so that it can hand the borrow to
+/// the stream when it resolves.
+fn stream_call_method(call: &Call) -> TokenStream {
+    let stream = stream_type(call);
+    let doc = format!(
+        "Sends query `{}` and returns its future, which resolves to the \
+         reply stream, `{stream}`, once the first element or the end of the \
+         stream arrived, and to `Transport::Timeout` when the bound passes \
+         before either. The call is sent when this method runs, not when the \
+         future is first polled. {}",
+        call.member.declared, CALL_METHOD_DOC_TAIL,
+    );
+    call_method_with(call, &doc, quote! { Some(&mut self.port) })
+}
+
+/// The body every call method shares: `port` is the expression the future's
+/// `port` field is built from.
+fn call_method_with(call: &Call, doc: &str, port: TokenStream) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
     let descriptor = &member.descriptor;
@@ -872,19 +962,7 @@ fn call_method(call: &Call, kind: &str) -> TokenStream {
     let future = future_type(call);
     let phase = phase_type(call);
     let send = send_fn(call);
-    let doc = format!(
-        "Sends {kind} `{}` and returns its future. The call is sent when this \
-         method runs, not when the future is first polled, and the future \
-         resolves on the outcome. A `require` clause that fails, or a send \
-         failure other than `SendError::Busy`, is a future that is ready with \
-         `ClientError::Send` and sends nothing. `SendError::Busy` is a future \
-         that waits for a free slot and sends on a later poll.\n\nThe call's \
-         bound is the member's `max`, measured from the port's clock when \
-         this method runs; a member with no `max` waits without a bound. The \
-         future holds this client's port until it is dropped.",
-        member.declared
-    );
-    let doc = call_doc(call, &doc);
+    let doc = call_doc(call, doc);
     let deprecated = deprecated_attr(member.deprecated);
     quote! {
         #doc
@@ -902,7 +980,7 @@ fn call_method(call: &Call, kind: &str) -> TokenStream {
                 Err(error) => #phase::Failed(error),
             };
             #future {
-                port: &mut self.port,
+                port: #port,
                 phase,
                 deadline,
             }
@@ -1244,8 +1322,8 @@ fn ty(reference: &str) -> TokenStream {
 }
 
 /// The payload types an interface's face encodes or decodes: the signal and
-/// event payloads, then each call's argument and reply, in declaration order,
-/// each once.
+/// event payloads, then each call's argument and reply — a streamed reply's
+/// element among them — in declaration order, each once.
 ///
 /// It is the list the `where` clause of every item of the face names, one
 /// `Payload` predicate per entry, so an interface is tied to exactly the
@@ -1255,6 +1333,7 @@ fn payload_types<'a>(
     events: &[(Member<'a>, &'a str)],
     commands: &[Call<'a>],
     queries: &[Call<'a>],
+    streams: &[Call<'a>],
 ) -> Vec<&'a str> {
     fn push<'a>(types: &mut Vec<&'a str>, name: &'a str) {
         if !name.is_empty() && !types.contains(&name) {
@@ -1266,7 +1345,7 @@ fn payload_types<'a>(
     for (_, payload) in signals.iter().chain(events) {
         push(&mut types, payload);
     }
-    for call in commands.iter().chain(queries) {
+    for call in commands.iter().chain(queries).chain(streams) {
         push(&mut types, call.arg_type);
         if let Some(reply) = call.reply_type {
             push(&mut types, reply);

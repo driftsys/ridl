@@ -20,6 +20,7 @@ pub(super) fn plumbing(
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
+    streams: &[Call],
 ) -> Vec<TokenStream> {
     let number = interface_number(iface);
     // Each function here is generic over the port, and reads the encoding of
@@ -47,6 +48,17 @@ pub(super) fn plumbing(
             &encoding,
         ));
         items.push(poll_reply(call, &encoding));
+    }
+    // A streamed query is sent as a query; its future pulls the reply stream
+    // itself, so it has no reply read here.
+    for call in streams {
+        items.push(send(
+            &number,
+            call,
+            quote! { ::ridl_rt::contract::Query },
+            quote! { query },
+            &encoding,
+        ));
     }
     if !events.is_empty() {
         items.push(poll_next_event(iface, events, &encoding));

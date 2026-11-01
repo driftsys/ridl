@@ -181,7 +181,10 @@ induce a reply struct. The rule is held by
 the one place the backend asks what a call sends. They read the name the
 lowering wrote, and the backend never builds one. A fallible `T | E` reply and
 an untyped position are still refused (driftsys/ridl#943). A call with a stream
-gets its descriptor, whose row lists its streams, but no method on the face. An
+gets its descriptor, whose row lists its streams, and a method on the face in
+one form only: a query whose reply is a stream of named elements and whose only
+stream is that reply, for which `query_reply_type` returns the element type and
+the consumer side below emits the call's future and its `<Name>Stream`. An
 induced payload with no finite bound in an encoding `encodings` names is also
 refused before its descriptor is accepted, because that encoding's codec cannot
 implement `Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers

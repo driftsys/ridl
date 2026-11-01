@@ -1108,6 +1108,134 @@ fn the_provider_trait_carries_the_settled_method_signatures() {
     );
 }
 
+/// The face of `stream_face.ridl`: `Log` declares a query whose reply is a
+/// stream of a named struct, beside a plain command; `Plain` declares a query
+/// with a named reply and no stream.
+fn stream_face() -> String {
+    let package = ir::compile_fixture("stream_face.ridl");
+    generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source
+}
+
+/// The face's encoding predicates for `Log`, whitespace-stripped, over the
+/// port type parameter `P`: the interface's `Sizes` bound, then one `Payload`
+/// bound per payload type the interface uses, the stream's element included.
+fn log_where() -> String {
+    let mut clause = "super::Log:::ridl_rt::contract::Sizes<P::Encoding>,".to_string();
+    for payload in ["Level", "Reading"] {
+        clause.push_str(&format!(
+            "super::{payload}:::ridl_rt::payload::Payload<P::Encoding>,"
+        ));
+    }
+    clause
+}
+
+/// A query whose reply is a stream of named elements gets the caller side of
+/// the face: the client method returning the call's future, and the stream
+/// value that future resolves to, with the pull API and `async fn next`. The
+/// `StreamCaller` bound is added to the `Client` of the interface that
+/// declares the stream member, and to no other.
+#[test]
+fn a_streamed_reply_of_named_elements_gets_a_client_method_and_a_stream() {
+    let source = stream_face();
+    let log = dense(&module(&source, "log"));
+    let plain = dense(&module(&source, "plain"));
+
+    let stream_bounds = "::ridl_rt::port::Encoded+::ridl_rt::port::Caller\
+                         +::ridl_rt::port::StreamCaller+::ridl_rt::port::Clock\
+                         +::ridl_rt::port::Wakeable";
+    assert!(
+        log.contains(&format!("pubstructClient<P:{stream_bounds},>")),
+        "the client of an interface with a stream member is bound on StreamCaller:\n{log}"
+    );
+    assert!(
+        plain.contains(
+            "pubstructClient<P:::ridl_rt::port::Encoded+::ridl_rt::port::Caller\
+             +::ridl_rt::port::Clock+::ridl_rt::port::Wakeable,>"
+        ),
+        "the client of an interface without a stream member carries no stream bound:\n{plain}"
+    );
+    assert!(
+        !plain.contains("StreamCaller"),
+        "nothing in the face of an interface without a stream names StreamCaller:\n{plain}"
+    );
+
+    // The client method sends when it is called and returns the call's
+    // future, as a plain query's does.
+    assert!(
+        log.contains("pubfnhistory(&mutself,limit:super::Level)->HistoryCall<'_,P>{"),
+        "the client method returns the call's future:\n{log}"
+    );
+
+    // The future resolves to the stream, which holds the port, the
+    // correlation and the element's buffer inline.
+    let future = between(&log, "pubstructHistoryCall<", "pubstructHistoryStream<");
+    assert!(
+        future.contains(
+            "typeOutput=::core::result::Result<HistoryStream<'a,P>,::ridl_rt::error::ClientError,>;"
+        ),
+        "the future resolves to the stream:\n{future}"
+    );
+    let stream = between(&log, "pubstructHistoryStream<", "pubtraitProvider{");
+    assert!(
+        stream.starts_with(&format!(
+            "pubstructHistoryStream<'a,P:{stream_bounds},>where\
+             super::Reading:::ridl_rt::payload::Payload<P::Encoding>,{{\
+             port:&'amutP,correlation:HistoryCorrelation,\
+             buffer:<super::Readingas::ridl_rt::payload::Payload<P::Encoding>>::Buffer,\
+             state:StreamState,}}"
+        )),
+        "the stream holds the port, the correlation and the element buffer inline:\n{stream}"
+    );
+    assert!(
+        stream.contains(
+            "pubfnpoll_next(&mutself,cx:&mut::core::task::Context<'_>,)\
+             ->::core::task::Poll<::core::option::Option<::core::result::Result<\
+             super::Reading,::ridl_rt::error::ClientError>,>,>{"
+        ),
+        "the stream has the pull API:\n{stream}"
+    );
+    assert!(
+        stream.contains(
+            "pubasyncfnnext(&mutself,)->::core::option::Option<\
+             ::core::result::Result<super::Reading,::ridl_rt::error::ClientError>,>{"
+        ),
+        "the stream has `async fn next`, outside any cfg:\n{stream}"
+    );
+    // Every impl of the stream carries the face's encoding predicates, as
+    // every impl of the client does.
+    assert!(
+        stream.contains(&format!("HistoryStream<'_,P>where{}{{", log_where())),
+        "the stream's impls carry the face's encoding predicates:\n{stream}"
+    );
+    // Dropping the stream before its end forgets the call, which interrupts
+    // the stream; the `Drop` impl repeats the struct's bounds exactly.
+    assert!(
+        stream.contains(&format!(
+            "impl<P:{stream_bounds},>::core::ops::DropforHistoryStream<'_,P>where\
+             super::Reading:::ridl_rt::payload::Payload<P::Encoding>,{{\
+             fndrop(&mutself){{ifself.state!=StreamState::Done{{\
+             self.port.forget(self.correlation.0);}}}}}}"
+        )),
+        "dropping the stream forgets the call unless it is done:\n{stream}"
+    );
+
+    // The provider side is not built: the trait carries the command and not
+    // the stream query, and the blocking module carries nothing for it.
+    let provider = between(&log, "pubtraitProvider{", "}");
+    assert!(
+        provider.contains("fnclear(&mutself,level:&super::Level);")
+            && !provider.contains("history"),
+        "the provider trait leaves the stream query out:\n{provider}"
+    );
+    let blocking = between(&log, "pubmodblocking{", "pubfnserve<");
+    assert!(
+        !blocking.contains("history"),
+        "the blocking module carries nothing for the stream query:\n{blocking}"
+    );
+}
+
 #[test]
 fn the_pipeline_generate_emits_no_face_module() {
     let package = ir::compile_fixture("interaction_face.ridl");

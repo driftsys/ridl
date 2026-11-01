@@ -23,7 +23,11 @@
 //!
 //! The module is emitted only when the interface declares something that
 //! waits — an event, a command or a query; a signal-only interface's `Client`
-//! never blocks, so it gets no `blocking` module.
+//! never blocks, so it gets no `blocking` module. A query with a streamed
+//! reply adds nothing to it: the stream's pull API has no blocking form yet,
+//! so an interface whose only waiting member is such a query gets no
+//! `blocking` module either, while its `Client` repeats the async client's
+//! bounds, the stream extension included.
 
 use super::{
     Call, Member, allow_deprecated, call_doc, catalog_panics_doc, client_bounds, deprecated_attr,
@@ -60,6 +64,7 @@ fn encoding_bounds(port: &Ident, iface: &Ident, payloads: &[&str]) -> TokenStrea
 
 /// The `blocking` module, or nothing for an interface with no event, command
 /// or query.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn blocking(
     iface: &Ident,
     iface_name: &str,
@@ -68,6 +73,7 @@ pub(super) fn blocking(
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
+    streams: &[Call],
 ) -> Option<TokenStream> {
     let has_calls = !commands.is_empty() || !queries.is_empty();
     if events.is_empty() && !has_calls {
@@ -83,6 +89,7 @@ pub(super) fn blocking(
             events,
             commands,
             queries,
+            streams,
         ),
     ];
     if has_calls {
@@ -127,6 +134,7 @@ fn deadline_after() -> TokenStream {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn client(
     iface: &Ident,
     iface_name: &str,
@@ -135,10 +143,12 @@ fn client(
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
+    streams: &[Call],
 ) -> TokenStream {
     // The blocking client is the async one and its timeout, so it repeats the
-    // async client's port bounds.
-    let bounds = client_bounds(signals, events, commands, queries);
+    // async client's port bounds, the stream extension included: the inner
+    // async client is built over the same `P`.
+    let bounds = client_bounds(signals, events, commands, queries, streams);
     let new_doc = format!(
         "Binds the face to a port, with no timeout. The port is held by value: \
          pass a handle, or a `&mut` borrow of one.\n\n{}",
