@@ -428,6 +428,7 @@ pub struct OptionalCompositesPair {
     #[prost(uint32, tag = "2")]
     pub field_2: u32,
 }
+/// strict: a value outside this list is refused by RIDL codecs
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Health {
@@ -457,6 +458,7 @@ impl Health {
         }
     }
 }
+/// strict: a value outside this list is refused by RIDL codecs
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Gear {
@@ -486,6 +488,7 @@ impl Gear {
         }
     }
 }
+/// strict: a value outside this list is refused by RIDL codecs
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Trend {
@@ -567,6 +570,7 @@ pub struct TorqueBox {
     #[prost(uint32, tag = "1")]
     pub value: u32,
 }
+/// strict: a value outside this list is refused by RIDL codecs
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Grade {

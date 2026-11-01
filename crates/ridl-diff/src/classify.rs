@@ -128,6 +128,13 @@ pub(crate) fn classify_in(
         // it.
         Category::EnumReordered => Verdict::Compatible,
 
+        // A reader built from a strict enum or enum set refuses a value it
+        // does not name, under every encoding (ADR-0031 decision 12), so an
+        // append to one is breaking, and so is closing an open declaration.
+        // Opening one only makes readers accept more.
+        Category::StrictEnumAppend | Category::EnumClosed => Verdict::Breaking,
+        Category::EnumOpened => Verdict::Compatible,
+
         // A service's list is a set of interface references (ADR-0015
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
@@ -149,14 +156,15 @@ pub(crate) fn classify_in(
         // 12).
         Category::InteractionClassChanged => Verdict::Breaking,
 
-        // The walk emits both only for an append the generic rule accepts, so
-        // the verdict is the encoding's alone: an inline copy of the struct
-        // cannot grow under podbuf, a wider enum integer or union tag moves
-        // every head that holds it, a value or flag a strict enum does not
-        // name is refused by an older reader's `verify`. proto3 has no fixed
-        // layout for any of them. FlatBuffers lays out an enum set's integer
-        // at its width too, so a widening flag also changes its scalar, which
-        // no FlatBuffers rule reports yet (driftsys/ridl#1120).
+        // The walk emits the first two only for an append the generic rule
+        // accepts, so the verdict is the encoding's alone: an inline copy of
+        // the struct cannot grow under podbuf, and a wider enum integer or
+        // union tag moves every head that holds it. proto3 has no fixed
+        // layout for either. FlatBuffers lays out an enum set's integer at
+        // its width too, so a widening flag also changes its scalar, which
+        // no FlatBuffers rule reports yet (driftsys/ridl#1120). The third is
+        // superseded by `StrictEnumAppend` and is no longer emitted; it keeps
+        // its old verdict for a report that still names it.
         Category::PodbufInlineAppend
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => {
@@ -330,16 +338,26 @@ fn added(change: &Change, old: &v2::Package, new: &v2::Package, scope: &[&v2::Pa
                     &union_slots(new_def),
                 )
         }
-        (Some(Kind::EnumDef(old_def)), Some(Kind::EnumDef(new_def))) => appended_slot(
-            &value_slots(&old_def.values),
-            &reserved_values(&old_def.reserved),
-            &value_slots(&new_def.values),
-        ),
-        (Some(Kind::EnumSetDef(old_def)), Some(Kind::EnumSetDef(new_def))) => appended_slot(
-            &value_slots(&old_def.bits),
-            &[],
-            &value_slots(&new_def.bits),
-        ),
+        // An append to an enum or enum set is compatible only when the new
+        // declaration is `open`: a reader built from a strict declaration
+        // refuses a value it does not name (ADR-0031 decision 12). The walk
+        // folds a strict append into `StrictEnumAppend` before this runs.
+        (Some(Kind::EnumDef(old_def)), Some(Kind::EnumDef(new_def))) => {
+            new_def.open
+                && appended_slot(
+                    &value_slots(&old_def.values),
+                    &reserved_values(&old_def.reserved),
+                    &value_slots(&new_def.values),
+                )
+        }
+        (Some(Kind::EnumSetDef(old_def)), Some(Kind::EnumSetDef(new_def))) => {
+            new_def.open
+                && appended_slot(
+                    &value_slots(&old_def.bits),
+                    &[],
+                    &value_slots(&new_def.bits),
+                )
+        }
         // A shape the table does not name classifies breaking.
         _ => false,
     };
@@ -348,6 +366,33 @@ fn added(change: &Change, old: &v2::Package, new: &v2::Package, scope: &[&v2::Pa
         Verdict::Compatible
     } else {
         Verdict::Breaking
+    }
+}
+
+/// Whether `new_decl` is `old_decl` with values or flags appended, and it is an
+/// enum or an enum set that is not `open`: the append the generic rule would
+/// accept, were the declaration open, and that is [`Category::StrictEnumAppend`]
+/// instead.
+pub(crate) fn is_strict_enum_append(old_decl: &v2::Decl, new_decl: &v2::Decl) -> bool {
+    use v2::decl::Kind;
+    match (&old_decl.kind, &new_decl.kind) {
+        (Some(Kind::EnumDef(old_def)), Some(Kind::EnumDef(new_def))) => {
+            !new_def.open
+                && appended_slot(
+                    &value_slots(&old_def.values),
+                    &reserved_values(&old_def.reserved),
+                    &value_slots(&new_def.values),
+                )
+        }
+        (Some(Kind::EnumSetDef(old_def)), Some(Kind::EnumSetDef(new_def))) => {
+            !new_def.open
+                && appended_slot(
+                    &value_slots(&old_def.bits),
+                    &[],
+                    &value_slots(&new_def.bits),
+                )
+        }
+        _ => false,
     }
 }
 
@@ -1525,20 +1570,43 @@ pub fn explain(category: Category) -> &'static str {
             "              scalar, which no rule reports yet (driftsys/ridl#1120)"
         ),
         Category::PodbufStrictEnumAppend => concat!(
-            "An enum value or an enum-set flag appended, compatible under the\n",
-            "generic rule, to an enum or an enum set that is strict. The `verify`\n",
-            "of podbuf refuses a value or a flag the declaration it was built from\n",
-            "does not name, so an older reader refuses a buffer that carries the\n",
-            "appended one. Every enum and enum set is strict today; once the\n",
-            "`open` keyword is built, the rule narrows to the strict ones. The\n",
-            "line is reported once per declaration, at `<package>/<decl>`, and the\n",
-            "detail names the appended values or flags. An enum or an enum set\n",
-            "whose append also changes the podbuf integer draws only the\n",
-            "`podbuf_width_change` line.\n",
-            "  breaking    with `--encoding podbuf`: an older reader refuses the\n",
-            "              appended value or flag\n",
-            "  compatible  otherwise; listed under the heading \"breaking under\n",
-            "              podbuf\", so that a workspace that builds podbuf sees it"
+            "Superseded by `strict_enum_append`, which is breaking for every\n",
+            "encoding. `ridl diff` no longer reports this category; the word stays\n",
+            "so that a report or a script that names it still reads.\n",
+            "  breaking    with `--encoding podbuf`\n",
+            "  compatible  otherwise"
+        ),
+        Category::StrictEnumAppend => concat!(
+            "An enum value or an enum-set flag appended to an enum or an enum set\n",
+            "that is not declared `open`. A reader built from the old declaration\n",
+            "refuses a value or a flag it does not name: the `verify` of podbuf\n",
+            "does, and so does the codec of every encoding that checks the\n",
+            "declaration, so the append is breaking whatever encodings the\n",
+            "comparison is judged for. To let readers accept values a later\n",
+            "version adds, declare the enum or the enum set `open` before the\n",
+            "first release that readers depend on: an append to an open enum or\n",
+            "an open enum set is compatible. The line is reported once per\n",
+            "declaration, at `<package>/<decl>`, and the detail names the\n",
+            "appended values or flags.\n",
+            "  breaking    always, for every encoding\n",
+            "  note        a value or flag that is not an append (an insert below\n",
+            "              the highest number, or a reused number) is decl_added,\n",
+            "              breaking, instead"
+        ),
+        Category::EnumOpened => concat!(
+            "An enum or an enum set that gained the `open` keyword. A reader built\n",
+            "from the old declaration already refuses nothing that the new one\n",
+            "names, and a reader built from the new declaration accepts any\n",
+            "integer, so no producer or reader of either side is refused by the\n",
+            "other. The path is the declaration's; there is no detail.\n",
+            "  compatible  always"
+        ),
+        Category::EnumClosed => concat!(
+            "An enum or an enum set that lost the `open` keyword. A reader built\n",
+            "from the new declaration refuses a value that a producer of the old\n",
+            "declaration may still send, because the old declaration accepted any\n",
+            "integer. The path is the declaration's; there is no detail.\n",
+            "  breaking    always"
         ),
     }
 }

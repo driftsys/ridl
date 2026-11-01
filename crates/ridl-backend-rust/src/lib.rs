@@ -2185,9 +2185,10 @@ fn emit_enum_set(
     // choice (typl §9): a strict enum set's `TryFrom` refuses a value that
     // carries one, and an open enum set's `From` keeps it, so a producer
     // that appends a bit to an open enum set sends a value an older consumer
-    // reads with the bit in `unknown_bits`. (Under `--encoding podbuf`
-    // `ridl-diff` reports an appended bit as breaking, as
-    // `podbuf_strict_enum_append`, ADR-0031 decision 10.)
+    // reads with the bit in `unknown_bits`. `ridl diff` matches this choice:
+    // an appended bit is `strict_enum_append`, breaking for every encoding,
+    // on a strict enum set, and compatible on an open one (ADR-0031
+    // decision 12).
     //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside

@@ -4149,7 +4149,9 @@ mod podbuf_width {
 
     use crate::{Category, Verdict, diff_refs_with, render_text};
 
-    /// An enum whose values are `0..count`, named `V<n>`.
+    /// An open enum whose values are `0..count`, named `V<n>`. The width rule
+    /// is tested over open declarations because an append to a strict one is
+    /// `strict_enum_append`, which the rule does not read.
     fn enum_package(count: i64) -> v2::Package {
         let values = (0..count)
             .map(|value| v2::EnumValue {
@@ -4162,6 +4164,7 @@ mod podbuf_width {
             "Mode",
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values,
+                open: true,
                 ..Default::default()
             }),
         )
@@ -4254,14 +4257,14 @@ mod podbuf_width {
         );
     }
 
-    /// Value 255 appended to an enum of `0..=254` keeps the `u8`: no width
-    /// line; the strict-enum line makes it breaking under podbuf.
+    /// Value 255 appended to an open enum of `0..=254` keeps the `u8`: no
+    /// width line, and the append is compatible.
     #[test]
     fn an_appended_enum_value_that_keeps_the_width_draws_no_width_line() {
         let (old, new) = (enum_package(255), enum_package(256));
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
         assert_eq!(width_change(&report), None);
-        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(report.verdict, Verdict::Compatible);
     }
 
     /// Arm 256 appended to a union of 255 arms widens the tag from `u8` to
@@ -4302,82 +4305,58 @@ mod podbuf_width {
         );
     }
 
-    fn enum_set_package(count: i64) -> v2::Package {
-        let bits = (0..count)
-            .map(|bit| v2::EnumValue {
-                name: format!("F{bit}"),
-                value: bit,
-                ..Default::default()
-            })
-            .collect();
-        with_decl(
-            "Flags",
-            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
-                bits,
-                ..Default::default()
-            }),
-        )
-    }
-
     fn strict_append(report: &crate::DiffReport) -> Vec<&crate::Change> {
         report
             .changes
             .iter()
-            .filter(|change| change.category == Category::PodbufStrictEnumAppend)
+            .filter(|change| change.category == Category::StrictEnumAppend)
             .collect()
     }
 
-    /// A value appended to an enum, with the integer kept, is a strict-enum
-    /// break under podbuf and compatible without it, listed under the podbuf
-    /// heading either way.
-    #[test]
-    fn an_appended_enum_value_is_a_strict_enum_break_under_podbuf() {
-        let (old, new) = (enum_package(3), enum_package(4));
-        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
-        let changes = strict_append(&report);
-        assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].verdict, Verdict::Breaking);
-        assert_eq!(changes[0].path, "veh.cluster/Mode");
-        assert_eq!(changes[0].after.as_deref(), Some("V3"));
-        assert_eq!(report.verdict, Verdict::Breaking);
+    /// The same package with every enum and enum set made strict.
+    fn strict(mut package: v2::Package) -> v2::Package {
+        for decl in &mut package.decls {
+            match &mut decl.kind {
+                Some(v2::decl::Kind::EnumDef(def)) => def.open = false,
+                Some(v2::decl::Kind::EnumSetDef(def)) => def.open = false,
+                _ => {}
+            }
+        }
+        package
+    }
 
-        let report = diff_refs_with(&[&old], &[&new], &[], &[]);
-        assert_eq!(report.verdict, Verdict::Compatible);
+    /// A value appended to a strict enum, with the integer kept, is breaking
+    /// whatever the encodings, and listed plainly, not under the podbuf
+    /// heading.
+    #[test]
+    fn an_appended_enum_value_is_a_strict_enum_break_for_every_encoding() {
+        let (old, new) = (strict(enum_package(3)), strict(enum_package(4)));
+        for encodings in [&[][..], &["podbuf"], &["flatbuffers", "proto3"]] {
+            let report = diff_refs_with(&[&old], &[&new], &[], encodings);
+            let changes = strict_append(&report);
+            assert_eq!(changes.len(), 1);
+            assert_eq!(changes[0].verdict, Verdict::Breaking);
+            assert_eq!(changes[0].path, "veh.cluster/Mode");
+            assert_eq!(changes[0].after.as_deref(), Some("V3"));
+            assert_eq!(report.verdict, Verdict::Breaking);
+            assert!(
+                render_text(&report).contains("[breaking] strict_enum_append veh.cluster/Mode"),
+                "{}",
+                render_text(&report)
+            );
+            assert!(!render_text(&report).contains("breaking under podbuf"));
+        }
+    }
+
+    /// An append that widens a strict enum's integer draws the strict line
+    /// alone: the width rule reads only the appends that are compatible.
+    #[test]
+    fn a_strict_append_that_widens_the_integer_draws_no_width_line() {
+        let (old, new) = (strict(enum_package(256)), strict(enum_package(257)));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(width_change(&report), None);
         assert_eq!(strict_append(&report).len(), 1);
-        assert!(
-            render_text(&report).contains(
-                "breaking under podbuf:\n  [compatible] podbuf_strict_enum_append veh.cluster/Mode"
-            ),
-            "{}",
-            render_text(&report)
-        );
-        let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers", "proto3"]);
-        assert_eq!(report.verdict, Verdict::Compatible);
-    }
-
-    /// A flag appended to an enum set is the same break.
-    #[test]
-    fn an_appended_enum_set_flag_is_a_strict_enum_break_under_podbuf() {
-        let (old, new) = (enum_set_package(3), enum_set_package(4));
-        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
-        let changes = strict_append(&report);
-        assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].verdict, Verdict::Breaking);
-        assert_eq!(changes[0].path, "veh.cluster/Flags");
         assert_eq!(report.verdict, Verdict::Breaking);
-        assert_eq!(
-            diff_refs_with(&[&old], &[&new], &[], &[]).verdict,
-            Verdict::Compatible
-        );
-    }
-
-    /// An append that widens the integer draws the width line alone.
-    #[test]
-    fn an_append_that_widens_the_integer_draws_no_second_line() {
-        let (old, new) = (enum_package(256), enum_package(257));
-        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
-        assert!(width_change(&report).is_some());
-        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
     }
 
     /// A value inserted at a free number is breaking under the generic rule
@@ -4432,6 +4411,7 @@ mod podbuf_width {
             v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
                 bits,
                 width: width as i32,
+                open: true,
                 ..Default::default()
             }),
         )
@@ -4469,19 +4449,16 @@ mod podbuf_width {
         );
     }
 
-    /// Bit 7 appended to `enumset {F0 = 0, F3 = 3}` keeps the `u8`: no width
-    /// line, and the strict-enum line still reports the flag.
+    /// Bit 7 appended to an open `enumset {F0 = 0, F3 = 3}` keeps the `u8`:
+    /// no width line, and the append is compatible.
     #[test]
     fn an_appended_enum_set_flag_that_keeps_the_width_draws_no_width_line() {
         let old = enum_set_with(&[0, 3], v2::IntWidth::U8);
         let new = enum_set_with(&[0, 3, 7], v2::IntWidth::U8);
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
         assert_eq!(width_change(&report), None);
-        let changes = strict_append(&report);
-        assert_eq!(changes.len(), 1);
-        assert_eq!(changes[0].path, "veh.cluster/Flags");
-        assert_eq!(changes[0].after.as_deref(), Some("F7"));
-        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+        assert_eq!(report.verdict, Verdict::Compatible);
     }
 
     /// Bit 3 inserted into `enumset {F0 = 0, F7 = 7}` is breaking under the
@@ -4543,6 +4520,7 @@ mod podbuf_width {
             "Mode",
             v2::decl::Kind::EnumDef(v2::EnumDef {
                 values,
+                open: true,
                 ..Default::default()
             }),
         )
@@ -4627,6 +4605,229 @@ mod podbuf_width {
             render_text(&report)
         );
         assert_eq!(width_change(&report), None, "{}", render_text(&report));
+    }
+}
+
+mod enum_open {
+    use ridl_ir::v2;
+
+    use crate::{Category, Change, DiffReport, Verdict, diff_refs_with, explain, render_text};
+
+    fn values(count: i64) -> Vec<v2::EnumValue> {
+        (0..count)
+            .map(|value| v2::EnumValue {
+                name: format!("V{value}"),
+                value,
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    fn package(kind: v2::decl::Kind) -> v2::Package {
+        v2::Package {
+            name: "veh.cluster".to_string(),
+            decls: vec![v2::Decl {
+                name: "Mode".to_string(),
+                kind: Some(kind),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn enum_of(count: i64, open: bool) -> v2::Package {
+        package(v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: values(count),
+            open,
+            ..Default::default()
+        }))
+    }
+
+    /// An enum set of the flags `0..count`, of the narrowest declared width
+    /// that holds the highest one, as the checker infers it.
+    fn enum_set_of(count: i64, open: bool) -> v2::Package {
+        let width = match count {
+            0..=8 => v2::IntWidth::U8,
+            9..=16 => v2::IntWidth::U16,
+            17..=32 => v2::IntWidth::U32,
+            _ => v2::IntWidth::U64,
+        };
+        package(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            bits: values(count),
+            width: width as i32,
+            open,
+            ..Default::default()
+        }))
+    }
+
+    /// A builder of a package holding `Mode`, from a member count and `open`.
+    type Build = fn(i64, bool) -> v2::Package;
+
+    /// Both shapes of declaration, as `(label, builder)`.
+    fn shapes() -> [(&'static str, Build); 2] {
+        [("enum", enum_of), ("enum set", enum_set_of)]
+    }
+
+    fn of_category(report: &DiffReport, category: Category) -> Vec<&Change> {
+        report
+            .changes
+            .iter()
+            .filter(|change| change.category == category)
+            .collect()
+    }
+
+    #[test]
+    fn an_append_to_a_strict_declaration_is_breaking_without_an_encoding() {
+        for (label, build) in shapes() {
+            let (old, new) = (build(3, false), build(4, false));
+            for encodings in [&[][..], &["flatbuffers"], &["proto3"], &["podbuf"]] {
+                let report = diff_refs_with(&[&old], &[&new], &[], encodings);
+                let lines = of_category(&report, Category::StrictEnumAppend);
+                assert_eq!(
+                    lines.len(),
+                    1,
+                    "{label} {encodings:?}: {}",
+                    render_text(&report)
+                );
+                assert_eq!(lines[0].verdict, Verdict::Breaking);
+                assert_eq!(lines[0].path, "veh.cluster/Mode");
+                assert_eq!(lines[0].after.as_deref(), Some("V3"));
+                assert_eq!(report.verdict, Verdict::Breaking, "{label} {encodings:?}");
+                assert!(
+                    of_category(&report, Category::DeclAdded).is_empty(),
+                    "{label}: the append draws no decl_added line: {}",
+                    render_text(&report)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn several_appended_members_draw_one_line_naming_them() {
+        for (label, build) in shapes() {
+            let (old, new) = (build(3, false), build(5, false));
+            let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+            let lines = of_category(&report, Category::StrictEnumAppend);
+            assert_eq!(lines.len(), 1, "{label}");
+            assert_eq!(lines[0].after.as_deref(), Some("V3, V4"), "{label}");
+        }
+    }
+
+    #[test]
+    fn an_append_to_an_open_declaration_is_compatible() {
+        for (label, build) in shapes() {
+            let (old, new) = (build(3, true), build(4, true));
+            for encodings in [&[][..], &["flatbuffers"], &["proto3"], &["podbuf"]] {
+                let report = diff_refs_with(&[&old], &[&new], &[], encodings);
+                assert_eq!(
+                    report.verdict,
+                    Verdict::Compatible,
+                    "{label} {encodings:?}: {}",
+                    render_text(&report)
+                );
+                assert!(of_category(&report, Category::StrictEnumAppend).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn a_strict_append_is_no_longer_reported_as_the_podbuf_category() {
+        for (_, build) in shapes() {
+            let (old, new) = (build(3, false), build(4, false));
+            let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+            assert!(of_category(&report, Category::PodbufStrictEnumAppend).is_empty());
+        }
+    }
+
+    #[test]
+    fn opening_is_compatible_and_closing_is_breaking() {
+        for (label, build) in shapes() {
+            let report = diff_refs_with(&[&build(3, false)], &[&build(3, true)], &[], &[]);
+            let lines = of_category(&report, Category::EnumOpened);
+            assert_eq!(lines.len(), 1, "{label}: {}", render_text(&report));
+            assert_eq!(lines[0].path, "veh.cluster/Mode");
+            assert_eq!(lines[0].verdict, Verdict::Compatible);
+            assert_eq!(report.verdict, Verdict::Compatible, "{label}");
+
+            let report = diff_refs_with(&[&build(3, true)], &[&build(3, false)], &[], &[]);
+            let lines = of_category(&report, Category::EnumClosed);
+            assert_eq!(lines.len(), 1, "{label}: {}", render_text(&report));
+            assert_eq!(lines[0].verdict, Verdict::Breaking);
+            assert_eq!(report.verdict, Verdict::Breaking, "{label}");
+        }
+    }
+
+    #[test]
+    fn opening_with_an_append_reports_both_and_is_compatible() {
+        for (label, build) in shapes() {
+            let report = diff_refs_with(&[&build(3, false)], &[&build(4, true)], &[], &[]);
+            assert_eq!(
+                of_category(&report, Category::EnumOpened).len(),
+                1,
+                "{label}"
+            );
+            assert_eq!(
+                report.verdict,
+                Verdict::Compatible,
+                "{label}: {}",
+                render_text(&report)
+            );
+        }
+    }
+
+    #[test]
+    fn closing_with_an_append_is_breaking() {
+        for (label, build) in shapes() {
+            let report = diff_refs_with(&[&build(3, true)], &[&build(4, false)], &[], &[]);
+            assert_eq!(
+                of_category(&report, Category::EnumClosed).len(),
+                1,
+                "{label}"
+            );
+            assert_eq!(
+                of_category(&report, Category::StrictEnumAppend).len(),
+                1,
+                "{label}"
+            );
+            assert_eq!(report.verdict, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn an_unchanged_declaration_reports_nothing() {
+        for (_, build) in shapes() {
+            for open in [false, true] {
+                let report = diff_refs_with(&[&build(3, open)], &[&build(3, open)], &[], &[]);
+                assert_eq!(report.verdict, Verdict::Identical);
+            }
+        }
+    }
+
+    #[test]
+    fn the_strict_append_explanation_names_the_open_keyword() {
+        assert!(explain(Category::StrictEnumAppend).contains("open"));
+        assert!(explain(Category::StrictEnumAppend).contains("breaking"));
+    }
+
+    /// An append to an open enum that widens the podbuf integer is still a
+    /// width change under podbuf: `ridl diff` reads IR snapshots, whatever
+    /// the build refuses.
+    #[test]
+    fn an_append_to_an_open_enum_that_widens_the_integer_is_a_podbuf_width_change() {
+        for (label, build) in shapes() {
+            let (old, new) = if label == "enum" {
+                (build(256, true), build(257, true))
+            } else {
+                (build(8, true), build(9, true))
+            };
+            let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+            let lines = of_category(&report, Category::PodbufWidthChange);
+            assert_eq!(lines.len(), 1, "{label}: {}", render_text(&report));
+            assert_eq!(lines[0].verdict, Verdict::Breaking);
+            assert_eq!(report.verdict, Verdict::Breaking);
+            let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+            assert_eq!(report.verdict, Verdict::Compatible, "{label}");
+        }
     }
 }
 

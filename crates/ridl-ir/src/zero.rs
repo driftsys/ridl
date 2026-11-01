@@ -111,7 +111,8 @@ pub fn enum_zero_member(values: &[v2::EnumValue]) -> Option<usize> {
 /// applies to an appended field and RIDL-155 to a deprecated one: an
 /// optional field, whose flag bit reads 0 and so means absent; a boolean,
 /// integer or float primitive; a named or inline scalar that
-/// [`scalar_holds_zero`]; an enum with a zero member; or an enum set, whose
+/// [`scalar_holds_zero`]; an enum with a zero member, or an `open` enum, which
+/// holds every integer and reads 0 as its unknown value; or an enum set, whose
 /// 0 is the empty set. A string, bytes, array, map, struct, tuple or union
 /// field is not. `resolve` maps a named reference, as the IR writes it, to
 /// the declaration it names; a reference it cannot resolve is not legal at 0.
@@ -130,7 +131,7 @@ pub fn field_type_holds_zero<'a>(
             use v2::decl::Kind as Decl;
             match resolve(reference).and_then(|decl| decl.kind.as_ref()) {
                 Some(Decl::TypeDef(def)) => scalar_holds_zero(def),
-                Some(Decl::EnumDef(def)) => enum_zero_member(&def.values).is_some(),
+                Some(Decl::EnumDef(def)) => def.open || enum_zero_member(&def.values).is_some(),
                 Some(Decl::EnumSetDef(_)) => true,
                 _ => false,
             }
@@ -227,7 +228,39 @@ impl Decimal {
 
 #[cfg(test)]
 mod tests {
-    use super::{enum_zero_member, range_holds_zero, v2};
+    use super::{enum_zero_member, field_type_holds_zero, range_holds_zero, v2};
+
+    /// An enum `Gear` with the values 1 and 2 and no zero member, open or not.
+    fn gear(open: bool) -> v2::Decl {
+        let value = |name: &str, value: i64| v2::EnumValue {
+            name: name.to_string(),
+            value,
+            ..Default::default()
+        };
+        v2::Decl {
+            name: "Gear".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![value("PARK", 1), value("DRIVE", 2)],
+                open,
+                ..Default::default()
+            })),
+            ..Default::default()
+        }
+    }
+
+    /// Every integer is a value of an open enum, so 0 is legal for one even
+    /// when no member is numbered 0. A strict enum without a zero member
+    /// still excludes it.
+    #[test]
+    fn an_open_enum_holds_zero_without_a_zero_member() {
+        let ty = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named("Gear".to_string())),
+        };
+        let (open, strict) = (gear(true), gear(false));
+        assert!(field_type_holds_zero(&ty, |_| Some(&open)));
+        assert!(!field_type_holds_zero(&ty, |_| Some(&strict)));
+    }
 
     #[test]
     fn range_holds_zero_follows_the_range_and_the_step() {

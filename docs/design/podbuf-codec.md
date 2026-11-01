@@ -41,7 +41,7 @@ the view in place
 | RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
 | `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
 | `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |
-| `podbuf_strict_enum_append`, the strict-enum rule of `ridl diff`         | `crates/ridl-diff/src/walk.rs`                 |
+| `strict_enum_append`, the strict-enum rule of `ridl diff`                | `crates/ridl-diff/src/walk.rs`                 |
 | The `encodings` list (`WireEncoding`) the entry points take              | `crates/ridl-backend-rust/src/lib.rs`          |
 | The marker `Podbuf` and the `Payload`, `View` and `Malformed` it shares  | `crates/ridl-rt/src/encoding.rs`, `payload.rs` |
 
@@ -56,8 +56,8 @@ padding lint and the build-time errors. They read it from the codegen `Model`
 plugin reads the same numbers (ADR-0020 decisions 8 and 9; the model's layout is
 described in [`codegen-plugins.md`](codegen-plugins.md), "The podbuf
 projection"). Nothing in the projection spells a Rust or C name. The
-`podbuf_strict_enum_append` rule of `ridl diff` reads no layout, only the kind
-of the declaration.
+`strict_enum_append` rule of `ridl diff` reads no layout, only the kind of the
+declaration and whether it is `open`.
 
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.

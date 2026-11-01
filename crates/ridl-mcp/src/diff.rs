@@ -12,7 +12,7 @@ pub struct DiffInput {
     pub new: String,
     /// Optional unsaved source files applied to the new source side only.
     pub overlays: Option<Vec<OverlayInput>>,
-    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). Only podbuf has rules of its own: with it, a podbuf_inline_append, a podbuf_width_change or a podbuf_strict_enum_append change is breaking; without it, compatible. The same as `ridl diff --encoding`.
+    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). Only podbuf has rules of its own: with it, a podbuf_inline_append or a podbuf_width_change change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.
     pub encodings: Option<Vec<String>>,
 }
 pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
@@ -111,8 +111,12 @@ mod tests {
             encodings: None,
         })
         .unwrap();
-        assert_eq!(result["verdict"], "compatible");
-        assert_ne!(result["verdict"], "identical");
+        // The enum is strict, so the appended value is breaking.
+        assert_eq!(result["verdict"], "breaking");
+        assert!(
+            result.to_string().contains("strict_enum_append"),
+            "{result}"
+        );
     }
     #[test]
     fn diff_with_a_missing_old_side_is_a_tool_error() {

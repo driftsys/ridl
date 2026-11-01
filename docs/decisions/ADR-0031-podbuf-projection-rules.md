@@ -19,6 +19,11 @@ struct a head of the old side holds inline; decision 10 states it and carries
 the dated note, decision 13 points to it, and the negative consequence on a type
 held inline is reworded.
 
+**Amended 2026-11-01 — decision 12, the `open` keyword is built, from
+driftsys/ridl#1121.** Decision 12 carries the dated note; decision 13 and the
+breaking list of decision 10 are reworded to the rules `ridl diff` applies now,
+and open item 1 is closed.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -626,13 +631,16 @@ a field is appended.
     lays out a different integer in every head that holds the enum, the enum set
     or the union; appending a field that cannot read as 0; appending to a struct
     that a head of the released side holds inline, when the append grows the
-    struct's head; changing a strict enum to an open one or the reverse; and
-    removing a field.
+    struct's head; changing an open enum or enum set to a strict one (the
+    reverse, `enum_opened`, is compatible: every value that was valid stays
+    valid); and removing a field.
 
-    **A strict-enum append is reported (builder's call).** `ridl diff` reports
-    an appended enum value or enum-set flag as the category
-    `podbuf_strict_enum_append`, because an older reader's `verify` refuses a
-    value or a bit its declaration does not name (decision 12).
+    **A strict-enum append is reported (Sebastien, 2026-11-01).** `ridl diff`
+    reports an appended enum value or enum-set flag of a declaration that is not
+    `open` as the category `strict_enum_append`, breaking for every encoding,
+    because an older reader refuses a value or a bit its declaration does not
+    name (decision 12). Before this date the category was
+    `podbuf_strict_enum_append`, judged by encoding (builder's call).
 
     **An append that grows a struct nested inline is a break** (author's call,
     narrowed 2026-10-29): the inline copy cannot grow without moving the fields
@@ -692,8 +700,9 @@ a field is appended.
     before it (N-2); choosing which version to write for a consumer is the
     producer's and the gate's logic, not ridl's.
 
-12. **Strict and open enums (Sebastien, 2026-10-24).** Decided; the `open`
-    keyword is not built.
+12. **Strict and open enums (Sebastien, 2026-10-24).** Decided. _Amended
+    2026-11-01: the `open` keyword is built; see the note at the end of this
+    decision._
     - An enum is **strict** by default: `verify` rejects any value the
       declaration does not name, and adding a value is a break (a new type
       version, decision 11).
@@ -706,17 +715,31 @@ a field is appended.
       of that variant is left to the change that adds `open`.
     - `open` is a contextual keyword, recognised only before `enum` or
       `enumset`, and not reserved. It is a typl language change, recorded
-      separately (typl §8, §9, the backends and `ridl diff`). **That change is a
-      prerequisite of the open rules and is not built.** Today every enum and
-      enum set is strict, and the codec and `verify` implement only the strict
-      rules. `ridl diff` reports the strict-enum break of an appended value or
-      flag as decision 13 says; when `open` lands, that rule narrows to strict
-      enums and enum sets, and an append to an open one is compatible. Before
-      the change lands it must check how today's backends and `ridl diff` treat
-      a new enum value, so that defaulting every enum to strict breaks nothing
-      silently. A new value that does not fit the inferred width or signedness
-      of an open enum changes the width, which is a break, as for an integer
-      range (typl §4.2).
+      separately (typl §8, §9, the backends and `ridl diff`). A new value that
+      does not fit the inferred width or signedness of an open enum changes the
+      width, which is a break, as for an integer range (typl §4.2).
+
+    **Note, 2026-11-01: the keyword is built.** The typl change, the IR and
+    codegen `Model` fields, the Rust and TypeScript backends and `ridl diff`
+    implement `open`. Two points were decided by Sebastien on the same date.
+    **Q-1: an append to a strict enum or enum set is breaking for every
+    encoding**, not only under podbuf, because the Rust codecs of proto3,
+    FlatBuffers and podbuf all refuse a value the declaration does not name, so
+    a verdict of compatible would be one that a reader then refuses. `ridl diff`
+    reports it as `strict_enum_append`; the category `podbuf_strict_enum_append`
+    stays in the vocabulary, is no longer reported, and its `--explain` row says
+    it is superseded. An append to an open enum or enum set is compatible, and
+    `enum_opened` (compatible) and `enum_closed` (breaking) report the keyword
+    gained or lost. **Q-2: an open declaration is refused at build time in a
+    package that podbuf encodes** (RIDL-158), until driftsys/ridl#1168 gives the
+    podbuf codec and the C header the open rules, so that no podbuf reader
+    treats an open enum as strict. `ridl diff` reads IR snapshots and does not
+    build, so the `podbuf_width_change` rule still applies to an append that
+    widens an open declaration under `--encoding podbuf`. The generated Rust for
+    an open enum is `#[non_exhaustive]` with a variant `Unknown(Unknown<Name>)`
+    whose payload is private, and for an open enum set a type with
+    `unknown_bits`; `ridl_ir::zero` treats 0 as a value of an open enum, because
+    every integer is one.
 
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
@@ -724,22 +747,21 @@ a field is appended.
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
       otherwise: the append that grows an inline struct, the category
-      `podbuf_inline_append`; the append that changes the podbuf integer of an
-      enum, an enum set or a union's tag, the category `podbuf_width_change`,
-      reported once per declaration with the old and the new integer; and the
-      append to a strict enum or enum set, the category
-      `podbuf_strict_enum_append`, reported once per declaration, except that an
-      enum or an enum set whose append changes the integer draws only the
-      `podbuf_width_change` line (builder's call). The three rules are stated in
-      decision 10; `ridl diff --explain <category>` states each in full. The
-      compatible verdict without podbuf holds under proto3; an enum-set flag
-      that widens the integer also widens the enum set's FlatBuffers scalar,
-      which `ridl diff` does not report yet (driftsys/ridl#1120). An appended
-      union arm that keeps the tag is reported as the generic rule judges it,
-      compatible. When the `open` keyword is built (open item 1), the strict
-      enum rule narrows to strict enums and enum sets.
-      `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the
-      encodings, because a snapshot does not record them.
+      `podbuf_inline_append`; and the append that changes the podbuf integer of
+      an enum, an enum set or a union's tag, the category `podbuf_width_change`,
+      reported once per declaration with the old and the new integer. The append
+      to an enum or enum set that is not `open` is not judged by encoding: it is
+      `strict_enum_append`, reported once per declaration and breaking always
+      (decision 12, note of 2026-11-01), and it draws no `podbuf_width_change`
+      line, because that rule reads only the appends that are compatible. The
+      two rules are stated in decision 10; `ridl diff --explain <category>`
+      states each in full. The compatible verdict without podbuf holds under
+      proto3; an enum-set flag that widens the integer also widens the enum
+      set's FlatBuffers scalar, which `ridl diff` does not report yet
+      (driftsys/ridl#1120). An appended union arm that keeps the tag is reported
+      as the generic rule judges it, compatible. `ridl diff --encoding <name>`
+      and the `ridl_diff` MCP tool name the encodings, because a snapshot does
+      not record them.
     - RIDL-156 `podbuf-padding-order`, a lint at `info`, reports a struct whose
       declared field order lays out in a larger head than the same fields sorted
       by descending alignment (declaration order kept among equal alignments).
@@ -927,9 +949,11 @@ stated in the decision above; this list is the index.
 
 ## Open items
 
-1. **The `open` keyword.** Decision 12's open enums wait for the typl change. It
-   needs its own record, and a check of how every backend and `ridl diff` treat
-   a new enum value under a strict default.
+1. **The `open` keyword.** Closed 2026-11-01 by driftsys/ridl#1121: the keyword
+   is built, and `ridl diff` treats an append to a strict enum as breaking for
+   every encoding (decision 12, note of 2026-11-01). The podbuf codec still
+   applies the strict rules only; driftsys/ridl#1168 tracks the open rules for
+   it.
 2. **A compatible append that raises `max_size`.** Closed 2026-10-30 by
    [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 19, with the first
    answer: `verify` checks structure only and no longer refuses a buffer longer
