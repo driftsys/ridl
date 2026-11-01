@@ -9,8 +9,8 @@ The session speaks the frame version of the subprotocol the server selects: 2 on
 `ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also attaches to a server
 that serves frame version 1 only. Frame version 2 is frame version 1 plus the
 `block` form, which carries a `fixed` payload that does not fit one message in
-parts (driftsys/ridl#1129). On a session of frame version 1, a `block` is a
-protocol violation.
+parts (frame specification §11.1, binding version 2). On a session of frame
+version 1, a `block` is a protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
 `WebSocket`, so it needs no other runtime. It is not yet published.

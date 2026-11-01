@@ -129,7 +129,7 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
     );
 }
 
-// -- Frame version 2 (driftsys/ridl#1129) ------------------------------------
+// -- Frame version 2 (frame specification §11.1, binding version 2) ----------
 //
 // `attach-2`, `block-last` and `block-one` are read from the version 2 table of
 // the frame specification. The other block vectors are test constants: they
