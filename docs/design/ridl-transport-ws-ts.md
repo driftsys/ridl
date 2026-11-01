@@ -489,9 +489,10 @@ bytes are the value the provider set.
   provider behaviour. Between the `fixed` and the signal, the test also reads
   the three large `fixed` values (ordinals 7 to 9 of `e2e/catalog.ts`, 65,280,
   16,137 and 16,138 bytes) and compares every byte with the pattern. A second
-  test opens a raw socket with no session, reads the `fixed` of 16,137 bytes and
-  gets one `publish`, reads the `fixed` of 16,138 bytes and gets four `block`
-  frames; the crate's scenario has no such test.
+  test opens a raw socket without the package's `Session`, sends `attach` and
+  waits for `attached`, reads the `fixed` of 16,137 bytes and gets one
+  `publish`, reads the `fixed` of 16,138 bytes and gets four `block` frames; the
+  crate's scenario has no such test.
 - **The browser** (`e2e/browser_test.ts`, `e2e/page.ts`, `e2e/browser.ts`). The
   test bundles `e2e/page.ts` with `deno bundle --platform=browser`, serves the
   bundle and a page from `Deno.serve` on `127.0.0.1`, starts a headless
@@ -582,7 +583,8 @@ D-11, the UTC default stamp of D-12 with the `clock` option, and the size checks
 of D-19 with the `interfaces` option. The frame specification's "As built" note
 and §11 and §11.1 name the package and its path. ADR-0020 carries the dated
 amendment of decision 6 (D-4) and a note on open item 2 (D-1). The book has no
-chapter on the package: it is not published, and no generated code uses it yet.
+chapter on the package: `npm-release.yml` publishes it on a `v*` tag, and no
+generated code uses it yet.
 
 ## What is not built
 
