@@ -3522,17 +3522,23 @@ impl Checker<'_> {
                 highest = highest.max(bit.value as u32);
             }
         }
-        // RIDL-149 against the method the generated code of an open enum set
-        // carries beside its bit constants: `unknown_bits`.
-        if decl.is_open() && bits.iter().any(|bit| bit.name == "unknown_bits") {
-            self.error(
-                DiagCode::RIDL_149,
-                name_range(decl),
-                "enumset bit `unknown_bits` has the name of the accessor the generated code of \
-                 an open enum set reserves for the bits outside the declared ones, so a target \
-                 would carry one identifier twice"
-                    .to_owned(),
-            );
+        // RIDL-149 against the accessor the generated code of an open enum
+        // set carries beside its bit constants: `unknown_bits` in Rust and
+        // `unknownBits` in TypeScript.
+        if decl.is_open() {
+            for reserved in ["unknown_bits", "unknownBits"] {
+                if bits.iter().any(|bit| bit.name == reserved) {
+                    self.error(
+                        DiagCode::RIDL_149,
+                        name_range(decl),
+                        format!(
+                            "enumset bit `{reserved}` has the name of the accessor the generated \
+                             code of an open enum set reserves for the bits outside the declared \
+                             ones, so a target would carry one identifier twice"
+                        ),
+                    );
+                }
+            }
         }
         v2::EnumSetDef {
             backing_enum,
@@ -8219,8 +8225,9 @@ mod tests {
         assert!(codes(&set).is_empty(), "got: {:?}", set.diagnostics);
     }
 
-    /// An open enum set's generated code carries `unknown_bits` beside the
-    /// bit constants, so a bit of that exact name collides with it. A bit
+    /// An open enum set's generated code carries `unknown_bits` (Rust) and
+    /// `unknownBits` (TypeScript) beside the bit constants, so a bit of either
+    /// exact name collides with it. A bit
     /// name is used as declared, so only the exact spelling collides, and a
     /// strict enum set has no such accessor.
     #[test]
@@ -8235,6 +8242,11 @@ mod tests {
         assert!(checked.diagnostics[0].message.contains("unknown_bits"));
         let other = check_source("p", "package p\nopen enumset F { UNKNOWN_BITS = 0 }\n");
         assert!(codes(&other).is_empty(), "got: {:?}", other.diagnostics);
+        let ts = check_source("p", "package p\nopen enumset F { unknownBits = 0 }\n");
+        assert_eq!(codes(&ts), vec!["RIDL-149"], "{:?}", ts.diagnostics);
+        assert!(ts.diagnostics[0].message.contains("unknownBits"));
+        let ts_strict = check_source("p", "package p\nenumset F { unknownBits = 0 }\n");
+        assert!(codes(&ts_strict).is_empty(), "got: {:?}", ts_strict.diagnostics);
         let strict = check_source("p", "package p\nenumset F { unknown_bits = 0 }\n");
         assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
     }
