@@ -50,8 +50,9 @@ pub fn pattern(n: usize) -> Vec<u8> {
     (0..n).map(|i| (i % 251) as u8).collect()
 }
 
-/// The member table of [`CATALOG`]: the eight members, the command and the query
-/// with a bound of 1 s. Ordinal 6 is reserved and has no entry.
+/// The member table of [`CATALOG`]: the signal, the event, the command, the
+/// query and four `fixed` members, the command and the query with a bound of
+/// 1 s. Ordinal 6 is reserved and has no entry.
 pub fn member_table() -> MemberTable {
     let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
     let bound = Some(Duration::from_secs(1));

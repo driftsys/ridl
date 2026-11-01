@@ -10,9 +10,10 @@
 //!
 //! Frame version 2 adds the `block` form (frame specification §11.1, binding
 //! version 2): one part of a `publish` of a `fixed`, in at most
-//! [`BLOCK_BYTES`] bytes of payload. The decoder checks each `block` by itself, with no session state: its `kind`,
-//! its `total`, its `index` and the number of bytes after its header. The
-//! order of the blocks of one payload is the session's to check.
+//! [`BLOCK_BYTES`] bytes of payload. The decoder checks each `block` by
+//! itself, with no session state: its `kind`, its `total`, its `index` and the
+//! number of bytes after its header. The order of the blocks of one payload is
+//! the session's to check.
 //!
 //! The module needs `core` only.
 
