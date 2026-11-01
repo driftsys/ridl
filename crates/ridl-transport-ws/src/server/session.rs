@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use ridl_rt::contract::{default_ceiling, CatalogRef, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{default_ceiling, CatalogRef, InterfaceNo, Kind, Ordinal, FIXED_CEILING};
 use ridl_rt::encoding::Encoding;
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
@@ -19,7 +19,7 @@ use super::config::Record;
 use super::{Backend, Config, Note};
 use crate::frame::{
     self, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, PublishState, Reason,
-    ResponseOutcome, Target, FRAME_VERSION,
+    ResponseOutcome, Target, BLOCK_BYTES, FRAME_VERSION,
 };
 use crate::ws::CloseCode;
 
@@ -99,6 +99,9 @@ pub(crate) struct Session<B: Backend> {
     occurrence_cap: usize,
     /// The same for one `response` under `reply`.
     reply_cap: usize,
+    /// The size of one `block` message with a full block, 4,130 bytes: a
+    /// message limit below it cannot carry a `block`.
+    block_message: usize,
     /// The message limit, which also bounds the occurrence bytes one tick
     /// sends.
     message_limit: usize,
@@ -107,6 +110,9 @@ pub(crate) struct Session<B: Backend> {
     max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
+    /// The frame version of the subprotocol the opening handshake selected:
+    /// `FRAME_VERSION` for `ridl-ws-v2`, 1 for `ridl-ws-v1`.
+    frame_version: u32,
     /// Whether an `attach` has been accepted.
     attached: bool,
     /// The close code once a message or a tick returned [`Step::Close`]:
@@ -163,10 +169,12 @@ impl<B: Backend> Session<B> {
             payload_cap: limit - empty_publish.encoded_len(),
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
+            block_message: super::block_message(),
             message_limit: limit,
             max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
+            frame_version: FRAME_VERSION,
             attached: false,
             closed: None,
             signals: BTreeMap::new(),
@@ -184,6 +192,12 @@ impl<B: Backend> Session<B> {
             response_seq: 0,
             buf: vec![0; FIRST_BUFFER],
         }
+    }
+
+    /// Records the frame version of the subprotocol the handshake selected.
+    /// A new session assumes `FRAME_VERSION`.
+    pub(crate) fn upgraded(&mut self, frame_version: u32) {
+        self.frame_version = frame_version;
     }
 
     /// Handles one message from the client. Each entry pushed to `out` is one
@@ -265,7 +279,8 @@ impl<B: Backend> Session<B> {
             | Frame::Answer { .. }
             | Frame::Publish { .. }
             | Frame::Occurrence { .. }
-            | Frame::Response { .. } => {
+            | Frame::Response { .. }
+            | Frame::Block { .. } => {
                 self.note(Note::UnexpectedDirection);
                 Step::Close(CloseCode::PROTOCOL.0)
             }
@@ -504,25 +519,30 @@ impl<B: Backend> Session<B> {
     }
 
     /// Checks an `attach` in the order of its refusal reasons, so that one
-    /// reason is given: frame version, unit name, hash, encoding.
+    /// reason is given: frame version, unit name, hash, encoding. The frame
+    /// version is refused when the `attach` names another one or when the
+    /// handshake selected the subprotocol of another one: the provider
+    /// serves frame version 2 only, so every `attach` on a `ridl-ws-v1`
+    /// connection is refused.
     fn attach(&mut self, attach: Attach<'_>, out: &mut Vec<Vec<u8>>) -> Step {
-        let refusal = if attach.frame_version() != FRAME_VERSION {
-            Some(Reason::FrameVersionUnsupported)
-        } else if attach.name() != self.catalog.name {
-            Some(Reason::UnknownCatalog)
-        } else if !self
-            .backend
-            .members()
-            .map_or(*attach.hash() == self.catalog.hash, |t| {
-                t.accepts(attach.hash())
-            })
-        {
-            Some(Reason::CatalogMismatch)
-        } else if Some(attach.encoding()) != self.encoding {
-            Some(Reason::EncodingUnsupported)
-        } else {
-            None
-        };
+        let refusal =
+            if attach.frame_version() != FRAME_VERSION || self.frame_version != FRAME_VERSION {
+                Some(Reason::FrameVersionUnsupported)
+            } else if attach.name() != self.catalog.name {
+                Some(Reason::UnknownCatalog)
+            } else if !self
+                .backend
+                .members()
+                .map_or(*attach.hash() == self.catalog.hash, |t| {
+                    t.accepts(attach.hash())
+                })
+            {
+                Some(Reason::CatalogMismatch)
+            } else if Some(attach.encoding()) != self.encoding {
+                Some(Reason::EncodingUnsupported)
+            } else {
+                None
+            };
         match refusal {
             Some(reason) => {
                 push(out, &Frame::Attached(AttachOutcome::Refused(reason)));
@@ -710,16 +730,29 @@ impl<B: Backend> Session<B> {
         Step::Continue
     }
 
-    /// Answers a `read` of a `fixed` with one `publish`: `Live`, `seq` 0 and
-    /// the backend's clock as the stamp. A value that one message cannot
-    /// carry, or that is longer than the member's limit, is not sent: the
-    /// read is answered `contract(UnknownInteraction)`, as a `fixed` with no
-    /// value is, and recorded. Until the binding carries a `fixed` in blocks
-    /// (driftsys/ridl#1129), that is every `fixed` above `max_message_bytes`
-    /// minus the 27-byte `publish` header, 16,137 bytes at the default
-    /// limit. A `read` of a signal above its limit is answered the same way.
+    /// Answers a `read` of a `fixed` with its value under one envelope:
+    /// `Live`, `seq` 0 and the backend's clock as the stamp. A value that
+    /// one `publish` carries under the message limit, `max_message_bytes`
+    /// minus the 27-byte `publish` header (16,137 bytes at the default
+    /// limit), is sent in one `publish`; a larger one is sent in `block`
+    /// frames of 4,096 bytes, one after the other with no frame between
+    /// them (binding version 2, driftsys/ridl#1129).
+    ///
+    /// The value is read up to the member's limit, at most the default
+    /// ceiling of a `fixed`, 65,280 bytes, whatever limit the member table
+    /// gives, so that the buffer never grows past it. When the message limit
+    /// is below one block message, 4,130 bytes, no `block` can be sent, and
+    /// the value is read only up to what one `publish` carries. A value
+    /// above that cap is not sent: the read is answered
+    /// `contract(UnknownInteraction)`, as a `fixed` with no value is, and
+    /// recorded. A `read` of a signal above its limit is answered the same
+    /// way.
     fn read_fixed(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
-        let cap = self.payload_cap.min(self.limit(target));
+        let cap = if self.message_limit >= self.block_message {
+            self.limit(target).min(FIXED_CEILING)
+        } else {
+            self.payload_cap.min(self.limit(target))
+        };
         let len = loop {
             match self
                 .backend
@@ -745,15 +778,23 @@ impl<B: Backend> Session<B> {
                 Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
             }
         };
-        let stamp = self.backend.ports().now();
-        push(
-            out,
-            &Frame::Publish {
-                target,
-                envelope: Envelope { stamp, seq: 0 },
-                state: PublishState::Live(&self.buf[..len]),
-            },
-        );
+        let envelope = Envelope {
+            stamp: self.backend.ports().now(),
+            seq: 0,
+        };
+        let value = &self.buf[..len];
+        if len <= self.payload_cap {
+            push(
+                out,
+                &Frame::Publish {
+                    target,
+                    envelope,
+                    state: PublishState::Live(value),
+                },
+            );
+        } else {
+            push_blocks(out, target, envelope, value);
+        }
         Step::Continue
     }
 
@@ -1115,7 +1156,7 @@ enum Fetch {
 }
 
 /// Whether the frame can carry `c`: every contract error but an
-/// `InvalidValue` whose `Rule` frame version 1 has no code for (frame
+/// `InvalidValue` whose `Rule` frame version 2 has no code for (frame
 /// specification §9.6), which a backend built against a newer `ridl-rt`
 /// could report.
 fn carried(c: Contract) -> bool {
@@ -1151,6 +1192,26 @@ fn push(out: &mut Vec<Vec<u8>>, frame: &Frame<'_>) {
     out.push(v);
 }
 
+/// Pushes `payload` as the `block` frames of `target` under `envelope`:
+/// `ceil(len / BLOCK_BYTES)` frames, `index` from 0, each with `total`
+/// equal to `payload.len()`, every one but the last with `BLOCK_BYTES`
+/// bytes. The caller holds `payload.len()` within a `u32` limit.
+fn push_blocks(out: &mut Vec<Vec<u8>>, target: Target, envelope: Envelope, payload: &[u8]) {
+    let total = u32::try_from(payload.len()).expect("the caller holds the payload within a u32");
+    for (index, block) in (0..).zip(payload.chunks(BLOCK_BYTES)) {
+        push(
+            out,
+            &Frame::Block {
+                target,
+                envelope,
+                total,
+                index,
+                payload: block,
+            },
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};
@@ -1176,7 +1237,7 @@ mod tests {
     use super::{Session, Step};
     use crate::frame::{
         decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
-        Target,
+        Target, BLOCK_BYTES, FRAME_VERSION,
     };
     use crate::server::{
         Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
@@ -1282,7 +1343,7 @@ mod tests {
 
     /// Attaches with the matching `attach` and checks it is accepted.
     fn open<B: Backend>(s: &mut Session<B>) {
-        let (step, out) = send(s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        let (step, out) = send(s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"));
         assert_eq!(step, Step::Continue);
         assert_eq!(out.len(), 1);
         assert_eq!(
@@ -1314,6 +1375,20 @@ mod tests {
             },
             state,
         }
+    }
+
+    /// The shared `block-last` vector: block 1 of a payload of 4,098 bytes.
+    fn block_last() -> Vec<u8> {
+        msg(Frame::Block {
+            target: FIXED,
+            envelope: Envelope {
+                stamp: Timestamp(0x0123_4567_89AB),
+                seq: 0,
+            },
+            total: 4_098,
+            index: 1,
+            payload: &[0xab, 0xcd],
+        })
     }
 
     fn commit(provider: &mut Loopback, bytes: &[u8]) {
@@ -1349,7 +1424,7 @@ mod tests {
     fn a_second_attach_is_a_violation() {
         let (mut s, _p, notes) = scanning();
         open(&mut s);
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"));
         assert_eq!(step, Step::Close(1002));
         assert!(out.is_empty());
         assert_eq!(*notes.lock().unwrap(), vec![Note::SecondAttach]);
@@ -1366,13 +1441,43 @@ mod tests {
     }
 
     #[test]
-    fn frame_version_2_is_refused() {
+    fn frame_versions_1_and_3_are_refused() {
+        for version in [1, 3] {
+            let (mut s, _p, _n) = scanning();
+            refused(
+                &mut s,
+                &attach_msg(version, 1, [7u8; 32], "ws.test"),
+                Reason::FrameVersionUnsupported,
+            );
+        }
+    }
+
+    /// The provider serves frame version 2 only, so a connection upgraded
+    /// with `ridl-ws-v1` refuses every `attach`. The check runs with the
+    /// frame-version check, before the unit name.
+    #[test]
+    fn an_attach_on_a_version_1_connection_is_refused_whatever_its_frame_version() {
+        let cases = [
+            (FRAME_VERSION, 1, [7u8; 32], "ws.test"),
+            (1, 1, [7u8; 32], "ws.test"),
+            (FRAME_VERSION, 2, [8u8; 32], "ws.other"),
+        ];
+        for (version, encoding, hash, name) in cases {
+            let (mut s, _p, _n) = scanning();
+            s.upgraded(1);
+            refused(
+                &mut s,
+                &attach_msg(version, encoding, hash, name),
+                Reason::FrameVersionUnsupported,
+            );
+        }
+    }
+
+    #[test]
+    fn an_attach_on_a_version_2_connection_is_accepted() {
         let (mut s, _p, _n) = scanning();
-        refused(
-            &mut s,
-            &attach_msg(2, 1, [7u8; 32], "ws.test"),
-            Reason::FrameVersionUnsupported,
-        );
+        s.upgraded(2);
+        open(&mut s);
     }
 
     #[test]
@@ -1380,7 +1485,7 @@ mod tests {
         let (mut s, _p, _n) = scanning();
         refused(
             &mut s,
-            &attach_msg(1, 1, [7u8; 32], "ws.other"),
+            &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.other"),
             Reason::UnknownCatalog,
         );
     }
@@ -1390,7 +1495,7 @@ mod tests {
         let (mut s, _p, _n) = scanning();
         refused(
             &mut s,
-            &attach_msg(1, 1, [8u8; 32], "ws.test"),
+            &attach_msg(FRAME_VERSION, 1, [8u8; 32], "ws.test"),
             Reason::CatalogMismatch,
         );
     }
@@ -1400,7 +1505,7 @@ mod tests {
         let (mut s, _p, _n) = scanning();
         refused(
             &mut s,
-            &attach_msg(1, 2, [7u8; 32], "ws.test"),
+            &attach_msg(FRAME_VERSION, 2, [7u8; 32], "ws.test"),
             Reason::EncodingUnsupported,
         );
     }
@@ -1408,7 +1513,7 @@ mod tests {
     #[test]
     fn a_refusal_is_followed_by_close_1000() {
         let (mut s, _p, _n) = scanning();
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.other"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.other"));
         assert_eq!(out.len(), 1);
         assert_eq!(step, Step::Close(1000));
     }
@@ -1524,6 +1629,27 @@ mod tests {
                 "{frame:?}"
             );
         }
+    }
+
+    /// A `block` is a provider-to-consumer form (frame version 2): the
+    /// provider never reassembles, so a block from the client is a violation.
+    #[test]
+    fn a_block_from_the_client_closes_with_1002_and_records_unexpected_direction() {
+        let (mut s, _p, notes) = scanning();
+        open(&mut s);
+        let (step, out) = send(&mut s, &block_last());
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+        assert_eq!(*notes.lock().unwrap(), vec![Note::UnexpectedDirection]);
+    }
+
+    #[test]
+    fn a_block_before_attach_closes_with_1002_as_a_message_before_attach() {
+        let (mut s, _p, notes) = scanning();
+        let (step, out) = send(&mut s, &block_last());
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+        assert_eq!(*notes.lock().unwrap(), vec![Note::MessageBeforeAttach]);
     }
 
     /// A `publish` or a `response` with bytes after a header that carries
@@ -2249,10 +2375,28 @@ mod tests {
     #[test]
     fn the_attach_checks_run_in_the_design_order() {
         let cases = [
-            (2, 2, [8u8; 32], "ws.other", Reason::FrameVersionUnsupported),
-            (1, 2, [8u8; 32], "ws.other", Reason::UnknownCatalog),
-            (1, 2, [8u8; 32], "ws.test", Reason::CatalogMismatch),
-            (1, 2, [7u8; 32], "ws.test", Reason::EncodingUnsupported),
+            (1, 2, [8u8; 32], "ws.other", Reason::FrameVersionUnsupported),
+            (
+                FRAME_VERSION,
+                2,
+                [8u8; 32],
+                "ws.other",
+                Reason::UnknownCatalog,
+            ),
+            (
+                FRAME_VERSION,
+                2,
+                [8u8; 32],
+                "ws.test",
+                Reason::CatalogMismatch,
+            ),
+            (
+                FRAME_VERSION,
+                2,
+                [7u8; 32],
+                "ws.test",
+                Reason::EncodingUnsupported,
+            ),
         ];
         for (version, encoding, hash, name, reason) in cases {
             let (mut s, _p, _n) = scanning();
@@ -2328,8 +2472,8 @@ mod tests {
     #[test]
     fn after_a_refusal_the_close_is_repeated() {
         let (mut s, _p, _n) = scanning();
-        send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.other"));
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.other"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"));
         assert_eq!(step, Step::Close(1000));
         assert!(out.is_empty());
     }
@@ -3194,6 +3338,9 @@ mod tests {
         }));
     }
 
+    /// A message limit of 1,024 bytes is below one block message, so it also
+    /// pins the rule for such a limit: a `fixed` is read up to what one
+    /// `publish` carries, and a larger one is not sent.
     #[test]
     fn a_fixed_is_capped_after_the_buffer_grew_on_occurrences() {
         let (mut s, mut p, notes) = limited();
@@ -3312,6 +3459,9 @@ mod tests {
         );
     }
 
+    /// A message limit of 4,096 bytes is below one block message, 4,130
+    /// bytes, so this pins the rule for such a limit: the cap is what one
+    /// `publish` carries, and no `block` is sent.
     #[test]
     fn a_fixed_of_exactly_the_cap_is_sent_and_one_byte_more_is_not() {
         let (mut s, mut p, notes) = roomy();
@@ -3421,6 +3571,10 @@ mod tests {
         ReadContract,
         /// `FixedReader::read_fixed` answers `Detached`.
         FixedDetached,
+        /// `FixedReader::read_fixed` holds a value one byte above the
+        /// default ceiling of a `fixed`: it answers `Short` with that size
+        /// when `out` is shorter, and fills that many bytes otherwise.
+        FixedOverCeiling,
     }
 
     /// Ports that delegate to a loopback, but for one call that fails, and
@@ -3452,8 +3606,17 @@ mod tests {
             ord: Ordinal,
             out: &mut [u8],
         ) -> Result<usize, ReadError> {
-            if self.0.fail.get() == Fail::FixedDetached {
-                return Err(ReadError::Detached);
+            match self.0.fail.get() {
+                Fail::FixedDetached => return Err(ReadError::Detached),
+                Fail::FixedOverCeiling => {
+                    let needed = FIXED_CEILING + 1;
+                    let Some(out) = out.get_mut(..needed) else {
+                        return Err(ReadError::Short { needed });
+                    };
+                    out.fill(1);
+                    return Ok(needed);
+                }
+                _ => {}
             }
             FixedReader::read_fixed(&self.0.inner, iface, ord, out)
         }
@@ -3467,6 +3630,7 @@ mod tests {
         p: Loopback,
         fail: Rc<Cell<Fail>>,
         forgotten: Rc<RefCell<Vec<Correlation>>>,
+        notes: Notes,
     }
 
     fn faulty(fail: Fail) -> FaultyRig {
@@ -3479,13 +3643,17 @@ mod tests {
             fail: Rc::clone(&fail),
             forgotten: Rc::clone(&forgotten),
         });
-        let mut s = Session::new(backend, &Config::default());
+        let notes = Notes::default();
+        let n = Arc::clone(&notes);
+        let config = Config::default().with_record(move |x| n.lock().unwrap().push(*x));
+        let mut s = Session::new(backend, &config);
         open(&mut s);
         FaultyRig {
             s,
             p,
             fail,
             forgotten,
+            notes,
         }
     }
 
@@ -4013,33 +4181,287 @@ mod tests {
         assert_eq!(notes.lock().unwrap().len(), 1);
     }
 
-    /// Until the binding carries a `fixed` in blocks (driftsys/ridl#1129), a
-    /// `fixed` above what one message carries is not served: the read is
-    /// answered `contract(UnknownInteraction)`, the refusal is recorded, and
-    /// the session goes on serving every other member.
+    /// A `fixed` above what one `publish` carries is answered in blocks: the
+    /// read is served, nothing is recorded, and the session goes on serving
+    /// every other member.
     #[test]
-    fn a_read_of_a_fixed_above_one_message_is_answered_unknown_interaction_and_recorded() {
+    fn a_read_of_a_fixed_above_one_message_is_answered_in_blocks_and_the_session_goes_on() {
         let (mut s, mut p, notes) = scanning();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &vec![1; 20_000])
+        let value = pattern(20_000);
+        p.provision_fixed(IFACE, Ordinal(5), &value)
             .expect("within the default ceiling of a fixed");
         let (step, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(step, Step::Continue);
-        assert_eq!(out.len(), 1);
-        assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
-        assert_eq!(
-            *notes.lock().unwrap(),
-            vec![Note::ValueTooLarge {
-                target: FIXED,
-                needed: 20_000
-            }]
-        );
+        assert_eq!(lengths(&out), [4_130, 4_130, 4_130, 4_130, 3_650]);
+        assert_eq!(blocks_joined(&out, 20_000, stamped(0)), value);
+        assert!(notes.lock().unwrap().is_empty());
         commit(&mut p, &[9]);
         let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
         assert_eq!(out.len(), 2);
         assert_eq!(
             decode(&out[1]).unwrap(),
             publish(SIGNAL, 0, 1, PublishState::Live(&[9]))
+        );
+    }
+
+    // -- A `fixed` in blocks (binding version 2, driftsys/ridl#1129) ---------
+
+    /// The `n` bytes whose byte `i` is `i mod 251`, so that a block at a
+    /// wrong offset changes the bytes.
+    fn pattern(len: usize) -> Vec<u8> {
+        (0..len).map(|i| (i % 251) as u8).collect()
+    }
+
+    /// The length of each message of `out`.
+    fn lengths(out: &[Vec<u8>]) -> Vec<usize> {
+        out.iter().map(Vec::len).collect()
+    }
+
+    /// An envelope with `seq` 0 and the stamp `stamp`.
+    fn stamped(stamp: i64) -> Envelope {
+        Envelope {
+            stamp: Timestamp(stamp),
+            seq: 0,
+        }
+    }
+
+    /// Decodes each message of `out` as a `block` of `FIXED`, checks that
+    /// they are the `ceil(total / 4,096)` blocks of one payload of `total`
+    /// bytes under `envelope`, `index` 0 to n − 1 in order, every block but
+    /// the last with 4,096 bytes and the last with the rest, and returns
+    /// their payloads joined.
+    fn blocks_joined(out: &[Vec<u8>], total: usize, envelope: Envelope) -> Vec<u8> {
+        let n = total.div_ceil(BLOCK_BYTES);
+        assert_eq!(out.len(), n, "the number of blocks");
+        let mut joined = Vec::new();
+        for (k, m) in out.iter().enumerate() {
+            let Frame::Block {
+                target,
+                envelope: got,
+                total: t,
+                index,
+                payload,
+            } = decode(m).unwrap()
+            else {
+                panic!("message {k} is not a block");
+            };
+            assert_eq!(target, FIXED);
+            assert_eq!(got, envelope, "the envelope of block {k}");
+            assert_eq!(t as usize, total, "the total of block {k}");
+            assert_eq!(index as usize, k);
+            let len = if k + 1 < n {
+                BLOCK_BYTES
+            } else {
+                total - BLOCK_BYTES * k
+            };
+            assert_eq!(payload.len(), len, "the length of block {k}");
+            joined.extend_from_slice(payload);
+        }
+        joined
+    }
+
+    /// A session over a scanning loopback under the message limit `limit`,
+    /// with no member table.
+    fn scanning_under(limit: usize) -> (Session<Scanning<Loopback>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let p = rt.attach();
+        let config = config(&notes)
+            .with_max_message_bytes(limit)
+            .expect("within the range");
+        (Session::new(Scanning(rt), &config), p, notes)
+    }
+
+    /// Provisions `value` as the `fixed` and reads it.
+    fn read_fixed_of<B: Backend>(
+        s: &mut Session<B>,
+        p: &mut Loopback,
+        value: &[u8],
+    ) -> Vec<Vec<u8>> {
+        p.provision_fixed(IFACE, Ordinal(5), value)
+            .expect("the loopback stores the fixed");
+        let (step, out) = send(s, &msg(Frame::Read(FIXED)));
+        assert_eq!(step, Step::Continue);
+        out
+    }
+
+    /// At the default message limit, 16,164 bytes, a `fixed` of up to
+    /// 16,137 bytes fits one `publish` and is sent whole; one byte more is
+    /// sent in blocks.
+    ///
+    /// Mutation: split at the block size instead of at the `publish` cap.
+    #[test]
+    fn a_fixed_of_16_137_bytes_is_sent_whole_and_one_of_16_138_bytes_in_4_blocks() {
+        let (mut s, mut p, notes) = scanning();
+        open(&mut s);
+        let whole = pattern(16_137);
+        let out = read_fixed_of(&mut s, &mut p, &whole);
+        assert_eq!(lengths(&out), [16_164]);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(FIXED, 0, 0, PublishState::Live(&whole))
+        );
+        let split = pattern(16_138);
+        let out = read_fixed_of(&mut s, &mut p, &split);
+        assert_eq!(lengths(&out), [4_130, 4_130, 4_130, 3_884]);
+        assert_eq!(blocks_joined(&out, 16_138, stamped(0)), split);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    /// The header of block 0 of the shared 65,280-byte split: `block`,
+    /// `Fixed`, interface 1, ordinal 5, stamp `0x0123456789AB`, `seq` 0,
+    /// `total` 65,280, `index` 0.
+    const BLOCK_0_HEADER: [u8; 34] = [
+        0x0b, 0x05, 0x01, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0xab, 0x89, 0x67, 0x45, 0x23,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ];
+
+    /// The largest `fixed`, 65,280 bytes, crosses as the 16 blocks of the
+    /// shared vectors, with the backend's clock in every envelope.
+    ///
+    /// Mutation: place block `k` at the offset of block `k + 1`.
+    #[test]
+    fn the_16_blocks_of_a_65_280_byte_fixed_match_the_shared_vectors() {
+        let (mut s, mut p, notes) = scanning();
+        open(&mut s);
+        p.advance(Duration(0x0123_4567_89AB));
+        let value = pattern(65_280);
+        let out = read_fixed_of(&mut s, &mut p, &value);
+        let mut expected = vec![4_130; 15];
+        expected.push(3_874);
+        assert_eq!(lengths(&out), expected);
+        for (k, m) in out.iter().enumerate() {
+            let start = BLOCK_BYTES * k;
+            let end = (start + BLOCK_BYTES).min(65_280);
+            let block = msg(Frame::Block {
+                target: FIXED,
+                envelope: stamped(0x0123_4567_89AB),
+                total: 65_280,
+                index: k as u32,
+                payload: &value[start..end],
+            });
+            assert_eq!(*m, block, "block {k}");
+        }
+        assert_eq!(out[0][..34], BLOCK_0_HEADER);
+        let mut header_15 = BLOCK_0_HEADER;
+        header_15[30] = 0x0f;
+        assert_eq!(out[15][..34], header_15);
+        assert_eq!(out[15][34..38], [0xc4, 0xc5, 0xc6, 0xc7]);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    /// A `fixed` whose length is an exact multiple of 4,096 ends with a full
+    /// block, and no empty ninth block follows.
+    ///
+    /// Mutation: count the blocks as `len / 4,096 + 1`.
+    #[test]
+    fn a_fixed_of_an_exact_multiple_of_4096_bytes_ends_with_a_full_block() {
+        let (mut s, mut p, _notes) = scanning();
+        open(&mut s);
+        let value = pattern(32_768);
+        let out = read_fixed_of(&mut s, &mut p, &value);
+        assert_eq!(lengths(&out), [4_130; 8]);
+        assert_eq!(blocks_joined(&out, 32_768, stamped(0)), value);
+    }
+
+    /// The whole-or-blocks threshold is the configured message limit minus
+    /// the 27-byte `publish` header, from one block message, 4,130 bytes, up.
+    /// Below one block message no block can be sent, and a `fixed` above one
+    /// `publish` is not sent, as before blocks.
+    ///
+    /// Mutation: compare the message limit with 4,129 instead of 4,130.
+    #[test]
+    fn a_lowered_message_limit_moves_the_split_to_the_limit_minus_27() {
+        // The lengths of the messages one read sends, each checked against
+        // the configured limit.
+        fn read_under<B: Backend>(
+            s: &mut Session<B>,
+            p: &mut Loopback,
+            limit: usize,
+            value: &[u8],
+        ) -> Vec<Vec<u8>> {
+            let out = read_fixed_of(s, p, value);
+            for m in &out {
+                assert!(m.len() <= limit, "a message of {} bytes", m.len());
+            }
+            out
+        }
+
+        let (mut s, mut p, notes) = scanning_under(5_000);
+        open(&mut s);
+        let out = read_under(&mut s, &mut p, 5_000, &pattern(4_973));
+        assert_eq!(lengths(&out), [5_000]);
+        let out = read_under(&mut s, &mut p, 5_000, &pattern(4_974));
+        assert_eq!(lengths(&out), [4_130, 912]);
+        assert_eq!(blocks_joined(&out, 4_974, stamped(0)), pattern(4_974));
+        assert!(notes.lock().unwrap().is_empty());
+
+        let (mut s, mut p, notes) = scanning_under(4_130);
+        open(&mut s);
+        let out = read_under(&mut s, &mut p, 4_130, &pattern(4_103));
+        assert_eq!(lengths(&out), [4_130]);
+        let out = read_under(&mut s, &mut p, 4_130, &pattern(4_104));
+        assert_eq!(lengths(&out), [4_130, 42]);
+        assert_eq!(blocks_joined(&out, 4_104, stamped(0)), pattern(4_104));
+        assert!(notes.lock().unwrap().is_empty());
+
+        let (mut s, mut p, notes) = scanning_under(4_129);
+        open(&mut s);
+        let out = read_under(&mut s, &mut p, 4_129, &pattern(4_102));
+        assert_eq!(lengths(&out), [4_129]);
+        let out = read_under(&mut s, &mut p, 4_129, &pattern(4_103));
+        assert_eq!(out, [msg(unknown(FIXED))]);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 4_103
+            }]
+        );
+    }
+
+    /// Without a member table, a `fixed` is read up to the default ceiling of
+    /// its kind, 65,280 bytes; a backend that holds more is answered
+    /// `contract(UnknownInteraction)`.
+    ///
+    /// Mutation: read a `fixed` with no cap.
+    #[test]
+    fn a_fixed_above_the_default_ceiling_without_a_table_is_answered_unknown_interaction() {
+        let FaultyRig { mut s, notes, .. } = faulty(Fail::FixedOverCeiling);
+        let (step, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out, [msg(unknown(FIXED))]);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 65_281
+            }]
+        );
+    }
+
+    /// A member table may give a `fixed` any `u32` limit; the session still
+    /// reads at most the default ceiling of a `fixed`, 65,280 bytes, so its
+    /// buffer never grows past it.
+    ///
+    /// Mutation: cap the read at the table's limit alone.
+    #[test]
+    fn a_table_limit_above_the_fixed_ceiling_is_held_to_the_ceiling() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, FIXED.ord, u32::MAX));
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        p.set_limit(IFACE, Ordinal(5), FIXED_CEILING + 1);
+        open(&mut s);
+        let out = read_fixed_of(&mut s, &mut p, &pattern(FIXED_CEILING + 1));
+        assert_eq!(out, [msg(unknown(FIXED))]);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: FIXED_CEILING + 1
+            }]
         );
     }
 
@@ -4054,6 +4476,39 @@ mod tests {
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: 9
+            }]
+        );
+        p.provision_fixed(IFACE, Ordinal(5), &[2; 8]).unwrap();
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(FIXED, 0, 0, PublishState::Live(&[2; 8]))
+        );
+    }
+
+    /// Below one block message, a `fixed` is read up to the smaller of what one
+    /// `publish` carries and the limit its table entry gives. At a message
+    /// limit of 1,024 bytes and a table limit of 8, a value of 9 bytes is
+    /// refused and a value of 8 bytes is sent in one `publish`.
+    ///
+    /// Mutation: clamp the read to the `publish` capacity alone, ignoring the
+    /// table limit.
+    #[test]
+    fn a_fixed_above_its_table_limit_is_refused_below_one_block_message() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, FIXED.ord, 8));
+        let (mut s, mut p, notes) = described_with(t, |c| c.with_max_message_bytes(1024).unwrap());
+        permissive(&mut p);
+        open(&mut s);
+        p.provision_fixed(IFACE, Ordinal(5), &[1; 9]).unwrap();
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out, [msg(unknown(FIXED))]);
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {
@@ -4220,7 +4675,7 @@ mod tests {
         t.add_compatible(CatalogHash([6; 32]));
         let backend = Described::new(Scanning(rt.attach()), Arc::new(t)).unwrap();
         let mut s = Session::new(backend, &config(&notes));
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [6u8; 32], "ws.test"));
         assert_eq!(step, Step::Continue);
         assert_eq!(
             decode(&out[0]).unwrap(),
@@ -4231,7 +4686,7 @@ mod tests {
         let mut s = Session::new(backend, &config(&notes));
         refused(
             &mut s,
-            &attach_msg(1, 1, [5u8; 32], "ws.test"),
+            &attach_msg(FRAME_VERSION, 1, [5u8; 32], "ws.test"),
             Reason::CatalogMismatch,
         );
     }
@@ -4250,7 +4705,7 @@ mod tests {
         t.add_compatible(CatalogHash([6; 32]));
         let backend = Described::new(Scanning(rt), Arc::new(t)).unwrap();
         let mut s = Session::new(backend, &config(&notes));
-        let (_, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        let (_, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [6u8; 32], "ws.test"));
         assert_eq!(
             decode(&out[0]).unwrap(),
             Frame::Attached(AttachOutcome::Accepted)

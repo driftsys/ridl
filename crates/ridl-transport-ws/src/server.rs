@@ -14,7 +14,7 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal, CALL_CEILING};
+use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
 use ridl_rt::sample::{Envelope, Timestamp};
 
 pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
@@ -23,7 +23,7 @@ pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
 pub use descriptor::DescriptorError;
 pub use members::MemberTable;
 
-use crate::frame::{Frame, ResponseOutcome, Target, ENVELOPE_BYTES};
+use crate::frame::{Frame, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES};
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
 
@@ -128,8 +128,8 @@ pub enum Ended {
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
     /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it did not
-    /// offer `ridl-ws-v1`; or `403 Forbidden`, because the check set by
-    /// [`Config::with_origin_check`] refused its `Origin`.
+    /// offer `ridl-ws-v2` or `ridl-ws-v1`; or `403 Forbidden`, because the
+    /// check set by [`Config::with_origin_check`] refused its `Origin`.
     Rejected,
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
@@ -141,7 +141,9 @@ pub enum Ended {
     /// close frame.
     Io(io::ErrorKind),
     /// [`Config::max_message_bytes`] is below what one message of a member
-    /// of the catalog needs (frame specification §11.1 "The sizes"): the
+    /// of the catalog needs (frame specification §11.1 "The sizes"), 36
+    /// bytes of header and envelope plus the member's limit, and for a
+    /// `fixed` the smaller of that and one block message, 4,130 bytes: the
     /// configuration cannot carry a payload the catalog allows, which is a
     /// configuration error, not a session event. [`serve`] returned before
     /// the opening handshake, without reading the connection, and recorded
@@ -174,12 +176,28 @@ const LINGER: Duration = Duration::from_millis(100);
 /// changed; it sends a ping each [`Config::ping_interval`]. A message is
 /// handled as soon as it is read, and the backend is polled once per poll
 /// interval, whatever the client's message rate: a client that sends often
-/// neither multiplies the polls nor delays them. A change on the backend is
-/// sent at most one poll interval after it, plus the write. Each write call has a write timeout of
-/// [`Config::liveness_timeout`]: a client that reads nothing for that long,
-/// so that a write call makes no progress, ends the session with
-/// [`Ended::LivenessTimeout`]. A client that keeps reading, however slowly,
-/// does not.
+/// does not multiply the polls. The messages that arrive in one socket read
+/// are all answered before the next poll, so a client that sends many
+/// `read`s of a large `fixed` delays its own session's polls for as long as
+/// their blocks take to write. This delay is accepted because it affects
+/// only the session of the client that sent the reads. A change on the
+/// backend is sent at most one poll interval after it, plus the write. Each
+/// write call has a write timeout of [`Config::liveness_timeout`]: a client
+/// that reads nothing for that long, so that a write call makes no progress,
+/// ends the session with [`Ended::LivenessTimeout`].
+///
+/// The liveness clock is set when a message arrives, before its answer is
+/// written, and checked after the write. A client that takes longer than the
+/// liveness timeout to read the answer of one message therefore ends the
+/// session with [`Ended::LivenessTimeout`] too, although each write made
+/// progress: the blocks of one `read` of a 65,280-byte `fixed` are 65,824
+/// bytes, so at the default timeout of 15 s that is a client that reads below
+/// about 4.4 KB/s.
+///
+/// Each `read` of a `fixed` sends the whole value again, in blocks when it
+/// does not fit one message. The frames the session writes after a message
+/// hold at most the blocks of one `read`, because `serve` writes them after
+/// each message it handles.
 ///
 /// `conn` must be in blocking mode: `serve` waits in each read for up to the
 /// read timeout it set. On a stream in non-blocking mode a read with no bytes
@@ -220,8 +238,9 @@ const LINGER: Duration = Duration::from_millis(100);
 /// With a member table, `serve` first checks that
 /// [`Config::max_message_bytes`] carries one message of every member: 36
 /// bytes of header and envelope plus the member's limit, which is the limit
-/// the table gives it or the default ceiling of its kind, and at most
-/// 16,128 bytes for a `fixed`, what one message carries. A limit below that
+/// the table gives it or the default ceiling of its kind. A `fixed` that
+/// one `publish` does not carry crosses in blocks, so a `fixed` needs the
+/// smaller of that and one block message, 4,130 bytes. A limit below that
 /// is a configuration error: `serve` records [`Note::MessageLimitTooSmall`]
 /// and returns [`Ended::ConfigRefused`] before the opening handshake,
 /// without reading the connection. The default limit carries every catalog.
@@ -247,20 +266,25 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config
 
 /// The member of `table` whose messages need the most bytes, with that
 /// number, when it is above `limit`: the largest data-plane header and
-/// envelope plus the member's limit, at most [`CALL_CEILING`] for a `fixed`,
-/// whose bytes above it one message does not carry. On a tie, the first
-/// member in key order.
+/// envelope plus the member's limit. A `fixed` needs at most one block
+/// message, 4,130 bytes, because a value that one `publish` does not carry
+/// crosses in blocks: the smaller of 36 bytes plus its limit and 4,130. The
+/// code clamps the limit of a `fixed` before it adds the header and adds with
+/// `saturating_add`; no test on a 64-bit host checks the order of these
+/// steps. On a tie, the first member in key order.
 fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
+    let header = largest_header();
+    let block_cap = block_message() - header;
     let largest = table
         .entries()
         .fold(None, |largest, (target, member_limit)| {
             let member_limit = member_limit.map_or(default_ceiling(target.kind), |l| l as usize);
             let carried = if target.kind == Kind::Fixed {
-                member_limit.min(CALL_CEILING)
+                member_limit.min(block_cap)
             } else {
                 member_limit
             };
-            let needed = largest_header().saturating_add(carried);
+            let needed = header.saturating_add(carried);
             match largest {
                 Some((_, most)) if most >= needed => largest,
                 _ => Some((target, needed)),
@@ -290,6 +314,29 @@ fn largest_header() -> usize {
     header
 }
 
+/// The size of one `block` message with a full block: the 34-byte header
+/// and [`BLOCK_BYTES`] bytes, 4,130 bytes. `serve` checks the message limit
+/// against it, and the session uses it to decide whether it can send blocks;
+/// the session splits a value by [`BLOCK_BYTES`].
+fn block_message() -> usize {
+    let header = Frame::Block {
+        target: Target {
+            kind: Kind::Fixed,
+            iface: InterfaceNo(1),
+            ord: Ordinal(1),
+        },
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq: 0,
+        },
+        total: 0,
+        index: 0,
+        payload: &[],
+    }
+    .encoded_len();
+    header + BLOCK_BYTES
+}
+
 fn run<C: Connection, B: Backend>(
     conn: &mut C,
     session: &mut Session<B>,
@@ -301,7 +348,7 @@ fn run<C: Connection, B: Backend>(
     let deadline = Instant::now() + config.liveness_timeout;
     let accept_origin = |origin: Option<&str>| config.origin_accepted(origin);
     match ws::handshake(&mut Deadline { conn, at: deadline }, accept_origin) {
-        Ok(Upgrade::Accepted) => {}
+        Ok(Upgrade::Accepted(frame_version)) => session.upgraded(frame_version),
         Ok(Upgrade::Rejected | Upgrade::Forbidden) => {
             linger(conn);
             return Ended::Rejected;

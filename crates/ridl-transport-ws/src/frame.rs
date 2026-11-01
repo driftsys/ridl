@@ -8,6 +8,12 @@
 //! [`ResponseOutcome::Reply`] hold payload bytes among the states that can
 //! lack them.
 //!
+//! Frame version 2 adds the `block` form (driftsys/ridl#1129): one part of a
+//! `publish` of a `fixed`, in at most [`BLOCK_BYTES`] bytes of payload. The
+//! decoder checks each `block` by itself, with no session state: its `kind`,
+//! its `total`, its `index` and the number of bytes after its header. The
+//! order of the blocks of one payload is the session's to check.
+//!
 //! The module needs `core` only.
 
 use core::str;
@@ -18,9 +24,12 @@ use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::sample::{Envelope, Timestamp};
 
 /// The frame version this binding carries.
-pub const FRAME_VERSION: u32 = 1;
-/// The WebSocket subprotocol name of binding version 1.
-pub const SUBPROTOCOL: &str = "ridl-ws-v1";
+pub const FRAME_VERSION: u32 = 2;
+/// The WebSocket subprotocol name of binding version 2.
+pub const SUBPROTOCOL: &str = "ridl-ws-v2";
+/// The subprotocol name of binding version 1, which the provider selects
+/// only to refuse its `attach` (driftsys/ridl#1129).
+pub const SUBPROTOCOL_V1: &str = "ridl-ws-v1";
 /// The smallest message size limit a receiver may configure: the largest
 /// header of any message, an `attach` with a 255-byte name.
 pub const MIN_MESSAGE_LIMIT: usize = 294;
@@ -31,6 +40,9 @@ pub const MIN_MESSAGE_LIMIT: usize = 294;
 pub const MAX_MESSAGE_LIMIT: usize = 16_164;
 /// The size of an encoded [`Envelope`] in bytes.
 pub const ENVELOPE_BYTES: usize = 16;
+/// The bytes of payload in every `block` but the last (binding version 2,
+/// driftsys/ridl#1129).
+pub const BLOCK_BYTES: usize = 4_096;
 
 const FORM_ATTACH: u8 = 1;
 const FORM_ATTACHED: u8 = 2;
@@ -42,6 +54,7 @@ const FORM_PUBLISH: u8 = 7;
 const FORM_OCCURRENCE: u8 = 8;
 const FORM_REQUEST: u8 = 9;
 const FORM_RESPONSE: u8 = 10;
+const FORM_BLOCK: u8 = 11;
 
 const OUT_ACCEPTED: u8 = 1;
 const OUT_REPLY: u8 = 2;
@@ -65,6 +78,9 @@ const ANSWER_LEN: usize = COMMON + 2;
 const PUBLISH_LEN: usize = COMMON + ENVELOPE_BYTES + 1;
 const DATA_LEN: usize = COMMON + ENVELOPE_BYTES;
 const RESPONSE_LEN: usize = COMMON + ENVELOPE_BYTES + 8 + 2;
+/// The header of a `block`: the common fields, the envelope, `total` and
+/// `index`.
+const BLOCK_LEN: usize = COMMON + ENVELOPE_BYTES + 8;
 /// `form`, `frame_version`, `encoding`, `hash` and `name_len`.
 const ATTACH_FIXED: usize = 1 + 4 + 1 + 32 + 1;
 
@@ -266,6 +282,20 @@ pub enum Frame<'a> {
         /// The outcome and, for `Reply`, the payload.
         outcome: ResponseOutcome<'a>,
     },
+    /// Provider to consumer: one part of a `publish` of a `fixed` whose
+    /// payload does not fit one message (frame version 2).
+    Block {
+        /// The `fixed`.
+        target: Target,
+        /// The sender's envelope, the same in every block of one payload.
+        envelope: Envelope,
+        /// The length of the whole payload, at least 1.
+        total: u32,
+        /// The position of this block, from 0.
+        index: u32,
+        /// The bytes of this block.
+        payload: &'a [u8],
+    },
 }
 
 /// The output buffer given to [`Frame::encode`] is too small.
@@ -297,6 +327,11 @@ pub enum ProtocolViolation {
     BadNameLength,
     /// An `attach`'s `name` is not valid UTF-8.
     BadName,
+    /// A `block` that is wrong by itself (frame version 2): `kind` not
+    /// `Fixed`, `total` 0, `index` at or past the block count, or a number of
+    /// bytes after the header other than 4,096 (every block but the last) or
+    /// `total - 4,096 * index` (the last).
+    BadBlock,
 }
 
 /// A frame the receiver records and drops; the session continues.
@@ -352,7 +387,7 @@ fn kind_from(code: u8) -> Result<Kind, ProtocolViolation> {
 
 /// The `detail` code of a violation's rule: `Range` 1, `Step` 2, `Length` 3,
 /// `Pattern` 4, `Variant` 5, `Unique` 6 (frame specification §9.6), or
-/// `None` for a `Rule` variant frame version 1 has no code for. `Rule` is
+/// `None` for a `Rule` variant frame version 2 has no code for. `Rule` is
 /// `#[non_exhaustive]`, and a new variant comes only with a new frame
 /// version, so a sender built against a newer `ridl-rt` checks here before
 /// it builds a `contract(InvalidValue)` outcome: the server sends such a
@@ -482,6 +517,37 @@ fn envelope_at(msg: &[u8], at: usize) -> Envelope {
         seq: u64_at(msg, at + 8),
     }
 }
+
+/// The number of payload bytes that block `index` of a payload of `total`
+/// bytes carries: 4,096 for every block but the last, `total - 4,096 * index`
+/// for the last, and `None` when `total` is 0 or `index` is at or past
+/// `ceil(total / 4,096)`.
+///
+/// Every step is in `u32`, which is 32 bits on every target, so the result
+/// does not depend on the width of `usize`. A rewrite in `usize` would
+/// overflow on a 32-bit target for the largest `total`; the assertions below
+/// are evaluated at the `usize` of the compiled target, so a build for a
+/// 32-bit target (wasm32, thumbv7em) catches such a rewrite.
+const fn block_len(total: u32, index: u32) -> Option<u32> {
+    if total == 0 {
+        return None;
+    }
+    let count = total.div_ceil(BLOCK_BYTES as u32);
+    if index >= count {
+        None
+    } else if index < count - 1 {
+        Some(BLOCK_BYTES as u32)
+    } else {
+        // `index` is below `count`, so `4,096 * index` is below `total`.
+        Some(total - BLOCK_BYTES as u32 * index)
+    }
+}
+
+// The largest `total` and its last block must not overflow. The computation is
+// in `u32`. The assertions are evaluated at the `usize` of the compiled
+// target, so a 32-bit build catches a rewrite in `usize`.
+const _: () = assert!(matches!(block_len(u32::MAX, 1_048_575), Some(4_095)));
+const _: () = assert!(block_len(u32::MAX, u32::MAX).is_none());
 
 /// Requires a message of at least `len` bytes.
 fn need(msg: &[u8], len: usize) -> Result<(), ProtocolViolation> {
@@ -613,6 +679,27 @@ pub fn decode(msg: &[u8]) -> Result<Frame<'_>, DecodeError> {
                 outcome,
             }
         }
+        FORM_BLOCK => {
+            need(msg, BLOCK_LEN)?;
+            let target = target_at(msg)?;
+            if target.kind != Kind::Fixed {
+                return Err(ProtocolViolation::BadBlock.into());
+            }
+            let envelope = envelope_at(msg, COMMON);
+            let total = u32_at(msg, COMMON + ENVELOPE_BYTES);
+            let index = u32_at(msg, COMMON + ENVELOPE_BYTES + 4);
+            let payload = &msg[BLOCK_LEN..];
+            match block_len(total, index) {
+                Some(len) if payload.len() == len as usize => Frame::Block {
+                    target,
+                    envelope,
+                    total,
+                    index,
+                    payload,
+                },
+                _ => return Err(ProtocolViolation::BadBlock.into()),
+            }
+        }
         _ => return Err(ProtocolViolation::UnknownCode.into()),
     })
 }
@@ -691,6 +778,7 @@ impl Frame<'_> {
                         _ => 0,
                     }
             }
+            Frame::Block { payload, .. } => BLOCK_LEN + payload.len(),
         }
     }
 
@@ -701,6 +789,9 @@ impl Frame<'_> {
     /// A `contract(InvalidValue)` outcome whose `Rule` has no tag
     /// ([`rule_tag`] is `None`) is written with `detail` 0, which a receiver
     /// refuses as an unknown code; check the rule before building the frame.
+    /// A [`Frame::Block`] is written without a check of its `kind`, `total`,
+    /// `index` or payload length: a block with `total` 0 or an `index` at or
+    /// past the block count encodes, and every receiver closes with 1002.
     pub fn encode(&self, out: &mut [u8]) -> Result<usize, Short> {
         let needed = self.encoded_len();
         if out.len() < needed {
@@ -798,6 +889,19 @@ impl Frame<'_> {
                     w.bytes(p);
                 }
             }
+            Frame::Block {
+                target,
+                envelope,
+                total,
+                index,
+                payload,
+            } => {
+                w.target(FORM_BLOCK, target);
+                w.envelope(envelope);
+                w.bytes(&total.to_le_bytes());
+                w.bytes(&index.to_le_bytes());
+                w.bytes(payload);
+            }
         }
         Ok(w.at)
     }
@@ -811,5 +915,22 @@ mod encoding_tag_tests {
     fn the_encoding_tag_of_podbuf_is_3() {
         assert_eq!(encoding_tag("podbuf"), Some(3));
         assert_eq!(encoding_tag("repr-c"), None);
+    }
+}
+
+#[cfg(test)]
+mod block_len_tests {
+    use super::block_len;
+
+    #[test]
+    fn the_block_length_of_the_largest_total_does_not_overflow() {
+        assert_eq!(block_len(u32::MAX, 1_048_575), Some(4_095));
+        assert_eq!(block_len(u32::MAX, 1_048_576), None);
+        assert_eq!(block_len(u32::MAX, 0), Some(4_096));
+        assert_eq!(block_len(4_096, 0), Some(4_096));
+        assert_eq!(block_len(4_096, 1), None);
+        assert_eq!(block_len(4_098, 1), Some(2));
+        assert_eq!(block_len(1, 0), Some(1));
+        assert_eq!(block_len(0, 0), None);
     }
 }
