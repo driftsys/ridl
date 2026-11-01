@@ -71,8 +71,10 @@ for the as-built map.
   - ADR-0021 and `docs/design/ridl-rt.md` — before changing `ridl-rt` or
     anything that consumes it.
   - `docs/design/ridl-transport-ws.md` — before changing `ridl-transport-ws`.
-  - ADR-0022 and `docs/technotes/rsdl-implementation.md` — before changing the
-    IR's system artifact, the `ridl build` contract, or `ridl diff`.
+  - ADR-0022, `docs/technotes/rsdl-implementation.md` and
+    `docs/design/deployment-descriptor.md` — before changing the IR's system
+    artifact, the `ridl build` contract, `ridl diff`, or the deployment
+    descriptor.
   - ADR-0023 and `docs/design/interaction-face.md` — before extending the Rust
     backend's interaction face; its decision 6 before changing what the face
     emits for a call.

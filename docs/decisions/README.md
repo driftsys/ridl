@@ -348,6 +348,8 @@ other entry below is Accepted.
   RSDL-7xx and still exits 1, and that `ridl diff` lists system changes under
   two headings with no verdict and only when both sides are source trees. A
   region is the catalog of a unit, not of a source package (amended 2026-10-09).
+  The codegen request's deployment section and the deployment descriptor file
+  are the two emitters over `System` (decisions 11 and 12, amended 2026-11-02).
   Binds the IR every later consumer reads, the `ridl build` contract, and
   `ridl diff`.
 

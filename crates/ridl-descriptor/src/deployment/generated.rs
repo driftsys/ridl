@@ -25,7 +25,7 @@ mod root {
             /// The enum `Crossing` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Enum `Crossing` in the file `crates/ridl-descriptor/schema/deployment.fbs:16`
+            /// * Enum `Crossing` in the file `crates/ridl-descriptor/schema/deployment.fbs:15`
             #[derive(
                 Copy,
                 Clone,
@@ -205,7 +205,7 @@ mod root {
             /// The enum `SurfaceDirection` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Enum `SurfaceDirection` in the file `crates/ridl-descriptor/schema/deployment.fbs:19`
+            /// * Enum `SurfaceDirection` in the file `crates/ridl-descriptor/schema/deployment.fbs:18`
             #[derive(
                 Copy,
                 Clone,
@@ -380,7 +380,7 @@ mod root {
             /// The table `AttributeValue` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `AttributeValue` in the file `crates/ridl-descriptor/schema/deployment.fbs:23`
+            /// * Table `AttributeValue` in the file `crates/ridl-descriptor/schema/deployment.fbs:22`
             #[derive(
                 Clone,
                 Debug,
@@ -735,7 +735,7 @@ mod root {
             /// The table `Attribute` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Attribute` in the file `crates/ridl-descriptor/schema/deployment.fbs:31`
+            /// * Table `Attribute` in the file `crates/ridl-descriptor/schema/deployment.fbs:30`
             #[derive(
                 Clone,
                 Debug,
@@ -1077,7 +1077,7 @@ mod root {
             /// The table `EmbeddedCatalog` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `EmbeddedCatalog` in the file `crates/ridl-descriptor/schema/deployment.fbs:42`
+            /// * Table `EmbeddedCatalog` in the file `crates/ridl-descriptor/schema/deployment.fbs:41`
             #[derive(
                 Clone,
                 Debug,
@@ -1414,7 +1414,7 @@ mod root {
             /// The table `InterfaceKey` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `InterfaceKey` in the file `crates/ridl-descriptor/schema/deployment.fbs:49`
+            /// * Table `InterfaceKey` in the file `crates/ridl-descriptor/schema/deployment.fbs:48`
             #[derive(
                 Clone,
                 Debug,
@@ -1732,7 +1732,7 @@ mod root {
             /// The table `DeployedInterface` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `DeployedInterface` in the file `crates/ridl-descriptor/schema/deployment.fbs:55`
+            /// * Table `DeployedInterface` in the file `crates/ridl-descriptor/schema/deployment.fbs:54`
             #[derive(
                 Clone,
                 Debug,
@@ -2232,7 +2232,7 @@ mod root {
             /// The table `Machine` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Machine` in the file `crates/ridl-descriptor/schema/deployment.fbs:64`
+            /// * Table `Machine` in the file `crates/ridl-descriptor/schema/deployment.fbs:63`
             #[derive(
                 Clone,
                 Debug,
@@ -2613,7 +2613,7 @@ mod root {
             /// The table `Component` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Component` in the file `crates/ridl-descriptor/schema/deployment.fbs:71`
+            /// * Table `Component` in the file `crates/ridl-descriptor/schema/deployment.fbs:70`
             #[derive(
                 Clone,
                 Debug,
@@ -3080,7 +3080,7 @@ mod root {
             /// The table `Instance` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Instance` in the file `crates/ridl-descriptor/schema/deployment.fbs:83`
+            /// * Table `Instance` in the file `crates/ridl-descriptor/schema/deployment.fbs:82`
             #[derive(
                 Clone,
                 Debug,
@@ -3567,7 +3567,7 @@ mod root {
             /// The table `Endpoint` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Endpoint` in the file `crates/ridl-descriptor/schema/deployment.fbs:93`
+            /// * Table `Endpoint` in the file `crates/ridl-descriptor/schema/deployment.fbs:92`
             #[derive(
                 Clone,
                 Debug,
@@ -3886,7 +3886,7 @@ mod root {
             /// The table `Link` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Link` in the file `crates/ridl-descriptor/schema/deployment.fbs:99`
+            /// * Table `Link` in the file `crates/ridl-descriptor/schema/deployment.fbs:98`
             #[derive(
                 Clone,
                 Debug,
@@ -4376,7 +4376,7 @@ mod root {
             /// The table `Route` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Route` in the file `crates/ridl-descriptor/schema/deployment.fbs:109`
+            /// * Table `Route` in the file `crates/ridl-descriptor/schema/deployment.fbs:108`
             #[derive(
                 Clone,
                 Debug,
@@ -4858,7 +4858,7 @@ mod root {
             /// The table `Surface` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Surface` in the file `crates/ridl-descriptor/schema/deployment.fbs:121`
+            /// * Table `Surface` in the file `crates/ridl-descriptor/schema/deployment.fbs:120`
             #[derive(
                 Clone,
                 Debug,
@@ -5177,7 +5177,7 @@ mod root {
             /// The table `Deployment` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Deployment` in the file `crates/ridl-descriptor/schema/deployment.fbs:126`
+            /// * Table `Deployment` in the file `crates/ridl-descriptor/schema/deployment.fbs:125`
             #[derive(
                 Clone,
                 Debug,

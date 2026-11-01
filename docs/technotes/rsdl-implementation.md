@@ -191,15 +191,14 @@ there is no runtime, and every fact it states about the lowered system and about
 
 ## What is not built yet
 
-- **A runtime's system descriptor.** rsdl §13 says a runtime's descriptor is an
-  emitter over these facts, specified with the runtime. The runtime descriptors
-  design defines two artifacts and the roadmap plans only the catalog half; the
-  per-deployment system descriptor takes its own rows now that rsdl has landed,
-  and has none yet. No runtime reads the lowered system: the one in this
-  workspace, `ridl-loopback`, is given its catalog by its caller and reads no
-  descriptor at all. A codegen request does read the lowered system: its
-  deployment section is an emitter over it
-  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
-  section"). The only plugin that reads that section is the test plugin of
-  `crates/ridlc/tests/layout.rs`; no backend of this workspace reads it.
+- **A runtime that reads the deployment descriptor.** The per-deployment
+  descriptor is built
+  ([the deployment descriptor record](../design/deployment-descriptor.md);
+  ADR-0022 decision 12). No runtime in this workspace reads it: `ridl-loopback`
+  is given its catalog by its caller and reads no descriptor at all. A codegen
+  request also reads the lowered system: its deployment section is an emitter
+  over it ([the codegen plugin design](../design/codegen-plugins.md), "The
+  deployment section"). The only plugin that reads that section is the test
+  plugin of `crates/ridlc/tests/layout.rs`; no backend of this workspace reads
+  it.
 - **Backend namespace claims.** See RSDL-804 above.

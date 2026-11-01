@@ -1,7 +1,6 @@
 // The deployment descriptor: what one deployment of a system contains, with
 // the catalogs of its closure embedded
-// (docs/wip/2026-11-01-deployment-descriptor-design.md; it becomes
-// docs/design/deployment-descriptor.md).
+// (docs/design/deployment-descriptor.md).
 //
 // Evolution is append-only. A field is only ever added at the END of its
 // table, so every field id already written keeps its meaning. Never remove,

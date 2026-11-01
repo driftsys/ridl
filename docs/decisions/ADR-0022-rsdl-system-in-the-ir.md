@@ -7,9 +7,8 @@ the rsdl language reference does not settle — where the lowered system lives,
 what artifact carries it, which facts of rsdl §13 the IR states and which it
 does not, how `ridl build` gates on an error that blocks one deployment only,
 and how `ridl diff` reports a change that carries no verdict. It binds the IR
-every later consumer reads — including the system descriptor of the runtime
-descriptors design, which is not yet planned — the `ridl build` contract, and
-`ridl diff`.
+every later consumer reads — including the deployment descriptor of the runtime
+descriptors design — the `ridl build` contract, and `ridl diff`.
 
 Written from lane B of the 2026-09-13 step-1 coordination (driftsys/ridl#328),
 which built rsdl's parser, checks, lowering and `ridl diff` support (stories
@@ -25,6 +24,11 @@ Sebastien delegated the plan's decisions P-B1 to P-B9 to the lane driver on
 Amended 2026-10-04 by story E6.17 (driftsys/ridl#367): the work decision 7
 deferred has landed. `Region` carries `bytes hash = 3`, and `ridlc` embeds the
 catalog hash in each region (see the second note under decision 7).
+
+Amended 2026-11-02 (driftsys/ridl#1176): decision 11 no longer leaves the system
+descriptor unbuilt. Decision 12 records the deployment descriptor as the second
+emitter over `System`; the record is
+[`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
 
 Amended 2026-10-09 by the catalog-per-unit design: decisions 6 and 7 name the
 unit, not the source package, as the owner of a catalog. A region is keyed on
@@ -218,10 +222,22 @@ nothing.
     decision 3 (see its note). **The boundary with the engine moves.** The
     store, the seqlock, the ring and the scheduler stay parked as `ridl-engine`;
     the values they are sized from are tabulated here. The system descriptor
-    file of the runtime descriptors design stays unbuilt: it would be a second
-    emitter over the same message, built when a runtime that reads one exists
-    (`docs/design/catalog-descriptor.md`, "Not built"). The design note is
+    file of the runtime descriptors design stayed unbuilt when this decision was
+    taken; decision 12 builds it. The design note is
     `docs/archive/2026-10-05-layout-inputs-design.md`.
+
+12. **The deployment descriptor is the second emitter over `System`**
+    (2026-11-02, driftsys/ridl#1176). `--emit deployment` writes one FlatBuffers
+    file per lowered deployment, `<package>.<Name>.deployment.binfb`, file
+    identifier `RDLD`, with the catalog descriptor of every region embedded
+    unchanged. It is a direct projection of `System`; the only rules it adds are
+    the `offers` and `maps` lists of an instance, which it takes from the
+    codegen deployment section so that the two emitters agree. The toolchain
+    assigns no instance number: a runtime reads its own backend key on the
+    placement line, and the codegen deployment section carries that key in
+    `Instance.attributes`. A deployment that an RSDL-7xx error blocked has no
+    file (decision 8). `System` does not change. The record is
+    [`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
 
 ## Consequences
 
