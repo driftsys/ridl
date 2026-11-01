@@ -462,17 +462,21 @@ a field is appended.
    _Amended 2026-11-01, from driftsys/ridl#1150._ The wire name an importing
    header gives a foreign tuple's head comes from the declaring package's own
    lowering, not from the order the importing package reaches that package's
-   declarations in. The importing lowering lowers the declaring package once,
-   the first time it reaches a position inside one of its declarations, and
-   matches each such position to one named tuple of that lowering by its induced
-   Rust name, its shape and its visibility; the position takes that tuple's
-   entry and its wire name. Two positions of the declaring package that share
-   one entry across two declarations (`A.bC.1` and `AB.cD.2`, both `ABCDP`) are
-   named `ABCField1` in every header; before, an importing header that reached
-   `AB` first named them `ABCDField2`, and the text comparison of the 2026-10-31
-   amendment (driftsys/ridl#1153) refused a valid workspace. That comparison
-   stays: the two definitions of one identity are now expected to be equal, and
-   a disagreement between the two lowerings is refused rather than written. A
+   declarations in. The importing lowering lowers the declaring package once, in
+   claims-only mode (its own foreign positions are lifted with no wire name and
+   lower no further package, so two packages that reference each other by
+   qualified name end), the first time it reaches a position inside one of its
+   declarations, and matches each such position to one named tuple of that
+   lowering by its induced Rust name, its shape and its visibility; the position
+   gets its own entry in the importer, deduplicated by declaring package, Rust
+   name, shape and visibility, and takes only the wire name from the claim. Two
+   positions of the declaring package that share one entry across two
+   declarations (`A.bC.1` and `AB.cD.2`, both `ABCDP`) are named `ABCField1` in
+   every header; before, an importing header that reached `AB` first named them
+   `ABCDField2`, and the text comparison of the 2026-10-31 amendment
+   (driftsys/ridl#1153) refused a valid workspace. That comparison stays: the
+   two definitions of one identity are now expected to be equal, and a
+   disagreement between the two lowerings is refused rather than written. A
    position no claim matches is an internal error, refused by the podbuf walk,
    never a name derived by the importer.
 

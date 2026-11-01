@@ -2156,3 +2156,47 @@ pub(super) fn absent_cause(cause: AbsentCause) -> v1::AbsentCause {
         AbsentCause::Unresolved => v1::AbsentCause::Unresolved,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A position inside a declaration of another package that matches no
+    /// claim of that package keeps an empty wire name: the name the importer
+    /// would derive for it (`ST`) is never used. No input to `lower` reaches
+    /// this case, because the declaring package's own lowering reaches every
+    /// position under the same name, shape and visibility; the rule is
+    /// pinned on the function.
+    #[test]
+    fn a_foreign_position_with_no_claim_keeps_an_empty_wire_name() {
+        let a = v2::Package {
+            name: "a".to_string(),
+            decls: vec![v2::Decl {
+                name: "S".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef::default())),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let b = v2::Package {
+            name: "b".to_string(),
+            ..Default::default()
+        };
+        let others = [&a];
+        let mut lowering = Lowering::new(Scope {
+            package: &b,
+            others: &others,
+        });
+        let at = Path::foreign("a", "S", v2::Visibility::Public as i32).field("t");
+        assert_eq!(at.wire, "ST");
+        let tuple = v2::TupleType {
+            fields: vec![v2::TupleField {
+                name: "x".to_string(),
+                r#type: None,
+            }],
+        };
+        let index = lowering.foreign_tuple_ref(&a, &tuple, &at) as usize;
+        assert_eq!(lowering.tuples[index].wire, "");
+    }
+}
