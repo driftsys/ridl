@@ -187,7 +187,11 @@ macro_rules! diag_codes {
 ///
 /// RIDL-150 (`payload-above-ceiling`) was retired on 2026-10-30 (ADR-0030
 /// decision 7 as amended): the error RIDL-157 reports the case it reported.
-pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 150, 415];
+///
+/// RIDL-158 (an `open` enum or enum set in a package that podbuf encodes) was
+/// retired on 2026-11-01 (ADR-0031 decision 12): the podbuf codec and the C
+/// header carry an open declaration, so the case it refused is valid.
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 150, 158, 415];
 
 /// The lint names of retired codes. A released lint name is a stable contract
 /// (ADR-0024 decision 7): a `ridl.toml` refers to it, so the name of a retired
@@ -911,17 +915,6 @@ diag_codes! {
         /// `ridl build`, on the interaction.
         RIDL_157 = "RIDL-157", Error,
             "payload above the default ceiling of its kind or with no finite bound";
-
-        /// An `open` enum or `open` enum set in a package of a workspace
-        /// whose manifest enables `podbuf` in a `[backend.<name>]` table.
-        /// The podbuf codec and the C header keep every enum strict until
-        /// driftsys/ridl#1168 lands, so an open declaration has no podbuf
-        /// encoding yet. Error; as an error code it has no name and no
-        /// level. Emitted by `ridlc` when a `[backend.<name>]` table enables
-        /// `podbuf`, on the declaration. The message names the declaration
-        /// and the issue.
-        RIDL_158 = "RIDL-158", Error,
-            "open enum or enum set in a package that podbuf encodes";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
