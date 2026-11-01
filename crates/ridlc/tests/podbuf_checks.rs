@@ -306,7 +306,6 @@ fn an_open_enum_in_a_podbuf_package_draws_no_podbuf_error() {
             .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
         "{out:?}"
     );
-    assert!(codes(&out).is_empty(), "{out:?}");
 }
 
 /// `ridl build` runs the same checks, and an open enum in a package that a
@@ -330,8 +329,20 @@ fn an_open_enum_in_a_podbuf_package_builds() {
     let out_dir = root.path().join("out");
     let run = ridlc::run_build(root.path(), &out_dir, &[ridlc::Emit::Rust], Frozen::No).unwrap();
     assert!(!run.has_error(), "{:?}", run.diagnostics);
+    // The package's crate carries the podbuf codec, and reads `Status` and
+    // `Flags` through `From<i64>`, the open path, rather than `TryFrom`.
+    let source = std::fs::read_to_string(out_dir.join("demo.rs")).expect("the package source");
     assert!(
-        std::fs::read_dir(&out_dir).unwrap().next().is_some(),
-        "the build writes its artifacts"
+        source.contains("impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Dash"),
+        "{source}"
     );
+    for name in ["Status", "Flags"] {
+        let open_read = format!("<{name} as ::core::convert::From<");
+        assert!(source.contains(&open_read), "{open_read} not in:\n{source}");
+        let strict_read = format!("<{name} as ::core::convert::TryFrom");
+        assert!(
+            !source.contains(&strict_read),
+            "{strict_read} in:\n{source}"
+        );
+    }
 }

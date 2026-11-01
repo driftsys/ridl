@@ -2878,3 +2878,23 @@ fn a_stale_exception_is_rejected() {
             .any(|m| m.contains("catalogue has an entry"))
     );
 }
+
+/// A `RIDL-` code that [`DEFERRED_OR_RETIRED`] marks retired is listed in
+/// `ridl_core::diag::RETIRED_RIDL_CODES`, so the guard that keeps a retired
+/// number out of the catalogue covers it: a number dropped from that list
+/// could be declared again (ADR-0008 decision 13). The converse does not hold:
+/// a code retired before it shipped, such as RIDL-415, has no reference row.
+#[test]
+fn every_ridl_code_the_reference_marks_retired_is_in_the_retired_list() {
+    let missing: Vec<u16> = DEFERRED_OR_RETIRED
+        .iter()
+        .filter(|(prefix, _, reason)| *prefix == "RIDL" && reason.starts_with("retired"))
+        .map(|(_, number, _)| *number)
+        .filter(|number| !ridl_core::diag::RETIRED_RIDL_CODES.contains(number))
+        .collect();
+    assert_eq!(
+        missing,
+        Vec::<u16>::new(),
+        "retired in the reference, not in RETIRED_RIDL_CODES"
+    );
+}
