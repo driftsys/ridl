@@ -1,0 +1,126 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/open_enums.typl
+---
+SourceFile@0..262
+  PackageDecl@0..16
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..16
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..16 "open"
+  Whitespace@16..18 "\n\n"
+  EnumDef@18..65
+    OpenKw@18..22 "open"
+    Whitespace@22..23 " "
+    EnumKw@23..27 "enum"
+    Whitespace@27..28 " "
+    Name@28..37
+      Ident@28..37 "DtcStatus"
+    Whitespace@37..38 " "
+    LBrace@38..39 "{"
+    Whitespace@39..40 " "
+    EnumValue@40..52
+      Name@40..48
+        Ident@40..48 "INACTIVE"
+      Whitespace@48..49 " "
+      Eq@49..50 "="
+      Whitespace@50..51 " "
+      Literal@51..52
+        IntNumber@51..52 "0"
+    Whitespace@52..53 " "
+    EnumValue@53..63
+      Name@53..59
+        Ident@53..59 "ACTIVE"
+      Whitespace@59..60 " "
+      Eq@60..61 "="
+      Whitespace@61..62 " "
+      Literal@62..63
+        IntNumber@62..63 "1"
+    Whitespace@63..64 " "
+    RBrace@64..65 "}"
+  Whitespace@65..67 "\n\n"
+  EnumDef@67..110
+    InternalKw@67..75 "internal"
+    Whitespace@75..76 " "
+    ErrorKw@76..81 "error"
+    Whitespace@81..82 " "
+    OpenKw@82..86 "open"
+    Whitespace@86..87 " "
+    EnumKw@87..91 "enum"
+    Whitespace@91..92 " "
+    Name@92..97
+      Ident@92..97 "Fault"
+    Whitespace@97..98 " "
+    LBrace@98..99 "{"
+    Whitespace@99..100 " "
+    EnumValue@100..108
+      Name@100..104
+        Ident@100..104 "NONE"
+      Whitespace@104..105 " "
+      Eq@105..106 "="
+      Whitespace@106..107 " "
+      Literal@107..108
+        IntNumber@107..108 "0"
+    Whitespace@108..109 " "
+    RBrace@109..110 "}"
+  Whitespace@110..112 "\n\n"
+  EnumSetDef@112..140
+    OpenKw@112..116 "open"
+    Whitespace@116..117 " "
+    EnumsetKw@117..124 "enumset"
+    Whitespace@124..125 " "
+    Name@125..130
+      Ident@125..130 "Flags"
+    Whitespace@130..131 " "
+    LBrace@131..132 "{"
+    Whitespace@132..133 " "
+    EnumSetBit@133..138
+      Name@133..134
+        Ident@133..134 "A"
+      Whitespace@134..135 " "
+      Eq@135..136 "="
+      Whitespace@136..137 " "
+      Literal@137..138
+        IntNumber@137..138 "0"
+    Whitespace@138..139 " "
+    RBrace@139..140 "}"
+  Whitespace@140..142 "\n\n"
+  EnumSetDef@142..171
+    OpenKw@142..146 "open"
+    Whitespace@146..147 " "
+    EnumsetKw@147..154 "enumset"
+    Whitespace@154..155 " "
+    Name@155..163
+      Ident@155..163 "Warnings"
+    Whitespace@163..164 " "
+    Colon@164..165 ":"
+    Whitespace@165..166 " "
+    PathType@166..171
+      QualifiedName@166..171
+        Ident@166..171 "Fault"
+  Whitespace@171..173 "\n\n"
+  LineComment@173..237 "// `open` is an ordin ..."
+  Whitespace@237..238 "\n"
+  StructDef@238..261
+    StructKw@238..244 "struct"
+    Whitespace@244..245 " "
+    Name@245..246
+      Ident@245..246 "S"
+    Whitespace@246..247 " "
+    LBrace@247..248 "{"
+    Whitespace@248..249 " "
+    FieldDef@249..259
+      Name@249..253
+        Ident@249..253 "open"
+      Colon@253..254 ":"
+      Whitespace@254..255 " "
+      PathType@255..259
+        QualifiedName@255..259
+          Ident@255..259 "bool"
+    Whitespace@259..260 " "
+    RBrace@260..261 "}"
+  Whitespace@261..262 "\n"
+errors: none

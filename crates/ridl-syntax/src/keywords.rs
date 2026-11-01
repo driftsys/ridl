@@ -64,6 +64,12 @@ const TYPL_KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("error", SyntaxKind::ErrorKw),
 ];
 
+/// The contextual keywords of the typl profile: a word that is a keyword only
+/// in one position and an ordinary identifier everywhere else. None of them is
+/// in [`FAMILY_RESERVED`], and the lexer lexes each as [`SyntaxKind::Ident`];
+/// the parser remaps `open` when `enum` or `enumset` follows it.
+pub const TYPL_CONTEXTUAL: &[&str] = &["open"];
+
 /// The nine words the ridl profile activates beyond typl's set (ridl reference
 /// §2.3): the interaction and container keywords plus the two expr-core words
 /// (`require`/`ensure`). Every entry here is also present in

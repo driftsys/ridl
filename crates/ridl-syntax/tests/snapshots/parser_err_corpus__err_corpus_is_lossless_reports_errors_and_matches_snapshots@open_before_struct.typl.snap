@@ -1,0 +1,30 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/open_before_struct.typl
+---
+SourceFile@0..93
+  PackageDecl@0..16
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..16
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..16 "open"
+  Whitespace@16..18 "\n\n"
+  LineComment@18..75 "// `open` modifies on ..."
+  Whitespace@75..76 "\n"
+  ErrorNode@76..80
+    Ident@76..80 "open"
+  Whitespace@80..81 " "
+  StructDef@81..92
+    StructKw@81..87 "struct"
+    Whitespace@87..88 " "
+    Name@88..89
+      Ident@88..89 "S"
+    Whitespace@89..90 " "
+    LBrace@90..91 "{"
+    RBrace@91..92 "}"
+  Whitespace@92..93 "\n"
+errors:
+  FORM-102 76..80 unexpected token after `open`: expected `enum` or `enumset`, because `open` modifies only an enum or an enumset definition

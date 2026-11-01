@@ -533,6 +533,9 @@ impl EnumDef {
     pub fn error_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::ErrorKw)
     }
+    pub fn open_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::OpenKw)
+    }
     pub fn enum_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::EnumKw)
     }
@@ -574,6 +577,9 @@ impl EnumSetDef {
     }
     pub fn error_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::ErrorKw)
+    }
+    pub fn open_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::OpenKw)
     }
     pub fn enumset_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::EnumsetKw)

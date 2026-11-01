@@ -39,6 +39,9 @@ pub enum SyntaxKind {
     MatchKw,
     ReservedKw,
     ErrorKw,
+    // Contextual: lexes as `Ident`; the parser remaps it when `enum` or
+    // `enumset` follows (typl reference §1.4).
+    OpenKw,
     // Keywords the ridl profile activates beyond typl's set (ridl reference
     // §2.3): the interaction and container words plus the expr-core pair.
     // Under `Profile::Typl` these words still lex to `ReservedWord`.

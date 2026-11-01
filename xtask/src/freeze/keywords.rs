@@ -1,7 +1,7 @@
 //! The keyword registry: which word is an active keyword in which profile,
 //! and the attribute registry: which key is accepted on which site.
 
-use ridl_syntax::keywords::{FAMILY_RESERVED, Profile, keyword_in};
+use ridl_syntax::keywords::{FAMILY_RESERVED, Profile, TYPL_CONTEXTUAL, keyword_in};
 use std::path::Path;
 
 const PROFILES: [(&str, Profile); 3] = [
@@ -60,6 +60,11 @@ pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
     let mut lines = lines(FAMILY_RESERVED, |profile, word| {
         keyword_in(profile, word).is_some()
     });
+    lines.extend(
+        TYPL_CONTEXTUAL
+            .iter()
+            .map(|word| format!("contextual {word} typl")),
+    );
     lines.extend(attribute_lines());
     Ok(lines)
 }
@@ -88,6 +93,20 @@ mod tests {
             .map(|row| row.sites.len())
             .sum();
         assert_eq!(attribute_lines, expected);
+    }
+
+    #[test]
+    fn dump_names_open_as_contextual_and_leaves_reserved_set_unchanged() {
+        let lines = dump(Path::new(".")).unwrap();
+        assert!(lines.contains(&"contextual open typl".to_string()));
+        assert!(
+            !lines
+                .iter()
+                .find(|l| l.starts_with("reserved-set "))
+                .unwrap()
+                .split(' ')
+                .any(|w| w == "open")
+        );
     }
 
     #[test]

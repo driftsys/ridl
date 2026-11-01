@@ -128,6 +128,11 @@ boolean  integer  float  string  bytes
 true  false  step  match  reserved  error
 ```
 
+`open` is a **contextual keyword**: it is a keyword only as the modifier that
+directly precedes `enum` or `enumset`, and an ordinary identifier everywhere
+else. It is not in the reserved-word registry, so a field, a package or a
+constant may still be named `open`.
+
 **Init values use bare `= value`** (§5.8), not a keyword —
 `type Speed : km/h [0.0..250.0 step 0.5] = 0.0`, the universal default-value
 idiom. There is **no `default` keyword** (retired) and **no `init` keyword** in
@@ -2120,6 +2125,7 @@ import        = "import" qualified_id [ "as" id ] ;
 definition    = [ "internal" ] [ "error" ] ( type_def | const_def | struct_def
                                | enum_def | enumset_def | union_def ) ;
               (* "error" valid on struct_def, enum_def, union_def only — §10.1 *)
+              (* "open" valid on enum_def and enumset_def only; it follows "error" *)
 
 (* ---------- Type ---------- *)
 
@@ -2176,13 +2182,13 @@ type_ref      = qualified_id ;                                     (* Type or pk
 
 (* ---------- Enum ---------- *)
 
-enum_def      = doc_comment? "enum" CamelCase_id "{" { ( enum_value | reserved ) sep? } "}" ;
+enum_def      = doc_comment? [ "open" ] "enum" CamelCase_id "{" { ( enum_value | reserved ) sep? } "}" ;
 enum_value    = doc_comment? SCREAMING_SNAKE_ID "=" int_lit ;
 
 (* ---------- EnumSet ---------- *)
 
-enumset_def   = doc_comment? "enumset" CamelCase_id "{" { enumset_bit sep? } "}"
-              | doc_comment? "enumset" CamelCase_id ":" type_ref
+enumset_def   = doc_comment? [ "open" ] "enumset" CamelCase_id "{" { enumset_bit sep? } "}"
+              | doc_comment? [ "open" ] "enumset" CamelCase_id ":" type_ref
               ;
 enumset_bit   = doc_comment? SCREAMING_SNAKE_ID "=" int_lit ;
 
