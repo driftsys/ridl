@@ -254,16 +254,21 @@ export class Calls {
    * A `response` for a query whose reply is a stream errors its stream and
    * forgets the call when the outcome is a refusal (`contract`, `corrupt`,
    * `busy`): a server that does not serve the member cannot know that its
-   * reply is a stream, and answers `contract(UnknownInteraction)`. Any other
-   * outcome for such a query returns `unexpected-form`, because a served
-   * streamed query is answered only by its stream.
+   * reply is a stream, and answers `contract(UnknownInteraction)`. This holds
+   * only before the stream's first `chunk`: once a chunk has arrived, the
+   * server serves the member, and a `response` returns `unexpected-form`. So
+   * does a `reply` or `accepted` at any time, because a served streamed query
+   * is answered only by its stream.
    */
   settle(frame: Response): Unused | null {
     const call = this.#inFlight.get(frame.correlation);
     if (!call) return "unknown-correlation";
     const outcome = frame.outcome;
     if (call.kind === "stream") {
-      if (outcome.outcome === "accepted" || outcome.outcome === "reply") {
+      if (
+        outcome.outcome === "accepted" || outcome.outcome === "reply" ||
+        call.expected !== 1n
+      ) {
         return "unexpected-form";
       }
       this.#forget(frame.correlation, call);

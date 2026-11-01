@@ -736,15 +736,17 @@ test("a_refusal_response_errors_the_stream_and_keeps_the_session", async () => {
   socket.deliver(
     response(STREAMED, 1n, {
       outcome: "contract",
-      contract: { category: "unknown-interaction" },
+      contract: { category: "invalid-value", rule: "range" },
     }),
   );
-  await assert.rejects(
-    reader.read(),
-    (e: unknown) =>
-      e instanceof SessionError && e.failure.category === "contract" &&
-      e.failure.contract.category === "unknown-interaction",
-  );
+  await assert.rejects(reader.read(), (e: unknown) => {
+    assert.ok(e instanceof SessionError);
+    assert.deepEqual(e.failure, {
+      category: "contract",
+      contract: { category: "invalid-value", rule: "range" },
+    });
+    return true;
+  });
   // The call is forgotten, and the stream ended at the server: nothing is
   // sent back, and a later frame of the call is discarded.
   assert.deepEqual(sentOf(socket, "stream_end"), []);
@@ -783,6 +785,52 @@ test("an accepted response for a streamed query is a protocol error", async () =
     violation: "unexpected-form",
   }]);
   await assert.rejects(reader.read(), isFailure("down"));
+});
+
+test("a refusing response after a chunk is a protocol error", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(2), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.deliver(response(STREAMED, 1n, { outcome: "busy" }));
+  assert.deepEqual(notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+  assert.deepEqual(socket.closes, [{}]);
+  await assert.rejects(reader.read(), isFailure("down"));
+});
+
+test("a stream_end forgets the call: a later chunk of it is discarded", async () => {
+  for (const outcome of [{ kind: "end" }, { kind: "busy" }] as const) {
+    const { socket, session, notes } = await attachedV3();
+    const stream = session.queryStream(1, 10, Uint8Array.of(1), BOUND);
+    const read = Array.fromAsync(stream).catch((e) => e);
+    if (outcome.kind === "end") socket.deliver(chunk(1n, 1n, [1]));
+    const seq = outcome.kind === "end" ? 2n : 1n;
+    socket.deliver(streamEnd(1n, seq, outcome));
+    socket.deliver(chunk(1n, seq + 1n, [9]));
+    assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
+      "unknown-correlation",
+    ]);
+    assert.deepEqual(socket.closes, []);
+    const result = await read;
+    if (outcome.kind === "end") assert.deepEqual(result, [Uint8Array.of(1)]);
+    else assert.ok(isFailure("busy")(result));
+  }
+});
+
+test("a repeated chunk seq errors interrupted and sends stream_end", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(3), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.deliver(chunk(1n, 1n, [1]));
+  await assert.rejects(reader.read(), isFailure("interrupted"));
+  assert.deepEqual(sentOf(socket, "stream_end"), [
+    stopped({ kind: "interrupted" }),
+  ]);
+  assert.deepEqual(notes, []);
 });
 
 test("a_chunk_for_a_plain_query_is_a_protocol_error", async () => {
@@ -945,26 +993,35 @@ test("stream_end_busy_before_a_chunk_errors_busy", async () => {
 });
 
 test("a stream_end with a contract, corrupt or interrupted outcome errors with that category", async () => {
-  const outcomes: StreamOutcome[] = [
-    { kind: "contract", contract: { category: "unknown-interaction" } },
-    { kind: "corrupt" },
-    { kind: "interrupted" },
+  const cases: [StreamOutcome, unknown][] = [
+    [
+      { kind: "contract", contract: { category: "unknown-interaction" } },
+      { category: "contract", contract: { category: "unknown-interaction" } },
+    ],
+    [
+      {
+        kind: "contract",
+        contract: { category: "invalid-value", rule: "length" },
+      },
+      {
+        category: "contract",
+        contract: { category: "invalid-value", rule: "length" },
+      },
+    ],
+    [{ kind: "corrupt" }, { category: "corrupt" }],
+    [{ kind: "interrupted" }, { category: "interrupted" }],
   ];
-  for (const outcome of outcomes) {
+  for (const [outcome, failure] of cases) {
     const { socket, session } = await attachedV3();
     const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
       .getReader();
     socket.deliver(chunk(1n, 1n, [1]));
     socket.deliver(streamEnd(1n, 2n, outcome));
-    await assert.rejects(
-      reader.read(),
-      (e: unknown) =>
-        e instanceof SessionError &&
-        e.failure.category === outcome.kind &&
-        (outcome.kind !== "contract" ||
-          (e.failure.category === "contract" &&
-            e.failure.contract.category === "unknown-interaction")),
-    );
+    await assert.rejects(reader.read(), (e: unknown) => {
+      assert.ok(e instanceof SessionError);
+      assert.deepEqual(e.failure, failure);
+      return true;
+    });
   }
 });
 
