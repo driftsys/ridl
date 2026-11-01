@@ -496,6 +496,55 @@ fn describe_rejects_a_version_this_toolchain_does_not_read() {
     assert_describe_rejects(&path, &cause);
 }
 
+/// Builds `examples/cabin` with `--emit catalog,deployment` into `out` and
+/// returns the paths of the deployment descriptor and of the catalog file.
+fn build_cabin_deployment(out: &Path) -> (PathBuf, PathBuf) {
+    let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
+    build_from(&cabin, out, "catalog,deployment");
+    (
+        out.join("veh.cabin.Bench.deployment.binfb"),
+        out.join("veh.cabin.catalog.binfb"),
+    )
+}
+
+#[test]
+fn describe_prints_a_deployment_descriptor_as_json() {
+    let out = TempDir::new("deployment");
+    let (file, _) = build_cabin_deployment(out.path());
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    assert_eq!(json["name"], "Bench");
+    assert_eq!(json["package"], "veh.cabin");
+    assert_eq!(json["catalogs"][0]["name"], "veh.cabin");
+    assert_eq!(
+        json["catalogs"][0]["catalog"]["interfaces"][0]["name"], "Cabin",
+        "the embedded catalog prints its own view"
+    );
+}
+
+/// A byte flipped inside an embedded catalog leaves the deployment's own
+/// structure sound, so only the catalog verifier can refuse the file. The
+/// command exits 2 and names the catalog; it does not print `null` for it.
+#[test]
+fn describe_rejects_a_deployment_with_a_damaged_embedded_catalog() {
+    let out = TempDir::new("deployment-damaged");
+    let (file, catalog) = build_cabin_deployment(out.path());
+    let mut bytes = std::fs::read(&file).unwrap();
+    let embedded = std::fs::read(&catalog).unwrap();
+    let start = bytes
+        .windows(embedded.len())
+        .position(|window| window == embedded)
+        .expect("the deployment embeds the catalog bytes");
+    // The most significant byte of the catalog root table's signed offset to
+    // its vtable, as in the catalog case above.
+    let root = u32::from_le_bytes(embedded[0..4].try_into().unwrap()) as usize;
+    bytes[start + root + 3] ^= 0x40;
+    let damaged = out.path().join("damaged.deployment.binfb");
+    std::fs::write(&damaged, &bytes).unwrap();
+    assert_describe_rejects(&damaged, "veh.cabin");
+}
+
 /// A reader that closes its end of the pipe before reading anything: every
 /// write of `ridl describe` to stdout then fails. The descriptor has 2000
 /// members, so its JSON view is far larger than a pipe buffer, and a write
