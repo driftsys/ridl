@@ -184,16 +184,17 @@ an untyped position are still refused (driftsys/ridl#943). A call with a stream
 gets its descriptor, whose row lists its streams, and a method on the face in
 one form only: a query whose reply is a stream of named elements and whose only
 stream is that reply, for which `query_reply_type` returns the element type and
-the consumer side below emits the call's future and its `<Name>Stream`. An
-induced payload with no finite bound in an encoding `encodings` names is also
-refused before its descriptor is accepted, because that encoding's codec cannot
-implement `Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers
-root has no finite bound; under `proto3`, a tuple whose proto3 size state is not
-bounded — no finite bound, a bound that does not fit, or a member proto3 cannot
-represent — with the refusal naming the tuple and the sizer's cause. The
-pipeline skips that interface with the same refusal marker, leaving the
-package's domain types and its other interfaces unaffected
-(`tests/induced_call_refusals.rs`).
+the consumer side below emits the call's future and its `<Name>Stream`. Every
+other stream form, a byte or text stream and a stream parameter, still gets its
+descriptor and no method on the face (driftsys/ridl#943). An induced payload
+with no finite bound in an encoding `encodings` names is also refused before its
+descriptor is accepted, because that encoding's codec cannot implement
+`Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers root has no
+finite bound; under `proto3`, a tuple whose proto3 size state is not bounded —
+no finite bound, a bound that does not fit, or a member proto3 cannot represent
+— with the refusal naming the tuple and the sizer's cause. The pipeline skips
+that interface with the same refusal marker, leaving the package's domain types
+and its other interfaces unaffected (`tests/induced_call_refusals.rs`).
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
@@ -245,6 +246,27 @@ consumer side is:
   a generated Rust `match` (driftsys/ridl#486).
 - **One future type per command and per query, `<Name>Call<'a, P>`**, and
   **`NextEvent<'a, P>`** when the interface declares an event.
+- **For a query whose reply is a stream of named elements, `<Name>Call<'a, P>`
+  resolves to `<Name>Stream<'a, P>`.** The method sends the call; the future
+  resolves `Ok(stream)` on the first element or the end, `Err(Timeout)` when the
+  bound passes first, and `Err(e)` when the provider failed the call before any
+  element. The stream holds the first chunk, so the first `poll_next` returns
+  it. `poll_next` is the pull API and needs only `core`; `async fn next` awaits
+  it with `core::future::poll_fn` and is emitted outside `cfg(feature = "std")`.
+  Both register the waker under `Interest::Stream`, and the stream allocates
+  nothing: the buffer for one element is inline. An element that fails its check
+  refuses the stream with `Contract::InvalidValue`, and a chunk that is no
+  well-formed element, or longer than any legal one, refuses it with
+  `Transport::Corrupt`. A refusal aborts the stream, which the provider reads
+  from its next push, and the call is kept until the stream is dropped; a chunk
+  the consumer refuses before any element resolves the call `Ok(stream)`, and
+  the stream yields the error on its first poll. After the end or an error every
+  later `poll_next` is `Ready(None)`. Dropping the stream forgets the call once,
+  which interrupts a stream that has not ended. There is no `blocking` method
+  for a stream. `tests/stream_face.rs` covers each path over `ridl-loopback`.
+  The veh-cluster corpus carries the form in `FaultLog`, and
+  `crates/ridlc/tests/veh_cluster_stream.rs` reads 64 of its elements, 67,328
+  bytes in FlatBuffers, which is more than one call of the interface may carry.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
   section "The blocking module" below.
 - **`prelude`** — the module a consumer glob-imports,

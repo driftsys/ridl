@@ -1122,6 +1122,28 @@ Rulings taken while the port was built. The source is the rustdoc of
   the reply stream, so no payload type is claimed for a reply, and `()`
   implements no `Payload`, so a generic caller cannot decode one from it; its
   `ensure` is always `Ok`, because the checker refuses `result` on a stream.
+- Stage 3 scope (S3-1): no `blocking` method for a stream and no `futures-io` or
+  `futures-core` feature. `async fn next` is emitted outside
+  `cfg(feature = "std")`, because it needs only `core::future::poll_fn`.
+- `Source::poll_next` yields `Poll<Option<Result<Item, Interrupted>>>` (S3-2),
+  not `Poll<Option<Item>>`, so that a provider can interrupt a stream. The
+  `Provider` type is `Source<Item = T>`, and `serve` answers `Err(Interrupted)`
+  with `abort_claim(.., Transport(Interrupted))`.
+- A refused element aborts the stream, and the call is forgotten when the stream
+  value is dropped, so the provider reads the refusal as `Failed(Contract(..))`
+  or `Failed(Transport(Corrupt))`. A chunk the consumer refuses before any
+  element resolves the call `Ok(stream)`, and the stream yields the error on its
+  first poll.
+- A generated `serve` drives one stream per member and settles a second
+  concurrent call `Transport::Busy`. The port gives no signal of a forget except
+  through the next push, so a caller that leaves while the source answers
+  `Pending` keeps the member busy until the next element. A port signal for it
+  is tracked by a follow-up issue.
+- The frozen veh-cluster copy has no cabin face, because a service's inline
+  shape is skipped, so the design's `stream_filter_history` is not in a dump.
+  The first dump change of stage 3 is `FaultLog`. Adding it renumbers the
+  provisional interface numbers of the interfaces that sort after it and changes
+  their catalog hash bytes in the `generated-crate` dump.
 - A call table slot holds `Interest::Stream` wakers for four streams
   (`ridl_rt::correlate::STREAM_WAKERS`), not one per `(slot, StreamNo)` as R-6
   read; a waiter on a fifth stream of one call is handed back and woken at once
