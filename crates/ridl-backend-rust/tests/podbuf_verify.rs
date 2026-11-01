@@ -47,31 +47,19 @@ fn dtc(status: DtcStatus, flags: OpenFlags) -> Dtc {
 }
 
 /// `OK`, or the declaration and the `Rule` of the `Contract` error the
-/// encoder returns for `value`.
-fn encode_rule(value: Dtc) -> String {
-    let mut out = Aligned([0u8; 4096]);
-    let mut writer = Writer::new(&mut out.0);
-    match value.__ridl_podbuf_encode(&mut writer) {
-        Ok(()) => "OK".to_string(),
-        Err(ridl_rt::payload::EncodeError::Contract(violation)) => {
-            format!("{} {:?}", violation.type_name.unwrap_or("-"), violation.rule)
+/// encoder returns for `$value`.
+macro_rules! encode_rule {
+    ($value:expr) => {{
+        let mut out = Aligned([0u8; 4096]);
+        let mut writer = Writer::new(&mut out.0);
+        match $value.__ridl_podbuf_encode(&mut writer) {
+            Ok(()) => "OK".to_string(),
+            Err(ridl_rt::payload::EncodeError::Contract(violation)) => {
+                format!("{} {:?}", violation.type_name.unwrap_or("-"), violation.rule)
+            }
+            Err(other) => format!("{other:?}"),
         }
-        Err(other) => format!("{other:?}"),
-    }
-}
-
-/// `OK`, or the declaration and the `Rule` of the `Contract` error the
-/// encoder returns for `value`.
-fn encode_tuning(value: Tuning) -> String {
-    let mut out = Aligned([0u8; 4096]);
-    let mut writer = Writer::new(&mut out.0);
-    match value.__ridl_podbuf_encode(&mut writer) {
-        Ok(()) => "OK".to_string(),
-        Err(ridl_rt::payload::EncodeError::Contract(violation)) => {
-            format!("{} {:?}", violation.type_name.unwrap_or("-"), violation.rule)
-        }
-        Err(other) => format!("{other:?}"),
-    }
+    }};
 }
 
 fn map(pairs: &[(&str, i64)]) -> Vec<(Name, Weight)> {
@@ -371,10 +359,10 @@ fn the_encoder_refuses_an_open_value_outside_the_inferred_width() {
     let out = run(
         "podbuf_open_width",
         &[
-            r#"encode_rule(dtc(DtcStatus::from(300), OpenFlags::A))"#,
-            r#"encode_rule(dtc(DtcStatus::from(-1), OpenFlags::A))"#,
-            r#"encode_rule(dtc(DtcStatus::Active, OpenFlags::from(0x100)))"#,
-            r#"encode_rule(dtc(DtcStatus::from(255), OpenFlags::from(0xff)))"#,
+            r#"encode_rule!(dtc(DtcStatus::from(300), OpenFlags::A))"#,
+            r#"encode_rule!(dtc(DtcStatus::from(-1), OpenFlags::A))"#,
+            r#"encode_rule!(dtc(DtcStatus::Active, OpenFlags::from(0x100)))"#,
+            r#"encode_rule!(dtc(DtcStatus::from(255), OpenFlags::from(0xff)))"#,
         ],
     );
     assert_eq!(
@@ -397,10 +385,10 @@ fn the_encoder_refuses_an_open_value_past_a_signed_or_a_16_bit_width() {
     let out = run(
         "podbuf_open_signed_width",
         &[
-            r#"encode_tuning(Tuning { trim: Trim::from(-129), mode: Mode::Idle })"#,
-            r#"encode_tuning(Tuning { trim: Trim::from(128), mode: Mode::Idle })"#,
-            r#"encode_tuning(Tuning { trim: Trim::Up, mode: Mode::from(65536) })"#,
-            r#"encode_tuning(Tuning { trim: Trim::Up, mode: Mode::from(-1) })"#,
+            r#"encode_rule!(Tuning { trim: Trim::from(-129), mode: Mode::Idle })"#,
+            r#"encode_rule!(Tuning { trim: Trim::from(128), mode: Mode::Idle })"#,
+            r#"encode_rule!(Tuning { trim: Trim::Up, mode: Mode::from(65536) })"#,
+            r#"encode_rule!(Tuning { trim: Trim::Up, mode: Mode::from(-1) })"#,
             r#"roundtrip!(Tuning, Tuning { trim: Trim::from(-128), mode: Mode::from(65535) })"#,
             r#"roundtrip!(Tuning, Tuning { trim: Trim::from(127), mode: Mode::Idle })"#,
         ],
@@ -416,6 +404,32 @@ fn the_encoder_refuses_an_open_value_past_a_signed_or_a_16_bit_width() {
             "true"
         ]
     );
+}
+
+/// The 64-bit widths: `Big` declares a value above `u32::MAX` and none
+/// below 0, so its podbuf integer is a `u64`, which holds no negative value,
+/// and the encoder refuses one with the range rule rather than write its two's
+/// complement. `Signed64` is an `i64`, which holds every value. An enum set
+/// of width 64 carries bit 63 as the sign bit of its `i64`, so a negative
+/// value is a set with bit 63 and is written and read back.
+#[test]
+fn the_64_bit_widths_of_an_open_enum_and_an_open_enum_set() {
+    let out = run(
+        "podbuf_open_64",
+        &[
+            r#"encode_rule!(Wide64 { big: Big::from(-1), signed: Signed64::Neg, wide: WideFlags::LOW })"#,
+            r#"roundtrip!(Wide64, Wide64 { big: Big::from(i64::MAX), signed: Signed64::Neg, wide: WideFlags::LOW })"#,
+            r#"roundtrip!(Wide64, Wide64 { big: Big::A, signed: Signed64::from(i64::MIN), wide: WideFlags::LOW })"#,
+            r#"roundtrip!(Wide64, Wide64 { big: Big::A, signed: Signed64::Neg, wide: WideFlags::from(i64::MIN | 0b10) })"#,
+            r#"{
+                let bytes = enc!(Wide64 { big: Big::A, signed: Signed64::Neg, wide: WideFlags::from(i64::MIN | 0b10) });
+                let buf = aligned(&bytes);
+                let v = Wide64::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                format!("{:#x}", v.wide().unknown_bits())
+            }"#,
+        ],
+    );
+    assert_eq!(out, ["Big Range", "true", "true", "true", "0x2"]);
 }
 
 /// §7 rule 2: an absent optional whose descriptor bytes are not zero is

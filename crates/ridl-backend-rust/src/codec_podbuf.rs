@@ -24,11 +24,11 @@
 //! 8-aligned zeroed array of `MAX_SIZE` bytes) calls them.
 //!
 //! `verify` checks the rules of ADR-0031 decision 8 in one pass over the
-//! data present: the
-//! preamble, each boolean and flags byte, the value of each strict enum and
-//! strict enum set (an `open` one is left unchecked: every value of its width
-//! is valid, ADR-0031 decision 12), each typl constraint, each descriptor's bounds, stride, terminator and key order,
-//! and each element, entry and arm with the same rules. It is not recursive:
+//! data present: the preamble, each boolean and flags byte, the value of each
+//! strict enum and strict enum set (an `open` one is left unchecked: every
+//! value of its width is valid, ADR-0031 decision 12), each typl constraint,
+//! each descriptor's bounds, stride, terminator and key order, and each
+//! element, entry and arm with the same rules. It is not recursive:
 //! a nested head is checked by that type's own `__ridl_podbuf_verify_at`,
 //! and typl has no recursive shape, so the call depth is bounded by the type
 //! (decision 8, "Verify is a call tree"). Pad bytes, uncovered tail bytes and
@@ -2401,22 +2401,26 @@ impl<'a> Codec<'a> {
     /// an open declaration admits every `i64` through `From<i64>`, so such
     /// a value can reach the encoder from the caller or from an encoding of
     /// a wider integer. Empty for a strict declaration, whose values fit the
-    /// width by construction, and for a 64-bit primitive.
+    /// width by construction, for an `i64`, which holds every value, and for
+    /// an enum set of width 64, whose bit 63 is the sign of its `i64`.
     fn open_width_check(
         &self,
         ty: &v1::Type,
         prim: Prim,
         lang: &TokenStream,
     ) -> Result<TokenStream, GenerateError> {
-        let open = match self.scalar_of(ty)? {
-            ScalarShape::Enum(ed, _) => ed.open,
-            ScalarShape::EnumSet(esd, _) => esd.open,
+        // An `i64` holds every value. A 64-bit enum set holds every value
+        // too: its bit 63 is the sign bit of the `i64`. A `u64` enum holds no
+        // negative value, so it is checked like a narrower width.
+        let checked = match self.scalar_of(ty)? {
+            ScalarShape::Enum(ed, _) => ed.open && prim.0 != "i64",
+            ScalarShape::EnumSet(esd, _) => esd.open && !matches!(prim.0, "i64" | "u64"),
             _ => false,
         };
         let Some(v1::r#type::Kind::Named(reference)) = ty.kind.as_ref() else {
             return Ok(TokenStream::new());
         };
-        if !open || matches!(prim.0, "i64" | "u64") {
+        if !checked {
             return Ok(TokenStream::new());
         }
         let name = reference.reference.as_str();
