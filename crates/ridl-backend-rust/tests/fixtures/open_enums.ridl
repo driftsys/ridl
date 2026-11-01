@@ -51,3 +51,9 @@ struct EmptyMsg {
 struct OpenList {
   statuses : [DtcStatus; 0..4]
 }
+
+// A packed collection of an open enum set, for the element site of the
+// FlatBuffers codec: the elements keep the width of the set.
+struct FlagsList {
+  sets : [Flags; 0..4]
+}

@@ -2061,6 +2061,41 @@ fn root(bytes: &[u8]) -> usize {
     );
 }
 
+/// The element site of the same rule: a vector element of an open enum set
+/// outside the width of the set is refused with `Rule::Range`, as a field is.
+#[test]
+fn an_open_enumset_vector_element_outside_its_wire_width_is_refused() {
+    rustc::run_program(
+        "fb_open_enumset_vector_element_outside_wire_width",
+        &open_program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{EncodeError, Ref, Rule};
+
+fn main() {
+    let mut out = [0u8; 64];
+    for raw in [257i64, -1i64] {
+        let list = FlagsList { sets: vec![Flags::from(1), Flags::from(raw)] };
+        match Ref::<FlagsList, FlatBuffers>::encode(&list, &mut out) {
+            Err(EncodeError::Contract(violation)) => {
+                assert_eq!(violation.rule, Rule::Range);
+                assert_eq!(violation.type_name, Some("Flags"));
+            }
+            Err(other) => panic!("expected a range violation for {raw}, got {other:?}"),
+            Ok(_) => panic!("expected a range violation for {raw}, got a success"),
+        }
+    }
+    // The width's own bound is carried.
+    let full = FlagsList { sets: vec![Flags::from(255)] };
+    let bytes = Ref::<FlagsList, FlatBuffers>::encode(&full, &mut out).expect("encode");
+    let back = Ref::<FlagsList, FlatBuffers>::verify(bytes.bytes()).expect("verify").decode();
+    assert_eq!(i64::from(back.sets[0]), 255);
+}
+"#,
+        ),
+    );
+}
+
 /// An open enum set keeps every bit, but its FlatBuffers field keeps the
 /// width inferred from the highest declared bit (8 bits for `Flags`), so the
 /// encoder refuses a value outside that width with `Rule::Range` rather than
