@@ -60,6 +60,20 @@ fn encode_rule(value: Dtc) -> String {
     }
 }
 
+/// `OK`, or the declaration and the `Rule` of the `Contract` error the
+/// encoder returns for `value`.
+fn encode_tuning(value: Tuning) -> String {
+    let mut out = Aligned([0u8; 4096]);
+    let mut writer = Writer::new(&mut out.0);
+    match value.__ridl_podbuf_encode(&mut writer) {
+        Ok(()) => "OK".to_string(),
+        Err(ridl_rt::payload::EncodeError::Contract(violation)) => {
+            format!("{} {:?}", violation.type_name.unwrap_or("-"), violation.rule)
+        }
+        Err(other) => format!("{other:?}"),
+    }
+}
+
 fn map(pairs: &[(&str, i64)]) -> Vec<(Name, Weight)> {
     pairs
         .iter()
@@ -370,6 +384,36 @@ fn the_encoder_refuses_an_open_value_outside_the_inferred_width() {
             "DtcStatus Range",
             "OpenFlags Range",
             "OK"
+        ]
+    );
+}
+
+/// The width check of an open enum follows the inferred width and its
+/// signedness: `Trim` is one signed byte (-128..127), `Mode` two unsigned
+/// bytes (0..65535). A value one past either end is refused with the range
+/// rule, and each end itself is written and read back.
+#[test]
+fn the_encoder_refuses_an_open_value_past_a_signed_or_a_16_bit_width() {
+    let out = run(
+        "podbuf_open_signed_width",
+        &[
+            r#"encode_tuning(Tuning { trim: Trim::from(-129), mode: Mode::Idle })"#,
+            r#"encode_tuning(Tuning { trim: Trim::from(128), mode: Mode::Idle })"#,
+            r#"encode_tuning(Tuning { trim: Trim::Up, mode: Mode::from(65536) })"#,
+            r#"encode_tuning(Tuning { trim: Trim::Up, mode: Mode::from(-1) })"#,
+            r#"roundtrip!(Tuning, Tuning { trim: Trim::from(-128), mode: Mode::from(65535) })"#,
+            r#"roundtrip!(Tuning, Tuning { trim: Trim::from(127), mode: Mode::Idle })"#,
+        ],
+    );
+    assert_eq!(
+        out,
+        [
+            "Trim Range",
+            "Trim Range",
+            "Mode Range",
+            "Mode Range",
+            "true",
+            "true"
         ]
     );
 }

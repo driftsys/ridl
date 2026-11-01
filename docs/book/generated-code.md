@@ -619,7 +619,10 @@ In the Rust column:
   one nothing refuses it (see [What the crate contains](#what-the-crate-contains)).
   The proto3 codec carries an enum as an int32, so its `encode` refuses an
   `Unknown` whose integer does not fit int32 with the range error; such a
-  value can only come from another encoding.
+  value can only come from another encoding. The podbuf codec carries an
+  enum or enum set at the width its declared values infer, so its `encode`
+  refuses with the range error an `open` value whose integer does not fit
+  that width.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a

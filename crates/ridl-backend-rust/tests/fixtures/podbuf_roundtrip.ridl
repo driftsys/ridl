@@ -155,6 +155,24 @@ struct Dtc {
   flags  : OpenFlags
 }
 
+/// An open enum with a negative declared value: one signed byte, -128..127.
+open enum Trim {
+  DOWN = -1
+  UP   = 1
+}
+
+/// An open enum with a declared value above 255: two bytes, 0..65535.
+open enum Mode {
+  IDLE = 0
+  BOOST = 300
+}
+
+/// A signed one-byte open enum and a two-byte open enum.
+struct Tuning {
+  trim : Trim
+  mode : Mode
+}
+
 /// Two descriptors, at 0..8 and 8..16.
 struct TwoStrings {
   a : string [0..8]

@@ -25,8 +25,9 @@
 //!
 //! `verify` checks the rules of ADR-0031 decision 8 in one pass over the
 //! data present: the
-//! preamble, each boolean, enum, enum set and flags byte, each typl
-//! constraint, each descriptor's bounds, stride, terminator and key order,
+//! preamble, each boolean and flags byte, the value of each strict enum and
+//! strict enum set (an `open` one is left unchecked: every value of its width
+//! is valid, ADR-0031 decision 12), each typl constraint, each descriptor's bounds, stride, terminator and key order,
 //! and each element, entry and arm with the same rules. It is not recursive:
 //! a nested head is checked by that type's own `__ridl_podbuf_verify_at`,
 //! and typl has no recursive shape, so the call depth is bounded by the type
