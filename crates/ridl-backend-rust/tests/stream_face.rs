@@ -1129,6 +1129,10 @@ fn serve_polls_the_source_once_per_poll_of_its_own() {
 /// `Contract::UnknownInteraction`. The loopback's call table holds 16 calls,
 /// fewer than one poll of `serve` takes, so the budget is reached through
 /// these.
+///
+/// It stores no `Interest::Claim` waker: the loopback wakes a `Claim` waker
+/// that registers while a claim is already waiting, which would hide whether
+/// `serve` wakes itself. Every other registration reaches the loopback.
 struct Crowded {
     inner: HandlerHandle,
     extra: Rc<Cell<usize>>,
@@ -1231,7 +1235,20 @@ impl StreamHandler for Crowded {
 
 impl Wakeable for Crowded {
     fn wake_on(&self, what: Interest, waker: &Waker) {
-        self.inner.wake_on(what, waker);
+        if !matches!(what, Interest::Claim(_)) {
+            self.inner.wake_on(what, waker);
+        }
+    }
+}
+
+impl Crowded {
+    /// A handler over `rt` with no added claims.
+    fn quiet(rt: &Loopback) -> Self {
+        Crowded {
+            inner: rt.handler(),
+            extra: Rc::new(Cell::new(0)),
+            taken: Rc::new(Cell::new(0)),
+        }
     }
 }
 
@@ -1479,4 +1496,201 @@ fn an_element_above_the_members_lowered_limit_is_refused_and_the_consumer_reads_
         "the push was refused TooLarge, and the stream stopped as interrupted"
     );
     assert_eq!(counters.dropped.get(), 1, "the source was dropped");
+}
+
+/// Polls `future` once with `waker`.
+fn poll_with<F: Future + Unpin>(future: &mut F, waker: &Waker) -> Poll<F::Output> {
+    let mut cx = Context::from_waker(waker);
+    Pin::new(future).poll(&mut cx)
+}
+
+#[test]
+fn serve_wakes_itself_after_it_starts_a_stream() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    // A handler that stores no `Claim` waker, so the only wake is the one
+    // `serve` makes itself.
+    let mut serve = generated::log::serve(Crowded::quiet(&rt), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending());
+
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    assert!(poll_with(&mut serve, &waker).is_pending());
+    assert_eq!(counters.started.get(), 1, "the poll started the stream");
+    assert_eq!(counters.polls.get(), 0, "and did not poll its source");
+    assert_eq!(
+        wakes.count(),
+        1,
+        "the future woke itself, so that the new source is polled"
+    );
+}
+
+#[test]
+fn serve_wakes_itself_after_the_window_took_an_element() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(Crowded::quiet(&rt), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let _call = sent(&mut client, &mut serve);
+
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    assert!(poll_with(&mut serve, &waker).is_pending());
+    assert_eq!(counters.polls.get(), 1, "the source gave one element");
+    assert_eq!(
+        wakes.count(),
+        1,
+        "the future woke itself: the source stored no waker and may have the next element"
+    );
+}
+
+#[test]
+fn serve_is_woken_when_room_frees_after_its_element_found_the_window_full() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(Crowded::quiet(&rt), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut call = sent(&mut client, &mut serve);
+    // Four elements fill the window.
+    for _ in 0..4 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    // The fifth element is pushed for the first time and finds the window
+    // full; nothing wakes the future yet.
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    assert!(poll_with(&mut serve, &waker).is_pending());
+    assert_eq!(counters.polls.get(), 5);
+    assert_eq!(wakes.count(), 0, "a full window is not a wake");
+    // The call's future pulls the first element, which frees room.
+    let _stream = resolved(poll_once(&mut call), "the first element");
+    assert_eq!(
+        wakes.count(),
+        1,
+        "the pull that freed room woke the waker registered before the push"
+    );
+}
+
+#[test]
+fn serve_is_woken_when_room_frees_while_it_pushes_a_held_element_again() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(Crowded::quiet(&rt), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut call = sent(&mut client, &mut serve);
+    // Four elements fill the window and the fifth is held.
+    for _ in 0..5 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    assert_eq!(counters.polls.get(), 5);
+    // A later poll pushes the held element again, still into a full window.
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    assert!(poll_with(&mut serve, &waker).is_pending());
+    assert_eq!(counters.polls.get(), 5, "the source is not polled");
+    assert_eq!(wakes.count(), 0);
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    assert_eq!(
+        wakes.count(),
+        1,
+        "the waker registered before the second push is the one woken"
+    );
+    // The first `poll_next` hands out the kept chunk and pulls nothing; the
+    // second pulls from the port and frees room again.
+    assert!(next_once(&mut stream).is_ready());
+    assert_eq!(wakes.count(), 1);
+    assert!(next_once(&mut stream).is_ready());
+    assert_eq!(wakes.count(), 1, "already woken; the waker was taken");
+}
+
+#[test]
+fn a_call_dropped_while_its_element_is_held_is_settled_and_its_source_dropped() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    // Every round fills the window, holds the fifth element, and drops the
+    // call. `serve`'s next push of the held element reads the forget; it must
+    // settle the claim, which gives the caller's call slot back, and drop
+    // the source, which frees the member. One round more than the call table
+    // holds shows both.
+    for round in 1..=Loopback::SLOTS + 1 {
+        let call = sent(&mut client, &mut serve);
+        for _ in 0..5 {
+            assert!(poll_once(&mut serve).is_pending());
+        }
+        assert_eq!(counters.polls.get(), round * 5, "the fifth element is held");
+        drop(call);
+        assert!(poll_once(&mut serve).is_pending());
+        assert_eq!(counters.dropped.get(), round, "serve dropped the source");
+        assert_eq!(counters.polls.get(), round * 5, "and did not poll it again");
+    }
+    let mut call = sent(&mut client, &mut serve);
+    assert!(poll_once(&mut serve).is_pending());
+    let mut stream = resolved(poll_once(&mut call), "the first element of a fresh call");
+    assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
+}
+
+#[test]
+fn a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_next_element() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        pending_before_each: 3,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+
+    let call = sent(&mut client, &mut serve);
+    drop(call);
+    // The port tells `serve` nothing of the forget until a push: the member
+    // stays held while its source answers `Pending`.
+    let mut refused = sent(&mut client, &mut serve);
+    assert_eq!(counters.polls.get(), 1, "the source answered Pending");
+    assert_eq!(
+        poll_once(&mut refused).map(|outcome| outcome.map(|_| ())),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Busy
+        )))),
+        "a new call of the member is settled Busy"
+    );
+    drop(refused);
+    assert_eq!(counters.dropped.get(), 0, "the source is kept");
+    // Two more `Pending`, then the element, whose push reads the forget.
+    for _ in 0..3 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    assert_eq!(counters.polls.get(), 4);
+    assert_eq!(
+        counters.dropped.get(),
+        1,
+        "the push failed and serve dropped the source"
+    );
+    // The member is free again.
+    let mut call = sent(&mut client, &mut serve);
+    for _ in 0..4 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut stream = resolved(poll_once(&mut call), "the first element");
+    assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
+    assert_eq!(counters.started.get(), 2);
 }
