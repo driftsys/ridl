@@ -266,14 +266,20 @@ fn stream_bounds() -> TokenStream {
 /// member-derived name can be: every one of those ends with a call suffix.
 fn stream_state() -> TokenStream {
     // `First` holds the length of the chunk the call's future pulled, kept in
-    // the stream's buffer for the first `poll_next`; `Open` pulls; `Done` is
-    // after the end, a failure or a refusal, once the call is forgotten.
-    // Private: no doc.
+    // the stream's buffer for the first `poll_next`; `Open` pulls; `Refused`
+    // holds the refusal the call's future made of a first chunk that is no
+    // legal element, which the first `poll_next` yields; `Stopped` is after
+    // a refusal, with the call kept until the stream is dropped, so that the
+    // provider's next push reads the refusal and not an interruption; `Done`
+    // is after the end or the provider's failure, once the call is
+    // forgotten. Private: no doc.
     quote! {
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum StreamState {
             First(usize),
             Open,
+            Refused(::ridl_rt::error::CallError),
+            Stopped,
             Done,
         }
     }
@@ -290,8 +296,12 @@ fn stream_state() -> TokenStream {
 /// before it reaches the port.
 ///
 /// The first chunk is pulled into a stack buffer and moved into the stream
-/// value, so it is not lost; no second pull is made for it. The future has
-/// no `sent` helper: the blocking module carries nothing for a stream.
+/// value, so it is not lost; no second pull is made for it. A first chunk
+/// longer than the element's buffer is refused at once, and the refusal is
+/// handed to the stream value, which yields it on its first poll and keeps
+/// the call until it is dropped, as it does for a refusal of its own. The
+/// future has no `sent` helper: the blocking module carries nothing for a
+/// stream.
 fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
@@ -310,7 +320,9 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
          `SendError::Busy` when no slot was free within the call's bound; to \
          `Transport::Timeout` when the call was sent and its bound passed \
          before the first element or the end; and to the outcome the provider \
-         settled when it failed the call before any element. Each poll \
+         settled when it failed the call before any element. A first chunk \
+         that is no legal element resolves it to the stream, which yields \
+         the refusal, `Transport::Corrupt`, as its one error. Each poll \
          registers its interest, reads the port once, and returns. Dropping \
          the future while it waits calls `Caller::forget` on the call, which \
          interrupts the stream; a future that resolved to an error has \
@@ -323,9 +335,10 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
     let polled_after = format!("`{future}` polled after completion");
     // The phase enum is the one `call_future` describes, with `Done` also the
     // phase after the stream was handed out. A chunk longer than the
-    // element's buffer is no legal element: the stream is refused with
-    // `Transport::Corrupt`, so `ReadError::Short` never reaches the
-    // application.
+    // element's buffer is no legal element: the stream is aborted with
+    // `Transport::Corrupt` and handed out in `Refused`, so `ReadError::Short`
+    // never reaches the application and the call is kept for the provider to
+    // read the refusal.
     quote! {
         #[doc = #doc]
         #[must_use = #must_use]
@@ -456,10 +469,7 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
                                         ::ridl_rt::port::REPLY_STREAM,
                                         error,
                                     );
-                                    port.forget(correlation.0);
-                                    return ::core::task::Poll::Ready(Err(
-                                        ::ridl_rt::error::ClientError::Call(error),
-                                    ));
+                                    StreamState::Refused(error)
                                 }
                                 Err(error) => {
                                     port.forget(correlation.0);
@@ -518,20 +528,24 @@ fn stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
          that fails its check refuses the stream with `Contract::InvalidValue`, \
          and a chunk that is no well-formed element, or longer than any legal \
          one, refuses it with `Transport::Corrupt`: the stream is aborted with \
-         that outcome, the call is forgotten, and the refusal is the one error \
-         the stream yields; the provider's next push fails. A stream the \
-         provider stopped yields its outcome, \
-         `Transport::Interrupted` for a stop on purpose, as its one error. \
-         After the end or an error the call is forgotten and every later \
-         `poll_next` is `Ready(None)`. Dropping the stream before that \
-         forgets the call, which interrupts the stream (ridl §12).",
+         that outcome, which the provider reads from its next push, and the \
+         refusal is the one error the stream yields; the call is kept until \
+         the stream is dropped. A stream the provider stopped yields its \
+         outcome, `Transport::Interrupted` for a stop on purpose, as its one \
+         error, and the call is forgotten at once, as it is after the end. \
+         After the end or an error every later `poll_next` is `Ready(None)`. \
+         Dropping the stream forgets the call, once, unless the end or the \
+         provider's failure already did; before the end that interrupts the \
+         stream (ridl §12).",
         member.declared
     );
     let must_use = "dropping the stream before its end interrupts it";
     // `finish` forgets the call once and moves to `Done`; `refuse` is the
-    // receiver's refusal of ridl §12.4, an abort with the refusal's outcome
-    // before the finish, whose answer is not read: the stream is done
-    // whatever the port says. Both are private: no doc.
+    // receiver's refusal of ridl §12.4, an abort with the refusal's outcome,
+    // whose answer is not read, then `Stopped`: the call is kept, so that the
+    // provider's next push reads the refusal and not the interruption a
+    // forget would make of it, and `Drop` forgets it. Both are private: no
+    // doc.
     quote! {
         #[doc = #doc]
         #[must_use = #must_use]
@@ -554,7 +568,8 @@ fn stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
             /// `Ready(Some(Err(error)))` once and then `Ready(None)` when
             /// the stream stopped or was refused, and `Pending` while no
             /// chunk is waiting, after the waker of `cx` was registered
-            /// under `Interest::Stream`.
+            /// under `Interest::Stream`. A refused stream keeps its call
+            /// until this value is dropped.
             pub fn poll_next(
                 &mut self,
                 cx: &mut ::core::task::Context<'_>,
@@ -564,7 +579,15 @@ fn stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
                 >,
             > {
                 let len = match self.state {
-                    StreamState::Done => return ::core::task::Poll::Ready(None),
+                    StreamState::Done | StreamState::Stopped => {
+                        return ::core::task::Poll::Ready(None);
+                    }
+                    StreamState::Refused(error) => {
+                        self.state = StreamState::Stopped;
+                        return ::core::task::Poll::Ready(Some(Err(
+                            ::ridl_rt::error::ClientError::Call(error),
+                        )));
+                    }
                     StreamState::First(len) => {
                         self.state = StreamState::Open;
                         len
@@ -652,14 +675,15 @@ fn stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
                     ::ridl_rt::port::REPLY_STREAM,
                     error,
                 );
-                self.finish();
+                self.state = StreamState::Stopped;
                 ::ridl_rt::error::ClientError::Call(error)
             }
         }
 
         // A `Drop` impl must repeat its type's bounds exactly: the struct's
         // one predicate, for its buffer field. It forgets a call whose stream
-        // is not done, which interrupts the stream.
+        // is not done: before the end that interrupts the stream, and after a
+        // refusal it releases the call the refusal kept.
         impl<P: #bounds> ::core::ops::Drop for #stream<'_, P>
         where
             #element: ::ridl_rt::payload::Payload<P::Encoding>,

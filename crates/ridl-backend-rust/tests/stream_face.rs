@@ -363,16 +363,85 @@ fn an_element_that_breaks_its_range_refuses_the_stream() {
         "the element fails its check and the stream is refused with it"
     );
     assert_eq!(next_once(&mut stream), Poll::Ready(None));
-    // The refusal aborts the stream with the error, then forgets the call at
-    // once, and a provider's push after the caller's forget answers
-    // `Interrupted` whatever stopped the stream first (`StreamHandler`'s
-    // forget rules): the provider learns that the stream is over, not why.
+    // The refusal aborts the stream with the error and keeps the call until
+    // the stream is dropped: a forget would turn the provider's answer into
+    // `Interrupted` (`StreamHandler`'s forget rules), and the provider is to
+    // read why the stream stopped.
+    assert_eq!(
+        provider.push(&reading(1, false)),
+        Err(PushError::Failed(invalid)),
+        "the provider reads the refusal from its next push"
+    );
+    drop(stream);
     assert_eq!(
         provider.push(&reading(1, false)),
         Err(PushError::Failed(CallError::Transport(
             Transport::Interrupted
         ))),
-        "the provider's next push fails"
+        "once the stream is dropped the call is forgotten"
+    );
+}
+
+/// A chunk that fits no legal element: 256 bytes, which the loopback takes
+/// (the member's limit is far above) and the element's buffer cannot hold.
+const OVERSIZED: [u8; 256] = [0; 256];
+const CORRUPT: CallError = CallError::Transport(Transport::Corrupt);
+
+#[test]
+fn a_first_chunk_longer_than_any_element_refuses_the_stream_as_corrupt() {
+    let mut rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let mut client = generated::log::Client::new(&mut rt);
+    assert!(
+        ELEMENT_MAX < OVERSIZED.len(),
+        "the chunk cannot fit the element buffer"
+    );
+
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut call).is_pending());
+    let claim = provider.claim();
+    assert_eq!(
+        provider.handler.push_claim(claim, REPLY_STREAM, &OVERSIZED),
+        Ok(OVERSIZED.len())
+    );
+    // `ReadError::Short` does not reach the application: the future refuses
+    // the chunk and hands the refusal to the stream.
+    let mut stream = resolved(poll_once(&mut call), "the refused first chunk");
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(Some(Err(ClientError::Call(CORRUPT))))
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    assert_eq!(
+        provider.push(&reading(1, false)),
+        Err(PushError::Failed(CORRUPT)),
+        "the provider reads the refusal from its next push"
+    );
+}
+
+#[test]
+fn a_later_chunk_longer_than_any_element_refuses_the_stream_as_corrupt() {
+    let mut rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let mut client = generated::log::Client::new(&mut rt);
+    let first = reading(1, false);
+
+    let mut stream = started(&mut client, &mut provider, &first);
+    let claim = provider.claim();
+    assert_eq!(
+        provider.handler.push_claim(claim, REPLY_STREAM, &OVERSIZED),
+        Ok(OVERSIZED.len())
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(Some(Ok(first))));
+    assert_eq!(
+        next_once(&mut stream),
+        Poll::Ready(Some(Err(ClientError::Call(CORRUPT)))),
+        "the chunk that does not fit is refused, not reported as a short read"
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    assert_eq!(
+        provider.push(&reading(2, false)),
+        Err(PushError::Failed(CORRUPT))
     );
 }
 
@@ -633,11 +702,48 @@ fn a_refused_element_aborts_the_stream_then_forgets_once() {
     );
     assert_eq!(
         doubles::take(&log),
-        vec![Op::Abort(c, REPLY_STREAM, invalid), Op::Forget(c)],
-        "the refusal aborts the stream with the error, then forgets the call"
+        vec![Op::Abort(c, REPLY_STREAM, invalid)],
+        "the refusal aborts the stream with the error and keeps the call"
+    );
+    assert_eq!(next_once(&mut stream), Poll::Ready(None));
+    assert!(
+        doubles::take(&log).is_empty(),
+        "a stopped stream touches the port no more"
     );
     drop(stream);
-    assert!(doubles::take(&log).is_empty(), "nothing more on drop");
+    assert_eq!(
+        doubles::take(&log),
+        vec![Op::Forget(c)],
+        "the drop forgets the call the refusal kept, once"
+    );
+    drop(client);
+    assert!(doubles::take(&log).is_empty(), "nothing else forgets it");
+}
+
+#[test]
+fn a_waiting_call_is_woken_by_the_providers_first_push_once() {
+    let rt = loopback();
+    let mut provider = Provider::new(&rt);
+    let ports = RecordingPorts::new(&rt);
+    let mut client = generated::log::Client::new(ports);
+    let wakes = CountWakes::new();
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(Pin::new(&mut call).poll(&mut cx).is_pending());
+    assert_eq!(wakes.count(), 0);
+    assert_eq!(provider.push(&reading(1, false)), Ok(element_len()));
+    assert_eq!(
+        wakes.count(),
+        1,
+        "the first push wakes the waker the call registered, once"
+    );
+    let mut stream = resolved(Pin::new(&mut call).poll(&mut cx), "the first element");
+    assert_eq!(
+        stream.poll_next(&mut cx),
+        Poll::Ready(Some(Ok(reading(1, false))))
+    );
 }
 
 #[test]

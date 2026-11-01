@@ -1236,9 +1236,11 @@ pub mod log {
     enum StreamState {
         First(usize),
         Open,
+        Refused(::ridl_rt::error::CallError),
+        Stopped,
         Done,
     }
-    ///The future of query `history`, returned by `Client::history`. It resolves to `HistoryStream`, the reply stream, once its first element or its end arrived; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; to `Transport::Timeout` when the call was sent and its bound passed before the first element or the end; and to the outcome the provider settled when it failed the call before any element. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits calls `Caller::forget` on the call, which interrupts the stream; a future that resolved to an error has already done so, and one that resolved to the stream handed the call to it. Polling it again after it resolved panics.
+    ///The future of query `history`, returned by `Client::history`. It resolves to `HistoryStream`, the reply stream, once its first element or its end arrived; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; to `Transport::Timeout` when the call was sent and its bound passed before the first element or the end; and to the outcome the provider settled when it failed the call before any element. A first chunk that is no legal element resolves it to the stream, which yields the refusal, `Transport::Corrupt`, as its one error. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits calls `Caller::forget` on the call, which interrupts the stream; a future that resolved to an error has already done so, and one that resolved to the stream handed the call to it. Polling it again after it resolved panics.
     #[must_use = "the query was sent, or waits for a slot; its stream is taken only when the future is polled"]
     pub struct HistoryCall<
         'a,
@@ -1388,10 +1390,7 @@ pub mod log {
                                 );
                                 let _ = port
                                     .abort(correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
-                                port.forget(correlation.0);
-                                return ::core::task::Poll::Ready(
-                                    Err(::ridl_rt::error::ClientError::Call(error)),
-                                );
+                                StreamState::Refused(error)
                             }
                             Err(error) => {
                                 port.forget(correlation.0);
@@ -1431,7 +1430,7 @@ pub mod log {
             }
         }
     }
-    ///The reply stream of query `history`, which `HistoryCall` resolves to. `poll_next` is the pull API, the whole face on a target without `std`: it registers the stream's interest, pulls one chunk, and verifies and decodes it as one element; `next` awaits it. An element that fails its check refuses the stream with `Contract::InvalidValue`, and a chunk that is no well-formed element, or longer than any legal one, refuses it with `Transport::Corrupt`: the stream is aborted with that outcome, the call is forgotten, and the refusal is the one error the stream yields; the provider's next push fails. A stream the provider stopped yields its outcome, `Transport::Interrupted` for a stop on purpose, as its one error. After the end or an error the call is forgotten and every later `poll_next` is `Ready(None)`. Dropping the stream before that forgets the call, which interrupts the stream (ridl §12).
+    ///The reply stream of query `history`, which `HistoryCall` resolves to. `poll_next` is the pull API, the whole face on a target without `std`: it registers the stream's interest, pulls one chunk, and verifies and decodes it as one element; `next` awaits it. An element that fails its check refuses the stream with `Contract::InvalidValue`, and a chunk that is no well-formed element, or longer than any legal one, refuses it with `Transport::Corrupt`: the stream is aborted with that outcome, which the provider reads from its next push, and the refusal is the one error the stream yields; the call is kept until the stream is dropped. A stream the provider stopped yields its outcome, `Transport::Interrupted` for a stop on purpose, as its one error, and the call is forgotten at once, as it is after the end. After the end or an error every later `poll_next` is `Ready(None)`. Dropping the stream forgets the call, once, unless the end or the provider's failure already did; before the end that interrupts the stream (ridl §12).
     #[must_use = "dropping the stream before its end interrupts it"]
     pub struct HistoryStream<
         'a,
@@ -1462,7 +1461,8 @@ pub mod log {
         /// `Ready(Some(Err(error)))` once and then `Ready(None)` when
         /// the stream stopped or was refused, and `Pending` while no
         /// chunk is waiting, after the waker of `cx` was registered
-        /// under `Interest::Stream`.
+        /// under `Interest::Stream`. A refused stream keeps its call
+        /// until this value is dropped.
         pub fn poll_next(
             &mut self,
             cx: &mut ::core::task::Context<'_>,
@@ -1472,7 +1472,15 @@ pub mod log {
             >,
         > {
             let len = match self.state {
-                StreamState::Done => return ::core::task::Poll::Ready(None),
+                StreamState::Done | StreamState::Stopped => {
+                    return ::core::task::Poll::Ready(None);
+                }
+                StreamState::Refused(error) => {
+                    self.state = StreamState::Stopped;
+                    return ::core::task::Poll::Ready(
+                        Some(Err(::ridl_rt::error::ClientError::Call(error))),
+                    );
+                }
                 StreamState::First(len) => {
                     self.state = StreamState::Open;
                     len
@@ -1582,7 +1590,7 @@ pub mod log {
             let _ = self
                 .port
                 .abort(self.correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
-            self.finish();
+            self.state = StreamState::Stopped;
             ::ridl_rt::error::ClientError::Call(error)
         }
     }
