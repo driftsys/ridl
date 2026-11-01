@@ -743,7 +743,7 @@ a field is appended.
 
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
-      compatible change as compatible. Three changes are judged by encoding, all
+      compatible change as compatible. Two changes are judged by encoding, all
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
       otherwise: the append that grows an inline struct, the category

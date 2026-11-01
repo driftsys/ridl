@@ -4748,12 +4748,14 @@ mod enum_open {
             assert_eq!(lines[0].path, "veh.cluster/Mode");
             assert_eq!(lines[0].verdict, Verdict::Compatible);
             assert_eq!(report.verdict, Verdict::Compatible, "{label}");
+            assert_eq!(report.changes.len(), 1, "{label}: {}", render_text(&report));
 
             let report = diff_refs_with(&[&build(3, true)], &[&build(3, false)], &[], &[]);
             let lines = of_category(&report, Category::EnumClosed);
             assert_eq!(lines.len(), 1, "{label}: {}", render_text(&report));
             assert_eq!(lines[0].verdict, Verdict::Breaking);
             assert_eq!(report.verdict, Verdict::Breaking, "{label}");
+            assert_eq!(report.changes.len(), 1, "{label}: {}", render_text(&report));
         }
     }
 
@@ -4805,7 +4807,7 @@ mod enum_open {
 
     #[test]
     fn the_strict_append_explanation_names_the_open_keyword() {
-        assert!(explain(Category::StrictEnumAppend).contains("open"));
+        assert!(explain(Category::StrictEnumAppend).contains("open enum"));
         assert!(explain(Category::StrictEnumAppend).contains("breaking"));
     }
 
