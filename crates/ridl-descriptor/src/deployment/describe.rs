@@ -1,7 +1,8 @@
 //! The JSON view of a deployment descriptor, in the conventions of
 //! [`crate::describe`]: the schema's field names as keys, enums by member
 //! name, a hash as an array of bytes, an absent field as `null`. The
-//! serialized object prints its keys in alphabetical order.
+//! serialized object prints its keys in alphabetical order, as
+//! [`crate::describe`] does.
 
 use serde_json::{Value, json};
 

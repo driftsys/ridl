@@ -1,5 +1,7 @@
 //! The lowering of one deployment of a system into a deployment descriptor.
 
+#![cfg(feature = "std")]
+
 use std::collections::BTreeMap;
 
 use ridl_descriptor::deployment::{DeploymentLowerError, FILE_IDENTIFIER, lower, to_json, verify};
@@ -305,6 +307,31 @@ fn a_catalog_whose_hash_differs_from_the_region_is_an_error() {
     let wrong = BTreeMap::from([("veh".to_owned(), catalog_bytes(&[1; 32]))]);
     let error = lower(&system(), "Prod", &[], &wrong).unwrap_err();
     assert!(matches!(error, DeploymentLowerError::HashMismatch { catalog } if catalog == "veh"));
+}
+
+#[test]
+fn a_catalog_that_fails_the_verifier_is_an_error() {
+    let invalid = BTreeMap::from([("veh".to_owned(), vec![0u8; 16])]);
+    let error = lower(&system(), "Prod", &[], &invalid).unwrap_err();
+    assert!(
+        matches!(error, DeploymentLowerError::InvalidCatalog { catalog, .. } if catalog == "veh")
+    );
+}
+
+#[test]
+fn an_unspecified_crossing_is_an_internal_error() {
+    let mut system = system();
+    system.deployments[0].links[0].crossing = v2::Crossing::Unspecified as i32;
+    let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+    assert!(matches!(error, DeploymentLowerError::Internal(text) if text.contains("crossing")));
+}
+
+#[test]
+fn a_surface_link_missing_from_the_list_is_an_internal_error() {
+    let mut system = system();
+    system.deployments[0].links.clear();
+    let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+    assert!(matches!(error, DeploymentLowerError::Internal(text) if text.contains("surface")));
 }
 
 #[test]
