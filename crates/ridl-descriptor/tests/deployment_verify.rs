@@ -109,6 +109,30 @@ fn a_list_nested_one_level_past_the_limit_is_refused() {
     assert!(matches!(verify(&bytes), Err(VerifyError::TooDeep)));
 }
 
+#[test]
+fn a_value_with_both_scalar_and_list_is_refused() {
+    let both = AttributeValue {
+        scalar: Some("x".to_owned()),
+        list: Some(vec![]),
+    };
+    assert!(matches!(
+        verify(&with_value(both)),
+        Err(VerifyError::MalformedAttributeValue)
+    ));
+}
+
+#[test]
+fn a_value_with_neither_scalar_nor_list_is_refused() {
+    let neither = AttributeValue {
+        scalar: None,
+        list: None,
+    };
+    assert!(matches!(
+        verify(&with_value(neither)),
+        Err(VerifyError::MalformedAttributeValue)
+    ));
+}
+
 /// A buffer whose lists share child tables: two levels of `fan` references to
 /// one table each. The buffer is a few kilobytes, and an unbounded walk makes
 /// `fan * fan` visits.

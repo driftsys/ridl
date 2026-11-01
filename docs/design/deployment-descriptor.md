@@ -151,10 +151,12 @@ verifies each embedded catalog with the catalog verifier, then compares the hash
 stored beside it with the hash inside it (`CatalogHashMismatch`). Attribute
 lists are verified to a depth of 16 (`MAX_ATTRIBUTE_DEPTH`), and the verifier
 visits at most `bytes.len() / 4` attribute values, counting every visit of a
-table that several lists share. It has its own
-`ridl_descriptor::deployment::VerifyError` (`TooShort`, `WrongIdentifier`,
-`WrongVersion`, `Invalid`, `EmbeddedCatalog`, `CatalogHashMismatch`, `TooDeep`,
-`TooManyAttributeValues`); the catalog `VerifyError` is unchanged.
+table that several lists share. It refuses an `AttributeValue` that sets both
+`scalar` and `list`, or neither (`MalformedAttributeValue`); a flag has no value
+table at all. It has its own `ridl_descriptor::deployment::VerifyError`
+(`TooShort`, `WrongIdentifier`, `WrongVersion`, `Invalid`, `EmbeddedCatalog`,
+`CatalogHashMismatch`, `TooDeep`, `TooManyAttributeValues`,
+`MalformedAttributeValue`); the catalog `VerifyError` is unchanged.
 
 `ridl describe <file>` reads either descriptor and chooses by the file
 identifier. For a deployment descriptor it verifies the file and every embedded
@@ -163,8 +165,14 @@ catalog, including the case of a stored hash that differs from the catalog's
 own. The lowering checks the same hash when it writes the file.
 
 `DeploymentLowerError` has these variants: `UnknownDeployment`,
-`MissingCatalog`, `HashMismatch`, `InvalidCatalog` and `Internal` (a value in
-the system IR that the schema cannot express).
+`MissingCatalog`, `HashMismatch`, `InvalidCatalog`, `AttributeTooDeep` and
+`Internal` (a value in the system IR that the schema cannot express, or a buffer
+that the lowering wrote and the verifier then refused). The lowering counts the
+depth of a backend key's value as the verifier does: the value is at depth 1 and
+each list wrapper adds 1, so a scalar inside 15 lists is the deepest value
+accepted. A deeper value draws `AttributeTooDeep`, which names the namespace and
+the key, at every site that carries backend keys. The lowering verifies the
+buffer it has written before it returns it.
 
 ## Evolution
 

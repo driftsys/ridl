@@ -378,3 +378,59 @@ fn to_json_names_every_field() {
     assert_eq!(value["links"][0]["crossing"], "DifferentMachine");
     assert_eq!(value["surface"][0]["direction"], "ExternalOffers");
 }
+
+/// A value whose scalar sits inside `wrappers` lists. The verifier counts the
+/// value of an attribute as depth 1 and each list wrapper as one more, so 15
+/// wrappers put the scalar at depth 16, the deepest value it accepts.
+fn wrapped(wrappers: usize) -> v2::AttributeValue {
+    let mut value = scalar("leaf");
+    for _ in 0..wrappers {
+        value = list(vec![value]);
+    }
+    value
+}
+
+#[test]
+fn a_placement_attribute_at_the_deepest_accepted_depth_lowers_and_verifies() {
+    let mut system = system();
+    system.deployments[0].placements[0].attributes =
+        vec![attribute("deep", "key", Some(wrapped(15)))];
+    let bytes = lower(&system, "Prod", &[], &catalogs()).expect("lowers");
+    verify(&bytes).expect("verifies");
+}
+
+#[test]
+fn a_placement_attribute_one_wrapper_deeper_is_an_error() {
+    let mut system = system();
+    system.deployments[0].placements[0].attributes =
+        vec![attribute("deep", "key", Some(wrapped(16)))];
+    let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+    assert!(matches!(
+        error,
+        DeploymentLowerError::AttributeTooDeep { ns, key } if ns == "deep" && key == "key"
+    ));
+}
+
+#[test]
+fn a_machine_attribute_one_wrapper_deeper_is_an_error() {
+    let mut system = system();
+    system.deployments[0].machines[0].attributes =
+        vec![attribute("deep", "mkey", Some(wrapped(16)))];
+    let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+    assert!(matches!(
+        error,
+        DeploymentLowerError::AttributeTooDeep { ns, key } if ns == "deep" && key == "mkey"
+    ));
+}
+
+#[test]
+fn a_value_that_is_neither_scalar_nor_list_is_an_internal_error() {
+    let mut system = system();
+    system.deployments[0].attributes = vec![attribute(
+        "dep",
+        "empty",
+        Some(v2::AttributeValue { kind: None }),
+    )];
+    let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+    assert!(matches!(error, DeploymentLowerError::Internal(text) if text.contains("dep.empty")));
+}

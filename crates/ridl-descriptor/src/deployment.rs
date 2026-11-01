@@ -72,6 +72,9 @@ pub enum VerifyError {
     /// The attribute values, counted with every repeated visit of a shared
     /// table, outnumber one for every 4 bytes of the buffer.
     TooManyAttributeValues,
+    /// An `AttributeValue` table has both `scalar` and `list` set, or neither.
+    /// A flag has no value table at all.
+    MalformedAttributeValue,
 }
 
 impl From<planus::Error> for VerifyError {
@@ -108,6 +111,10 @@ impl fmt::Display for VerifyError {
             Self::TooDeep => write!(
                 f,
                 "attribute values nest deeper than {MAX_ATTRIBUTE_DEPTH} levels"
+            ),
+            Self::MalformedAttributeValue => write!(
+                f,
+                "an attribute value sets both or neither of `scalar` and `list`"
             ),
             Self::TooManyAttributeValues => {
                 write!(f, "the attribute values outnumber the size of the buffer")
@@ -302,8 +309,12 @@ fn walk_value(
         .0
         .checked_sub(1)
         .ok_or(VerifyError::TooManyAttributeValues)?;
-    value.scalar()?;
-    if let Some(list) = value.list()? {
+    let scalar = value.scalar()?;
+    let list = value.list()?;
+    if scalar.is_some() == list.is_some() {
+        return Err(VerifyError::MalformedAttributeValue);
+    }
+    if let Some(list) = list {
         for item in list {
             walk_value(item?, depth + 1, budget)?;
         }

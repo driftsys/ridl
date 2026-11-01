@@ -14,8 +14,8 @@ use ridl_ir::v2;
 
 use super::{
     Attribute, AttributeValue, Component, Crossing, DeployedInterface, Deployment, EmbeddedCatalog,
-    Endpoint, Instance, InterfaceKey, Link, Machine, Route, SCHEMA_VERSION, Surface,
-    SurfaceDirection, finish,
+    Endpoint, Instance, InterfaceKey, Link, MAX_ATTRIBUTE_DEPTH, Machine, Route, SCHEMA_VERSION,
+    Surface, SurfaceDirection, finish, verify,
 };
 
 /// Why a deployment cannot be lowered.
@@ -34,6 +34,9 @@ pub enum DeploymentLowerError {
     /// The hash of the catalog descriptor given for this region is not the
     /// region's hash. Both come from one build, so this is an internal error.
     HashMismatch { catalog: String },
+    /// A backend key's value nests lists deeper than the verifier accepts
+    /// ([`MAX_ATTRIBUTE_DEPTH`]). `ns` and `key` name the attribute.
+    AttributeTooDeep { ns: String, key: String },
     /// The system IR holds a value the deployment schema cannot express. The
     /// text names what was found.
     Internal(String),
@@ -53,6 +56,11 @@ impl fmt::Display for DeploymentLowerError {
             Self::HashMismatch { catalog } => write!(
                 f,
                 "the catalog descriptor of `{catalog}` does not carry the hash of its region"
+            ),
+            Self::AttributeTooDeep { ns, key } => write!(
+                f,
+                "the value of the backend key `{ns}.{key}` nests lists deeper than \
+                 {MAX_ATTRIBUTE_DEPTH} levels"
             ),
             Self::Internal(what) => write!(f, "internal error: {what}"),
         }
@@ -125,23 +133,25 @@ pub fn lower(
         .instances
         .iter()
         .zip(&declared.placements)
-        .map(|(instance, placement)| Instance {
-            component: instance.component.clone(),
-            instance: instance.instance.clone(),
-            machine: instance.machine.clone(),
-            external: instance.external,
-            attributes: attributes(&placement.attributes),
-            offers: instance
-                .offers
-                .iter()
-                .map(|key| InterfaceKey {
-                    catalog: key.catalog.clone(),
-                    number: key.number,
-                })
-                .collect(),
-            maps: instance.maps.clone(),
+        .map(|(instance, placement)| {
+            Ok(Instance {
+                component: instance.component.clone(),
+                instance: instance.instance.clone(),
+                machine: instance.machine.clone(),
+                external: instance.external,
+                attributes: attributes(&placement.attributes)?,
+                offers: instance
+                    .offers
+                    .iter()
+                    .map(|key| InterfaceKey {
+                        catalog: key.catalog.clone(),
+                        number: key.number,
+                    })
+                    .collect(),
+                maps: instance.maps.clone(),
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, DeploymentLowerError>>()?;
 
     let descriptor = Deployment {
         version: SCHEMA_VERSION,
@@ -153,25 +163,29 @@ pub fn lower(
         machines: declared
             .machines
             .iter()
-            .map(|machine| Machine {
-                name: machine.name.clone(),
-                external: machine.external,
-                labels: machine.labels.clone(),
-                attributes: attributes(&machine.attributes),
+            .map(|machine| {
+                Ok(Machine {
+                    name: machine.name.clone(),
+                    external: machine.external,
+                    labels: machine.labels.clone(),
+                    attributes: attributes(&machine.attributes)?,
+                })
             })
-            .collect(),
+            .collect::<Result<_, DeploymentLowerError>>()?,
         components: system
             .components
             .iter()
-            .map(|component| Component {
-                name: component.qualified_name(),
-                implicit: component.implicit,
-                external: component.external,
-                instances: component.instances.clone(),
-                labels: component.labels.clone(),
-                attributes: attributes(&component.attributes),
+            .map(|component| {
+                Ok(Component {
+                    name: component.qualified_name(),
+                    implicit: component.implicit,
+                    external: component.external,
+                    instances: component.instances.clone(),
+                    labels: component.labels.clone(),
+                    attributes: attributes(&component.attributes)?,
+                })
             })
-            .collect(),
+            .collect::<Result<_, DeploymentLowerError>>()?,
         instances,
         links: declared
             .links
@@ -196,10 +210,14 @@ pub fn lower(
             .iter()
             .map(|surface| lower_surface(declared, surface))
             .collect::<Result<_, _>>()?,
-        system_attributes: attributes(&system.attributes),
-        attributes: attributes(&declared.attributes),
+        system_attributes: attributes(&system.attributes)?,
+        attributes: attributes(&declared.attributes)?,
     };
-    Ok(finish(&descriptor))
+    let bytes = finish(&descriptor);
+    // The reader refuses what the verifier refuses, so a buffer that fails
+    // here would be written and then be unreadable.
+    verify(&bytes).map_err(|error| DeploymentLowerError::Internal(error.to_string()))?;
+    Ok(bytes)
 }
 
 fn endpoint(endpoint: &v2::Endpoint) -> Endpoint {
@@ -255,7 +273,7 @@ fn lower_link(system: &v2::System, link: &v2::Link) -> Result<Link, DeploymentLo
         consumer: Box::new(endpoint(&consumer)),
         producer: Box::new(endpoint(&producer)),
         crossing,
-        attributes: line.map_or_else(Vec::new, |line| attributes(&line.attributes)),
+        attributes: line.map_or_else(|| Ok(Vec::new()), |line| attributes(&line.attributes))?,
     })
 }
 
@@ -299,33 +317,55 @@ fn lower_surface(
     Ok(Surface { link, direction })
 }
 
-fn attributes(attributes: &[v2::Attribute]) -> Vec<Attribute> {
+fn attributes(attributes: &[v2::Attribute]) -> Result<Vec<Attribute>, DeploymentLowerError> {
     attributes
         .iter()
-        .map(|attribute| Attribute {
-            ns: attribute.namespace.clone(),
-            key: attribute.key.clone(),
-            value: attribute
+        .map(|attribute| {
+            let value = attribute
                 .value
                 .as_ref()
-                .map(|value| Box::new(attribute_value(value))),
+                .map(|value| attribute_value(value, 1, attribute).map(Box::new))
+                .transpose()?;
+            Ok(Attribute {
+                ns: attribute.namespace.clone(),
+                key: attribute.key.clone(),
+                value,
+            })
         })
         .collect()
 }
 
-fn attribute_value(value: &v2::AttributeValue) -> AttributeValue {
+/// `depth` counts the way the verifier does: the value of an attribute is at
+/// depth 1 and each list wrapper adds 1, so a scalar inside 15 lists is at
+/// depth 16, the deepest the verifier accepts.
+fn attribute_value(
+    value: &v2::AttributeValue,
+    depth: usize,
+    owner: &v2::Attribute,
+) -> Result<AttributeValue, DeploymentLowerError> {
+    if depth > MAX_ATTRIBUTE_DEPTH {
+        return Err(DeploymentLowerError::AttributeTooDeep {
+            ns: owner.namespace.clone(),
+            key: owner.key.clone(),
+        });
+    }
     match &value.kind {
-        Some(v2::attribute_value::Kind::Scalar(text)) => AttributeValue {
+        Some(v2::attribute_value::Kind::Scalar(text)) => Ok(AttributeValue {
             scalar: Some(text.clone()),
             list: None,
-        },
-        Some(v2::attribute_value::Kind::List(list)) => AttributeValue {
+        }),
+        Some(v2::attribute_value::Kind::List(list)) => Ok(AttributeValue {
             scalar: None,
-            list: Some(list.items.iter().map(attribute_value).collect()),
-        },
-        None => AttributeValue {
-            scalar: None,
-            list: None,
-        },
+            list: Some(
+                list.items
+                    .iter()
+                    .map(|item| attribute_value(item, depth + 1, owner))
+                    .collect::<Result<_, _>>()?,
+            ),
+        }),
+        None => Err(DeploymentLowerError::Internal(format!(
+            "the value of the backend key `{}.{}` is neither a scalar nor a list",
+            owner.namespace, owner.key
+        ))),
     }
 }
