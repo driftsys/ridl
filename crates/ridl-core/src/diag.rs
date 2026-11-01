@@ -911,6 +911,17 @@ diag_codes! {
         RIDL_157 = "RIDL-157", Error,
             "payload above the default ceiling of its kind or with no finite bound";
 
+        /// An `open` enum or `open` enum set in a package of a workspace
+        /// whose manifest enables `podbuf` in a `[backend.<name>]` table.
+        /// The podbuf codec and the C header keep every enum strict until
+        /// driftsys/ridl#1168 lands, so an open declaration has no podbuf
+        /// encoding yet. Error; as an error code it has no name and no
+        /// level. Emitted by `ridlc` when a `[backend.<name>]` table enables
+        /// `podbuf`, on the declaration. The message names the declaration
+        /// and the issue.
+        RIDL_158 = "RIDL-158", Error,
+            "open enum or enum set in a package that podbuf encodes";
+
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
         RIDL_201 = "RIDL-201", Error,

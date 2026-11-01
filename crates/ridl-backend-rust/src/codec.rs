@@ -290,16 +290,22 @@ enum Repr {
     Float,
     /// A named scalar over one of the three above.
     Named(NamedScalar),
-    /// A generated `#[repr(i64)]` enum. `first` is the variant a discharged
-    /// read decodes to; `zero` is the variant whose value is 0, which is what
-    /// an absent field reads as, when the enum declares one.
+    /// A generated enum. For a strict one, `#[repr(i64)]` with `TryFrom<i64>`:
+    /// `first` is the variant a discharged read decodes to, and `zero` is the
+    /// variant whose value is 0, which is what an absent field reads as, when
+    /// the enum declares one. An `open` one converts through `From<i64>`,
+    /// which is total: `verify` checks no value, and an absent field reads
+    /// as `From(0)`.
     Enum {
         name: String,
         first: String,
         zero: Option<String>,
+        open: bool,
     },
-    /// A generated enum set: a `#[repr(transparent)]` newtype over `i64`.
-    EnumSet { name: String },
+    /// A generated enum set: a `#[repr(transparent)]` newtype over `i64`,
+    /// which converts through `TryFrom<i64>` when strict and through
+    /// `From<i64>`, keeping every bit, when `open`.
+    EnumSet { name: String, open: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -372,12 +378,20 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#zero) }
             }
-            Repr::Enum { name, first, zero } => {
+            Repr::Enum {
+                name, open: true, ..
+            } => {
+                let ty = type_path(name);
+                quote! { <#ty as ::core::convert::From<::core::primitive::i64>>::from(0i64) }
+            }
+            Repr::Enum {
+                name, first, zero, ..
+            } => {
                 let ty = type_path(name);
                 let variant = ident(zero.as_ref().unwrap_or(first));
                 quote! { #ty::#variant }
             }
-            Repr::EnumSet { name } => {
+            Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 quote! { #ty(0i64) }
             }
@@ -434,6 +448,15 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#widened) }
             }
+            Repr::Enum {
+                name, open: true, ..
+            }
+            | Repr::EnumSet { name, open: true } => {
+                let ty = type_path(name);
+                quote! {
+                    <#ty as ::core::convert::From<::core::primitive::i64>>::from(#widened)
+                }
+            }
             Repr::Enum { name, first, .. } => {
                 let ty = type_path(name);
                 let variant = ident(first);
@@ -442,7 +465,7 @@ impl Scalar {
                         .unwrap_or(#ty::#variant)
                 }
             }
-            Repr::EnumSet { name } => {
+            Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 quote! {
                     <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#widened)
@@ -1275,13 +1298,15 @@ impl<'a> Codec<'a> {
                     // Every typl enum is emitted at one underlying width,
                     // `long`, which is what the projection charges it.
                     prim: Prim::I64,
-                    zero_legal: zero.is_some(),
+                    // An open enum admits every integer, 0 included.
+                    zero_legal: zero.is_some() || def.open,
                     repr: Repr::Enum {
                         name: owner.clone(),
                         // The variant `emit_enum` declared, which is the
                         // pinned `pascal_case` spelling.
                         first: pascal_of(first.name.as_ref()),
                         zero,
+                        open: def.open,
                     },
                 }))
             }
@@ -1292,6 +1317,7 @@ impl<'a> Codec<'a> {
                 })?,
                 repr: Repr::EnumSet {
                     name: owner.clone(),
+                    open: def.open,
                 },
                 zero_legal: true,
             })),
@@ -2022,7 +2048,14 @@ impl<'a> Codec<'a> {
             Wire::Scalar(scalar) => {
                 let read = scalar.read(&buf, at);
                 match &scalar.repr {
-                    Repr::Enum { name, .. } | Repr::EnumSet { name } => {
+                    // An open enum or enum set admits every value, so the
+                    // read is checked for its structure alone.
+                    Repr::Enum { open: true, .. } | Repr::EnumSet { open: true, .. } => {
+                        quote! {
+                            #read.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        }
+                    }
+                    Repr::Enum { name, .. } | Repr::EnumSet { name, .. } => {
                         let ty = type_path(name);
                         let widened = scalar.widen(quote! { __raw });
                         quote! {

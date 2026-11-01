@@ -54,7 +54,25 @@ The package module holds:
   scalar each become a Rust type. A constrained type is built with `new`, which
   checks the typl constraints and returns an error when the value breaks one;
   `new_unchecked` skips the check and is for a value already known to satisfy
-  them. `get` returns the value of a named scalar.
+  them. `get` returns the value of a named scalar. An enum is a `#[repr(i64)]`
+  enum with one variant per declared value, built from an integer with
+  `TryFrom<i64>`, which returns an error for a value the declaration does not
+  name; an enum set is a newtype over `i64` with one constant per declared
+  bit, built with `TryFrom<i64>`, which returns an error for a value that
+  carries an undeclared bit. An `open` enum has, after its declared variants,
+  a last variant `Unknown(Unknown<Name>)`, where `Unknown<Name>` is a
+  generated type that holds an undeclared value as the integer the wire
+  carried and returns it from `raw`; the enum is `#[non_exhaustive]`, so a
+  `match` outside the generated crate keeps a wildcard arm, and it is built
+  with `From<i64>`, which returns the declared variant for every declared
+  value and `Unknown` for every other integer. An `open` enum set is built
+  with `From<i64>`, which keeps every bit, and `unknown_bits` returns the bits
+  that no declared bit names. In both forms `From<Name> for i64` returns the
+  integer, an `Unknown` value's included, so a value read from the wire is
+  written back unchanged. The doc of an open declaration says so. The podbuf
+  encoding does not carry an open declaration yet: `ridl build` reports
+  RIDL-158 on one when a `[backend.<name>]` table names `podbuf`
+  ([driftsys/ridl#1168](https://github.com/driftsys/ridl/issues/1168)).
 - **The codecs** of each payload type, one per encoding the manifest names
   under `[backend.rust] encodings`: `flatbuffers`, `proto3`, or both. Each
   codec is `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list
@@ -572,6 +590,13 @@ In the Rust column:
   anonymous string and byte lengths and variable-length collection counts.
   Exact array counts are enforced by their Rust type. Other field constraints
   and map-key uniqueness are checked by `verify`.
+- An enum's and an enum set's set of declared values is not a rule of the
+  table, but it is checked the same way: for a strict declaration `TryFrom`
+  and `verify` refuse a value the declaration does not name, and for an `open`
+  one nothing refuses it (see [What the crate contains](#what-the-crate-contains)).
+  The proto3 codec carries an enum as an int32, so its `encode` refuses an
+  `Unknown` whose integer does not fit int32 with the range error; such a
+  value can only come from another encoding.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a

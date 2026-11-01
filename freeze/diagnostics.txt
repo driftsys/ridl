@@ -68,6 +68,7 @@ RIDL-154 error
 RIDL-155 error
 RIDL-156 info lint=podbuf-padding-order default=info
 RIDL-157 error
+RIDL-158 error
 RIDL-201 error
 RIDL-202 error
 RIDL-301 error

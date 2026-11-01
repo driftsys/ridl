@@ -182,6 +182,10 @@ pub(crate) fn lower_package(
     // duplicate lowers once (first-wins).
     let mut lowered_services: HashSet<String> = HashSet::new();
     let mut composite_starts = Vec::new();
+    // Every winning declaration's name and site, and the names of the open
+    // enums among them, for the RIDL-149 check over the type namespace below.
+    let mut declaration_sites = Vec::new();
+    let mut open_enums: HashSet<String> = HashSet::new();
     for (index, file) in files.iter().enumerate() {
         checker.current_file = index;
         let source = source_file(db, *file);
@@ -191,10 +195,14 @@ pub(crate) fn lower_package(
             if !checker.is_winner(*file, &definition) {
                 continue;
             }
-            if matches!(&definition, Definition::Struct(_) | Definition::Union(_))
-                && let Some(name) = declared_name(&definition)
-            {
-                composite_starts.push((name, index, name_range(&definition)));
+            if let Some(name) = declared_name(&definition) {
+                if matches!(&definition, Definition::Struct(_) | Definition::Union(_)) {
+                    composite_starts.push((name.clone(), index, name_range(&definition)));
+                }
+                if matches!(&definition, Definition::Enum(decl) if decl.is_open()) {
+                    open_enums.insert(name.clone());
+                }
+                declaration_sites.push((name, index, name_range(&definition)));
             }
             if let Some(decl) = checker.lower_definition(&definition) {
                 decls.push(decl);
@@ -241,6 +249,7 @@ pub(crate) fn lower_package(
     }
 
     checker.check_recursion(&composite_starts);
+    checker.check_unknown_type_names(&declaration_sites, &open_enums);
 
     // The ridl lint pass: four advisory codes over the interaction
     // declarations, emitted as ordinary diagnostics once lowering has settled.
@@ -3338,6 +3347,20 @@ impl Checker<'_> {
             // it is not in RIDL-149's namespace.
             if !duplicate_name {
                 self.check_enum_value_projection(&name, name_range, &mut pascal_values);
+                // RIDL-149 against the variant the generated code of an open
+                // enum reserves: `Unknown`, which holds an undeclared value.
+                if decl.is_open() && pascal_case(&name) == "Unknown" {
+                    self.error(
+                        DiagCode::RIDL_149,
+                        name_range,
+                        format!(
+                            "enum value `{name}` becomes `Unknown` under the pascal_case name \
+                             transform, which is the variant the generated code of an open enum \
+                             reserves for an undeclared value, so a target whose namespace is \
+                             PascalCase would carry one identifier twice"
+                        ),
+                    );
+                }
             }
             let doc_info = docs::scan(&value_node.doc_comments());
             let (links, see) = self.doc_links(&doc_info);
@@ -3498,6 +3521,18 @@ impl Checker<'_> {
             } else {
                 highest = highest.max(bit.value as u32);
             }
+        }
+        // RIDL-149 against the method the generated code of an open enum set
+        // carries beside its bit constants: `unknown_bits`.
+        if decl.is_open() && bits.iter().any(|bit| bit.name == "unknown_bits") {
+            self.error(
+                DiagCode::RIDL_149,
+                name_range(decl),
+                "enumset bit `unknown_bits` has the name of the accessor the generated code of \
+                 an open enum set reserves for the bits outside the declared ones, so a target \
+                 would carry one identifier twice"
+                    .to_owned(),
+            );
         }
         v2::EnumSetDef {
             backing_enum,
@@ -4289,6 +4324,39 @@ impl Checker<'_> {
     /// `snake_case` collides here too, and one key covers both targets
     /// (ADR-0016, 2026-09-26 amendment). First wins, so the secondary label
     /// points at the value that keeps the projected name.
+    /// RIDL-149 over the type namespace of the package: the generated code of
+    /// an open enum `E` carries the type `UnknownE`, which holds an undeclared
+    /// value, so a declaration of that name in the same package would give a
+    /// target one identifier twice. A declaration name is used as declared
+    /// (ADR-0016), so the collision is exact. `sites` are the winning
+    /// declarations with their file index and name range; `open_enums` are
+    /// the names of the open enums among them.
+    fn check_unknown_type_names(
+        &mut self,
+        sites: &[(String, usize, TextRange)],
+        open_enums: &HashSet<String>,
+    ) {
+        for (name, file, range) in sites {
+            let Some(enum_name) = name.strip_prefix("Unknown") else {
+                continue;
+            };
+            if !open_enums.contains(enum_name) {
+                continue;
+            }
+            self.current_file = *file;
+            self.error(
+                DiagCode::RIDL_149,
+                *range,
+                format!(
+                    "declaration `{name}` has the name of the type the generated code of open \
+                     enum `{enum_name}` reserves for an undeclared value (`Unknown` before the \
+                     enum's name), so a target whose namespace is PascalCase would carry one \
+                     identifier twice"
+                ),
+            );
+        }
+    }
+
     fn check_enum_value_projection(
         &mut self,
         name: &str,
@@ -8043,6 +8111,92 @@ mod tests {
     fn ridl_149_enum_values_that_collide_only_under_a_merged_transform_are_accepted() {
         let checked = check_source("app", &enum_source("A_B", "AB"));
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// An open enum's generated code reserves the variant `Unknown` for an
+    /// undeclared value, so a value whose `pascal_case` spelling is `Unknown`
+    /// collides with it. A strict enum emits no such variant.
+    #[test]
+    fn ridl_149_a_value_spelled_unknown_collides_in_an_open_enum() {
+        for value in ["UNKNOWN", "Unknown", "unknown"] {
+            let checked = check_source("p", &format!("package p\nopen enum E {{ {value} = 0 }}\n"));
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-149"],
+                "{value}: {:?}",
+                checked.diagnostics
+            );
+            let message = &checked.diagnostics[0].message;
+            assert!(message.contains("Unknown"), "{message}");
+            assert!(message.contains("open enum"), "{message}");
+        }
+        let strict = check_source("p", "package p\nenum E { UNKNOWN = 0 }\n");
+        assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
+    }
+
+    /// An open enum `E` generates the type `UnknownE`, so a declaration of
+    /// that name in the same package collides with it, whatever its kind.
+    /// Beside a strict enum the name is free.
+    #[test]
+    fn ridl_149_a_declaration_named_unknown_enum_collides_beside_an_open_enum() {
+        for other in [
+            "struct UnknownE {}",
+            "type UnknownE : integer [0..1]",
+            "const UnknownE : integer = 1",
+        ] {
+            let checked = check_source(
+                "p",
+                &format!("package p\nopen enum E {{ A = 0 }}\n{other}\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-149"],
+                "{other}: {:?}",
+                checked.diagnostics
+            );
+            let message = &checked.diagnostics[0].message;
+            assert!(message.contains("UnknownE"), "{message}");
+            assert!(message.contains("open enum `E`"), "{message}");
+        }
+        // The order of the two declarations does not matter.
+        let reversed = check_source(
+            "p",
+            "package p\nstruct UnknownE {}\nopen enum E { A = 0 }\n",
+        );
+        assert_eq!(
+            codes(&reversed),
+            vec!["RIDL-149"],
+            "{:?}",
+            reversed.diagnostics
+        );
+        let strict = check_source("p", "package p\nenum E { A = 0 }\nstruct UnknownE {}\n");
+        assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
+        // An open enum set generates no `Unknown` type.
+        let set = check_source(
+            "p",
+            "package p\nopen enumset E { A = 0 }\nstruct UnknownE {}\n",
+        );
+        assert!(codes(&set).is_empty(), "got: {:?}", set.diagnostics);
+    }
+
+    /// An open enum set's generated code carries `unknown_bits` beside the
+    /// bit constants, so a bit of that exact name collides with it. A bit
+    /// name is used as declared, so only the exact spelling collides, and a
+    /// strict enum set has no such accessor.
+    #[test]
+    fn ridl_149_a_bit_named_unknown_bits_collides_in_an_open_enum_set() {
+        let checked = check_source("p", "package p\nopen enumset F { unknown_bits = 0 }\n");
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("unknown_bits"));
+        let other = check_source("p", "package p\nopen enumset F { UNKNOWN_BITS = 0 }\n");
+        assert!(codes(&other).is_empty(), "got: {:?}", other.diagnostics);
+        let strict = check_source("p", "package p\nenumset F { unknown_bits = 0 }\n");
+        assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
     }
 
     /// A `reserved` value emits no variant, so it is not in the namespace.

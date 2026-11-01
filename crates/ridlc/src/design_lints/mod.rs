@@ -45,15 +45,16 @@ pub fn check_design_lints(
     })
 }
 
-/// RIDL-153, RIDL-154 and RIDL-155 over one source set: the build-time errors
-/// of the podbuf encoding, raised only when `encodings` names `podbuf`.
+/// RIDL-153, RIDL-154, RIDL-155 and RIDL-158 over one source set: the
+/// build-time errors of the podbuf encoding, raised only when `encodings`
+/// names `podbuf`.
 /// `encodings` are the names that every `[backend.<name>]` table of the
 /// workspace manifest enables, as one set. `std_ir` is the lowered
 /// `ridl.std`, which a package's references resolve against besides
 /// `checked`. `blocked` holds, per entry of `packages`, whether the package or
 /// one it depends on has an error; a blocked package is read as a target and
 /// never examined. The checks read types, not interactions, so they run for a
-/// workspace with no interface. All three codes are errors, so lint levels do
+/// workspace with no interface. All four codes are errors, so lint levels do
 /// not apply.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_podbuf(

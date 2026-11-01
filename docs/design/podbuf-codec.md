@@ -37,7 +37,7 @@ the view in place
 | The `Sizes<Podbuf>` table and the aligned buffers                        | `crates/ridl-backend-rust/src/descriptors.rs`  |
 | The claim table entries for the generated names                          | `crates/ridl-backend-rust/src/claims.rs`       |
 | The C header emitter                                                     | `crates/ridl-backend-podbuf/src/lib.rs`        |
-| RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`      |
+| RIDL-153 to RIDL-155 and RIDL-158, the build-time errors                 | `crates/ridlc/src/design_lints/podbuf.rs`      |
 | RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
 | `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
 | `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |

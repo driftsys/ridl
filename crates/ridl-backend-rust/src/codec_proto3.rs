@@ -281,17 +281,24 @@ enum Repr {
     Float,
     /// A named scalar over one of the three above.
     Named(NamedScalar),
-    /// A generated `#[repr(i64)]` enum, written as a proto3 enum: an `int32`
-    /// varint. `first` is the variant a discharged read decodes to; `zero`
-    /// is the variant whose value is 0, which an absent field reads as, when
-    /// the enum declares one.
+    /// A generated enum, written as a proto3 enum: an `int32` varint. For a
+    /// strict one, `#[repr(i64)]` with `TryFrom<i64>`: `first` is the
+    /// variant a discharged read decodes to, and `zero` is the variant whose
+    /// value is 0, which an absent field reads as, when the enum declares
+    /// one. An `open` one converts through `From<i64>`, which is total:
+    /// `verify` checks no value, an absent field reads as `From(0)`, and
+    /// `encode` refuses an `Unknown` whose integer does not fit int32 with
+    /// `Rule::Range`.
     Enum {
         name: String,
         first: String,
         zero: Option<String>,
+        open: bool,
     },
-    /// A generated enum set, written as the scalar of its width.
-    EnumSet { name: String },
+    /// A generated enum set, written as the scalar of its width, which
+    /// converts through `TryFrom<i64>` when strict and through `From<i64>`,
+    /// keeping every bit, when `open`.
+    EnumSet { name: String, open: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -319,6 +326,35 @@ impl Scalar {
             Repr::Enum { .. } | Repr::EnumSet { .. } => {
                 quote! { ::core::primitive::i64::from(#expr) }
             }
+        }
+    }
+
+    /// The `encode` statement that refuses the domain value `__s` of an open
+    /// enum whose integer does not fit the int32 proto3 carries an enum as,
+    /// with the contract error for an out-of-range value, naming the enum.
+    /// Such a value cannot come from the proto3 wire (`narrow_i32` refuses it
+    /// as structure); it comes from another encoding, through a transcode or
+    /// through `From<i64>`. Empty for every other scalar.
+    fn encode_check(&self) -> TokenStream {
+        match &self.repr {
+            Repr::Enum {
+                name, open: true, ..
+            } => {
+                let type_name = name.rsplit('.').next().unwrap_or(name);
+                quote! {
+                    if ::core::primitive::i32::try_from(::core::primitive::i64::from(__s)).is_err() {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::EncodeError::Contract(
+                                ::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some(#type_name),
+                                    rule: ::ridl_rt::payload::Rule::Range,
+                                },
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => quote! {},
         }
     }
 
@@ -496,6 +532,15 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#language) }
             }
+            Repr::Enum {
+                name, open: true, ..
+            }
+            | Repr::EnumSet { name, open: true } => {
+                let ty = type_path(name);
+                quote! {
+                    <#ty as ::core::convert::From<::core::primitive::i64>>::from(#language)
+                }
+            }
             Repr::Enum { name, first, .. } => {
                 let ty = type_path(name);
                 let variant = ident(first);
@@ -504,7 +549,7 @@ impl Scalar {
                         .unwrap_or(#ty::#variant)
                 }
             }
-            Repr::EnumSet { name } => {
+            Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 quote! {
                     <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(#language)
@@ -527,12 +572,20 @@ impl Scalar {
                 let ctor = format_ident!("{}", named.ctor);
                 quote! { #ty::#ctor(#zero) }
             }
-            Repr::Enum { name, first, zero } => {
+            Repr::Enum {
+                name, open: true, ..
+            } => {
+                let ty = type_path(name);
+                quote! { <#ty as ::core::convert::From<::core::primitive::i64>>::from(0i64) }
+            }
+            Repr::Enum {
+                name, first, zero, ..
+            } => {
                 let ty = type_path(name);
                 let variant = ident(zero.as_ref().unwrap_or(first));
                 quote! { #ty::#variant }
             }
-            Repr::EnumSet { name } => {
+            Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 quote! { #ty(0i64) }
             }
@@ -543,7 +596,10 @@ impl Scalar {
     /// `__v`, or `None` when the type checks nothing.
     fn check(&self, owner: &str) -> Option<TokenStream> {
         match &self.repr {
-            Repr::Enum { name, .. } | Repr::EnumSet { name } => {
+            // An open enum or enum set admits every value the wire can
+            // carry: an enum's int32 is read by `narrow_i32` as structure.
+            Repr::Enum { open: true, .. } | Repr::EnumSet { open: true, .. } => None,
+            Repr::Enum { name, .. } | Repr::EnumSet { name, .. } => {
                 let ty = type_path(name);
                 Some(quote! {
                     <#ty as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__v)
@@ -1493,11 +1549,13 @@ impl<'a> Codec<'a> {
                     .map(|zero| pascal_of(zero.name.as_ref()));
                 Ok(Wire::Scalar(Scalar {
                     scalar: pb::Scalar::Int64,
-                    zero_legal: zero.is_some(),
+                    // An open enum admits every integer, 0 included.
+                    zero_legal: zero.is_some() || def.open,
                     repr: Repr::Enum {
                         name: owner,
                         first: pascal_of(first.name.as_ref()),
                         zero,
+                        open: def.open,
                     },
                     constraint: None,
                 }))
@@ -1511,7 +1569,10 @@ impl<'a> Codec<'a> {
                     })?;
                 Ok(Wire::Scalar(Scalar {
                     scalar,
-                    repr: Repr::EnumSet { name: owner },
+                    repr: Repr::EnumSet {
+                        name: owner,
+                        open: def.open,
+                    },
                     constraint: None,
                     zero_legal: true,
                 }))
@@ -1748,8 +1809,10 @@ impl<'a> Codec<'a> {
                 let action = match pass {
                     Pass::Len => quote! { __n = __n.saturating_add(#tag_len + #value_len); },
                     Pass::Encode => {
+                        let check = scalar.encode_check();
                         let write = scalar.write();
                         quote! {
+                            #check
                             writer.tag(#number, #wire_type);
                             #write
                         }
@@ -1890,6 +1953,7 @@ impl<'a> Codec<'a> {
         let body = match element {
             Wire::Scalar(scalar) => {
                 let raw = scalar.raw(scalar.language(quote! { __s }));
+                let check = scalar.encode_check();
                 let write = scalar.write();
                 let run_len = match scalar.fixed_width() {
                     Some(width) => {
@@ -1919,6 +1983,7 @@ impl<'a> Codec<'a> {
                         writer.varint(__l as ::core::primitive::u64);
                         for __e in __c.iter() {
                             let __s = *__e;
+                            #check
                             let __r = #raw;
                             #write
                         }

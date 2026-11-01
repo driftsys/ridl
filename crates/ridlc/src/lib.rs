@@ -2601,8 +2601,9 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
-    // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
-    // workspace with no interface, whenever a backend table enables podbuf.
+    // RIDL-153 to RIDL-155 and RIDL-158 read types, not interactions, so they
+    // run for a workspace with no interface, whenever a backend table enables
+    // podbuf.
     // They lower each package to the codegen model, so they skip a package
     // that has an error, or that depends on one, and still examine the clean
     // packages of the workspace. The errors that count are the ones that stop
