@@ -13,7 +13,9 @@
 //! `Package::shapes()`, a `Struct.slots[j]` from `StructDef.members[j]`, an
 //! `Interface.slots[j]` from `Interface.interactions[j]`.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use super::clauses;
 use super::docs::{doc_links, model_rules};
@@ -384,8 +386,10 @@ struct Lowering<'a> {
     /// reached. A position inside a declaration of another package takes its
     /// entry and its wire name from these, so that the name is the one the
     /// declaring package gives the tuple, whatever order this package reaches
-    /// that package's declarations in (driftsys/ridl#1150).
-    declaring_claims: HashMap<String, Vec<Claim>>,
+    /// that package's declarations in (driftsys/ridl#1150). One memo is shared
+    /// with every lowering this one starts for a declaring package, so that
+    /// one call of [`lower`] lowers each package at most once.
+    declaring_claims: Memo,
     /// The entry a position inside a declaration of another package was
     /// lifted at, by the declaring package and the index of its claim.
     foreign_tuple_at: HashMap<(String, u32), usize>,
@@ -403,8 +407,24 @@ struct Claim {
     index: u32,
 }
 
+/// The claims of every declaring package lowered so far, shared by the
+/// lowering of a package and the lowerings it starts for the packages it
+/// reaches, which in turn share it with theirs.
+type Memo = Rc<RefCell<HashMap<String, Rc<Vec<Claim>>>>>;
+
+#[cfg(test)]
+thread_local! {
+    /// How many lowerings of a declaring package this thread has started:
+    /// one per package reached, when the memo is shared as intended.
+    pub(super) static DECLARING_LOWERINGS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 impl<'a> Lowering<'a> {
     fn new(scope: Scope<'a>) -> Self {
+        Self::with_memo(scope, Memo::default())
+    }
+
+    fn with_memo(scope: Scope<'a>, declaring_claims: Memo) -> Self {
         Self {
             scope,
             deps: scope.packages().collect(),
@@ -415,7 +435,7 @@ impl<'a> Lowering<'a> {
             foreign_at: HashMap::new(),
             tuples: Vec::new(),
             tuple_at: HashMap::new(),
-            declaring_claims: HashMap::new(),
+            declaring_claims,
             foreign_tuple_at: HashMap::new(),
             collisions: Vec::new(),
         }
@@ -872,18 +892,27 @@ impl<'a> Lowering<'a> {
     }
 
     /// The claims of `declaring`: the named tuples of its own lowering, over
-    /// the rest of the scope, in `Model.tuples` order. Lowered once, the first
-    /// time a position inside one of its declarations is reached. Imports are
-    /// acyclic (ADR-0002), so lowering the declaring package ends.
-    fn declaring_claims(&mut self, declaring: &'a v2::Package) -> &[Claim] {
-        if !self.declaring_claims.contains_key(&declaring.name) {
-            let others = self.scope.projection_others(declaring);
-            let mut lowering = Lowering::new(Scope {
+    /// the rest of the scope, in `Model.tuples` order. Lowered once per memo,
+    /// the first time a position inside one of its declarations is reached
+    /// by this lowering or by one that shares the memo. Imports are acyclic
+    /// (ADR-0002), so lowering the declaring package ends.
+    fn declaring_claims(&mut self, declaring: &'a v2::Package) -> Rc<Vec<Claim>> {
+        if let Some(claims) = self.declaring_claims.borrow().get(&declaring.name) {
+            return Rc::clone(claims);
+        }
+        #[cfg(test)]
+        DECLARING_LOWERINGS.with(|count| count.set(count.get() + 1));
+        let others = self.scope.projection_others(declaring);
+        let mut lowering = Lowering::with_memo(
+            Scope {
                 package: declaring,
                 others: &others,
-            });
-            lowering.declarations();
-            let claims = lowering
+            },
+            Rc::clone(&self.declaring_claims),
+        );
+        lowering.declarations();
+        let claims = Rc::new(
+            lowering
                 .tuples
                 .iter()
                 .enumerate()
@@ -895,10 +924,12 @@ impl<'a> Lowering<'a> {
                     wire: entry.wire.clone(),
                     index: index as u32,
                 })
-                .collect();
-            self.declaring_claims.insert(declaring.name.clone(), claims);
-        }
-        &self.declaring_claims[&declaring.name]
+                .collect::<Vec<Claim>>(),
+        );
+        self.declaring_claims
+            .borrow_mut()
+            .insert(declaring.name.clone(), Rc::clone(&claims));
+        claims
     }
 
     /// A new entry for the tuple at `at`, under the wire name `wire`.

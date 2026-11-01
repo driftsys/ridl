@@ -4044,9 +4044,18 @@ fn one_member_struct(name: &str, member_name: &str, ty: v2::FieldType) -> v2::De
 /// from one shape, so `a` gives them one entry under the wire name of the
 /// position it reaches first, `ABCField1`.
 fn shared_entry_package() -> v2::Package {
+    shared_entry_package_in("a", "A")
+}
+
+/// [`shared_entry_package`] as the package `name`, with the pair named from
+/// `prefix`: `<prefix> { bC : (dP : (x, y)) }` and
+/// `<prefix>B { cD : (q, p : (x, y)) }`, which induce one Rust name,
+/// `<prefix>BCDP`, and the shared wire name `<prefix>BCField1`.
+fn shared_entry_package_in(name: &str, prefix: &str) -> v2::Package {
     let mut a = package_a();
+    a.name = name.to_string();
     a.decls.push(one_member_struct(
-        "A",
+        prefix,
         "bC",
         tuple(vec![v2::TupleField {
             name: "dP".to_string(),
@@ -4054,7 +4063,7 @@ fn shared_entry_package() -> v2::Package {
         }]),
     ));
     a.decls.push(one_member_struct(
-        "AB",
+        &format!("{prefix}B"),
         "cD",
         tuple(vec![
             v2::TupleField {
@@ -4068,6 +4077,28 @@ fn shared_entry_package() -> v2::Package {
         ]),
     ));
     a
+}
+
+/// A package `name` with one public struct `B` whose members are `fields`,
+/// each a `(name, type)` pair, in order.
+fn struct_package(name: &str, fields: &[(&str, v2::FieldType)]) -> v2::Package {
+    v2::Package {
+        name: name.to_string(),
+        decls: vec![v2::Decl {
+            name: "B".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: fields
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (name, ty))| member(index as u32 + 1, name, ty.clone()))
+                    .collect(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
 }
 
 /// The wire names of the heads of the tuples of another package that `model`
@@ -4099,29 +4130,11 @@ fn a_foreign_shared_entry_keeps_the_declaring_wire_name_in_either_order() {
         ("declaring order", ["a", "ab"]),
         ("reverse order", ["ab", "a"]),
     ] {
-        let b = v2::Package {
-            name: "b".to_string(),
-            decls: vec![v2::Decl {
-                name: "B".to_string(),
-                visibility: v2::Visibility::Public as i32,
-                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
-                    members: members
-                        .iter()
-                        .enumerate()
-                        .map(|(index, name)| {
-                            member(
-                                index as u32 + 1,
-                                name,
-                                named(&format!("a.{}", name.to_uppercase())),
-                            )
-                        })
-                        .collect(),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
+        let fields: Vec<(&str, v2::FieldType)> = members
+            .iter()
+            .map(|name| (*name, named(&format!("a.{}", name.to_uppercase()))))
+            .collect();
+        let b = struct_package("b", &fields);
         let model = lower(&b, &[&a]);
         assert_eq!(
             nested_tuple_wires(&model),
@@ -4129,6 +4142,90 @@ fn a_foreign_shared_entry_keeps_the_declaring_wire_name_in_either_order() {
             "{order}"
         );
     }
+}
+
+/// The claims are read per declaring package: an importer that reaches the
+/// shared pairs of two packages, `a` and `b`, each in the reverse order,
+/// names each pair by its own package's wire name.
+#[test]
+fn an_importer_reads_the_claims_of_each_declaring_package() {
+    let a = shared_entry_package_in("a", "A");
+    let b = shared_entry_package_in("b", "Y");
+    let c = struct_package(
+        "c",
+        &[
+            ("yb", named("b.YB")),
+            ("y", named("b.Y")),
+            ("ab", named("a.AB")),
+            ("a", named("a.A")),
+        ],
+    );
+    let model = lower(&c, &[&a, &b]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["ABC", "ABCD", "ABCField1", "YBC", "YBCD", "YBCField1"]
+    );
+}
+
+/// A position matches a claim by its visibility too. In `a`, `AB` is
+/// `internal`, so its position 2 of `cD` and position 1 of `A.bC` spell one
+/// Rust name from one shape with two visibilities: a collision in `a`, which
+/// every backend refuses, so no build reaches this lowering; the lowering of
+/// an importer still gives each position the wire name of its own claim,
+/// `ABCField1` for the public one and `ABCDField2` for the internal one.
+#[test]
+fn a_foreign_position_matches_a_claim_of_its_own_visibility() {
+    let mut a = shared_entry_package();
+    a.decls
+        .iter_mut()
+        .find(|decl| decl.name == "AB")
+        .expect("AB")
+        .visibility = v2::Visibility::Internal as i32;
+    assert_eq!(lower(&a, &[]).tuple_collisions.len(), 1);
+    let b = struct_package("b", &[("ab", named("a.AB")), ("a", named("a.A"))]);
+    let model = lower(&b, &[&a]);
+    assert_eq!(
+        nested_tuple_wires(&model),
+        ["ABC", "ABCD", "ABCDField2", "ABCField1"]
+    );
+}
+
+/// A package `name` with `struct <NAME> { t : (x), below : <below>.<BELOW> }`,
+/// the struct named after the package in upper case: a tuple, so that an
+/// importer reads the package's claims, and a field that reaches the layer
+/// below.
+fn layer(name: &str, below: Option<&str>) -> v2::Package {
+    let mut fields = vec![(
+        "t",
+        tuple(vec![v2::TupleField {
+            name: "x".to_string(),
+            r#type: Some(named("a.Small")),
+        }]),
+    )];
+    if let Some(below) = below {
+        fields.push(("below", named(&format!("{below}.{}", below.to_uppercase()))));
+    }
+    let mut package = struct_package(name, &fields);
+    package.decls[0].name = name.to_uppercase();
+    package
+}
+
+/// One call of `lower` lowers each declaring package at most once: the
+/// lowering of `d` reaches `c`, `b` and `a`, and the lowering it starts for
+/// `c` reaches `b` and `a` through one memo shared with it, so three
+/// declaring lowerings run, not six.
+#[test]
+fn each_declaring_package_is_lowered_once_per_lowering() {
+    let mut a = package_a();
+    a.decls.push(layer("a", None).decls.remove(0));
+    let b = layer("b", Some("a"));
+    let c = layer("c", Some("b"));
+    let d = layer("d", Some("c"));
+    let before = super::lower::DECLARING_LOWERINGS.with(|count| count.get());
+    let model = lower(&d, &[&c, &b, &a]);
+    let after = super::lower::DECLARING_LOWERINGS.with(|count| count.get());
+    assert_eq!(nested_tuple_wires(&model), ["AT", "BT", "CT"]);
+    assert_eq!(after - before, 3);
 }
 
 /// A call with two parameters induces one argument struct, with one field

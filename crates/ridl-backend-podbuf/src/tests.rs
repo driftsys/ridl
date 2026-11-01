@@ -776,6 +776,26 @@ fn one_identity_with_two_definitions_is_not_one_entity() {
     assert!(!claim("uint8_t u;").same_entity(&claim("uint8_t w;")));
 }
 
+/// The build-wide check compares the definitions of a head and of its guard:
+/// two headers that claim one name for one identity with two texts are
+/// refused, and with one text are not. No workspace holds two packages of
+/// one name, so the two views of `a.Inner` are two compiled packages named
+/// `a`, one with one member and one with two, handed to the check together.
+#[test]
+fn one_identity_with_two_definitions_is_refused_by_the_check() {
+    let one = compile("package a\nstruct Inner {\n  x : integer [0..10]\n}\n");
+    let two =
+        compile("package a\nstruct Inner {\n  x : integer [0..10]\n  y : integer [0..10]\n}\n");
+    assert_eq!(crate::check_c_names(&[&one, &one]), Ok(()));
+    let errors = crate::check_c_names(&[&one, &two]).expect_err("two texts are refused");
+    let names: Vec<&str> = errors
+        .iter()
+        .filter_map(|error| error.message.strip_prefix("the C name `"))
+        .map(|rest| rest.split('`').next().unwrap())
+        .collect();
+    assert_eq!(names, vec!["A_INNER_HEAD_DEFINED", "a_inner_head"]);
+}
+
 /// `check_c_names` leaves out a package whose projection refuses a head: a
 /// struct whose field names a type that does not resolve, which checked
 /// source does not reach, so the IR is edited after the compile. The package
