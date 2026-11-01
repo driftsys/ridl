@@ -16,7 +16,7 @@ fn row() -> (usize, usize) {
         .iter()
         .find(|b| b.name == "websocket")
         .expect("the websocket row exists");
-    assert_eq!(row.version, "1");
+    assert_eq!(row.version, "2");
     (
         row.frame_header_max_bytes.expect("the row states a header") as usize,
         row.envelope_bytes.expect("the row states an envelope") as usize,
