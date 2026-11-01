@@ -36,10 +36,6 @@ name = "msrv"
 baseline = "016167c90fe1418df512a60330e70b35a55c4a7b"
 
 [[surface]]
-name = "wire"
-baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
-
-[[surface]]
 name = "codegen-protocol"
 baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
