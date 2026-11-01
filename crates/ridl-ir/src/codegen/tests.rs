@@ -2417,6 +2417,13 @@ fn populated_deployment() -> v1::Deployment {
                 inline: true,
             }],
             maps: vec!["veh.cabin".to_string()],
+            attributes: vec![v1::Attribute {
+                namespace: "shm".to_string(),
+                key: "service".to_string(),
+                value: Some(v1::AttributeValue {
+                    kind: Some(v1::attribute_value::Kind::Scalar("3".to_string())),
+                }),
+            }],
         }],
         channels: vec![v1::Channel {
             catalog: "veh.cabin".to_string(),
@@ -2521,6 +2528,15 @@ fn a_populated_deployment_section_renders_the_keys_a_plugin_reads() {
         ],
         "maps": [
           "veh.cabin"
+        ],
+        "attributes": [
+          {
+            "namespace": "shm",
+            "key": "service",
+            "value": {
+              "scalar": "3"
+            }
+          }
         ]
       }
     ],
@@ -2651,7 +2667,20 @@ fn the_deployment_sections_field_numbers_are_the_schemas() {
             ("external", 4),
             ("offers", 5),
             ("maps", 6),
+            ("attributes", 7),
         ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Attribute"),
+        expected(&[("namespace", 1), ("key", 2), ("value", 3)])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.AttributeValue"),
+        expected(&[("scalar", 10), ("list", 11)])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.AttributeList"),
+        expected(&[("items", 1)])
     );
     assert_eq!(
         fields("ridl.codegen.v1.Endpoint"),
@@ -2720,6 +2749,9 @@ fn the_deployment_schema_declares_the_messages_the_field_gate_reads() {
     assert_eq!(
         declared,
         [
+            "ridl.codegen.v1.Attribute",
+            "ridl.codegen.v1.AttributeList",
+            "ridl.codegen.v1.AttributeValue",
             "ridl.codegen.v1.Binding",
             "ridl.codegen.v1.Channel",
             "ridl.codegen.v1.Consumer",
