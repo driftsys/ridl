@@ -280,7 +280,10 @@ impl<B: Backend> Session<B> {
             | Frame::Publish { .. }
             | Frame::Occurrence { .. }
             | Frame::Response { .. }
-            | Frame::Block { .. } => {
+            | Frame::Block { .. }
+            | Frame::Chunk { .. }
+            | Frame::StreamEnd { .. }
+            | Frame::StreamCredit { .. } => {
                 self.note(Note::UnexpectedDirection);
                 Step::Close(CloseCode::PROTOCOL.0)
             }

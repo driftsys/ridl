@@ -51,10 +51,12 @@ fn a_subscribe_with_trailing_bytes_is_control_too_long() {
 }
 
 #[test]
-fn form_0_and_form_12_are_unknown_codes_and_a_lone_form_11_is_too_short() {
+fn form_0_and_form_15_are_unknown_codes_and_a_lone_stream_form_is_too_short() {
     assert_eq!(decode_err(&[0]), violation(ProtocolViolation::UnknownCode));
-    assert_eq!(decode_err(&[12]), violation(ProtocolViolation::UnknownCode));
-    assert_eq!(decode_err(&[11]), violation(ProtocolViolation::TooShort));
+    assert_eq!(decode_err(&[15]), violation(ProtocolViolation::UnknownCode));
+    for form in 11..=14 {
+        assert_eq!(decode_err(&[form]), violation(ProtocolViolation::TooShort));
+    }
 }
 
 /// The header of the shared `block-last` vector, up to `total`.
@@ -508,5 +510,139 @@ fn every_form_cut_short_of_its_header_is_too_short() {
     assert_eq!(
         decode_err(&block[..34]),
         violation(ProtocolViolation::BadBlock)
+    );
+}
+
+// -- Frame version 3: the stream forms ---------------------------------------
+
+/// A `stream_end` of kind `Query` with the given `outcome` and `detail`.
+fn stream_end(kind: u8, outcome: u8, detail: u8) -> Vec<u8> {
+    let mut m =
+        bytes("0d 00 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00");
+    m[1] = kind;
+    m.extend_from_slice(&[outcome, detail]);
+    m
+}
+
+#[test]
+fn stream_frame_of_kind_signal_is_bad_stream() {
+    let chunk =
+        bytes("0c 01 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00");
+    let credit = bytes("0e 01 01000000 04000000 0200000000000000 00 04000000");
+    for kind in [1, 2, 5] {
+        let mut c = chunk.clone();
+        c[1] = kind;
+        assert_eq!(decode_err(&c), violation(ProtocolViolation::BadStream));
+        assert_eq!(
+            decode_err(&stream_end(kind, 10, 0)),
+            violation(ProtocolViolation::BadStream)
+        );
+        let mut k = credit.clone();
+        k[1] = kind;
+        assert_eq!(decode_err(&k), violation(ProtocolViolation::BadStream));
+    }
+    assert!(decode(&stream_end(3, 10, 0)).is_ok());
+    assert!(decode(&stream_end(4, 10, 0)).is_ok());
+    // A kind outside 1 to 5 is an unknown code, as on every form.
+    assert_eq!(
+        decode_err(&stream_end(6, 10, 0)),
+        violation(ProtocolViolation::UnknownCode)
+    );
+}
+
+#[test]
+fn stream_end_with_outcome_reply_is_not_allowed() {
+    for outcome in [1, 2, 9] {
+        assert_eq!(
+            decode_err(&stream_end(4, outcome, 0)),
+            violation(ProtocolViolation::OutcomeNotAllowed),
+            "outcome {outcome}"
+        );
+    }
+    for outcome in [0, 12, 255] {
+        assert_eq!(
+            decode_err(&stream_end(4, outcome, 0)),
+            violation(ProtocolViolation::UnknownCode),
+            "outcome {outcome}"
+        );
+    }
+}
+
+#[test]
+fn stream_end_interrupted_with_nonzero_detail_is_refused() {
+    for outcome in [7, 8, 10, 11, 4, 5, 6] {
+        assert_eq!(
+            decode_err(&stream_end(4, outcome, 1)),
+            violation(ProtocolViolation::NonzeroDetail),
+            "outcome {outcome}"
+        );
+    }
+    // `InvalidValue` takes a `Rule` code, and 0 and 7 are not one.
+    for detail in [0, 7] {
+        assert_eq!(
+            decode_err(&stream_end(4, 3, detail)),
+            violation(ProtocolViolation::UnknownCode),
+            "detail {detail}"
+        );
+    }
+}
+
+#[test]
+fn stream_credit_of_zero_is_zero_number() {
+    let credit = |value: &str| {
+        bytes(&format!(
+            "0e 04 01000000 04000000 0200000000000000 00 {value}"
+        ))
+    };
+    assert!(decode(&credit("01000000")).is_ok());
+    assert_eq!(
+        decode_err(&credit("00000000")),
+        violation(ProtocolViolation::ZeroNumber)
+    );
+}
+
+#[test]
+fn chunk_shorter_than_its_header_is_too_short() {
+    let chunk =
+        bytes("0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00");
+    assert_eq!(chunk.len(), 35);
+    assert!(decode(&chunk).is_ok(), "an empty chunk is a chunk");
+    assert_eq!(
+        decode_err(&chunk[..34]),
+        violation(ProtocolViolation::TooShort)
+    );
+    let end = stream_end(4, 10, 0);
+    assert_eq!(end.len(), 37);
+    for len in 1..37 {
+        assert_eq!(
+            decode_err(&end[..len]),
+            violation(ProtocolViolation::TooShort),
+            "stream_end cut to {len} bytes"
+        );
+    }
+    let credit = bytes("0e 04 01000000 04000000 0200000000000000 00 04000000");
+    assert_eq!(credit.len(), 23);
+    for len in 1..23 {
+        assert_eq!(
+            decode_err(&credit[..len]),
+            violation(ProtocolViolation::TooShort),
+            "stream_credit cut to {len} bytes"
+        );
+    }
+}
+
+#[test]
+fn bytes_after_a_stream_end_or_a_stream_credit_header_are_discarded() {
+    let mut end = stream_end(4, 10, 0);
+    end.push(0);
+    assert_eq!(
+        decode_err(&end),
+        Err(DecodeError::Discard(Discarded::UnexpectedPayload))
+    );
+    let mut credit = bytes("0e 04 01000000 04000000 0200000000000000 00 04000000");
+    credit.push(0);
+    assert_eq!(
+        decode_err(&credit),
+        Err(DecodeError::Discard(Discarded::UnexpectedPayload))
     );
 }

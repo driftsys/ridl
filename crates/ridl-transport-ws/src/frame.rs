@@ -15,6 +15,14 @@
 //! number of bytes after its header. The order of the blocks of one payload is
 //! the session's to check.
 //!
+//! Frame version 3 adds the three stream forms (frame specification §4,
+//! binding version 3): `chunk`, `stream_end` and `stream_credit`. The decoder
+//! checks each by itself, with no session state, as it does a `block`: the
+//! `kind` of a stream frame must be `Command` or `Query`, a `stream_end`
+//! carries one of the outcomes of [`StreamOutcome`], and a `stream_credit`
+//! grants at least one chunk. Which frame version a session carries, and so
+//! whether a stream form may cross it, is the session's to check.
+//!
 //! The module needs `core` only.
 
 use core::str;
@@ -28,6 +36,13 @@ use ridl_rt::sample::{Envelope, Timestamp};
 pub const FRAME_VERSION: u32 = 2;
 /// The WebSocket subprotocol name of binding version 2.
 pub const SUBPROTOCOL: &str = "ridl-ws-v2";
+/// The frame version that adds the stream forms.
+pub const FRAME_VERSION_3: u32 = 3;
+/// The WebSocket subprotocol name of binding version 3.
+pub const SUBPROTOCOL_V3: &str = "ridl-ws-v3";
+/// The number of chunks the receiver of a stream grants the sender before it
+/// sends any `stream_credit` (frame specification §11.1, binding version 3).
+pub const INITIAL_CREDIT: u32 = 4;
 /// The subprotocol name of binding version 1, which the provider selects
 /// only to refuse its `attach` (frame specification §11.1, binding version 2).
 pub const SUBPROTOCOL_V1: &str = "ridl-ws-v1";
@@ -56,6 +71,9 @@ const FORM_OCCURRENCE: u8 = 8;
 const FORM_REQUEST: u8 = 9;
 const FORM_RESPONSE: u8 = 10;
 const FORM_BLOCK: u8 = 11;
+const FORM_CHUNK: u8 = 12;
+const FORM_STREAM_END: u8 = 13;
+const FORM_STREAM_CREDIT: u8 = 14;
 
 const OUT_ACCEPTED: u8 = 1;
 const OUT_REPLY: u8 = 2;
@@ -66,6 +84,8 @@ const OUT_UNKNOWN_INTERACTION: u8 = 6;
 const OUT_CORRUPT: u8 = 7;
 const OUT_BUSY: u8 = 8;
 const OUT_REFUSED: u8 = 9;
+const OUT_END: u8 = 10;
+const OUT_INTERRUPTED: u8 = 11;
 
 const PROV_INIT: u8 = 1;
 const PROV_LIVE: u8 = 2;
@@ -82,6 +102,14 @@ const RESPONSE_LEN: usize = COMMON + ENVELOPE_BYTES + 8 + 2;
 /// The header of a `block`: the common fields, the envelope, `total` and
 /// `index`.
 const BLOCK_LEN: usize = COMMON + ENVELOPE_BYTES + 8;
+/// The header of a `chunk`: the common fields, the envelope, `correlation` and
+/// `stream`.
+const CHUNK_LEN: usize = COMMON + ENVELOPE_BYTES + 8 + 1;
+/// The header of a `stream_end`: a `chunk`'s, then `outcome` and `detail`.
+const STREAM_END_LEN: usize = CHUNK_LEN + 2;
+/// The header of a `stream_credit`: the common fields, `correlation`,
+/// `stream` and `credit`.
+const STREAM_CREDIT_LEN: usize = COMMON + 8 + 1 + 4;
 /// `form`, `frame_version`, `encoding`, `hash` and `name_len`.
 const ATTACH_FIXED: usize = 1 + 4 + 1 + 32 + 1;
 
@@ -224,6 +252,23 @@ pub enum ResponseOutcome<'a> {
     Busy,
 }
 
+/// The outcome carried by a `stream_end` frame.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StreamOutcome {
+    /// The stream ended normally.
+    End,
+    /// The receiver refused a chunk, or the provider refused the call before
+    /// the first chunk, with a contract error.
+    Contract(Contract),
+    /// A chunk could not be decoded, or was longer than the member's limit.
+    Corrupt,
+    /// The providing runtime refused the call at admission.
+    Busy,
+    /// The sender stopped without an end, or the receiver cancelled.
+    Interrupted,
+}
+
 /// One decoded frame. Payloads and the unit name borrow from the message.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -297,6 +342,46 @@ pub enum Frame<'a> {
         /// The bytes of this block.
         payload: &'a [u8],
     },
+    /// One chunk of one stream of one call (frame version 3).
+    Chunk {
+        /// The command or query.
+        target: Target,
+        /// The sender's envelope: `seq` counts the frames of this stream in
+        /// this direction.
+        envelope: Envelope,
+        /// The `seq` of the request, the caller's name for the call.
+        correlation: u64,
+        /// The stream of the call, from 0.
+        stream: u8,
+        /// The bytes of the chunk, possibly empty.
+        payload: &'a [u8],
+    },
+    /// The end of one stream, normal or not (frame version 3). The receiver of
+    /// a stream also sends it to stop the stream.
+    StreamEnd {
+        /// The command or query.
+        target: Target,
+        /// The sender's envelope.
+        envelope: Envelope,
+        /// The `seq` of the request, the caller's name for the call.
+        correlation: u64,
+        /// The stream of the call, from 0.
+        stream: u8,
+        /// How the stream ended.
+        outcome: StreamOutcome,
+    },
+    /// The receiver of a stream grants the sender more chunks (frame
+    /// version 3).
+    StreamCredit {
+        /// The command or query.
+        target: Target,
+        /// The `seq` of the request, the caller's name for the call.
+        correlation: u64,
+        /// The stream of the call, from 0.
+        stream: u8,
+        /// The number of chunks granted, at least 1.
+        credit: u32,
+    },
 }
 
 /// The output buffer given to [`Frame::encode`] is too small.
@@ -333,6 +418,9 @@ pub enum ProtocolViolation {
     /// bytes after the header other than 4,096 (every block but the last) or
     /// `total - 4,096 * index` (the last).
     BadBlock,
+    /// A stream frame whose `kind` is not `Command` or `Query` (frame
+    /// version 3).
+    BadStream,
 }
 
 /// A frame the receiver records and drops; the session continues.
@@ -472,6 +560,50 @@ fn contract_from(outcome: u8, detail: u8) -> Result<Contract, ProtocolViolation>
         OUT_PRECONDITION_FAILED => Ok(Contract::PreconditionFailed),
         OUT_CONTRACT_BROKEN => Ok(Contract::ContractBroken),
         _ => Ok(Contract::UnknownInteraction),
+    }
+}
+
+/// The `(outcome, detail)` pair of a `stream_end` outcome.
+fn stream_codes(outcome: StreamOutcome) -> (u8, u8) {
+    match outcome {
+        StreamOutcome::End => (OUT_END, 0),
+        StreamOutcome::Contract(c) => contract_codes(c),
+        StreamOutcome::Corrupt => (OUT_CORRUPT, 0),
+        StreamOutcome::Busy => (OUT_BUSY, 0),
+        StreamOutcome::Interrupted => (OUT_INTERRUPTED, 0),
+    }
+}
+
+/// A `stream_end` outcome from its `outcome` and `detail` codes. Outcomes 1, 2
+/// and 9 are in the table but not allowed on a `stream_end`.
+fn stream_from(outcome: u8, detail: u8) -> Result<StreamOutcome, ProtocolViolation> {
+    match outcome {
+        OUT_INVALID_VALUE..=OUT_UNKNOWN_INTERACTION => {
+            Ok(StreamOutcome::Contract(contract_from(outcome, detail)?))
+        }
+        OUT_ACCEPTED | OUT_REPLY | OUT_REFUSED => Err(ProtocolViolation::OutcomeNotAllowed),
+        OUT_CORRUPT | OUT_BUSY | OUT_END | OUT_INTERRUPTED => {
+            if detail != 0 {
+                return Err(ProtocolViolation::NonzeroDetail);
+            }
+            Ok(match outcome {
+                OUT_CORRUPT => StreamOutcome::Corrupt,
+                OUT_BUSY => StreamOutcome::Busy,
+                OUT_END => StreamOutcome::End,
+                _ => StreamOutcome::Interrupted,
+            })
+        }
+        _ => Err(ProtocolViolation::UnknownCode),
+    }
+}
+
+/// Reads the target of a stream frame, which must be of `kind` `Command` or
+/// `Query`.
+fn stream_target_at(msg: &[u8]) -> Result<Target, ProtocolViolation> {
+    let target = target_at(msg)?;
+    match target.kind {
+        Kind::Command | Kind::Query => Ok(target),
+        _ => Err(ProtocolViolation::BadStream),
     }
 }
 
@@ -701,6 +833,49 @@ pub fn decode(msg: &[u8]) -> Result<Frame<'_>, DecodeError> {
                 _ => return Err(ProtocolViolation::BadBlock.into()),
             }
         }
+        FORM_CHUNK => {
+            need(msg, CHUNK_LEN)?;
+            let target = stream_target_at(msg)?;
+            Frame::Chunk {
+                target,
+                envelope: envelope_at(msg, COMMON),
+                correlation: u64_at(msg, COMMON + ENVELOPE_BYTES),
+                stream: msg[CHUNK_LEN - 1],
+                payload: &msg[CHUNK_LEN..],
+            }
+        }
+        FORM_STREAM_END => {
+            need(msg, STREAM_END_LEN)?;
+            let target = stream_target_at(msg)?;
+            let outcome = stream_from(msg[STREAM_END_LEN - 2], msg[STREAM_END_LEN - 1])?;
+            if msg.len() > STREAM_END_LEN {
+                return Err(DecodeError::Discard(Discarded::UnexpectedPayload));
+            }
+            Frame::StreamEnd {
+                target,
+                envelope: envelope_at(msg, COMMON),
+                correlation: u64_at(msg, COMMON + ENVELOPE_BYTES),
+                stream: msg[STREAM_END_LEN - 3],
+                outcome,
+            }
+        }
+        FORM_STREAM_CREDIT => {
+            need(msg, STREAM_CREDIT_LEN)?;
+            let target = stream_target_at(msg)?;
+            let credit = u32_at(msg, STREAM_CREDIT_LEN - 4);
+            if credit == 0 {
+                return Err(ProtocolViolation::ZeroNumber.into());
+            }
+            if msg.len() > STREAM_CREDIT_LEN {
+                return Err(DecodeError::Discard(Discarded::UnexpectedPayload));
+            }
+            Frame::StreamCredit {
+                target,
+                correlation: u64_at(msg, COMMON),
+                stream: msg[STREAM_CREDIT_LEN - 5],
+                credit,
+            }
+        }
         _ => return Err(ProtocolViolation::UnknownCode.into()),
     })
 }
@@ -780,6 +955,9 @@ impl Frame<'_> {
                     }
             }
             Frame::Block { payload, .. } => BLOCK_LEN + payload.len(),
+            Frame::Chunk { payload, .. } => CHUNK_LEN + payload.len(),
+            Frame::StreamEnd { .. } => STREAM_END_LEN,
+            Frame::StreamCredit { .. } => STREAM_CREDIT_LEN,
         }
     }
 
@@ -792,7 +970,8 @@ impl Frame<'_> {
     /// refuses as an unknown code; check the rule before building the frame.
     /// A [`Frame::Block`] is written without a check of its `kind`, `total`,
     /// `index` or payload length: a block with `total` 0 or an `index` at or
-    /// past the block count encodes, and every receiver closes with 1002.
+    /// past the block count encodes, and every receiver closes with 1002. A
+    /// stream frame is likewise written without a check of its `kind`.
     pub fn encode(&self, out: &mut [u8]) -> Result<usize, Short> {
         let needed = self.encoded_len();
         if out.len() < needed {
@@ -902,6 +1081,45 @@ impl Frame<'_> {
                 w.bytes(&total.to_le_bytes());
                 w.bytes(&index.to_le_bytes());
                 w.bytes(payload);
+            }
+            Frame::Chunk {
+                target,
+                envelope,
+                correlation,
+                stream,
+                payload,
+            } => {
+                w.target(FORM_CHUNK, target);
+                w.envelope(envelope);
+                w.bytes(&correlation.to_le_bytes());
+                w.u8(stream);
+                w.bytes(payload);
+            }
+            Frame::StreamEnd {
+                target,
+                envelope,
+                correlation,
+                stream,
+                outcome,
+            } => {
+                w.target(FORM_STREAM_END, target);
+                w.envelope(envelope);
+                w.bytes(&correlation.to_le_bytes());
+                w.u8(stream);
+                let (code, detail) = stream_codes(outcome);
+                w.u8(code);
+                w.u8(detail);
+            }
+            Frame::StreamCredit {
+                target,
+                correlation,
+                stream,
+                credit,
+            } => {
+                w.target(FORM_STREAM_CREDIT, target);
+                w.bytes(&correlation.to_le_bytes());
+                w.u8(stream);
+                w.bytes(&credit.to_le_bytes());
             }
         }
         Ok(w.at)

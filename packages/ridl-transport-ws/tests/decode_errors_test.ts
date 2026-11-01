@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { attach, AttachError, decode, encode, Kind } from "../mod.ts";
 import type { Violation } from "../mod.ts";
-import { blockMessage, blockViolations } from "./block_vectors.ts";
+import { blockMessage, blockViolations, hex } from "./block_vectors.ts";
 
 const PUBLISH_LIVE = [
   0x07,
@@ -143,10 +143,12 @@ Deno.test("a subscribe with trailing bytes is control too long", () => {
   assert.equal(violation([...SUBSCRIBE, 0]), "control-too-long");
 });
 
-Deno.test("form 0 and form 12 are unknown codes and a lone form 11 is too short", () => {
+Deno.test("form 0 and form 15 are unknown codes and a lone stream form is too short", () => {
   assert.equal(violation([0]), "unknown-code");
-  assert.equal(violation([12]), "unknown-code");
-  assert.equal(violation([11]), "too-short");
+  assert.equal(violation([15]), "unknown-code");
+  for (const form of [11, 12, 13, 14]) {
+    assert.equal(violation([form]), "too-short");
+  }
 });
 
 Deno.test("every single-block error is a violation", () => {
@@ -459,4 +461,97 @@ Deno.test("a name that starts with a byte order mark decodes with it", () => {
   const d = decode(new Uint8Array(attachMessage(4, [0xef, 0xbb, 0xbf, 0x76])));
   assert.ok(d.ok && d.frame.form === "attach");
   assert.equal(d.frame.name, "\uFEFFv");
+});
+
+// -- Frame version 3: the stream forms ---------------------------------------
+
+const CHUNK_HEAD =
+  "04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00";
+
+/** A `stream_end` message with the given `kind`, `outcome` and `detail`. */
+function streamEnd(kind: number, outcome: number, detail: number): number[] {
+  const message = [...hex(`0d ${CHUNK_HEAD}`), outcome, detail];
+  message[1] = kind;
+  return message;
+}
+
+Deno.test("a stream frame of kind signal is bad-stream", () => {
+  const credit = [
+    ...hex("0e 04 01000000 04000000 0200000000000000 00 04000000"),
+  ];
+  for (const kind of [1, 2, 5]) {
+    const chunk = [...hex(`0c ${CHUNK_HEAD}`)];
+    chunk[1] = kind;
+    assert.equal(violation(chunk), "bad-stream");
+    assert.equal(violation(streamEnd(kind, 10, 0)), "bad-stream");
+    const granted = [...credit];
+    granted[1] = kind;
+    assert.equal(violation(granted), "bad-stream");
+  }
+  assert.ok(decode(new Uint8Array(streamEnd(3, 10, 0))).ok);
+  assert.ok(decode(new Uint8Array(streamEnd(4, 10, 0))).ok);
+  // A kind outside 1 to 5 is an unknown code, as on every form.
+  assert.equal(violation(streamEnd(6, 10, 0)), "unknown-code");
+});
+
+Deno.test("a stream_end with outcome reply is not allowed", () => {
+  for (const outcome of [1, 2, 9]) {
+    assert.equal(violation(streamEnd(4, outcome, 0)), "outcome-not-allowed");
+  }
+  for (const outcome of [0, 12, 255]) {
+    assert.equal(violation(streamEnd(4, outcome, 0)), "unknown-code");
+  }
+});
+
+Deno.test("a stream_end with a nonzero detail is refused", () => {
+  for (const outcome of [7, 8, 10, 11, 4, 5, 6]) {
+    assert.equal(violation(streamEnd(4, outcome, 1)), "nonzero-detail");
+  }
+  // `invalid-value` takes a rule code, and 0 and 7 are not one.
+  for (const detail of [0, 7]) {
+    assert.equal(violation(streamEnd(4, 3, detail)), "unknown-code");
+  }
+});
+
+Deno.test("a stream_credit of zero is a zero number", () => {
+  const credit = (
+    value: string,
+  ) => [...hex(`0e 04 01000000 04000000 0200000000000000 00 ${value}`)];
+  assert.ok(decode(new Uint8Array(credit("01000000"))).ok);
+  assert.equal(violation(credit("00000000")), "zero-number");
+});
+
+Deno.test("a stream frame shorter than its header is too short", () => {
+  const chunk = [...hex(`0c ${CHUNK_HEAD}`)];
+  assert.equal(chunk.length, 35);
+  assert.ok(decode(new Uint8Array(chunk)).ok, "an empty chunk is a chunk");
+  assert.equal(violation(chunk.slice(0, 34)), "too-short");
+  const end = streamEnd(4, 10, 0);
+  assert.equal(end.length, 37);
+  for (let len = 1; len < 37; len++) {
+    assert.equal(
+      violation(end.slice(0, len)),
+      "too-short",
+      `end cut to ${len}`,
+    );
+  }
+  const credit = [
+    ...hex("0e 04 01000000 04000000 0200000000000000 00 04000000"),
+  ];
+  assert.equal(credit.length, 23);
+  for (let len = 1; len < 23; len++) {
+    assert.equal(
+      violation(credit.slice(0, len)),
+      "too-short",
+      `credit cut to ${len}`,
+    );
+  }
+});
+
+Deno.test("bytes after a stream_end or a stream_credit header are discarded", () => {
+  assert.equal(violation([...streamEnd(4, 10, 0), 0]), "unexpected-payload");
+  const credit = [
+    ...hex("0e 04 01000000 04000000 0200000000000000 00 04000000"),
+  ];
+  assert.equal(violation([...credit, 0]), "unexpected-payload");
 });

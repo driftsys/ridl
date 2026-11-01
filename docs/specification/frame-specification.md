@@ -203,54 +203,64 @@ set is closed: a binding carries exactly these fields, adds none, and omits none
 that the form requires. Header fields have no default: a field the form requires
 is present on every frame of that form.
 
-| Field         | Domain                                                                                  | Present on                                              |
-| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `form`        | one of the eleven forms below                                                           | every frame                                             |
-| `interface`   | `InterfaceNo`, `u32`, never 0                                                           | every frame but `attach` and `attached`                 |
-| `ordinal`     | `Ordinal`, `u32`, never 0                                                               | every frame but `attach` and `attached`                 |
-| `kind`        | `Kind`, values 1 to 5                                                                   | every frame but `attach` and `attached`                 |
-| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                                                    | `publish`, `occurrence`, `request`, `response`, `block` |
-| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                                                   | `publish`                                               |
-| `correlation` | `u64`: the `seq` of the request answered                                                | `response`                                              |
-| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries                           | `response`, `attached`, `answer`                        |
-| `total`       | `u32`: the length in bytes of the whole payload that the block is a part of, at least 1 | `block`                                                 |
-| `index`       | `u32`: the position of the block in that payload, counted from 0                        | `block`                                                 |
-| `payload`     | bytes in the session's encoding                                                         | as §5 states per form and per kind                      |
+| Field         | Domain                                                                                  | Present on                                                                     |
+| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `form`        | one of the fourteen forms below                                                         | every frame                                                                    |
+| `interface`   | `InterfaceNo`, `u32`, never 0                                                           | every frame but `attach` and `attached`                                        |
+| `ordinal`     | `Ordinal`, `u32`, never 0                                                               | every frame but `attach` and `attached`                                        |
+| `kind`        | `Kind`, values 1 to 5                                                                   | every frame but `attach` and `attached`                                        |
+| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                                                    | `publish`, `occurrence`, `request`, `response`, `block`, `chunk`, `stream_end` |
+| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                                                   | `publish`                                                                      |
+| `correlation` | `u64`: the `seq` of the request answered                                                | `response`, `chunk`, `stream_end`, `stream_credit`                             |
+| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries                           | `response`, `attached`, `answer`, `stream_end`                                 |
+| `total`       | `u32`: the length in bytes of the whole payload that the block is a part of, at least 1 | `block`                                                                        |
+| `index`       | `u32`: the position of the block in that payload, counted from 0                        | `block`                                                                        |
+| `stream`      | `u8`: the number of the stream of the call, counted from 0                              | `chunk`, `stream_end`, `stream_credit`                                         |
+| `credit`      | `u32`: the number of chunks the receiver of a stream grants the sender, at least 1      | `stream_credit`                                                                |
+| `payload`     | bytes in the session's encoding                                                         | as §5 states per form and per kind                                             |
 
-**Frame versions.** This document defines **frame version 2**: frame version 1
-and the `block` form with its two fields `total` and `index`. Frame version 1 is
-the same frame without them, ten forms and no `total` and no `index`. Every
-other field, code and rule is the same in both versions. A session carries one
-frame version, which its `attach` names (§6.1).
+**Frame versions.** This document defines **frame version 3**: frame version 2
+and the three stream forms `chunk`, `stream_end` and `stream_credit`, with their
+fields `stream` and `credit`, and the two `outcome` values `end` and
+`interrupted`. Frame version 2 is frame version 1 and the `block` form with its
+two fields `total` and `index`. Frame version 1 is the same frame without them,
+ten forms and no `total` and no `index`. Every other field, code and rule is the
+same in all versions. A session carries one frame version, which its `attach`
+names (§6.1).
 
-**The eleven forms**, by plane and direction:
+**The fourteen forms**, by plane and direction:
 
-| Form          | Plane   | Direction           | Meaning                                                                      |
-| ------------- | ------- | ------------------- | ---------------------------------------------------------------------------- |
-| `attach`      | control | consumer → provider | opens the session for one catalog and one encoding (§6.1)                    |
-| `attached`    | control | provider → consumer | accepts or refuses the `attach` (§6.1)                                       |
-| `subscribe`   | control | consumer → provider | starts delivery of one signal or one event (§6.2)                            |
-| `answer`      | control | provider → consumer | accepts or refuses a `subscribe`; refuses a `read` (§6.2, §6.3)              |
-| `unsubscribe` | control | consumer → provider | stops delivery of one signal or one event (§6.2)                             |
-| `read`        | control | consumer → provider | asks for the current state of one signal, or the value of one `fixed` (§6.3) |
-| `publish`     | data    | provider → consumer | one publication of a signal's state, or the value of a `fixed` (§5.1, §5.5)  |
-| `occurrence`  | data    | provider → consumer | one occurrence of an event (§5.2)                                            |
-| `request`     | data    | consumer → provider | one call of a command or a query (§5.3, §5.4)                                |
-| `response`    | data    | provider → consumer | the acknowledgment of a command, or the reply of a query (§5.3, §5.4)        |
-| `block`       | data    | provider → consumer | one part of a `publish` of a `fixed` that is sent in parts (§5.5)            |
+| Form            | Plane   | Direction           | Meaning                                                                      |
+| --------------- | ------- | ------------------- | ---------------------------------------------------------------------------- |
+| `attach`        | control | consumer → provider | opens the session for one catalog and one encoding (§6.1)                    |
+| `attached`      | control | provider → consumer | accepts or refuses the `attach` (§6.1)                                       |
+| `subscribe`     | control | consumer → provider | starts delivery of one signal or one event (§6.2)                            |
+| `answer`        | control | provider → consumer | accepts or refuses a `subscribe`; refuses a `read` (§6.2, §6.3)              |
+| `unsubscribe`   | control | consumer → provider | stops delivery of one signal or one event (§6.2)                             |
+| `read`          | control | consumer → provider | asks for the current state of one signal, or the value of one `fixed` (§6.3) |
+| `publish`       | data    | provider → consumer | one publication of a signal's state, or the value of a `fixed` (§5.1, §5.5)  |
+| `occurrence`    | data    | provider → consumer | one occurrence of an event (§5.2)                                            |
+| `request`       | data    | consumer → provider | one call of a command or a query (§5.3, §5.4)                                |
+| `response`      | data    | provider → consumer | the acknowledgment of a command, or the reply of a query (§5.3, §5.4)        |
+| `block`         | data    | provider → consumer | one part of a `publish` of a `fixed` that is sent in parts (§5.5)            |
+| `chunk`         | data    | both                | one chunk of one stream of one call                                          |
+| `stream_end`    | data    | both                | the end of one stream, normal or not; also the receiver's stop of a stream   |
+| `stream_credit` | data    | both                | the receiver of a stream grants the sender `credit` more chunks              |
 
 **The codes.** A binding that carries a field as a numeric code uses these
 values. `form`: `attach` 1, `attached` 2, `subscribe` 3, `answer` 4,
 `unsubscribe` 5, `read` 6, `publish` 7, `occurrence` 8, `request` 9, `response`
-10, `block` 11 — the order of the table above; `block` 11 is a code of frame
-version 2 only. `provenance`: `Init` 1, `Live` 2, `Invalid(Declared)` 3.
-`outcome`: `accepted` 1, `reply` 2, `contract(InvalidValue)` 3,
-`contract(PreconditionFailed)` 4, `contract(ContractBroken)` 5,
-`contract(UnknownInteraction)` 6, `corrupt` 7, `busy` 8, `refused` 9. A
-`refused` reason: `unknown_catalog` 1, `catalog_mismatch` 2,
-`encoding_unsupported` 3, `frame_version_unsupported` 4, `range` 5. The `Rule`
-of an `InvalidValue`: §9.6. A new value in any of these tables is a new frame
-version.
+10, `block` 11, `chunk` 12, `stream_end` 13, `stream_credit` 14 — the order of
+the table above; `block` 11 is a code of frame version 2 and later, and 12 to 14
+are codes of frame version 3 only. `provenance`: `Init` 1, `Live` 2,
+`Invalid(Declared)` 3. `outcome`: `accepted` 1, `reply` 2,
+`contract(InvalidValue)` 3, `contract(PreconditionFailed)` 4,
+`contract(ContractBroken)` 5, `contract(UnknownInteraction)` 6, `corrupt` 7,
+`busy` 8, `refused` 9, `end` 10, `interrupted` 11; `end` and `interrupted` are
+codes of frame version 3 and only a `stream_end` carries them. A `refused`
+reason: `unknown_catalog` 1, `catalog_mismatch` 2, `encoding_unsupported` 3,
+`frame_version_unsupported` 4, `range` 5. The `Rule` of an `InvalidValue`: §9.6.
+A new value in any of these tables is a new frame version.
 
 **The `block` form.** A `block` is one part of a `publish` of a `fixed` under
 `Live`, sent when a binding carries that `publish` in parts (§5.5, §10 item 10).
@@ -266,6 +276,29 @@ size in bytes, and the last carries the rest, so a payload of `total` bytes has
 whose `kind` is not `Fixed`, whose `total` is 0, whose `index` is n or more, or
 whose number of payload bytes is not the one its `index` and `total` give is not
 a frame the receiver can read (§9.5): the check needs no session state.
+
+**The stream forms.** A stream is one of the ordered sequences of chunks of a
+call of a `command` or a `query`. The three stream forms carry `interface`,
+`ordinal` and `kind` of that call, with `kind` `Command` or `Query`; any other
+`kind` is a value outside the forms' table. Each carries `correlation`, the
+`seq` of the `request` that opened the call, the caller's name for it, and
+`stream`. A `chunk` carries an `envelope` and a payload, which may be zero
+bytes. A `stream_end` carries an `envelope`, an `outcome` and a `detail`, and no
+payload. A `stream_credit` carries no `envelope` and no payload.
+
+On a `chunk` and a `stream_end`, `seq` is one counter per stream and direction,
+from 1 for the first chunk, and the `stream_end` takes the next value, so a
+receiver that sees a gap treats the stream as interrupted without waiting. On a
+`stream_end`, `outcome` is one of `end` 10 (normal), `contract(c)` 3 to 6,
+`corrupt` 7, `busy` 8 and `interrupted` 11; `detail` is the `Rule` code under
+`contract(InvalidValue)` (§9.6) and 0 otherwise. Any other `outcome` is not
+allowed on a `stream_end`, and `end` and `interrupted` are not allowed on any
+other form. A `stream_end` travels against the stream's direction when its
+receiver stops the stream. A `stream_credit` grants `credit` more chunks to the
+sender of the stream, and a `credit` of 0 is a value outside the form's table.
+Every stream has an initial credit that binds the sender before the first
+`stream_credit`; the binding states it (§11.1, "Binding version 3"). Each of
+these checks needs no session state.
 
 **Why `kind` is on the frame at all.** Both sides hold the catalog, so either
 could look the kind up from the ordinal. It crosses because a relay, a recorder
@@ -601,11 +634,11 @@ a buffer and one that frames it.
 
 `attach` opens the session. It carries:
 
-| Field           | Domain                                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------------------------- |
-| `frame_version` | `u32`: the version of the frame the session carries, **1** or **2**; this document defines version 2 (§4) |
-| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash                                                          |
-| `encoding`      | the encoding tag (§3)                                                                                     |
+| Field           | Domain                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `frame_version` | `u32`: the version of the frame the session carries, **1**, **2** or **3**; this document defines version 3 (§4) |
+| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash                                                                 |
+| `encoding`      | the encoding tag (§3)                                                                                            |
 
 `attached` answers with an `outcome`:
 
@@ -1035,13 +1068,14 @@ decision 6) is its Rust crate, and `@driftsys/ridl-transport-ws`
 browser; it carries payload bytes without decoding them, so the two ends of one
 connection may be a Rust runtime and a TypeScript one. This section is the
 binding document: it states the ten items of §10 and adds nothing to the frame.
-It specifies two binding versions: **version 1**, under the subprotocol
-`ridl-ws-v1`, carries frame version 1, and **version 2**, under `ridl-ws-v2`,
-carries frame version 2. Items 1 to 9 hold for both versions, item 10 holds for
-version 2 only (version 1 has no `block` form), the test vectors below are
-version 1's, and version 2 adds what "Binding version 2", at the end of this
-section, states. The reasoning behind each rule, with the alternatives
-considered, is in
+It specifies three binding versions: **version 1**, under the subprotocol
+`ridl-ws-v1`, carries frame version 1, **version 2**, under `ridl-ws-v2`,
+carries frame version 2, and **version 3**, under `ridl-ws-v3`, carries frame
+version 3. Items 1 to 9 hold for all versions, item 10 holds for versions 2 and
+3 (version 1 has no `block` form), the test vectors below are version 1's, and
+versions 2 and 3 add what "Binding version 2" and "Binding version 3", at the
+end of this section, state. The reasoning behind each rule, with the
+alternatives considered, is in
 [the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
 **1. The transport and the session.** One WebSocket connection carries one
@@ -1203,19 +1237,19 @@ fit one message in blocks of 4,096 bytes, as "Binding version 2" states.
 **Later versions.** An addition to the frame — a form, a field, a code — is a
 new frame version carried by a new binding version, offered beside the earlier
 ones in the subprotocol list. Version 1's layout, codes and vectors are never
-edited, and neither are version 2's. Binding version 2, below, is the first such
-version; streams (ridl §12, driftsys/ridl#336) arrive as version 3 the same way.
+edited, and neither are version 2's or version 3's. Binding version 2, below, is
+the first such version; binding version 3 adds the stream forms the same way.
 
 **Test vectors.** Each line is one complete message in hexadecimal, spaces for
 reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
-column, which is stable and never renamed, and it reads the table of "Binding
-version 2" the same way. The stamp in every data-plane vector is
-`0x0123456789AB` microseconds (and `0x0123456789AC` on the responses), chosen to
-show the byte order; the hash in `attach` is the bytes `00` to `1f`; the unit
-name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell names as
-`` payload `<hex>` `` and fails a row whose bytes after the header differ from
-it, or from no bytes when the cell names none; it decides from the header
-whether a frame carries a payload, by the rule "Whether a frame carries a
+column, which is stable and never renamed, and it reads the tables of "Binding
+version 2" and "Binding version 3" the same way. The stamp in every data-plane
+vector is `0x0123456789AB` microseconds (and `0x0123456789AC` on the responses),
+chosen to show the byte order; the hash in `attach` is the bytes `00` to `1f`;
+the unit name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell
+names as `` payload `<hex>` `` and fails a row whose bytes after the header
+differ from it, or from no bytes when the cell names none; it decides from the
+header whether a frame carries a payload, by the rule "Whether a frame carries a
 payload" above.
 
 | Id                   | Vector                                                          | Hex                                                                                                     |
@@ -1297,6 +1331,57 @@ row, so no such block is a vector of this table.
 | `attach-2`   | `attach` frame 2, FlatBuffers, `veh.cabin`                                         | `01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
 | `block-last` | `block` fixed, interface 1, ordinal 5, seq 0, total 4,098, index 1, payload `abcd` | `0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd`                      |
 | `block-one`  | `block` fixed, interface 1, ordinal 5, seq 0, total 1, index 0, payload `ab`       | `0b 05 01000000 05000000 ab89674523010000 0000000000000000 01000000 00000000 ab`                        |
+
+#### Binding version 3
+
+Binding version 3 carries frame version 3 (§4) under the subprotocol
+`ridl-ws-v3`. It is version 2 with the three stream forms: every layout, code
+and rule of version 2 holds unchanged, blocks included; an `attach` carries
+`frame_version` 3.
+
+**The subprotocol and the frame version.** A client that speaks the three
+versions offers `ridl-ws-v3, ridl-ws-v2, ridl-ws-v1`, newest first, and sends
+`attach` with the frame version of the subprotocol the server selected: 3 on
+`ridl-ws-v3`, 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`. On a `ridl-ws-v3`
+connection, `attach.frame_version` is 3 or the `attach` is refused
+`frame_version_unsupported`. On a version 1 or version 2 session no stream form
+crosses, and a message whose `form` is 12, 13 or 14 there is a code outside its
+table (item 4).
+
+**The header encoding.** Version 3 adds three rows to the table of item 2:
+
+| Form            | Bytes                                                                                                 | Header size |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ----------- |
+| `chunk`         | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `stream` u8                            | 35          |
+| `stream_end`    | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `stream` u8, `outcome` u8, `detail` u8 | 37          |
+| `stream_credit` | the common 10, then `correlation` u64, `stream` u8, `credit` u32                                      | 23          |
+
+A chunk's payload is every byte after its header. A `stream_end` and a
+`stream_credit` carry no payload. The largest data-plane message is a `chunk`
+with 16,128 bytes of payload, 16,163 bytes, which is below the limit of 16,164
+bytes of item 2, so that limit holds unchanged.
+
+**Initial credit.** The sender of a stream may send 4 chunks before it has
+received a `stream_credit` for that stream. Each `stream_credit` adds its
+`credit` to the number of chunks the sender may send.
+
+**Framing.** A stream frame that is wrong by itself (§4, "The stream forms") is
+a protocol violation of item 4: a `kind` other than `Command` or `Query`, an
+`outcome` not allowed on a `stream_end`, a `detail` other than 0 where the
+`outcome` has none, and a `credit` of 0. The receiver records it and closes with
+1002, as §3 states.
+
+**Version 3 test vectors.** Each line is one complete message in hexadecimal,
+spaces for reading only, with the stamp, the hash and the unit name of the
+version 1 table. A `chunk` and a `stream_end` are sent by the provider here, so
+their stamp is `0x0123456789AC`.
+
+| Id               | Vector                                                                                | Hex                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `attach-3`       | `attach` frame 3, FlatBuffers, `veh.cabin`                                            | `01 03000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `chunk-reply`    | `chunk` query, interface 1, ordinal 4, seq 1, correlation 2, stream 0, payload `ff01` | `0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 ff01`                    |
+| `stream-end-end` | `stream_end` `end`, query, interface 1, ordinal 4, seq 2, correlation 2, stream 0     | `0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00`                   |
+| `stream-credit`  | `stream_credit` 4, query, interface 1, ordinal 4, correlation 2, stream 0             | `0e 04 01000000 04000000 0200000000000000 00 04000000`                                                  |
 
 ### 11.2 Binder on Android
 
