@@ -372,7 +372,8 @@ as `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING` (16,128) and
 `FIXED_CEILING` (65,280) with `defaultCeiling`. No hand-written limit option
 exists, so that a limit cannot be stated twice. The Rust crate `ridl-rt` holds
 the same three values in `ridl_rt::contract`, and the crate's test
-`tests/ts_ceilings.rs` reads `frame.ts` and compares them.
+`tests/ts_ceilings.rs` reads `frame.ts` and `blocks.ts` and compares them, with
+the block size, the frame version and the two subprotocol names of the crate.
 
 The check runs on receive, before a payload reaches the application, and
 compares the payload's length with the limit: a payload of exactly the limit
@@ -485,7 +486,12 @@ bytes are the value the provider set.
   `2a 07` and the occurrence with the same payload, sends the query and checks
   the reply, and closes with 1000 with no violation recorded. This is the
   sequence of the crate's scenario, so the two clients are checked against one
-  provider behaviour.
+  provider behaviour. Between the `fixed` and the signal, the test also reads
+  the three large `fixed` values (ordinals 7 to 9 of `e2e/catalog.ts`, 65,280,
+  16,137 and 16,138 bytes) and compares every byte with the pattern. A second
+  test opens a raw socket with no session, reads the `fixed` of 16,137 bytes and
+  gets one `publish`, reads the `fixed` of 16,138 bytes and gets four `block`
+  frames; the crate's scenario has no such test.
 - **The browser** (`e2e/browser_test.ts`, `e2e/page.ts`, `e2e/browser.ts`). The
   test bundles `e2e/page.ts` with `deno bundle --platform=browser`, serves the
   bundle and a page from `Deno.serve` on `127.0.0.1`, starts a headless
@@ -511,11 +517,12 @@ bytes are the value the provider set.
 
 **D-15. The unit tests.** All under `packages/ridl-transport-ws/tests/`.
 
-- **The vectors** (`vectors_test.ts`). Reads the §11.1 vector table out of
+- **The vectors** (`vectors_test.ts`). Reads the binding version 1 and the
+  binding version 2 vector tables out of
   `docs/specification/frame-specification.md`, as the crate's `tests/vectors.rs`
   does, decodes each row to the frame its `Vector` cell describes, and encodes
-  that frame back to the same bytes. It fails on an unknown `Id`, so a new
-  vector cannot be skipped.
+  that frame back to the same bytes. It fails on an unknown `Id` and on a known
+  `Id` that its table lacks, so a new vector cannot be skipped.
 - **Every code** (`codes_test.ts`). Every code of §4 and §9.6, written as bytes
   by hand, in both directions; signedness of extreme integers, a message at a
   nonzero byte offset, and payloads as views.

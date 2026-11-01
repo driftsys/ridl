@@ -65,8 +65,8 @@ only; the transport refuses a payload longer than its interaction's limit, once
 (decision 19). A transport binding carries every payload up to the limit that
 the catalog gives its interaction, a raised limit included (decision 20). The
 WebSocket binding keeps its message size of 16,164 bytes and carries a larger
-payload in blocks, in a new frame version whose layout is tracked in
-driftsys/ridl#1129 (decision 15). The codec guard of decision 4,
+payload in blocks, in a new frame version whose layout is in the frame
+specification (decision 15, driftsys/ridl#1129). The codec guard of decision 4,
 `EncodeError::TooLarge` and `PAYLOAD_CEILING`, is withdrawn: the transport
 refuses a size, against the catalog's limit, on send and on receive (decision
 4). The amendment lands as a decision first. Its code is added to

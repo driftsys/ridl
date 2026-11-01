@@ -13,7 +13,9 @@ parts (frame specification §11.1, binding version 2). On a session of frame
 version 1, a `block` is a protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
-`WebSocket`, so it needs no other runtime. It is not yet published.
+`WebSocket`, so it needs no other runtime. The npm release workflow
+(`.github/workflows/npm-release.yml`) publishes it as
+`@driftsys/ridl-transport-ws` on a `v*` tag.
 
 The wire format is in the
 [frame specification](../../docs/specification/frame-specification.md), section

@@ -174,11 +174,10 @@ differently, so the error says which:
   `refused` on a `response`); a nonzero `detail` where §11.1 requires 0;
   `interface` or `ordinal` 0; a `name_len` of 0 or one that does not match the
   message; a `name` that is not valid UTF-8; and a block that is wrong by
-  itself, `ProtocolViolation::BadBlock` (`kind` not `Fixed`, `total` 0, no bytes
-  after the header, more than 4,096 bytes, `index` at or above the number of
-  blocks, a short block that is not the last, a last block of the wrong length).
-  A `kind` outside the table stays `UnknownCode` and an `interface` or `ordinal`
-  0 stays `ZeroNumber`, as for every form.
+  itself, `ProtocolViolation::BadBlock` (the cases are in
+  [frame specification](../specification/frame-specification.md) §11.1, "Binding
+  version 2", "Framing"). A `kind` outside the table stays `UnknownCode` and an
+  `interface` or `ordinal` 0 stays `ZeroNumber`, as for every form.
 - `DecodeError::Discard(_)`: a `publish` or a `response` whose header says it
   carries no payload and which has bytes after the header. A consumer records it
   and drops it, and its session continues; the server, which receives neither
@@ -792,12 +791,14 @@ connection. It waits no longer than that for the client to close the connection
 
 All under `crates/ridl-transport-ws/`.
 
-- **The vectors** (`tests/vectors.rs`). The test reads the §11.1 test-vector
-  table out of `docs/specification/frame-specification.md`, decodes each `Hex`
-  cell, checks that it decodes to the frame its `Vector` cell describes, and
-  that encoding that frame gives the same bytes. It fails on a row whose id it
-  does not know, so a new vector cannot be skipped. Reading the table from the
-  specification, instead of copying it, means the test cannot drift from it.
+- **The vectors** (`tests/vectors.rs`). One test reads the binding version 1
+  test-vector table, and one reads the binding version 2 table, both out of
+  `docs/specification/frame-specification.md`. Each decodes every `Hex` cell,
+  checks that it decodes to the frame its `Vector` cell describes, and that
+  encoding that frame gives the same bytes. Each fails on a row whose id it does
+  not know and on a known id that its table lacks, so a new vector cannot be
+  skipped. Reading the tables from the specification, instead of copying them,
+  means the test cannot drift from them.
 - **Every code** (`tests/codes.rs`). Every code of §4 and §9.6, written out as
   bytes by hand and checked in both directions, so a wrong code constant cannot
   cancel itself out in a round trip.

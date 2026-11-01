@@ -375,12 +375,13 @@ crate the workspace holds — see `AGENTS.md` for that.
   consuming side of a frame session: it opens one WebSocket offering the
   subprotocols `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`, `subscribe`,
   `unsubscribe`, `read` and `request`, and applies the consumer's rules that
-  need no catalog. It has no dependency and is not published. It carries a
-  payload as bytes and does not decode it. `packages/` is not a Cargo workspace
-  member and holds TypeScript only; Deno builds and tests it (`just ts-check`,
-  `just ts-e2e`, and `just ts-browser-e2e` in CI), at the version
-  `.deno-version` pins. The version in its `deno.json` follows the workspace
-  version. See [its design record](../design/ridl-transport-ws-ts.md).
+  need no catalog. It has no dependency, and `.github/workflows/npm-release.yml`
+  publishes it to npm on a `v*` tag. It carries a payload as bytes and does not
+  decode it. `packages/` is not a Cargo workspace member and holds TypeScript
+  only; Deno builds and tests it (`just ts-check`, `just ts-e2e`, and
+  `just ts-browser-e2e` in CI), at the version `.deno-version` pins. The version
+  in its `deno.json` follows the workspace version. See
+  [its design record](../design/ridl-transport-ws-ts.md).
 
 - **`packages/ridl-runtime`** — the loader of the wasm codec module,
   `@driftsys/ridl-runtime`, for Deno, Bun, Node and the browser. `loadCodec`

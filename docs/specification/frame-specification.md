@@ -1037,9 +1037,10 @@ connection may be a Rust runtime and a TypeScript one. This section is the
 binding document: it states the ten items of §10 and adds nothing to the frame.
 It specifies two binding versions: **version 1**, under the subprotocol
 `ridl-ws-v1`, carries frame version 1, and **version 2**, under `ridl-ws-v2`,
-carries frame version 2. Items 1 to 10 hold for both versions, the test vectors
-below are version 1's, and version 2 adds what "Binding version 2", at the end
-of this section, states. The reasoning behind each rule, with the alternatives
+carries frame version 2. Items 1 to 9 hold for both versions, item 10 holds for
+version 2 only (version 1 has no `block` form), the test vectors below are
+version 1's, and version 2 adds what "Binding version 2", at the end of this
+section, states. The reasoning behind each rule, with the alternatives
 considered, is in
 [the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
@@ -1098,11 +1099,12 @@ bytes follow the header: by its `form`, by the `provenance` of a `publish` and
 by the `outcome` of a `response`. From §5: an `occurrence` and a `request`
 always carry one; a `publish` carries one under `Live` (a signal's publication,
 and every `publish` of a `fixed`) and none under `Init` or `Invalid(Declared)`;
-a `response` carries one under `reply` and none under any other outcome;
-`attach`, `attached`, `subscribe`, `answer`, `unsubscribe` and `read` never
-carry one. `kind` does not change the answer. A payload that is present may be
-zero bytes long — a proto3 value whose fields all hold their defaults encodes to
-no bytes — and is handed to the generated binding as it is.
+a `response` carries one under `reply` and none under any other outcome; a
+`block` always carries one (frame version 2); `attach`, `attached`, `subscribe`,
+`answer`, `unsubscribe` and `read` never carry one. `kind` does not change the
+answer. A payload that is present may be zero bytes long — a proto3 value whose
+fields all hold their defaults encodes to no bytes — and is handed to the
+generated binding as it is.
 
 **The sizes.** The envelope is 16 bytes. The largest data-plane header without
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36

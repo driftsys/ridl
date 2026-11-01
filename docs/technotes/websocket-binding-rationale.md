@@ -18,12 +18,12 @@ decision 9 (why `Violation.type_name` is an `Option`).
 
 From release 0.10.0 the wire surface is frozen: the byte layout of §11.1 for
 frame version 1 and binding version 1, the code tables of §4 and §9.6, and the
-test vectors. The `wire` freeze dump reads the vector table from the
-specification by its `Id` column and checks each vector's length, its codes
-against their tables and its payload bytes (`xtask/src/freeze/wire.rs`), so an
-edit to a vector is a break. A wire format with a promise and no check is only a
-policy, and the promise is made before the transport crate exists so that a
-WebSocket user gets it at 0.10.0.
+test vectors. The `wire` freeze dump reads the two vector tables (binding
+version 1 and binding version 2) from the specification by its `Id` column and
+checks each vector's length, its codes against their tables and its payload
+bytes (`xtask/src/freeze/wire.rs`), so an edit to a vector is a break. A wire
+format with a promise and no check is only a policy, and the promise is made
+before the transport crate exists so that a WebSocket user gets it at 0.10.0.
 
 Not frozen, because they are outside the surfaces ADR-0029 decision 1 lists: the
 transport crate `ridl-transport-ws`, the TypeScript WebSocket package, the
