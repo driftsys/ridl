@@ -74,7 +74,9 @@ export type CallFailure =
   | { category: "busy" }
   | { category: "undelivered" }
   | { category: "timeout" }
-  | { category: "down" };
+  | { category: "down" }
+  | { category: "interrupted" }
+  | { category: "unsupported" };
 
 /** An operation of an open session failed. */
 export class SessionError extends Error {

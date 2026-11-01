@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
-import { connect, decode, Kind, SessionError, SUBPROTOCOL } from "../mod.ts";
+import {
+  connect,
+  decode,
+  Kind,
+  SessionError,
+  SUBPROTOCOL,
+  SUBPROTOCOL_V3,
+} from "../mod.ts";
 import type {
   ConnectOptions,
   Frame,
   Note,
   ResponseOutcome,
   Session,
+  StreamOutcome,
   Target,
 } from "../mod.ts";
 import { FakeSocket } from "./fake_socket.ts";
@@ -25,7 +33,10 @@ function test(name: string, fn: () => Promise<void>): void {
   Deno.test({ name, sanitizeOps: true, fn });
 }
 
-async function attached(extra: Partial<ConnectOptions> = {}) {
+async function attached(
+  extra: Partial<ConnectOptions> = {},
+  protocol = SUBPROTOCOL,
+) {
   const sockets: FakeSocket[] = [];
   const notes: Note[] = [];
   const pending = connect("ws://127.0.0.1:9000", {
@@ -40,7 +51,7 @@ async function attached(extra: Partial<ConnectOptions> = {}) {
     ...extra,
   });
   const socket = sockets[0];
-  socket.open(SUBPROTOCOL);
+  socket.open(protocol);
   socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
   const session: Session = await pending;
   return { socket, session, notes };
@@ -521,4 +532,426 @@ test("the arguments of a query the generated tables raise are sent up to the rai
     isFailure("corrupt"),
   );
   assert.equal(frames(socket).length, sent + 1);
+});
+
+// A query whose reply is a stream, on a frame version 3 session.
+
+const STREAMED: Target = { kind: Kind.Query, iface: 1, ord: 10 };
+
+function attachedV3(extra: Partial<ConnectOptions> = {}) {
+  return attached(extra, SUBPROTOCOL_V3);
+}
+
+function chunk(
+  correlation: bigint,
+  seq: bigint,
+  payload: number[],
+  stream = 0,
+  target = STREAMED,
+): Frame {
+  return {
+    form: "chunk",
+    target,
+    envelope: { stamp: 600n + seq, seq },
+    correlation,
+    stream,
+    payload: Uint8Array.from(payload),
+  };
+}
+
+function streamEnd(
+  correlation: bigint,
+  seq: bigint,
+  outcome: StreamOutcome,
+  target = STREAMED,
+): Frame {
+  return {
+    form: "stream_end",
+    target,
+    envelope: { stamp: 600n + seq, seq },
+    correlation,
+    stream: 0,
+    outcome,
+  };
+}
+
+/** The `stream_end` the client sends to stop the reply stream of call 1. */
+function stopped(outcome: StreamOutcome): Frame {
+  return {
+    form: "stream_end",
+    target: STREAMED,
+    envelope: { stamp: STAMP, seq: 1n },
+    correlation: 1n,
+    stream: 0,
+    outcome,
+  };
+}
+
+function sentOf(socket: FakeSocket, form: Frame["form"]): Frame[] {
+  return frames(socket).filter((f) => f.form === form);
+}
+
+/** The sum of the `stream_credit` frames the client sent. */
+function credited(socket: FakeSocket): number {
+  return sentOf(socket, "stream_credit").reduce(
+    (sum, f) => sum + (f.form === "stream_credit" ? f.credit : 0),
+    0,
+  );
+}
+
+/** Lets the stream run the callbacks it queued. */
+function settled(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+test("queryStream_reads_chunks_in_order_and_closes_on_end", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const stream = session.queryStream(1, 10, Uint8Array.of(3), BOUND);
+  assert.deepEqual(lastSent(socket), {
+    form: "request",
+    target: STREAMED,
+    envelope: { stamp: STAMP, seq: 1n },
+    payload: Uint8Array.of(3),
+  });
+  socket.deliver(chunk(1n, 1n, [1, 1]));
+  socket.deliver(chunk(1n, 2n, [2]));
+  socket.deliver(chunk(1n, 3n, []));
+  socket.deliver(streamEnd(1n, 4n, { kind: "end" }));
+  const read: Uint8Array[] = [];
+  for await (const c of stream) read.push(c);
+  assert.deepEqual(read, [
+    Uint8Array.of(1, 1),
+    Uint8Array.of(2),
+    new Uint8Array(),
+  ]);
+  assert.deepEqual(notes, []);
+  assert.deepEqual(sentOf(socket, "stream_end"), []);
+});
+
+test("queryStream_grants_credit_as_the_reader_drains", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(9), BOUND)
+    .getReader();
+  await settled();
+  assert.equal(sentOf(socket, "stream_credit").length, 0);
+  for (let seq = 1n; seq <= 4n; seq++) {
+    socket.deliver(chunk(1n, seq, [Number(seq)]));
+  }
+  await settled();
+  // The queue holds the four chunks of the initial credit: nothing is granted.
+  assert.equal(sentOf(socket, "stream_credit").length, 0);
+  for (let reads = 1; reads <= 8; reads++) {
+    const { value, done } = await reader.read();
+    assert.equal(done, false);
+    assert.deepEqual(value, Uint8Array.of(reads));
+    await settled();
+    assert.equal(sentOf(socket, "stream_credit").length, reads);
+    assert.ok(
+      4 + credited(socket) <= 4 + reads,
+      `granted ${4 + credited(socket)} after ${reads} reads`,
+    );
+    for (const f of sentOf(socket, "stream_credit")) {
+      assert.deepEqual(f, {
+        form: "stream_credit",
+        target: STREAMED,
+        correlation: 1n,
+        stream: 0,
+        credit: 1,
+      });
+    }
+    socket.deliver(chunk(1n, BigInt(reads + 4), [reads + 4]));
+  }
+  socket.deliver(streamEnd(1n, 13n, { kind: "end" }));
+  for (let n = 9; n <= 12; n++) {
+    assert.deepEqual((await reader.read()).value, Uint8Array.of(n));
+  }
+  assert.equal((await reader.read()).done, true);
+  assert.deepEqual(notes, []);
+});
+
+test("queryStream_seq_gap_errors_interrupted_and_sends_stream_end", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(3), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.deliver(chunk(1n, 3n, [3]));
+  await assert.rejects(reader.read(), isFailure("interrupted"));
+  assert.deepEqual(sentOf(socket, "stream_end"), [
+    stopped({ kind: "interrupted" }),
+  ]);
+  // The call is forgotten: a later frame of it is discarded.
+  socket.deliver(chunk(1n, 4n, [4]));
+  assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
+    "unknown-correlation",
+  ]);
+  assert.deepEqual(socket.closes, []);
+});
+
+test("a stream_end after a gap errors interrupted", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(3), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.deliver(streamEnd(1n, 3n, { kind: "end" }));
+  await assert.rejects(reader.read(), isFailure("interrupted"));
+  // The stream has ended: the client has nothing to stop.
+  assert.deepEqual(sentOf(socket, "stream_end"), []);
+  assert.deepEqual(notes, []);
+});
+
+test("queryStream_chunk_beyond_credit_is_a_protocol_error", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(9), BOUND)
+    .getReader();
+  for (let seq = 1n; seq <= 4n; seq++) socket.deliver(chunk(1n, seq, [1]));
+  assert.deepEqual(notes, []);
+  socket.deliver(chunk(1n, 5n, [1]));
+  assert.deepEqual(notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+  assert.deepEqual(socket.closes, [{}]);
+  await assert.rejects(reader.read(), isFailure("down"));
+});
+
+test("queryStream_response_is_a_protocol_error", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  socket.deliver(
+    response(STREAMED, 1n, { outcome: "reply", payload: Uint8Array.of(1) }),
+  );
+  assert.deepEqual(notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+  assert.deepEqual(socket.closes, [{}]);
+  await assert.rejects(reader.read(), isFailure("down"));
+});
+
+test("a_chunk_for_a_plain_query_is_a_protocol_error", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const call = session.query(1, 7, Uint8Array.of(1), BOUND);
+  const down = assert.rejects(call, isFailure("down"));
+  socket.deliver(chunk(1n, 1n, [1], 0, QUERY));
+  assert.deepEqual(notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+  assert.deepEqual(socket.closes, [{}]);
+  await down;
+});
+
+test("a stream_end or a stream_credit for a plain query is a protocol error", async () => {
+  const frames: Frame[] = [
+    streamEnd(1n, 1n, { kind: "end" }, QUERY),
+    {
+      form: "stream_credit",
+      target: QUERY,
+      correlation: 1n,
+      stream: 0,
+      credit: 1,
+    },
+  ];
+  for (const frame of frames) {
+    const { socket, session, notes } = await attachedV3();
+    const down = assert.rejects(
+      session.query(1, 7, Uint8Array.of(1), BOUND),
+      isFailure("down"),
+    );
+    socket.deliver(frame);
+    assert.deepEqual(notes, [{
+      note: "violation",
+      violation: "unexpected-form",
+    }]);
+    await down;
+  }
+});
+
+test("a stream_credit, or a chunk on a stream other than 0, for a streamed reply is a protocol error", async () => {
+  const frames: Frame[] = [
+    {
+      form: "stream_credit",
+      target: STREAMED,
+      correlation: 1n,
+      stream: 0,
+      credit: 1,
+    },
+    chunk(1n, 1n, [1], 1),
+  ];
+  for (const frame of frames) {
+    const { socket, session, notes } = await attachedV3();
+    const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+      .getReader();
+    socket.deliver(frame);
+    assert.deepEqual(notes, [{
+      note: "violation",
+      violation: "unexpected-form",
+    }]);
+    await assert.rejects(reader.read(), isFailure("down"));
+  }
+});
+
+test("cancel_sends_one_stream_end_interrupted_with_seq_1", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(9), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.deliver(chunk(1n, 2n, [2]));
+  await reader.cancel();
+  await reader.cancel();
+  assert.deepEqual(sentOf(socket, "stream_end"), [
+    stopped({ kind: "interrupted" }),
+  ]);
+  assert.deepEqual(notes, []);
+});
+
+test("a_frame_after_cancel_is_discarded", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(9), BOUND)
+    .getReader();
+  await reader.cancel();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.deliver(streamEnd(1n, 2n, { kind: "end" }));
+  await settled();
+  assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
+    "unknown-correlation",
+    "unknown-correlation",
+  ]);
+  assert.equal(sentOf(socket, "stream_credit").length, 0);
+  assert.deepEqual(socket.closes, []);
+});
+
+test("an_empty_stream_closes_with_no_chunk", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(0), BOUND)
+    .getReader();
+  socket.deliver(streamEnd(1n, 1n, { kind: "end" }));
+  assert.deepEqual(await reader.read(), { value: undefined, done: true });
+  assert.deepEqual(notes, []);
+});
+
+test("queryStream_times_out_without_a_first_frame", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  await assert.rejects(reader.read(), isFailure("timeout"));
+  assert.deepEqual(sentOf(socket, "stream_end"), [
+    stopped({ kind: "interrupted" }),
+  ]);
+  socket.deliver(chunk(1n, 1n, [1]));
+  assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
+    "unknown-correlation",
+  ]);
+});
+
+test("a stream whose first chunk arrived does not time out", async () => {
+  const { socket, session } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(2), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  await new Promise((resolve) => setTimeout(resolve, BOUND.bound * 3));
+  socket.deliver(chunk(1n, 2n, [2]));
+  socket.deliver(streamEnd(1n, 3n, { kind: "end" }));
+  assert.deepEqual((await reader.read()).value, Uint8Array.of(1));
+  assert.deepEqual((await reader.read()).value, Uint8Array.of(2));
+  assert.equal((await reader.read()).done, true);
+  assert.deepEqual(sentOf(socket, "stream_end"), []);
+});
+
+test("queryStream_on_a_v2_session_errors_unsupported_and_sends_nothing", async () => {
+  const { socket, session, notes } = await attached();
+  const sent = socket.sent.length;
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  await assert.rejects(reader.read(), isFailure("unsupported"));
+  assert.equal(socket.sent.length, sent);
+  // The session goes on, and the caller number was not used.
+  const call = session.query(1, 7, new Uint8Array(), BOUND);
+  const request = lastSent(socket);
+  assert.equal(request.form === "request" && request.envelope.seq, 1n);
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array() }),
+  );
+  await call;
+  assert.deepEqual(notes, []);
+  assert.deepEqual(socket.closes, []);
+});
+
+test("stream_end_busy_before_a_chunk_errors_busy", async () => {
+  const { socket, session, notes } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  socket.deliver(streamEnd(1n, 1n, { kind: "busy" }));
+  await assert.rejects(reader.read(), isFailure("busy"));
+  assert.deepEqual(sentOf(socket, "stream_end"), []);
+  assert.deepEqual(notes, []);
+});
+
+test("a stream_end with a contract, corrupt or interrupted outcome errors with that category", async () => {
+  const outcomes: StreamOutcome[] = [
+    { kind: "contract", contract: { category: "unknown-interaction" } },
+    { kind: "corrupt" },
+    { kind: "interrupted" },
+  ];
+  for (const outcome of outcomes) {
+    const { socket, session } = await attachedV3();
+    const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+      .getReader();
+    socket.deliver(chunk(1n, 1n, [1]));
+    socket.deliver(streamEnd(1n, 2n, outcome));
+    await assert.rejects(
+      reader.read(),
+      (e: unknown) =>
+        e instanceof SessionError &&
+        e.failure.category === outcome.kind &&
+        (outcome.kind !== "contract" ||
+          (e.failure.category === "contract" &&
+            e.failure.contract.category === "unknown-interaction")),
+    );
+  }
+});
+
+const SMALL_STREAM = {
+  iface: 1,
+  ask: { iface: 1, ord: 10, kind: "query", limit: 2 },
+} as const;
+
+test("a chunk above the member's limit sends stream_end corrupt and errors corrupt", async () => {
+  const { socket, session, notes } = await attachedV3({
+    interfaces: [SMALL_STREAM],
+  });
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1, 2]));
+  assert.deepEqual(sentOf(socket, "stream_end"), []);
+  socket.deliver(chunk(1n, 2n, [1, 2, 3]));
+  assert.deepEqual(sentOf(socket, "stream_end"), [
+    stopped({ kind: "corrupt" }),
+  ]);
+  await assert.rejects(reader.read(), isFailure("corrupt"));
+  assert.deepEqual(notes, []);
+});
+
+test("the session ending errors a stream in flight with down", async () => {
+  const { socket, session } = await attachedV3();
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), BOUND)
+    .getReader();
+  socket.deliver(chunk(1n, 1n, [1]));
+  socket.serverClose(1001);
+  await assert.rejects(reader.read(), isFailure("down"));
+  // After the end, a new stream errors down and sends nothing.
+  const sent = socket.sent.length;
+  const late = session.queryStream(1, 10, Uint8Array.of(1), BOUND).getReader();
+  await assert.rejects(late.read(), isFailure("down"));
+  assert.equal(socket.sent.length, sent);
+});
+
+test("queryStream with a bound of 0 errors with RangeError and sends nothing", async () => {
+  const { socket, session } = await attachedV3();
+  const sent = socket.sent.length;
+  const reader = session.queryStream(1, 10, Uint8Array.of(1), { bound: 0 })
+    .getReader();
+  await assert.rejects(reader.read(), RangeError);
+  assert.equal(socket.sent.length, sent);
 });
