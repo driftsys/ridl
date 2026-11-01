@@ -1020,7 +1020,10 @@ open enum DtcStatus {
 
 **Evolution.**
 
-- Appending a value to an open enum is compatible.
+- Appending a value to an open enum is compatible, except under the podbuf
+  encoding when the value changes the integer width or the signedness of the
+  enum: that append is breaking (`ridl diff` reports it as
+  `podbuf_width_change`).
 - Appending a value to a strict enum is breaking for every encoding, because a
   reader that was built before the append refuses the new value.
 - Removing a value, or giving a value another number, is breaking, open or
@@ -1067,9 +1070,11 @@ An `enumset` is **strict** by default: a bit that the declaration does not name
 is invalid. The modifier `open` before `enumset` makes it **open**: any bit that
 fits the width is valid, an undeclared bit is kept, and the named flags are the
 declared bits that are set. The rules of §8.1 for evolution apply to bits in
-place of values: appending a bit to an open enumset is compatible, appending a
-bit to a strict enumset is breaking for every encoding, and removing a bit or
-moving it to another position is breaking.
+place of values: appending a bit to an open enumset is compatible (except under
+the podbuf encoding when the bit changes the integer width, which is breaking
+and reported by `ridl diff` as `podbuf_width_change`), appending a bit to a
+strict enumset is breaking for every encoding, and removing a bit or moving it
+to another position is breaking.
 
 ### 9.1 Standalone Form
 
