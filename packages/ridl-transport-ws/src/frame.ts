@@ -7,10 +7,10 @@
  * whether a frame carries a payload is decided from its header alone.
  *
  * The `block` form (form code 11) belongs to binding version 2
- * (driftsys/ridl#1129): one part of the payload of a `publish` of a `fixed`
- * that does not fit one message. Every block but the last carries
- * {@link BLOCK_BYTES} bytes. The codec reads and writes the form on any
- * session; whether a session accepts it is the session's to decide.
+ * (frame specification §11.1, binding version 2): one part of the payload of
+ * a `publish` of a `fixed` that does not fit one message. Every block but the
+ * last carries {@link BLOCK_BYTES} bytes. The codec reads and writes the form
+ * on any session; whether a session accepts it is the session's to decide.
  *
  * @module
  */

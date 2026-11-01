@@ -8,11 +8,12 @@
 //! [`ResponseOutcome::Reply`] hold payload bytes among the states that can
 //! lack them.
 //!
-//! Frame version 2 adds the `block` form (driftsys/ridl#1129): one part of a
-//! `publish` of a `fixed`, in at most [`BLOCK_BYTES`] bytes of payload. The
-//! decoder checks each `block` by itself, with no session state: its `kind`,
-//! its `total`, its `index` and the number of bytes after its header. The
-//! order of the blocks of one payload is the session's to check.
+//! Frame version 2 adds the `block` form (frame specification §11.1, binding
+//! version 2): one part of a `publish` of a `fixed`, in at most
+//! [`BLOCK_BYTES`] bytes of payload. The decoder checks each `block` by
+//! itself, with no session state: its `kind`, its `total`, its `index` and the
+//! number of bytes after its header. The order of the blocks of one payload is
+//! the session's to check.
 //!
 //! The module needs `core` only.
 
@@ -28,7 +29,7 @@ pub const FRAME_VERSION: u32 = 2;
 /// The WebSocket subprotocol name of binding version 2.
 pub const SUBPROTOCOL: &str = "ridl-ws-v2";
 /// The subprotocol name of binding version 1, which the provider selects
-/// only to refuse its `attach` (driftsys/ridl#1129).
+/// only to refuse its `attach` (frame specification §11.1, binding version 2).
 pub const SUBPROTOCOL_V1: &str = "ridl-ws-v1";
 /// The smallest message size limit a receiver may configure: the largest
 /// header of any message, an `attach` with a 255-byte name.
@@ -41,7 +42,7 @@ pub const MAX_MESSAGE_LIMIT: usize = 16_164;
 /// The size of an encoded [`Envelope`] in bytes.
 pub const ENVELOPE_BYTES: usize = 16;
 /// The bytes of payload in every `block` but the last (binding version 2,
-/// driftsys/ridl#1129).
+/// frame specification §11.1, binding version 2).
 pub const BLOCK_BYTES: usize = 4_096;
 
 const FORM_ATTACH: u8 = 1;

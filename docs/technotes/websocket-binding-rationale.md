@@ -18,12 +18,12 @@ decision 9 (why `Violation.type_name` is an `Option`).
 
 From release 0.10.0 the wire surface is frozen: the byte layout of §11.1 for
 frame version 1 and binding version 1, the code tables of §4 and §9.6, and the
-test vectors. The `wire` freeze dump reads the vector table from the
-specification by its `Id` column and checks each vector's length, its codes
-against their tables and its payload bytes (`xtask/src/freeze/wire.rs`), so an
-edit to a vector is a break. A wire format with a promise and no check is only a
-policy, and the promise is made before the transport crate exists so that a
-WebSocket user gets it at 0.10.0.
+test vectors. The `wire` freeze dump reads the two vector tables (binding
+version 1 and binding version 2) from the specification by its `Id` column and
+checks each vector's length, its codes against their tables and its payload
+bytes (`xtask/src/freeze/wire.rs`), so an edit to a vector is a break. A wire
+format with a promise and no check is only a policy, and the promise is made
+before the transport crate exists so that a WebSocket user gets it at 0.10.0.
 
 Not frozen, because they are outside the surfaces ADR-0029 decision 1 lists: the
 transport crate `ridl-transport-ws`, the TypeScript WebSocket package, the
@@ -98,7 +98,7 @@ overhead per message, recoverable additively.
 Little-endian is what the FlatBuffers payload already uses on every target in
 scope, so one message has one byte order; fixed widths make the header canonical
 (§4) with no encoder choices, and a TypeScript end reads it with `DataView` at
-fixed offsets. A `u8` form and a `u8` kind are enough for ten forms and five
+fixed offsets. A `u8` form and a `u8` kind are enough for eleven forms and five
 kinds; the frame version bumps if either table needs more. `InterfaceNo` and
 `Ordinal` keep 32 bits, so the 16-bit fallback of ADR-0021 decision 2 stays
 untriggered.
@@ -186,23 +186,110 @@ that specified the binding (driftsys/ridl#890), so every deployment section has
 them before the transport crate exists. The test that checks the sum against a
 frame the transport writes comes with the crate (driftsys/ridl#718).
 
-### Streams arrive as frame version 2 and binding version 2
+### Blocks arrive as frame version 2 and binding version 2
+
+A `fixed` of up to 65,280 bytes does not cross in one message: the largest
+message of the Rust provider is 16,164 bytes, and a `publish` header takes 27 of
+them, so a `fixed` above 16,137 bytes needs a form that carries part of a
+payload. That form, `block`, is a new form, so it is a new frame version. A
+binding never refuses an interaction the catalog allows (ADR-0030 decision 20),
+so the answer is blocks and not a smaller limit. The rules of the form are in
+the frame specification §4, §5.5 and §11.1 "Binding version 2"; this section
+gives the reasons.
+
+- **4,096 bytes per block, not a whole message.** ADR-0030 decision 16 asks a
+  binding to copy at most 4,096 bytes between two scheduling points, so a
+  receiver copies one block per message it handles. Block `i` lands at offset
+  4,096 × `i`, one page per block. The size does not depend on the provider's
+  message limit, so a lowered limit splits the same way and the consumer, which
+  does not know that limit, never has to. The cost is 16 messages for the
+  largest `fixed` instead of 5, paid once per session because a `fixed` is read
+  once.
+- **Only a `fixed`, only provider to consumer, only above one message.** Every
+  signal, event, command and query fits one message, so splitting them would add
+  a reassembly on the provider for no payload that needs it. The provider never
+  reassembles. Alternative: blocks for every payload above 4 KiB in both
+  directions, rejected and open to a later binding version if a measurement asks
+  for it.
+- **`total` and `index` in every block, no last-block flag.** The receiver
+  learns the size at the first block, so it refuses a payload above the
+  catalog's limit before it copies a byte, and a missing block is a sequence
+  error and not a wait without a bound. Each block names its interaction, so the
+  decoder checks it with no session state. Alternatives: a first block with the
+  header and later blocks with an index only (a block that cannot be attributed
+  without state); a byte offset in place of `index` (the same information, with
+  the block size in two places).
+- **A form, not fields on `publish`.** Fields on `publish` would sit on every
+  `publish` of every signal. Alternative: blocks as binding framing that splits
+  any encoded message, rejected because a fragment does not name its
+  interaction, so the size could not be checked against the catalog's limit.
+- **Version 1 peers are told why.** The Rust provider serves frame version 2
+  only and, for a client that offers `ridl-ws-v1` alone, selects it and answers
+  `attached(refused(frame_version_unsupported))`, because a browser reports a
+  failed handshake as a close with 1006 and no reason. Alternative: serve both
+  versions, rejected because version 1 would have to refuse a large `fixed`.
+- **One reassembly per session, and a sequence error ends the session.** The
+  provider answers reads one after the other, so nothing needs several
+  reassemblies at once. The transport is reliable and ordered, so a missing,
+  repeated or reordered block is a sender defect, and dropping the payload would
+  leave the `read` waiting. A payload above the catalog's limit is different:
+  decision 19 makes the refusal of a size a failure of that interaction's read,
+  so the session continues and the remaining blocks are skipped, still checked
+  for their sequence.
+- **Other frames may come between blocks.** Forbidding it is simpler to state,
+  but it would stop a sender from answering a call between two blocks, which is
+  what the copy rule of decision 16 asks of a sender on a single-threaded
+  executor. The receiver pays nothing, because it holds one reassembly either
+  way. The Rust provider as built sends the blocks of one payload in one step.
+  Two frames are the exception: a whole `publish` and an `answer` of the `fixed`
+  being reassembled. The provider answers the `read`s of one interaction in the
+  order it receives them and sends the whole answer of one `read` before the
+  next, so such a frame can only be a sender defect, and applying an `answer`
+  would settle the next `read` with the payload meant for the first. The
+  exceptions compare the kind as well as the numbers, because the consumer keys
+  its queues of waiting operations by the kind too, and a frame whose kind
+  disagrees with the catalog is a frame of an unknown interaction (frame
+  specification §4, §6.4), not a frame of the interaction being reassembled.
+- **A `ridl-ws-v1` connection refuses every `attach`.** The Rust provider cannot
+  serve version 1, so it refuses an `attach` of frame 1 and also an `attach` of
+  frame 2 that arrives on a connection that selected `ridl-ws-v1`. The reason is
+  the same `frame_version_unsupported`, and the subprotocol the connection
+  selected, not the field alone, decides.
+- **The consumer sizes its buffer from the catalog and treats its member table
+  as partial.** The generated TypeScript module carries each member's limit, so
+  no limit option exists on `connect` and the catalog stays the one source. The
+  tables omit members without a finite bound, so the session does not use them
+  to decide whether a block names a `fixed`; it reassembles within the limit it
+  has and lets the existing `publish` path discard an unsolicited payload.
+  Alternative: a second set of identities and a second discard path, rejected as
+  more rules for a case only a sender defect reaches.
+- **The `Config` check counts a `fixed` as at most one block message.** A
+  `fixed` that does not fit one message crosses in blocks of at most 4,130
+  bytes, so a message limit of 4,130 bytes carries every payload the catalog
+  allows. The check keeps one header size for every member, which refuses up to
+  9 bytes more than needed for a `fixed` below one block message; an exact rule
+  per kind is a separate change.
+
+Cost if wrong: the block size is a constant of binding version 2, so another
+size is another binding version, and version 2 stays as it is.
+
+### Streams arrive as frame version 3 and binding version 3
 
 Streams need new forms (an item, an end, flow-control credit) and a per-element
 bound. The subprotocol list plus `frame_version` is a negotiation the binding
-already has, so additions need no new mechanism. A client that supports both
-offers `ridl-ws-v2, ridl-ws-v1`, a version 1 server selects `ridl-ws-v1`, and
-the client uses no stream form on that session. Version 1's layout, codes and
-vectors are never edited, which is what ADR-0029 asks of a frozen surface. A
-consumer given a contract that declares a stream over a version 1 session
-reports the call through a new `Transport` variant (additive, because
-`Transport` is `#[non_exhaustive]`), not as `UnknownInteraction`, which would
-misname a disagreement about the catalog. Alternative: add stream forms to
-version 1 as forms an old peer discards, rejected because an unknown form is a
-protocol violation and an old provider cannot know the new consumer will never
-subscribe a stream. Cost if wrong: a newer peer carries two layouts for a while;
-no break for the older one. The same path serves a new `Rule` code, a new form
-or a new field.
+already has, so additions need no new mechanism. A client that supports all
+three offers `ridl-ws-v3, ridl-ws-v2, ridl-ws-v1`, a server that serves version
+2 selects `ridl-ws-v2`, and the client uses no stream form on that session.
+Version 1's layout, codes and vectors are never edited, which is what ADR-0029
+asks of a frozen surface. A consumer given a contract that declares a stream
+over a session of frame version 1 or 2 reports the call through a new
+`Transport` variant (additive, because `Transport` is `#[non_exhaustive]`), not
+as `UnknownInteraction`, which would misname a disagreement about the catalog.
+Alternative: add stream forms to version 1 as forms an old peer discards,
+rejected because an unknown form is a protocol violation and an old provider
+cannot know the new consumer will never subscribe a stream. Cost if wrong: a
+newer peer carries two layouts for a while; no break for the older one. The same
+path serves a new `Rule` code, a new form or a new field.
 
 ### The vectors are frozen now
 

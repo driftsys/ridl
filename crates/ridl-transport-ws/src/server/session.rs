@@ -736,7 +736,7 @@ impl<B: Backend> Session<B> {
     /// minus the 27-byte `publish` header (16,137 bytes at the default
     /// limit), is sent in one `publish`; a larger one is sent in `block`
     /// frames of 4,096 bytes, one after the other with no frame between
-    /// them (binding version 2, driftsys/ridl#1129).
+    /// them (frame specification §11.1, binding version 2).
     ///
     /// The value is read up to the member's limit, at most the default
     /// ceiling of a `fixed`, 65,280 bytes, whatever limit the member table
@@ -4205,7 +4205,7 @@ mod tests {
         );
     }
 
-    // -- A `fixed` in blocks (binding version 2, driftsys/ridl#1129) ---------
+    // -- A `fixed` in blocks (frame specification §11.1, binding version 2) ---
 
     /// The `n` bytes whose byte `i` is `i mod 251`, so that a block at a
     /// wrong offset changes the bytes.

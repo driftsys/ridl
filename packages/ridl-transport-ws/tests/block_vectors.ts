@@ -1,7 +1,8 @@
 /**
  * The byte vectors of `block` messages (frame version 2) that the decoder,
- * the encoder and the session tests share (driftsys/ridl#1129). Each hex
- * string is one whole message; spaces are for reading only.
+ * the encoder and the session tests share (frame specification §11.1, binding
+ * version 2). Each hex string is one whole message; spaces are for reading
+ * only.
  */
 
 import type { Violation } from "../mod.ts";
@@ -67,9 +68,6 @@ export function blockMessage(
 }
 
 /** The vectors that decode. */
-export const ATTACH_2 = hex(
-  "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e",
-);
 export const BLOCK_LAST = hex(
   `${blockHeader(4098, 1)} abcd`,
 );

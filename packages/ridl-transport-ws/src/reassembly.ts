@@ -1,6 +1,6 @@
 /**
- * The reassembly of the `block` frames of a `fixed` (binding version 2,
- * driftsys/ridl#1129).
+ * The reassembly of the `block` frames of a `fixed` (frame specification
+ * §11.1, binding version 2).
  *
  * A session holds one {@link Reassembly}. It receives each decoded block,
  * whose single-block rules the codec has already checked, and checks the

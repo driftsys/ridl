@@ -2,7 +2,9 @@
 // whose port is the `port` parameter of the page's query string, runs the
 // signal half of the end-to-end sequence, and sets `globalThis.result` to a
 // promise of what it received: the provenance and the payload, as hex, of
-// the signal's first publish and of its publish after the command.
+// the signal's first publish and of its publish after the command, the length
+// and the byte-for-byte match of each large `fixed`, and the count of discard
+// notes.
 
 import { connect, Kind } from "../mod.ts";
 import type { Sample } from "../mod.ts";
@@ -13,6 +15,10 @@ import { waiter } from "./waiter.ts";
 export interface Result {
   init: string;
   live: string;
+  /** Each large `fixed`, by ordinal: `<length>:<match>`. */
+  fixed: Record<string, string>;
+  /** The count of `discarded` notes. */
+  discarded: number;
 }
 
 function describe(sample: Sample): string {
@@ -28,6 +34,7 @@ async function run(): Promise<Result> {
   if (!port) throw new Error("the page URL has no port parameter");
   const init = waiter<Sample>("init publish", 2000);
   const live = waiter<Sample>("live publish", 2000);
+  let discarded = 0;
   const session = await connect(`ws://127.0.0.1:${port}`, {
     catalog: { name: catalog.NAME, hash: catalog.HASH },
     encoding: catalog.ENCODING,
@@ -38,8 +45,24 @@ async function run(): Promise<Result> {
       if (sample.provenance === "init") init.accept(sample);
       if (sample.provenance === "live") live.accept(sample);
     },
+    onNote(note) {
+      if (note.note === "discarded") discarded++;
+    },
   });
   try {
+    const fixed: Record<string, string> = {};
+    for (const [ord, length] of catalog.FIXED_LENGTHS) {
+      const sample = await session.read({
+        kind: Kind.Fixed,
+        iface: catalog.IFACE,
+        ord,
+      });
+      const expected = catalog.pattern(length);
+      const payload = sample.payload;
+      const match = payload !== null && payload.length === expected.length &&
+        payload.every((b, i) => b === expected[i]);
+      fixed[ord] = `${payload?.length ?? 0}:${match}`;
+    }
     init.start();
     await session.subscribe({
       kind: Kind.Signal,
@@ -56,7 +79,12 @@ async function run(): Promise<Result> {
       { bound: 2000 },
     );
     const second = await live.promise;
-    return { init: describe(first), live: describe(second) };
+    return {
+      init: describe(first),
+      live: describe(second),
+      fixed,
+      discarded,
+    };
   } finally {
     init.cancel();
     live.cancel();

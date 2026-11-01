@@ -6,7 +6,7 @@ use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
     Attach, Frame, PublishState, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
-    MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
+    FRAME_VERSION, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
 };
 
 /// The frame header maximum and the envelope size of the `websocket` row.
@@ -16,7 +16,7 @@ fn row() -> (usize, usize) {
         .iter()
         .find(|b| b.name == "websocket")
         .expect("the websocket row exists");
-    assert_eq!(row.version, "1");
+    assert_eq!(row.version, FRAME_VERSION.to_string());
     (
         row.frame_header_max_bytes.expect("the row states a header") as usize,
         row.envelope_bytes.expect("the row states an envelope") as usize,

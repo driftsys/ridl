@@ -4,13 +4,13 @@
 TypeScript side of the WebSocket binding that
 [the frame specification](../specification/frame-specification.md) §11.1
 defines. It is the **consuming side** of a frame session, for Deno and for the
-browser: it opens one WebSocket with the subprotocol `ridl-ws-v1`, sends
-`attach`, `subscribe`, `unsubscribe`, `read` and `request`, and applies the
-consumer's rules that need no payload decoding. It carries payload bytes without
-reading them: a payload is a `Uint8Array` that the package hands to its caller
-as it arrived, and sends as the caller gave it. The one thing it checks of a
-payload is its length, against the member's limit from the generated interface
-tables (D-19).
+browser: it opens one WebSocket offering the subprotocols `ridl-ws-v2` and
+`ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`, `read` and `request`,
+and applies the consumer's rules that need no payload decoding. It carries
+payload bytes without reading them: a payload is a `Uint8Array` that the package
+hands to its caller as it arrived, and sends as the caller gave it. The one
+thing it checks of a payload is its length, against the member's limit from the
+generated interface tables (D-19).
 
 The Rust crate `ridl-transport-ws` is the providing side of the same binding;
 its as-built record is [`ridl-transport-ws.md`](ridl-transport-ws.md), which
@@ -21,7 +21,7 @@ the generated codec module's, `<base>.codec.ts`
 ([`ts-codec-table.md`](ts-codec-table.md)); the generated faces over this
 package are not built. ADR-0020 decision 6 places the package; its dependency
 row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
-§3 to §9 and §11.1 (binding version 1).
+§3 to §9 and §11.1 (binding versions 1 and 2).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -39,9 +39,10 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 
 **What the package does.**
 
-- Encodes and decodes every one of the ten forms of frame specification §4
-  exactly as §11.1 item 2 lays them out, and reproduces every test vector of
-  §11.1 byte for byte, read from the same table the crate's tests read.
+- Encodes and decodes every one of the eleven forms of frame specification §4
+  exactly as §11.1 item 2 and "Binding version 2" lay them out, and reproduces
+  every test vector of §11.1 byte for byte, read from the same table the crate's
+  tests read.
 - Opens a consuming session over one `WebSocket`: `attach`, `subscribe`,
   `unsubscribe`, `read` (signal and `fixed`), `command` and `query`, and the end
   of the session.
@@ -122,26 +123,28 @@ the runtime package holds them.
 
 **D-5. Two layers, as in the crate: a sans-IO codec and a session.**
 
-| Module           | Holds                                                                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `src/frame.ts`   | the ten forms as the discriminated union `Frame`, `encode`, `decode`, `attach`, `AttachError`, `encodingTag` and the constants |
-| `src/session.ts` | `connect` and the `Session` class: the consumer's state machine over one `WebSocket`                                           |
-| `src/calls.ts`   | the calls in flight of one session (`Calls`, not exported from `mod.ts`): the caller counter, the bounds and the correlation   |
-| `src/errors.ts`  | the errors a session rejects with: `AttachRefused`, `ProtocolError`, `SessionError` and its `CallFailure`                      |
-| `mod.ts`         | the public exports: everything exported by `frame.ts`, `errors.ts` and `session.ts`                                            |
+| Module              | Holds                                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `src/frame.ts`      | the eleven forms as the discriminated union `Frame`, `encode`, `decode`, `attach`, `AttachError`, `encodingTag` and the constants |
+| `src/blocks.ts`     | the block size (`BLOCK_BYTES`) and the number of blocks of a payload                                                              |
+| `src/reassembly.ts` | `Reassembly`: the one payload in progress of a session, and the sequence rules of its blocks (frame specification §5.5)           |
+| `src/session.ts`    | `connect` and the `Session` class: the consumer's state machine over one `WebSocket`                                              |
+| `src/calls.ts`      | the calls in flight of one session (`Calls`, not exported from `mod.ts`): the caller counter, the bounds and the correlation      |
+| `src/errors.ts`     | the errors a session rejects with: `AttachRefused`, `ProtocolError`, `SessionError` and its `CallFailure`                         |
+| `mod.ts`            | the public exports: everything exported by `frame.ts`, `errors.ts` and `session.ts`                                               |
 
 `src/calls.ts` was split out of `session.ts` during implementation, to keep the
 session file at a readable size.
 
-The codec defines `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`),
-`MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES` (16), the `Kind` codes,
-`encodingTag`, which maps `flatbuffers`, `proto3` and `podbuf` to 1, 2 and 3,
-and the three default ceilings of a payload with `defaultCeiling(kind)` (D-19).
-As in the crate's D-3, the payload rules are in the types: a `publish` carries a
-`PublishState` (`init`, `live` with a payload, or `invalid`), a `response` a
-`ResponseOutcome` (`accepted`, `reply` with a payload, `contract`, `corrupt` or
-`busy`), and an `occurrence` or a `request` always carries a payload, which may
-be empty.
+The codec defines `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`),
+`SUBPROTOCOL_V1` (`ridl-ws-v1`), `MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES`
+(16), the `Kind` codes, `encodingTag`, which maps `flatbuffers`, `proto3` and
+`podbuf` to 1, 2 and 3, and the three default ceilings of a payload with
+`defaultCeiling(kind)` (D-19). As in the crate's D-3, the payload rules are in
+the types: a `publish` carries a `PublishState` (`init`, `live` with a payload,
+or `invalid`), a `response` a `ResponseOutcome` (`accepted`, `reply` with a
+payload, `contract`, `corrupt` or `busy`), and an `occurrence` or a `request`
+always carries a payload, which may be empty.
 
 The codec encodes and decodes every form in both directions, as the crate's D-6
 does, so a later providing side in TypeScript can reuse it. `decode` returns a
@@ -191,8 +194,9 @@ unit tests use to pass a fake one; the default is
 
 - `connect` validates the name, the encoding and the hash with `attach` before
   any socket is created, and rejects with that `AttachError` or `RangeError`. It
-  then opens the connection with the subprotocol `ridl-ws-v1`, sends the
-  `attach` once the connection is open, and resolves with a `Session` on
+  then opens the connection offering `ridl-ws-v2` and then `ridl-ws-v1`, sends
+  the `attach` with the frame version of the subprotocol the server selected (2
+  or 1) once the connection is open, and resolves with a `Session` on
   `attached(accepted)`. It rejects with `AttachRefused` (carrying the `reason`
   and a `closed` promise) on `attached(refused)`; with `ProtocolError` when the
   server broke the binding before `attached`; and with `SessionError` `down`
@@ -317,14 +321,19 @@ codec, a text message (`text-message`), a server that selected no subprotocol
 (`no-subprotocol`, which Deno reports; a browser fails the handshake itself and
 the session ends with 1006, see D-8), or a form the provider must not send at
 that point (`unexpected-form`: a first message other than `attached`, a second
-`attached`, a consumer form) the session calls `close()` with no code, which
-sends a close frame with no status (the server sees 1005), records the violation
-through `onNote`, and ends with `violation` set in `Ended`. A message is not
-checked against a message limit: the platform sets the limit of the connection,
-and the client cannot close with 1009. What is checked is the length of each
-received payload against its member's limit (D-19), which refuses the payload
-and does not end the session. driftsys/ridl#991 asks the frame specification to
-state the close of a client that cannot choose a close code.
+`attached`, a consumer form), or a frame that breaks the reassembly rules of
+frame specification §5.5, a `block` out of sequence or a whole `publish` or
+`answer` of the `fixed` being reassembled (`block-sequence`), or a message whose
+form is 11 on a `ridl-ws-v1` connection (`unknown-code`) the session calls
+`close()` with no code, which sends a close frame with no status (the server
+sees 1005), records the violation through `onNote`, and ends with `violation`
+set in `Ended`. A message is not checked against a message limit: the platform
+sets the limit of the connection, and the client cannot close with 1009. What is
+checked is the length of each received payload against its member's limit
+(D-19), which refuses the payload and does not end the session; a payload in
+blocks is refused at its first block, from `total`. driftsys/ridl#991 asks the
+frame specification to state the close of a client that cannot choose a close
+code.
 
 **D-11. No client liveness timer.** §11.1 item 1 has either end treat no message
 of any kind within its liveness timeout as the end of the session. A browser's
@@ -363,7 +372,8 @@ as `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING` (16,128) and
 `FIXED_CEILING` (65,280) with `defaultCeiling`. No hand-written limit option
 exists, so that a limit cannot be stated twice. The Rust crate `ridl-rt` holds
 the same three values in `ridl_rt::contract`, and the crate's test
-`tests/ts_ceilings.rs` reads `frame.ts` and compares them.
+`tests/ts_ceilings.rs` reads `frame.ts` and `blocks.ts` and compares them, with
+the block size, the frame version and the two subprotocol names of the crate.
 
 The check runs on receive, before a payload reaches the application, and
 compares the payload's length with the limit: a payload of exactly the limit
@@ -393,9 +403,59 @@ limit, and send nothing. That is the answer the provider gives a `request` above
 the limit (the crate's D-26), but only to arguments that one message carries; a
 larger message is above the provider's message limit, which closes the session
 with 1009 and rejects every call in flight with `down`. A `fixed` whose value is
-longer than one message, which the provider cannot serve over this binding until
-driftsys/ridl#1129, is answered by the provider with
-`contract(unknown-interaction)`, which rejects the `read` as any refused read.
+longer than one message arrives in `block` frames of at most 4,096 bytes, which
+the session reassembles.
+
+**Blocks.** `src/reassembly.ts` holds the one payload in progress. The rules it
+applies, and the answers to each sequence error, are frame specification §5.5;
+this record does not restate them. What the session adds is the following. A
+payload goes into one buffer of `total` bytes, allocated at the first block, and
+is handled as a `live` `publish` that arrived whole after its last block. The
+reads that the payload answers are the reads waiting for the identity when its
+first block arrived; a `read` sent while the payload is being reassembled waits
+for the next payload. The limit used at the first block is the member's limit
+held to 65,280 bytes. A message whose form is 11 on a connection that selected
+`ridl-ws-v1` ends the session, because that form is outside the table of frame
+version 1. The session refuses it before it decodes it, and before `attached`
+too, so a malformed block on that session gets the same violation code,
+`unknown-code`, as a well-formed one; the decoder itself reads form 11 on any
+session.
+
+The codes of the failures. A block that is wrong by itself is the violation
+`bad-block`; a `kind` outside the table stays `unknown-code` and an `interface`
+or `ordinal` 0 stays `zero-number`. A sequence error is the session violation
+`block-sequence`. A `fixed` payload refused for its size, whether it crossed
+whole or in blocks, rejects every `read` at the head of its identity's queue
+with `corrupt` and is recorded once as the note
+`{ note: "discarded", reason: "over-limit", frame }`, with the `publish` or the
+first block as `frame`, in place of the `not-subscribed` note that a payload no
+`read` waits for gets. The consumer does not know the provider's message limit,
+so the report of a `fixed` must not depend on whether the provider split it. A
+signal's or an event's payload above its limit keeps the `detected` report of
+D-19 and records no `over-limit` note; an unsolicited one is still recorded
+`not-subscribed`, as any unsolicited frame is.
+
+The session treats every identity as having no member table. The `interfaces`
+option lists only the members of the generated tables, and the generated module
+leaves out a member whose payload has no finite FlatBuffers bound, so the table
+is partial. Each listed entry carries its `kind`, which would let the session
+tell that a block does not name a `fixed`; it does not use that, on purpose. It
+reassembles any identity within that identity's limit (the entry's, else 65,280,
+and never more than 65,280) and hands the result to the existing `publish` path,
+which discards it as `not-subscribed` when no `read` waits. The cost is that a
+block payload that names an identity the tables list under another kind, which
+only a provider defect can send under a matching catalog hash, is copied, up to
+65,280 bytes, before it is discarded. The gain is one rule, no second set of
+identities and no second discard path in the session.
+
+The two exceptions of frame specification §5.5 (a whole `publish` and an
+`answer` of the `fixed` being reassembled) compare `(kind, interface, ordinal)`:
+`Reassembly.holds` is true when the frame's `kind` is `Fixed` and its
+`interface` and `ordinal` are the slot's. The session keys every queue of
+waiting operations by an identity that holds the kind, so a frame of another
+kind settles or shifts another queue and cannot change the reads that the blocks
+answer. A frame the codec discards for bytes after its header is recorded and
+the reassembly goes on.
 
 ## The end-to-end tests
 
@@ -426,7 +486,13 @@ bytes are the value the provider set.
   `2a 07` and the occurrence with the same payload, sends the query and checks
   the reply, and closes with 1000 with no violation recorded. This is the
   sequence of the crate's scenario, so the two clients are checked against one
-  provider behaviour.
+  provider behaviour. Between the `fixed` and the signal, the test also reads
+  the three large `fixed` values (ordinals 7 to 9 of `e2e/catalog.ts`, 65,280,
+  16,137 and 16,138 bytes) and compares every byte with the pattern. A second
+  test opens a raw socket without the package's `Session`, sends `attach` and
+  waits for `attached`, reads the `fixed` of 16,137 bytes and gets one
+  `publish`, reads the `fixed` of 16,138 bytes and gets four `block` frames; the
+  crate's scenario has no such test.
 - **The browser** (`e2e/browser_test.ts`, `e2e/page.ts`, `e2e/browser.ts`). The
   test bundles `e2e/page.ts` with `deno bundle --platform=browser`, serves the
   bundle and a page from `Deno.serve` on `127.0.0.1`, starts a headless
@@ -452,11 +518,12 @@ bytes are the value the provider set.
 
 **D-15. The unit tests.** All under `packages/ridl-transport-ws/tests/`.
 
-- **The vectors** (`vectors_test.ts`). Reads the §11.1 vector table out of
+- **The vectors** (`vectors_test.ts`). Reads the binding version 1 and the
+  binding version 2 vector tables out of
   `docs/specification/frame-specification.md`, as the crate's `tests/vectors.rs`
   does, decodes each row to the frame its `Vector` cell describes, and encodes
-  that frame back to the same bytes. It fails on an unknown `Id`, so a new
-  vector cannot be skipped.
+  that frame back to the same bytes. It fails on an unknown `Id` and on a known
+  `Id` that its table lacks, so a new vector cannot be skipped.
 - **Every code** (`codes_test.ts`). Every code of §4 and §9.6, written as bytes
   by hand, in both directions; signedness of extreme integers, a message at a
   nonzero byte offset, and payloads as views.
@@ -516,7 +583,8 @@ D-11, the UTC default stamp of D-12 with the `clock` option, and the size checks
 of D-19 with the `interfaces` option. The frame specification's "As built" note
 and §11 and §11.1 name the package and its path. ADR-0020 carries the dated
 amendment of decision 6 (D-4) and a note on open item 2 (D-1). The book has no
-chapter on the package: it is not published, and no generated code uses it yet.
+chapter on the package: `npm-release.yml` publishes it on a `v*` tag, and no
+generated code uses it yet.
 
 ## What is not built
 
