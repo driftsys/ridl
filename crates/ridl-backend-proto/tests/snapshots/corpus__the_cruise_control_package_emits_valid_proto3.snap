@@ -6,6 +6,7 @@ syntax = "proto3";
 
 package veh.cruise;
 
+// strict: a value outside this list is refused by RIDL codecs
 enum EngageState {
   ENGAGE_STATE_OFF = 0;
   ENGAGE_STATE_ARMED = 1;

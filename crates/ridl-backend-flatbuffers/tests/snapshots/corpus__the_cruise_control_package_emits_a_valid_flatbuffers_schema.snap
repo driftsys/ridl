@@ -4,6 +4,7 @@ expression: generated.fbs_source
 ---
 namespace veh.cruise;
 
+// strict: a value outside this list is refused by RIDL codecs
 enum EngageState : long {
   OFF = 0,
   ARMED = 1,

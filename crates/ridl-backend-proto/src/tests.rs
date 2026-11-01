@@ -2593,3 +2593,45 @@ fn a_declared_type_colliding_with_a_root_box_message_is_refused() {
         error.message
     );
 }
+
+#[test]
+fn an_enum_states_whether_it_is_strict_or_open() {
+    for (open, comment) in [
+        (
+            false,
+            "// strict: a value outside this list is refused by RIDL codecs\nenum Gear {",
+        ),
+        (
+            true,
+            "// open: a value outside this list is kept\nenum Gear {",
+        ),
+    ] {
+        let package = v2::Package {
+            name: "veh.common".to_string(),
+            decls: vec![v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![v2::EnumValue {
+                        name: "PARK".to_string(),
+                        value: 0,
+                        doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
+                    }],
+                    reserved: Vec::new(),
+                    open,
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let generated = generate(&package).expect("generate");
+        assert!(
+            generated.proto_source.contains(comment),
+            "got:\n{}",
+            generated.proto_source
+        );
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}

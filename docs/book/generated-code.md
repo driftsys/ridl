@@ -491,6 +491,25 @@ refused with an error that names both. An internal payload type has no
 `encode`/`decode`, because `<base>.ts` does not export its type.
 [The codec table design record][codec-table] gives the rules in full.
 
+An `open` enum keeps its `export enum` and adds the type
+`<Name>Value = <Name> | { readonly unknown: number }`; a field of the enum has
+that type. The codec decodes a declared value to the member and any other
+value to `{ unknown: n }`, and it encodes `{ unknown: n }` as `n`, so a caller
+who writes `{ unknown: n }` for a declared `n` gets the member back after a
+round trip. A field that the buffer leaves out decodes to `{ unknown: 0 }` when
+the enum declares no zero member. The codec refuses an unknown value outside
+`Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`, on decode and on encode,
+with a `RuleError` whose `rule` is `variant`. An `open` enum set keeps its
+branded type, and `<Name>Bits.unknownBits(value)` returns the bits of `value`
+that the set does not declare. The codec refuses an open enum set value that
+does not fit the width of the set, on encode, with a `RuleError` whose `rule`
+is `range`.
+
+The `.proto` and `.fbs` files that the build writes carry one comment line above
+each enum that states the rule the RIDL codecs apply to it: `// strict: a value
+outside this list is refused by RIDL codecs` or `// open: a value outside this
+list is kept`. The enum type itself is the same in both cases.
+
 ## Documentation in the generated code
 
 The doc comment of a declaration or a member (see

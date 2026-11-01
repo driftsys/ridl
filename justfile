@@ -3035,6 +3035,17 @@ _codec-ts-check:
     deno lint --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
     deno check --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
     deno test --config "$foreign/deno.json" "$foreign/check_test.ts"
+    # The third fixture: open enums and open enum sets, which the codec keeps
+    # a value of that the declaration does not name.
+    open="$tmp/open"
+    mkdir -p "$open"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-open --emit typescript --emit flatbuffers --out-dir "$open"
+    flatc --ts --gen-object-api -I "$open" -o "$open" "$open/open.demo.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-open/deno.json > "$open/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-open/open_test.ts "$open/open_test.ts"
+    deno lint --config "$open/deno.json" "$open/open.demo.codec.ts"
+    deno check --config "$open/deno.json" "$open/open.demo.codec.ts" "$open/open.demo.ts"
+    deno test --config "$open/deno.json" "$open/open_test.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because

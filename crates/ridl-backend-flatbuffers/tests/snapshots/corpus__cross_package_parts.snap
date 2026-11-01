@@ -8,6 +8,7 @@ table Wheel {
   radius: ubyte (id: 0);
 }
 
+// strict: a value outside this list is refused by RIDL codecs
 enum Grade : long {
   A = 0,
   B = 1,

@@ -2379,3 +2379,96 @@ fn ts_docs_carry_no_issue_reference() {
     }
     assert!(read > 0, "no snapshot was read from {}", dir.display());
 }
+
+fn dtc_status_decl(open: bool) -> v2::Decl {
+    public_decl(
+        "DtcStatus",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![enum_value("INACTIVE", 0), enum_value("ACTIVE", 1)],
+            reserved: Vec::new(),
+            open,
+        }),
+    )
+}
+
+#[test]
+fn an_open_enum_emits_a_value_type_with_an_unknown_case() {
+    let source = ts_for(vec![dtc_status_decl(true)]);
+    assert!(
+        source.contains("export type DtcStatusValue = DtcStatus | { readonly unknown: number };"),
+        "an open enum must emit its value type, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_strict_enum_emits_no_value_type() {
+    let source = ts_for(vec![dtc_status_decl(false)]);
+    assert!(
+        !source.contains("DtcStatusValue"),
+        "a strict enum must not emit a value type, got:\n{source}"
+    );
+}
+
+#[test]
+fn a_field_of_an_open_enum_is_typed_with_the_value_type() {
+    let decls = vec![
+        dtc_status_decl(true),
+        public_decl(
+            "Report",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "status",
+                    1,
+                    "DtcStatus",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        ),
+    ];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("status: DtcStatusValue;"),
+        "a field of an open enum must use the value type, got:\n{source}"
+    );
+}
+
+#[test]
+fn an_open_enumset_adds_the_unknown_bits_function() {
+    let decls = vec![public_decl(
+        "Flags",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("A", 0), enum_value("B", 1)],
+            width: v2::IntWidth::U8 as i32,
+            open: true,
+        }),
+    )];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("unknownBits(value: Flags): Flags {"),
+        "an open enumset must emit unknownBits, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn an_open_wide_enumset_keeps_the_bigint_form() {
+    let decls = vec![public_decl(
+        "WideFlags",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("LOW", 0), enum_value("TOP", 63)],
+            width: v2::IntWidth::I64 as i32,
+            open: true,
+        }),
+    )];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("unknownBits(value: WideFlags): WideFlags {"),
+        "an open enumset must emit unknownBits, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}

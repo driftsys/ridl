@@ -31,6 +31,9 @@ use crate::{GenerateError, GeneratedTs};
 /// index `n - 2`: the order of `WASM_RULES` in the generated crate.
 const RULES: [&str; 6] = ["length", "pattern", "range", "step", "unique", "variant"];
 
+/// The largest integer a TypeScript number holds exactly.
+const MAX_SAFE: u64 = 9_007_199_254_740_991;
+
 /// The length of `Catalog.hash`.
 const HASH_LEN: usize = 32;
 
@@ -140,6 +143,9 @@ struct Codec<'a> {
     used_locals: BTreeSet<String>,
     /// Whether a converter reads a required field the buffer may leave out.
     needs_absent: bool,
+    /// The open enums and open enum sets of this package that a payload type
+    /// reaches, by index: each gets a converter pair of its own.
+    reached_open: BTreeSet<usize>,
 }
 
 impl<'a> Codec<'a> {
@@ -195,6 +201,7 @@ impl<'a> Codec<'a> {
             foreign_types: BTreeSet::new(),
             used_locals: BTreeSet::new(),
             needs_absent: false,
+            reached_open: BTreeSet::new(),
         };
         let roots = model
             .flatbuffers
@@ -318,6 +325,9 @@ impl<'a> Codec<'a> {
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
+        if !self.reached_open.is_empty() {
+            register("RuleError".to_string(), "RuleError".to_string())?;
+        }
         for package in &self.foreign_types {
             let alias = package_alias(package);
             register(alias.clone(), alias)?;
@@ -360,6 +370,12 @@ impl<'a> Codec<'a> {
                 register(format!("{prefix}{name}"), name.to_string())?;
             }
         }
+        for index in &self.reached_open {
+            let name = declared_name(&self.model.declarations[*index]);
+            for prefix in ["pack", "unpack"] {
+                register(format!("{prefix}{name}"), name.to_string())?;
+            }
+        }
         let mut reached_tuples: Vec<&usize> = self.reached_tuples.iter().collect();
         reached_tuples.sort();
         for index in reached_tuples {
@@ -380,6 +396,18 @@ impl<'a> Codec<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Whether `ty` names an open enum of this package.
+    fn is_open_enum(&self, ty: &v1::Type) -> bool {
+        let Some(v1::r#type::Kind::Named(reference)) = &ty.kind else {
+            return false;
+        };
+        matches!(
+            self.resolve(reference, "").ok(),
+            Some(Target::Local(_, declaration))
+                if matches!(&declaration.kind, Some(v1::declaration::Kind::Enum(shape)) if shape.open)
+        )
     }
 
     /// The payload types, in the order of the roots.
@@ -485,9 +513,19 @@ impl<'a> Codec<'a> {
                 }
                 Ok(())
             }
-            Some(Kind::Scalar(_) | Kind::Enum(_) | Kind::EnumSet(_) | Kind::Constant(_)) | None => {
+            Some(Kind::Enum(shape)) => {
+                if shape.open {
+                    self.reached_open.insert(index);
+                }
                 Ok(())
             }
+            Some(Kind::EnumSet(shape)) => {
+                if shape.open {
+                    self.reached_open.insert(index);
+                }
+                Ok(())
+            }
+            Some(Kind::Scalar(_) | Kind::Constant(_)) | None => Ok(()),
         }
     }
 
@@ -599,7 +637,7 @@ impl<'a> Codec<'a> {
         use v1::r#type::Kind;
         match &ty.kind {
             Some(Kind::Named(reference)) => match self.resolve(reference, qualified)? {
-                Target::Local(_, declaration) => Ok(format!("t.{}", declared_name(declaration))),
+                Target::Local(_, declaration) => Ok(value_type(declaration)),
                 Target::Foreign(package, declaration) => {
                     self.foreign_types.insert(package.to_string());
                     Ok(format!(
@@ -696,6 +734,20 @@ impl<'a> Codec<'a> {
                 };
                 let name = declared_name(declaration);
                 Ok(match &declaration.kind {
+                    Some(Kind::Enum(shape)) if shape.open && nested => Rule {
+                        pack: format!("pack{name}({{}})"),
+                        unpack: format!("unpack{name}({{}})"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
+                    Some(Kind::EnumSet(shape)) if shape.open && nested => Rule {
+                        pack: format!("pack{name}({{}})"),
+                        unpack: format!("{{}} as {spelled}"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
                     Some(Kind::Enum(_)) => Rule {
                         pack: "BigInt({})".to_string(),
                         unpack: format!("Number({{}}) as {spelled}"),
@@ -900,6 +952,9 @@ impl<'a> Codec<'a> {
             if self.reached.contains(&index) {
                 self.emit_converters(&mut body, index, declaration)?;
             }
+            if self.reached_open.contains(&index) {
+                self.emit_open_converters(&mut body, declaration);
+            }
         }
         for (index, tuple) in self.model.tuples.iter().enumerate() {
             if self.is_payload_tuple(index, tuple) {
@@ -920,7 +975,7 @@ impl<'a> Codec<'a> {
                 continue;
             }
             let spelled = match payload.declaration {
-                Some(_) => format!("t.{}", payload.name),
+                Some(declaration) => value_type(declaration),
                 None => payload.name.to_string(),
             };
             let _ = writeln!(
@@ -1000,6 +1055,17 @@ impl<'a> Codec<'a> {
                 "/** Throws for a required field the buffer leaves out. */\n\
                  function absent(type: string, field: string): never {\n  \
                  throw new RangeError(`field ${field} of ${type} is absent`);\n}\n\n",
+            );
+        }
+        if !self.reached_open.is_empty() {
+            out.push_str(
+                "/** Thrown for a value the codec refuses, with the text of the rule it breaks. */\n\
+                 export class RuleError extends RangeError {\n  \
+                 readonly rule: (typeof RULES)[number];\n  \
+                 constructor(rule: (typeof RULES)[number], message: string) {\n    \
+                 super(message);\n    \
+                 this.name = \"RuleError\";\n    \
+                 this.rule = rule;\n  }\n}\n\n",
             );
         }
         out.push_str(&body);
@@ -1115,12 +1181,19 @@ impl<'a> Codec<'a> {
                 self.emit_encode_decode(out, name, &format!("t.{name}"), name, &qualified);
                 return Ok(());
             }
-            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Some(true)),
+            Some(Kind::Enum(shape)) if shape.open => {
+                (format!("new fb.{name}BoxT(pack{name}(value))"), Read::Open)
+            }
+            Some(Kind::EnumSet(shape)) if shape.open => (
+                format!("new fb.{name}BoxT(pack{name}(value))"),
+                Read::Assertion,
+            ),
+            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Read::Enum),
             Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
-                (format!("new fb.{name}BoxT(Array.from(value))"), None)
+                (format!("new fb.{name}BoxT(Array.from(value))"), Read::Bytes)
             }
             Some(Kind::Scalar(_) | Kind::EnumSet(_)) => {
-                (format!("new fb.{name}BoxT(value)"), Some(false))
+                (format!("new fb.{name}BoxT(value)"), Read::Assertion)
             }
             _ => {
                 return refuse(format!(
@@ -1129,12 +1202,13 @@ impl<'a> Codec<'a> {
                 ));
             }
         };
-        let (packed, is_enum) = boxed;
+        let (packed, read_as) = boxed;
+        let spelled = value_type(declaration);
         out.push('\n');
         let _ = writeln!(out, "/** Encodes a `{qualified}` payload. */");
         let _ = writeln!(
             out,
-            "export function encode{name}(value: t.{name}): Uint8Array {{"
+            "export function encode{name}(value: {spelled}): Uint8Array {{"
         );
         out.push_str("  const builder = new flatbuffers.Builder();\n");
         let _ = writeln!(out, "  builder.finish({packed}.pack(builder));");
@@ -1145,24 +1219,99 @@ impl<'a> Codec<'a> {
         );
         let _ = writeln!(
             out,
-            "export function decode{name}(bytes: Uint8Array): t.{name} {{"
+            "export function decode{name}(bytes: Uint8Array): {spelled} {{"
         );
         let read = format!(
             "fb.{name}Box.getRootAs{name}Box(new flatbuffers.ByteBuffer(bytes)).unpack().value"
         );
-        match is_enum {
-            Some(true) => {
+        match read_as {
+            Read::Enum => {
                 let _ = writeln!(out, "  return Number({read}) as t.{name};");
             }
-            Some(false) => {
+            Read::Open => {
+                let _ = writeln!(out, "  return unpack{name}({read});");
+            }
+            Read::Assertion => {
                 let _ = writeln!(out, "  return {read} as t.{name};");
             }
-            None => {
+            Read::Bytes => {
                 let _ = writeln!(out, "  return Uint8Array.from({read}) as t.{name};");
             }
         }
         out.push_str("}\n");
         Ok(())
+    }
+
+    /// The converter pair of an open enum or an open enum set. The enum pair
+    /// keeps every value: an undeclared one is `{ unknown: n }`, and a value
+    /// beyond the safe integers is refused. The enum set pair refuses a value
+    /// that does not fit the width of the set.
+    fn emit_open_converters(&self, out: &mut String, declaration: &v1::Declaration) {
+        use v1::declaration::Kind;
+        let name = declared_name(declaration);
+        let qualified = self.qualified(name);
+        out.push('\n');
+        match &declaration.kind {
+            Some(Kind::Enum(shape)) => {
+                let declared: Vec<String> = shape
+                    .values
+                    .iter()
+                    .map(|value| value.value.to_string())
+                    .collect();
+                let _ = writeln!(
+                    out,
+                    "function pack{name}(value: t.{name}Value): bigint {{\n  \
+                     const raw = typeof value === \"number\" ? value : value.unknown;\n  \
+                     if (!Number.isSafeInteger(raw)) {{\n    \
+                     throw new RuleError(\"variant\", `value ${{raw}} of {qualified} is not a \
+                     safe integer`);\n  }}\n  \
+                     return BigInt(raw);\n}}"
+                );
+                let _ = writeln!(
+                    out,
+                    "function unpack{name}(raw: bigint | null): t.{name}Value {{\n  \
+                     const value = raw ?? 0n;\n  \
+                     if (value > {MAX_SAFE}n || value < -{MAX_SAFE}n) {{\n    \
+                     throw new RuleError(\"variant\", `value ${{value}} of {qualified} is outside \
+                     the safe integers`);\n  }}\n  \
+                     const n = Number(value);\n  \
+                     return ([{declared}] as readonly number[]).includes(n)\n    \
+                     ? n as t.{name}\n    : {{ unknown: n }};\n}}",
+                    declared = declared.join(", ")
+                );
+            }
+            Some(Kind::EnumSet(shape)) => {
+                let (wide, signed, bits) = match shape.width() {
+                    v1::IntWidth::U8 => (false, false, 8),
+                    v1::IntWidth::I8 => (false, true, 8),
+                    v1::IntWidth::U16 => (false, false, 16),
+                    v1::IntWidth::I16 => (false, true, 16),
+                    v1::IntWidth::U32 => (false, false, 32),
+                    v1::IntWidth::I32 => (false, true, 32),
+                    v1::IntWidth::U64 => (true, false, 64),
+                    v1::IntWidth::I64 | v1::IntWidth::Unspecified => (true, true, 64),
+                };
+                let (low, high) = if signed {
+                    (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+                } else {
+                    (0, (1i128 << bits) - 1)
+                };
+                let (suffix, base, check) = if wide {
+                    ("n", "bigint", "")
+                } else {
+                    ("", "number", "!Number.isInteger(value) || ")
+                };
+                let _ = writeln!(
+                    out,
+                    "function pack{name}(value: t.{name}): {base} {{\n  \
+                     if ({check}value < {low}{suffix} || value > {high}{suffix}) {{\n    \
+                     throw new RuleError(\"range\", `value ${{value}} of {qualified} does not fit \
+                     {bits} bits`);\n  }}\n  \
+                     return value;\n}}"
+                );
+            }
+            _ => {}
+        }
     }
 
     fn emit_converters(
@@ -1200,7 +1349,8 @@ impl<'a> Codec<'a> {
                         accessor: accessor(declared),
                         rule: self.rule(ty, &qualified)?,
                         optional: ty.optional,
-                        null_default,
+                        // An open enum has no absent value: 0 is a value of it.
+                        null_default: null_default && !self.is_open_enum(ty),
                     });
                 }
                 self.emit_record(
@@ -1259,7 +1409,7 @@ impl<'a> Codec<'a> {
                 accessor: format!("field{}", position + 1),
                 rule: self.rule(ty, &qualified)?,
                 optional: ty.optional,
-                null_default,
+                null_default: null_default && !self.is_open_enum(ty),
             });
         }
         self.emit_record(
@@ -1724,6 +1874,28 @@ fn foreign_refusal(site: &str, package: &str, name: &str, word: &str) -> String 
         "{site} `{package}.{name}`, a {word} of another package, which the codec module does not \
          convert yet"
     )
+}
+
+/// How the decode function of a boxed payload type reads the value of its box.
+enum Read {
+    /// `Number(box.value)` of a strict enum.
+    Enum,
+    /// The unpack function of an open enum.
+    Open,
+    /// A type assertion over the box value.
+    Assertion,
+    /// `Uint8Array.from` of the box value.
+    Bytes,
+}
+
+/// The TypeScript type of a value of `declaration`: `t.<Name>`, or
+/// `t.<Name>Value` for an open enum.
+fn value_type(declaration: &v1::Declaration) -> String {
+    let name = declared_name(declaration);
+    match &declaration.kind {
+        Some(v1::declaration::Kind::Enum(shape)) if shape.open => format!("t.{name}Value"),
+        _ => format!("t.{name}"),
+    }
 }
 
 /// The conversion of a position whose value is copied as it is.

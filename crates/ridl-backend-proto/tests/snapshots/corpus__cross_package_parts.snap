@@ -10,6 +10,7 @@ message Wheel {
   uint32 radius = 1;
 }
 
+// strict: a value outside this list is refused by RIDL codecs
 enum Grade {
   GRADE_A = 0;
   GRADE_B = 1;

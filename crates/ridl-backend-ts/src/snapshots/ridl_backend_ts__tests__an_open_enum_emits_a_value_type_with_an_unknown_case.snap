@@ -1,0 +1,22 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+export enum DtcStatus {
+  INACTIVE = 0,
+  ACTIVE = 1,
+}
+
+/**
+ * A `DtcStatus`, or a value that the enum does not declare.
+ *
+ * The codec decodes a declared value to the enum member and any other value to
+ * `{ unknown: n }`, and it encodes `{ unknown: n }` as `n`. A value
+ * `{ unknown: n }` whose `n` is declared is encoded as `n` and decodes as the
+ * member.
+ */
+export type DtcStatusValue = DtcStatus | { readonly unknown: number };
+
+export function initDtcStatus(): DtcStatus {
+  return DtcStatus.INACTIVE;
+}

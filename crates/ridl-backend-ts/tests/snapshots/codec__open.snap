@@ -1,0 +1,245 @@
+---
+source: crates/ridl-backend-ts/tests/codec.rs
+expression: source
+---
+import * as flatbuffers from "flatbuffers";
+import type * as t from "./open.demo.js";
+// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
+// of this file.
+import * as fb from "./open/demo.js";
+
+/** Thrown for a value the codec refuses, with the text of the rule it breaks. */
+export class RuleError extends RangeError {
+  readonly rule: (typeof RULES)[number];
+  constructor(rule: (typeof RULES)[number], message: string) {
+    super(message);
+    this.name = "RuleError";
+    this.rule = rule;
+  }
+}
+
+/** The name of the catalog unit this package belongs to. */
+export const CATALOG_NAME = "open.demo";
+/** The hash of the catalog unit, which the wasm module carries. */
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([34, 135, 109, 35, 30, 128, 186, 16, 24, 91, 210, 32, 39, 103, 215, 243, 159, 234, 219, 44, 169, 243, 204, 86, 245, 138, 1, 84, 89, 235, 52, 230]);
+/** The qualified names of the payload types of this package, which name the wasm type ids. */
+export const PAYLOAD_TYPES = [
+  "open.demo.DtcStatus",
+  "open.demo.Empty",
+  "open.demo.EmptyReport",
+  "open.demo.Flags",
+  "open.demo.Mode",
+  "open.demo.Pick",
+  "open.demo.Report",
+  "open.demo.WideFlags",
+] as const;
+/** The text of each rule code the wasm module reports, rule code n at index n - 2. */
+export const RULES = ["length", "pattern", "range", "step", "unique", "variant"] as const;
+
+/** Encodes a `open.demo.DtcStatus` payload. */
+export function encodeDtcStatus(value: t.DtcStatusValue): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.DtcStatusBoxT(packDtcStatus(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.DtcStatus` payload the codec has verified. */
+export function decodeDtcStatus(bytes: Uint8Array): t.DtcStatusValue {
+  return unpackDtcStatus(fb.DtcStatusBox.getRootAsDtcStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function packDtcStatus(value: t.DtcStatusValue): bigint {
+  const raw = typeof value === "number" ? value : value.unknown;
+  if (!Number.isSafeInteger(raw)) {
+    throw new RuleError("variant", `value ${raw} of open.demo.DtcStatus is not a safe integer`);
+  }
+  return BigInt(raw);
+}
+function unpackDtcStatus(raw: bigint | null): t.DtcStatusValue {
+  const value = raw ?? 0n;
+  if (value > 9007199254740991n || value < -9007199254740991n) {
+    throw new RuleError("variant", `value ${value} of open.demo.DtcStatus is outside the safe integers`);
+  }
+  const n = Number(value);
+  return ([0, 1] as readonly number[]).includes(n)
+    ? n as t.DtcStatus
+    : { unknown: n };
+}
+
+/** Encodes a `open.demo.Mode` payload. */
+export function encodeMode(value: t.ModeValue): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.ModeBoxT(packMode(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.Mode` payload the codec has verified. */
+export function decodeMode(bytes: Uint8Array): t.ModeValue {
+  return unpackMode(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function packMode(value: t.ModeValue): bigint {
+  const raw = typeof value === "number" ? value : value.unknown;
+  if (!Number.isSafeInteger(raw)) {
+    throw new RuleError("variant", `value ${raw} of open.demo.Mode is not a safe integer`);
+  }
+  return BigInt(raw);
+}
+function unpackMode(raw: bigint | null): t.ModeValue {
+  const value = raw ?? 0n;
+  if (value > 9007199254740991n || value < -9007199254740991n) {
+    throw new RuleError("variant", `value ${value} of open.demo.Mode is outside the safe integers`);
+  }
+  const n = Number(value);
+  return ([1, 2] as readonly number[]).includes(n)
+    ? n as t.Mode
+    : { unknown: n };
+}
+
+/** Encodes a `open.demo.Empty` payload. */
+export function encodeEmpty(value: t.EmptyValue): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.EmptyBoxT(packEmpty(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.Empty` payload the codec has verified. */
+export function decodeEmpty(bytes: Uint8Array): t.EmptyValue {
+  return unpackEmpty(fb.EmptyBox.getRootAsEmptyBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function packEmpty(value: t.EmptyValue): bigint {
+  const raw = typeof value === "number" ? value : value.unknown;
+  if (!Number.isSafeInteger(raw)) {
+    throw new RuleError("variant", `value ${raw} of open.demo.Empty is not a safe integer`);
+  }
+  return BigInt(raw);
+}
+function unpackEmpty(raw: bigint | null): t.EmptyValue {
+  const value = raw ?? 0n;
+  if (value > 9007199254740991n || value < -9007199254740991n) {
+    throw new RuleError("variant", `value ${value} of open.demo.Empty is outside the safe integers`);
+  }
+  const n = Number(value);
+  return ([] as readonly number[]).includes(n)
+    ? n as t.Empty
+    : { unknown: n };
+}
+
+/** Encodes a `open.demo.Flags` payload. */
+export function encodeFlags(value: t.Flags): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.FlagsBoxT(packFlags(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.Flags` payload the codec has verified. */
+export function decodeFlags(bytes: Uint8Array): t.Flags {
+  return fb.FlagsBox.getRootAsFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Flags;
+}
+
+function packFlags(value: t.Flags): number {
+  if (!Number.isInteger(value) || value < 0 || value > 255) {
+    throw new RuleError("range", `value ${value} of open.demo.Flags does not fit 8 bits`);
+  }
+  return value;
+}
+
+/** Encodes a `open.demo.WideFlags` payload. */
+export function encodeWideFlags(value: t.WideFlags): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.WideFlagsBoxT(packWideFlags(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.WideFlags` payload the codec has verified. */
+export function decodeWideFlags(bytes: Uint8Array): t.WideFlags {
+  return fb.WideFlagsBox.getRootAsWideFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.WideFlags;
+}
+
+function packWideFlags(value: t.WideFlags): bigint {
+  if (value < 0n || value > 18446744073709551615n) {
+    throw new RuleError("range", `value ${value} of open.demo.WideFlags does not fit 64 bits`);
+  }
+  return value;
+}
+
+/** Encodes a `open.demo.Report` payload. */
+export function encodeReport(value: t.Report): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packReport(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.Report` payload the codec has verified. */
+export function decodeReport(bytes: Uint8Array): t.Report {
+  return unpackReport(fb.Report.getRootAsReport(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packReport(value: t.Report): fb.ReportT {
+  const object = new fb.ReportT();
+  object.status = packDtcStatus(value.status);
+  object.mode = packMode(value.mode);
+  object.flags = packFlags(value.flags);
+  object.wide = packWideFlags(value.wide);
+  object.list = value.list.map((element) => packDtcStatus(element));
+  object.maybe = value.maybe === undefined ? null : packDtcStatus(value.maybe);
+  return object;
+}
+function unpackReport(object: fb.ReportT): t.Report {
+  const result: t.Report = {
+    status: unpackDtcStatus(object.status),
+    mode: unpackMode(object.mode),
+    flags: object.flags as t.Flags,
+    wide: object.wide as t.WideFlags,
+    list: object.list.map((element) => unpackDtcStatus(element)),
+  };
+  if (object.maybe !== null) result.maybe = unpackDtcStatus(object.maybe);
+  return result;
+}
+
+/** Encodes a `open.demo.EmptyReport` payload. */
+export function encodeEmptyReport(value: t.EmptyReport): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packEmptyReport(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.EmptyReport` payload the codec has verified. */
+export function decodeEmptyReport(bytes: Uint8Array): t.EmptyReport {
+  return unpackEmptyReport(fb.EmptyReport.getRootAsEmptyReport(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packEmptyReport(value: t.EmptyReport): fb.EmptyReportT {
+  const object = new fb.EmptyReportT();
+  object.value = packEmpty(value.value);
+  return object;
+}
+function unpackEmptyReport(object: fb.EmptyReportT): t.EmptyReport {
+  return {
+    value: unpackEmpty(object.value),
+  };
+}
+
+/** Encodes a `open.demo.Pick` payload. */
+export function encodePick(value: t.Pick): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packPick(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.Pick` payload the codec has verified. */
+export function decodePick(bytes: Uint8Array): t.Pick {
+  return unpackPick(fb.Pick.getRootAsPick(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packPick(value: t.Pick): fb.PickT {
+  switch (value.kind) {
+    case "status":
+      return new fb.PickT(fb.PickUnion.status, new fb.PickStatusBoxT(packDtcStatus(value.value)));
+    case "flags":
+      return new fb.PickT(fb.PickUnion.flags, new fb.PickFlagsBoxT(packFlags(value.value)));
+  }
+}
+function unpackPick(object: fb.PickT): t.Pick {
+  switch (object.valueType) {
+    case fb.PickUnion.status:
+      return { kind: "status", value: unpackDtcStatus((object.value as fb.PickStatusBoxT).value) };
+    case fb.PickUnion.flags:
+      return { kind: "flags", value: (object.value as fb.PickFlagsBoxT).value as t.Flags };
+    default:
+      throw new RangeError("union open.demo.Pick carries no arm");
+  }
+}

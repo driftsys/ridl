@@ -374,6 +374,17 @@ fn push_root_box(
     Ok(())
 }
 
+/// The comment line above an emitted enum that states which rule the RIDL
+/// codecs apply to a value outside its list. The schema type itself is the
+/// same for both: this target keeps any integer on the wire.
+fn strictness_comment(open: bool) -> &'static str {
+    if open {
+        "// open: a value outside this list is kept"
+    } else {
+        "// strict: a value outside this list is refused by RIDL codecs"
+    }
+}
+
 /// One enum as one FlatBuffers `enum` (typl §8): values keep their explicitly
 /// assigned numbers, unprefixed and in declaration order, because FlatBuffers
 /// scopes an enum's values inside the enum rather than as siblings of it —
@@ -392,7 +403,10 @@ fn push_root_box(
 /// directly can, and the target rejects the repeat.
 fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), GenerateError> {
     let mut values = Namespace::values(name);
-    out.push_str(&format!("\nenum {name} : long {{\n"));
+    out.push_str(&format!(
+        "\n{}\nenum {name} : long {{\n",
+        strictness_comment(def.open)
+    ));
     for value in &def.values {
         values.claim(
             &value.name,

@@ -2373,3 +2373,30 @@ fn a_corpus_type_with_no_unbounded_member_is_bounded() {
         .is_some()
     );
 }
+
+#[test]
+fn an_enum_states_whether_it_is_strict_or_open() {
+    for (open, comment) in [
+        (
+            false,
+            "// strict: a value outside this list is refused by RIDL codecs\nenum Gear : long {",
+        ),
+        (
+            true,
+            "// open: a value outside this list is kept\nenum Gear : long {",
+        ),
+    ] {
+        let mut package = enum_package("Gear", vec![("PARK", 0)]);
+        let Some(v2::decl::Kind::EnumDef(def)) = package.decls[0].kind.as_mut() else {
+            panic!("enum_package builds an enum");
+        };
+        def.open = open;
+        let generated = generate(&package).expect("generate");
+        assert!(
+            generated.fbs_source.contains(comment),
+            "got:\n{}",
+            generated.fbs_source
+        );
+        compile_with_planus("veh.common.fbs", &generated.fbs_source);
+    }
+}
