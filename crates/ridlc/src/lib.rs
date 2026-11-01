@@ -691,6 +691,16 @@ pub enum Emit {
     /// service with an inline body: a FlatBuffers file of the unit's
     /// interfaces, their members and their catalog hash.
     Catalog,
+    /// The deployment descriptor an engine reads, written to
+    /// `<deployment package>.<DeploymentName>.deployment.binfb` for every
+    /// deployment the lowered system holds: a FlatBuffers file of the
+    /// deployment's instances, links, routes and machines, with the catalog
+    /// descriptor of every region embedded byte for byte.
+    ///
+    /// Single-file mode, a workspace with no `system` and a deployment an
+    /// RSDL-7xx error blocked write no file. It is classified with the code
+    /// emits for the reason [`Emit::Catalog`] is.
+    Deployment,
 }
 
 impl Emit {
@@ -752,8 +762,10 @@ impl Emit {
             // backend: a code emit keeps `ridl.std` in the `others` that
             // `run_build` passes, so the descriptor's catalog hash covers a
             // `ridl.std` type a payload names, as the hash the Rust face
-            // carries does.
-            | Emit::Catalog => None,
+            // carries does. `Deployment` is classed the same way, for the
+            // catalogs it embeds.
+            | Emit::Catalog
+            | Emit::Deployment => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -782,7 +794,8 @@ impl Emit {
             | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
-            | Emit::Catalog => None,
+            | Emit::Catalog
+            | Emit::Deployment => None,
             Emit::IrJson => Some(".system.json"),
             Emit::IrText => Some(".system.txtpb"),
             Emit::IrBinary => Some(".system.binpb"),
@@ -822,7 +835,7 @@ impl Emit {
             Emit::Podbuf => Some("podbuf"),
             Emit::CodegenModel => Some("codegen-model"),
             Emit::CodegenRequest => Some("codegen-request"),
-            Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
+            Emit::Catalog | Emit::Deployment | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
         }
     }
 
@@ -851,6 +864,7 @@ impl Emit {
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog
+            | Emit::Deployment
             | Emit::IrJson
             | Emit::IrText
             | Emit::IrBinary => false,
@@ -1701,8 +1715,24 @@ fn run_build_inner<E: From<std::io::Error>>(
             )?;
         }
 
-        if emits.contains(&Emit::Catalog) {
-            write_catalogs(out_dir, &own, &others, compatible)?;
+        let writes_deployments = emits.contains(&Emit::Deployment) && !single_file;
+        if emits.contains(&Emit::Catalog) || writes_deployments {
+            // The catalog bytes of each unit are lowered once and shared by
+            // the catalog files and the catalogs a deployment embeds. A
+            // deployment's regions can name a unit the build does not own (a
+            // dependency), so those units are lowered here too.
+            let own_units = catalog_units(&own);
+            let mut units: BTreeSet<&str> = own_units.clone();
+            if writes_deployments && let Some(lowered) = &lowered_system {
+                units.extend(lowered.regions.iter().map(|region| region.catalog.as_str()));
+            }
+            let catalogs = lower_catalogs(&units, &others, compatible)?;
+            if emits.contains(&Emit::Catalog) {
+                write_catalogs(out_dir, &own_units, &catalogs)?;
+            }
+            if writes_deployments && let Some(lowered) = &lowered_system {
+                write_deployments(out_dir, lowered, &others, &catalogs)?;
+            }
         }
 
         if let Some(std_ir) = &std_ir {
@@ -3078,33 +3108,74 @@ fn write_response(
     Ok(())
 }
 
-/// Writes the catalog descriptor of every unit of the build that has at least
-/// one interface shape, to `<unit>.catalog.binfb` in `out_dir`, in unit name
-/// order; a unit with no interface shape gets no file. `packages` are the
-/// build's checked packages, which name the units through
-/// `ridl_ir::v2::unit_of`; `others` is the scope the catalogs are lowered
-/// over ([`catalog_scope`]); `compatible` holds, per unit name, the earlier
-/// catalog hashes the descriptor lists, a unit absent from it listing none.
-/// A lowering failure is an internal error, not a
-/// diagnostic: it is returned as an I/O error, which stops the build and
-/// which the command reports with exit code 2 (ADR-0010 decision 1).
+/// Writes the catalog descriptor of each of `own_units` (the units of the
+/// build with at least one interface shape, [`catalog_units`]) to
+/// `<unit>.catalog.binfb` in `out_dir`, in unit name order. `catalogs` holds
+/// the bytes [`lower_catalogs`] produced for them.
 fn write_catalogs(
     out_dir: &Path,
-    packages: &[&ridl_ir::v2::Package],
-    others: &[&ridl_ir::v2::Package],
-    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
+    own_units: &BTreeSet<&str>,
+    catalogs: &BTreeMap<String, Vec<u8>>,
 ) -> std::io::Result<()> {
-    let units: BTreeSet<&str> = packages
+    for unit in own_units {
+        std::fs::write(
+            out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),
+            &catalogs[*unit],
+        )?;
+    }
+    Ok(())
+}
+
+/// The units of `packages` that get a catalog descriptor: those that declare
+/// an interface or a service with an inline body.
+fn catalog_units<'a>(packages: &[&'a ridl_ir::v2::Package]) -> BTreeSet<&'a str> {
+    packages
         .iter()
         .filter(|package| package.shapes().next().is_some())
         .map(|package| ridl_ir::v2::unit_of(package))
-        .collect();
+        .collect()
+}
+
+/// The catalog descriptor bytes of each of `units`, lowered over `others`
+/// with the earlier catalog hashes `compatible` lists for the unit (none for
+/// a unit absent from it). A lowering failure is an I/O error, as for
+/// [`write_catalogs`].
+fn lower_catalogs(
+    units: &BTreeSet<&str>,
+    others: &[&ridl_ir::v2::Package],
+    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
+) -> std::io::Result<BTreeMap<String, Vec<u8>>> {
+    let mut catalogs = BTreeMap::new();
     for unit in units {
-        let earlier = compatible.get(unit).map_or(&[][..], Vec::as_slice);
+        let earlier = compatible.get(*unit).map_or(&[][..], Vec::as_slice);
         let bytes = ridl_descriptor::lower(unit, others, earlier)
             .map_err(|err| std::io::Error::other(err.to_string()))?;
+        catalogs.insert((*unit).to_owned(), bytes);
+    }
+    Ok(catalogs)
+}
+
+/// Writes `<deployment package>.<DeploymentName>.deployment.binfb` for each
+/// deployment of the lowered `system`, with the catalog descriptors in
+/// `catalogs` embedded. A lowering failure is an I/O error, which the command
+/// reports with exit code 2.
+fn write_deployments(
+    out_dir: &Path,
+    system: &ridl_ir::v2::System,
+    packages: &[&ridl_ir::v2::Package],
+    catalogs: &BTreeMap<String, Vec<u8>>,
+) -> std::io::Result<()> {
+    for deployment in &system.deployments {
+        let bytes =
+            ridl_descriptor::deployment::lower(system, &deployment.name, packages, catalogs)
+                .map_err(|err| std::io::Error::other(err.to_string()))?;
         std::fs::write(
-            out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),
+            out_dir.join(format!(
+                "{}.{}{}",
+                deployment.package,
+                deployment.name,
+                ridl_descriptor::deployment::FILE_SUFFIX
+            )),
             bytes,
         )?;
     }
@@ -3237,7 +3308,7 @@ fn write_emits(
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
             Emit::CodegenRequest => Box::new(codegen::RequestBackend),
             // Written once per build by `write_catalogs`, not per package.
-            Emit::Catalog => continue,
+            Emit::Catalog | Emit::Deployment => continue,
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;
@@ -3412,7 +3483,8 @@ fn write_system_emits(
             | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
-            | Emit::Catalog => continue,
+            | Emit::Catalog
+            | Emit::Deployment => continue,
             Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
             Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
             Emit::IrBinary => Ok(ridl_ir::v2::system_to_binary(system)),
@@ -3667,7 +3739,13 @@ mod emit_table_tests {
             Emit::CodegenRequest.backend_table(),
             Some("codegen-request")
         );
-        for emit in [Emit::Catalog, Emit::IrJson, Emit::IrText, Emit::IrBinary] {
+        for emit in [
+            Emit::Catalog,
+            Emit::Deployment,
+            Emit::IrJson,
+            Emit::IrText,
+            Emit::IrBinary,
+        ] {
             assert_eq!(emit.backend_table(), None, "{emit:?}");
         }
     }
@@ -3685,6 +3763,7 @@ mod emit_table_tests {
             Emit::CodegenModel,
             Emit::CodegenRequest,
             Emit::Catalog,
+            Emit::Deployment,
             Emit::IrJson,
             Emit::IrText,
             Emit::IrBinary,
