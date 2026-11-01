@@ -3,6 +3,7 @@ source: crates/ridl-backend-ts/tests/codec.rs
 expression: source
 ---
 import * as flatbuffers from "flatbuffers";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import type * as t from "./open.demo.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
@@ -21,9 +22,10 @@ export class RuleError extends RangeError {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "open.demo";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([34, 135, 109, 35, 30, 128, 186, 16, 24, 91, 210, 32, 39, 103, 215, 243, 159, 234, 219, 44, 169, 243, 204, 86, 245, 138, 1, 84, 89, 235, 52, 230]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([105, 142, 181, 44, 177, 196, 132, 217, 5, 114, 91, 178, 170, 0, 70, 156, 36, 246, 6, 114, 211, 140, 151, 171, 179, 139, 76, 153, 169, 55, 111, 31]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
+  "open.demo.ControlSelectParams",
   "open.demo.DtcStatus",
   "open.demo.Empty",
   "open.demo.EmptyReport",
@@ -35,6 +37,12 @@ export const PAYLOAD_TYPES = [
 ] as const;
 /** The text of each rule code the wasm module reports, rule code n at index n - 2. */
 export const RULES = ["length", "pattern", "range", "step", "unique", "variant"] as const;
+
+/** The induced tuple of `Control.select`. */
+export interface ControlSelectParams {
+  status: t.DtcStatusValue;
+  mode: t.ModeValue;
+}
 
 /** Encodes a `open.demo.DtcStatus` payload. */
 export function encodeDtcStatus(value: t.DtcStatusValue): Uint8Array {
@@ -243,3 +251,32 @@ function unpackPick(object: fb.PickT): t.Pick {
       throw new RangeError("union open.demo.Pick carries no arm");
   }
 }
+
+/** Encodes a `open.demo.ControlSelectParams` payload. */
+export function encodeControlSelectParams(value: ControlSelectParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packControlSelectParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `open.demo.ControlSelectParams` payload the codec has verified. */
+export function decodeControlSelectParams(bytes: Uint8Array): ControlSelectParams {
+  return unpackControlSelectParams(fb.ControlSelectParams.getRootAsControlSelectParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packControlSelectParams(value: ControlSelectParams): fb.ControlSelectParamsT {
+  const tuple = new fb.ControlSelectParamsT();
+  tuple.field1 = packDtcStatus(value.status);
+  tuple.field2 = packMode(value.mode);
+  return tuple;
+}
+function unpackControlSelectParams(object: fb.ControlSelectParamsT): ControlSelectParams {
+  return { status: unpackDtcStatus(object.field1), mode: unpackMode(object.field2) };
+}
+
+const codecControlSelectParams: PayloadCodec<ControlSelectParams> = { type: "open.demo.ControlSelectParams", encode: encodeControlSelectParams, decode: decodeControlSelectParams };
+
+/** The members of interface `Control`, interface number `1`. */
+export const Control = {
+  iface: 1,
+  select: { iface: 1, ord: 1, kind: "command", request: codecControlSelectParams },
+} as const;

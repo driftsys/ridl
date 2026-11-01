@@ -2435,6 +2435,37 @@ fn a_field_of_an_open_enum_is_typed_with_the_value_type() {
     );
 }
 
+/// A field typed with an open enum of an imported package is spelled with
+/// that package's value type; a strict one keeps its plain name.
+#[test]
+fn a_field_of_a_foreign_open_enum_is_typed_with_the_foreign_value_type() {
+    for (open, expected) in [
+        (true, "status: other_pkg.DtcStatusValue;"),
+        (false, "status: other_pkg.DtcStatus;"),
+    ] {
+        let other = package("other.pkg", vec![dtc_status_decl(open)]);
+        let holder = v2::StructDef {
+            members: vec![field_member(named_field(
+                "status",
+                1,
+                "other.pkg.DtcStatus",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        };
+        let local = package(
+            "veh.common",
+            vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+        );
+        let model = ridl_ir::codegen::lower(&local, &[&other]);
+        let source = super::generate_with(&local, &model)
+            .expect("generation succeeds")
+            .source;
+        assert!(source.contains(expected), "open {open}, got:\n{source}");
+    }
+}
+
 #[test]
 fn an_open_enumset_adds_the_unknown_bits_function() {
     let decls = vec![public_decl(

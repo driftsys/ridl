@@ -49,6 +49,33 @@ Deno.test("a value beyond the safe integers is refused on decode with the varian
   assert.deepEqual(codec.decodeDtcStatus(limit.asUint8Array()), { unknown: 2 ** 53 - 1 });
 });
 
+Deno.test("the lower safe-integer bound is refused on decode and kept just inside it", () => {
+  const below = new flatbuffers.Builder();
+  below.finish(new fb.DtcStatusBoxT(-(2n ** 53n)).pack(below));
+  assert.throws(() => codec.decodeDtcStatus(below.asUint8Array()), ruleError("variant"));
+  const limit = new flatbuffers.Builder();
+  limit.finish(new fb.DtcStatusBoxT(-(2n ** 53n - 1n)).pack(limit));
+  assert.deepEqual(codec.decodeDtcStatus(limit.asUint8Array()), { unknown: -(2 ** 53 - 1) });
+  assert.throws(() => codec.encodeDtcStatus({ unknown: -(2 ** 53) }), ruleError("variant"));
+  assert.deepEqual(codec.encodeDtcStatus({ unknown: -(2 ** 53 - 1) }), limit.asUint8Array());
+});
+
+Deno.test("an unknown case that holds a declared number encodes as that number", () => {
+  const bytes = codec.encodeDtcStatus({ unknown: 1 });
+  assert.deepEqual(bytes, codec.encodeDtcStatus(t.DtcStatus.ACTIVE));
+  assert.equal(codec.decodeDtcStatus(bytes), t.DtcStatus.ACTIVE);
+});
+
+Deno.test("the request tuple of a command takes open enums, an unknown value included", () => {
+  const value: codec.ControlSelectParams = { status: { unknown: 9 }, mode: { unknown: 0 } };
+  assert.deepEqual(codec.decodeControlSelectParams(codec.encodeControlSelectParams(value)), value);
+  const declared: codec.ControlSelectParams = { status: t.DtcStatus.ACTIVE, mode: t.Mode.HIGH };
+  assert.deepEqual(
+    codec.decodeControlSelectParams(codec.encodeControlSelectParams(declared)),
+    declared,
+  );
+});
+
 Deno.test("a value beyond the safe integers is refused on encode with the variant rule", () => {
   assert.throws(() => codec.encodeDtcStatus({ unknown: 2 ** 53 }), ruleError("variant"));
   assert.throws(() => codec.encodeDtcStatus({ unknown: 1.5 }), ruleError("variant"));

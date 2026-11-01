@@ -1333,6 +1333,16 @@ fn the_open_codec_module() {
         !source.contains("absent(\"open.demo.Report\", \"mode\")"),
         "an open enum field must not throw when absent, got:\n{source}"
     );
+    // A required open enum with no zero member in the position of an induced
+    // tuple is never absent either: the tuple converter unpacks it as a field.
+    assert!(
+        source.contains("mode: unpackMode(object.field2)"),
+        "a tuple position of an open enum must use the unpack function, got:\n{source}"
+    );
+    assert!(
+        !source.contains("absent(\"open.demo.ControlSelectParams\""),
+        "an open enum tuple position must not throw when absent, got:\n{source}"
+    );
     insta::assert_snapshot!("open", source);
 }
 

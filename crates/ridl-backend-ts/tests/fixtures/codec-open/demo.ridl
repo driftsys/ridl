@@ -47,3 +47,11 @@ union Pick {
   status : DtcStatus
   flags  : Flags
 }
+
+/// An interface whose command takes open enums as parameters, so the
+/// converter of its request tuple holds a required open enum with no zero
+/// member.
+interface Control {
+  /// Selects a status and a mode.
+  command select(status: DtcStatus, mode: Mode) @[..50ms]
+}
