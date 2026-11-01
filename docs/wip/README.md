@@ -367,6 +367,11 @@ was archived on 2026-10-31, once the work landed (driftsys/ridl#1124);
 decisions 17 to 19 and the Status paragraph) and
 [the lints chapter](../book/lints.md) are the durable records.
 
+The streams stages 1 and 2 plan (`2026-10-31-streams-stages-1-2-plan.md`) was
+archived on 2026-11-01, once the work landed (driftsys/ridl#1154). The streams
+design (`2026-10-31-streams-design.md`) stays here, because stages 3 to 6 build
+on it (driftsys/ridl#1116).
+
 ## Files that stay after the 0.10.0 gardening pass (2026-10-13)
 
 Each file below was read against the code and the issue tracker on 2026-10-13
