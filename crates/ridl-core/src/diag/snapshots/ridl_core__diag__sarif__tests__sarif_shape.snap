@@ -675,7 +675,7 @@ expression: log
               "id": "TYPL-413",
               "name": "open-enum-without-values",
               "shortDescription": {
-                "text": "open enum declares no value"
+                "text": "open enum or enum set declares no value or bit"
               },
               "defaultConfiguration": {
                 "level": "warning"

@@ -3540,6 +3540,13 @@ impl Checker<'_> {
                 }
             }
         }
+        if decl.is_open() && bits.is_empty() {
+            self.warning(
+                DiagCode::TYPL_413,
+                name_range(decl),
+                "open enum set declares no bit: every bit is unknown".to_owned(),
+            );
+        }
         v2::EnumSetDef {
             backing_enum,
             bits,
@@ -4322,14 +4329,6 @@ impl Checker<'_> {
             .or_insert_with(|| (name.to_string(), range));
     }
 
-    /// RIDL-149 over one enum value name, against the values already seen.
-    ///
-    /// The Rust backend spells the variant with `pascal_case`; proto's
-    /// prefixed value is `snake_case` upper-cased. `pascal_case` is a function
-    /// of `snake_case`'s output, so every pair that collides under
-    /// `snake_case` collides here too, and one key covers both targets
-    /// (ADR-0016, 2026-09-26 amendment). First wins, so the secondary label
-    /// points at the value that keeps the projected name.
     /// RIDL-149 over the type namespace of the package: the generated code of
     /// an open enum `E` carries the Rust type `UnknownE` and the TypeScript
     /// type `EValue`, which hold an undeclared value, so a declaration of
@@ -4370,6 +4369,14 @@ impl Checker<'_> {
         }
     }
 
+    /// RIDL-149 over one enum value name, against the values already seen.
+    ///
+    /// The Rust backend spells the variant with `pascal_case`; proto's
+    /// prefixed value is `snake_case` upper-cased. `pascal_case` is a function
+    /// of `snake_case`'s output, so every pair that collides under
+    /// `snake_case` collides here too, and one key covers both targets
+    /// (ADR-0016, 2026-09-26 amendment). First wins, so the secondary label
+    /// points at the value that keeps the projected name.
     fn check_enum_value_projection(
         &mut self,
         name: &str,
@@ -6681,6 +6688,78 @@ mod tests {
         assert_eq!(codes(&strict), Vec::<&str>::new());
     }
 
+    /// `reserved` entries are not declared values, so an open enum holding
+    /// only those is warned, and an open enum set with no bit is warned the
+    /// same way; a strict declaration, and an open set with a bit, are not.
+    #[test]
+    fn an_open_declaration_without_a_name_is_warned() {
+        let reserved = check_source("p", "package p\nopen enum E { reserved 3 }\n");
+        assert_eq!(codes(&reserved), ["TYPL-413"], "{:?}", reserved.diagnostics);
+        let empty_set = check_source("p", "package p\nopen enumset F {}\n");
+        assert_eq!(
+            codes(&empty_set),
+            ["TYPL-413"],
+            "{:?}",
+            empty_set.diagnostics
+        );
+        let derived = check_source("p", "package p\nopen enum E {}\nopen enumset F : E\n");
+        assert_eq!(codes(&derived), ["TYPL-413", "TYPL-413"]);
+        let named = check_source("p", "package p\nopen enumset F { A = 0 }\n");
+        assert!(codes(&named).is_empty(), "{:?}", named.diagnostics);
+        let strict = check_source("p", "package p\nenumset F {}\n");
+        assert!(codes(&strict).is_empty(), "{:?}", strict.diagnostics);
+    }
+
+    /// The names an open enum `E` reserves (`UnknownE`, `EValue`) are
+    /// package-wide, so a declaration in another file of the package collides
+    /// as one in the same file does.
+    #[test]
+    fn ridl_149_unknown_type_names_collide_across_files_of_one_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let files = [
+            ("p/a.typl", "package p\nopen enum E { A = 0 }\n"),
+            (
+                "p/b.typl",
+                "package p\nstruct UnknownE {}\nstruct EValue {}\n",
+            ),
+        ]
+        .into_iter()
+        .map(|(file_name, text)| InputFile::new(&db, file_name.to_string(), text.to_string()))
+        .collect();
+        let pkg = Package::new(
+            &db,
+            "p".to_string(),
+            "p".to_string(),
+            files,
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            TimingDefaults::default(),
+            None,
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149", "RIDL-149"],
+            "{:?}",
+            checked.diagnostics
+        );
+        let messages: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect();
+        assert!(
+            messages.iter().any(|m| m.contains("`UnknownE`")),
+            "{messages:?}"
+        );
+        assert!(
+            messages.iter().any(|m| m.contains("`EValue`")),
+            "{messages:?}"
+        );
+    }
+
     fn union_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::UnionDef {
         let Some(v2::decl::Kind::UnionDef(def)) = &decl(checked, name).kind else {
             panic!("`{name}` is not a union def");
@@ -8261,7 +8340,11 @@ mod tests {
         assert_eq!(codes(&ts), vec!["RIDL-149"], "{:?}", ts.diagnostics);
         assert!(ts.diagnostics[0].message.contains("unknownBits"));
         let ts_strict = check_source("p", "package p\nenumset F { unknownBits = 0 }\n");
-        assert!(codes(&ts_strict).is_empty(), "got: {:?}", ts_strict.diagnostics);
+        assert!(
+            codes(&ts_strict).is_empty(),
+            "got: {:?}",
+            ts_strict.diagnostics
+        );
         let strict = check_source("p", "package p\nenumset F { unknown_bits = 0 }\n");
         assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
     }

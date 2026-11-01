@@ -631,11 +631,12 @@ diag_codes! {
         TYPL_412 = "TYPL-412", Info,
             "malformed lint directive", lint = "malformed-lint-directive";
 
-        /// An `open enum` that declares no value (typl §8): no value has a
-        /// name, so every value is unknown. Warning. Emitted by the checker
+        /// An `open enum` that declares no value, or an `open enumset` that
+        /// declares no bit (typl §8.1): nothing has a name, so every value is
+        /// unknown. Warning. Emitted by the checker
         /// (`ridl_sem::check`).
         TYPL_413 = "TYPL-413", Warning,
-            "open enum declares no value", lint = "open-enum-without-values";
+            "open enum or enum set declares no value or bit", lint = "open-enum-without-values";
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in

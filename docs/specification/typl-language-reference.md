@@ -1012,9 +1012,10 @@ open enum DtcStatus {
   integer is the one the encoding carries (for example `int32` for proto3).
 - The init value does not change: the member whose value is 0, else the lowest
   declared value. An unknown value is never an init value.
-- An open enum that declares no value draws TYPL-413
-  (`open-enum-without-values`, a warning): no value has a name, so every value
-  is unknown.
+- An open enum that declares no value, and an open `enumset` that declares no
+  bit, draw TYPL-413 (`open-enum-without-values`, a warning): no value or bit
+  has a name, so every value is unknown. A `reserved` entry does not count as a
+  declared value.
 - `open` is a contextual keyword; it is recognised only directly before `enum`
   or `enumset`.
 
@@ -1532,7 +1533,7 @@ a `.ridl` file, as its row says:
 | TYPL-410 | doc comment written as `/** */` — `allow` by default                                                                                                                     | warning  |
 | TYPL-411 | lint directive allows a lint that no diagnostic in its scope raises                                                                                                      | info     |
 | TYPL-412 | malformed lint directive — a word other than `allow`, no lint name, a name that is not a lint name, a name of a directive lint, no reason, or no declaration to apply to | info     |
-| TYPL-413 | open enum declares no value — no value has a name, so every value is unknown                                                                                             | warning  |
+| TYPL-413 | open enum or enum set declares no value or bit — nothing has a name, so every value is unknown                                                                           | warning  |
 
 ---
 
