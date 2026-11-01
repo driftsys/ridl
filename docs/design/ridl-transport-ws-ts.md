@@ -431,7 +431,8 @@ first block as `frame`, in place of the `not-subscribed` note that a payload no
 `read` waits for gets. The consumer does not know the provider's message limit,
 so the report of a `fixed` must not depend on whether the provider split it. A
 signal's or an event's payload above its limit keeps the `detected` report of
-D-19 and records no note.
+D-19 and records no `over-limit` note; an unsolicited one is still recorded
+`not-subscribed`, as any unsolicited frame is.
 
 The session treats every identity as having no member table. The `interfaces`
 option lists only the members of the generated tables, and the generated module
