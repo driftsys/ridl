@@ -4738,6 +4738,23 @@ mod enum_open {
         }
     }
 
+    /// The rule applies to an `internal` declaration as to a public one.
+    #[test]
+    fn an_append_to_an_internal_strict_enum_is_a_breaking_strict_append() {
+        for (label, build) in shapes() {
+            let internal = |mut package: v2::Package| {
+                package.decls[0].visibility = v2::Visibility::Internal as i32;
+                package
+            };
+            let (old, new) = (internal(build(3, false)), internal(build(4, false)));
+            let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+            let lines = of_category(&report, Category::StrictEnumAppend);
+            assert_eq!(lines.len(), 1, "{label}: {}", render_text(&report));
+            assert_eq!(lines[0].verdict, Verdict::Breaking, "{label}");
+            assert_eq!(report.verdict, Verdict::Breaking, "{label}");
+        }
+    }
+
     #[test]
     fn several_appended_members_draw_one_line_naming_them() {
         for (label, build) in shapes() {

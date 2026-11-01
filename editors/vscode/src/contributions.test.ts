@@ -85,6 +85,13 @@ test("the rsdl grammar highlights the rsdl keywords and no retired word", () => 
 
 test("the typl grammar highlights `open` only directly before enum or enumset", () => {
   const grammar = readJson("syntaxes/typl.tmLanguage.json");
+  // The rule only highlights when the top-level patterns include it. The
+  // repository has no tokenizer dependency, so the include and the regex are
+  // asserted separately.
+  assert.ok(
+    grammar.patterns.some((pattern: { include?: string }) => pattern.include === "#keywords-modifier"),
+    "the top-level patterns include the modifier rule",
+  );
   const modifier = new RegExp(grammar.repository["keywords-modifier"].match, "g");
   const matches = (text: string) => [...text.matchAll(modifier)].map((match) => match[0]);
   assert.deepEqual(matches("open enum Mode {}"), ["open"]);

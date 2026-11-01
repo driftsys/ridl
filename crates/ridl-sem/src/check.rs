@@ -6693,17 +6693,42 @@ mod tests {
     /// same way; a strict declaration, and an open set with a bit, are not.
     #[test]
     fn an_open_declaration_without_a_name_is_warned() {
-        let reserved = check_source("p", "package p\nopen enum E { reserved 3 }\n");
-        assert_eq!(codes(&reserved), ["TYPL-413"], "{:?}", reserved.diagnostics);
-        let empty_set = check_source("p", "package p\nopen enumset F {}\n");
-        assert_eq!(
-            codes(&empty_set),
-            ["TYPL-413"],
-            "{:?}",
-            empty_set.diagnostics
+        // Each TYPL-413 is a warning on the name of its declaration.
+        let assert_warnings = |text: &str, names: &[&str]| {
+            let checked = check_source("p", text);
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-413"; names.len()],
+                "{:?}",
+                checked.diagnostics
+            );
+            let found: Vec<(Severity, usize, usize)> = checked
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == DiagCode::TYPL_413)
+                .map(|d| {
+                    (
+                        d.severity,
+                        usize::from(d.primary.range.start()),
+                        usize::from(d.primary.range.end()),
+                    )
+                })
+                .collect();
+            let expected: Vec<(Severity, usize, usize)> = names
+                .iter()
+                .map(|name| {
+                    let at = text.find(&format!(" {name} ")).expect("the name") + 1;
+                    (Severity::Warning, at, at + name.len())
+                })
+                .collect();
+            assert_eq!(found, expected, "{text}");
+        };
+        assert_warnings("package p\nopen enum E { reserved 3 }\n", &["E"]);
+        assert_warnings("package p\nopen enumset F {}\n", &["F"]);
+        assert_warnings(
+            "package p\nopen enum E {}\nopen enumset F : E\n",
+            &["E", "F"],
         );
-        let derived = check_source("p", "package p\nopen enum E {}\nopen enumset F : E\n");
-        assert_eq!(codes(&derived), ["TYPL-413", "TYPL-413"]);
         let named = check_source("p", "package p\nopen enumset F { A = 0 }\n");
         assert!(codes(&named).is_empty(), "{:?}", named.diagnostics);
         let strict = check_source("p", "package p\nenumset F {}\n");
@@ -8346,6 +8371,28 @@ mod tests {
             ts_strict.diagnostics
         );
         let strict = check_source("p", "package p\nenumset F { unknown_bits = 0 }\n");
+        assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
+    }
+
+    /// A derived open enum set copies the values of its backing enum as bits,
+    /// so a value spelled `unknownBits` collides as a declared bit does.
+    #[test]
+    fn ridl_149_unknown_bits_reservation_reaches_a_derived_open_enum_set() {
+        let derived = check_source(
+            "p",
+            "package p\nenum E { unknownBits = 0 }\nopen enumset F : E\n",
+        );
+        assert_eq!(
+            codes(&derived),
+            vec!["RIDL-149"],
+            "{:?}",
+            derived.diagnostics
+        );
+        assert!(derived.diagnostics[0].message.contains("unknownBits"));
+        let strict = check_source(
+            "p",
+            "package p\nenum E { unknownBits = 0 }\nenumset F : E\n",
+        );
         assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
     }
 
