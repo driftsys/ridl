@@ -457,10 +457,11 @@ one, so a breaking change in a package that the unit does not reach leaves the
 unit's chain as it was. A breaking change that changes the catalog restarts the
 chain: the file then holds the one new hash. The change is judged for the
 root manifest's encodings ([ADR-0031][adr-0031] decision 13), so when a
-`[backend.<name>]` table lists `podbuf`, a podbuf break restarts the chain,
-except when the inline head reaches a type from a remote package
-([driftsys/ridl#1141][issue-1141]). That holds for the step from a baseline published before `podbuf` was listed; the
-hashes carried before then stay in the file. The file being replaced is carried
+`[backend.<name>]` table lists `podbuf`, a podbuf break restarts the chain. That
+holds for the step from a baseline published before `podbuf` was listed; the
+hashes carried before then stay in the file. The remote packages the command's
+own compile resolved are the diff's context, so a struct held inline whose head
+reaches a type from a remote package is laid out on both sides. The file being replaced is carried
 only when its first hash is the hash recomputed from the snapshots published
 beside it; a file that does not describe those snapshots, as a partially
 hand-edited baseline leaves behind, restarts the chain instead of carrying a
@@ -714,9 +715,10 @@ scoped to the unit, judges the change from the baseline to the tree breaking
 and the current catalog hash is not the file's first hash. The change is judged
 for the root manifest's encodings, as `ridl baseline` judges it
 ([ADR-0031][adr-0031] decision 13), so when a `[backend.<name>]` table lists
-`podbuf`, a podbuf break empties the list, except when the inline head reaches
-a type from a remote package ([driftsys/ridl#1141][issue-1141]), from a
-baseline published before `podbuf` was listed too; the hashes carried before then stay listed. When the
+`podbuf`, a podbuf break empties the list; a break in the step from a
+baseline published before `podbuf` was listed empties it too, and the hashes carried before then stay listed. The
+remote packages the build's own compile resolved are the diff's context, as for
+`ridl baseline`. When the
 two hashes are equal the catalog did not change, and the list holds the file's other
 hashes whatever the verdict. The file is used at all only when its first hash
 is the hash recomputed from the baseline's own snapshots of the unit; a file
@@ -1591,7 +1593,11 @@ with `--encoding podbuf` and compatible without it, and each listed under the
 heading `breaking under podbuf` either way, so that a workspace that does not
 build podbuf still sees it. A struct field appended that grows the podbuf head
 of a struct another head of the old side holds inline is
-`podbuf_inline_append`, whose line names each inline use. An enum value, an
+`podbuf_inline_append`, whose line names each inline use. The heads are laid out
+with `ridl.std` and the remote `[imports]` packages a source side compiled, so
+a struct whose head reaches a remote type is measured on both sides; a head
+that reaches a type neither side resolves, as when both sides are snapshots, is
+read as grown, and every append to that struct draws the line. An enum value, an
 enum-set flag or a union arm appended after which the podbuf integer of the
 enum, the enum set or the union's tag is a different integer is
 `podbuf_width_change`, reported once per declaration with the old and the new
@@ -2756,5 +2762,4 @@ argument.
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 [adr-0031]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0031-podbuf-projection-rules.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196
-[issue-1141]: https://github.com/driftsys/ridl/issues/1141
 [clig]: https://clig.dev

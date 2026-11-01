@@ -2906,6 +2906,434 @@ mod podbuf {
         );
     }
 
+    /// `veh.common` holding `SensorReading { value: veh.remote.Level }`, a
+    /// struct whose head reaches a package that neither side nor the context
+    /// holds, with the appended `members` and the holder's field `range`.
+    fn held_unresolved(members: Vec<v2::StructMember>, range: v2::FieldType) -> v2::Package {
+        let mut fields = vec![field("value", 1, named("veh.remote.Level"))];
+        fields.extend(members);
+        package(
+            "veh.common",
+            vec![
+                int_type("Level", "0", "100"),
+                struct_decl("SensorReading", fields),
+                struct_decl("SensorBounds", vec![field("range", 1, range)]),
+            ],
+        )
+    }
+
+    /// The held struct's head reaches a package neither side nor the context
+    /// holds, so the law lays out neither head. The holder names the struct
+    /// directly, so the use is still found, and the old head is read as
+    /// grown: the growing append draws the line.
+    #[test]
+    fn a_growing_append_to_a_struct_whose_old_head_cannot_be_laid_out_is_a_break() {
+        let old = held_unresolved(vec![], named("SensorReading"));
+        let new = held_unresolved(vec![field("quality", 2, wide())], named("SensorReading"));
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .unwrap();
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.common/SensorBounds/range")
+        );
+    }
+
+    /// With no old head to measure against, a one-byte append draws the line
+    /// too: the rule cannot tell a pad-fit append from a growing one, and
+    /// keeps the conservative verdict.
+    #[test]
+    fn a_one_byte_append_to_a_struct_whose_old_head_cannot_be_laid_out_is_a_break() {
+        let old = held_unresolved(vec![], named("SensorReading"));
+        let new = held_unresolved(
+            vec![field("quality", 2, named("Level"))],
+            named("SensorReading"),
+        );
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The holder is an exact-length array of the struct whose head cannot
+    /// be laid out: the array's elements sit at fixed offsets of the holder's
+    /// head, so the use is found by the type's shape and the line is drawn.
+    #[test]
+    fn a_growing_append_to_a_struct_held_in_a_fixed_array_whose_old_head_cannot_be_laid_out_is_a_break()
+     {
+        let window = array(named("SensorReading"), 2, 2);
+        let old = held_unresolved(vec![], window.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], window);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The holder is a bounded array of the struct whose head cannot be laid
+    /// out: a tail block with a stride, not a fixed offset of a head, so the
+    /// shape draws no use and the append is compatible, as it is when the
+    /// law lays the struct out.
+    #[test]
+    fn a_growing_append_to_a_struct_held_in_a_bounded_array_whose_old_head_cannot_be_laid_out_is_not_a_break()
+     {
+        let entries = array(named("SensorReading"), 0, 8);
+        let old = held_unresolved(vec![], entries.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], entries);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The holder is a tuple one of whose members is the struct whose head
+    /// cannot be laid out: the member sits at a fixed offset of the tuple's
+    /// head, so the use is found by shape.
+    #[test]
+    fn a_growing_append_to_a_struct_held_in_a_tuple_whose_old_head_cannot_be_laid_out_is_a_break() {
+        let pair = tuple(vec![
+            ("low", named("Level")),
+            ("high", named("SensorReading")),
+        ]);
+        let old = held_unresolved(vec![], pair.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], pair);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// Two packages declare a `SensorReading` whose head cannot be laid out,
+    /// and the holder names the other package's: the shape walk reads the
+    /// declaring package as well as the name, so the append to `veh.common`'s
+    /// struct has no use and draws no line.
+    #[test]
+    fn a_holder_naming_another_packages_struct_of_the_same_name_is_not_a_use() {
+        let other = package(
+            "veh.other",
+            vec![struct_decl(
+                "SensorReading",
+                vec![field("value", 1, named("veh.remote.Level"))],
+            )],
+        );
+        let old = [
+            held_unresolved(vec![], named("veh.other.SensorReading")),
+            other.clone(),
+        ];
+        let new = [
+            held_unresolved(
+                vec![field("quality", 2, wide())],
+                named("veh.other.SensorReading"),
+            ),
+            other,
+        ];
+        let old: Vec<&v2::Package> = old.iter().collect();
+        let new: Vec<&v2::Package> = new.iter().collect();
+        let report = diff_refs_with(&old, &new, &[], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The holder is a bounded array of a tuple holding the struct whose head
+    /// cannot be laid out: the tuple's head cannot grow, so the member sits at
+    /// a fixed offset inside each element, and the use is found by shape as
+    /// the law finds it when the struct resolves.
+    #[test]
+    fn a_growing_append_to_a_struct_held_in_a_tuple_of_a_bounded_array_whose_old_head_cannot_be_laid_out_is_a_break()
+     {
+        let entries = array(
+            tuple(vec![
+                ("reading", named("SensorReading")),
+                ("at", named("Level")),
+            ]),
+            0,
+            4,
+        );
+        let old = held_unresolved(vec![], entries.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], entries);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The holder is a stream of the struct whose head cannot be laid out: a
+    /// stream has no form and holds nothing in a head, so no use by shape
+    /// either, and the append is compatible.
+    #[test]
+    fn a_growing_append_to_a_struct_streamed_whose_old_head_cannot_be_laid_out_is_not_a_break() {
+        let streamed = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                element: Some(v2::stream_type::Element::Named("SensorReading".to_string())),
+            })),
+        };
+        let old = held_unresolved(vec![], streamed.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], streamed);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The holder is a bounded array with a non-zero minimum: still a tail
+    /// block with a stride, not an exact-length array, so no use by shape.
+    #[test]
+    fn a_growing_append_to_a_struct_held_in_a_bounded_array_with_a_minimum_whose_old_head_cannot_be_laid_out_is_not_a_break()
+     {
+        let entries = array(named("SensorReading"), 2, 8);
+        let old = held_unresolved(vec![], entries.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], entries);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The old head cannot be laid out and the new head can, because the
+    /// package the struct reaches is new on the new side: with no old size to
+    /// measure against, a one-byte append the new head places in its pads is
+    /// still read as grown.
+    #[test]
+    fn a_pad_fit_append_whose_old_head_cannot_be_laid_out_but_new_head_can_is_a_break() {
+        let old = held_unresolved(vec![], named("SensorReading"));
+        let new = [
+            held_unresolved(
+                vec![field("quality", 2, named("Level"))],
+                named("SensorReading"),
+            ),
+            level_package("veh.remote"),
+        ];
+        let new: Vec<&v2::Package> = new.iter().collect();
+        let report = diff_refs_with(&[&old], &new, &[], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// `held_unresolved` with no holder field (`range` is a `Level`) and the
+    /// interface `Ctl` holding `interactions`.
+    fn interface_unresolved(
+        members: Vec<v2::StructMember>,
+        interactions: Vec<v2::Decl>,
+    ) -> v2::Package {
+        let mut package = held_unresolved(members, named("Level"));
+        package.interfaces = vec![super::interface("Ctl", interactions)];
+        package
+    }
+
+    /// A two-parameter call whose induced argument struct holds the struct
+    /// whose head cannot be laid out: the root is read by shape, and the use
+    /// is the interaction. A call with the struct as its one named parameter
+    /// sends the struct as its own root, which is no use, by shape as by the
+    /// law.
+    #[test]
+    fn a_call_whose_argument_struct_holds_a_struct_whose_old_head_cannot_be_laid_out_is_a_break() {
+        let two = || {
+            vec![command(
+                "set",
+                1,
+                vec![
+                    param("a", named("SensorReading")),
+                    param("b", named("Level")),
+                ],
+            )]
+        };
+        let report = diff(
+            &interface_unresolved(vec![], two()),
+            &interface_unresolved(vec![field("quality", 2, wide())], two()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .unwrap_or_else(|| panic!("the use is found: {:?}", report.changes));
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.common/Ctl/set")
+        );
+
+        let one = || vec![command("set", 1, vec![param("a", named("SensorReading"))])];
+        let report = diff(
+            &interface_unresolved(vec![], one()),
+            &interface_unresolved(vec![field("quality", 2, wide())], one()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+    }
+
+    /// A fixed payload that is an exact-length array of the struct whose head
+    /// cannot be laid out has no head, so the struct inside it is not held;
+    /// an exact-length array of a tuple holding the struct is, through the
+    /// tuple's head. The root is read by shape as the law reads it.
+    #[test]
+    fn an_exact_array_root_of_a_struct_whose_old_head_cannot_be_laid_out_is_not_a_use_but_of_a_tuple_is()
+     {
+        let of_struct = || vec![fixed("window", 1, array(named("SensorReading"), 2, 2))];
+        let report = diff(
+            &interface_unresolved(vec![], of_struct()),
+            &interface_unresolved(vec![field("quality", 2, wide())], of_struct()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+
+        let of_tuple = || {
+            vec![fixed(
+                "window",
+                1,
+                array(
+                    tuple(vec![
+                        ("reading", named("SensorReading")),
+                        ("at", named("Level")),
+                    ]),
+                    2,
+                    2,
+                ),
+            )]
+        };
+        let report = diff(
+            &interface_unresolved(vec![], of_tuple()),
+            &interface_unresolved(vec![field("quality", 2, wide())], of_tuple()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The shape walk and the form-based reading find the same holders: for
+    /// every shape in the table, built over a struct the law lays out, the
+    /// shape walk answers as `field_form` followed by `holds_inline` does, and
+    /// the root variant as `root_holds_inline` does; each row also states the
+    /// expected answer, so the two cannot agree by both being wrong.
+    #[test]
+    fn the_shape_walk_finds_the_holders_the_law_finds() {
+        use ridl_ir::projection::flatbuffers::Packages;
+        use ridl_ir::projection::podbuf::{
+            Inlined, field_form, root_shape_holds_inline, shape_holds_inline,
+        };
+
+        let home = package(
+            "veh.common",
+            vec![
+                int_type("Level", "0", "100"),
+                string_type("Label"),
+                reading_v1(),
+            ],
+        );
+        let packages = Packages {
+            package: &home,
+            others: &[],
+        };
+        let target = Inlined::Declaration {
+            package: "veh.common".to_string(),
+            name: "SensorReading".to_string(),
+        };
+        let reading = || named("SensorReading");
+        let optional = || v2::FieldType {
+            optional: true,
+            ..named("SensorReading")
+        };
+        let pair = || tuple(vec![("reading", reading()), ("at", named("Level"))]);
+        // (label, type, held in a struct field, held at a root)
+        let table: Vec<(&str, v2::FieldType, bool, bool)> = vec![
+            ("direct", reading(), true, false),
+            ("optional", optional(), true, false),
+            ("exact array", array(reading(), 2, 2), true, false),
+            ("bounded array 0..8", array(reading(), 0, 8), false, false),
+            ("bounded array 2..8", array(reading(), 2, 8), false, false),
+            ("bounded array of a tuple", array(pair(), 0, 4), true, true),
+            (
+                "map with the struct in the value tuple",
+                map(named("Label"), pair()),
+                true,
+                true,
+            ),
+            (
+                "map with the struct as the value",
+                map(named("Label"), reading()),
+                false,
+                false,
+            ),
+            ("tuple", pair(), true, true),
+            (
+                "nested tuple",
+                tuple(vec![("inner", pair()), ("at", named("Level"))]),
+                true,
+                true,
+            ),
+            ("exact array of a tuple", array(pair(), 2, 2), true, true),
+            (
+                "exact array of an exact array",
+                array(array(reading(), 2, 2), 2, 2),
+                true,
+                false,
+            ),
+            ("another type", named("Level"), false, false),
+            ("a scalar", wide(), false, false),
+        ];
+        for (label, ty, in_field, at_root) in table {
+            let form = field_form(packages, &ty).unwrap_or_else(|err| panic!("{label}: {err:?}"));
+            let law = crate::walk::holds_inline(&form, &target, true);
+            let shape = shape_holds_inline(packages, &ty, "veh.common", "SensorReading");
+            assert_eq!(law, in_field, "{label}: the law reads a field");
+            assert_eq!(shape, in_field, "{label}: the shape reads a field");
+            let law = crate::walk::root_holds_inline(&form, &target);
+            let shape = root_shape_holds_inline(packages, &ty, "veh.common", "SensorReading");
+            assert_eq!(law, at_root, "{label}: the law reads a root");
+            assert_eq!(shape, at_root, "{label}: the shape reads a root");
+        }
+    }
+
     /// The appended field's type is itself new on the new side: the new head
     /// is laid out over the new side, where the type resolves, and the
     /// one-byte field fits in the old pad.

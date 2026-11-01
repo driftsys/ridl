@@ -447,12 +447,12 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 7,
+        lines: 8,
         why: "a test mutating one fixture interface, two lines in the \
               name-stability test indexing into the single fixture interface \
               both the old and new packages share, three lines in the \
               doc-field tests editing the single fixture interface or its \
-              one interaction, and one line in the podbuf inline-use tests \
+              one interaction, and two lines in the podbuf inline-use tests \
               setting a fixture package's named interfaces",
     },
     Allowed {

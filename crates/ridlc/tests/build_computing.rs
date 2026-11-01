@@ -45,13 +45,16 @@ fn build(
 fn the_function_is_called_once_with_the_checked_packages() {
     let root = workspace(SOURCE);
     let mut calls = Vec::new();
-    let run = build(root.path(), &mut |packages, _std, names_imports| {
-        calls.push((
-            packages.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
-            names_imports,
-        ));
-        Ok(BTreeMap::new())
-    })
+    let run = build(
+        root.path(),
+        &mut |packages, _std, names_imports, _remotes| {
+            calls.push((
+                packages.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+                names_imports,
+            ));
+            Ok(BTreeMap::new())
+        },
+    )
     .expect("the build runs");
     assert!(!run.has_error(), "unexpected error: {:?}", run.diagnostics);
     assert_eq!(calls, vec![(vec!["demo".to_string()], false)]);
@@ -61,7 +64,7 @@ fn the_function_is_called_once_with_the_checked_packages() {
 fn a_build_with_an_error_diagnostic_never_calls_it() {
     let root = workspace("package demo\n\nstruct S {\n  x: Missing\n}\n");
     let mut called = false;
-    let run = build(root.path(), &mut |_, _, _| {
+    let run = build(root.path(), &mut |_, _, _, _| {
         called = true;
         Ok(BTreeMap::new())
     })
@@ -73,7 +76,7 @@ fn a_build_with_an_error_diagnostic_never_calls_it() {
 #[test]
 fn an_error_of_the_function_is_the_error_of_the_build() {
     let root = workspace(SOURCE);
-    let error = build(root.path(), &mut |_, _, _| {
+    let error = build(root.path(), &mut |_, _, _, _| {
         Err(std::io::Error::other("the baseline cannot be read"))
     })
     .err()
@@ -115,7 +118,7 @@ fn a_package_whose_imports_do_not_materialize_never_calls_it() {
     )
     .expect("the manifest is written");
     let mut flags = Vec::new();
-    let run = frozen_build(root.path(), &mut |_, _, names_imports| {
+    let run = frozen_build(root.path(), &mut |_, _, names_imports, _| {
         flags.push(names_imports);
         Ok(BTreeMap::new())
     })
@@ -148,7 +151,7 @@ fn a_root_whose_imports_do_not_materialize_never_calls_it() {
     .expect("the member manifest is written");
     std::fs::write(member.join("demo.typl"), SOURCE).expect("the source is written");
     let mut flags = Vec::new();
-    let run = frozen_build(root.path(), &mut |_, _, names_imports| {
+    let run = frozen_build(root.path(), &mut |_, _, names_imports, _| {
         flags.push(names_imports);
         Ok(BTreeMap::new())
     })

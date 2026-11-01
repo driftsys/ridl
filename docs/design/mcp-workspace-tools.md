@@ -105,10 +105,12 @@ The behaviour that is not in the README:
   are independent of lint levels and return the common workspace status.
 - **`ridl_diff`** accepts what `ridl diff <old> <new>` accepts, through
   `ridlc::load_diff_side`, and returns what `ridl_diff::render_json` writes,
-  with the standard IR passed as context (driftsys/ridl#598). A comparison
-  against the published baseline is `old: "<root>/.ridl/baseline"`. The optional
-  `encodings` list is `ridl diff --encoding`, one name per element: the names a
-  manifest's `[backend.<name>] encodings` list takes
+  with the standard IR and the remote packages either source side compiled
+  passed as context, as `ridl diff` passes them (driftsys/ridl#598,
+  driftsys/ridl#1141). A comparison against the published baseline is
+  `old: "<root>/.ridl/baseline"`. The optional `encodings` list is
+  `ridl diff --encoding`, one name per element: the names a manifest's
+  `[backend.<name>] encodings` list takes
   (`ridl_core::manifest::ENCODING_NAMES`). With `podbuf` among them a
   `podbuf_inline_append`, a `podbuf_width_change` or a
   `podbuf_strict_enum_append` change is breaking; without it, compatible. A name

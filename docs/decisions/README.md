@@ -594,7 +594,11 @@ other entry below is Accepted.
   2026-10-31, decision 13: `ridl build` and `ridl baseline` judge the catalog
   history for the root manifest's encodings, which closes open item 3
   (driftsys/ridl#1095). Amended 2026-10-31, decision 7: the C header reads a
-  boxed root, which closes open item 4 (driftsys/ridl#1096).
+  boxed root, which closes open item 4 (driftsys/ridl#1096). Amended 2026-10-31,
+  decision 13: the remote packages a side compiled are the context of
+  `ridl diff`, `ridl build` and `ridl baseline`, so an inline append whose head
+  reaches a remote type is judged by the layout, and a head no side can lay out
+  is read as grown (driftsys/ridl#1141).
 
 - **ADR-0032 — Byte streams.** Fourteen decisions: the use case is a file or
   document of unknown size, downloaded or uploaded and read or written as I/O;

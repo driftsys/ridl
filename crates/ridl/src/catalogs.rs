@@ -17,8 +17,12 @@ use crate::{default_baseline_dir, report_diff_side_error};
 
 /// The earlier catalogs each unit of the workspace at `entry` is compatible
 /// with, per unit name, for `ridl build` to write into the unit's descriptor
-/// and codegen request. `checked` and `std` are the build's own checked
-/// packages and `ridl.std` package, so the workspace is not compiled again.
+/// and codegen request. `checked`, `std` and `remotes` are the build's own
+/// checked packages, `ridl.std` package and the checked packages of its
+/// remote units, so the workspace is not compiled again. `std` and `remotes`
+/// are the context of the diff ([`judged_diff`]); the published snapshots
+/// carry no remote package, so the remotes of this compile stand for both
+/// sides.
 ///
 /// The chain is read from `.ridl/baseline/` at the workspace root
 /// ([`default_baseline_dir`]). With no such directory, one holding no
@@ -49,6 +53,7 @@ pub(crate) fn compatible_catalogs(
     checked: &[&Package],
     std: &Package,
     names_imports: bool,
+    remotes: &[&Package],
 ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, ExitCode> {
     let published = default_baseline_dir(entry);
     let mut compatible = BTreeMap::new();
@@ -59,7 +64,10 @@ pub(crate) fn compatible_catalogs(
         .map_err(report_diff_side_error)?
         .packages;
     let old_refs: Vec<&Package> = old.iter().collect();
-    let report = judged_diff(entry, &old_refs, checked, std);
+    let context: Vec<&Package> = std::iter::once(std)
+        .chain(remotes.iter().copied())
+        .collect();
+    let report = judged_diff(entry, &old_refs, checked, &context);
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&report, &old_refs, checked);
     let scope = ridlc::catalog_scope(checked, Some(std));
     let published_scope = ridlc::catalog_scope(&old_refs, Some(std));
@@ -105,7 +113,11 @@ pub(crate) fn compatible_catalogs(
 /// (the ones in `staging`) that has at least one interface shape. The
 /// verdicts are judged by [`judged_diff`] for the root manifest of the
 /// workspace at `entry`, as [`compatible_catalogs`] judges them, so
-/// `ridl baseline` and `ridl build` give one verdict.
+/// `ridl baseline` and `ridl build` give one verdict. `remotes` are the
+/// checked packages of the remote units of the compile that wrote `fresh`,
+/// passed with `ridl.std` as the diff's context: neither snapshot set carries
+/// them, and a type a unit reaches in one must resolve for the podbuf rule to
+/// lay the unit's heads out.
 ///
 /// Each file holds the unit's catalog hash, computed over `fresh` as
 /// `ridl build --emit catalog` computes it. When the unit's verdict between
@@ -131,12 +143,14 @@ pub(crate) fn write_catalog_histories(
     published: &Path,
     old: &[Package],
     fresh: &[Package],
+    remotes: &[Package],
     entry: &Path,
 ) -> Result<(), ExitCode> {
     let std = ridlc::std_ir();
     let fresh_refs: Vec<&Package> = fresh.iter().collect();
     let old_refs: Vec<&Package> = old.iter().collect();
-    let report = (!old.is_empty()).then(|| judged_diff(entry, &old_refs, &fresh_refs, &std));
+    let context: Vec<&Package> = std::iter::once(&std).chain(remotes.iter()).collect();
+    let report = (!old.is_empty()).then(|| judged_diff(entry, &old_refs, &fresh_refs, &context));
     let verdicts = report
         .as_ref()
         .map(|report| ridl_diff::UnitVerdicts::new(report, old, fresh));
@@ -175,11 +189,14 @@ pub(crate) fn write_catalog_histories(
     Ok(())
 }
 
-/// The diff from the snapshots `old` to `new`, with `std` as context, judged
+/// The diff from the snapshots `old` to `new`, with `context` — `ridl.std`
+/// and the remote packages the compile of `new` resolved — as context, judged
 /// for the root manifest's encodings of the workspace at `entry`
 /// ([`crate::root_manifest_encodings`]): the one report both catalog history
 /// verdicts read. Under `podbuf`, a podbuf break makes the unit's verdict
-/// breaking as any other break does.
+/// breaking as any other break does; the heads of both sides are laid out
+/// with the context, so a struct that reaches a remote type has a head on
+/// the old side too.
 ///
 /// Only this step, from the latest published snapshots to `new`, is judged
 /// for the current encodings. A snapshot does not record encodings, so the
@@ -190,11 +207,11 @@ fn judged_diff(
     entry: &Path,
     old: &[&Package],
     new: &[&Package],
-    std: &Package,
+    context: &[&Package],
 ) -> ridl_diff::DiffReport {
     let encodings = crate::root_manifest_encodings(entry);
     let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
-    ridl_diff::diff_refs_with(old, new, &[std], &encodings)
+    ridl_diff::diff_refs_with(old, new, context, &encodings)
 }
 
 /// Whether `dir` holds at least one entry named `<unit>.catalogs` and at

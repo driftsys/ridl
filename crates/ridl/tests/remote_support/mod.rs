@@ -144,6 +144,28 @@ pub fn consumer(dir: &TempDir, url: &str) -> PathBuf {
     dir.path().join("app")
 }
 
+/// A consumer package `app` whose root manifest lists `podbuf`, with a struct
+/// `Reading` whose head reaches `veh.common.Speed`, held inline by `Bounds`,
+/// the payload of the interface's signal. `appended` is written after the
+/// fields of `Reading`: `""`, or one more field such as `"  quality: Wide\n"`
+/// (eight bytes, which grow the head) or `"  quality: Level\n"` (one byte,
+/// which fits in the pad of the head).
+pub fn inline_consumer(dir: &TempDir, url: &str, appended: &str) -> PathBuf {
+    dir.write(
+        "app/ridl.toml",
+        &format!(
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{url}\"\n\n[backend.rust]\nencodings = [\"podbuf\"]\n"
+        ),
+    );
+    dir.write(
+        "app/app.ridl",
+        &format!(
+            "package app\n\nimport veh.common.Speed\n\ntype Level: integer [0..100]\ntype Wide: integer [0..9223372036854775807]\n\nstruct Reading {{\n  speed: Speed\n  level: Level\n{appended}}}\n\nstruct Bounds {{\n  range: Reading\n  limit: Level\n}}\n\ninterface Dash {{\n  signal bounds: Bounds @10ms\n}}\n"
+        ),
+    );
+    dir.path().join("app")
+}
+
 /// A workspace `ws` whose root pins `veh.common` to `url`, with one member
 /// `app` that imports `veh.common.Speed`. Returns the member directory.
 pub fn member_consumer(dir: &TempDir, url: &str) -> PathBuf {

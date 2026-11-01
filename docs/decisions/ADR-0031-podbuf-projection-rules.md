@@ -85,6 +85,13 @@ its include guard before the names it derives, and `ridl build` checks the C
 names of the headers of one build against each other, by the identity of the
 entity each name stands for; decision 7 carries the dated note.
 
+**Amended 2026-10-31 — decision 13, remote packages in the diff's context, from
+driftsys/ridl#1141.** The remote packages a side compiled are the context of
+`ridl diff`, the `ridl_diff` tool, `ridl build` and `ridl baseline`, so an
+inline append whose head reaches a remote type is judged by the layout, and a
+head no side can lay out is read as grown; decision 13 carries the dated note
+and its known limit, and the known gap it recorded goes.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a
@@ -615,8 +622,10 @@ a field is appended.
     ordinary `decl_added` line alone; a field that starts in the pads and ends
     past the old size does not fit, and is a break. When several fields are
     appended at once, `ridl diff` draws `podbuf_inline_append` for each field
-    that does not fit and for none that does. A new declaration the law refuses
-    is read as grown, which keeps the conservative verdict.
+    that does not fit and for none that does. A head the law refuses on either
+    side — the new declaration, or the old one, when the struct reaches a type
+    the old side does not hold — is read as grown, which keeps the conservative
+    verdict (decision 13, the 2026-10-31 amendment from driftsys/ridl#1141).
 
     _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
     to a struct held inline was a break, on holders of the new side. The two
@@ -723,15 +732,36 @@ a field is appended.
       the tree is judged for the current encodings. A snapshot does not record
       encodings, so the step from a baseline published before `podbuf` was
       listed is judged by the podbuf rules; the hashes the history carried
-      before then were judged without them and stay in it. An inline append
-      whose head reaches a type from a remote package (an `[imports]` unit) is
-      not reported as a podbuf break, so it does not end the history; a type
-      from another member of the workspace resolves (driftsys/ridl#1141).
+      before then were judged without them and stay in it.
       `ridl check --baseline` is the ordinal desk check (RIDL-407), not a diff
       gate, and it does not judge podbuf breaks; a workspace that builds podbuf
       catches them in CI with `ridl diff --encoding podbuf` against its
       baseline. Amended 2026-10-31, from driftsys/ridl#1095: this replaces the
       known gap the decision recorded.
+
+      _Amended 2026-10-31, from driftsys/ridl#1141._ The packages of a remote
+      `[imports]` unit resolve from the side that compiled them: `ridl diff` and
+      the `ridl_diff` tool pass the remote packages of both source sides as the
+      diff's context (`ridl.std`, the new side's remotes, then the old side's
+      remotes the new side does not name), and `ridl build` and `ridl baseline`
+      pass the remote packages of their own compile. One list stands for both
+      sides, because a snapshot side carries no remote package and a change in a
+      dependency is the dependency's diff. A struct held inline whose head
+      reaches a remote type is then laid out on both sides, so a pad-fit append
+      to it is compatible and a growing append is the podbuf break. A type that
+      resolves on neither side — both sides read from snapshots — leaves the old
+      head without a size, and the rule reads the head as grown: every append to
+      such a struct is reported as the break, the conservative verdict. The
+      holder of such a struct is found by the shape of its type (the field names
+      the struct, or holds it in an exact-length array or a tuple), since the
+      law cannot lay the holder out either. Known limit: when the remote pin
+      moves and a remote struct held inline changes layout in the same step as a
+      consumer append, the old head is laid out with the new pin's struct, so
+      the verdict can be wrong in either direction; the remote's change is the
+      remote's diff. A side effect in the same direction as driftsys/ridl#598: a
+      field appended with a remote type is judged by that type's declaration, so
+      one whose type holds 0 is compatible where it was reported breaking as
+      unresolved.
 
 14. **What podbuf generates, and what it exposes (Sebastien).** Per type:
     - the head struct with its pad fields and assertions, and the preamble
@@ -918,6 +948,7 @@ stated in the decision above; this list is the index.
 | [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                         | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                           |
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
 | [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
 
