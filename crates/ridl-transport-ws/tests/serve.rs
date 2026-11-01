@@ -1777,6 +1777,13 @@ impl Stepped {
         self.shared.lock().unwrap().1.failures.clone()
     }
 
+    /// Makes one pass of the provider, for a provider made by
+    /// [`Stepped::held`].
+    fn step(&self) {
+        let (rt, streams) = &mut *self.shared.lock().unwrap();
+        provider::provider_step(rt, streams);
+    }
+
     /// Sets the signal of the test provider and commits it.
     fn set_signal(&self, bytes: &[u8]) {
         let (rt, _) = &mut *self.shared.lock().unwrap();
@@ -1925,6 +1932,59 @@ fn assert_quiet(ws: &mut WebSocket<TcpStream>) {
     ws.get_mut().set_read_timeout(Some(TEST_LIMIT)).unwrap();
 }
 
+/// The next binary message, when one arrives within `wait`.
+fn try_recv(ws: &mut WebSocket<TcpStream>, wait: Duration) -> Option<Vec<u8>> {
+    ws.get_mut().set_read_timeout(Some(wait)).unwrap();
+    let got = loop {
+        match ws.read() {
+            Ok(Message::Binary(b)) => break Some(b.to_vec()),
+            Ok(Message::Ping(_) | Message::Pong(_)) => {}
+            Ok(other) => panic!("unexpected message {other:?}"),
+            Err(tungstenite::Error::Io(e))
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break None
+            }
+            Err(e) => panic!("read failed: {e}"),
+        }
+    };
+    ws.get_mut().set_read_timeout(Some(TEST_LIMIT)).unwrap();
+    got
+}
+
+/// Sends a `request` of the plain query under `seq`, then reads up to its
+/// `response`, and returns the frames read before it.
+fn sync(ws: &mut WebSocket<TcpStream>, seq: u64) -> Vec<Vec<u8>> {
+    request(ws, PLAIN_QUERY, seq, &[5]);
+    let mut before = Vec::new();
+    loop {
+        let m = recv(ws);
+        if matches!(decode(&m).unwrap(), Frame::Response { correlation, .. } if correlation == seq)
+        {
+            return before;
+        }
+        before.push(m);
+    }
+}
+
+/// Subscribes the provider's signal and reads the answer and the first
+/// `publish`. The server reads messages in order, so every message sent
+/// before has then been handled: a `request` has reached the backend, and a
+/// `stream_credit` has been added.
+fn barrier(ws: &mut WebSocket<TcpStream>) {
+    let signal = Target {
+        kind: Kind::Signal,
+        iface: provider::IFACE,
+        ord: provider::SIGNAL,
+    };
+    send(ws, Frame::Subscribe(signal));
+    assert!(matches!(decode(&recv(ws)).unwrap(), Frame::Answer { .. }));
+    assert!(matches!(decode(&recv(ws)).unwrap(), Frame::Publish { .. }));
+}
+
 /// Waits until `cond` holds, or fails the test after [`TEST_LIMIT`].
 fn wait_until(what: &str, cond: impl Fn() -> bool) {
     let start = Instant::now();
@@ -1964,8 +2024,11 @@ fn an_empty_stream_ends_with_seq_1() {
     close(ws, handle);
 }
 
-/// Mutations: an initial credit other than 4; replace the credit instead of
-/// adding to it; ignore the `stream_credit`.
+/// The credit is granted here only once the first 4 are spent, so adding it
+/// and replacing it give the same result:
+/// `a_credit_adds_to_the_credit_left` pins the add.
+///
+/// Mutations: an initial credit other than 4; ignore the `stream_credit`.
 #[test]
 fn no_credit_means_four_chunks_and_no_more() {
     let (mut ws, handle, _p) = v3_session(config());
@@ -2026,9 +2089,14 @@ fn credit_stall_does_not_block_a_signal() {
     close(ws, handle);
 }
 
-/// Mutations: leave out the abort, so the provider pushes into a stream
-/// nobody reads until the forget; leave out the forget, so a later credit
-/// sends more chunks; leave out the note.
+/// The client's `stream_end` reaches the provider as
+/// `Transport::Interrupted`: the server aborts the stream and then forgets
+/// the call, and after a forget a push answers `Interrupted` whatever the
+/// abort carried, so this test cannot tell the abort from the forget. It pins
+/// that the stream stops on the backend, that a later credit sends nothing,
+/// and the note.
+///
+/// Mutations: leave out both the abort and the forget; leave out the note.
 #[test]
 fn client_interrupt_forgets_the_call_on_the_backend() {
     let (config, notes) = recording();
@@ -2248,6 +2316,176 @@ fn an_abandoned_stream_ends_interrupted() {
     assert_eq!(
         decode(&recv(&mut ws)).unwrap(),
         stream_end(1, 5, StreamOutcome::Interrupted)
+    );
+    assert_eq!(*notes.lock().unwrap(), vec![Note::CallAbandoned { seq: 1 }]);
+    close(ws, handle);
+}
+
+/// A stream that ends right after the last chunk the credit allows sends its
+/// `stream_end` with no more credit: the server holds one more pull.
+///
+/// Mutation: stop pulling while the credit is 0.
+#[test]
+fn a_stream_of_exactly_the_initial_credit_ends_with_no_more_credit() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[4]);
+    for i in 0..4u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 5, StreamOutcome::End)
+    );
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+/// A chunk pulled with no credit left is held and sent first, in order, when
+/// credit arrives.
+///
+/// Mutation: drop the held chunk.
+#[test]
+fn a_held_chunk_is_sent_first_when_credit_arrives() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[6]);
+    for i in 0..4u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_quiet(&mut ws);
+    grant(&mut ws, 1, 2);
+    for i in 4..6u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 7, StreamOutcome::End)
+    );
+    close(ws, handle);
+}
+
+/// Each ended stream frees its call on the backend: more streams than the
+/// loopback has call slots run one after another on one session.
+///
+/// Mutation: remove the call from the session only, not from the backend.
+#[test]
+fn more_streams_than_call_slots_run_one_after_another() {
+    let (mut ws, handle, _p) = v3_session(config());
+    for seq in 1..=(Loopback::SLOTS as u64 + 4) {
+        request(&mut ws, STREAM_QUERY, seq, &[0]);
+        assert_eq!(
+            decode(&recv(&mut ws)).unwrap(),
+            stream_end(seq, 1, StreamOutcome::End),
+            "stream {seq}"
+        );
+    }
+    close(ws, handle);
+}
+
+/// Mutation: keep nothing after a client stop, so the repeat is dropped.
+#[test]
+fn a_retransmit_after_a_client_stop_is_answered_stream_end_interrupted() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    assert_eq!(recv(&mut ws), element(1, 1, 0));
+    send(
+        &mut ws,
+        Frame::StreamEnd {
+            target: STREAM_QUERY,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::Interrupted,
+        },
+    );
+    sync(&mut ws, 2);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 1, StreamOutcome::Interrupted)
+    );
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+/// A credit granted before the initial 4 are spent adds to them: the
+/// provider is stepped only once the credit has arrived, and 6 chunks cross.
+///
+/// Mutation: replace the credit instead of adding to it.
+#[test]
+fn a_credit_adds_to_the_credit_left() {
+    let (mut ws, handle, provider) = stream_session(config(), SUBPROTOCOL_V3, false);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    grant(&mut ws, 1, 2);
+    barrier(&mut ws);
+    for _ in 0..10 {
+        provider.step();
+        thread::sleep(Duration::from_millis(20));
+    }
+    let mut chunks = 0u8;
+    while let Some(m) = try_recv(&mut ws, QUIET) {
+        assert_eq!(m, element(1, u64::from(chunks) + 1, chunks));
+        chunks += 1;
+    }
+    assert_eq!(chunks, 6);
+    close(ws, handle);
+}
+
+/// A `stream_credit` restarts the abandon bound: credits every 100 ms keep a
+/// stream whose provider sends nothing open for twice the bound, and the
+/// stream is abandoned once they stop.
+///
+/// Mutation: do not restart the bound on a credit.
+#[test]
+fn a_credit_restarts_the_abandon_bound() {
+    let (mut config, notes) = recording();
+    config.call_abandon_after = Duration::from_millis(300);
+    let (mut ws, handle, _p) = stream_session(config, SUBPROTOCOL_V3, false);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    for _ in 0..6 {
+        thread::sleep(Duration::from_millis(100));
+        grant(&mut ws, 1, 1);
+        if let Some(m) = try_recv(&mut ws, Duration::from_millis(1)) {
+            panic!("a frame while the credits flow: {:?}", decode(&m));
+        }
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 1, StreamOutcome::Interrupted)
+    );
+    assert_eq!(*notes.lock().unwrap(), vec![Note::CallAbandoned { seq: 1 }]);
+    close(ws, handle);
+}
+
+/// A `chunk` sent restarts the abandon bound: with one credit granted at the
+/// start, a provider that pushes every 100 ms keeps the stream open for
+/// twice the bound, and the stream is abandoned once it stops.
+///
+/// Mutation: do not restart the bound on a chunk.
+#[test]
+fn a_chunk_restarts_the_abandon_bound() {
+    let (mut config, notes) = recording();
+    config.call_abandon_after = Duration::from_millis(300);
+    let (mut ws, handle, provider) = stream_session(config, SUBPROTOCOL_V3, false);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    grant(&mut ws, 1, 100);
+    barrier(&mut ws);
+    let mut seq = 0u64;
+    for _ in 0..6 {
+        provider.step();
+        // One step fills the loopback's window of 4 chunks.
+        for _ in 0..4 {
+            let i = seq as u8;
+            seq += 1;
+            assert_eq!(recv(&mut ws), element(1, seq, i), "chunk {seq}");
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, seq + 1, StreamOutcome::Interrupted)
     );
     assert_eq!(*notes.lock().unwrap(), vec![Note::CallAbandoned { seq: 1 }]);
     close(ws, handle);

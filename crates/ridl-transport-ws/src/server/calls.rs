@@ -16,7 +16,7 @@ use crate::frame::Target;
 const RETAINED: usize = 64;
 
 /// One call sent to the backend whose outcome is not known yet.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct InFlight {
     /// The backend's name for the call.
     pub(super) correlation: Correlation,
@@ -38,7 +38,7 @@ pub(super) struct InFlight {
 }
 
 /// The server's side of the reply stream of one call in flight.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct ReplyStream {
     /// The `seq` of the last frame sent on the stream; 0 before the first.
     pub(super) seq_out: u64,
@@ -48,6 +48,10 @@ pub(super) struct ReplyStream {
     /// the request arrived before either: the abandon bound of a streamed
     /// call is measured from it.
     pub(super) last_activity: Instant,
+    /// One chunk pulled from the backend while the credit was 0, sent first
+    /// when credit arrives. Pulling it is how the server learns, with no
+    /// credit left, that the stream has ended.
+    pub(super) held: Option<Vec<u8>>,
 }
 
 /// Where a request's `seq` stands in the session.
