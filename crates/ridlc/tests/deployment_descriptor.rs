@@ -144,10 +144,28 @@ fn every_deployment_gets_its_own_descriptor() {
 }
 
 #[test]
-fn no_deployment_writes_no_file() {
+fn no_system_writes_no_file() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::copy(cabin().join("cabin.ridl"), dir.path().join("cabin.ridl")).unwrap();
     std::fs::copy(cabin().join("ridl.toml"), dir.path().join("ridl.toml")).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(dir.path(), out.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert!(files_ending(out.path(), deployment::FILE_SUFFIX).is_empty());
+}
+
+#[test]
+fn a_system_with_no_deployment_writes_no_file() {
+    // The cabin system and its components, without the `deployment` block.
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["cabin.ridl", "ridl.toml"] {
+        std::fs::copy(cabin().join(name), dir.path().join(name)).unwrap();
+    }
+    let system = std::fs::read_to_string(cabin().join("system.rsdl")).unwrap();
+    let cut = system
+        .find("/// The bench deployment")
+        .expect("the cabin system declares a deployment");
+    std::fs::write(dir.path().join("system.rsdl"), &system[..cut]).unwrap();
     let out = tempfile::tempdir().unwrap();
     let (code, stderr) = build(dir.path(), out.path(), "deployment");
     assert_eq!(code, 0, "{stderr}");
