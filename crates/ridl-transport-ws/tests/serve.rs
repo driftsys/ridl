@@ -1,17 +1,23 @@
 //! `serve` over a TCP connection, with `tungstenite` as the client and
 //! `ridl-loopback` as the backend.
 
+// The provider module is shared with the other tests, and this file uses
+// only part of it.
+#[allow(dead_code)]
+#[path = "support/provider.rs"]
+mod provider;
+
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal, CALL_CEILING};
-use ridl_rt::error::CallError;
+use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, Clock, Correlation, Encoded, EventSource, Handler, RawOccurrence, RawSample,
     ReadError, SendError, SignalReader, SignalWriter, SubscribeError,
@@ -20,7 +26,8 @@ use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
     decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Reason,
-    StreamOutcome, Target, BLOCK_BYTES, FRAME_VERSION, FRAME_VERSION_3, SUBPROTOCOL,
+    ResponseOutcome, StreamOutcome, Target, BLOCK_BYTES, FRAME_VERSION, FRAME_VERSION_3,
+    SUBPROTOCOL, SUBPROTOCOL_V3,
 };
 use ridl_transport_ws::{
     serve, Backend, Config, Connection, Described, Ended, MemberTable, Note, Polling, Scanning,
@@ -1710,4 +1717,538 @@ fn a_stream_form_on_a_v2_session_closes_1002() {
         *notes.lock().unwrap(),
         vec![Note::Violation(ProtocolViolation::UnknownCode)]
     );
+}
+
+// -- A streamed reply over frame version 3 ---------------------------------
+
+/// The query of the test provider whose reply is a stream.
+const STREAM_QUERY: Target = Target {
+    kind: Kind::Query,
+    iface: provider::IFACE,
+    ord: provider::STREAM_QUERY,
+};
+/// The plain query of the test provider.
+const PLAIN_QUERY: Target = Target {
+    kind: Kind::Query,
+    iface: provider::IFACE,
+    ord: provider::QUERY,
+};
+/// How long a test waits to conclude that no frame is coming.
+const QUIET: Duration = Duration::from_millis(200);
+
+/// The test provider, shared with the server's backend, stepped every
+/// millisecond on its own thread when it was made by [`Stepped::start`].
+/// Dropping the value stops the thread.
+struct Stepped {
+    shared: Arc<Mutex<(Loopback, provider::Streams)>>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Stepped {
+    /// A provider stepped on its own thread.
+    fn start(rt: Loopback) -> Self {
+        let mut stepped = Self::held(rt);
+        let shared = Arc::clone(&stepped.shared);
+        let stop = Arc::clone(&stepped.stop);
+        stepped.thread = Some(thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                {
+                    let (rt, streams) = &mut *shared.lock().unwrap();
+                    provider::provider_step(rt, streams);
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
+        }));
+        stepped
+    }
+
+    /// A provider that is never stepped, so that no call is claimed.
+    fn held(rt: Loopback) -> Self {
+        Stepped {
+            shared: Arc::new(Mutex::new((rt, provider::Streams::default()))),
+            stop: Arc::new(AtomicBool::new(false)),
+            thread: None,
+        }
+    }
+
+    /// The failures the provider's pushes read so far.
+    fn failures(&self) -> Vec<CallError> {
+        self.shared.lock().unwrap().1.failures.clone()
+    }
+
+    /// Sets the signal of the test provider and commits it.
+    fn set_signal(&self, bytes: &[u8]) {
+        let (rt, _) = &mut *self.shared.lock().unwrap();
+        rt.set(provider::IFACE, provider::SIGNAL, bytes).unwrap();
+        rt.commit();
+    }
+}
+
+impl Drop for Stepped {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            thread.join().unwrap();
+        }
+    }
+}
+
+/// A session with the test provider, attached under the frame version of
+/// `protocol`, over a backend that carries streams and has the provider's
+/// member table. With `step`, the provider is stepped on its own thread.
+fn stream_session(
+    config: Config,
+    protocol: &str,
+    step: bool,
+) -> (WebSocket<TcpStream>, Server, Stepped) {
+    let (server, client) = pair();
+    let rt = provider::provider();
+    let backend = Described::new(
+        Streaming(Scanning(rt.attach())),
+        Arc::new(provider::member_table()),
+    )
+    .unwrap();
+    let stepped = if step {
+        Stepped::start(rt)
+    } else {
+        Stepped::held(rt)
+    };
+    let handle = spawn(server, backend, config);
+    let (mut ws, selected) = connect_selected(client, protocol);
+    assert_eq!(selected.as_deref(), Some(protocol));
+    let version = if protocol == SUBPROTOCOL_V3 {
+        FRAME_VERSION_3
+    } else {
+        FRAME_VERSION
+    };
+    let catalog = provider::CATALOG;
+    let attach = Attach::new(version, 1, catalog.hash, catalog.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Accepted)
+    );
+    (ws, handle, stepped)
+}
+
+/// A version 3 session with the stepped test provider.
+fn v3_session(config: Config) -> (WebSocket<TcpStream>, Server, Stepped) {
+    stream_session(config, SUBPROTOCOL_V3, true)
+}
+
+/// Closes the session from the client and checks that `serve` returns.
+fn close(mut ws: WebSocket<TcpStream>, handle: Server) {
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+/// Sends a `request` of `target` under `seq`.
+fn request(ws: &mut WebSocket<TcpStream>, target: Target, seq: u64, payload: &[u8]) {
+    send(
+        ws,
+        Frame::Request {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq,
+            },
+            payload,
+        },
+    );
+}
+
+/// Grants `credit` more chunks of the reply stream of the call `correlation`.
+fn grant(ws: &mut WebSocket<TcpStream>, correlation: u64, credit: u32) {
+    send(
+        ws,
+        Frame::StreamCredit {
+            target: STREAM_QUERY,
+            correlation,
+            stream: 0,
+            credit,
+        },
+    );
+}
+
+/// The `chunk` the server sends as element `element` of the reply stream of
+/// the call `correlation`, under the stream `seq` `seq`.
+fn element(correlation: u64, seq: u64, element: u8) -> Vec<u8> {
+    encode(Frame::Chunk {
+        target: STREAM_QUERY,
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq,
+        },
+        correlation,
+        stream: 0,
+        payload: &[element; provider::ELEMENT_LEN],
+    })
+}
+
+/// The `stream_end` the server sends for the reply stream of the call
+/// `correlation`, under the stream `seq` `seq`.
+fn stream_end(correlation: u64, seq: u64, outcome: StreamOutcome) -> Frame<'static> {
+    Frame::StreamEnd {
+        target: STREAM_QUERY,
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq,
+        },
+        correlation,
+        stream: 0,
+        outcome,
+    }
+}
+
+/// Fails the test when a binary message arrives within [`QUIET`].
+fn assert_quiet(ws: &mut WebSocket<TcpStream>) {
+    ws.get_mut().set_read_timeout(Some(QUIET)).unwrap();
+    let start = Instant::now();
+    while start.elapsed() < QUIET {
+        match ws.read() {
+            Ok(Message::Binary(b)) => panic!("unexpected frame {:?}", decode(&b)),
+            Ok(Message::Ping(_) | Message::Pong(_)) => {}
+            Ok(other) => panic!("unexpected message {other:?}"),
+            Err(tungstenite::Error::Io(e))
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break
+            }
+            Err(e) => panic!("read failed: {e}"),
+        }
+    }
+    ws.get_mut().set_read_timeout(Some(TEST_LIMIT)).unwrap();
+}
+
+/// Waits until `cond` holds, or fails the test after [`TEST_LIMIT`].
+fn wait_until(what: &str, cond: impl Fn() -> bool) {
+    let start = Instant::now();
+    while !cond() {
+        assert!(start.elapsed() < TEST_LIMIT, "{what} within the limit");
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// Mutations: answer the query with a `response`; start the stream `seq` at
+/// 0; send the chunks past the credit; leave out the `stream_end`.
+#[test]
+fn streams_64_elements_then_ends_with_the_next_seq() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    for i in 0..64u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+        grant(&mut ws, 1, 1);
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 65, StreamOutcome::End)
+    );
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+#[test]
+fn an_empty_stream_ends_with_seq_1() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[0]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 1, StreamOutcome::End)
+    );
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+/// Mutations: an initial credit other than 4; replace the credit instead of
+/// adding to it; ignore the `stream_credit`.
+#[test]
+fn no_credit_means_four_chunks_and_no_more() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    for i in 0..4u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_quiet(&mut ws);
+    grant(&mut ws, 1, 2);
+    for i in 4..6u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+/// Mutation: wait for credit inside the tick.
+#[test]
+fn credit_stall_does_not_block_a_signal() {
+    let (mut ws, handle, provider) = v3_session(config());
+    let signal = Target {
+        kind: Kind::Signal,
+        iface: provider::IFACE,
+        ord: provider::SIGNAL,
+    };
+    send(&mut ws, Frame::Subscribe(signal));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Answer {
+            target: signal,
+            outcome: AnswerOutcome::Accepted,
+        }
+    );
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Publish {
+            state: PublishState::Init,
+            ..
+        }
+    ));
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    for i in 0..4u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_quiet(&mut ws);
+    provider.set_signal(&[9]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Publish {
+            target: signal,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            state: PublishState::Live(&[9]),
+        }
+    );
+    close(ws, handle);
+}
+
+/// Mutations: leave out the abort, so the provider pushes into a stream
+/// nobody reads until the forget; leave out the forget, so a later credit
+/// sends more chunks; leave out the note.
+#[test]
+fn client_interrupt_forgets_the_call_on_the_backend() {
+    let (config, notes) = recording();
+    let (mut ws, handle, provider) = v3_session(config);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    for i in 0..2u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    send(
+        &mut ws,
+        Frame::StreamEnd {
+            target: STREAM_QUERY,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::Interrupted,
+        },
+    );
+    // A credit for a stream the server no longer sends is ignored.
+    grant(&mut ws, 1, 10);
+    // The plain query's response comes after every frame the server sent
+    // before it read the `stream_end`: at most the 2 chunks left of the
+    // initial credit.
+    request(&mut ws, PLAIN_QUERY, 2, &[5]);
+    let mut late = 0;
+    loop {
+        let m = recv(&mut ws);
+        match decode(&m).unwrap() {
+            Frame::Response { correlation: 2, .. } => break,
+            Frame::Chunk { correlation: 1, .. } => late += 1,
+            other => panic!("unexpected frame {other:?}"),
+        }
+    }
+    assert!(late <= 2, "{late} chunks after the cancel");
+    assert_quiet(&mut ws);
+    wait_until("a failed push", || !provider.failures().is_empty());
+    assert_eq!(
+        provider.failures(),
+        vec![CallError::Transport(Transport::Interrupted)]
+    );
+    assert!(notes
+        .lock()
+        .unwrap()
+        .contains(&Note::StreamStopped { seq: 1 }));
+    close(ws, handle);
+}
+
+/// Mutation: answer a `Pull::Failed` with `stream_end end`.
+#[test]
+fn provider_interrupt_reaches_the_client() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, STREAM_QUERY, 1, &[provider::STREAM_INTERRUPT]);
+    for i in 0..3u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 4, StreamOutcome::Interrupted)
+    );
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+/// Mutations: keep the `stream_end end` that was sent instead of the
+/// `interrupted` one; keep nothing, so the repeat is dropped.
+#[test]
+fn retransmit_after_the_end_is_answered_stream_end_interrupted() {
+    let (config, notes) = recording();
+    let (mut ws, handle, _p) = v3_session(config);
+    request(&mut ws, STREAM_QUERY, 1, &[1]);
+    assert_eq!(recv(&mut ws), element(1, 1, 0));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 2, StreamOutcome::End)
+    );
+    request(&mut ws, STREAM_QUERY, 1, &[1]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 1, StreamOutcome::Interrupted)
+    );
+    assert_quiet(&mut ws);
+    assert!(notes.lock().unwrap().is_empty());
+    close(ws, handle);
+}
+
+/// Mutation: answer a refused dispatch with a `response`.
+#[test]
+fn a_busy_admission_is_a_stream_end_busy_with_seq_1() {
+    let (mut ws, handle, _p) = stream_session(config(), SUBPROTOCOL_V3, false);
+    // The provider is not stepped, so every call keeps its slot of the
+    // loopback's call table, and the call after the last slot is refused.
+    let slots = Loopback::SLOTS as u64;
+    for seq in 1..=slots {
+        request(&mut ws, STREAM_QUERY, seq, &[1]);
+    }
+    request(&mut ws, STREAM_QUERY, slots + 1, &[1]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(slots + 1, 1, StreamOutcome::Busy)
+    );
+    assert_quiet(&mut ws);
+    close(ws, handle);
+}
+
+/// A client stream frame that a session with no parameter stream cannot
+/// accept closes the session with 1002 and records `note`.
+fn refused_from_the_client(frame: Frame<'_>, note: Note) {
+    let (config, notes) = recording();
+    let (mut ws, handle, _p) = v3_session(config);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    send(&mut ws, frame);
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Protocol));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1002));
+    assert_eq!(*notes.lock().unwrap(), vec![note]);
+}
+
+fn client_chunk(stream: u8) -> Frame<'static> {
+    Frame::Chunk {
+        target: STREAM_QUERY,
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq: 1,
+        },
+        correlation: 1,
+        stream,
+        payload: &[1],
+    }
+}
+
+#[test]
+fn a_client_chunk_on_stream_0_closes_1002() {
+    refused_from_the_client(client_chunk(0), Note::UnexpectedDirection);
+}
+
+#[test]
+fn a_client_chunk_on_stream_1_closes_1002() {
+    refused_from_the_client(client_chunk(1), Note::StreamCreditExceeded { seq: 1 });
+}
+
+#[test]
+fn a_client_stream_end_end_closes_1002() {
+    refused_from_the_client(
+        Frame::StreamEnd {
+            target: STREAM_QUERY,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::End,
+        },
+        Note::Violation(ProtocolViolation::OutcomeNotAllowed),
+    );
+}
+
+#[test]
+fn a_plain_query_on_a_v3_session_is_answered_by_a_response() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, PLAIN_QUERY, 1, &[1, 2]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Response {
+            target: PLAIN_QUERY,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            outcome: ResponseOutcome::Reply(&[2, 3]),
+        }
+    );
+    close(ws, handle);
+}
+
+/// Mutation: serve the stream whatever the frame version.
+#[test]
+fn a_streamed_member_on_a_v2_session_is_unknown_interaction() {
+    let (config, notes) = recording();
+    let (mut ws, handle, _p) = stream_session(config, SUBPROTOCOL, true);
+    request(&mut ws, STREAM_QUERY, 1, &[1]);
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Response {
+            target: STREAM_QUERY,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            outcome: ResponseOutcome::Contract(Contract::UnknownInteraction),
+        }
+    );
+    assert_quiet(&mut ws);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::UnknownInteraction {
+            target: STREAM_QUERY
+        }]
+    );
+    close(ws, handle);
+}
+
+/// Mutations: never abandon a streamed call; abandon it with nothing sent.
+#[test]
+fn an_abandoned_stream_ends_interrupted() {
+    let (mut config, notes) = recording();
+    config.call_abandon_after = Duration::from_millis(100);
+    let (mut ws, handle, _p) = v3_session(config);
+    request(&mut ws, STREAM_QUERY, 1, &[64]);
+    for i in 0..4u8 {
+        assert_eq!(recv(&mut ws), element(1, u64::from(i) + 1, i), "chunk {i}");
+    }
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        stream_end(1, 5, StreamOutcome::Interrupted)
+    );
+    assert_eq!(*notes.lock().unwrap(), vec![Note::CallAbandoned { seq: 1 }]);
+    close(ws, handle);
 }

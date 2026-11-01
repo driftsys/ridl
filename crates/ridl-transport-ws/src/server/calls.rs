@@ -32,6 +32,22 @@ pub(super) struct InFlight {
     /// The backend's clock when the request arrived; caps the retention when
     /// `stamp` is ahead of it.
     pub(super) receipt: Timestamp,
+    /// The state of the reply stream, for a query whose reply is a stream;
+    /// `None` for a call answered by one `response`.
+    pub(super) stream: Option<ReplyStream>,
+}
+
+/// The server's side of the reply stream of one call in flight.
+#[derive(Clone, Copy)]
+pub(super) struct ReplyStream {
+    /// The `seq` of the last frame sent on the stream; 0 before the first.
+    pub(super) seq_out: u64,
+    /// The number of chunks the client allows the server to send.
+    pub(super) credit: u32,
+    /// When the last `chunk` was sent or the last `stream_credit` arrived, or
+    /// the request arrived before either: the abandon bound of a streamed
+    /// call is measured from it.
+    pub(super) last_activity: Instant,
 }
 
 /// Where a request's `seq` stands in the session.
@@ -101,6 +117,26 @@ impl Calls {
     /// A copy of the calls in flight, for a pass that settles some of them.
     pub(super) fn in_flight(&self) -> Vec<InFlight> {
         self.in_flight.clone()
+    }
+
+    /// The call in flight whose reply is a stream and whose request carried
+    /// `seq`.
+    pub(super) fn streamed(&mut self, seq: u64) -> Option<&mut InFlight> {
+        self.in_flight
+            .iter_mut()
+            .find(|call| call.seq == seq && call.stream.is_some())
+    }
+
+    /// Replaces the reply stream state of the call `correlation`, when it is
+    /// still in flight.
+    pub(super) fn update(&mut self, correlation: Correlation, stream: ReplyStream) {
+        if let Some(call) = self
+            .in_flight
+            .iter_mut()
+            .find(|call| call.correlation == correlation)
+        {
+            call.stream = Some(stream);
+        }
     }
 
     pub(super) fn remove(&mut self, correlation: Correlation) {
