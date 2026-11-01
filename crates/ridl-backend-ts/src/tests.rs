@@ -2472,3 +2472,40 @@ fn an_open_wide_enumset_keeps_the_bigint_form() {
     );
     insta::assert_snapshot!(source);
 }
+
+#[test]
+fn an_empty_open_enum_inits_to_unknown_zero_and_so_does_a_struct_holding_it() {
+    let decls = vec![
+        public_decl(
+            "Empty",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: Vec::new(),
+                reserved: Vec::new(),
+                open: true,
+            }),
+        ),
+        public_decl(
+            "Holder",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "value",
+                    1,
+                    "Empty",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        ),
+    ];
+    let source = ts_for(decls);
+    assert!(
+        source.contains("export function initEmpty(): EmptyValue {\n  return { unknown: 0 };\n}"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("export function initHolder(): Holder {"),
+        "got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}

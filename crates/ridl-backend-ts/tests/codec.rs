@@ -1335,3 +1335,33 @@ fn the_open_codec_module() {
     );
     insta::assert_snapshot!("open", source);
 }
+
+/// A field of an open enum set of another package is checked against the
+/// width of the set on encode, as a field of a local open set is; a strict
+/// foreign set converts by assertion.
+#[test]
+fn a_foreign_open_enum_set_is_checked_against_its_width() {
+    for (open, checked) in [(true, true), (false, false)] {
+        let mut model = open_model();
+        let reference = foreign_thing(
+            &mut model,
+            v1::declaration::Kind::EnumSet(v1::EnumSet {
+                open,
+                width: v1::IntWidth::U8 as i32,
+                ..Default::default()
+            }),
+        );
+        field(&mut model, "Report", 2).kind = Some(v1::r#type::Kind::Named(reference));
+        let source = module(&model, "open.demo");
+        assert_eq!(
+            source.contains("object.flags = pack_veh_other_Thing(value.flags);"),
+            checked,
+            "{source}"
+        );
+        assert_eq!(
+            source.contains("function pack_veh_other_Thing(value: veh_other.Thing): number {"),
+            checked,
+            "{source}"
+        );
+    }
+}

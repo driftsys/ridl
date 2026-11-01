@@ -146,6 +146,9 @@ struct Codec<'a> {
     /// The open enums and open enum sets of this package that a payload type
     /// reaches, by index: each gets a converter pair of its own.
     reached_open: BTreeSet<usize>,
+    /// The open enum sets of other packages a payload type reaches, by the
+    /// name of the function that checks a value against the set's width.
+    foreign_open_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
 }
 
 impl<'a> Codec<'a> {
@@ -202,6 +205,7 @@ impl<'a> Codec<'a> {
             used_locals: BTreeSet::new(),
             needs_absent: false,
             reached_open: BTreeSet::new(),
+            foreign_open_sets: BTreeMap::new(),
         };
         let roots = model
             .flatbuffers
@@ -325,7 +329,7 @@ impl<'a> Codec<'a> {
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
-        if !self.reached_open.is_empty() {
+        if !self.reached_open.is_empty() || !self.foreign_open_sets.is_empty() {
             register("RuleError".to_string(), "RuleError".to_string())?;
         }
         for package in &self.foreign_types {
@@ -549,6 +553,14 @@ impl<'a> Codec<'a> {
                     // The converter names the type through the package's
                     // alias, which the name check needs before emit.
                     self.foreign_types.insert(package.to_string());
+                    if let Some(v1::declaration::Kind::EnumSet(shape)) = &declaration.kind
+                        && shape.open
+                    {
+                        self.foreign_open_sets.insert(
+                            foreign_set_pack(package, declared_name(declaration)),
+                            (package, declaration),
+                        );
+                    }
                     Ok(())
                 }
             },
@@ -708,11 +720,14 @@ impl<'a> Codec<'a> {
         use v1::r#type::Kind as TypeKind;
         match &ty.kind {
             Some(TypeKind::Named(reference)) => {
-                let (spelled, declaration, nested) = match self.resolve(reference, qualified)? {
+                let (spelled, declaration, nested, home) = match self
+                    .resolve(reference, qualified)?
+                {
                     Target::Local(_, declaration) => (
                         format!("t.{}", declared_name(declaration)),
                         declaration,
                         true,
+                        "",
                     ),
                     Target::Foreign(package, declaration) => {
                         // `reach_reference` refused a foreign struct, union
@@ -729,6 +744,7 @@ impl<'a> Codec<'a> {
                             format!("{}.{}", package_alias(package), declared_name(declaration)),
                             declaration,
                             false,
+                            package,
                         )
                     }
                 };
@@ -743,6 +759,13 @@ impl<'a> Codec<'a> {
                     },
                     Some(Kind::EnumSet(shape)) if shape.open && nested => Rule {
                         pack: format!("pack{name}({{}})"),
+                        unpack: format!("{{}} as {spelled}"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
+                    Some(Kind::EnumSet(shape)) if shape.open => Rule {
+                        pack: format!("{}({{}})", foreign_set_pack(home, name)),
                         unpack: format!("{{}} as {spelled}"),
                         plain: false,
                         nullable: false,
@@ -965,6 +988,20 @@ impl<'a> Codec<'a> {
             }
         }
 
+        for (function_name, (package, declaration)) in &self.foreign_open_sets {
+            if let Some(v1::declaration::Kind::EnumSet(shape)) = &declaration.kind {
+                let name = declared_name(declaration);
+                body.push('\n');
+                emit_set_pack(
+                    &mut body,
+                    function_name,
+                    &format!("{}.{name}", package_alias(package)),
+                    &format!("{package}.{name}"),
+                    shape,
+                );
+            }
+        }
+
         body.push('\n');
         for payload in &payloads {
             if payload
@@ -1057,7 +1094,7 @@ impl<'a> Codec<'a> {
                  throw new RangeError(`field ${field} of ${type} is absent`);\n}\n\n",
             );
         }
-        if !self.reached_open.is_empty() {
+        if !self.reached_open.is_empty() || !self.foreign_open_sets.is_empty() {
             out.push_str(
                 "/** Thrown for a value the codec refuses, with the text of the rule it breaks. */\n\
                  export class RuleError extends RangeError {\n  \
@@ -1281,33 +1318,12 @@ impl<'a> Codec<'a> {
                 );
             }
             Some(Kind::EnumSet(shape)) => {
-                let (wide, signed, bits) = match shape.width() {
-                    v1::IntWidth::U8 => (false, false, 8),
-                    v1::IntWidth::I8 => (false, true, 8),
-                    v1::IntWidth::U16 => (false, false, 16),
-                    v1::IntWidth::I16 => (false, true, 16),
-                    v1::IntWidth::U32 => (false, false, 32),
-                    v1::IntWidth::I32 => (false, true, 32),
-                    v1::IntWidth::U64 => (true, false, 64),
-                    v1::IntWidth::I64 | v1::IntWidth::Unspecified => (true, true, 64),
-                };
-                let (low, high) = if signed {
-                    (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
-                } else {
-                    (0, (1i128 << bits) - 1)
-                };
-                let (suffix, base, check) = if wide {
-                    ("n", "bigint", "")
-                } else {
-                    ("", "number", "!Number.isInteger(value) || ")
-                };
-                let _ = writeln!(
+                emit_set_pack(
                     out,
-                    "function pack{name}(value: t.{name}): {base} {{\n  \
-                     if ({check}value < {low}{suffix} || value > {high}{suffix}) {{\n    \
-                     throw new RuleError(\"range\", `value ${{value}} of {qualified} does not fit \
-                     {bits} bits`);\n  }}\n  \
-                     return value;\n}}"
+                    &format!("pack{name}"),
+                    &format!("t.{name}"),
+                    &qualified,
+                    shape,
                 );
             }
             _ => {}
@@ -1874,6 +1890,52 @@ fn foreign_refusal(site: &str, package: &str, name: &str, word: &str) -> String 
         "{site} `{package}.{name}`, a {word} of another package, which the codec module does not \
          convert yet"
     )
+}
+
+/// The function `function_name` that refuses a value of the open enum set
+/// `shape`, written `ts_type` in the module, that does not fit the width of
+/// the set, with the `range` rule.
+fn emit_set_pack(
+    out: &mut String,
+    function_name: &str,
+    ts_type: &str,
+    qualified: &str,
+    shape: &v1::EnumSet,
+) {
+    let (wide, signed, bits) = match shape.width() {
+        v1::IntWidth::U8 => (false, false, 8),
+        v1::IntWidth::I8 => (false, true, 8),
+        v1::IntWidth::U16 => (false, false, 16),
+        v1::IntWidth::I16 => (false, true, 16),
+        v1::IntWidth::U32 => (false, false, 32),
+        v1::IntWidth::I32 => (false, true, 32),
+        v1::IntWidth::U64 => (true, false, 64),
+        v1::IntWidth::I64 | v1::IntWidth::Unspecified => (true, true, 64),
+    };
+    let (low, high) = if signed {
+        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+    } else {
+        (0, (1i128 << bits) - 1)
+    };
+    let (suffix, base, check) = if wide {
+        ("n", "bigint", "")
+    } else {
+        ("", "number", "!Number.isInteger(value) || ")
+    };
+    let _ = writeln!(
+        out,
+        "function {function_name}(value: {ts_type}): {base} {{\n  \
+         if ({check}value < {low}{suffix} || value > {high}{suffix}) {{\n    \
+         throw new RuleError(\"range\", `value ${{value}} of {qualified} does not fit \
+         {bits} bits`);\n  }}\n  \
+         return value;\n}}"
+    );
+}
+
+/// The name of the function that checks a value of the open enum set `name`
+/// of `package` against the width of the set.
+fn foreign_set_pack(package: &str, name: &str) -> String {
+    format!("pack_{}_{name}", package_alias(package))
 }
 
 /// How the decode function of a boxed payload type reads the value of its box.

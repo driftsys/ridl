@@ -17,6 +17,6 @@ export enum DtcStatus {
  */
 export type DtcStatusValue = DtcStatus | { readonly unknown: number };
 
-export function initDtcStatus(): DtcStatus {
+export function initDtcStatus(): DtcStatusValue {
   return DtcStatus.INACTIVE;
 }

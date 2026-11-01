@@ -4325,33 +4325,40 @@ impl Checker<'_> {
     /// (ADR-0016, 2026-09-26 amendment). First wins, so the secondary label
     /// points at the value that keeps the projected name.
     /// RIDL-149 over the type namespace of the package: the generated code of
-    /// an open enum `E` carries the type `UnknownE`, which holds an undeclared
-    /// value, so a declaration of that name in the same package would give a
-    /// target one identifier twice. A declaration name is used as declared
-    /// (ADR-0016), so the collision is exact. `sites` are the winning
-    /// declarations with their file index and name range; `open_enums` are
-    /// the names of the open enums among them.
+    /// an open enum `E` carries the Rust type `UnknownE` and the TypeScript
+    /// type `EValue`, which hold an undeclared value, so a declaration of
+    /// either name in the same package would give a target one identifier
+    /// twice. A declaration name is used as declared (ADR-0016), so the
+    /// collision is exact. `sites` are the winning declarations with their
+    /// file index and name range; `open_enums` are the names of the open
+    /// enums among them.
     fn check_unknown_type_names(
         &mut self,
         sites: &[(String, usize, TextRange)],
         open_enums: &HashSet<String>,
     ) {
         for (name, file, range) in sites {
-            let Some(enum_name) = name.strip_prefix("Unknown") else {
+            let (enum_name, spelling, target) = if let Some(rest) = name
+                .strip_prefix("Unknown")
+                .filter(|rest| open_enums.contains(*rest))
+            {
+                (rest, "`Unknown` before the enum's name", "PascalCase")
+            } else if let Some(rest) = name
+                .strip_suffix("Value")
+                .filter(|rest| open_enums.contains(*rest))
+            {
+                (rest, "`Value` after the enum's name", "TypeScript")
+            } else {
                 continue;
             };
-            if !open_enums.contains(enum_name) {
-                continue;
-            }
             self.current_file = *file;
             self.error(
                 DiagCode::RIDL_149,
                 *range,
                 format!(
                     "declaration `{name}` has the name of the type the generated code of open \
-                     enum `{enum_name}` reserves for an undeclared value (`Unknown` before the \
-                     enum's name), so a target whose namespace is PascalCase would carry one \
-                     identifier twice"
+                     enum `{enum_name}` reserves for an undeclared value ({spelling}), so a \
+                     {target} target would carry one identifier twice"
                 ),
             );
         }
@@ -8175,6 +8182,39 @@ mod tests {
         let set = check_source(
             "p",
             "package p\nopen enumset E { A = 0 }\nstruct UnknownE {}\n",
+        );
+        assert!(codes(&set).is_empty(), "got: {:?}", set.diagnostics);
+    }
+
+    /// An open enum `E` generates the TypeScript type `EValue`, so a
+    /// declaration of that name in the same package collides with it. Beside
+    /// a strict enum, or an open enum set, the name is free.
+    #[test]
+    fn ridl_149_a_declaration_named_enum_value_collides_beside_an_open_enum() {
+        for other in [
+            "struct EValue {}",
+            "type EValue : integer [0..1]",
+            "const EValue : integer = 1",
+        ] {
+            let checked = check_source(
+                "p",
+                &format!("package p\nopen enum E {{ A = 0 }}\n{other}\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-149"],
+                "{other}: {:?}",
+                checked.diagnostics
+            );
+            let message = &checked.diagnostics[0].message;
+            assert!(message.contains("EValue"), "{message}");
+            assert!(message.contains("open enum `E`"), "{message}");
+        }
+        let strict = check_source("p", "package p\nenum E { A = 0 }\nstruct EValue {}\n");
+        assert!(codes(&strict).is_empty(), "got: {:?}", strict.diagnostics);
+        let set = check_source(
+            "p",
+            "package p\nopen enumset E { A = 0 }\nstruct EValue {}\n",
         );
         assert!(codes(&set).is_empty(), "got: {:?}", set.diagnostics);
     }

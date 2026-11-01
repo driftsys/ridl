@@ -111,3 +111,8 @@ Deno.test("a union arm of an open enum or an open enum set round-trips", () => {
   const flags: t.Pick = { kind: "flags", value: 0b1000_0001 as t.Flags };
   assert.deepEqual(codec.decodePick(codec.encodePick(flags)), flags);
 });
+
+Deno.test("the init of an empty open enum and of a struct holding it is unknown 0", () => {
+  assert.deepEqual(t.initEmpty(), { unknown: 0 });
+  assert.deepEqual(t.initEmptyReport(), { value: { unknown: 0 } });
+});

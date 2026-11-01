@@ -794,8 +794,10 @@ fn init_function(ctx: &Ctx, decl: &v2::Decl) -> Option<String> {
     let expr = decl_init_expr(ctx, decl)?;
     let export = export_kw(decl.visibility);
     let name = &decl.name;
+    // The init of an open enum can be `{ unknown: 0 }`, which is not a member.
+    let ty = ctx.type_ref(name);
     Some(format!(
-        "{export}function init{name}(): {name} {{\n  return {expr};\n}}\n"
+        "{export}function init{name}(): {ty} {{\n  return {expr};\n}}\n"
     ))
 }
 
@@ -1071,11 +1073,15 @@ fn array_from(count: u64, body: &str) -> String {
 
 fn enum_init(name: &str, ed: &v2::EnumDef) -> Option<String> {
     // The value 0 if declared, else the lowest declared value (typl §5.8).
+    // An open enum with no declared value has only `{ unknown: 0 }`.
     let chosen = ed
         .values
         .iter()
         .find(|value| value.value == 0)
-        .or_else(|| ed.values.iter().min_by_key(|value| value.value))?;
+        .or_else(|| ed.values.iter().min_by_key(|value| value.value));
+    let Some(chosen) = chosen else {
+        return ed.open.then(|| "{ unknown: 0 }".to_string());
+    };
     Some(format!("{name}.{}", chosen.name))
 }
 
