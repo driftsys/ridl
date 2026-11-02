@@ -324,11 +324,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["RSDL-314", "RSDL-314"]
         );
-        assert!(
-            diagnostics
-                .iter()
-                .any(|d| d.message.contains("--rename veh.topology.Gone=veh.topology.New"))
-        );
+        assert!(diagnostics.iter().any(|d| {
+            d.message
+                .contains("--rename veh.topology.Gone=veh.topology.New")
+        }));
         assert!(
             diagnostics
                 .iter()

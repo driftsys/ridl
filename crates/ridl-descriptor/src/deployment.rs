@@ -84,7 +84,11 @@ pub enum VerifyError {
     },
     /// A surface entry's `link` is not an index into `Deployment.links`.
     /// `index` is the entry's position in `Deployment.surface`.
-    SurfaceLink { index: usize, link: u32, links: usize },
+    SurfaceLink {
+        index: usize,
+        link: u32,
+        links: usize,
+    },
 }
 
 impl From<planus::Error> for VerifyError {

@@ -185,7 +185,9 @@ mod tests {
         assert_eq!(source.matches(allow).count(), 1, "{source}");
         let at = source.find(allow).unwrap();
         assert!(
-            source[at + allow.len()..].trim_start().starts_with("pub mod adas {"),
+            source[at + allow.len()..]
+                .trim_start()
+                .starts_with("pub mod adas {"),
             "{source}"
         );
         assert!(
