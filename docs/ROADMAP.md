@@ -1363,6 +1363,120 @@ driftsys/ridl#1092.
 
 ---
 
+# Epic 19 — deployment and instance identity
+
+**Milestone:** the node of a runtime on each machine configures itself, and
+identifies every client that attaches, from the files and the code that the
+build emits. No number is typed by hand. **Value:** a shared-memory runtime must
+know, for each instance on its machine, which interfaces the instance writes and
+which catalogs it maps, and each client must state its identity at attach.
+Without the toolchain, both are agreements kept outside the source, and an
+instance number typed on a placement line is one more such agreement. **Exit
+criteria:** a production build emits one verified deployment descriptor per
+deployment that lists every instance with its locked number, and every program
+links its instance's number as a generated constant (MVP 0); a debug build lets
+a gateway listen to every interface of a machine and take the place of a
+producer over a WebSocket (MVP 1).
+
+The work comes from driftsys/ridl#1176. The deployment descriptor is recorded in
+[the deployment descriptor design record](design/deployment-descriptor.md) and
+ADR-0022 decision 12. The owner rejected on 2026-11-02 the instance number that
+a person types as a backend key on the placement line; the decisions that
+replace it are below.
+
+**The identities.**
+
+- A component is identified by its qualified rsdl name. ridl assigns no
+  component number.
+- ridl numbers every declared instance, keyed by the component's qualified name
+  and the instance name. The numbers are 1 to 2^31 − 1, are the same in every
+  system and every deployment of the workspace, are locked, and a removed
+  instance's number is never given again. 0 is not a valid number.
+- Negative numbers are reserved for instances that the runtime defines and that
+  exist only in a debug build: −N is the debug twin of instance N, and
+  `i32::MIN`, the one negative number that is no instance's twin, is the
+  listener. ridl assigns and generates neither.
+- An instance number is sent at attach only. No data frame carries it, so
+  instances stay indistinguishable on the wire (rsdl §7, V-02).
+- A component with several instances is a redundant provider set. Each instance
+  has its own number; only one of them is active at a time, and the rule that
+  chooses it belongs to the runtime (E19.12).
+
+**The phases.**
+
+| Phase | Content                                                                                                             | Stories                             |
+| ----- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| MVP 0 | what a production build needs: the descriptor, the lock, the numbers and the constants                              | E19.0 to E19.3, E19.5, E19.6        |
+| MVP 1 | what a debug socket needs: the twin and the listener in the runtime, and a WebSocket gateway                        | E19.7                               |
+| Later | the file per machine, several deployments, the node's checks, platform principals, service numbers, failover, ports | E19.4, E19.8 to E19.14, unscheduled |
+
+PR driftsys/ridl#1179 holds E19.1 and does not merge before E19.0 is approved.
+Its test debt is driftsys/ridl#1180.
+
+| ID     | Story                                                                                                                                                                                                                                                                                                                                                                                                                                        | Done when                                                                                                                                                                             | Size |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E19.0  | The design of MVP 0: the lock file (its name, its place and the command that writes it), the number's range, the instances of a component declared in a dependency unit, and the crate that holds the constants; it replaces the placement key of the deployment descriptor design record and amends ADR-0022 decision 12                                                                                                                    | the design is approved by the owner and merged with its "Alternatives considered"                                                                                                     | M    |
+| E19.1  | The deployment descriptor: the `RDLD` schema, its lowering from the system artifact, `ridlc build --emit deployment`, the bounded verifier and `ridl describe` **Built on driftsys/ridl#1179, unmerged.**                                                                                                                                                                                                                                    | a corpus deployment writes a descriptor that verifies, its embedded catalogs carry their region hashes, and `ridl describe` prints it                                                 | L    |
+| E19.2  | The instance lock: a lock file of instance numbers beside the interface lock, written by the lock command, keyed by the component's qualified name and the instance name, with a removed number retired; an instance with no entry gets a number marked provisional                                                                                                                                                                          | reordering the sources keeps every number, removing an instance and adding another never gives the new one the old number, and an instance with no lock entry is reported provisional | L    |
+| E19.3  | The number in the artifacts: the system artifact of the IR, `Instance` of the deployment descriptor and `Instance` of the codegen deployment section carry the locked number and its provisional flag; the placement key is removed from the record and the tests                                                                                                                                                                            | for every instance of the corpus, the descriptor and the codegen section carry the same number, and that number is the lock's                                                         | M    |
+| E19.4  | One deployment descriptor per machine, beside the one per deployment: a gateway reads the whole deployment to dispatch to the machines, and the node of a machine reads a file that holds its instances, every link with an endpoint on it, and only the catalogs that its instances offer or map, so that it can allow only the transactions of its machine; built when a cybersecurity or a deployment requirement needs the filtered file | each machine of the corpus deployment gets one file that verifies and holds no instance and no catalog of another machine                                                             | M    |
+| E19.5  | The Rust constants: one constant per declared instance in the crate generated from the rsdl package that declares the component, the same in every deployment; the crate of an interface unit is unchanged                                                                                                                                                                                                                                   | a program reads its instance's number from the generated constant, the constant equals the lock's number, and every catalog hash is unchanged                                         | M    |
+| E19.6  | The rules around the number: `ridl diff` reports a changed or a reused instance number as breaking; the rsdl reference states that 0 is not valid, that negative numbers are reserved for the runtime, and that the number travels at attach only                                                                                                                                                                                            | `ridl diff` reports both changes as breaking, and the rsdl reference and the design record state the three rules                                                                      | S    |
+| E19.7  | The debug socket: the twin and the listener in `ridl-rt` behind a `debug` feature, in `ridl-loopback` and in the conformance tests, and a debug gateway that serves listening and injection over `ridl-transport-ws` (see "MVP 1 in detail")                                                                                                                                                                                                 | every "Done when" of "MVP 1 in detail" holds                                                                                                                                          | L    |
+| E19.8  | Several deployments and variants: how a debug or staging system that adds diagnostic components is written beside the production one, and how each variant's descriptor lists only what it places                                                                                                                                                                                                                                            | a production deployment and a debug variant of one system build from one workspace, and each instance has the same number in both                                                     | M    |
+| E19.9  | The node's checks: a node refuses an attach whose number, or an interface that the client claims, is not placed on its machine, and a production build refuses every negative number                                                                                                                                                                                                                                                         | a conformance test attaches each refused case and sees it refused, and a production build of the loopback runtime has no code path that accepts a negative number                     | M    |
+| E19.10 | Platform principals: the Android package or APEX name and the Linux SELinux domain derived from the qualified name by a fixed transform per platform, with a backend attribute on the component to override it                                                                                                                                                                                                                               | the transform is specified per platform, and the descriptor carries the derived or overridden principal of every component                                                            | M    |
+| E19.11 | Service numbers, for a transport that puts a service id on the wire                                                                                                                                                                                                                                                                                                                                                                          | a transport that needs one reads a locked number per service from the descriptor                                                                                                      | M    |
+| E19.12 | The active instance of a redundant provider set: the runtime's rule that chooses the instance that writes and how a standby takes over; RSDL-409 is relaxed for a runtime that enforces it                                                                                                                                                                                                                                                   | a standby takes over in a conformance test, and RSDL-409 is not drawn for a set that such a runtime serves                                                                            | L    |
+| E19.13 | The instance constants for TypeScript, and notice to the Kotlin plugin maintainers                                                                                                                                                                                                                                                                                                                                                           | the TypeScript codec module exports the same constants as the Rust crate                                                                                                              | S    |
+| E19.14 | A manifest claim for the attribute namespace of a runtime outside the toolchain (ADR-0022 open item 3)                                                                                                                                                                                                                                                                                                                                       | a claimed namespace draws no RSDL-804                                                                                                                                                 | S    |
+
+## MVP 1 in detail
+
+E19.7 is one story in four parts, in this order. Its design is a design note of
+its own, approved before code starts.
+
+1. **The identities in `ridl-rt`, behind a `debug` feature that is off by
+   default.** The instance number type gets the twin of a number (−N) and the
+   listener constant (`i32::MIN`). Without the feature, neither exists, so a
+   production program cannot write either. A generated crate's `debug` feature
+   only turns on `ridl-rt/debug`; the generated constants stay positive.
+   - Done when: a crate that names the twin or the listener does not compile
+     without the feature, and compiles with it.
+2. **The attach rules, in the port contract and in `ridl-loopback`.** An attach
+   as −N receives N's grant: N's `offers` and N's `maps`, read from the
+   deployment descriptor. The twin takes N's place, so −N is refused while N is
+   attached, and N is refused while −N is attached. An attach as the listener
+   maps every catalog that the instances of the machine offer or map, and writes
+   nothing. `ridl-rt-conformance` gains the tests, so that a runtime outside
+   this repository runs them too.
+   - Done when: the conformance tests pass on `ridl-loopback` for the twin's
+     grant, the exclusion of N and −N in both orders, the listener's read of
+     every catalog, and the refusal of a write by the listener.
+3. **Listening over the WebSocket.** A debug gateway program reads the
+   deployment descriptor, attaches as the listener, and puts a
+   `ridl-transport-ws` server over those ports. A WebSocket client attaches per
+   catalog, as the binding requires, and subscribes to or reads any signal and
+   event. The program that embeds the server keeps the access policy of each
+   connection
+   ([the `ridl-transport-ws` design record](design/ridl-transport-ws.md), D-7).
+   - Done when: an end-to-end test publishes a value on every interface of a
+     loopback machine, and a client attached through the gateway receives each
+     of them.
+4. **Injection over the WebSocket.** To inject on an interface, the gateway
+   finds the instance N that offers it in the descriptor, attaches as −N, and
+   writes through −N's ports. Commands and queries already travel as `request`.
+   A `publish` goes only from the provider to the consumer (frame specification
+   §5), so a client cannot send a signal value or an event today. The design
+   note chooses between a session in which the client is the providing side and
+   a debug control channel of the gateway, and records the other as the
+   alternative.
+   - Done when: an end-to-end test with N detached injects a signal value, an
+     event and a command through the gateway, a consumer on the machine receives
+     each of them, and an attach of N while −N writes is refused.
+
+---
+
 # Parked, and what reopens each
 
 Every parked story keeps its row, its `Done when` and its size under "Parked
@@ -1410,27 +1524,28 @@ reopening is an observation rather than an argument.
 | none | Kotlin, the first plugin        | after step 2                                                                       |
 | none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                               |
 
-| Epic | Milestone                       | Step                                                                                   |
-| ---- | ------------------------------- | -------------------------------------------------------------------------------------- |
-| E0   | walking skeleton                | landed — internal                                                                      |
-| E1   | typl schema language            | landed — **v0.1 preview**                                                              |
-| E2   | ridl contract boundary          | landed — v0.x                                                                          |
-| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed     |
-| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                          |
-| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR                 |
-| E17  | layout inputs for plugins       | **step 1**, landed                                                                     |
-| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                               |
-| E11  | the runtime library             | **step 1** — generated code links a library                                            |
-| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                          |
-| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                                   |
-| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                                 |
-| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                              |
-| E8   | agent enablement                | **step 1** — threads alongside                                                         |
-| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                        |
-| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                           |
-| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                                  |
-| none | Kotlin, the first plugin        | after step 2                                                                           |
-| E18  | exact numerics                  | the next two breaking releases — the design and the policy, then the type and the wire |
+| Epic | Milestone                        | Step                                                                                   |
+| ---- | -------------------------------- | -------------------------------------------------------------------------------------- |
+| E0   | walking skeleton                 | landed — internal                                                                      |
+| E1   | typl schema language             | landed — **v0.1 preview**                                                              |
+| E2   | ridl contract boundary           | landed — v0.x                                                                          |
+| E9   | wire SSOT                        | **step 1** — the hash over the IR and the R5 drift removed; the projections landed     |
+| E15  | interface identity and the lock  | **step 1** — an interface's number is recorded in its package                          |
+| E16  | the catalog descriptor           | **step 1**, landed — an engine reads a catalog without decoding the IR                 |
+| E17  | layout inputs for plugins        | **step 1**, landed                                                                     |
+| E6   | rsdl, rewritten                  | **step 1** — a system is described and lowered to the IR                               |
+| E11  | the runtime library              | **step 1** — generated code links a library                                            |
+| E14  | typl and ridl finalization       | **step 1** — the references stop being drafts                                          |
+| E10  | typl value objects               | **step 1** — types that cannot hold an invalid value                                   |
+| none | Rust codegen finalized           | **step 1** — the three payload codecs, byte-conformant                                 |
+| E3   | boundary model, core             | **step 1** — the attribute layer enforced                                              |
+| E8   | agent enablement                 | **step 1** — threads alongside                                                         |
+| E12  | the TypeScript framework         | **step 2** — a second language, and an emulator                                        |
+| E4.5 | the plugin protocol              | **step 2** — the extension seam every domain reaches through                           |
+| E7   | the `.rxdl` profile, trimmed     | **step 2** — types, interfaces and wiring in one file                                  |
+| none | Kotlin, the first plugin         | after step 2                                                                           |
+| E18  | exact numerics                   | the next two breaking releases — the design and the policy, then the type and the wire |
+| E19  | deployment and instance identity | MVP 0 with #1179, then MVP 1 — production, then the debug socket                       |
 
 Rows are in step order, not numeric order, except the last, which is a release
 rather than a step — the numbering is identity, as the tracker section above
