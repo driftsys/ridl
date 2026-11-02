@@ -577,9 +577,12 @@ fn a_link_whose_interface_no_region_holds_is_an_internal_error() {
     );
 }
 
+/// Clears one part of a link.
+type ClearPart = fn(&mut v2::Link);
+
 #[test]
 fn a_link_missing_a_part_is_an_internal_error() {
-    let parts: [(&str, fn(&mut v2::Link)); 3] = [
+    let parts: [(&str, ClearPart); 3] = [
         ("interface", |link| link.interface = None),
         ("consumer", |link| link.consumer = None),
         ("producer", |link| link.producer = None),
