@@ -1,8 +1,9 @@
 # Podbuf: remote structs held inline across import pins
 
-Status: proposed design for driftsys/ridl#1163. Written against commit
-`42d04b32` on 2026-11-02. No option is adopted by this note. This is a design
-comparison, not an implementation plan; it changes no decision record.
+Status: owner-approved design direction for driftsys/ridl#1163, approved on
+2026-11-02. Code observations refer to commit `42d04b32`. The owner selected A
+and the decisions in section 7. This note is not an implementation plan and
+changes no durable decision record or implementation.
 
 ## 1. Problem
 
@@ -237,13 +238,15 @@ judgments work offline with the same information as source diffs.
 For legacy baselines, use C's explicit uncertainty as a migration behavior and
 restart affected podbuf histories at the first enriched publication. This is not
 a claim to repair historical chains. Source-to-source judgments can be correct
-without waiting for baseline enrichment, but release timing and stability
-treatment remain owner decisions.
+without waiting for baseline enrichment during development. The owner approved
+R2: release source comparisons, baseline enrichment and migration behavior
+together, so diff, build and publication use consistent evidence.
 
 Defer same-size remote layout changes, shrinkage, general dependency semantic
 comparison, historical chain certification, encoding-history storage and rsdl
-system snapshots. No implementation, migration or record amendment is authorized
-by this recommendation.
+system snapshots. The approved direction does not perform an implementation,
+migration or durable record amendment; this deliverable remains the design note
+only.
 
 ## 6. Alternatives considered
 
@@ -268,32 +271,93 @@ current loaders. Reusing `podbuf_inline_append` avoids a new category but
 misstates the evidence and its path; a category addition must instead receive
 explicit stability review.
 
-## 7. Open questions for the owner
+## 7. Owner questions and approved decisions
+
+The owner approved these answers on 2026-11-02. No owner question remains open
+for this design direction.
 
 1. Do you choose A (complete remote IR snapshots), B (sizes or layouts), or C
    (no format change) for the baseline contract?
+
+   **A.** Store complete reached remote IR as distinct baseline context.
+
 2. If you choose B, do you choose B1 (head sizes only) or B2 (full head
    layouts)?
+
+   **Not applicable with A.** B2 would provide more evidence than B1 if B were
+   selected, but neither is added alongside A. Derive layouts from the stored IR
+   using the shared projection law.
+
 3. Do you approve treating the baseline extension and new diff category as
    changes to policy-frozen surfaces requiring explicit stability review?
+
+   **Yes.** Users can depend on baseline formats and CLI output. Review the
+   compatibility effects and document migration and release impact. Protection
+   by policy applies even where no automated freeze dump covers the surface; it
+   does not prohibit an explicitly declared change in an eligible release.
+
 4. Do you approve ending affected podbuf catalog histories when legacy baselines
    lack old remote evidence, even when the current catalog hash is unchanged?
+
+   **Yes.** End the affected compatibility chain on a proved break or missing
+   historical evidence. Preserve the previous baseline for inspection and
+   explain why the chain ended. Start a fresh chain at the current catalog;
+   resetting history must never assert compatibility with earlier peers.
+
 5. Do you approve exit code 2 for an explicit podbuf baseline comparison that
    cannot judge remote inline compatibility because historical evidence is
    absent?
+
+   **Yes, provided recovery is available.** Exit 2 means compatibility could not
+   be determined; exit 1 remains a proved break. Provide documented, explicit
+   repair and reset operations with actionable diagnostics:
+
+   - Repair reconstructs historical evidence from the original consumer sources
+     and exact old dependency pins. The evidence must correspond to the baseline
+     being repaired; current sources or pins are not substitutes. Repair is
+     conditional on those inputs being available and does not certify earlier
+     carried hashes without their own evidence.
+   - Reset preserves the previous baseline for inspection, publishes an enriched
+     current baseline and starts fresh compatible catalog history. It does not
+     repair or certify earlier history. Missing evidence alone must not prevent
+     this explicit recovery operation, although ordinary compilation and
+     publication refusal rules still apply.
+
+   Neither operation is an existing command promised by this note. Exact CLI
+   spelling, preservation location and artifact naming are left to the builder;
+   the operations must be explicit and the diagnostics must identify the
+   applicable recovery command. Normal diff remains read-only.
+
 6. Do you choose R1 (release source-to-source judgment first) or R2 (release it
    together with baseline enrichment and migration behavior)?
+
+   **R2.** Release source comparison, baseline enrichment and recovery together.
+   Internal development can proceed separately. Released diff, build and
+   baseline behavior must use consistent evidence and history decisions.
+
 7. Do you approve scheduling any incompatible baseline or CLI contract change
    for a declared minor release rather than assuming it can ship in a patch?
+
+   **Yes.** Schedule the compatibility changes for a declared pre-1.0 minor
+   release, 0.15.0 if this follows the current 0.14 series. Do not ship them in
+   a patch. Release notes must state the changed baseline evidence, category,
+   failure behavior, minimum tool version and repair/reset procedure. Follow
+   ADR-0029's stability review; do not infer permission to alter unrelated
+   frozen surfaces. After 1.0, incompatible public-contract changes require a
+   major release under Semantic Versioning.
+
 8. Do you approve the distinct category `podbuf_remote_inline_growth` instead of
    reusing `podbuf_inline_append`?
+
+   **Yes.** The category identifies a consumer break caused by remote inline
+   growth without implying that the consumer appended a field.
 
 ## 8. Trace and record/code differences
 
 The task source is driftsys/ridl#1163. No network lookup was performed; all
 observations above are from this checkout and the supplied issue brief.
 
-Records a selected design would amend or review:
+Records the approved design would amend or review in subsequent work:
 
 - [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), decisions 10 and
   13: add the consumer effect of dependency growth, separate contexts, category,
