@@ -339,6 +339,9 @@ pub enum Rule {
     Variant,
     /// A map contains more than one entry with the same key.
     Unique,
+    /// A text chunk of a `<string>` stream is not valid UTF-8
+    /// (ADR-0032 decision 12).
+    Utf8,
 }
 
 /// Why a transcode failed.
@@ -441,7 +444,7 @@ mod tests {
     /// The match names every variant with no `_` arm, so a `Rule` variant
     /// added or removed fails this test to compile.
     #[test]
-    fn rule_is_exactly_these_six_variants() {
+    fn rule_is_exactly_these_seven_variants() {
         fn all(r: Rule) {
             match r {
                 Rule::Range => {}
@@ -450,10 +453,12 @@ mod tests {
                 Rule::Pattern => {}
                 Rule::Variant => {}
                 Rule::Unique => {}
+                Rule::Utf8 => {}
             }
         }
         all(Rule::Range);
         all(Rule::Unique);
+        all(Rule::Utf8);
     }
 
     /// The three variants the proto3 codec adds exist on every feature set:
