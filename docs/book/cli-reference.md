@@ -1059,7 +1059,9 @@ package inline defines that head again behind a guard macro, so the headers of
 two packages can be included in one translation unit. `ridl build` refuses the
 headers of a build that derive one C name for different entities (`veh_common_speed_head`
 from `veh.CommonSpeed` and from `veh.common.Speed`), and writes no header for
-that build.
+that build. It also refuses a package that derives a C17 name defined by the
+included `<stdint.h>` or `<stddef.h>`; the
+[podbuf codec record](../design/podbuf-codec.md) lists the claims.
 
 **`codegen-model` is not a backend at all**: it writes the lowered codegen
 model — one package, resolved over the scope the build read, with the scalar

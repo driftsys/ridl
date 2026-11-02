@@ -702,6 +702,43 @@ fn a_constant_equal_to_a_preamble_macro_is_refused_naming_both() {
     );
 }
 
+#[test]
+fn an_accessor_equal_to_a_stddef_type_is_refused_naming_both() {
+    let err = generate_fixture_err("package max\nstruct Align {\n  t : integer [0..10]\n}\n");
+    assert!(
+        err.message.contains("`max_align_t`")
+            && err.message.contains("<stdint.h> and <stddef.h>")
+            && err
+                .message
+                .contains("the accessor of `t` of the head of `Align`"),
+        "{}",
+        err.message
+    );
+}
+
+#[test]
+fn a_constant_equal_to_a_stdint_limit_is_refused_naming_both() {
+    let err = generate_fixture_err("package uint\nenum Least8 {\n  MAX = 0\n}\n");
+    assert!(
+        err.message.contains("`UINT_LEAST8_MAX`")
+            && err.message.contains("<stdint.h> and <stddef.h>")
+            && err.message.contains("the enum value `MAX`"),
+        "{}",
+        err.message
+    );
+}
+
+#[test]
+fn names_near_standard_header_names_are_accepted() {
+    let h = generate_fixture("package max\nstruct Align {\n  time : integer [0..10]\n}\n")
+        .header_source;
+    assert!(h.contains("max_align_time("), "{h}");
+    let h = generate_fixture("package uint\nenum Least8 {\n  MAXIMUM = 0\n}\n").header_source;
+    assert!(h.contains("#define UINT_LEAST8_MAXIMUM 0"), "{h}");
+    let h = generate_fixture("package uint\nenum Custom {\n  MAX = 0\n}\n").header_source;
+    assert!(h.contains("#define UINT_CUSTOM_MAX 0"), "{h}");
+}
+
 /// The include guard of the header is claimed too: the enum `RidlPodbuf` of
 /// `ridl.podbuf` with a value `H` spells `RIDL_PODBUF_RIDL_PODBUF_H`, the
 /// guard of its own header, and the `#define` would end the header early.

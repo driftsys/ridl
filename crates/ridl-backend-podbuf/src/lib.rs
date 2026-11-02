@@ -28,15 +28,17 @@
 //!   `<prefix>_<type>_value`, as for the head of any other declaration.
 //!
 //! The header claims each name it writes once: first the fixed names of the
-//! preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`, `PREAMBLE_NAMES`)
+//! preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`, `PREAMBLE_NAMES`),
+//! the C17 names of `<stdint.h>` and `<stddef.h>` (`STANDARD_HEADER_NAMES`),
 //! and the include guard of the header, then the names it derives from the
 //! package: the constants of the enums, enum sets and union tags, the head
 //! type names, the guard macro of each head, and the accessor and
 //! presence-test functions. A package where two of them are equal (an enum
 //! value equal to the guard of a head, two heads under one name, two accessors
 //! under one name, an accessor `ridl_podbuf_desc_at` of a package
-//! `ridl.podbuf`) is refused, and the message names both claimants. The names
-//! `<stdint.h>` and `<stddef.h>` define are not claimed.
+//! `ridl.podbuf`) is refused, and the message names both claimants. Names that
+//! only match a future-use reserved pattern of the standard headers are not
+//! claimed.
 //!
 //! The headers of one build are checked against each other too, by
 //! [`check_c_names`], because a C file includes any of them together and
@@ -360,9 +362,9 @@ impl Claim {
 }
 
 /// The names the header claims at file scope, so that two claims of one name
-/// are refused instead of written. The fixed names of the preamble and the
-/// include guard of the header are claimed first, so a name the package
-/// derives cannot define one of them again.
+/// are refused instead of written. The fixed names of the preamble, the
+/// included standard headers and the include guard are claimed first, so a
+/// name the package derives cannot define one of them again.
 #[derive(Default)]
 struct Claims {
     by_name: BTreeMap<String, Claim>,
@@ -401,6 +403,106 @@ impl Claims {
         }
     }
 }
+
+/// The C17 names of <stdint.h> and <stddef.h>, including optional fixed-width
+/// types and their macros. Future-use reserved patterns are not claimed.
+const STANDARD_HEADER_NAMES: &[&str] = &[
+    "int8_t",
+    "uint8_t",
+    "int16_t",
+    "uint16_t",
+    "int32_t",
+    "uint32_t",
+    "int64_t",
+    "uint64_t",
+    "int_least8_t",
+    "uint_least8_t",
+    "int_least16_t",
+    "uint_least16_t",
+    "int_least32_t",
+    "uint_least32_t",
+    "int_least64_t",
+    "uint_least64_t",
+    "int_fast8_t",
+    "uint_fast8_t",
+    "int_fast16_t",
+    "uint_fast16_t",
+    "int_fast32_t",
+    "uint_fast32_t",
+    "int_fast64_t",
+    "uint_fast64_t",
+    "intptr_t",
+    "uintptr_t",
+    "intmax_t",
+    "uintmax_t",
+    "INT8_MIN",
+    "INT8_MAX",
+    "UINT8_MAX",
+    "INT16_MIN",
+    "INT16_MAX",
+    "UINT16_MAX",
+    "INT32_MIN",
+    "INT32_MAX",
+    "UINT32_MAX",
+    "INT64_MIN",
+    "INT64_MAX",
+    "UINT64_MAX",
+    "INT_LEAST8_MIN",
+    "INT_LEAST8_MAX",
+    "UINT_LEAST8_MAX",
+    "INT_LEAST16_MIN",
+    "INT_LEAST16_MAX",
+    "UINT_LEAST16_MAX",
+    "INT_LEAST32_MIN",
+    "INT_LEAST32_MAX",
+    "UINT_LEAST32_MAX",
+    "INT_LEAST64_MIN",
+    "INT_LEAST64_MAX",
+    "UINT_LEAST64_MAX",
+    "INT_FAST8_MIN",
+    "INT_FAST8_MAX",
+    "UINT_FAST8_MAX",
+    "INT_FAST16_MIN",
+    "INT_FAST16_MAX",
+    "UINT_FAST16_MAX",
+    "INT_FAST32_MIN",
+    "INT_FAST32_MAX",
+    "UINT_FAST32_MAX",
+    "INT_FAST64_MIN",
+    "INT_FAST64_MAX",
+    "UINT_FAST64_MAX",
+    "INTPTR_MIN",
+    "INTPTR_MAX",
+    "UINTPTR_MAX",
+    "INTMAX_MIN",
+    "INTMAX_MAX",
+    "UINTMAX_MAX",
+    "PTRDIFF_MIN",
+    "PTRDIFF_MAX",
+    "SIG_ATOMIC_MIN",
+    "SIG_ATOMIC_MAX",
+    "SIZE_MAX",
+    "WCHAR_MIN",
+    "WCHAR_MAX",
+    "WINT_MIN",
+    "WINT_MAX",
+    "INT8_C",
+    "UINT8_C",
+    "INT16_C",
+    "UINT16_C",
+    "INT32_C",
+    "UINT32_C",
+    "INT64_C",
+    "UINT64_C",
+    "INTMAX_C",
+    "UINTMAX_C",
+    "size_t",
+    "ptrdiff_t",
+    "wchar_t",
+    "max_align_t",
+    "NULL",
+    "offsetof",
+];
 
 /// The fixed names [`PREAMBLE`] defines, which every header claims before any
 /// name it derives from the package.
@@ -1005,8 +1107,8 @@ impl<'a> Header<'a> {
         self.render_with_claims().map(|(generated, _)| generated)
     }
 
-    /// The header and every C name it claims. The fixed names of the preamble
-    /// and the include guard of the header are claimed first.
+    /// The header and every C name it claims. The fixed names of the preamble,
+    /// included standard headers and include guard are claimed first.
     fn render_with_claims(&self) -> Result<(Generated, Claims), GenerateError> {
         let mut claims = Claims::default();
         for name in PREAMBLE_NAMES {
@@ -1014,6 +1116,17 @@ impl<'a> Header<'a> {
                 name,
                 "the preamble of every header".to_string(),
                 Identity::preamble(name),
+            )?;
+        }
+        for &name in STANDARD_HEADER_NAMES {
+            claims.claim(
+                name,
+                "<stdint.h> and <stddef.h>".to_string(),
+                Identity {
+                    package: String::new(),
+                    key: name.to_string(),
+                    role: "standard header".to_string(),
+                },
             )?;
         }
         let guard = format!("RIDL_PODBUF_{}_H", self.prefix.to_uppercase());

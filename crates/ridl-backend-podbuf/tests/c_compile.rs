@@ -71,6 +71,30 @@ fn with_headers(headers: &[(String, String)], extra: &[(&str, &str)]) -> tempfil
 }
 
 #[test]
+fn standard_header_name_near_misses_compile_as_c11_on_the_host() {
+    let Some(cc) = host_cc() else {
+        return skip("no C compiler (cc, clang or gcc) on PATH");
+    };
+    let sources = [
+        "package max\nstruct Align {\n  time : integer [0..10]\n}\n",
+        "package uint\nenum Least8 {\n  MAXIMUM = 0\n}\nenum Custom {\n  MAX = 0\n}\n",
+    ];
+    let headers: Vec<_> = sources
+        .iter()
+        .map(|source| {
+            let package = ridlc::compile("fixture.typl", source).package;
+            let generated = ridl_backend_podbuf::generate(&package).expect("generate");
+            (file_name(&package.name), generated.header_source)
+        })
+        .collect();
+    let source = unit(&["max.h", "uint.h"]);
+    let dir = with_headers(&headers, &[("unit.c", &source)]);
+    let mut args = STRICT.to_vec();
+    args.push("unit.c");
+    run(cc, &args, dir.path()).unwrap_or_else(|error| panic!("{error}"));
+}
+
+#[test]
 fn the_veh_cluster_headers_compile_as_c11_on_the_host() {
     let Some(cc) = host_cc() else {
         return skip("no C compiler (cc, clang or gcc) on PATH");
