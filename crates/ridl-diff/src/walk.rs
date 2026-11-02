@@ -2320,7 +2320,7 @@ fn inline_uses(
 /// root on its own, and holds nothing at a fixed offset of another head, so it
 /// is not listed. A stream parameter is not part of the request.
 /// [`root_holds_inline`] reads each one.
-fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
+pub(crate) fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
     use v2::decl::Kind;
 
     fn named(reference: &str) -> v2::FieldType {

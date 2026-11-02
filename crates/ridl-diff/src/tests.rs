@@ -2353,6 +2353,523 @@ mod podbuf {
 
     use crate::{Category, Verdict, diff_refs_with, render_text};
 
+    #[test]
+    fn remote_inline_growth_without_local_append_is_breaking() {
+        let local = package(
+            "app.api",
+            vec![struct_decl(
+                "Sample",
+                vec![
+                    field("reading", 1, named("dep.types.Reading")),
+                    field("sequence", 2, wide()),
+                ],
+            )],
+        );
+        let old_remote = package(
+            "dep.types",
+            vec![struct_decl("Reading", vec![field("value", 1, wide())])],
+        );
+        let new_remote = package(
+            "dep.types",
+            vec![struct_decl(
+                "Reading",
+                vec![field("value", 1, wide()), field("extra", 2, wide())],
+            )],
+        );
+        let report = crate::diff_refs_with_contexts(
+            &[&local],
+            &[&local],
+            &[&old_remote],
+            &[&new_remote],
+            &["podbuf"],
+        )
+        .unwrap();
+        let change = report
+            .changes
+            .iter()
+            .find(|change| crate::category_word(change.category) == "podbuf_remote_inline_growth")
+            .expect("remote inline growth must be reported without a local append");
+        assert_eq!(change.path, "app.api/Sample/reading");
+        assert_eq!(change.before.as_deref(), Some("dep.types.Reading: 8"));
+        assert_eq!(change.after.as_deref(), Some("dep.types.Reading: 16"));
+        assert_eq!(change.verdict, Verdict::Breaking);
+    }
+
+    fn remote_reading(extra: bool) -> v2::Package {
+        let mut members = vec![field("value", 1, wide())];
+        if extra {
+            members.push(field("extra", 2, wide()));
+        }
+        package("dep.types", vec![struct_decl("Reading", members)])
+    }
+
+    fn remote_holder(ty: v2::FieldType) -> v2::Package {
+        package(
+            "app.api",
+            vec![struct_decl(
+                "Sample",
+                vec![field("reading", 1, ty), field("sequence", 2, wide())],
+            )],
+        )
+    }
+
+    fn checked_remote(
+        local: &v2::Package,
+        old: &v2::Package,
+        new: &v2::Package,
+        encodings: &[&str],
+    ) -> crate::DiffReport {
+        crate::diff_refs_with_contexts(&[local], &[local], &[old], &[new], encodings).unwrap()
+    }
+
+    fn remote_changes(report: &crate::DiffReport) -> Vec<&crate::Change> {
+        report
+            .changes
+            .iter()
+            .filter(|c| c.category == Category::PodbufRemoteInlineGrowth)
+            .collect()
+    }
+
+    #[test]
+    fn remote_growth_respects_producer_size_boundaries_and_inline_heads() {
+        let old = remote_reading(false);
+        let new = remote_reading(true);
+        for (ty, expected) in [
+            (named("dep.types.Reading"), 1),
+            (array(named("dep.types.Reading"), 2, 2), 1),
+            (array(named("dep.types.Reading"), 0, 2), 0),
+            (map(wide(), named("dep.types.Reading")), 0),
+            (
+                array(
+                    tuple(vec![
+                        ("reading", named("dep.types.Reading")),
+                        ("sequence", wide()),
+                    ]),
+                    0,
+                    2,
+                ),
+                1,
+            ),
+            (
+                map(wide(), tuple(vec![("reading", named("dep.types.Reading"))])),
+                1,
+            ),
+        ] {
+            let report = checked_remote(&remote_holder(ty), &old, &new, &["podbuf"]);
+            assert_eq!(remote_changes(&report).len(), expected, "{report:?}");
+        }
+    }
+
+    #[test]
+    fn remote_roots_can_grow_but_their_nested_inline_members_cannot() {
+        let old = remote_reading(false);
+        let new = remote_reading(true);
+        let root = |ty| {
+            let mut p = package("app.api", vec![]);
+            p.interfaces = vec![super::interface("Api", vec![fixed("reading", 1, ty)])];
+            p
+        };
+        assert!(
+            remote_changes(&checked_remote(
+                &root(named("dep.types.Reading")),
+                &old,
+                &new,
+                &["podbuf"]
+            ))
+            .is_empty()
+        );
+        let mut old_outer = old.clone();
+        old_outer.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        let mut new_outer = new.clone();
+        new_outer.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        for ty in [
+            named("dep.types.Outer"),
+            array(named("dep.types.Outer"), 0, 4),
+        ] {
+            let local = root(ty);
+            let report = checked_remote(&local, &old_outer, &new_outer, &["podbuf"]);
+            let changes = remote_changes(&report);
+            assert_eq!(changes.len(), 1, "{report:?}");
+            assert_eq!(changes[0].path, "app.api/Api/reading");
+            assert_eq!(changes[0].before.as_deref(), Some("dep.types.Reading: 8"));
+        }
+    }
+
+    #[test]
+    fn remote_equal_size_and_unrelated_changes_are_not_growth() {
+        let mut old = remote_reading(false);
+        old.decls[0] = struct_decl("Reading", vec![field("small", 1, named("Small"))]);
+        old.decls.push(int_type("Small", "0", "255"));
+        let mut new = old.clone();
+        new.decls[0] = struct_decl(
+            "Reading",
+            vec![
+                field("small", 1, named("Small")),
+                field("more", 2, named("Small")),
+            ],
+        );
+        let local = remote_holder(named("dep.types.Reading"));
+        assert!(remote_changes(&checked_remote(&local, &old, &new, &["podbuf"])).is_empty());
+        new.decls
+            .push(struct_decl("Unrelated", vec![field("value", 1, wide())]));
+        assert!(remote_changes(&checked_remote(&local, &old, &new, &["podbuf"])).is_empty());
+    }
+
+    #[test]
+    fn remote_growth_without_podbuf_is_compatible_under_the_podbuf_heading() {
+        let report = checked_remote(
+            &remote_holder(named("dep.types.Reading")),
+            &remote_reading(false),
+            &remote_reading(true),
+            &[],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible);
+        assert!(render_text(&report).contains("breaking under podbuf:"));
+        assert_eq!(
+            crate::category_from_word("podbuf_remote_inline_growth"),
+            Some(Category::PodbufRemoteInlineGrowth)
+        );
+        assert!(crate::explain(Category::PodbufRemoteInlineGrowth).contains("consumer"));
+    }
+
+    #[test]
+    fn missing_remote_evidence_never_borrows_the_other_pin() {
+        let local = remote_holder(named("dep.types.Reading"));
+        let remote = remote_reading(false);
+        let empty = package("dep.types", vec![]);
+        for (old, new, side) in [
+            (&[][..], &[&remote][..], crate::ContextSide::Old),
+            (&[&remote][..], &[][..], crate::ContextSide::New),
+            (&[&remote][..], &[&empty][..], crate::ContextSide::New),
+        ] {
+            let error = crate::diff_refs_with_contexts(&[&local], &[&local], old, new, &["podbuf"])
+                .unwrap_err();
+            assert_eq!(
+                error.issues,
+                vec![crate::ContextIssue {
+                    path: "app.api/Sample/reading".into(),
+                    declaration: "dep.types.Reading".into(),
+                    side
+                }]
+            );
+            assert!(error.to_string().contains("dep.types.Reading"));
+            assert!(crate::diff_refs_with_contexts(&[&local], &[&local], old, new, &[]).is_ok());
+        }
+    }
+
+    #[test]
+    fn remote_growth_counts_only_old_holders_and_deduplicates_consumers() {
+        let old_local = package("app.api", vec![]);
+        let new_local = remote_holder(named("dep.types.Reading"));
+        let old = remote_reading(false);
+        let new = remote_reading(true);
+        let report = crate::diff_refs_with_contexts(
+            &[&old_local],
+            &[&new_local],
+            &[&old],
+            &[&new],
+            &["podbuf"],
+        )
+        .unwrap();
+        assert!(remote_changes(&report).is_empty());
+        let mut local = remote_holder(tuple(vec![
+            ("first", named("dep.types.Reading")),
+            ("second", named("dep.types.Reading")),
+        ]));
+        local.decls.push(struct_decl(
+            "Other",
+            vec![field("value", 1, named("dep.types.Reading"))],
+        ));
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        let paths: Vec<_> = remote_changes(&report)
+            .iter()
+            .map(|c| c.path.as_str())
+            .collect();
+        assert_eq!(paths, ["app.api/Other/value", "app.api/Sample/reading"]);
+    }
+
+    #[test]
+    fn remote_growth_in_induced_request_and_reply_tuples_is_reported() {
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![
+                command(
+                    "send",
+                    1,
+                    vec![
+                        param("reading", named("dep.types.Reading")),
+                        param("sequence", wide()),
+                    ],
+                ),
+                query(
+                    "get",
+                    2,
+                    vec![],
+                    tuple(vec![
+                        ("reading", named("dep.types.Reading")),
+                        ("sequence", wide()),
+                    ]),
+                ),
+            ],
+        )];
+        let report = checked_remote(
+            &local,
+            &remote_reading(false),
+            &remote_reading(true),
+            &["podbuf"],
+        );
+        let paths: Vec<_> = remote_changes(&report)
+            .iter()
+            .map(|c| c.path.as_str())
+            .collect();
+        assert_eq!(paths, ["app.api/Api/get", "app.api/Api/send"]);
+    }
+
+    #[test]
+    fn remote_union_arms_allow_direct_growth_but_examine_nested_heads() {
+        let union = |name| {
+            typl_decl(
+                "Choice",
+                v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "value".into(),
+                        ordinal: 1,
+                        type_ref: name,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            )
+        };
+        let mut old = remote_reading(false);
+        let mut new = remote_reading(true);
+        old.decls.push(union("Reading".into()));
+        new.decls.push(union("Reading".into()));
+        let local = remote_holder(named("dep.types.Choice"));
+        assert!(remote_changes(&checked_remote(&local, &old, &new, &["podbuf"])).is_empty());
+        old.decls.push(struct_decl(
+            "Outer",
+            vec![field("items", 1, array(named("Reading"), 2, 2))],
+        ));
+        new.decls.push(struct_decl(
+            "Outer",
+            vec![field("items", 1, array(named("Reading"), 2, 2))],
+        ));
+        old.decls.retain(|d| d.name != "Choice");
+        new.decls.retain(|d| d.name != "Choice");
+        old.decls.push(union("Outer".into()));
+        new.decls.push(union("Outer".into()));
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        assert_eq!(remote_changes(&report).len(), 1, "{report:?}");
+    }
+
+    #[test]
+    fn remote_nested_growth_keeps_consumer_ownership() {
+        let mut old = remote_reading(false);
+        let mut new = remote_reading(true);
+        old.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        new.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        let report = checked_remote(
+            &remote_holder(named("dep.types.Outer")),
+            &old,
+            &new,
+            &["podbuf"],
+        );
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 2);
+        assert!(changes.iter().all(|c| c.path == "app.api/Sample/reading"));
+    }
+
+    #[test]
+    fn remote_signal_and_event_roots_examine_inline_members() {
+        let mut old = remote_reading(false);
+        let mut new = remote_reading(true);
+        old.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        new.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![
+                super::signal("signal", 1, "dep.types.Outer"),
+                super::event("event", 2, "dep.types.Outer"),
+            ],
+        )];
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        assert_eq!(remote_changes(&report).len(), 2, "{report:?}");
+    }
+
+    #[test]
+    fn remote_members_inside_local_union_arms_are_consumer_owned() {
+        let mut old = remote_reading(false);
+        let mut new = remote_reading(true);
+        old.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        new.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        let local = package(
+            "app.api",
+            vec![typl_decl(
+                "Choice",
+                v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "value".into(),
+                        ordinal: 1,
+                        type_ref: "dep.types.Outer".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            )],
+        );
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        assert_eq!(remote_changes(&report).len(), 1, "{report:?}");
+        assert_eq!(remote_changes(&report)[0].path, "app.api/Choice/value");
+    }
+
+    #[test]
+    fn local_inline_append_uses_each_sources_remote_head() {
+        let local = |append: Option<v2::FieldType>| {
+            let mut members = vec![
+                field("reading", 1, named("dep.types.Reading")),
+                field("small", 2, named("Small")),
+            ];
+            if let Some(ty) = append {
+                members.push(field("extra", 3, ty));
+            }
+            package(
+                "app.api",
+                vec![
+                    int_type("Small", "0", "255"),
+                    struct_decl("Held", members),
+                    struct_decl("Holder", vec![field("held", 1, named("Held"))]),
+                ],
+            )
+        };
+        let old_local = local(None);
+        for (old_remote, new_remote, append, checked_break, shared_break) in [
+            (
+                remote_reading(false),
+                remote_reading(true),
+                named("Small"),
+                true,
+                false,
+            ),
+            (
+                remote_reading(true),
+                remote_reading(false),
+                wide(),
+                false,
+                true,
+            ),
+        ] {
+            let new_local = local(Some(append));
+            let checked = crate::diff_refs_with_contexts(
+                &[&old_local],
+                &[&new_local],
+                &[&old_remote],
+                &[&new_remote],
+                &["podbuf"],
+            )
+            .unwrap();
+            let shared = diff_refs_with(&[&old_local], &[&new_local], &[&new_remote], &["podbuf"]);
+            assert_eq!(
+                !inline_append_paths(&checked).is_empty(),
+                checked_break,
+                "{checked:?}"
+            );
+            assert_eq!(
+                !inline_append_paths(&shared).is_empty(),
+                shared_break,
+                "{shared:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn removed_nested_remote_declaration_is_missing_new_evidence() {
+        let mut old = remote_reading(false);
+        old.decls.push(struct_decl(
+            "Outer",
+            vec![field("inner", 1, named("Reading"))],
+        ));
+        let new = package(
+            "dep.types",
+            vec![struct_decl("Outer", vec![field("replacement", 1, wide())])],
+        );
+        let local = remote_holder(named("dep.types.Outer"));
+        let error =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&old], &[&new], &["podbuf"])
+                .unwrap_err();
+        assert_eq!(
+            error.issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Reading".into(),
+                side: crate::ContextSide::New
+            }]
+        );
+    }
+
+    #[test]
+    fn missing_remote_issues_have_stable_consumer_order() {
+        let local = package(
+            "app.api",
+            vec![struct_decl(
+                "Sample",
+                vec![
+                    field("second", 1, named("dep.types.Reading")),
+                    field(
+                        "first",
+                        2,
+                        tuple(vec![
+                            ("one", named("dep.types.Reading")),
+                            ("two", named("dep.types.Reading")),
+                        ]),
+                    ),
+                ],
+            )],
+        );
+        let error = crate::diff_refs_with_contexts(&[&local], &[&local], &[], &[], &["podbuf"])
+            .unwrap_err();
+        let order: Vec<_> = error
+            .issues
+            .iter()
+            .map(|i| (i.path.as_str(), i.side))
+            .collect();
+        assert_eq!(
+            order,
+            [
+                ("app.api/Sample/first", crate::ContextSide::Old),
+                ("app.api/Sample/first", crate::ContextSide::New),
+                ("app.api/Sample/second", crate::ContextSide::Old),
+                ("app.api/Sample/second", crate::ContextSide::New),
+            ]
+        );
+    }
+
     fn typl_decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
         v2::Decl {
             limit: None,

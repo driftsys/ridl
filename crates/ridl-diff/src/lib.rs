@@ -27,6 +27,7 @@
 use ridl_ir::v2::{Package, System};
 
 mod classify;
+mod remote_inline;
 pub mod system;
 pub mod unit_verdict;
 mod walk;
@@ -270,6 +271,8 @@ declare_categories! {
         /// `<package>/<struct>/<field>` and an interaction's request, reply
         /// or fixed payload as `<package>/<interface>/<interaction>`.
         PodbufInlineAppend,
+        /// A remote struct held inline by an old consumer has a larger head.
+        PodbufRemoteInlineGrowth,
         /// An enum value, an enum-set flag or a union arm appended, compatible
         /// under the generic rule, after which the podbuf integer of the enum
         /// or the enum set or the tag of the union is a different integer, by
@@ -508,25 +511,111 @@ pub fn diff_refs_with(
     context: &[&Package],
     encodings: &[&str],
 ) -> DiffReport {
+    diff_refs_scoped(old, new, context, context, encodings)
+}
+
+/// The side whose remote declarations are unavailable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ContextSide {
+    Old,
+    New,
+}
+
+impl std::fmt::Display for ContextSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Old => "old",
+            Self::New => "new",
+        })
+    }
+}
+
+/// Missing evidence for a consumer-owned podbuf comparison.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ContextIssue {
+    pub path: String,
+    pub declaration: String,
+    pub side: ContextSide,
+}
+
+impl std::fmt::Display for ContextIssue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: {} context is missing {}",
+            self.path, self.side, self.declaration
+        )
+    }
+}
+
+/// An explicit podbuf comparison lacks its own side's remote evidence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContextError {
+    pub issues: Vec<ContextIssue>,
+}
+
+impl std::fmt::Display for ContextError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, issue) in self.issues.iter().enumerate() {
+            if index != 0 {
+                f.write_str("; ")?;
+            }
+            write!(f, "{issue}")?;
+        }
+        Ok(())
+    }
+}
+impl std::error::Error for ContextError {}
+
+/// Compares packages using independent source-side resolution scopes.
+/// Missing remote evidence prevents only an explicit podbuf judgment.
+/// Context packages resolve references without being compared themselves.
+/// Local packages take precedence over context packages with the same name.
+/// Growth is reported once per old consumer path and remote declaration;
+/// issues are sorted by consumer path, declaration, then side.
+pub fn diff_refs_with_contexts(
+    old: &[&Package],
+    new: &[&Package],
+    old_context: &[&Package],
+    new_context: &[&Package],
+    encodings: &[&str],
+) -> Result<DiffReport, ContextError> {
+    let old_scope: Vec<_> = old.iter().chain(old_context).copied().collect();
+    let new_scope: Vec<_> = new.iter().chain(new_context).copied().collect();
+    let (mut remote, issues) = remote_inline::compare(old, &old_scope, &new_scope, encodings);
+    if encodings.contains(&"podbuf") && !issues.is_empty() {
+        return Err(ContextError { issues });
+    }
+    let mut result = diff_refs_scoped(old, new, old_context, new_context, encodings);
+    result.changes.append(&mut remote);
+    Ok(report(result.changes))
+}
+
+fn diff_refs_scoped(
+    old: &[&Package],
+    new: &[&Package],
+    old_context: &[&Package],
+    new_context: &[&Package],
+    encodings: &[&str],
+) -> DiffReport {
     use std::collections::BTreeMap;
 
     use ridl_ir::v2::{members_of_unit, unit_of};
 
-    let scope: Vec<&Package> = new.iter().chain(context).copied().collect();
+    let scope: Vec<&Package> = new.iter().chain(new_context).copied().collect();
     let matching = walk::Matching::new(old, new);
 
     let old_by: BTreeMap<&str, &Package> =
         old.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
     let new_by: BTreeMap<&str, &Package> =
         new.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
-    // The old side as the podbuf rule reads it: the old packages, and the
-    // context packages the old side does not name, which stand for both
-    // sides.
+    // Old packages take precedence over their own context, independently
+    // of the new side's definitions.
     let old_scope: Vec<&Package> = old
         .iter()
         .copied()
         .chain(
-            context
+            old_context
                 .iter()
                 .copied()
                 .filter(|pkg| !old_by.contains_key(pkg.name.as_str())),
@@ -695,6 +784,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::DocOnly => "doc_only",
         Category::VisibilityChanged => "visibility_changed",
         Category::PodbufInlineAppend => "podbuf_inline_append",
+        Category::PodbufRemoteInlineGrowth => "podbuf_remote_inline_growth",
         Category::PodbufWidthChange => "podbuf_width_change",
         Category::PodbufStrictEnumAppend => "podbuf_strict_enum_append",
         Category::StrictEnumAppend => "strict_enum_append",
@@ -735,6 +825,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
             Some("compatible on the wire, may change the catalog hash")
         }
         Category::PodbufInlineAppend
+        | Category::PodbufRemoteInlineGrowth
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => Some("breaking under podbuf"),
         Category::DeclAdded

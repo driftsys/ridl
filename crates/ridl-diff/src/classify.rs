@@ -166,6 +166,7 @@ pub(crate) fn classify_in(
         // superseded by `StrictEnumAppend` and is no longer emitted; it keeps
         // its old verdict for a report that still names it.
         Category::PodbufInlineAppend
+        | Category::PodbufRemoteInlineGrowth
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => {
             if encodings.contains(&"podbuf") {
@@ -1512,6 +1513,14 @@ pub fn explain(category: Category) -> &'static str {
             "              consumer's build. The wire layout does not move, but the\n",
             "              consumer-visible guarantee narrows (ADR-0008 d14). Any\n",
             "              direction involving an unset visibility is breaking"
+        ),
+        Category::PodbufRemoteInlineGrowth => concat!(
+            "A remote struct held inline by an old consumer has a larger podbuf head.\n",
+            "The path belongs to the consumer; the values name the remote declaration\n",
+            "and its old and new head sizes. Producer-sized roots, array elements,\n",
+            "map entries and union arms may grow, but their inline members may not.\n",
+            "  breaking    with `--encoding podbuf`\n",
+            "  compatible  otherwise; listed under the heading \"breaking under podbuf\""
         ),
         Category::PodbufInlineAppend => concat!(
             "A struct field appended, compatible under the generic rule, to a\n",
