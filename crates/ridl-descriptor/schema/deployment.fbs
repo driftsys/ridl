@@ -1,0 +1,143 @@
+// The deployment descriptor: what one deployment of a system contains, with
+// the catalogs of its closure embedded
+// (docs/design/deployment-descriptor.md).
+//
+// Evolution is append-only. A field is only ever added at the END of its
+// table, so every field id already written keeps its meaning. Never remove,
+// reorder or retype a field; never renumber an enum member. A reader built
+// against an older schema ignores fields it does not know.
+//
+// Regenerate the Rust accessors after every edit: `cargo xtask descriptor-codegen`.
+
+namespace ridl.deployment;
+
+// Where the two endpoints of a link run relative to each other.
+enum Crossing : ubyte { SameMachine = 0, DifferentMachine = 1, OffBoard = 2 }
+
+// Which side of the system boundary the external party is on.
+enum SurfaceDirection : ubyte { ExternalConsumes = 0, ExternalOffers = 1 }
+
+// The value of an attribute: exactly one of the two fields is set. A flag
+// has no value table at all.
+table AttributeValue {
+  scalar: string;
+  list: [AttributeValue];
+}
+
+// A backend key of a namespace, as the IR carries it. The field `ns` holds the
+// namespace: `namespace` is a keyword of the FlatBuffers grammar and cannot
+// name a field.
+table Attribute {
+  ns: string (required);
+  key: string (required);
+  value: AttributeValue;
+}
+
+// One catalog of the closure, embedded whole. `bytes` is a catalog descriptor
+// (`ridl.descriptor.Catalog`, file identifier RDLC, schema/catalog.fbs). The
+// field does not carry the `nested_flatbuffer` attribute because that
+// attribute names a type of the same schema, and this schema does not include
+// catalog.fbs: the verifier checks the embedded buffer instead.
+table EmbeddedCatalog {
+  name: string (required);
+  hash: [ubyte] (required);
+  bytes: [ubyte] (required);
+}
+
+// An interface and its number in one catalog.
+table InterfaceKey {
+  catalog: string (required);
+  number: uint32;
+}
+
+// One interface of a region, with the service that owns it.
+table DeployedInterface {
+  catalog: string (required);
+  number: uint32;
+  name: string (required);
+  inline: bool;
+  provisional: bool;
+  service: string (required);
+}
+
+table Machine {
+  name: string (required);
+  external: bool;
+  labels: [string] (required);
+  attributes: [Attribute] (required);
+}
+
+table Component {
+  name: string (required);
+  implicit: bool;
+  external: bool;
+  instances: [string] (required);
+  labels: [string] (required);
+  attributes: [Attribute] (required);
+}
+
+// One placement of a component on a machine. `offers` lists the interfaces
+// whose slots the instance writes; `maps` lists the catalogs its component's
+// `requires` lines reach.
+table Instance {
+  component: string (required);
+  instance: string (required);
+  machine: string (required);
+  external: bool;
+  attributes: [Attribute] (required);
+  offers: [InterfaceKey] (required);
+  maps: [string] (required);
+}
+
+table Endpoint {
+  component: string (required);
+  instance: string (required);
+  machine: string (required);
+}
+
+table Link {
+  catalog: string (required);
+  number: uint32;
+  service: string (required);
+  consumer: Endpoint (required);
+  producer: Endpoint (required);
+  crossing: Crossing;
+  attributes: [Attribute] (required);
+}
+
+table Route {
+  catalog: string (required);
+  number: uint32;
+  ordinal: uint32;
+  interface: string (required);
+  member: string (required);
+  service: string (required);
+  producers: [Endpoint] (required);
+}
+
+// An external party on the system boundary: `link` is the index of the link
+// in `Deployment.links`.
+table Surface {
+  link: uint32;
+  direction: SurfaceDirection;
+}
+
+table Deployment {
+  version: uint32;
+  system: string (required);
+  name: string (required);
+  package: string (required);
+  catalogs: [EmbeddedCatalog] (required);
+  interfaces: [DeployedInterface] (required);
+  machines: [Machine] (required);
+  components: [Component] (required);
+  instances: [Instance] (required);
+  links: [Link] (required);
+  routes: [Route] (required);
+  surface: [Surface] (required);
+  system_attributes: [Attribute] (required);
+  attributes: [Attribute] (required);
+}
+
+root_type Deployment;
+file_identifier "RDLD";

@@ -378,12 +378,13 @@ and
 whose §4 holds the maintainer's eleven answers on the design's open items; the
 plan's first section lists every change.
 
-**The system descriptor is not here.** The design defines two artifacts; the
-per-deployment system descriptor embeds the catalog descriptors of its closure
-and waits for the rsdl lowering, which has landed (E6.16). E17.0 of
-[Epic 17](#epic-17--layout-inputs-for-backend-plugins) decided on 2026-10-05
-that it stays unbuilt: the per-deployment facts reach a backend through the
-codegen request's deployment section (ADR-0022 decision 11).
+**The system descriptor is not in this epic.** The design defines two artifacts;
+the per-deployment system descriptor embeds the catalog descriptors of its
+closure. E17.0 of [Epic 17](#epic-17--layout-inputs-for-backend-plugins) decided
+on 2026-10-05 that it stays unbuilt: the per-deployment facts reach a backend
+through the codegen request's deployment section (ADR-0022 decision 11). It was
+built afterwards, as the deployment descriptor (ADR-0022 decision 12,
+driftsys/ridl#1176).
 
 **Epic 15 landed first**, so the IR carries each interface's number and its
 provisional flag, and the descriptor copies them: plan Task 3, as re-baselined,

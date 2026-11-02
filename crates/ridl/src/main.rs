@@ -266,9 +266,12 @@ enum Command {
         #[arg(long, value_name = "NAME")]
         name: Option<String>,
     },
-    /// Print a catalog descriptor as strict JSON, after verifying it.
+    /// Print a catalog or deployment descriptor as strict JSON, after
+    /// verifying it.
     Describe {
-        /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
+        /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote,
+        /// or a `<package>.<Name>.deployment.binfb` file `ridl build --emit
+        /// deployment` wrote.
         path: PathBuf,
     },
     /// Copy every remote unit of the workspace's `[imports]` into `vendor/`
@@ -467,14 +470,37 @@ fn run_describe(path: &Path) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let catalog = match ridl_descriptor::verify(&bytes) {
-        Ok(catalog) => catalog,
-        Err(err) => {
-            eprintln!("error: {}: {err}", path.display());
-            return ExitCode::from(2);
-        }
+    // The file identifier decides which kind of descriptor this is. The
+    // deployment verifier also verifies every catalog the file embeds, so
+    // a damaged embedded catalog is refused here and never printed as
+    // `null`.
+    let is_deployment = bytes.get(4..8) == Some(&ridl_descriptor::deployment::FILE_IDENTIFIER[..]);
+    let (json, kind) = if is_deployment {
+        let deployment = match ridl_descriptor::deployment::verify(&bytes) {
+            Ok(deployment) => deployment,
+            Err(err) => {
+                eprintln!("error: {}: {err}", path.display());
+                return ExitCode::from(2);
+            }
+        };
+        (
+            ridl_descriptor::deployment::to_json(deployment),
+            "deployment descriptor",
+        )
+    } else {
+        let catalog = match ridl_descriptor::verify(&bytes) {
+            Ok(catalog) => catalog,
+            Err(err) => {
+                eprintln!("error: {}: {err}", path.display());
+                return ExitCode::from(2);
+            }
+        };
+        (
+            ridl_descriptor::describe::to_json(catalog),
+            "catalog descriptor",
+        )
     };
-    match ridl_descriptor::describe::to_json(catalog) {
+    match json {
         Ok(json) => {
             use std::io::Write as _;
             let text = serde_json::to_string_pretty(&json).expect("a JSON value serializes");
@@ -493,10 +519,7 @@ fn run_describe(path: &Path) -> ExitCode {
             }
         }
         Err(err) => {
-            eprintln!(
-                "error: {}: catalog descriptor is malformed: {err}",
-                path.display()
-            );
+            eprintln!("error: {}: {kind} is malformed: {err}", path.display());
             ExitCode::from(2)
         }
     }

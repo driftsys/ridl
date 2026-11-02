@@ -420,7 +420,8 @@ fn build_help_documents_every_emit_value() {
             "podbuf",
             "codegen-model",
             "codegen-request",
-            "catalog"
+            "catalog",
+            "deployment"
         ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
     );
@@ -569,7 +570,8 @@ fn every_emit_variant_is_classified() {
             | ridlc::Emit::Podbuf
             | ridlc::Emit::CodegenModel
             | ridlc::Emit::CodegenRequest
-            | ridlc::Emit::Catalog => false,
+            | ridlc::Emit::Catalog
+            | ridlc::Emit::Deployment => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
         assert_eq!(
@@ -603,7 +605,8 @@ fn every_emit_variant_names_its_intended_suffix() {
             | ridlc::Emit::Podbuf
             | ridlc::Emit::CodegenModel
             | ridlc::Emit::CodegenRequest
-            | ridlc::Emit::Catalog => None,
+            | ridlc::Emit::Catalog
+            | ridlc::Emit::Deployment => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
             ridlc::Emit::IrBinary => Some(".ir.binpb"),
@@ -686,7 +689,8 @@ fn every_emit_variant_names_its_intended_system_suffix() {
             | ridlc::Emit::Podbuf
             | ridlc::Emit::CodegenModel
             | ridlc::Emit::CodegenRequest
-            | ridlc::Emit::Catalog => None,
+            | ridlc::Emit::Catalog
+            | ridlc::Emit::Deployment => None,
             ridlc::Emit::IrJson => Some(".system.json"),
             ridlc::Emit::IrText => Some(".system.txtpb"),
             ridlc::Emit::IrBinary => Some(".system.binpb"),

@@ -192,6 +192,31 @@ const ALLOWED: &[Allowed] = &[
               `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/src/deployment.rs",
+        lines: 1,
+        why: "`verify` walking the deployment descriptor's own `interfaces` vector in a buffer, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-descriptor/src/deployment/describe.rs",
+        lines: 1,
+        why: "`to_json` reading the deployment descriptor's own `interfaces` vector through the planus accessor, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-descriptor/src/deployment/generated.rs",
+        lines: 3,
+        why: "the planus-generated accessors for the deployment descriptor's own `Deployment.interfaces` field, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-descriptor/src/deployment/lower.rs",
+        lines: 2,
+        why: "`lower` reading the interface lists of the codegen `v1::Deployment` regions, which are already resolved, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-descriptor/tests/deployment_lower.rs",
+        lines: 1,
+        why: "a test asserting the length of the lowered deployment descriptor's own `interfaces` field, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/src/describe.rs",
         lines: 1,
         why: "`to_json` reading the descriptor's own `interfaces` vector \

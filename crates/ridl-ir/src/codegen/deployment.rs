@@ -139,9 +139,31 @@ fn instances(system: &v2::System, deployment: &v2::Deployment) -> Vec<v1::Instan
                 external: component.is_some_and(|component| component.external),
                 offers,
                 maps,
+                attributes: placement.attributes.iter().map(attribute).collect(),
             }
         })
         .collect()
+}
+
+/// A backend key of the system IR, in the shape of the section.
+fn attribute(attribute: &v2::Attribute) -> v1::Attribute {
+    v1::Attribute {
+        namespace: attribute.namespace.clone(),
+        key: attribute.key.clone(),
+        value: attribute.value.as_ref().map(attribute_value),
+    }
+}
+
+fn attribute_value(value: &v2::AttributeValue) -> v1::AttributeValue {
+    let kind = value.kind.as_ref().map(|kind| match kind {
+        v2::attribute_value::Kind::Scalar(text) => v1::attribute_value::Kind::Scalar(text.clone()),
+        v2::attribute_value::Kind::List(list) => {
+            v1::attribute_value::Kind::List(v1::AttributeList {
+                items: list.items.iter().map(attribute_value).collect(),
+            })
+        }
+    });
+    v1::AttributeValue { kind }
 }
 
 /// One channel per (route, producer instance).
@@ -1661,6 +1683,108 @@ mod tests {
                     .collect::<Vec<_>>()
             );
         }
+    }
+
+    #[test]
+    fn an_instance_carries_its_placement_line_keys() {
+        let scalar = |text: &str| v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::Scalar(text.to_string())),
+        };
+        let mut system = system();
+        system.deployments[0].placements[0].attributes = vec![
+            v2::Attribute {
+                namespace: "shm".to_string(),
+                key: "service".to_string(),
+                value: Some(scalar("3")),
+            },
+            v2::Attribute {
+                namespace: "linux".to_string(),
+                key: "cpuset".to_string(),
+                value: Some(v2::AttributeValue {
+                    kind: Some(v2::attribute_value::Kind::List(v2::AttributeList {
+                        items: vec![scalar("0"), scalar("1")],
+                    })),
+                }),
+            },
+            v2::Attribute {
+                namespace: "linux".to_string(),
+                key: "realtime".to_string(),
+                value: None,
+            },
+        ];
+        let package = package();
+        let section =
+            lower_deployment(&system, "prod", &[&package]).expect("the deployment is named prod");
+        let value = |kind| Some(v1::AttributeValue { kind: Some(kind) });
+        assert_eq!(
+            section.instances[0].attributes,
+            [
+                v1::Attribute {
+                    namespace: "shm".to_string(),
+                    key: "service".to_string(),
+                    value: value(v1::attribute_value::Kind::Scalar("3".to_string())),
+                },
+                v1::Attribute {
+                    namespace: "linux".to_string(),
+                    key: "cpuset".to_string(),
+                    value: value(v1::attribute_value::Kind::List(v1::AttributeList {
+                        items: vec![
+                            v1::AttributeValue {
+                                kind: Some(v1::attribute_value::Kind::Scalar("0".to_string())),
+                            },
+                            v1::AttributeValue {
+                                kind: Some(v1::attribute_value::Kind::Scalar("1".to_string())),
+                            },
+                        ],
+                    })),
+                },
+                v1::Attribute {
+                    namespace: "linux".to_string(),
+                    key: "realtime".to_string(),
+                    value: None,
+                },
+            ]
+        );
+        assert!(section.instances[1].attributes.is_empty());
+    }
+
+    #[test]
+    fn a_list_nested_in_a_list_is_carried_whole() {
+        let scalar = |text: &str| v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::Scalar(text.to_string())),
+        };
+        let list = |items| v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::List(v2::AttributeList { items })),
+        };
+        let mut system = system();
+        system.deployments[0].placements[0].attributes = vec![v2::Attribute {
+            namespace: "linux".to_string(),
+            key: "groups".to_string(),
+            value: Some(list(vec![
+                scalar("a"),
+                list(vec![scalar("b"), scalar("c")]),
+            ])),
+        }];
+        let package = package();
+        let section =
+            lower_deployment(&system, "prod", &[&package]).expect("the deployment is named prod");
+        let carried = |value: &v1::AttributeValue| -> String {
+            fn text(value: &v1::AttributeValue) -> String {
+                match value.kind.as_ref().expect("a kind") {
+                    v1::attribute_value::Kind::Scalar(text) => text.clone(),
+                    v1::attribute_value::Kind::List(list) => {
+                        let items: Vec<String> = list.items.iter().map(text).collect();
+                        format!("[{}]", items.join(","))
+                    }
+                }
+            }
+            text(value)
+        };
+        let value = section.instances[0].attributes[0]
+            .value
+            .as_ref()
+            .expect("the key has a value");
+        assert_eq!(carried(value), "[a,[b,c]]");
     }
 
     /// The bytes of one section, for a comparison that covers every field.

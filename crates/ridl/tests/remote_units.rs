@@ -231,6 +231,63 @@ fn build_generates_the_remote_package_but_writes_no_snapshot_or_catalog_for_it()
     );
 }
 
+/// `ridl build --emit deployment` embeds the catalog descriptor of a remote
+/// unit that a region names, although the build writes no catalog file for
+/// that unit. The embedded bytes carry the unit's own catalog hash.
+#[test]
+fn a_remote_unit_catalog_is_embedded_in_the_deployment() {
+    let dir = TempDir::new("deployment");
+    let out = TempDir::new("deployment-out");
+    let stub = Stub::serving(unit_tar(&[
+        COMMON_UNIT[0],
+        (
+            "common.ridl",
+            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n\nservice veh.common.probes: Probe\n",
+        ),
+    ]));
+    let root = consumer(&dir, stub.url());
+    dir.write(
+        "app/system.rsdl",
+        "package app\n\nimport veh.common.Probe\n\nsystem Rig { Source, Sink }\n\ncomponent Source { offers veh.common.probes }\ncomponent Sink { requires Probe }\n\ndeployment Bench for Rig {\n  machine Host { Source, Sink }\n}\n",
+    );
+    let (code, _, stderr) = ridl(
+        &root,
+        dir.path(),
+        &[
+            "build",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+            "--emit",
+            "deployment",
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        !out.path().join("veh.common.catalog.binfb").exists(),
+        "no catalog file for a remote unit"
+    );
+    let bytes = std::fs::read(out.path().join("app.Bench.deployment.binfb")).unwrap();
+    let view = ridl_descriptor::deployment::verify(&bytes).expect("the descriptor verifies");
+    let json = ridl_descriptor::deployment::to_json(view).unwrap();
+    let names: Vec<&str> = json["catalogs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|catalog| catalog["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"veh.common"), "{names:?}");
+    let remote = json["catalogs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|catalog| catalog["name"] == "veh.common")
+        .unwrap();
+    assert!(
+        !remote["catalog"].is_null(),
+        "the embedded remote catalog verifies and prints"
+    );
+}
+
 /// The unit of the build test above, with `limits` appended to its manifest.
 fn probe_unit_with_limits(limits: &str) -> Vec<(&'static str, String)> {
     vec![

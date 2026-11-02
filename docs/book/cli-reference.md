@@ -72,7 +72,7 @@ Commands:
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
   new       Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
-  describe  Print a catalog descriptor as strict JSON, after verifying it
+  describe  Print a catalog or deployment descriptor as strict JSON, after verifying it
   vendor    Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
   help      Print this message or the help of the given subcommand(s)
 
@@ -662,6 +662,7 @@ Options:
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
+          - deployment:      The deployment descriptor an engine reads, written to `<deployment package>.<DeploymentName>.deployment.binfb` for every deployment the lowered system holds: a FlatBuffers file of the deployment's instances, links, routes and machines, with the catalog descriptor of every region embedded byte for byte
           
           [default: rust]
 
@@ -700,6 +701,19 @@ When no name can be right, the message says which reason it is — the workspace
 declares no system, or the system declares no deployment. A deployment that an
 `RSDL-7xx` error removed from the system is not unknown either: the build
 reports that error and exits 1.
+
+**The deployment descriptor.** `--emit deployment` writes one file per
+deployment of the lowered system, named
+`<deployment package>.<DeploymentName>.deployment.binfb`, whatever `--deployment`
+selects. Each file holds the deployment's instances, links, routes and machines,
+and embeds the catalog descriptor of every region of the system byte for byte,
+including the catalog of a remote unit, for which the build writes no
+`<unit>.catalog.binfb` file. An embedded descriptor is the same bytes the build
+writes for `--emit catalog`, so the two emits state one fact. A deployment that
+an `RSDL-7xx` error removed from the system gets no file, the build exits 1 for
+that error, and the other deployments are written. A single-file build, and a
+workspace with no `system`, write no deployment descriptor. [`ridl
+describe`](#ridl-describe) prints the file.
 
 **The compatible catalogs.** When the build writes a catalog descriptor or
 generates code, `ridl build` reads `.ridl/baseline/` at the workspace root, as
@@ -2309,12 +2323,12 @@ ridl describe --help
 ```
 
 ```text
-Print a catalog descriptor as strict JSON, after verifying it
+Print a catalog or deployment descriptor as strict JSON, after verifying it
 
 Usage: ridl describe <PATH>
 
 Arguments:
-  <PATH>  The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote
+  <PATH>  The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote, or a `<package>.<Name>.deployment.binfb` file `ridl build --emit deployment` wrote
 
 Options:
   -h, --help  Print help
@@ -2323,6 +2337,15 @@ Options:
 Prints a catalog descriptor written by `ridl build --emit catalog` as JSON after
 verifying it; a file that is not a descriptor, or is malformed, is rejected as a
 whole with exit code 2.
+
+The command also prints a deployment descriptor written by
+`ridl build --emit deployment`, which it tells from a catalog descriptor by the
+file identifier in bytes 4 to 8. A deployment descriptor embeds the catalog
+descriptor of every region, byte for byte, and each embedded descriptor is
+verified as a catalog descriptor too: a file with a damaged embedded catalog is
+rejected as a whole with exit code 2, and the message names that catalog. The
+printed `catalogs` list gives each embedded catalog's name, hash, the length of
+its bytes and its own JSON view.
 
 The transcript below is abridged: it is the output for the test corpus in
 `crates/ridl/tests/baseline-corpus`, with each `...` line standing for lines
@@ -2394,10 +2417,11 @@ ridl describe out/corpus.baseline.catalog.binfb
 ```
 
 **Exit codes.** 0 when the descriptor was printed. 2 for a missing or
-unreadable path, a file that is not a catalog descriptor, a version this
-toolchain does not read, a malformed buffer, or an I/O failure writing to
-stdout (a pipe whose reader has gone); the message names the path and the
-cause. There is no exit 1: `ridl describe` answers no question that can come
+unreadable path, a file that is neither a catalog descriptor nor a deployment
+descriptor, a version this
+toolchain does not read, a malformed buffer, a deployment descriptor with a
+damaged embedded catalog, or an I/O failure writing to stdout (a pipe whose
+reader has gone); the message names the path and the cause. There is no exit 1: `ridl describe` answers no question that can come
 back negative. The exit-0 outcome, the missing path, the foreign file, a
 malformed buffer (three fixtures), a version the toolchain does not read, and the write
 failure on stdout are confirmed against the built binary by
@@ -2609,7 +2633,7 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `podbuf`, `codegen-model`, `codegen-request`, `catalog`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `podbuf`, `codegen-model`, `codegen-request`, `catalog`, `deployment`
 
           Possible values:
           - rust:            Idiomatic Rust source, written to `<base>.rs`
@@ -2623,6 +2647,7 @@ Options:
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
+          - deployment:      The deployment descriptor an engine reads, written to `<deployment package>.<DeploymentName>.deployment.binfb` for every deployment the lowered system holds: a FlatBuffers file of the deployment's instances, links, routes and machines, with the catalog descriptor of every region embedded byte for byte
           
           [default: rust]
 
@@ -2694,7 +2719,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
 | `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written |
-| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
+| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
 | `ridl vendor` | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108) | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/`, or a fetch failure (MANI-101) |
 
 This table is this repository's own taxonomy, recorded in

@@ -91,12 +91,18 @@ choices, see [`../decisions/`](../decisions/).
   generated planus accessors, what a catalog contains, the catalog hash and the
   three artifacts that carry it, the size state per payload and encoding,
   verification before access, `ridl describe`, the port's catalog check, and the
-  design's decisions D-1 to D-10 with what is not built (the system descriptor
-  among them). The decisions behind its choices are
-  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
+  design's decisions D-1 to D-10 with what is not built. The decisions behind
+  its choices are [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 5 as amended 2026-10-03, and
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 8.
+- **deployment-descriptor.md** — the FlatBuffers deployment descriptor per
+  deployment as built: the `RDLD` file `--emit deployment` writes, with the
+  catalog descriptors of its closure embedded, what it contains, how a runtime
+  identifies an instance by its own backend key, verification before access, and
+  where it differs from the design. The decisions behind it are
+  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decisions 11
+  and 12.
 - **codegen-plugins.md** — the backend contract
   `generate(CodegenRequest) → CodegenResponse`, its in-process host over every
   in-tree backend, the process host behind `--plugin` (`ridlc-gen-<language>` on

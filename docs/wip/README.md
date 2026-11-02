@@ -123,6 +123,13 @@ L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
 #328 stays open.
 
+The deployment descriptor design and plan
+(`2026-11-01-deployment-descriptor-{design,plan}.md`) were archived on
+2026-11-02, once the work landed (driftsys/ridl#1176);
+[`../design/deployment-descriptor.md`](../design/deployment-descriptor.md) and
+decision 12 of [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) are
+their durable records.
+
 The release 0.11 plan (`2026-10-15-release-0.11-plan.md`) was archived on
 2026-10-19, once 0.11.0 was released and every issue it names was closed (#880,
 #884, #925, #919, #863, #874, #864, #877). Its durable records are the pull

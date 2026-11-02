@@ -24,6 +24,12 @@ ridl.codegen.v1.ArmHead.foreign = 3 optional uint32
 ridl.codegen.v1.ArrayType.element = 1 singular ridl.codegen.v1.Type
 ridl.codegen.v1.ArrayType.max = 3 singular uint64
 ridl.codegen.v1.ArrayType.min = 2 singular uint64
+ridl.codegen.v1.Attribute.key = 2 singular string
+ridl.codegen.v1.Attribute.namespace = 1 singular string
+ridl.codegen.v1.Attribute.value = 3 singular ridl.codegen.v1.AttributeValue
+ridl.codegen.v1.AttributeList.items = 1 repeated ridl.codegen.v1.AttributeValue
+ridl.codegen.v1.AttributeValue.list = 11 singular ridl.codegen.v1.AttributeList oneof=kind
+ridl.codegen.v1.AttributeValue.scalar = 10 singular string oneof=kind
 ridl.codegen.v1.BackendOption.key = 1 singular string
 ridl.codegen.v1.BackendOption.value = 2 singular string
 ridl.codegen.v1.Binding.envelope_bytes = 4 optional uint32
@@ -317,6 +323,7 @@ ridl.codegen.v1.InitSource.INIT_SOURCE_DECLARED = 1
 ridl.codegen.v1.InitSource.INIT_SOURCE_DERIVED = 2
 ridl.codegen.v1.InitSource.INIT_SOURCE_NONE = 3
 ridl.codegen.v1.InitSource.INIT_SOURCE_UNSPECIFIED = 0
+ridl.codegen.v1.Instance.attributes = 7 repeated ridl.codegen.v1.Attribute
 ridl.codegen.v1.Instance.component = 1 singular string
 ridl.codegen.v1.Instance.external = 4 singular bool
 ridl.codegen.v1.Instance.instance = 2 singular string

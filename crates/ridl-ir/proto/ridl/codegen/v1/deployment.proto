@@ -86,6 +86,34 @@ message Instance {
   repeated InterfaceKey offers = 5;
   // The catalogs the instance requires into: the regions it maps.
   repeated string maps = 6;
+  // The backend keys of the placement line that placed the instance, as
+  // declared (rsdl §5).
+  repeated Attribute attributes = 7;
+}
+
+// A backend key as declared (rsdl §5): `namespace.key`, a flag or a value,
+// never interpreted by the compiler. The shape of the IR's `Attribute`.
+message Attribute {
+  // `shm` in `shm.service`.
+  string namespace = 1;
+  // `service` in `shm.service`.
+  string key = 2;
+  // Absent for a flag.
+  AttributeValue value = 3;
+}
+
+// An attribute value as written: the text of one literal or name, or a
+// parenthesised list.
+message AttributeValue {
+  oneof kind {
+    string scalar = 10;
+    AttributeList list = 11;
+  }
+}
+
+// The items of a parenthesised attribute value, in written order.
+message AttributeList {
+  repeated AttributeValue items = 1;
 }
 
 // A placed instance, as the producer of a channel.

@@ -440,9 +440,10 @@ facts. The chapter [The catalog descriptor](catalog-descriptor.md) describes
 the file for its readers, and the [catalog descriptor record][catalog] gives
 its byte-level details.
 
-A system descriptor, a file per deployment, is not built
-([catalog descriptor record, "Not built"][not-built]). The request's deployment
-section carries those facts to a plugin at build time.
+The deployment descriptor, a file per deployment, carries the deployment's facts
+to a runtime ([deployment descriptor record][deployment]). The request's
+deployment section carries the same deployment's facts to a plugin at build
+time; the descriptor leaves out the sizing values that the section holds.
 
 ## What is not available yet
 
@@ -481,7 +482,7 @@ section carries those facts to a plugin at build time.
 [podbuf-projection]: https://github.com/driftsys/ridl/blob/main/docs/design/codegen-plugins.md#the-podbuf-projection
 [catalog]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md
 [size-states]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#the-size-states
-[not-built]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#not-built
+[deployment]: https://github.com/driftsys/ridl/blob/main/docs/design/deployment-descriptor.md
 [face-check]: https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-catalog-check
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md

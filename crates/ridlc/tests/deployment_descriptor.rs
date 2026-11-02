@@ -1,0 +1,269 @@
+//! `ridlc build --emit deployment`: one deployment descriptor per lowered
+//! deployment, with the catalog descriptors of its regions embedded.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use ridl_descriptor::deployment;
+
+fn cabin() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin")
+}
+
+/// Runs `ridlc build <entry> --out-dir <out> --emit <emits>` and returns
+/// `(exit_code, stderr)`.
+fn build(entry: &Path, out: &Path, emits: &str) -> (i32, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_ridlc"))
+        .args(["build".as_ref(), entry.as_os_str()])
+        .args(["--out-dir".as_ref(), out.as_os_str()])
+        .args(["--emit", emits])
+        .output()
+        .expect("the ridlc binary must run");
+    (
+        output.status.code().expect("the process exits with a code"),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+/// The names of the files in `dir` that end with `suffix`, sorted.
+fn files_ending(dir: &Path, suffix: &str) -> Vec<String> {
+    let mut found: Vec<String> = std::fs::read_dir(dir)
+        .expect("the output directory exists")
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(suffix))
+        .collect();
+    found.sort();
+    found
+}
+
+/// A copy of the cabin sources in a temporary directory, with `extra` added
+/// to its `system.rsdl`.
+fn cabin_copy(extra: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["cabin.ridl", "ridl.toml", "system.rsdl"] {
+        std::fs::copy(cabin().join(name), dir.path().join(name)).unwrap();
+    }
+    let system = dir.path().join("system.rsdl");
+    let mut text = std::fs::read_to_string(&system).unwrap();
+    text.push_str(extra);
+    std::fs::write(&system, text).unwrap();
+    dir
+}
+
+#[test]
+fn cabin_writes_one_descriptor_per_deployment() {
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(&cabin(), out.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        files_ending(out.path(), deployment::FILE_SUFFIX),
+        ["veh.cabin.Bench.deployment.binfb"]
+    );
+
+    let bytes = std::fs::read(out.path().join("veh.cabin.Bench.deployment.binfb")).unwrap();
+    assert_eq!(&bytes[4..8], b"RDLD");
+    let view = deployment::verify(&bytes).expect("the descriptor verifies");
+    let json = deployment::to_json(view).expect("the descriptor prints");
+    assert_eq!(json["name"], "Bench");
+    assert_eq!(json["package"], "veh.cabin");
+    let instances = json["instances"].as_array().unwrap();
+    let climate = instances
+        .iter()
+        .find(|instance| instance["component"] == "veh.cabin.Climate")
+        .expect("the Climate instance is described");
+    let interfaces = json["interfaces"].as_array().unwrap();
+    let offered: Vec<&str> = climate["offers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|key| {
+            interfaces
+                .iter()
+                .find(|interface| {
+                    interface["catalog"] == key["catalog"] && interface["number"] == key["number"]
+                })
+                .expect("an offer names a deployed interface")["name"]
+                .as_str()
+                .unwrap()
+        })
+        .collect();
+    assert!(offered.contains(&"Cabin"), "{offered:?}");
+}
+
+#[test]
+fn the_embedded_catalog_equals_the_standalone_file() {
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(&cabin(), out.path(), "catalog,deployment");
+    assert_eq!(code, 0, "{stderr}");
+    let bytes = std::fs::read(out.path().join("veh.cabin.Bench.deployment.binfb")).unwrap();
+    let view = deployment::verify(&bytes).unwrap();
+    let json = deployment::to_json(view).unwrap();
+    let catalogs = json["catalogs"].as_array().unwrap();
+    assert!(!catalogs.is_empty());
+    for catalog in catalogs {
+        let name = catalog["name"].as_str().unwrap();
+        let standalone = std::fs::read(out.path().join(format!("{name}.catalog.binfb"))).unwrap();
+        assert_eq!(catalog["bytes_len"], standalone.len(), "{name}");
+        // The embedded bytes are the standalone file: a window of the
+        // deployment buffer equals it.
+        assert!(
+            bytes.windows(standalone.len()).any(|w| w == standalone),
+            "the deployment embeds {name}.catalog.binfb unchanged"
+        );
+    }
+}
+
+#[test]
+fn the_deployment_descriptor_does_not_change_the_catalog_file() {
+    let alone = tempfile::tempdir().unwrap();
+    let both = tempfile::tempdir().unwrap();
+    assert_eq!(build(&cabin(), alone.path(), "catalog").0, 0);
+    assert_eq!(build(&cabin(), both.path(), "catalog,deployment").0, 0);
+    assert_eq!(
+        std::fs::read(alone.path().join("veh.cabin.catalog.binfb")).unwrap(),
+        std::fs::read(both.path().join("veh.cabin.catalog.binfb")).unwrap()
+    );
+}
+
+#[test]
+fn every_deployment_gets_its_own_descriptor() {
+    let dir = cabin_copy(
+        "\n/// A second deployment with everything on one machine.\n\
+         deployment Single for Vehicle {\n  machine All { Climate, Panel, Telemetry }\n}\n",
+    );
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(dir.path(), out.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        files_ending(out.path(), deployment::FILE_SUFFIX),
+        [
+            "veh.cabin.Bench.deployment.binfb",
+            "veh.cabin.Single.deployment.binfb"
+        ]
+    );
+
+    // Each file holds its own deployment: its machines, its placements and
+    // the crossings of its links differ.
+    let read = |name: &str| {
+        let bytes = std::fs::read(out.path().join(name)).unwrap();
+        deployment::to_json(deployment::verify(&bytes).unwrap()).unwrap()
+    };
+    let machines = |json: &serde_json::Value| -> Vec<String> {
+        json["machines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|machine| machine["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let machine_of = |json: &serde_json::Value, component: &str| -> String {
+        json["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|instance| instance["component"] == component)
+            .expect("the component is placed")["machine"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let crossings = |json: &serde_json::Value| -> Vec<String> {
+        json["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|link| link["crossing"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let bench = read("veh.cabin.Bench.deployment.binfb");
+    let single = read("veh.cabin.Single.deployment.binfb");
+    assert_eq!(bench["name"], "Bench");
+    assert_eq!(single["name"], "Single");
+    assert_eq!(machines(&bench), ["Hpc", "Gateway"]);
+    assert_eq!(machines(&single), ["All"]);
+    assert_eq!(machine_of(&bench, "veh.cabin.Telemetry"), "Gateway");
+    assert_eq!(machine_of(&single, "veh.cabin.Telemetry"), "All");
+    assert!(crossings(&bench).iter().any(|c| c == "DifferentMachine"));
+    assert!(crossings(&single).iter().all(|c| c == "SameMachine"));
+}
+
+#[test]
+fn no_system_writes_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::copy(cabin().join("cabin.ridl"), dir.path().join("cabin.ridl")).unwrap();
+    std::fs::copy(cabin().join("ridl.toml"), dir.path().join("ridl.toml")).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(dir.path(), out.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert!(files_ending(out.path(), deployment::FILE_SUFFIX).is_empty());
+}
+
+#[test]
+fn a_system_with_no_deployment_writes_no_file() {
+    // The cabin system and its components, without the `deployment` block.
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["cabin.ridl", "ridl.toml"] {
+        std::fs::copy(cabin().join(name), dir.path().join(name)).unwrap();
+    }
+    let system = std::fs::read_to_string(cabin().join("system.rsdl")).unwrap();
+    let cut = system
+        .find("/// The bench deployment")
+        .expect("the cabin system declares a deployment");
+    std::fs::write(dir.path().join("system.rsdl"), &system[..cut]).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(dir.path(), out.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert!(files_ending(out.path(), deployment::FILE_SUFFIX).is_empty());
+}
+
+#[test]
+fn a_blocked_deployment_writes_no_file() {
+    let dir = cabin_copy(
+        "\n/// Leaves Telemetry on no machine.\n\
+         deployment Partial for Vehicle {\n  machine Hpc { Climate, Panel }\n}\n",
+    );
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(dir.path(), out.path(), "deployment");
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("RSDL-701"), "{stderr}");
+    // The error blocks its own deployment only: the sound one is written.
+    assert_eq!(
+        files_ending(out.path(), deployment::FILE_SUFFIX),
+        ["veh.cabin.Bench.deployment.binfb"]
+    );
+}
+
+/// A system with one component and one deployment, in one file.
+const LONE: &str = "package solo\n\
+    /// The world.\nsystem World { Alpha }\n\
+    /// The only component.\ncomponent Alpha {}\n\
+    /// The lab.\ndeployment Lab for World {\n  /// One machine.\n  machine One { Alpha }\n}\n";
+
+#[test]
+fn single_file_mode_writes_no_deployment_descriptor() {
+    // The same declarations write a descriptor when the entry is a package
+    // with a manifest, so the missing file below is the single-file rule and
+    // not an absent system.
+    let package = tempfile::tempdir().unwrap();
+    std::fs::write(package.path().join("lone.rsdl"), LONE).unwrap();
+    std::fs::write(
+        package.path().join("ridl.toml"),
+        "[package]\nname = \"solo\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    let written = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(package.path(), written.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        files_ending(written.path(), deployment::FILE_SUFFIX),
+        ["solo.Lab.deployment.binfb"]
+    );
+
+    let alone = tempfile::tempdir().unwrap();
+    let file = alone.path().join("lone.rsdl");
+    std::fs::write(&file, LONE).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(&file, out.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert!(files_ending(out.path(), deployment::FILE_SUFFIX).is_empty());
+}
