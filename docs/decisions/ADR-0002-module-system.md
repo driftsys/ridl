@@ -411,17 +411,24 @@ name and the file path, and fail the command; its Warnings and Infos are dropped
 before any `[lints]` level is applied, and the consumer's `[lints]` do not apply
 to it. Its packages are given to the code backends and generated like a
 member's; no IR snapshot, catalog, `interfaces.lock`, property run or diff side
-is produced for it, and `ridl fmt` never touches it. `internal` declarations of
-a remote unit are not visible to the consumer. A remote package is reached
-through the key that pins it: from a member, through the member's own
-`[imports]` (step 2) or the workspace `[imports]` (step 3), so a sibling
-member's pin is never visible. A package of a remote unit resolves a reference
-through step 1, which finds the consumer's workspace members and the packages of
-its own unit, then through its own `[imports]` (step 2); the workspace
-`[imports]` (step 3) apply to workspace members only, so a remote unit never
-uses a remote unit its own manifest does not declare. Step 1 finds the
-consumer's members so that the cycle check across the boundary sees both sides.
-A qualified reference and a doc link apply the same visibility as an `import`.
+is produced for it, and `ridl fmt` never touches it. _Amended 2026-11-02,
+driftsys/ridl#1163:_ baseline publication retains complete reached remote
+packages and verified owning-unit URL/tree pins as distinct context evidence,
+without making them owned snapshots or compared dependency contracts. The
+[CLI reference](../book/cli-reference.md#baseline-context) owns that envelope;
+[ADR-0031 decision 13](ADR-0031-podbuf-projection-rules.md) owns its use in
+side-specific comparisons. Resolver precedence and lockfile verification stay as
+specified here. `internal` declarations of a remote unit are not visible to the
+consumer. A remote package is reached through the key that pins it: from a
+member, through the member's own `[imports]` (step 2) or the workspace
+`[imports]` (step 3), so a sibling member's pin is never visible. A package of a
+remote unit resolves a reference through step 1, which finds the consumer's
+workspace members and the packages of its own unit, then through its own
+`[imports]` (step 2); the workspace `[imports]` (step 3) apply to workspace
+members only, so a remote unit never uses a remote unit its own manifest does
+not declare. Step 1 finds the consumer's members so that the cycle check across
+the boundary sees both sides. A qualified reference and a doc link apply the
+same visibility as an `import`.
 
 ### 6. Cycles
 

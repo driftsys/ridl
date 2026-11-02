@@ -48,6 +48,10 @@ ridl baseline --help optional
 ridl baseline --help switch
 ridl baseline --out <DIR>
 ridl baseline --out optional
+ridl baseline --repair-context optional
+ridl baseline --repair-context switch
+ridl baseline --reset-history optional
+ridl baseline --reset-history switch
 ridl baseline -h switch
 ridl baseline arg 1 <PATH> optional
 ridl baseline arg 1 default .

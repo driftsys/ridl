@@ -144,6 +144,28 @@ fail `ridl check`, so no source that compiled before stops compiling.
 RIDL-157 reports the case, for every kind, and an error has no level. TYPL-116
 `bound-above-transfer` is the one lint that starts at `warn`.
 
+**Amended 2026-11-02 — policy-only baseline and diff surfaces, from
+driftsys/ridl#1163.** The owner explicitly approved complete reached remote IR
+in baseline context, the `podbuf_remote_inline_growth` category, explicit podbuf
+cannot-judge exit 2, and affected-history invalidation even when a hash is
+unchanged. This changes policy-frozen baseline and CLI contracts under decisions
+1, 3 and 4. Those surfaces have no dedicated dump row to remove; no unrelated
+row is removed or baseline weakened. The two optional recovery flags add CLI
+dump lines. Wire layout, canonical catalog-hash inputs and the IR package schema
+stay unchanged.
+
+Source judgment, baseline enrichment and repair/reset must release together in a
+declared pre-1.0 minor release, with target and minimum supporting tool release
+0.15.0 after 0.14, never a 0.14.x patch. Version pins and publication remain
+separate release work. The
+[stability chapter](../book/stability.md#remote-inline-compatibility-adoption)
+owns adoption and release-note requirements;
+[ADR-0031](ADR-0031-podbuf-projection-rules.md) owns the comparison/history
+decisions and the [CLI reference](../book/cli-reference.md#baseline-context)
+owns the artifact and recovery contract. This approval covers only these
+assessed changes; passing dump checks does not approve other policy-frozen
+changes.
+
 ## Context
 
 Until 0.9.x, a breaking change could land in any release. 0.10.0 is the first

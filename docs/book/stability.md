@@ -79,6 +79,36 @@ Its reason is recorded in the stability policy.
 A break can only land in 0.11 or a later release, and that release states it.
 The releases of 0.9.x and earlier are not covered by this promise.
 
+## Remote inline compatibility adoption
+
+On 2026-11-02 the owner approved the baseline evidence and diff-contract changes
+for remote inline podbuf growth (driftsys/ridl#1163), under
+[ADR-0029](../decisions/ADR-0029-stability-policy.md). They must ship together in
+a declared pre-1.0 minor release: source comparisons, enriched baseline evidence,
+and explicit repair/reset. The target and minimum supporting tool release is
+**0.15.0**, following 0.14. This is a release requirement, not a claim that
+0.15.0 is published; repository version pins remain unchanged until separate
+release preparation. These changes must not ship in a 0.14.x patch.
+
+The assessed surfaces are `.ridl/baseline`'s new version-1 `context.json`, the
+`podbuf_remote_inline_growth` category, exit 2 when explicit podbuf comparison
+cannot establish compatibility, and affected catalog-history handling even for
+unchanged hashes. The optional recovery flags are additive CLI surface entries.
+The baseline format, diff categories and failure behavior are policy-frozen;
+passing generated dump checks alone does not approve their changes. No frozen
+wire layout, canonical catalog-hash input or IR package protocol changes.
+
+Use RIDL 0.15.0 or later for enriched compatibility decisions. An older tool may
+ignore the context file and continue running, but cannot establish the new
+historical comparison. Legacy absence never licenses using today's remote pin
+as historical evidence. Follow the
+[CLI migration and recovery procedure](cli-reference.md#baseline-publication-and-recovery);
+it defines what repair can verify, when reset is needed and which prior files
+are preserved. Neither mode certifies older carried hashes. Release notes must
+state this minimum, the evidence/category/failure changes and the recovery
+procedure. After 1.0 an incompatible public-contract change requires a major
+release.
+
 ## How the promise is checked
 
 The repository checks each frozen surface that has a recorded baseline against

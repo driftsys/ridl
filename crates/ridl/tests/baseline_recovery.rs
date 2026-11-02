@@ -1,4 +1,5 @@
 //! Explicit recovery preserves historical artifacts and publication guards.
+mod cli_reference_support;
 mod remote_support;
 use remote_support::{Stub, TempDir, ridl, unit_tar};
 use std::collections::BTreeMap;
@@ -49,6 +50,34 @@ fn inventory(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut files = BTreeMap::new();
     visit(dir, dir, &mut files);
     files
+}
+// Run the reference's recovery command forms against real source and output
+// directories; dropping --out would recover the wrong baseline and fail the
+// existing preservation and history assertions.
+fn recovery_example(flag: &str, source: &Path, baseline: &Path) -> Vec<String> {
+    let page = cli_reference_support::page("cli-reference.md");
+    let blocks = cli_reference_support::fences(&page);
+    let commands: Vec<_> = blocks
+        .iter()
+        .filter(|block| block.info == "sh")
+        .flat_map(|block| block.body.lines())
+        .map(|line| line.split_whitespace().collect::<Vec<_>>())
+        .filter(|args| args.starts_with(&["ridl", "baseline"]) && args.contains(&flag))
+        .collect();
+    assert_eq!(
+        commands.len(),
+        1,
+        "one executable recovery example for {flag}"
+    );
+    commands[0]
+        .iter()
+        .skip(1)
+        .map(|arg| match *arg {
+            "HISTORICAL_SOURCE" | "CURRENT_SOURCE" => source.to_str().unwrap().to_string(),
+            "BASELINE" => baseline.to_str().unwrap().to_string(),
+            other => other.to_string(),
+        })
+        .collect()
 }
 fn context(dir: &Path) -> ridlc::baseline_context::BaselineContext {
     let local =
@@ -103,7 +132,13 @@ fn legacy_baseline_reset_unblocks_diff_and_preserves_prior_bytes() {
         2,
     );
     command(dir.path(), home.path(), &["baseline"], 2);
-    let stderr = command(dir.path(), home.path(), &["baseline", "--reset-history"], 0);
+    let args = recovery_example("--reset-history", dir.path(), &baseline);
+    let stderr = command(
+        dir.path(),
+        home.path(),
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+        0,
+    );
     let backup = dir.path().join(".ridl/baseline.previous.1");
     assert!(stderr.contains(backup.to_str().unwrap()));
     assert_eq!(inventory(&backup), prior);
@@ -499,16 +534,11 @@ fn repair_from_historical_source_with_explicit_output_discards_uncertified_histo
     .unwrap();
     let original = inventory(target.path());
     let source = inventory(dir.path());
+    let args = recovery_example("--repair-context", dir.path(), target.path());
     let stderr = command(
         home.path(),
         home.path(),
-        &[
-            "baseline",
-            dir.path().to_str().unwrap(),
-            "--repair-context",
-            "--out",
-            target.path().to_str().unwrap(),
-        ],
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
         0,
     );
     let name = target.path().file_name().unwrap().to_str().unwrap();

@@ -96,7 +96,7 @@ fn finish_backup_with(
         );
     } else if let Err(err) = remove(backup) {
         eprintln!(
-            "warning: baseline published, but cannot remove transaction backup {}: {err}; backup retained",
+            "warning: baseline published, but cannot remove transaction backup {}: {err}; cleanup incomplete, inspect remaining files",
             backup.display()
         );
     }

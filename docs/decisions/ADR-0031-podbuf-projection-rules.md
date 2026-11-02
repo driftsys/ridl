@@ -28,6 +28,18 @@ and open item 1 is closed.
 open declaration, from driftsys/ridl#1168.** Decision 12 carries a second dated
 note: Q-2 is lifted and RIDL-158 is retired; open item 1 is reworded.
 
+**Amended 2026-11-02 — decisions 10 and 13, remote inline growth and historical
+context, from driftsys/ridl#1163.** Old and new layouts use separate evidence. A
+pin-only growth is attributed to its old consumer holder. Baselines retain
+complete reached remote IR separately from local snapshots; missing evidence
+requires explicit repair or reset before affected histories can continue. The
+owner approved the baseline-format, category and failure-contract changes for a
+declared pre-1.0 minor release, with source comparisons, enrichment and recovery
+released together. [ADR-0029](ADR-0029-stability-policy.md) records the
+stability assessment; the
+[CLI reference](../book/cli-reference.md#baseline-context) owns the versioned
+artifact and operational contract.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -662,15 +674,32 @@ a field is appended.
     ordinary `decl_added` line alone; a field that starts in the pads and ends
     past the old size does not fit, and is a break. When several fields are
     appended at once, `ridl diff` draws `podbuf_inline_append` for each field
-    that does not fit and for none that does. A head the law refuses on either
-    side — the new declaration, or the old one, when the struct reaches a type
-    the old side does not hold — is read as grown, which keeps the conservative
-    verdict (decision 13, the 2026-10-31 amendment from driftsys/ridl#1141).
+    that does not fit and for none that does. The legacy shared-context entry
+    points read an unmeasurable head as grown. _Amended 2026-11-02:_ the checked
+    CLI/MCP entry points report missing remote evidence separately and refuse an
+    explicit podbuf judgment; they never establish old layouts from current
+    context (decision 13).
 
     _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
     to a struct held inline was a break, on holders of the new side. The two
     narrowings above (the head must grow, and only an old holder counts) are the
     amendment.
+
+    **Remote inline growth (Sebastien, 2026-11-02).** A remote struct held
+    inline by an old consumer cannot grow its head without changing consumer
+    bytes, even when the consumer declarations are unchanged and only an import
+    pin moves. Compare the old and new computed sizes in their own package
+    contexts, including transitive remote references. Emit
+    `podbuf_remote_inline_growth` once per old consumer path and remote
+    declaration, in deterministic path order. The path belongs to the consumer;
+    before/after values identify the remote declaration and sizes. Pin
+    provenance is retained separately in baseline context. New holders have no
+    published copy. Producer-sized boundaries retain their existing rule: growth
+    of the root, array element, map entry or union arm alone is not inline
+    growth, but inline members within them remain covered. Equal-size pad-fit
+    growth draws no line. Equal-size remote layout changes, shrinkage and
+    general dependency semantic comparison remain deferred. This adds no podbuf
+    layout or wire-hash change.
 
     **The inline-use rule, as built (builder's call).** `ridl diff` finds an
     inline use by asking the layout law what the encoder lays out inline, so the
@@ -806,25 +835,26 @@ a field is appended.
 
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
-      compatible change as compatible. Two changes are judged by encoding, all
+      compatible change as compatible. Three changes are judged by encoding, all
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
       otherwise: the append that grows an inline struct, the category
-      `podbuf_inline_append`; and the append that changes the podbuf integer of
-      an enum, an enum set or a union's tag, the category `podbuf_width_change`,
-      reported once per declaration with the old and the new integer. The append
-      to an enum or enum set that is not `open` is not judged by encoding: it is
-      `strict_enum_append`, reported once per declaration and breaking always
-      (decision 12, note of 2026-11-01), and it draws no `podbuf_width_change`
-      line, because that rule reads only the appends that are compatible. The
-      two rules are stated in decision 10; `ridl diff --explain <category>`
-      states each in full. The compatible verdict without podbuf holds under
-      proto3; an enum-set flag that widens the integer also widens the enum
-      set's FlatBuffers scalar, which `ridl diff` does not report yet
-      (driftsys/ridl#1120). An appended union arm that keeps the tag is reported
-      as the generic rule judges it, compatible. `ridl diff --encoding <name>`
-      and the `ridl_diff` MCP tool name the encodings, because a snapshot does
-      not record them.
+      `podbuf_inline_append`; remote growth held inline by an old consumer,
+      `podbuf_remote_inline_growth`; and the append that changes the podbuf
+      integer of an enum, an enum set or a union's tag, the category
+      `podbuf_width_change`, reported once per declaration with the old and the
+      new integer. The append to an enum or enum set that is not `open` is not
+      judged by encoding: it is `strict_enum_append`, reported once per
+      declaration and breaking always (decision 12, note of 2026-11-01), and it
+      draws no `podbuf_width_change` line, because that rule reads only the
+      appends that are compatible. The three rules are stated in decision 10;
+      `ridl diff --explain <category>` states each in full. The compatible
+      verdict without podbuf holds under proto3; an enum-set flag that widens
+      the integer also widens the enum set's FlatBuffers scalar, which
+      `ridl diff` does not report yet (driftsys/ridl#1120). An appended union
+      arm that keeps the tag is reported as the generic rule judges it,
+      compatible. `ridl diff --encoding <name>` and the `ridl_diff` MCP tool
+      name the encodings, because a snapshot does not record them.
     - RIDL-156 `podbuf-padding-order`, a lint at `info`, reports a struct whose
       declared field order lays out in a larger head than the same fields sorted
       by descending alignment (declaration order kept among equal alignments).
@@ -852,29 +882,31 @@ a field is appended.
       baseline. Amended 2026-10-31, from driftsys/ridl#1095: this replaces the
       known gap the decision recorded.
 
-      _Amended 2026-10-31, from driftsys/ridl#1141._ The packages of a remote
-      `[imports]` unit resolve from the side that compiled them: `ridl diff` and
-      the `ridl_diff` tool pass the remote packages of both source sides as the
-      diff's context (`ridl.std`, the new side's remotes, then the old side's
-      remotes the new side does not name), and `ridl build` and `ridl baseline`
-      pass the remote packages of their own compile. One list stands for both
-      sides, because a snapshot side carries no remote package and a change in a
-      dependency is the dependency's diff. A struct held inline whose head
-      reaches a remote type is then laid out on both sides, so a pad-fit append
-      to it is compatible and a growing append is the podbuf break. A type that
-      resolves on neither side — both sides read from snapshots — leaves the old
-      head without a size, and the rule reads the head as grown: every append to
-      such a struct is reported as the break, the conservative verdict. The
-      holder of such a struct is found by the shape of its type (the field names
-      the struct, or holds it in an exact-length array or a tuple), since the
-      law cannot lay the holder out either. Known limit: when the remote pin
-      moves and a remote struct held inline changes layout in the same step as a
-      consumer append, the old head is laid out with the new pin's struct, so
-      the verdict can be wrong in either direction; the remote's change is the
-      remote's diff. A side effect in the same direction as driftsys/ridl#598: a
-      field appended with a remote type is judged by that type's declaration, so
-      one whose type holds 0 is compatible where it was reported breaking as
-      unresolved.
+      _Amended 2026-11-02, from driftsys/ridl#1163; supersedes the shared
+      context amendment of 2026-10-31 from driftsys/ridl#1141._ CLI and MCP
+      comparisons use distinct old/new resolution contexts. Remote packages
+      resolve references without becoming compared local packages. The legacy
+      shared-context entry points keep their signatures and new-side precedence,
+      but cannot establish two historical remote layouts. A directory baseline
+      retains complete IR of the remote closure reached from every local
+      declaration and interaction, with owning units, verified URL/tree pins and
+      fingerprints binding all local snapshots. The CLI reference owns
+      [the version-1 envelope and validation](../book/cli-reference.md#baseline-context).
+      Current pins never substitute for missing historical evidence.
+
+      Missing evidence on an explicit podbuf comparison is exit 2, not a proved
+      break (exit 1). Without podbuf the tool returns its ordinary report
+      without an affirmative remote inline judgment; malformed retained evidence
+      is an input error in either mode. Build warns and omits compatibility for
+      affected units. Normal publication refuses missing historical evidence,
+      including in type-only units, with exit 2 and keeps the prior baseline.
+      Explicit repair or reset is required; neither certifies earlier carried
+      history. Proved podbuf breaks and missing evidence override unchanged
+      hashes, while unaffected known units retain valid histories. Every
+      reconstructed history starts at the same current canonical hash the
+      descriptor emits, using its complete scope; canonical wire-hash inputs are
+      unchanged. The CLI reference owns
+      [recovery, retention and rollback limits](../book/cli-reference.md#baseline-publication-and-recovery).
 
 14. **What podbuf generates, and what it exposes (Sebastien).** Per type:
     - the head struct with its pad fields and assertions, and the preamble
@@ -1064,6 +1096,9 @@ stated in the decision above; this list is the index.
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-02: remote growth detection and bounded deferred gaps replace the shared-context limit                                |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-02: baseline context, separate comparison scopes, recovery, exit codes and publication guarantees                     |
+| [ADR-0029](ADR-0029-stability-policy.md) and [Stability](../book/stability.md)                 | amended 2026-11-02: approved minor-release adoption and minimum supporting tool version                                               |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                         |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an open enum or enum set in `encode`, `verify`, `decode` and the C header, and the "Known gaps" row of #1168 goes |
