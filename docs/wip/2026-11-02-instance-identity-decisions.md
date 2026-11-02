@@ -59,14 +59,15 @@ one deployment.
    with its number, so a release daemon refuses an attach that claims a
    debug-only instance's number.
 
-7. **A component can run several instances at a time (kept).** rsdl's
-   `instances = (a, b)` serves redundancy and debug. Each instance gets its own
-   locked number and its own generated constant, and attaches with it (MVP).
-   Several consumer instances need nothing more. Several producer instances of
-   one interface (a redundant provider set) stay flagged by RSDL-409 as not yet
-   realizable: the descriptor lists every producing instance with its number,
-   and the rule that decides which one writes (active and standby, election,
-   handover) belongs to the runtime and is **not in the MVP**.
+7. **A component can run several instances, and only one is active at a time
+   (owner, 2026-11-02).** rsdl's `instances = (a, b)` serves redundancy and
+   debug. Each instance gets its own locked number and its own generated
+   constant, and attaches with it (MVP). For a redundant provider set, the
+   descriptor lists every producing instance with its number. At any moment
+   exactly one of them is active and writes; the others are on standby. Which
+   one is active, and how a standby takes over, is the runtime's rule and is
+   **not in the MVP**. Once a runtime enforces that rule, RSDL-409 ("not yet
+   realizable") can be relaxed for it.
 
 ## Questions for the MVP design
 
