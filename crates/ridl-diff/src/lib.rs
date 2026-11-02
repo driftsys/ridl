@@ -606,7 +606,8 @@ pub fn diff_refs_with(
 /// Compares two workspaces at the system (rsdl reference §14): the packages by
 /// the ridl categories, exactly as [`diff_sets`] does, and — when both sides
 /// carry a lowered system — the system's placement and composition changes,
-/// which carry no verdict. A system on one side only is not compared: there is
+/// which carry no verdict, and its instance number changes, which make the
+/// report breaking. A system on one side only is not compared: there is
 /// nothing to compare it against.
 ///
 /// `context` is passed to [`diff_sets_in`]. The comparison is judged for no

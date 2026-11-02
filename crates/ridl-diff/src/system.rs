@@ -41,7 +41,8 @@ pub enum SystemHeading {
     InstanceNumberChanged,
 }
 
-/// One change to the system, listed under its heading with no verdict.
+/// One change to the system, listed under its heading. Only a change under
+/// [`SystemHeading::InstanceNumberChanged`] carries a verdict: breaking.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemChange {
     pub heading: SystemHeading,
@@ -64,11 +65,12 @@ pub fn heading_text(heading: SystemHeading) -> &'static str {
 }
 
 /// Compares two lowered systems: the composition changes first, in the new
-/// closure's order and then the removed components, and then the placement
+/// closure's order and then the removed components, then the placement
 /// changes, deployment by deployment in the new system's order and then the
-/// removed deployments. The doc fields (`doc`, the doc links, `see`,
-/// `since`) are never read: a doc edit is neither a placement nor a
-/// composition change, and a system change has no verdict (ADR-0026). The
+/// removed deployments, and then the instance number changes. The doc fields
+/// (`doc`, the doc links, `see`, `since`) are never read: a doc edit is
+/// neither a placement nor a composition change, and a placement or
+/// composition change has no verdict (ADR-0026). The
 /// sizing fields (`Deployment.sizing`, `Placement.sizing`) are never read: the
 /// registry records them as not reported, reason sizing
 /// (`ridl_core::attributes`).
@@ -1186,6 +1188,26 @@ mod tests {
         let changes = diff_systems(
             &numbered(&[("veh.C", "a", 1, true)]),
             &numbered(&[("veh.C", "a", 2, false)]),
+        );
+        assert!(listed(&changes).is_empty());
+    }
+
+    /// A locked number that both sides hold for the same key is not a
+    /// change: a lock-bearing diff with no renumbering lists nothing.
+    #[test]
+    fn an_unchanged_locked_number_is_not_listed() {
+        let both = numbered(&[("veh.C", "a", 1, false), ("veh.C", "b", 2, false)]);
+        assert!(listed(&diff_systems(&both, &both)).is_empty());
+    }
+
+    /// A new key that takes a number its old holder held only provisionally
+    /// is not listed, though the old holder is still present: the old number
+    /// was never part of the lock.
+    #[test]
+    fn a_new_key_on_a_provisional_old_number_is_not_listed() {
+        let changes = diff_systems(
+            &numbered(&[("veh.C", "a", 1, true)]),
+            &numbered(&[("veh.C", "a", 2, false), ("veh.C", "b", 1, false)]),
         );
         assert!(listed(&changes).is_empty());
     }

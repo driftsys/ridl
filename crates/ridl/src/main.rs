@@ -625,9 +625,9 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
         Err(error) => return report_diff_side_error(error),
     };
 
-    // The verdict is the contracts' alone: the system's placement and
-    // composition changes are listed under their headings with no verdict
-    // (rsdl reference §14).
+    // The verdict is the contracts', and breaking when an instance number
+    // changed: the system's placement and composition changes are listed
+    // under their headings with no verdict (rsdl reference §14).
     // No snapshot carries `ridl.std`, so it is passed as context: a struct
     // field appended with a `ridl.std` type is then judged by that type's
     // declaration rather than reported breaking as unresolved
