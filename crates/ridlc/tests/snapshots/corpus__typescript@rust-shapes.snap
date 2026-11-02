@@ -188,6 +188,58 @@ export function initFailure(): Failure {
 }
 
 /**
+ * A lamp state that a newer producer may extend.
+ */
+export enum Lamp {
+  /**
+   * Off.
+   */
+  OFF = 0,
+  /**
+   * On.
+   */
+  ON = 1,
+}
+
+/**
+ * A `Lamp`, or a value that the enum does not declare.
+ *
+ * The codec decodes a declared value to the enum member and any other value to
+ * `{ unknown: n }`, and it encodes `{ unknown: n }` as `n`. A value
+ * `{ unknown: n }` whose `n` is declared is encoded as `n` and decodes as the
+ * member.
+ */
+export type LampValue = Lamp | { readonly unknown: number };
+
+export function initLamp(): LampValue {
+  return Lamp.OFF;
+}
+
+/**
+ * Lamps that a newer producer may extend.
+ */
+export type Lamps = number & { readonly __ridl: 'lint.shapes.Lamps' };
+
+export const LampsBits = {
+  /**
+   * The low beam.
+   */
+  LOW: 1,
+  /**
+   * The high beam.
+   */
+  HIGH: 2,
+  /** The bits of `value` that no bit of this set declares. */
+  unknownBits(value: Lamps): Lamps {
+    return ((value & ~3) >>> 0) as Lamps;
+  },
+} as const;
+
+export function initLamps(): Lamps {
+  return 0 as Lamps;
+}
+
+/**
  * A struct that nests inside `Panel`.
  */
 export interface Inner {
@@ -346,6 +398,30 @@ export interface Panel {
    * @deprecated read `count`
    */
   legacy?: Count;
+}
+
+/**
+ * An open enum and an open enum set, alone and in an array.
+ */
+export interface Lights {
+  lamp: LampValue;
+  lamps: Lamps;
+  /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 4
+   *
+   * @bounds 0..4
+   */
+  trail: readonly LampValue[];
+}
+
+export function initLights(): Lights {
+  return {
+    lamp: initLamp(),
+    lamps: initLamps(),
+    trail: [],
+  };
 }
 
 /**

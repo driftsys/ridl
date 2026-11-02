@@ -367,6 +367,72 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       }
     },
     {
+      "name": "Lamp",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "A lamp state that a newer producer may extend.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumDef": {
+        "values": [
+          {
+            "name": "OFF",
+            "value": "0",
+            "doc": "Off.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "ON",
+            "value": "1",
+            "doc": "On.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "reserved": [],
+        "open": true
+      }
+    },
+    {
+      "name": "Lamps",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "Lamps that a newer producer may extend.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumSetDef": {
+        "bits": [
+          {
+            "name": "LOW",
+            "value": "0",
+            "doc": "The low beam.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "HIGH",
+            "value": "1",
+            "doc": "The high beam.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "width": "INT_WIDTH_U8",
+        "open": true
+      }
+    },
+    {
       "name": "Inner",
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -897,6 +963,85 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "doc": "",
               "labels": [],
               "deprecated": "read `count`",
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          }
+        ],
+        "fixedLayout": false
+      }
+    },
+    {
+      "name": "Lights",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "An open enum and an open enum set, alone and in an array.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "lamp",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Lamp"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "lamps",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Lamps"
+              },
+              "init": {
+                "derivable": true,
+                "value": ""
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "trail",
+              "ordinal": 3,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "Lamp"
+                  },
+                  "min": "0",
+                  "max": "4"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
               "links": [],
               "see": [],
               "since": []

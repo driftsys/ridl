@@ -664,17 +664,6 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-405", Showcase),
     ("RIDL-406", Showcase),
     (
-        "RIDL-158",
-        Elsewhere {
-            fixture: "crates/ridlc/tests/podbuf_checks.rs",
-            reason: "the podbuf checks run in the shared check pass, over the manifest's \
-                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
-                     passes, so the showcase compile never reaches them. Provoked by \
-                     `an_open_enum_in_a_podbuf_package_is_refused` in \
-                     `crates/ridlc/tests/podbuf_checks.rs`",
-        },
-    ),
-    (
         "RIDL-407",
         Elsewhere {
             fixture: "crates/ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json",
@@ -1204,7 +1193,7 @@ fn rsdl_reference_rules_match_the_catalogue_summaries() {
 
 /// The codes a reference table specifies that the catalogue has no entry for,
 /// each with the reason: the codes the checker does not emit yet, the codes
-/// the lock retired, and the retired lint RIDL-150.
+/// the lock retired, the retired lint RIDL-150, and the retired error RIDL-158.
 /// Each code is a prefix and a number, because the guard that finds code
 /// literals in Rust sources (`codes_written_as_string_literals_are_all_catalogued`)
 /// reads a quoted code as an emitted one, and none of these is catalogued.
@@ -1254,6 +1243,12 @@ const DEFERRED_OR_RETIRED: &[(&str, u16, &str)] = &[
         150,
         "retired: the error RIDL-157 reports a payload above the default ceiling of its kind \
          (ADR-0030 decision 7 as amended)",
+    ),
+    (
+        "RIDL",
+        158,
+        "retired: the podbuf codec and the C header carry an open enum or enum set \
+         (ADR-0031 decision 12)",
     ),
     (
         "RIDL",
@@ -2881,5 +2876,25 @@ fn a_stale_exception_is_rejected() {
         mismatches
             .iter()
             .any(|m| m.contains("catalogue has an entry"))
+    );
+}
+
+/// A `RIDL-` code that [`DEFERRED_OR_RETIRED`] marks retired is listed in
+/// `ridl_core::diag::RETIRED_RIDL_CODES`, so the guard that keeps a retired
+/// number out of the catalogue covers it: a number dropped from that list
+/// could be declared again (ADR-0008 decision 13). The converse does not hold:
+/// a code retired before it shipped, such as RIDL-415, has no reference row.
+#[test]
+fn every_ridl_code_the_reference_marks_retired_is_in_the_retired_list() {
+    let missing: Vec<u16> = DEFERRED_OR_RETIRED
+        .iter()
+        .filter(|(prefix, _, reason)| *prefix == "RIDL" && reason.starts_with("retired"))
+        .map(|(_, number, _)| *number)
+        .filter(|number| !ridl_core::diag::RETIRED_RIDL_CODES.contains(number))
+        .collect();
+    assert_eq!(
+        missing,
+        Vec::<u16>::new(),
+        "retired in the reference, not in RETIRED_RIDL_CODES"
     );
 }

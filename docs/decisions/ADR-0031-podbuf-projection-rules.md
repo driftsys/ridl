@@ -24,6 +24,10 @@ driftsys/ridl#1121.** Decision 12 carries the dated note; decision 13 and the
 breaking list of decision 10 are reworded to the rules `ridl diff` applies now,
 and open item 1 is closed.
 
+**Amended 2026-11-01 — decision 12, the podbuf codec and the C header carry an
+open declaration, from driftsys/ridl#1168.** Decision 12 carries a second dated
+note: Q-2 is lifted and RIDL-158 is retired; open item 1 is reworded.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -300,8 +304,8 @@ a field is appended.
    | integer                        | the wire width typl infers from the range (typl §4.2)                                                 | Sebastien     |
    | float                          | `f32` or `f64` as typl infers (typl §4.3)                                                             | author's call |
    | boolean                        | `u8`, 0 or 1                                                                                          | author's call |
-   | enum                           | the narrowest integer that holds the declared values; strict (decision 12)                            | Sebastien     |
-   | enum set                       | the integer width typl infers (typl §9.3); strict (decision 12)                                       | Sebastien     |
+   | enum                           | the narrowest integer that holds the declared values; strict or open (decision 12)                    | Sebastien     |
+   | enum set                       | the integer width typl infers (typl §9.3); strict or open (decision 12)                               | Sebastien     |
    | optional field `?`             | one bit in a `u8` flags field placed by the first-fit law; an absent field's bytes are zero           | author's call |
    | tuple                          | an inline head, laid out by the same law and rounded to 8                                             | author's call |
    | exact-length array `[T; N]`    | inline `T[N]`, no length                                                                              | Sebastien     |
@@ -338,7 +342,7 @@ a field is appended.
    | typl construct                  | Rule                                                            |
    | ------------------------------- | --------------------------------------------------------------- |
    | boolean, integer, float         | a fixed-width scalar in the head (decision 5)                   |
-   | enum, enum set                  | an integer in the head, strict (decision 12)                    |
+   | enum, enum set                  | an integer in the head, strict or open (decision 12)            |
    | string, bytes                   | a descriptor and tail bytes (decisions 3 and 5)                 |
    | exact-length array `[T; N]`     | inline `T[N]` in the head                                       |
    | bounded array                   | a descriptor with a stride, and the elements (decision 3)       |
@@ -701,8 +705,8 @@ a field is appended.
     producer's and the gate's logic, not ridl's.
 
 12. **Strict and open enums (Sebastien, 2026-10-24).** Decided. _Amended
-    2026-11-01: the `open` keyword is built; see the note at the end of this
-    decision._
+    2026-11-01: the `open` keyword is built, and podbuf carries an open
+    declaration; see the two notes at the end of this decision._
     - An enum is **strict** by default: `verify` rejects any value the
       declaration does not name, and adding a value is a break (a new type
       version, decision 11).
@@ -764,6 +768,25 @@ a field is appended.
       compatible outside podbuf while every Rust codec refused the new value,
       and that the TypeScript codec checks no enum value; the first is the
       reason for Q-1, the second is driftsys/ridl#1173.
+
+    **Note, 2026-11-01: podbuf carries an open declaration**
+    (driftsys/ridl#1168). Q-2 is lifted: `ridl build` no longer refuses an open
+    enum or enum set in a package that podbuf encodes, and RIDL-158 is retired
+    and never reused (ADR-0008 decision 13). The Rust podbuf codec applies the
+    rules of the first two bullets of this decision: `verify` keeps the strict
+    check for a strict declaration and checks no value of an open one; the view
+    and `decode` read an undeclared value of an open enum as `Unknown`, which
+    holds the integer, and an open enum set keeps every bit; `encode` writes the
+    integer back unchanged. The width stays the one the declared values infer
+    (decision 5), so `encode` refuses with the range rule, naming the
+    declaration, an open enum or enum set whose integer does not fit it, as the
+    proto3 codec does for its int32; a truncating cast would change the value
+    without an error. The codegen `Model` needs no new podbuf field: the codec
+    and the header read `Enum.open` and `EnumSet.open`. The C header writes the
+    constants as before, after one comment per enum and enum set that states its
+    rule, and not how the rule is enforced, as the comment of the `.proto` and
+    `.fbs` output does: a value (or a bit) outside the constants is not valid,
+    or is valid and is kept. A declaration with no constant gets no comment.
 
     **Alternatives considered.** `#[non_exhaustive]` alone, with no unknown
     variant: a reader could not hold a value it does not know, so it would have
@@ -986,9 +1009,9 @@ stated in the decision above; this list is the index.
 
 1. **The `open` keyword.** Closed 2026-11-01 by driftsys/ridl#1121: the keyword
    is built, and `ridl diff` treats an append to a strict enum as breaking for
-   every encoding (decision 12, note of 2026-11-01). The podbuf codec still
-   applies the strict rules only; driftsys/ridl#1168 tracks the open rules for
-   it.
+   every encoding (decision 12, note of 2026-11-01). The podbuf codec and the C
+   header carry an open declaration since driftsys/ridl#1168 (decision 12,
+   second note of 2026-11-01).
 2. **A compatible append that raises `max_size`.** Closed 2026-10-30 by
    [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 19, with the first
    answer: `verify` checks structure only and no longer refuses a buffer longer
@@ -1023,23 +1046,25 @@ stated in the decision above; this list is the index.
 
 ## Documents amended
 
-| Document                                                                                 | Change                                                                                                                                |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding  |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                               |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                              |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                                |
-| [ADR-0014](ADR-0014-ir-encodings.md)                                                     | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                         |
-| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                   | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                      |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name      |
-| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                         | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                           |
-| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
-| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                         | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                         |
-| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
-| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
+| Document                                                                                       | Change                                                                                                                                |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                      | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | new: the as-built codec                                                                                                               |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                              |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                                |
+| [ADR-0014](ADR-0014-ir-encodings.md)                                                           | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                         |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                      |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name      |
+| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                               | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                           |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                         |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an open enum or enum set in `encode`, `verify`, `decode` and the C header, and the "Known gaps" row of #1168 goes |
+| [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | amended 2026-11-01: RIDL-158 is retired                                                                                               |
+| [`docs/book/stability.md`](../book/stability.md)                                               | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
+| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | ledger row 42, and row 35 cites this record; row 42 amended 2026-11-01: podbuf carries an open declaration                            |
 
 ## Trace
 
@@ -1051,7 +1076,7 @@ stated in the decision above; this list is the index.
   ADR-0024 (the lint registry); ADR-0029 (the frozen surfaces); ADR-0030 (the
   payload ceiling); typl reference §4.2–§4.6, §7.1–§7.4, §8–§12 and §14.2
   (`@deprecated`).
-- Depends on, for decision 12 only: the typl `open` keyword, not built.
+- Depends on, for decision 12 only: the typl `open` keyword, built 2026-11-01.
 - Design record: [`../design/podbuf-codec.md`](../design/podbuf-codec.md).
 - The reasoning and the evidence:
   [`../archive/2026-10-24-podbuf-design.md`](../archive/2026-10-24-podbuf-design.md).

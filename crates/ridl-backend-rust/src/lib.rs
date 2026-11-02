@@ -533,7 +533,6 @@ fn package_items(
         recorded.push((WireEncoding::Proto3, owners));
     }
     if encodings.contains(&WireEncoding::Podbuf) {
-        refuse_open_under_podbuf(ctx)?;
         let (codec_items, owners) = codec_podbuf::package_items(ctx)?;
         items.extend(codec_items);
         recorded.push((WireEncoding::Podbuf, owners));
@@ -550,32 +549,6 @@ fn package_items(
         items.extend(transcode::package_items(&owners));
     }
     Ok(items)
-}
-
-/// Refuses the package when it declares an open enum or an open enum set and
-/// its encodings name podbuf. The podbuf codec and the C header keep every
-/// enum strict until driftsys/ridl#1168 lands, so an open declaration has no
-/// podbuf encoding yet, and emitting strict code for it would read an
-/// undeclared value as a contract violation that the declaration admits.
-/// `ridl build` refuses the package before this backend runs (RIDL-158); a
-/// codegen plugin that reaches this backend without `ridlc` is refused here.
-fn refuse_open_under_podbuf(ctx: &Ctx) -> Result<(), GenerateError> {
-    for decl in &ctx.model.declarations {
-        let what = match decl.kind.as_ref() {
-            Some(v1::declaration::Kind::Enum(ed)) if ed.open => "enum",
-            Some(v1::declaration::Kind::EnumSet(esd)) if esd.open => "enum set",
-            _ => continue,
-        };
-        let name = declared(decl.name.as_ref());
-        return Err(GenerateError {
-            message: format!(
-                "`{}.{name}` is an open {what}, which the podbuf encoding does not carry yet \
-                 (driftsys/ridl#1168); remove `open`, or remove `podbuf` from the encodings",
-                ctx.package_name()
-            ),
-        });
-    }
-    Ok(())
 }
 
 /// A payload encoding a generated package carries a codec for, and that its

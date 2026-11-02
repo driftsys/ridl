@@ -65,6 +65,22 @@ error enum Failure {
   DENIED = 1
 }
 
+/// A lamp state that a newer producer may extend.
+open enum Lamp {
+  /// Off.
+  OFF = 0
+  /// On.
+  ON  = 1
+}
+
+/// Lamps that a newer producer may extend.
+open enumset Lamps {
+  /// The low beam.
+  LOW  = 0
+  /// The high beam.
+  HIGH = 1
+}
+
 // --- composites ---
 
 /// A struct that nests inside `Panel`.
@@ -101,6 +117,13 @@ struct Panel {
   nested : [Inner; 0..2]
   /// @deprecated "read `count`"
   legacy : Count?
+}
+
+/// An open enum and an open enum set, alone and in an array.
+struct Lights {
+  lamp  : Lamp
+  lamps : Lamps
+  trail : [Lamp; 0..4]
 }
 
 /// A union with data arms only.

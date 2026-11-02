@@ -1,4 +1,4 @@
-//! RIDL-153, RIDL-154, RIDL-155 and RIDL-158: the build-time errors of the
+//! RIDL-153, RIDL-154 and RIDL-155: the build-time errors of the
 //! podbuf encoding. Each is raised only when a `[backend.<name>]` table of
 //! the workspace manifest names `podbuf` in its `encodings`.
 
@@ -37,7 +37,7 @@ fn podbuf_errors(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
         .filter(|diagnostic| {
             matches!(
                 diagnostic.code.as_str(),
-                "RIDL-153" | "RIDL-154" | "RIDL-155" | "RIDL-158"
+                "RIDL-153" | "RIDL-154" | "RIDL-155"
             )
         })
         .collect()
@@ -290,34 +290,28 @@ fn the_checks_are_silent_when_no_backend_names_podbuf() {
     }
 }
 
-/// An open enum and an open enum set, which the podbuf codec does not carry
-/// yet (driftsys/ridl#1168).
+/// An open enum and an open enum set: the podbuf codec reads an undeclared
+/// value of the enum as its unknown variant and keeps an undeclared bit of
+/// the enum set (ADR-0031 decision 12).
 const OPEN: &str = "package demo\n\
     open enum Status {\n  A = 0\n}\n\
     open enumset Flags {\n  A = 0\n}\n\
     struct Dash {\n  status: Status\n  flags: Flags\n}\n";
 
 #[test]
-fn an_open_enum_in_a_podbuf_package_is_refused() {
+fn an_open_enum_in_a_podbuf_package_draws_no_podbuf_error() {
     let out = check(OPEN, PODBUF);
-    assert_eq!(codes(&out), vec!["RIDL-158", "RIDL-158"], "{out:?}");
-    let messages: Vec<&str> = podbuf_errors(&out)
-        .iter()
-        .map(|diagnostic| diagnostic.message.as_str())
-        .collect();
-    assert!(messages[0].contains("`demo.Status`"), "{messages:?}");
-    assert!(messages[1].contains("`demo.Flags`"), "{messages:?}");
-    for message in &messages {
-        assert!(message.contains("driftsys/ridl#1168"), "{message}");
-    }
-    assert!(codes(&check(OPEN, FLATBUFFERS)).is_empty());
-    assert!(codes(&check(OPEN, "")).is_empty());
+    assert!(
+        !out.iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error),
+        "{out:?}"
+    );
 }
 
-/// `ridl build` runs the same checks, so an open enum stops the build when
-/// a backend table names podbuf.
+/// `ridl build` runs the same checks, and an open enum in a package that a
+/// backend table encodes with podbuf builds and writes its artifacts.
 #[test]
-fn an_open_enum_in_a_podbuf_package_stops_the_build() {
+fn an_open_enum_in_a_podbuf_package_builds() {
     let root = tempfile::tempdir().expect("a temp dir");
     std::fs::write(
         root.path().join("ridl.toml"),
@@ -334,11 +328,21 @@ fn an_open_enum_in_a_podbuf_package_stops_the_build() {
     std::fs::write(member.join("m.ridl"), OPEN).unwrap();
     let out_dir = root.path().join("out");
     let run = ridlc::run_build(root.path(), &out_dir, &[ridlc::Emit::Rust], Frozen::No).unwrap();
-    assert!(run.has_error(), "{:?}", run.diagnostics);
-    assert_eq!(codes(&run.diagnostics), vec!["RIDL-158", "RIDL-158"]);
-    // An error blocks every artifact: nothing is written.
+    assert!(!run.has_error(), "{:?}", run.diagnostics);
+    // The package's crate carries the podbuf codec, and reads `Status` and
+    // `Flags` through `From<i64>`, the open path, rather than `TryFrom`.
+    let source = std::fs::read_to_string(out_dir.join("demo.rs")).expect("the package source");
     assert!(
-        !out_dir.exists() || std::fs::read_dir(&out_dir).unwrap().next().is_none(),
-        "no artifact is written when the build is refused"
+        source.contains("impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Dash"),
+        "{source}"
     );
+    for name in ["Status", "Flags"] {
+        let open_read = format!("<{name} as ::core::convert::From<");
+        assert!(source.contains(&open_read), "{open_read} not in:\n{source}");
+        let strict_read = format!("<{name} as ::core::convert::TryFrom");
+        assert!(
+            !source.contains(&strict_read),
+            "{strict_read} in:\n{source}"
+        );
+    }
 }

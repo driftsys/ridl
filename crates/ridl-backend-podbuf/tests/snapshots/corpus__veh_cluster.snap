@@ -101,9 +101,11 @@ static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h,
 
 #endif
 
+/* strict: a value outside these constants is not valid */
 #define VEH_CLUSTER_DIAG_ERROR_FILTER_INVALID 0
 #define VEH_CLUSTER_DIAG_ERROR_STORAGE_BUSY 1
 #define VEH_CLUSTER_DIAG_ERROR_ACCESS_DENIED 2
+/* strict: a value outside these constants is not valid */
 #define VEH_CLUSTER_HVAC_ERROR_COMPRESSOR_OFF 0
 #define VEH_CLUSTER_HVAC_ERROR_SENSOR_FAULT 1
 #define VEH_CLUSTER_FAULT_RESULT_TAG_SINGLE 1

@@ -69,10 +69,9 @@ The package module holds:
   with `From<i64>`, which keeps every bit, and `unknown_bits` returns the bits
   that no declared bit names. In both forms `From<Name> for i64` returns the
   integer, an `Unknown` value's included, so a value read from the wire is
-  written back unchanged. The doc of an open declaration says so. The podbuf
-  encoding does not carry an open declaration yet: `ridl build` reports
-  RIDL-158 on one when a `[backend.<name>]` table names `podbuf`
-  ([driftsys/ridl#1168](https://github.com/driftsys/ridl/issues/1168)).
+  written back unchanged. The doc of an open declaration says so. Every
+  codec the manifest names reads and writes an open declaration this way,
+  `podbuf` included.
 - **The codecs** of each payload type, one per encoding the manifest names
   under `[backend.rust] encodings`: `flatbuffers`, `proto3`, or both. Each
   codec is `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list
@@ -620,7 +619,10 @@ In the Rust column:
   one nothing refuses it (see [What the crate contains](#what-the-crate-contains)).
   The proto3 codec carries an enum as an int32, so its `encode` refuses an
   `Unknown` whose integer does not fit int32 with the range error; such a
-  value can only come from another encoding.
+  value can only come from another encoding. The podbuf codec carries an
+  enum or enum set at the width its declared values infer, so its `encode`
+  refuses with the range error an `open` value whose integer does not fit
+  that width.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a

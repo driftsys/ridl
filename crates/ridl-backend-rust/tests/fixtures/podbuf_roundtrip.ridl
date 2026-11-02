@@ -136,6 +136,68 @@ struct Warnings {
   flags : WarningFlags
 }
 
+/// An open enum, one byte wide: 7 is not declared and is valid.
+open enum DtcStatus {
+  INACTIVE = 0
+  ACTIVE   = 1
+  PENDING  = 2
+}
+
+/// An open enum set, one byte wide: bit 7 is not declared and is kept.
+open enumset OpenFlags {
+  A = 0
+  B = 1
+}
+
+/// An open enum at head offset 0 and an open enum set at head offset 1.
+struct Dtc {
+  status : DtcStatus
+  flags  : OpenFlags
+}
+
+/// An open enum with a negative declared value: one signed byte, -128..127.
+open enum Trim {
+  DOWN = -1
+  UP   = 1
+}
+
+/// An open enum with a declared value above 255: two bytes, 0..65535.
+open enum Mode {
+  IDLE = 0
+  BOOST = 300
+}
+
+/// A signed one-byte open enum and a two-byte open enum.
+struct Tuning {
+  trim : Trim
+  mode : Mode
+}
+
+/// An open enum with a value above `u32::MAX` and none below 0: a `u64`.
+open enum Big {
+  A = 0
+  B = 4294967296
+}
+
+/// An open enum with a negative value and one above `u32::MAX`: an `i64`.
+open enum Signed64 {
+  NEG = -1
+  BIG = 4294967296
+}
+
+/// An open enum set of width 64: bit 63 is declared, bit 1 is not.
+open enumset WideFlags {
+  LOW = 0
+  TOP = 63
+}
+
+/// The three 64-bit open declarations.
+struct Wide64 {
+  big    : Big
+  signed : Signed64
+  wide   : WideFlags
+}
+
 /// Two descriptors, at 0..8 and 8..16.
 struct TwoStrings {
   a : string [0..8]
