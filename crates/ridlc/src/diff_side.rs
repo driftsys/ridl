@@ -1,5 +1,6 @@
 //! Loads a diff side without filesystem writes or remote-import fetches.
 use crate::Emit;
+use crate::baseline_context::{ContextArtifactError, RemoteContext, capture_context, read_context};
 use ridl_core::{Diagnostic, Overlay, RidlDatabase, SourceMap};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,24 +12,19 @@ pub struct DiffSide {
     /// side; every snapshot, for a snapshot side.
     pub packages: Vec<ridl_ir::v2::Package>,
     pub system: Option<ridl_ir::v2::System>,
-    /// The packages of the remote `[imports]` units a source side's compile
-    /// resolved, which the side does not compare; empty for a snapshot side,
-    /// which carries none (`ridl baseline` publishes the consumer's packages
-    /// only). [`diff_context`] passes them to the diff so a type the compared
-    /// packages reach resolves.
+    /// Remote packages available to the legacy shared-context diff API.
     pub remotes: Vec<ridl_ir::v2::Package>,
+    /// Side-specific verified remote evidence. `None` denotes legacy or
+    /// standalone snapshots; source sides carry complete evidence.
+    pub remote_context: Option<RemoteContext>,
 }
 
-/// The context packages a diff from `old` to `new` resolves type references
-/// against without comparing them: `ridl.std` ([`crate::std_ir`]), then the
-/// remote packages of `new`, then the remote packages of `old` whose name
-/// `new` does not hold. One list stands for both sides, because a remote unit
-/// is not part of either side's contract (a change in a dependency is the
-/// dependency's diff), and because an old side read from snapshots carries no
-/// remote package: with one list, a type the old side reaches in a remote
-/// package still resolves, from the side that compiled it. When the remote
-/// pin moved between the two sides, the old side is read with the new pin's
-/// declarations.
+/// The legacy shared resolution context: `ridl.std`, then the new side's
+/// remotes, then the old side's remotes whose name the new side does not hold.
+///
+/// This preserves the original shared-context API and its new-side precedence.
+/// It does not establish historical side-specific layouts or compare pins;
+/// callers needing that evidence use [`DiffSide::remote_context`].
 #[must_use]
 pub fn diff_context(old: &DiffSide, new: &DiffSide) -> Vec<ridl_ir::v2::Package> {
     std::iter::once(crate::std_ir())
@@ -44,6 +40,7 @@ pub fn diff_context(old: &DiffSide, new: &DiffSide) -> Vec<ridl_ir::v2::Package>
 
 /// A refusal to load or compile one side of a diff.
 pub enum DiffSideError {
+    Context(ContextArtifactError),
     NonJsonIr(PathBuf),
     ArtifactDirectory {
         path: PathBuf,
@@ -88,6 +85,7 @@ pub enum DiffSideError {
 impl std::fmt::Display for DiffSideError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Context(error) => write!(f, "{error}"),
             Self::NonJsonIr(entry) => write!(
                 f,
                 "{}: `ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); \
@@ -189,6 +187,7 @@ pub fn load_diff_side(
             packages: load_snapshots(&[entry.to_path_buf()])?,
             system: None,
             remotes: Vec::new(),
+            remote_context: None,
         });
     }
     if is_non_json_ir(entry) {
@@ -198,10 +197,27 @@ pub fn load_diff_side(
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
             refuse_snapshot_overlay(entry, overlays)?;
+            let packages = load_snapshots(&snapshots)?;
+            let context = read_context(entry, &packages).map_err(DiffSideError::Context)?;
+            let remote_context = context.map(|context| context.remote_context());
+            let remotes = remote_context
+                .as_ref()
+                .map(|c| c.packages.clone())
+                .unwrap_or_default();
             return Ok(DiffSide {
-                packages: load_snapshots(&snapshots)?,
+                packages,
                 system: None,
-                remotes: Vec::new(),
+                remotes,
+                remote_context,
+            });
+        }
+        if let Some(context) = read_context(entry, &[]).map_err(DiffSideError::Context)? {
+            let remote_context = context.remote_context();
+            return Ok(DiffSide {
+                packages: Vec::new(),
+                system: None,
+                remotes: remote_context.packages.clone(),
+                remote_context: Some(remote_context),
             });
         }
         if !is_source_dir(entry) {
@@ -241,19 +257,26 @@ pub fn load_diff_side(
             sources: output.sources,
         });
     }
-    // A remote unit is not part of the consumer's contract: a change in a
-    // dependency is the dependency's diff, so its packages are left out of
-    // the compared side. They were loaded so that the consumer's imports
-    // resolve, and are kept apart for the diff to resolve them too.
+    // Remote packages resolve local references and remain separate from the
+    // local packages the side compares.
     let (remotes, packages): (Vec<_>, Vec<_>) = output
         .checked
         .into_iter()
         .map(|c| c.ir)
         .partition(|ir| crate::is_remote(ir, &output.remote_units));
+    let context = capture_context(
+        &packages.iter().collect::<Vec<_>>(),
+        &remotes.iter().collect::<Vec<_>>(),
+        &output.remote_units,
+    )
+    .map_err(DiffSideError::Context)?;
+    let remote_context = context.remote_context();
+    let remotes = remote_context.packages.clone();
     Ok(DiffSide {
         packages,
         system: output.system,
         remotes,
+        remote_context: Some(remote_context),
     })
 }
 
@@ -517,6 +540,7 @@ mod tests {
         DiffSide {
             packages: Vec::new(),
             system: None,
+            remote_context: None,
             remotes: remotes
                 .iter()
                 .map(|(name, unit)| ridl_ir::v2::Package {

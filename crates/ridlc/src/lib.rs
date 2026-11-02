@@ -50,6 +50,7 @@ pub mod deps;
 mod design_lints;
 mod link_encodings;
 pub use design_lints::{check_design_lints, cohesion_groups};
+pub mod baseline_context;
 pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, diff_context, load_diff_side};
 pub mod plugin;
