@@ -345,13 +345,14 @@ other entry below is Accepted.
   stated once for the closure; a `reserved` tombstone has no route; the catalog
   hash is embedded by the driver, never computed by the lowering, since story
   E6.17), that `ridl build` writes every artifact when the only errors are
-  RSDL-7xx and still exits 1, and that `ridl diff` lists system changes under
-  two headings with no verdict and only when both sides are source trees. A
-  region is the catalog of a unit, not of a source package (amended 2026-10-09).
-  The codegen request's deployment section and the deployment descriptor file
-  are the two emitters over `System` (decisions 11 and 12, amended 2026-11-02).
-  Binds the IR every later consumer reads, the `ridl build` contract, and
-  `ridl diff`.
+  RSDL-7xx and still exits 1, and that `ridl diff` lists system changes only
+  when both sides are source trees: placement and composition changes with no
+  verdict, and a changed locked instance number as breaking (amended
+  2026-11-02). A region is the catalog of a unit, not of a source package
+  (amended 2026-10-09). The codegen request's deployment section and the
+  deployment descriptor file are the two emitters over `System` (decisions 11
+  and 12, amended 2026-11-02). Binds the IR every later consumer reads, the
+  `ridl build` contract, and `ridl diff`.
 
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
   and call signatures.** Six decisions: four taken while implementing story

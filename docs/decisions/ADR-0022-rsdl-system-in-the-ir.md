@@ -25,16 +25,6 @@ Amended 2026-10-04 by story E6.17 (driftsys/ridl#367): the work decision 7
 deferred has landed. `Region` carries `bytes hash = 3`, and `ridlc` embeds the
 catalog hash in each region (see the second note under decision 7).
 
-Amended 2026-11-02 (instance numbers): decision 12 takes the instance number
-from `instances.lock`; the lowered `System` gains `Component.numbers`, and the
-codegen deployment section and the deployment descriptor carry `number` and
-`provisional` for each instance.
-
-Amended 2026-11-02 (driftsys/ridl#1176): decision 11 no longer leaves the system
-descriptor unbuilt. Decision 12 records the deployment descriptor as the second
-emitter over `System`; the record is
-[`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
-
 Amended 2026-10-09 by the catalog-per-unit design: decisions 6 and 7 name the
 unit, not the source package, as the owner of a catalog. A region is keyed on
 the `unit` of the interface's IR package, and its interface names are catalog
@@ -42,8 +32,9 @@ names (`cluster.SpeedDisplay`), so a unit with several source packages has one
 region.
 
 It does not restate the rsdl language reference: §13 lists the facts the
-lowering produces and §14 states the two headings and that they carry no
-verdict. This record fixes the engineering choices those sections leave open.
+lowering produces and §14 states the headings: placement changed and composition
+changed carry no verdict, and instance number changed is breaking. This record
+fixes the engineering choices those sections leave open.
 [ADR-0014](ADR-0014-ir-encodings.md) decision 4 carries the artifact naming in
 its 2026-09-18 amendment; decision 2 below states why it is written by the IR
 dump emits and nothing more.
@@ -57,6 +48,17 @@ Amended 2026-10-06 by the records of story E17.5 (driftsys/ridl#736): the note
 under decision 3 is rewritten, because rsdl §13 now lists the declared sizing
 values (driftsys/ridl#719). The note no longer states the two `sizing` fields as
 a fact that §13 does not list.
+
+Amended 2026-11-02 (driftsys/ridl#1176): decision 11 no longer leaves the system
+descriptor unbuilt. Decision 12 records the deployment descriptor as the second
+emitter over `System`; the record is
+[`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
+
+Amended again 2026-11-02 (instance numbers): decision 12 takes the instance
+number from `instances.lock`; the lowered `System` gains `Component.numbers`,
+and the codegen deployment section and the deployment descriptor carry `number`
+and `provisional` for each instance. Decision 9 gains the heading "instance
+number changed", the one system heading that carries a verdict: breaking.
 
 ## Context
 
@@ -258,9 +260,9 @@ nothing.
 - A build whose only errors are RSDL-7xx now leaves artifacts on disk with a
   non-zero exit. Anything that treats exit 1 as "nothing was written" must be
   read again; `ridl baseline` already refuses on any error and is unaffected.
-- `ridl diff`'s JSON output gains two optional keys, `placement_changed` and
-  `composition_changed`, each left out when empty, so a report without a system
-  change renders byte for byte as before.
+- `ridl diff`'s JSON output gains three optional keys, `placement_changed`,
+  `composition_changed` and `instance_number_changed`, each left out when empty,
+  so a report without a system change renders byte for byte as before.
 - Since story E6.17 landed (2026-10-04), the system artifact carries the catalog
   hash of each region, so a consumer can check it against the hash in the
   catalog's descriptor.
@@ -271,8 +273,9 @@ nothing.
    `Region` carries the hash, and `ridlc` embeds it (see the second note under
    decision 7).
 2. **Which system changes are breaking, and for whom** — the stability policy's
-   question (roadmap E4.5a), which is why decision 9 reports them with no
-   verdict.
+   question (roadmap E4.5a), which is why decision 9 reports the placement and
+   composition changes with no verdict. A changed locked instance number is the
+   one system change decision 9 already reports as breaking.
 3. **Which backend claims which namespace** — RSDL-804 warns on every backend
    key until a backend can declare the keys it consumes, which waits for the
    plugin contract of
@@ -301,7 +304,8 @@ nothing.
 - [the rsdl implementation technote](../technotes/rsdl-implementation.md) — the
   checks, the lowering and the diff as built
 - [rsdl language reference](../specification/rsdl-language-reference.md) — §13
-  the facts, §14 the two headings, §11 grants and regions, §16 the diagnostics
+  the facts, §14 the system headings, §11 grants and regions, §16 the
+  diagnostics
 - [ADR-0014](ADR-0014-ir-encodings.md) — the three encodings and the artifact
   names
 - `crates/ridl-ir/proto/ridl/ir/v2/system.proto`,

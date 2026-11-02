@@ -268,10 +268,13 @@ and still exits 1.
 
 ## Comparing two systems
 
-`ridl diff` compares the contracts by the ridl categories, and those alone give
-the verdict and the exit code. The changes that are not contract changes are
-listed after them, under two headings and with no verdict. Moving `Dashboard`
-from `Head` to `ZoneRear` in `Car`:
+`ridl diff` compares the contracts by the ridl categories, and those give the
+verdict and the exit code. The changes that are not contract changes are listed
+after them, under the headings `placement changed` and `composition changed`,
+with no verdict. A changed locked instance number is the exception: it is
+listed under `instance number changed (breaking)`, and it makes the verdict
+`breaking` and the exit code 1. Moving `Dashboard` from `Head` to `ZoneRear` in
+`Car`:
 
 ```text
 identical

@@ -405,8 +405,11 @@ crate the workspace holds — see `AGENTS.md` for that.
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
-  `ridl-descriptor`'s accessors (`crates/ridl-descriptor/src/generated.rs`) from
-  `crates/ridl-descriptor/schema/catalog.fbs` with planus.
+  `ridl-descriptor`'s accessors with planus:
+  `crates/ridl-descriptor/src/generated.rs` from
+  `crates/ridl-descriptor/schema/catalog.fbs`, and
+  `crates/ridl-descriptor/src/deployment/generated.rs` from
+  `crates/ridl-descriptor/schema/deployment.fbs`.
 
   `cargo xtask calibrate` dumps the design lints' findings over `evals/` and
   derives the calibration summary ([`xtask/README.md`](../../xtask/README.md)).

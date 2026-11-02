@@ -310,7 +310,11 @@ wasm-check:
 # manifest is built
 # unchanged apart from the appended tables, in three feature sets: the
 # defaults, none, and only `dedup`. The unit tests and the integration tests
-# the deployment_* tests, lower, round_trip and verify run with the defaults; codec_agreement (it
+# deployment_lower, deployment_lower_content, deployment_round_trip,
+# deployment_verify, lower, round_trip and verify run with the defaults
+# (deployment_common, the helper the deployment tests include, is listed too,
+# because cargo builds it as a target of its own);
+# codec_agreement (it
 # needs a dev-dependency the package drops, and it reads a corpus snapshot
 # under crates/ridl/, outside the package), golden_hash (it reads a file
 # outside the package) and the doctests do not run at the minimum, and the

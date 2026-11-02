@@ -99,9 +99,9 @@ choices, see [`../decisions/`](../decisions/).
 - **deployment-descriptor.md** — the FlatBuffers deployment descriptor per
   deployment as built: the `RDLD` file `--emit deployment` writes, with the
   catalog descriptors of its closure embedded, what it contains, how a runtime
-  identifies an instance by its own backend key, verification before access, and
-  where it differs from the design. The decisions behind it are
-  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decisions 11
+  identifies an instance by the number `instances.lock` gives it, verification
+  before access, and where it differs from the design. The decisions behind it
+  are [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decisions 11
   and 12.
 - **codegen-plugins.md** — the backend contract
   `generate(CodegenRequest) → CodegenResponse`, its in-process host over every

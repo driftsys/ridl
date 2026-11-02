@@ -151,17 +151,19 @@ one unit, `veh`, so its system has one region, named `veh`, whose interfaces are
 ## `ridl diff` at the system
 
 `ridl_diff::system` compares two lowered systems and returns `SystemChange`
-values under one of two headings, `PlacementChanged` and `CompositionChanged`.
-They are their own vocabulary rather than `Category` variants because a
-`Category` carries a verdict and these carry none, which is also why `--explain`
-does not list them.
+values under one of three headings, `PlacementChanged`, `CompositionChanged` and
+`InstanceNumberChanged`. They are their own vocabulary rather than `Category`
+variants because a `Category` carries a verdict and the first two carry none,
+which is also why `--explain` does not list them.
 
-The contract comparison is unchanged and still decides the verdict and the exit
-code. The system changes are rendered after the contract lines — in text, the
-heading on its own line and one indented `path: before -> after` line per change
-with no `[verdict]`; in JSON, the optional keys `placement_changed` and
-`composition_changed`, left out when empty — so a report with no system change
-renders byte for byte as it did before.
+The contract comparison is unchanged and decides the verdict and the exit code,
+except that a change under `InstanceNumberChanged` (a changed locked instance
+number) makes the verdict breaking. The system changes are rendered after the
+contract lines — in text, the heading on its own line, followed by `(breaking)`
+for the instance number heading, and one indented `path: before -> after` line
+per change with no `[verdict]`; in JSON, the optional keys `placement_changed`,
+`composition_changed` and `instance_number_changed`, left out when empty — so a
+report with no system change renders byte for byte as it did before.
 
 The region map is not compared, so a changed region hash lists no system change.
 A change to an interface or a type the hash covers is reported by the contract

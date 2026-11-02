@@ -142,6 +142,12 @@ Its number is then the next free one at the time of the build, and a later
 `ridl lock` may assign another. A runtime that stores the number outside the
 build treats a provisional number as unstable.
 
+0 is not an instance number. Negative numbers are reserved for the runtime: the
+toolchain neither assigns nor generates one, so no descriptor and no generated
+constant holds one. A client sends its instance number when it attaches only; no
+data frame carries it, so instances stay indistinguishable on the wire (rsdl
+reference section 7).
+
 The verifier refuses an instance whose number is 0 or negative
 (`VerifyError::InstanceNumber`), and the lowering reports a system that holds
 such a number as `DeploymentLowerError::Internal`. A backend key on the
@@ -158,10 +164,12 @@ lists are verified to a depth of 16 (`MAX_ATTRIBUTE_DEPTH`), and the verifier
 visits at most `bytes.len() / 4` attribute values, counting every visit of a
 table that several lists share. It refuses an `AttributeValue` that sets both
 `scalar` and `list`, or neither (`MalformedAttributeValue`); a flag has no value
-table at all. It has its own `ridl_descriptor::deployment::VerifyError`
-(`TooShort`, `WrongIdentifier`, `WrongVersion`, `Invalid`, `EmbeddedCatalog`,
-`CatalogHashMismatch`, `TooDeep`, `TooManyAttributeValues`,
-`MalformedAttributeValue`); the catalog `VerifyError` is unchanged.
+table at all. It refuses a surface entry whose `link` is not an index into
+`links` (`SurfaceLink`). It has its own
+`ridl_descriptor::deployment::VerifyError` (`TooShort`, `WrongIdentifier`,
+`WrongVersion`, `Invalid`, `EmbeddedCatalog`, `CatalogHashMismatch`, `TooDeep`,
+`TooManyAttributeValues`, `MalformedAttributeValue`, `InstanceNumber`,
+`SurfaceLink`); the catalog `VerifyError` is unchanged.
 
 `ridl describe <file>` reads either descriptor and chooses by the file
 identifier. For a deployment descriptor it verifies the file and every embedded
@@ -171,13 +179,14 @@ own. The lowering checks the same hash when it writes the file.
 
 `DeploymentLowerError` has these variants: `UnknownDeployment`,
 `MissingCatalog`, `HashMismatch`, `InvalidCatalog`, `AttributeTooDeep` and
-`Internal` (a value in the system IR that the schema cannot express, or a buffer
-that the lowering wrote and the verifier then refused). The lowering counts the
-depth of a backend key's value as the verifier does: the value is at depth 1 and
-each list wrapper adds 1, so a scalar inside 15 lists is the deepest value
-accepted. A deeper value draws `AttributeTooDeep`, which names the namespace and
-the key, at every site that carries backend keys. The lowering verifies the
-buffer it has written before it returns it.
+`Internal` (a value in the system IR that the schema cannot express, a link with
+no interface, no consumer or no producer, a link whose interface no region of
+its catalog holds, or a buffer that the lowering wrote and the verifier then
+refused). The lowering counts the depth of a backend key's value as the verifier
+does: the value is at depth 1 and each list wrapper adds 1, so a scalar inside
+15 lists is the deepest value accepted. A deeper value draws `AttributeTooDeep`,
+which names the namespace and the key, at every site that carries backend keys.
+The lowering verifies the buffer it has written before it returns it.
 
 ## Evolution
 
