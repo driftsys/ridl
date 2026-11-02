@@ -567,6 +567,69 @@ fn a_surface_link_absent_from_a_nonempty_list_is_an_internal_error() {
 }
 
 #[test]
+fn a_link_whose_interface_no_region_holds_is_an_internal_error() {
+    let mut system = system();
+    system.deployments[0].links[0].interface = Some(iface("veh", "Stranger", false));
+    let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+    assert!(
+        matches!(&error, DeploymentLowerError::Internal(text) if text.contains("`Stranger`")),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn a_link_missing_a_part_is_an_internal_error() {
+    let parts: [(&str, fn(&mut v2::Link)); 3] = [
+        ("interface", |link| link.interface = None),
+        ("consumer", |link| link.consumer = None),
+        ("producer", |link| link.producer = None),
+    ];
+    for (part, clear) in parts {
+        let mut system = system();
+        clear(&mut system.deployments[0].links[0]);
+        let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
+        assert!(
+            matches!(&error, DeploymentLowerError::Internal(text) if text.contains(part)),
+            "{part}: {error:?}"
+        );
+    }
+}
+
+/// A link's number is looked up in the region of its own catalog, among the
+/// interfaces with its own inline flag. The `nav` region, which comes first,
+/// gets a `Climate` of its own, and the `veh` region gets an inline `Seat`
+/// before the declared one: neither may give its number to a link.
+#[test]
+fn a_link_takes_the_number_of_its_own_catalog_and_inline_flag() {
+    let mut system = system();
+    system.regions[0].interfaces.push(region_interface(
+        "Climate",
+        false,
+        7,
+        false,
+        "nav.MapService",
+    ));
+    system.regions[1].interfaces.insert(
+        0,
+        region_interface("Seat", true, 9, false, "veh.SeatService"),
+    );
+    let bytes = lower(&system, "Prod", &[], &catalogs()).expect("lowers");
+    let numbers: Vec<(String, u32, String)> = owned_of(&bytes)
+        .links
+        .iter()
+        .map(|link| (link.catalog.clone(), link.number, link.service.clone()))
+        .collect();
+    assert_eq!(
+        numbers,
+        [
+            ("veh".to_owned(), 1, "veh.ClimateService".to_owned()),
+            ("nav".to_owned(), 1, "nav.MapService".to_owned()),
+            ("veh".to_owned(), 2, "veh.SeatService".to_owned()),
+        ]
+    );
+}
+
+#[test]
 fn the_json_view_equals_the_independently_written_value() {
     let bytes = lowered();
     let value = to_json(verify(&bytes).expect("verifies")).expect("renders");

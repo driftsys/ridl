@@ -1,5 +1,8 @@
 //! The catalog descriptor: the FlatBuffers file per unit that an engine
-//! reads without decoding (`docs/design/catalog-descriptor.md`).
+//! reads without decoding (`docs/design/catalog-descriptor.md`). The
+//! [`deployment`] module holds the deployment descriptor, the FlatBuffers
+//! file per deployment that embeds those catalogs
+//! (`docs/design/deployment-descriptor.md`).
 //!
 //! `schema/catalog.fbs` is the schema; `generated.rs` holds the accessors
 //! planus generates from it (`cargo xtask descriptor-codegen`). [`finish`]

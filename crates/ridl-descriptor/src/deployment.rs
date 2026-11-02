@@ -82,6 +82,9 @@ pub enum VerifyError {
         instance: String,
         number: i32,
     },
+    /// A surface entry's `link` is not an index into `Deployment.links`.
+    /// `index` is the entry's position in `Deployment.surface`.
+    SurfaceLink { index: usize, link: u32, links: usize },
 }
 
 impl From<planus::Error> for VerifyError {
@@ -135,6 +138,10 @@ impl fmt::Display for VerifyError {
             Self::TooManyAttributeValues => {
                 write!(f, "the attribute values outnumber the size of the buffer")
             }
+            Self::SurfaceLink { index, link, links } => write!(
+                f,
+                "surface entry {index} names link {link}, but the deployment has {links} links"
+            ),
         }
     }
 }
@@ -285,9 +292,13 @@ fn walk_fields(deployment: DeploymentRef<'_>, budget: &mut Budget) -> Result<(),
             walk_endpoint(producer?)?;
         }
     }
-    for surface in deployment.surface()? {
+    let links = deployment.links()?.len();
+    for (index, surface) in deployment.surface()?.iter().enumerate() {
         let surface = surface?;
-        surface.link()?;
+        let link = surface.link()?;
+        if usize::try_from(link).map_or(true, |link| link >= links) {
+            return Err(VerifyError::SurfaceLink { index, link, links });
+        }
         surface.direction()?;
     }
     walk_attributes(deployment.system_attributes()?, budget)?;

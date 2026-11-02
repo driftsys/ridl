@@ -315,3 +315,30 @@ fn the_verifier_refuses_a_number_that_is_not_positive() {
 fn the_verifier_accepts_the_largest_number() {
     verify(&with_instance_number(i32::MAX)).expect("verifies");
 }
+
+fn with_surface_link(link: u32) -> Vec<u8> {
+    let mut d = valid();
+    d.surface[0].link = link;
+    finish(&d)
+}
+
+/// The schema defines `Surface.link` as an index into `Deployment.links`; the
+/// fixture has one link, so 0 is the only index the verifier accepts.
+#[test]
+fn the_verifier_refuses_a_surface_link_past_the_last_link() {
+    verify(&with_surface_link(0)).expect("verifies");
+    for link in [1, u32::MAX] {
+        match verify(&with_surface_link(link)) {
+            Err(VerifyError::SurfaceLink {
+                index,
+                link: found,
+                links,
+            }) => assert_eq!((index, found, links), (0, link, 1)),
+            other => panic!("link {link}: expected SurfaceLink, got {other:?}"),
+        }
+    }
+    assert_eq!(
+        verify(&with_surface_link(1)).unwrap_err().to_string(),
+        "surface entry 0 names link 1, but the deployment has 1 links"
+    );
+}

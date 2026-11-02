@@ -240,17 +240,30 @@ fn endpoint(endpoint: &v2::Endpoint) -> Endpoint {
 /// is read from the region map, which carries the identity the routing key
 /// uses. The attributes are those of the consumer's `requires` line, which is
 /// the link's attribute site.
+///
+/// A link with no interface, no consumer or no producer, or whose interface
+/// is in no region, is refused with [`DeploymentLowerError::Internal`]: the
+/// lowering fails instead of choosing a default.
 fn lower_link(system: &v2::System, link: &v2::Link) -> Result<Link, DeploymentLowerError> {
-    let interface = link.interface.clone().unwrap_or_default();
+    let missing = |what: &str| {
+        DeploymentLowerError::Internal(format!("the link of `{}` has no {what}", link.service))
+    };
+    let interface = link.interface.clone().ok_or_else(|| missing("interface"))?;
+    let consumer = link.consumer.clone().ok_or_else(|| missing("consumer"))?;
+    let producer = link.producer.clone().ok_or_else(|| missing("producer"))?;
     let number = system
         .regions
         .iter()
         .filter(|region| region.catalog == interface.catalog)
         .flat_map(|region| &region.interfaces)
         .find(|candidate| candidate.name == interface.name && candidate.inline == interface.inline)
-        .map_or(0, |candidate| candidate.number);
-    let consumer = link.consumer.clone().unwrap_or_default();
-    let producer = link.producer.clone().unwrap_or_default();
+        .map(|candidate| candidate.number)
+        .ok_or_else(|| {
+            DeploymentLowerError::Internal(format!(
+                "the link of `{}` names interface `{}` of catalog `{}`, which no region holds",
+                link.service, interface.name, interface.catalog
+            ))
+        })?;
     let line = system
         .components
         .iter()
