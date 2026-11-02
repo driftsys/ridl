@@ -290,13 +290,15 @@ A changed `labels`, `deprecated`, `tier` or backend key is listed under the
 heading of the declaration it is on, as a before-and-after line; a changed
 sizing key (`depth`, `slots`, `budget`) is not listed, because it changes no
 link and no contract.
-Which of these changes break an already deployed system, and for whom, is not
-something the compiler decides.
+The compiler does not decide which placement or composition changes break an
+already deployed system, and for whom; the one exception is a changed locked
+instance number, which it reports as breaking.
 
 ## What is not here yet
 
-- **No runtime reads the lowered system,** and no descriptor is emitted from it.
-  The facts are written down and go no further.
+- **No runtime reads the lowered system.** `ridl build --emit deployment`
+  writes one deployment descriptor per deployment from it (see
+  `docs/design/deployment-descriptor.md`).
 - **rsdl declares no transport, no network and no process.** A same-machine
   crossing says two instances share a machine, not how they talk. If a backend
   needs such a fact, it arrives as that backend's namespaced key.
