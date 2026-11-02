@@ -59,6 +59,15 @@ one deployment.
    with its number, so a release daemon refuses an attach that claims a
    debug-only instance's number.
 
+7. **A component can run several instances at a time (kept).** rsdl's
+   `instances = (a, b)` serves redundancy and debug. Each instance gets its own
+   locked number and its own generated constant, and attaches with it (MVP).
+   Several consumer instances need nothing more. Several producer instances of
+   one interface (a redundant provider set) stay flagged by RSDL-409 as not yet
+   realizable: the descriptor lists every producing instance with its number,
+   and the rule that decides which one writes (active and standby, election,
+   handover) belongs to the runtime and is **not in the MVP**.
+
 ## Questions for the MVP design
 
 - The lock file: its name and place (beside `interfaces.lock`, or one per
