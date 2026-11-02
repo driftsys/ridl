@@ -39,6 +39,11 @@ one file per deployment.
 | `Emit::Deployment`, `write_deployments`                                                                      | `crates/ridlc/src/lib.rs`                                    |
 | `ridl describe` (`run_describe`)                                                                             | `crates/ridl/src/main.rs`                                    |
 | The placement's backend keys in the codegen deployment section (`Instance.attributes`)                       | `crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto`      |
+| The instance lock: format, allocation, retire, rename, merge                                                 | `crates/ridl-core/src/instance_lock.rs`                      |
+| The numbering step, and the `RSDL-314` and `RSDL-315` diagnostics                                            | `crates/ridl-sem/src/rsdl/numbering.rs`                      |
+| `ridl lock` for instances, and the merge driver                                                              | `crates/ridl/src/lock.rs`                                    |
+| The `instances` module of the generated Rust crate                                                           | `crates/ridl-backend-rust/src/instances.rs`                  |
+| The `instance number changed` heading of `ridl diff`                                                         | `crates/ridl-diff/src/system.rs`                             |
 
 `finish`, `verify` and the generated accessors need no standard library. `lower`
 and `to_json` are under the `std` feature of `ridl-descriptor`.
@@ -224,6 +229,41 @@ reason. They bind later changes to the artifact.
   Rejected: a key owned by rsdl (`id = 3`), because a number written in source
   is not unique across deployments; a number derived from placement order,
   because it changes when a source is reordered.
+- **One instance lock for the workspace, at the root.** An interface number is
+  scoped by its catalog, so the interface lock is one per unit. An instance
+  number is scoped by nothing: a node compares it with every instance of a
+  deployment, and a deployment can place components of several units, so one
+  file numbers them all. The root workspace numbers every instance, including
+  those of a component declared in a dependency unit, because the workspace that
+  builds a system is the one that deploys it and nothing may be written into a
+  remote unit (ADR-0002). Plain `ridl lock` at the root is the only command that
+  allocates. The format, the key, the allocation and the retire and rename rules
+  are specified in the rsdl reference section 7 and the CLI reference, not
+  repeated here. Rejected: a lock per unit, because two units would both start
+  at 1 and scoping the number by unit would put the unit on the attach as a
+  second identity; the dependency's own lock, because its numbers can collide
+  with the root's and the dependency's workspace may deploy the component
+  elsewhere; a number keyed per system or per deployment, because one instance
+  has one number in every build and its constant must not depend on a
+  deployment.
+- **The numbering is one workspace step before lowering.** `number_instances`
+  takes the checked systems of the root workspace and the lock and returns the
+  map from key to number and provisional flag. A provisional number depends on
+  every other provisional key, so it is computed once for the workspace and not
+  per system. `lower_system` takes the map, so the system IR, the codegen
+  section and the descriptor read one source and cannot disagree.
+- **`ridl diff` reports a changed locked number, and not a rename.** When the
+  old key is absent on the new side, a diff cannot tell a rename from a reuse.
+  The lock never reuses a number, and a client built before a rename sends the
+  same number to the same instance, so the diff does not report it (rsdl
+  reference section 14). A provisional old number was never a promise and is
+  never reported.
+- **The constants are an integer, from the system artifact, with no constants
+  for a bare file.** The type is `i32`, the type of the attach field; a newtype
+  is left to the runtime work that defines the debug twin on it
+  (driftsys/ridl#1176). A single-file build writes no crate `lib.rs`, so it gets
+  no `instances` module; its numbers still reach the IR, the section and the
+  descriptor. A workspace with no `system` gets no module.
 - **The codegen deployment section carries the placement's backend keys**
   (`Instance.attributes`) and the instance's number and provisional flag
   (`Instance.number`, `Instance.provisional`), so that a plugin generates a
