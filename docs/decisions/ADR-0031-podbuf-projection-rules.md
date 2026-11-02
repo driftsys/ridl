@@ -1018,6 +1018,38 @@ stated in the decision above; this list is the index.
 | `unsafe` pointer casts for a one-compare string read                                                                 | rejected       | the generated code and `ridl-rt` hold no `unsafe`; a UTF-8 scan per string read is the cost                                                              |
 | Names `reprbuf`, `ridlbuf`, `hptbuf`, `typlbuf`, `wirebuf`, `membuf`, `cbuf`, `rxbuf`, `rpbuf`, `tailbuf`, `spanbuf` | rejected       | Rust-only, toolchain-bound, unexplained, misleading (wire, receive buffer, RPMsg), or taken on crates.io                                                 |
 
+### Remote baseline evidence alternatives
+
+For the remote-growth amendment, complete IR of reached remote packages is
+retained separately from local snapshots. It preserves the semantic input and
+lets the shared projection compute each historical layout offline, without a
+second layout schema. Its cost is the serialized size of whole reached packages,
+including declarations that the consumer does not itself reference. Retaining
+those declarations provides input for future rules; the implemented rule still
+judges only growth, not general dependency compatibility.
+
+Size-only metadata was rejected because it cannot reconstruct old consumer heads
+for the existing pad-fit append checks. Full-layout metadata would retain more
+physical facts, but duplicate projection output and still lack semantic
+declarations. Storing no context was rejected as the complete baseline contract:
+legacy snapshots do not identify old pins, so even an unchanged workspace can
+lack the evidence needed for an affirmative judgment. Explicit uncertainty
+remains the migration behavior for that legacy case, with repair or reset as
+described in decision 13.
+
+Fetching old pins or depending on a surviving cache was rejected as the baseline
+contract because comparison is offline and caches can disappear. A lockfile
+alone identifies pins without retaining their IR. Comparing imported packages as
+owned packages, including by placing their snapshots in the flat local snapshot
+directory, would report unrelated dependency changes and assign the wrong
+ownership. Reusing `podbuf_inline_append` was rejected because a pin-only break
+does not require an appended consumer field. The distinct remote-growth category
+states the evidence correctly. Source comparison, enrichment and recovery
+release together so diff, build and publication use consistent evidence;
+source-only delivery was not selected. The approved options and release
+rationale are preserved in the
+[remote-inline design](../archive/2026-11-02-podbuf-remote-inline-design.md).
+
 ## Consequences
 
 - **Positive.** A consumer reads a field at a fixed offset with no library, in C

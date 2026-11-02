@@ -354,6 +354,12 @@ surviving.
 This coverage replaces the shared-current-context limitation recorded on
 2026-10-31. Local append layouts also use their respective historical scopes. It
 does not certify earlier catalog history or compare unrelated remote contracts.
+The
+[archived remote-inline design](../archive/2026-11-02-podbuf-remote-inline-design.md)
+and [implementation plan](../archive/2026-11-02-podbuf-remote-inline-plan.md)
+retain the approved direction and implementation sequence; their proposed
+wording is historical. The operational contract is the CLI reference linked
+above.
 
 ## Known gaps
 
