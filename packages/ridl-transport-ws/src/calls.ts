@@ -136,13 +136,17 @@ export class Calls {
    * sends the call's frames: the `request` at once, within this call, then
    * a `stream_credit` from the stream's `pull` each time the reader has room
    * for more chunks than are granted and not yet received, and a
-   * `stream_end interrupted` when the reader cancels or `bound` milliseconds
-   * pass with no `chunk` and no `stream_end`. The stream holds at most
+   * `stream_end interrupted` when the reader cancels or when `bound`
+   * milliseconds pass after the `request` with no `chunk` and no `stream_end`:
+   * the timer stops at the first frame of the stream, so a stream that has
+   * begun is not bounded by it. The stream holds at most
    * {@link INITIAL_CREDIT} chunks, the initial credit. It closes on
    * `stream_end end` and errors with a {@link SessionError}: the outcome of
    * any other `stream_end`, `interrupted` for a gap in `seq`, `corrupt` for a
    * chunk longer than `limit` (also sent to the server as `stream_end
-   * corrupt`), `timeout` when the bound passes, `down` when the session ends.
+   * corrupt`), `timeout` when neither a `chunk` nor a `stream_end` arrives
+   * within `bound` milliseconds of the `request`, `down` when the session
+   * ends.
    * It errors with a `RangeError`, and sends nothing, for a bound that is not
    * a finite number greater than 0 and at most 2147483647.
    */

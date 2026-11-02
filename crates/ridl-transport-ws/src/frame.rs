@@ -32,7 +32,8 @@ use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::sample::{Envelope, Timestamp};
 
-/// The frame version this binding carries.
+/// The newest frame version without streams, 2, which this binding carries
+/// with [`FRAME_VERSION_3`], the frame version that adds the stream forms.
 pub const FRAME_VERSION: u32 = 2;
 /// The WebSocket subprotocol name of binding version 2.
 pub const SUBPROTOCOL: &str = "ridl-ws-v2";

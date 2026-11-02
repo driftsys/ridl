@@ -484,11 +484,13 @@ is the following.
   the call.
 - **Errors.** The stream errors with the category of the server's `stream_end`:
   `contract`, `corrupt`, `busy` or `interrupted`. A gap in the stream's `seq`, a
-  `chunk` or a `stream_end` that skips a value, errors it `interrupted` and the
-  client sends `stream_end interrupted`. A chunk longer than the member's limit
-  errors it `corrupt` and sends `stream_end corrupt`. When `bound` milliseconds
-  pass with neither a `chunk` nor a `stream_end`, it errors `timeout` and the
-  client sends `stream_end interrupted`; the bound ends at the first frame, as
+  `chunk` or a `stream_end` that skips a value, errors it `interrupted`. After a
+  gap in the `seq` of a `chunk` the client sends `stream_end interrupted`; after
+  a gap in the `seq` of a `stream_end` it sends nothing, because the stream has
+  ended. A chunk longer than the member's limit errors it `corrupt` and sends
+  `stream_end corrupt`. When `bound` milliseconds pass with neither a `chunk`
+  nor a `stream_end`, it errors `timeout` and the client sends
+  `stream_end interrupted`; the bound ends at the first frame, as
   [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13 states. When the
   session ends, an open stream errors `down`. An argument longer than the
   member's limit errors the stream `corrupt`, and a bound or a number that
@@ -656,9 +658,8 @@ generated code uses it yet.
   it, and the generated codec module that decodes and encodes a payload are
   built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
   this package by hand.
-- A parameter stream on a command or a query (`commandStream` and
-  `queryWithUpload` of the working design), a byte stream, and the UTF-8 check
-  of a `<string>` chunk.
+- A parameter stream on a command or a query, a byte stream, and the UTF-8 check
+  of a `<string>` chunk. Only the reply stream of a query is built.
 - The providing side in TypeScript, an emulator (driftsys/ridl#290), and the
   stand-in roles of the crate's "Adding the stand-in ports later".
 - Reading a catalog descriptor: the `kind` check, the response bound, the

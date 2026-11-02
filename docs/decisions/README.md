@@ -633,8 +633,11 @@ other entry below is Accepted.
   an entry can only lower the chunk size. Amended 2026-10-31: decision 10's
   example declares a named result union instead of the inline `<A | B>`, which
   the grammar does not admit. The stream port of `ridl-rt` (decisions 9 and 11)
-  is built; the frame version and the generated face are not
-  (driftsys/ridl#1116).
+  is built, and so are frame version 3, which carries a query's streamed reply
+  over WebSocket
+  ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
+  and the Rust face for a streamed reply of named elements; parameter, byte and
+  text streams are not carried yet (driftsys/ridl#1116).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

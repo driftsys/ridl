@@ -181,13 +181,16 @@ differently, so the error says which:
   itself, `ProtocolViolation::BadBlock` (the cases are in
   [frame specification](../specification/frame-specification.md) §11.1, "Binding
   version 2", "Framing"); and a stream form that is wrong by itself,
-  `ProtocolViolation::BadStream` (§11.1, "Binding version 3", "Framing": an
-  outcome not allowed on a `stream_end`, a `detail` where the outcome has none,
-  a `credit` of 0, and bytes after the header of a `stream_end` or a
+  `ProtocolViolation::BadStream` for a stream form whose `kind` is not `command`
+  or `query` and for bytes after the header of a `stream_end` or a
   `stream_credit`, which are a violation and not a discard, because discarding
-  an end or a credit would leave its stream stuck). A `kind` outside the table
-  stays `UnknownCode` and an `interface` or `ordinal` 0 stays `ZeroNumber`, as
-  for every form.
+  an end or a credit would leave its stream stuck (§11.1, "Binding version 3",
+  "Framing"). The other cases of a stream form that is wrong by itself keep the
+  violation of the same case on every form: an outcome not allowed on a
+  `stream_end` is `OutcomeNotAllowed`, a `detail` where the outcome has none is
+  `NonzeroDetail`, and a `credit` of 0 is `ZeroNumber`. A `kind` outside the
+  table stays `UnknownCode` and an `interface` or `ordinal` 0 stays
+  `ZeroNumber`, as for every form.
 - `DecodeError::Discard(_)`: a `publish` or a `response` whose header says it
   carries no payload and which has bytes after the header. A consumer records it
   and drops it, and its session continues; the server, which receives neither
@@ -681,14 +684,16 @@ chooses.
   and records no note. A `stream_end` stops the stream: the server aborts it,
   forgets the call at once, records `Note::StreamStopped`, sends nothing more
   for the call, and keeps a `stream_end interrupted` for a later retransmit of
-  the `request`. The provider then reads `Interrupted`, not the verdict of the
-  client's outcome, because a reply stream's provider needs only to stop; the
-  verdict reaches a provider only on a parameter stream, which is not built. A
-  `stream_end` with `end` or `busy` closes 1002 with
-  `ProtocolViolation::OutcomeNotAllowed`. A `stream_credit` or a `stream_end` on
-  a stream other than 0 is ignored and records no note. A client `chunk` on
-  stream 0 is `Note::UnexpectedDirection` and a client `chunk` on any other
-  stream is `Note::StreamCreditExceeded`, each closing 1002.
+  the `request`. The server aborts the stream on the backend with the error of
+  the client's outcome (`interrupted`, `contract` or `corrupt`) and then forgets
+  the call, so a provider on the loopback reads `Interrupted` whatever the abort
+  carried: after a forget a push answers `Interrupted`. The verdict reaches a
+  provider only on a parameter stream, which is not built. A `stream_end` with
+  `end` or `busy` closes 1002 with `ProtocolViolation::OutcomeNotAllowed`. A
+  `stream_credit` or a `stream_end` on a stream other than 0 is ignored and
+  records no note. A client `chunk` on stream 0 is `Note::UnexpectedDirection`
+  and a client `chunk` on any other stream is `Note::StreamCreditExceeded`, each
+  closing 1002.
 - **A streamed member on a session below version 3.** A `request` for a member
   whose reply is a stream is answered `response` with
   `contract(UnknownInteraction)` and `Note::UnknownInteraction`, because version

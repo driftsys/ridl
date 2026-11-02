@@ -25,7 +25,10 @@
 
 import { BLOCK_BYTES, blockCount, FORM_BLOCK } from "./blocks.ts";
 
-/** The frame version this binding carries. */
+/**
+ * The newest frame version without streams, 2, which this binding carries
+ * with {@link FRAME_VERSION_3}, the frame version that adds the stream forms.
+ */
 export const FRAME_VERSION = 2;
 /** The WebSocket subprotocol name of binding version 2. */
 export const SUBPROTOCOL = "ridl-ws-v2";

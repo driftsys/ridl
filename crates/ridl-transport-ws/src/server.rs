@@ -278,12 +278,12 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, mut backend: B, config: &Co
 
 /// The member of `table` whose messages need the most bytes, with that
 /// number, when it is above `limit`: the largest header and envelope of a
-/// message that carries a payload, plus the member's limit. A `fixed` needs at most one block
-/// message, 4,130 bytes, because a value that one `publish` does not carry
-/// crosses in blocks: the smaller of 36 bytes plus its limit and 4,130. The
-/// code clamps the limit of a `fixed` before it adds the header and adds with
-/// `saturating_add`; no test on a 64-bit host checks the order of these
-/// steps. On a tie, the first member in key order.
+/// message that carries a payload, plus the member's limit. A `fixed` needs
+/// at most one block message, 4,130 bytes, because a value that one `publish`
+/// does not carry crosses in blocks: the smaller of 36 bytes plus its limit
+/// and 4,130. The code clamps the limit of a `fixed` before it adds the header
+/// and adds with `saturating_add`; no test on a 64-bit host checks the order
+/// of these steps. On a tie, the first member in key order.
 fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     let header = largest_header();
     let block_cap = block_message() - header;

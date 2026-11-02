@@ -549,8 +549,9 @@ export class Session {
    * `interrupted` as the server's `stream_end` reports; `interrupted` also
    * when a `seq` is missing, and `corrupt` when a chunk is longer than the
    * member's limit, the client then sending `stream_end` with that outcome;
-   * `timeout` when `opts.bound` milliseconds pass with no `chunk` and no
-   * `stream_end`, the client then sending `stream_end interrupted`; `down`
+   * `timeout` when neither a `chunk` nor a `stream_end` arrives within
+   * `opts.bound` milliseconds of the `request` (the timer stops at the first
+   * frame of the stream), the client then sending `stream_end interrupted`; `down`
    * when the session has ended or ends first; `unsupported`, with nothing
    * sent, on a session of frame version 1 or 2, which has no stream forms;
    * `corrupt`, with nothing sent, when `args` is longer than the member's

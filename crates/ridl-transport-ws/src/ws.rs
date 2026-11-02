@@ -60,18 +60,18 @@ pub(crate) enum Upgrade {
 /// `accept_origin` accepts its `Origin` header, which is `None` when the
 /// request has none. The `101` selects the newest subprotocol that is offered
 /// and whose frame version is at most `max_version`, whatever the order of the
-/// offer; the caller passes 3 when it serves streams and 2 otherwise. This provider serves no
-/// attach of frame version 1, but it selects `ridl-ws-v1` for a client that
-/// offers only that, so that the client receives an explicit refusal reason
-/// at the attach and not a failed handshake. The path, the query and every
-/// other header are ignored. A request head over 8 KiB, a malformed request,
-/// a request with more than one `Origin` header, or a request that offers
-/// no subprotocol up to `max_version` is answered `400 Bad Request` and returns
-/// [`Upgrade::Rejected`]; when the request is well formed and its version is
-/// not 13, whatever its other headers, the `400` names the version the server
-/// speaks in a `Sec-WebSocket-Version: 13` header (RFC 6455 §4.2.2 item 4).
-/// A request whose `Origin` `accept_origin` refuses is answered
-/// `403 Forbidden` and returns [`Upgrade::Forbidden`].
+/// offer; the caller passes 3 when it serves streams and 2 otherwise. This
+/// provider serves no attach of frame version 1, but it selects `ridl-ws-v1`
+/// for a client that offers only that, so that the client receives an
+/// explicit refusal reason at the attach and not a failed handshake. The path,
+/// the query and every other header are ignored. A request head over 8 KiB, a
+/// malformed request, a request with more than one `Origin` header, or a
+/// request that offers no subprotocol up to `max_version` is answered `400
+/// Bad Request` and returns [`Upgrade::Rejected`]; when the request is well
+/// formed and its version is not 13, whatever its other headers, the `400`
+/// names the version the server speaks in a `Sec-WebSocket-Version: 13`
+/// header (RFC 6455 §4.2.2 item 4). A request whose `Origin` `accept_origin`
+/// refuses is answered `403 Forbidden` and returns [`Upgrade::Forbidden`].
 ///
 /// The head is read one byte at a time, so that no byte after the empty line
 /// that ends it is taken from the stream.
