@@ -526,7 +526,8 @@ pub fn compile_workspace_with_access(
 /// Keeps the diagnostics a command reports for an entry inside a workspace
 /// member: those whose primary span is in a file under `scope`, the member
 /// directory ([`LoadedWorkspace::report_scope`]), and those on the workspace
-/// root's `ridl.toml` — the `ridl.toml` of a directory above `scope` — because
+/// root's `ridl.toml` and `instances.lock` — those of a directory above
+/// `scope` — because
 /// the root's `[imports]`, `[lints]` and `members` govern the member, so a
 /// problem there (MANI-007, for one) is the member's to see. A diagnostic
 /// with no file path is kept, and so is one in a file under any of
@@ -593,11 +594,14 @@ pub fn is_remote(
     remote_units.contains_key(ridl_ir::v2::unit_of(package))
 }
 
-/// Whether `path` is the `ridl.toml` of a directory at or above `scope`: the
-/// workspace root's manifest, for a member scope. A sibling member's manifest
+/// Whether `path` is the `ridl.toml` or the `instances.lock` of a directory at
+/// or above `scope`: the workspace root's manifest or instance lock, for a
+/// member scope. The instance lock numbers the whole workspace's system, so a
+/// finding on it (RSDL-314, RSDL-315) is every member's to see. A sibling member's manifest
 /// is not, because its directory is beside `scope`, not above it.
 fn is_manifest_above(path: &Path, scope: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == "ridl.toml")
+    path.file_name()
+        .is_some_and(|name| name == "ridl.toml" || name == ridl_core::instance_lock::FILE_NAME)
         && path.parent().is_some_and(|dir| scope.starts_with(dir))
 }
 

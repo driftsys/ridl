@@ -103,3 +103,19 @@ fn check_reports_a_malformed_instance_lock_as_rsdl_315() {
     assert_eq!(code, 1, "stderr: {stderr}");
     assert!(stderr.contains("error[RSDL-315]"), "{stderr}");
 }
+
+#[test]
+fn check_inside_a_member_still_reports_the_root_instance_lock() {
+    let dir = TempDir::new("member");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"veh\"]\n");
+    dir.write("veh/ridl.toml", MANIFEST);
+    dir.write("veh/system.rsdl", SYSTEM);
+    dir.write(
+        "instances.lock",
+        &format!("{HEADER}next 4\nveh.Cruise/spare 3\n"),
+    );
+    let member = dir.path().join("veh");
+    let (code, _, stderr) = ridl(&["check".as_ref(), member.as_os_str()]);
+    assert_eq!(code, 1, "stderr: {stderr}");
+    assert!(stderr.contains("error[RSDL-314]"), "{stderr}");
+}
