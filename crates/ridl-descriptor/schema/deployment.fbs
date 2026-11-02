@@ -87,6 +87,8 @@ table Instance {
   attributes: [Attribute] (required);
   offers: [InterfaceKey] (required);
   maps: [string] (required);
+  number: int32;
+  provisional: bool;
 }
 
 table Endpoint {

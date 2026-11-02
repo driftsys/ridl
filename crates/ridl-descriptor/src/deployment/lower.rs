@@ -134,6 +134,12 @@ pub fn lower(
         .iter()
         .zip(&declared.placements)
         .map(|(instance, placement)| {
+            if instance.number <= 0 {
+                return Err(DeploymentLowerError::Internal(format!(
+                    "instance `{}/{}` has no positive number in the system",
+                    instance.component, instance.instance
+                )));
+            }
             Ok(Instance {
                 component: instance.component.clone(),
                 instance: instance.instance.clone(),
@@ -149,6 +155,8 @@ pub fn lower(
                     })
                     .collect(),
                 maps: instance.maps.clone(),
+                number: instance.number,
+                provisional: instance.provisional,
             })
         })
         .collect::<Result<Vec<_>, DeploymentLowerError>>()?;

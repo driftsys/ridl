@@ -100,9 +100,9 @@ message Instance {
 // A backend key as declared (rsdl §5): `namespace.key`, a flag or a value,
 // never interpreted by the compiler. The shape of the IR's `Attribute`.
 message Attribute {
-  // `shm` in `shm.service`.
+  // `linux` in `linux.priority`.
   string namespace = 1;
-  // `service` in `shm.service`.
+  // `priority` in `linux.priority`.
   string key = 2;
   // Absent for a flag.
   AttributeValue value = 3;

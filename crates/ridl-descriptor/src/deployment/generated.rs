@@ -3107,6 +3107,10 @@ mod root {
                 pub offers: ::planus::alloc::vec::Vec<self::InterfaceKey>,
                 /// The field `maps` in the table `Instance`
                 pub maps: ::planus::alloc::vec::Vec<::planus::alloc::string::String>,
+                /// The field `number` in the table `Instance`
+                pub number: i32,
+                /// The field `provisional` in the table `Instance`
+                pub provisional: bool,
             }
 
             #[allow(clippy::derivable_impls)]
@@ -3120,6 +3124,8 @@ mod root {
                         attributes: ::core::default::Default::default(),
                         offers: ::core::default::Default::default(),
                         maps: ::core::default::Default::default(),
+                        number: 0,
+                        provisional: false,
                     }
                 }
             }
@@ -3145,6 +3151,8 @@ mod root {
                         ::planus::Offset<[::planus::Offset<self::InterfaceKey>]>,
                     >,
                     field_maps: impl ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+                    field_number: impl ::planus::WriteAsDefault<i32, i32>,
+                    field_provisional: impl ::planus::WriteAsDefault<bool, bool>,
                 ) -> ::planus::Offset<Self> {
                     let prepared_component = field_component.prepare(builder);
                     let prepared_instance = field_instance.prepare(builder);
@@ -3153,8 +3161,10 @@ mod root {
                     let prepared_attributes = field_attributes.prepare(builder);
                     let prepared_offers = field_offers.prepare(builder);
                     let prepared_maps = field_maps.prepare(builder);
+                    let prepared_number = field_number.prepare(builder, &0);
+                    let prepared_provisional = field_provisional.prepare(builder, &false);
 
-                    let mut table_writer: ::planus::table_writer::TableWriter<18> =
+                    let mut table_writer: ::planus::table_writer::TableWriter<22> =
                         ::core::default::Default::default();
                     table_writer.write_entry::<::planus::Offset<str>>(0);
                     table_writer.write_entry::<::planus::Offset<str>>(1);
@@ -3164,8 +3174,14 @@ mod root {
                     table_writer
                         .write_entry::<::planus::Offset<[::planus::Offset<self::InterfaceKey>]>>(5);
                     table_writer.write_entry::<::planus::Offset<[::planus::Offset<str>]>>(6);
+                    if prepared_number.is_some() {
+                        table_writer.write_entry::<i32>(7);
+                    }
                     if prepared_external.is_some() {
                         table_writer.write_entry::<bool>(3);
+                    }
+                    if prepared_provisional.is_some() {
+                        table_writer.write_entry::<bool>(8);
                     }
 
                     unsafe {
@@ -3176,10 +3192,18 @@ mod root {
                             object_writer.write::<_, _, 4>(&prepared_attributes);
                             object_writer.write::<_, _, 4>(&prepared_offers);
                             object_writer.write::<_, _, 4>(&prepared_maps);
+                            if let ::core::option::Option::Some(prepared_number) = prepared_number {
+                                object_writer.write::<_, _, 4>(&prepared_number);
+                            }
                             if let ::core::option::Option::Some(prepared_external) =
                                 prepared_external
                             {
                                 object_writer.write::<_, _, 1>(&prepared_external);
+                            }
+                            if let ::core::option::Option::Some(prepared_provisional) =
+                                prepared_provisional
+                            {
+                                object_writer.write::<_, _, 1>(&prepared_provisional);
                             }
                         });
                     }
@@ -3220,6 +3244,8 @@ mod root {
                         &self.attributes,
                         &self.offers,
                         &self.maps,
+                        self.number,
+                        self.provisional,
                     )
                 }
             }
@@ -3331,6 +3357,58 @@ mod root {
             }
 
             impl<T0, T1, T2, T3, T4, T5, T6> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6)> {
+                /// Setter for the [`number` field](Instance#structfield.number).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn number<T7>(
+                    self,
+                    value: T7,
+                ) -> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)>
+                where
+                    T7: ::planus::WriteAsDefault<i32, i32>,
+                {
+                    let (v0, v1, v2, v3, v4, v5, v6) = self.0;
+                    InstanceBuilder((v0, v1, v2, v3, v4, v5, v6, value))
+                }
+
+                /// Sets the [`number` field](Instance#structfield.number) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn number_as_default(
+                    self,
+                ) -> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, ::planus::DefaultValue)>
+                {
+                    self.number(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0, T1, T2, T3, T4, T5, T6, T7> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7)> {
+                /// Setter for the [`provisional` field](Instance#structfield.provisional).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn provisional<T8>(
+                    self,
+                    value: T8,
+                ) -> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
+                where
+                    T8: ::planus::WriteAsDefault<bool, bool>,
+                {
+                    let (v0, v1, v2, v3, v4, v5, v6, v7) = self.0;
+                    InstanceBuilder((v0, v1, v2, v3, v4, v5, v6, v7, value))
+                }
+
+                /// Sets the [`provisional` field](Instance#structfield.provisional) to the default value.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn provisional_as_default(
+                    self,
+                ) -> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, ::planus::DefaultValue)>
+                {
+                    self.provisional(::planus::DefaultValue)
+                }
+            }
+
+            impl<T0, T1, T2, T3, T4, T5, T6, T7, T8> InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)> {
                 /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [Instance].
                 #[inline]
                 pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<Instance>
@@ -3349,8 +3427,10 @@ mod root {
                 T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Attribute>]>>,
                 T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::InterfaceKey>]>>,
                 T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+                T7: ::planus::WriteAsDefault<i32, i32>,
+                T8: ::planus::WriteAsDefault<bool, bool>,
             > ::planus::WriteAs<::planus::Offset<Instance>>
-                for InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                for InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
             {
                 type Prepared = ::planus::Offset<Instance>;
 
@@ -3368,8 +3448,10 @@ mod root {
                 T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Attribute>]>>,
                 T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::InterfaceKey>]>>,
                 T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
+                T7: ::planus::WriteAsDefault<i32, i32>,
+                T8: ::planus::WriteAsDefault<bool, bool>,
             > ::planus::WriteAsOptional<::planus::Offset<Instance>>
-                for InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                for InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
             {
                 type Prepared = ::planus::Offset<Instance>;
 
@@ -3390,12 +3472,15 @@ mod root {
                 T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Attribute>]>>,
                 T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::InterfaceKey>]>>,
                 T6: ::planus::WriteAs<::planus::Offset<[::planus::Offset<str>]>>,
-            > ::planus::WriteAsOffset<Instance> for InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                T7: ::planus::WriteAsDefault<i32, i32>,
+                T8: ::planus::WriteAsDefault<bool, bool>,
+            > ::planus::WriteAsOffset<Instance>
+                for InstanceBuilder<(T0, T1, T2, T3, T4, T5, T6, T7, T8)>
             {
                 #[inline]
                 fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Instance> {
-                    let (v0, v1, v2, v3, v4, v5, v6) = &self.0;
-                    Instance::create(builder, v0, v1, v2, v3, v4, v5, v6)
+                    let (v0, v1, v2, v3, v4, v5, v6, v7, v8) = &self.0;
+                    Instance::create(builder, v0, v1, v2, v3, v4, v5, v6, v7, v8)
                 }
             }
 
@@ -3458,6 +3543,22 @@ mod root {
                 > {
                     self.0.access_required(6, "Instance", "maps")
                 }
+
+                /// Getter for the [`number` field](Instance#structfield.number).
+                #[inline]
+                pub fn number(&self) -> ::planus::Result<i32> {
+                    ::core::result::Result::Ok(self.0.access(7, "Instance", "number")?.unwrap_or(0))
+                }
+
+                /// Getter for the [`provisional` field](Instance#structfield.provisional).
+                #[inline]
+                pub fn provisional(&self) -> ::planus::Result<bool> {
+                    ::core::result::Result::Ok(
+                        self.0
+                            .access(8, "Instance", "provisional")?
+                            .unwrap_or(false),
+                    )
+                }
             }
 
             impl<'a> ::core::fmt::Debug for InstanceRef<'a> {
@@ -3470,6 +3571,8 @@ mod root {
                     f.field("attributes", &self.attributes());
                     f.field("offers", &self.offers());
                     f.field("maps", &self.maps());
+                    f.field("number", &self.number());
+                    f.field("provisional", &self.provisional());
                     f.finish()
                 }
             }
@@ -3487,6 +3590,8 @@ mod root {
                         attributes: value.attributes()?.to_vec_result()?,
                         offers: value.offers()?.to_vec_result()?,
                         maps: value.maps()?.to_vec_result()?,
+                        number: ::core::convert::TryInto::try_into(value.number()?)?,
+                        provisional: ::core::convert::TryInto::try_into(value.provisional()?)?,
                     })
                 }
             }
@@ -3567,7 +3672,7 @@ mod root {
             /// The table `Endpoint` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Endpoint` in the file `crates/ridl-descriptor/schema/deployment.fbs:92`
+            /// * Table `Endpoint` in the file `crates/ridl-descriptor/schema/deployment.fbs:94`
             #[derive(
                 Clone,
                 Debug,
@@ -3886,7 +3991,7 @@ mod root {
             /// The table `Link` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Link` in the file `crates/ridl-descriptor/schema/deployment.fbs:98`
+            /// * Table `Link` in the file `crates/ridl-descriptor/schema/deployment.fbs:100`
             #[derive(
                 Clone,
                 Debug,
@@ -4376,7 +4481,7 @@ mod root {
             /// The table `Route` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Route` in the file `crates/ridl-descriptor/schema/deployment.fbs:108`
+            /// * Table `Route` in the file `crates/ridl-descriptor/schema/deployment.fbs:110`
             #[derive(
                 Clone,
                 Debug,
@@ -4858,7 +4963,7 @@ mod root {
             /// The table `Surface` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Surface` in the file `crates/ridl-descriptor/schema/deployment.fbs:120`
+            /// * Table `Surface` in the file `crates/ridl-descriptor/schema/deployment.fbs:122`
             #[derive(
                 Clone,
                 Debug,
@@ -5177,7 +5282,7 @@ mod root {
             /// The table `Deployment` in the namespace `ridl.deployment`
             ///
             /// Generated from these locations:
-            /// * Table `Deployment` in the file `crates/ridl-descriptor/schema/deployment.fbs:125`
+            /// * Table `Deployment` in the file `crates/ridl-descriptor/schema/deployment.fbs:127`
             #[derive(
                 Clone,
                 Debug,

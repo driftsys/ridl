@@ -107,6 +107,8 @@ pub fn deployment(version: u32, embedded: Vec<u8>) -> Deployment {
                 number: 3,
             }],
             maps: vec!["veh".to_owned()],
+            number: 7,
+            provisional: true,
         }],
         links: vec![Link {
             catalog: "veh".to_owned(),

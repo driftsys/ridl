@@ -63,6 +63,14 @@ fn interface_ref() -> v2::InterfaceRef {
     }
 }
 
+fn number(instance: &str, number: i32, provisional: bool) -> v2::InstanceNumber {
+    v2::InstanceNumber {
+        instance: instance.to_owned(),
+        number,
+        provisional,
+    }
+}
+
 /// A provider that offers one service, a consumer that requires it, and a
 /// third component with no line, on two machines.
 fn system() -> v2::System {
@@ -82,6 +90,7 @@ fn system() -> v2::System {
                 name: "Provider".to_owned(),
                 package: "veh".to_owned(),
                 instances: vec!["p0".to_owned()],
+                numbers: vec![number("p0", 3, false)],
                 offers: vec![v2::Offer {
                     service: "veh.ClimateService".to_owned(),
                     ..Default::default()
@@ -93,6 +102,7 @@ fn system() -> v2::System {
                 name: "Consumer".to_owned(),
                 package: "veh".to_owned(),
                 instances: vec!["c0".to_owned()],
+                numbers: vec![number("c0", 1, true)],
                 requires: vec![v2::Require {
                     interface: Some(interface_ref()),
                     service: "veh.ClimateService".to_owned(),
@@ -106,6 +116,7 @@ fn system() -> v2::System {
                 name: "Idle".to_owned(),
                 package: "veh".to_owned(),
                 instances: vec!["i0".to_owned()],
+                numbers: vec![number("i0", 2, true)],
                 ..Default::default()
             },
         ],
@@ -146,8 +157,8 @@ fn system() -> v2::System {
                     instance: "p0".to_owned(),
                     machine: "hpc".to_owned(),
                     attributes: vec![
-                        attribute("shm", "service", Some(scalar("3"))),
-                        attribute("shm", "pinned", None),
+                        attribute("linux", "priority", Some(scalar("3"))),
+                        attribute("linux", "pinned", None),
                         attribute(
                             "linux",
                             "cpuset",
@@ -235,13 +246,37 @@ fn the_instances_carry_offers_maps_and_placement_keys() {
     assert_eq!(provider.offers[0].catalog, "veh");
     assert_eq!(provider.offers[0].number, 1);
     assert!(provider.maps.is_empty());
-    let service = attribute_of(&provider.attributes, "service");
-    assert_eq!(service.ns, "shm");
-    assert_eq!(service.value.as_ref().unwrap().scalar.as_deref(), Some("3"));
+    let priority = attribute_of(&provider.attributes, "priority");
+    assert_eq!(priority.ns, "linux");
+    assert_eq!(
+        priority.value.as_ref().unwrap().scalar.as_deref(),
+        Some("3")
+    );
 
     let consumer = &deployment.instances[1];
     assert!(consumer.offers.is_empty());
     assert_eq!(consumer.maps, vec!["veh".to_owned()]);
+}
+
+#[test]
+fn the_instances_carry_their_number_and_provisional_flag() {
+    let deployment = owned();
+    let numbers: Vec<_> = deployment
+        .instances
+        .iter()
+        .map(|instance| (instance.number, instance.provisional))
+        .collect();
+    assert_eq!(numbers, [(3, false), (1, true), (2, true)]);
+}
+
+#[test]
+fn a_zero_instance_number_is_an_internal_error() {
+    let mut system = system();
+    system.components[0].numbers.clear();
+    assert!(matches!(
+        lower(&system, "Prod", &[], &catalogs()),
+        Err(DeploymentLowerError::Internal(text)) if text.contains("number")
+    ));
 }
 
 #[test]
@@ -369,7 +404,7 @@ fn to_json_names_every_field() {
     assert_eq!(catalog["bytes_len"], catalogs()["veh"].len());
     assert!(catalog.get("bytes").is_none());
     assert_eq!(catalog["catalog"]["name"], "veh");
-    assert_eq!(value["instances"][0]["attributes"][0]["ns"], "shm");
+    assert_eq!(value["instances"][0]["attributes"][0]["ns"], "linux");
     assert_eq!(
         value["instances"][0]["attributes"][2]["value"],
         json!({ "scalar": null, "list": [{ "scalar": "2", "list": null }, { "scalar": "3", "list": null }] })

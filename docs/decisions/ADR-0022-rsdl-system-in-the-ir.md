@@ -25,6 +25,11 @@ Amended 2026-10-04 by story E6.17 (driftsys/ridl#367): the work decision 7
 deferred has landed. `Region` carries `bytes hash = 3`, and `ridlc` embeds the
 catalog hash in each region (see the second note under decision 7).
 
+Amended 2026-11-02 (instance numbers): decision 12 takes the instance number
+from `instances.lock`; the lowered `System` gains `Component.numbers`, and the
+codegen deployment section and the deployment descriptor carry `number` and
+`provisional` for each instance.
+
 Amended 2026-11-02 (driftsys/ridl#1176): decision 11 no longer leaves the system
 descriptor unbuilt. Decision 12 records the deployment descriptor as the second
 emitter over `System`; the record is
@@ -232,11 +237,14 @@ nothing.
     identifier `RDLD`, with the catalog descriptor of every region embedded
     unchanged. It is a direct projection of `System`; the only rules it adds are
     the `offers` and `maps` lists of an instance, which it takes from the
-    codegen deployment section so that the two emitters agree. The toolchain
-    assigns no instance number: a runtime reads its own backend key on the
-    placement line, and the codegen deployment section carries that key in
-    `Instance.attributes`. A deployment that an RSDL-7xx error blocked has no
-    file (decision 8). `System` does not change. The record is
+    codegen deployment section so that the two emitters agree. The instance
+    number comes from `instances.lock`, which replaces the hand-typed placement
+    key an earlier wording of this decision left to a runtime: `Instance`
+    carries `number` and `provisional` in the codegen deployment section and in
+    the descriptor, and `System` gains `Component.numbers`, one
+    `InstanceNumber { instance, number, provisional }` per instance. A
+    deployment that an RSDL-7xx error blocked has no file (decision 8). The
+    record is
     [`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
 
 ## Consequences

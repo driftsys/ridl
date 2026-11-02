@@ -75,6 +75,13 @@ pub enum VerifyError {
     /// An `AttributeValue` table has both `scalar` and `list` set, or neither.
     /// A flag has no value table at all.
     MalformedAttributeValue,
+    /// An instance has a number that is 0 or negative. `component` and
+    /// `instance` name it.
+    InstanceNumber {
+        component: String,
+        instance: String,
+        number: i32,
+    },
 }
 
 impl From<planus::Error> for VerifyError {
@@ -115,6 +122,15 @@ impl fmt::Display for VerifyError {
             Self::MalformedAttributeValue => write!(
                 f,
                 "an attribute value sets both or neither of `scalar` and `list`"
+            ),
+            Self::InstanceNumber {
+                component,
+                instance,
+                number,
+            } => write!(
+                f,
+                "instance `{component}/{instance}` has the number {number}; \
+                 an instance number is 1 to 2147483647"
             ),
             Self::TooManyAttributeValues => {
                 write!(f, "the attribute values outnumber the size of the buffer")
@@ -237,6 +253,15 @@ fn walk_fields(deployment: DeploymentRef<'_>, budget: &mut Budget) -> Result<(),
             key.number()?;
         }
         walk_strings(instance.maps()?)?;
+        instance.provisional()?;
+        let number = instance.number()?;
+        if number <= 0 {
+            return Err(VerifyError::InstanceNumber {
+                component: instance.component()?.to_string(),
+                instance: instance.instance()?.to_string(),
+                number,
+            });
+        }
     }
     for link in deployment.links()? {
         let link = link?;

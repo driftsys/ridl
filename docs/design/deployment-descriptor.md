@@ -67,8 +67,8 @@ the embedded catalog verifies and that its hash is the region's hash; a failure
 is a `DeploymentLowerError`, not a bad file. A reader configures a deployment
 from this one file and compares one hash with the client's catalog.
 
-The toolchain assigns no number to a component, an instance or a service. See
-"Identifying an instance".
+The toolchain assigns no number to a component or a service. It numbers an
+instance from `instances.lock`. See "Identifying an instance".
 
 ## What a deployment descriptor contains
 
@@ -83,7 +83,7 @@ it.
 | `interfaces`                           | One `DeployedInterface { catalog, number, name, inline, provisional, service }` per interface of a region: the region map flattened, with the owning service.               |
 | `machines`                             | `Machine { name, external, labels, attributes }`, in declaration order.                                                                                                     |
 | `components`                           | `Component { name, implicit, external, instances, labels, attributes }`, in closure order.                                                                                  |
-| `instances`                            | One `Instance { component, instance, machine, external, attributes, offers, maps }` per placement, in placement order.                                                      |
+| `instances`                            | One `Instance { component, instance, machine, external, attributes, offers, maps, number, provisional }` per placement, in placement order.                                 |
 | `links`                                | `Link { catalog, number, service, consumer, producer, crossing, attributes }`, in IR link order. `consumer` and `producer` are `Endpoint { component, instance, machine }`. |
 | `routes`                               | `Route { catalog, number, ordinal, interface, member, service, producers }`, in the IR's (catalog, number, ordinal) order.                                                  |
 | `surface`                              | `Surface { link, direction }`. `link` is the index of the link in `links`; `direction` is `ExternalConsumes` or `ExternalOffers`.                                           |
@@ -120,30 +120,26 @@ members, prints a hash as an array of bytes and prints an absent field as
 
 ## Identifying an instance
 
-The toolchain assigns no instance number. A runtime that identifies an instance
-by an integer declares it as a backend key of its own namespace on the placement
-line, and reads it from the instance's `attributes` in the descriptor. The
-toolchain carries the key as declared and does not interpret it (rsdl section
-5).
+An instance has a number from 1 to 2147483647, assigned by `ridl lock` in the
+root `instances.lock` and stable across builds (rsdl reference section 7). The
+lowered system carries it in `Component.numbers`, one entry of
+`InstanceNumber { instance, number, provisional }` per instance. The codegen
+deployment section copies it into `Instance.number` and `Instance.provisional`,
+and the deployment descriptor copies it from the section into the `number` and
+`provisional` fields of its `Instance`. A runtime that identifies an instance by
+an integer reads `number` from the descriptor, and a plugin reads the same value
+from the section.
 
-```rsdl,ignore
-deployment Vehicle for VehicleSystem {
-  machine Hpc {
-    VehicleStateProvider [ shm.service = 3 ]
-    UiModel [ shm.service = 4 ]
-  }
-}
-```
+`provisional` is true when the instance has no live entry in `instances.lock`.
+Its number is then the next free one at the time of the build, and a later
+`ridl lock` may assign another. A runtime that stores the number outside the
+build treats a provisional number as unstable.
 
-A namespace that no configured backend claims draws RSDL-804, a warning, and the
-key is carried. That warning is accepted. A way for a manifest to claim a
-namespace for a runtime outside the toolchain is the third open item of ADR-0022
-and is not built.
-
-The codegen deployment section carries the same keys in `Instance.attributes`,
-so that a plugin which generates a client's bring-up code can emit the number
-from the key the node reads. The Rust backend emits no deployment module: a
-generated interface crate stays independent of every deployment.
+The verifier refuses an instance whose number is 0 or negative
+(`VerifyError::InstanceNumber`), and the lowering reports a system that holds
+such a number as `DeploymentLowerError::Internal`. A backend key on the
+placement line stays what it was: the toolchain carries it as declared in
+`attributes` and does not interpret it (rsdl section 5).
 
 ## Verification before access
 
@@ -202,20 +198,22 @@ reason. They bind later changes to the artifact.
   `.catalog.binfb` that a client includes, so both sides compare one hash. The
   catalogs and the deployment come from one build, so a hash that differs is a
   defect of the build and not of the input.
-- **No number for an instance in ridl.** A runtime that needs an integer
-  declares it as a backend key on the placement line. The language already has
-  the site and the carrier, and a number is a fact of one runtime's wire, which
-  rsdl section 1.3 keeps out of the toolchain's identities. Rejected: a lock
-  file of instance numbers, as `interfaces.lock` numbers interfaces, because it
-  adds a second lock with its resolver and baseline rules for one runtime's
-  integer, and a backend key written once in source is as stable; a key owned by
-  rsdl (`id = 3`), because it changes the language for one runtime's need,
-  against the family rule that a backend's fact is a backend key; a number
-  derived from placement order, because it changes when a source is reordered.
+- **The number comes from `instances.lock`, not from a backend key.** A runtime
+  that needs an integer per instance reads it from the descriptor, and the
+  toolchain assigns it in a lock file as `interfaces.lock` numbers interfaces,
+  so that the number is stable and the same in every artifact. This replaces an
+  earlier decision that left the number to a backend key. The owner rejected
+  that decision on 2026-11-02: a key typed by hand in each deployment can differ
+  between deployments, and no check compares it with another instance's key.
+  Rejected: a key owned by rsdl (`id = 3`), because a number written in source
+  is not unique across deployments; a number derived from placement order,
+  because it changes when a source is reordered.
 - **The codegen deployment section carries the placement's backend keys**
-  (`Instance.attributes`), so that a plugin generates a client's bring-up code
-  from the same key the node reads and no program writes the number by hand. The
-  field is additive under the IR specification section 6.
+  (`Instance.attributes`) and the instance's number and provisional flag
+  (`Instance.number`, `Instance.provisional`), so that a plugin generates a
+  client's bring-up code from the values the node reads and no program writes
+  the number by hand. The fields are additive under the IR specification
+  section 6.
 - **No deployment module in the Rust backend.** A deployment module in a
   generated crate would bind the crate to one deployment, which is the problem
   that the catalog hash exists to avoid. A runtime that wants generated identity

@@ -279,3 +279,39 @@ fn a_verified_buffer_reads_in_full_whatever_byte_was_damaged() {
         }
     }
 }
+
+fn with_instance_number(number: i32) -> Vec<u8> {
+    let mut d = valid();
+    d.instances[0].number = number;
+    finish(&d)
+}
+
+#[test]
+fn the_verifier_refuses_a_number_that_is_not_positive() {
+    for number in [0, -1] {
+        match verify(&with_instance_number(number)) {
+            Err(VerifyError::InstanceNumber {
+                component,
+                instance,
+                number: found,
+            }) => {
+                assert_eq!(
+                    (component.as_str(), instance.as_str()),
+                    ("Climate", "Climate0")
+                );
+                assert_eq!(found, number);
+            }
+            other => panic!("number {number}: expected InstanceNumber, got {other:?}"),
+        }
+    }
+    let message = verify(&with_instance_number(0)).unwrap_err().to_string();
+    assert_eq!(
+        message,
+        "instance `Climate/Climate0` has the number 0; an instance number is 1 to 2147483647"
+    );
+}
+
+#[test]
+fn the_verifier_accepts_the_largest_number() {
+    verify(&with_instance_number(i32::MAX)).expect("verifies");
+}

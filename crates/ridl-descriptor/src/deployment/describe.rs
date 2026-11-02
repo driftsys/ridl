@@ -84,6 +84,8 @@ pub fn to_json(deployment: DeploymentRef<'_>) -> planus::Result<Value> {
             "attributes": attributes(instance.attributes()?)?,
             "offers": offers,
             "maps": strings(instance.maps()?)?,
+            "number": instance.number()?,
+            "provisional": instance.provisional()?,
         }));
     }
     let mut links = Vec::new();

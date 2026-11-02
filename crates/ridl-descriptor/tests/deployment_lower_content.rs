@@ -128,8 +128,30 @@ fn link(
     }
 }
 
+/// The number the fixture gives each instance; `o0` is the only provisional one.
+fn instance_number(instance: &str) -> i32 {
+    match instance {
+        "p0" => 1,
+        "o0" => 2,
+        "c0" => 3,
+        other => panic!("no number for instance {other}"),
+    }
+}
+
+fn instance_provisional(instance: &str) -> bool {
+    instance == "o0"
+}
+
 fn component(name: &str, instances: &[&str]) -> v2::Component {
     v2::Component {
+        numbers: instances
+            .iter()
+            .map(|instance| v2::InstanceNumber {
+                instance: (*instance).to_owned(),
+                number: instance_number(instance),
+                provisional: instance_provisional(instance),
+            })
+            .collect(),
         name: name.to_owned(),
         package: "veh".to_owned(),
         instances: instances.iter().map(|i| (*i).to_owned()).collect(),
@@ -394,6 +416,8 @@ fn expected() -> Deployment {
                 attributes: vec![],
                 offers: vec![key("nav", 1), key("veh", 1), key("veh", 3)],
                 maps: vec![],
+                number: 1,
+                provisional: false,
             },
             Instance {
                 component: "veh.Other".to_owned(),
@@ -403,6 +427,8 @@ fn expected() -> Deployment {
                 attributes: vec![],
                 offers: vec![key("veh", 2)],
                 maps: vec![],
+                number: 2,
+                provisional: true,
             },
             Instance {
                 component: "veh.Consumer".to_owned(),
@@ -412,6 +438,8 @@ fn expected() -> Deployment {
                 attributes: vec![],
                 offers: vec![],
                 maps: vec!["nav".to_owned(), "veh".to_owned()],
+                number: 3,
+                provisional: false,
             },
         ],
         links: vec![
@@ -500,6 +528,12 @@ fn offers_and_maps_equal_the_codegen_section_for_every_placement() {
         assert_eq!(written, offers, "{}", from_section.instance);
         assert_eq!(
             instance.maps, from_section.maps,
+            "{}",
+            from_section.instance
+        );
+        assert_eq!(
+            (instance.number, instance.provisional),
+            (from_section.number, from_section.provisional),
             "{}",
             from_section.instance
         );
@@ -632,6 +666,8 @@ fn the_json_view_equals_the_independently_written_value() {
                 { "catalog": "veh", "number": 3 },
             ],
             "maps": [],
+            "number": 1,
+            "provisional": false,
         })
     );
     assert_eq!(value["instances"][2]["maps"], json!(["nav", "veh"]));
