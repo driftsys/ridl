@@ -864,9 +864,10 @@ fn the_header_states_whether_an_enum_or_an_enum_set_is_strict_or_open() {
     }
 }
 
-/// An open enum with no value, an open enum with only a `reserved` entry
-/// and an open enum set with no bit write no constant, so the header writes
-/// no comment for them either: a comment would sit above nothing.
+/// An open enum with no value and an open enum set with no bit write no
+/// constant, so the header writes no comment for them either: a comment would
+/// sit above nothing. `Retired` also pins that a `reserved` entry is not a
+/// value and emits no constant.
 #[test]
 fn a_declaration_with_no_constant_has_no_strictness_comment() {
     let h = generate_fixture(
@@ -877,4 +878,11 @@ fn a_declaration_with_no_constant_has_no_strictness_comment() {
     )
     .header_source;
     assert!(!h.contains("these constants"), "{h}");
+    // The one `#define` that names `Retired` is the guard of its box head.
+    let constants: Vec<&str> = h
+        .lines()
+        .filter(|line| line.starts_with("#define VEH_COMMON_RETIRED_"))
+        .filter(|line| !line.ends_with("_HEAD_DEFINED"))
+        .collect();
+    assert!(constants.is_empty(), "{constants:?}");
 }
