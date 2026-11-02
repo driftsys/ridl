@@ -52,7 +52,7 @@ mod link_encodings;
 pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod baseline_context;
 pub mod diff_side;
-pub use diff_side::{DiffSide, DiffSideError, diff_context, load_diff_side};
+pub use diff_side::{DiffSide, DiffSideError, diff_context, diff_side_context, load_diff_side};
 pub mod plugin;
 
 /// Serializes the write of a file this test binary then executes against
@@ -416,8 +416,8 @@ pub struct WorkspaceOutput {
 /// on its own, the same pass [`compile_workspace`] runs for
 /// [`WorkspaceOutput::std_ir`]. A consumer that holds IR snapshots and no
 /// compiled workspace uses it to resolve a `ridl.std` reference: `ridl diff`
-/// passes it, with the remote packages of both sides ([`diff_context`]), to
-/// `ridl_diff::diff_workspaces_with` as context, since no snapshot carries
+/// passes it with each side's own remote packages ([`diff_side_context`]) to
+/// `ridl_diff::diff_workspaces_with_contexts`, since no snapshot carries
 /// `ridl.std` (driftsys/ridl#598).
 pub fn std_ir() -> ridl_ir::v2::Package {
     let mut db = RidlDatabase::default();

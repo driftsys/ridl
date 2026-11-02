@@ -727,6 +727,29 @@ pub fn diff_workspaces_with(
     report
 }
 
+/// Compares workspace packages with independent side contexts and, when both
+/// sides carry a system, lists the system changes without changing the verdict.
+/// Missing remote evidence is an error for an explicit podbuf comparison.
+pub fn diff_workspaces_with_contexts(
+    old: &[Package],
+    old_system: Option<&System>,
+    new: &[Package],
+    new_system: Option<&System>,
+    old_context: &[Package],
+    new_context: &[Package],
+    encodings: &[&str],
+) -> Result<DiffReport, ContextError> {
+    let old: Vec<&Package> = old.iter().collect();
+    let new: Vec<&Package> = new.iter().collect();
+    let old_context: Vec<&Package> = old_context.iter().collect();
+    let new_context: Vec<&Package> = new_context.iter().collect();
+    let mut report = diff_refs_with_contexts(&old, &new, &old_context, &new_context, encodings)?;
+    if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
+        report.system = diff_systems(old_system, new_system);
+    }
+    Ok(report)
+}
+
 /// The stable lowercase word for a verdict — used by both the text and JSON
 /// renderers so the two stay in lockstep.
 pub(crate) fn verdict_word(verdict: Verdict) -> &'static str {

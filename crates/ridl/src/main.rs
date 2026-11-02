@@ -597,21 +597,37 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
     // The verdict is the contracts' alone: the system's placement and
     // composition changes are listed under their headings with no verdict
     // (rsdl reference §14).
-    // No snapshot carries `ridl.std`, so it is passed as context: a struct
-    // field appended with a `ridl.std` type is then judged by that type's
-    // declaration rather than reported breaking as unresolved
-    // (driftsys/ridl#598). The remote packages a source side compiled are
-    // context too, so a type a compared package reaches in one resolves, and
-    // a struct whose head reaches one is laid out for the podbuf rule.
+    // Resolve each side against its own standard and remote context, including
+    // retained historical evidence from enriched snapshot directories.
     let encodings: Vec<&str> = encodings.iter().map(|encoding| encoding.name()).collect();
-    let report = ridl_diff::diff_workspaces_with(
+    let report = match ridl_diff::diff_workspaces_with_contexts(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
-        &ridlc::diff_context(&old_side, &new_side),
+        &ridlc::diff_side_context(&old_side),
+        &ridlc::diff_side_context(&new_side),
         &encodings,
-    );
+    ) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!(
+                "error: cannot establish podbuf compatibility: {error}\n\
+Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
+To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility. BASELINE is the affected snapshot input named by the old or new context issue."
+            );
+            if error
+                .issues
+                .iter()
+                .any(|issue| issue.side == ridl_diff::ContextSide::New)
+            {
+                eprintln!(
+                    "For missing candidate evidence, compare its source path or an enriched snapshot directory."
+                );
+            }
+            return ExitCode::from(2);
+        }
+    };
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
     match format {

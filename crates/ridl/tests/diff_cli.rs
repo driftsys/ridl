@@ -1316,3 +1316,249 @@ fn a_source_workspace_holding_a_snapshot_it_cannot_stat_is_refused() {
         "the message names the entry it could not read:\n{stderr}"
     );
 }
+
+fn remote_input_inventory(
+    root: &Path,
+) -> std::collections::BTreeMap<PathBuf, (Vec<u8>, std::time::SystemTime)> {
+    let mut files = std::collections::BTreeMap::new();
+    if !root.exists() {
+        return files;
+    }
+    for entry in std::fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files.extend(remote_input_inventory(&path));
+        } else {
+            files.insert(
+                path.clone(),
+                (
+                    std::fs::read(&path).unwrap(),
+                    std::fs::metadata(path).unwrap().modified().unwrap(),
+                ),
+            );
+        }
+    }
+    files
+}
+
+/// Offline source fixture: only the verified remote pin and remote head change.
+fn remote_inline_source(dir: &TempDir, side: &str, grown: bool, inline: bool) -> PathBuf {
+    let root = dir.path().join(side);
+    let vendor = root.join("vendor/dep");
+    dir.write(
+        &format!("{side}/vendor/dep/ridl.toml"),
+        "[package]\nname = \"dep\"\nversion = \"1.0.0\"\n",
+    );
+    let extra = if grown {
+        "\n second: integer [0..9223372036854775807]"
+    } else {
+        ""
+    };
+    dir.write(
+        &format!("{side}/vendor/dep/types.typl"),
+        &format!(
+            "package dep\nstruct Reading {{\n first: integer [0..9223372036854775807]{extra}\n}}\n"
+        ),
+    );
+    dir.write(&format!("{side}/ridl.toml"), "[package]\nname = \"app\"\nversion = \"1.0.0\"\n[imports]\ndep = \"https://example.invalid/dep.tar\"\n");
+    let payload = if inline { "Reading" } else { "integer" };
+    dir.write(&format!("{side}/app.typl"), &format!("package app\nimport dep.Reading\nstruct Sample {{\n reading: {payload}\n sequence: integer [0..9223372036854775807]\n}}\n"));
+    let lock = ridl_core::lock::Lockfile {
+        entries: [(
+            "https://example.invalid/dep.tar".into(),
+            ridl_core::lock::LockEntry {
+                sha256: "a".repeat(64),
+                tree: Some(ridl_core::tree_hash(&vendor).unwrap()),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+    ridl_core::lock::write_lockfile(&root.join("ridl.lock"), &lock).unwrap();
+    root
+}
+
+/// Build historical fixtures independently of baseline publication/recovery.
+fn remote_inline_baseline(source: &Path, out: &Path, enriched: bool) {
+    let output = ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), source).unwrap();
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == ridl_core::Severity::Error)
+    );
+    let (remote, own): (Vec<_>, Vec<_>) = output
+        .checked
+        .iter()
+        .map(|p| &p.ir)
+        .partition(|p| ridlc::is_remote(p, &output.remote_units));
+    std::fs::create_dir_all(out).unwrap();
+    for package in &own {
+        std::fs::write(
+            out.join(format!("{}.ir.json", package.name)),
+            ridl_ir::v2::to_json_pretty(package).unwrap(),
+        )
+        .unwrap();
+    }
+    if enriched {
+        let context =
+            ridlc::baseline_context::capture_context(&own, &remote, &output.remote_units).unwrap();
+        ridlc::baseline_context::write_context(out, &context).unwrap();
+    }
+}
+
+#[test]
+fn remote_pin_only_inline_growth_exits_one_for_sources_and_enriched_baselines() {
+    let dir = TempDir::new("remote-growth");
+    let old = remote_inline_source(&dir, "old", false, true);
+    let new = remote_inline_source(&dir, "new", true, true);
+    let baseline = dir.path().join("baseline");
+    remote_inline_baseline(&old, &baseline, true);
+    let before = remote_input_inventory(dir.path());
+    // SHA-256 of the fixture URL: only that cache entry could be accessed.
+    let cache = ridl_core::Cache::user_default()
+        .root
+        .join("83d8e8e1b5362aa8d63beac38c539cc1aabdb41d0e7257a3fde21269afedfebd");
+    let cache_before = remote_input_inventory(&cache);
+    for old in [&old, &baseline] {
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            old.as_os_str(),
+            new.as_os_str(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            "--format".as_ref(),
+            "json".as_ref(),
+        ]);
+        assert_eq!(
+            code, 1,
+            "remote growth breaks the consumer: {stdout}\n{stderr}"
+        );
+        let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(report["verdict"], "breaking");
+        let changes = report["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 1, "only the consumer changes: {report}");
+        assert_eq!(changes[0]["category"], "podbuf_remote_inline_growth");
+        assert_eq!(changes[0]["path"], "app/Sample/reading");
+        assert_eq!(changes[0]["before"], "dep.Reading: 8");
+        assert_eq!(changes[0]["after"], "dep.Reading: 16");
+        let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+        assert_eq!(code, 0, "{stderr}");
+        assert!(stdout.starts_with("compatible\n"), "{stdout}");
+        assert!(
+            stdout.contains("podbuf_remote_inline_growth app/Sample/reading"),
+            "{stdout}"
+        );
+    }
+    assert_eq!(before, remote_input_inventory(dir.path()));
+    assert_eq!(cache_before, remote_input_inventory(&cache));
+}
+
+#[test]
+fn remote_legacy_inline_baseline_requires_historical_evidence() {
+    let dir = TempDir::new("remote-legacy");
+    let source = remote_inline_source(&dir, "source", false, true);
+    let legacy = dir.path().join("legacy");
+    let enriched = dir.path().join("enriched");
+    remote_inline_baseline(&source, &legacy, false);
+    remote_inline_baseline(&source, &enriched, true);
+    let before = remote_input_inventory(dir.path());
+    for (old, new, missing_side) in [
+        (&legacy, &source, "old context is missing dep.Reading"),
+        (&legacy, &enriched, "old context is missing dep.Reading"),
+        (&legacy, &legacy, "old context is missing dep.Reading"),
+        (&enriched, &legacy, "new context is missing dep.Reading"),
+    ] {
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            old.as_os_str(),
+            new.as_os_str(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+        ]);
+        assert_eq!(
+            code, 2,
+            "missing historical context prevents judgment: {stdout}\n{stderr}"
+        );
+        assert!(stdout.is_empty(), "no complete report exists: {stdout}");
+        for expected in [
+            "app/Sample/reading",
+            "dep.Reading",
+            missing_side,
+            "HISTORICAL_SOURCE --repair-context --out",
+            "CURRENT_SOURCE --reset-history --out",
+            "historical",
+            "preserv",
+        ] {
+            assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+        }
+        if missing_side.starts_with("new") {
+            assert!(
+                stderr.contains("candidate")
+                    && stderr.contains("source path")
+                    && stderr.contains("enriched snapshot directory"),
+                "{stderr}"
+            );
+        }
+    }
+    assert_eq!(before, remote_input_inventory(dir.path()));
+}
+
+#[test]
+fn remote_unchanged_enriched_baseline_exits_zero() {
+    let dir = TempDir::new("remote-unchanged");
+    let source = remote_inline_source(&dir, "source", false, true);
+    let baseline = dir.path().join("baseline");
+    remote_inline_baseline(&source, &baseline, true);
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        baseline.as_os_str(),
+        source.as_os_str(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "identical\n");
+}
+
+#[test]
+fn remote_context_is_not_required_without_podbuf_or_remote_uses() {
+    let dir = TempDir::new("remote-negative");
+    for inline in [false, true] {
+        let source =
+            remote_inline_source(&dir, if inline { "inline" } else { "local" }, false, inline);
+        let baseline = source.with_extension("baseline");
+        remote_inline_baseline(&source, &baseline, false);
+        let mut args = vec!["diff".as_ref(), baseline.as_os_str(), source.as_os_str()];
+        if !inline {
+            args.extend([
+                std::ffi::OsStr::new("--encoding"),
+                std::ffi::OsStr::new("podbuf"),
+            ]);
+        }
+        let (code, stdout, stderr) = ridl(&args);
+        assert_eq!(code, 0, "{stderr}");
+        assert_eq!(stdout, "identical\n");
+    }
+}
+
+#[test]
+fn remote_malformed_enriched_baseline_is_an_input_error() {
+    let dir = TempDir::new("remote-malformed");
+    let source = remote_inline_source(&dir, "source", false, true);
+    let baseline = dir.path().join("baseline");
+    remote_inline_baseline(&source, &baseline, true);
+    std::fs::write(baseline.join("context.json"), "{broken").unwrap();
+    let before = remote_input_inventory(dir.path());
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        baseline.as_os_str(),
+        source.as_os_str(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+    ]);
+    assert_eq!(code, 2, "{stdout}\n{stderr}");
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("context.json"), "{stderr}");
+    assert_eq!(before, remote_input_inventory(dir.path()));
+}

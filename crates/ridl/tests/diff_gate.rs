@@ -234,10 +234,10 @@ fn every_reported_category_is_explainable() {
 /// bodies prints both labels, one per direction, and is skipped here: its
 /// fixed verdict cannot be read without a pair of bodies, and
 /// `explain_prints_the_rule_row_for_a_category` covers such a row. So are
-/// `podbuf_inline_append`, `podbuf_width_change` and
-/// `podbuf_strict_enum_append`, whose verdict the classifier reads from the
+/// `podbuf_inline_append`, `podbuf_remote_inline_growth`, `podbuf_width_change`
+/// and `podbuf_strict_enum_append`, whose verdict the classifier reads from the
 /// encodings `--encoding` names: each row prints one label per case, and
-/// `diff_cli.rs` covers both. (The last of the three is superseded and no
+/// `diff_cli.rs` covers both. (The last of these is superseded and no
 /// longer reported, but its row keeps its two labels.)
 #[test]
 fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
@@ -251,6 +251,7 @@ fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
         Category::RpcBoundChanged,
         Category::ContractChanged,
         Category::PodbufInlineAppend,
+        Category::PodbufRemoteInlineGrowth,
         Category::PodbufWidthChange,
         Category::PodbufStrictEnumAppend,
     ];
@@ -343,6 +344,7 @@ fn the_category_spellings_are_pinned() {
             "doc_only",
             "visibility_changed",
             "podbuf_inline_append",
+            "podbuf_remote_inline_growth",
             "podbuf_width_change",
             "podbuf_strict_enum_append",
             "strict_enum_append",

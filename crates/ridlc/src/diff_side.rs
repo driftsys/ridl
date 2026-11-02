@@ -38,6 +38,15 @@ pub fn diff_context(old: &DiffSide, new: &DiffSide) -> Vec<ridl_ir::v2::Package>
         .collect()
 }
 
+/// The resolution context of one side: `ridl.std` and only its own remotes.
+/// Historical snapshots never borrow evidence from the other side.
+#[must_use]
+pub fn diff_side_context(side: &DiffSide) -> Vec<ridl_ir::v2::Package> {
+    std::iter::once(crate::std_ir())
+        .chain(side.remotes.iter().cloned())
+        .collect()
+}
+
 /// A refusal to load or compile one side of a diff.
 pub enum DiffSideError {
     Context(ContextArtifactError),
