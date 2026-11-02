@@ -4334,6 +4334,15 @@ mod tests {
     /// A [`StreamRig`] whose [`STREAMED`] has the payload limit `limit` when
     /// one is given, and whose backend fails as `fail` says.
     fn stream_rig(fail: Fail, limit: Option<u32>) -> StreamRig {
+        stream_rig_with(fail, limit, |c| c)
+    }
+
+    /// The same, with `configure` applied to the session's configuration.
+    fn stream_rig_with(
+        fail: Fail,
+        limit: Option<u32>,
+        configure: impl FnOnce(Config) -> Config,
+    ) -> StreamRig {
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
         p.serve(IFACE, &[QUERY.ord, STREAMED.ord]).unwrap();
@@ -4354,7 +4363,7 @@ mod tests {
         });
         let backend = Described::new(Streaming(backend), Arc::new(t)).unwrap();
         let notes = Notes::default();
-        let mut s = Session::new(backend, &config(&notes));
+        let mut s = Session::new(backend, &configure(config(&notes)));
         s.upgraded(FRAME_VERSION_3);
         let (step, _) = send(
             &mut s,
@@ -4523,6 +4532,107 @@ mod tests {
         r.p.next_claim(&mut [0; 64]).unwrap().expect("a claim").id
     }
 
+    /// The backend's correlation of the streamed call started by
+    /// [`start_stream`].
+    fn backend_correlation(r: &mut StreamRig) -> Correlation {
+        r.s.calls.streamed(1).expect("the call streams").correlation
+    }
+
+    /// A pulled chunk of exactly the member's limit is sent, and one byte
+    /// more stops the stream with `corrupt`.
+    ///
+    /// Mutation: the `Short` arm accepts `needed < cap`.
+    #[test]
+    fn a_chunk_of_exactly_the_members_limit_is_sent_and_one_byte_more_is_not() {
+        for (len, sent) in [(1_100, true), (1_101, false)] {
+            let mut r = stream_rig(Fail::None, Some(1_100));
+            let claim = start_stream(&mut r);
+            let element = vec![7u8; len];
+            assert_eq!(
+                r.p.push_claim(claim, REPLY_STREAM, &element),
+                Ok(element.len())
+            );
+            let (_, out) = tick(&mut r.s);
+            assert_eq!(out.len(), 1, "{len}");
+            let want = if sent {
+                streamed_chunk(1, &element)
+            } else {
+                streamed_end(1, 1, StreamOutcome::Corrupt)
+            };
+            assert_eq!(decode(&out[0]).unwrap(), want, "{len}");
+        }
+    }
+
+    /// A member limit above the message limit does not raise the cap: a
+    /// chunk is at most what one message carries.
+    ///
+    /// Mutations: take the member's limit alone as the cap; leave the header
+    /// out of the message cap.
+    #[test]
+    fn a_member_limit_above_the_message_limit_is_capped_by_the_message() {
+        let header = Frame::Chunk {
+            target: STREAMED,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 0,
+            },
+            correlation: 0,
+            stream: 0,
+            payload: &[],
+        }
+        .encoded_len();
+        let cap = 2_048 - header;
+        for (len, sent) in [(cap, true), (cap + 1, false)] {
+            let mut r = stream_rig_with(Fail::None, Some(5_000), |c| {
+                c.with_max_message_bytes(2_048).expect("above the minimum")
+            });
+            let claim = start_stream(&mut r);
+            let element = vec![7u8; len];
+            assert_eq!(
+                r.p.push_claim(claim, REPLY_STREAM, &element),
+                Ok(element.len())
+            );
+            let (_, out) = tick(&mut r.s);
+            assert_eq!(out.len(), 1, "{len}");
+            if sent {
+                assert_eq!(out[0].len(), 2_048);
+                assert_eq!(decode(&out[0]).unwrap(), streamed_chunk(1, &element));
+            } else {
+                assert_eq!(
+                    decode(&out[0]).unwrap(),
+                    streamed_end(1, 1, StreamOutcome::Corrupt)
+                );
+            }
+        }
+    }
+
+    /// A tick exactly `call_abandon_after` after the last activity of a
+    /// stream abandons it; one just before does not.
+    ///
+    /// Mutation: abandon only when the time is above the bound.
+    #[test]
+    fn a_stream_is_abandoned_exactly_at_the_bound() {
+        let mut r = stream_rig(Fail::None, None);
+        start_stream(&mut r);
+        let last =
+            r.s.calls
+                .streamed(1)
+                .and_then(|call| call.stream.as_ref())
+                .map(|stream| stream.last_activity)
+                .expect("the call streams");
+        let bound = Config::default().call_abandon_after;
+        let mut out = Vec::new();
+        let before = last + bound - std::time::Duration::from_nanos(1);
+        assert_eq!(r.s.tick(before, &mut out), Step::Continue);
+        assert!(out.is_empty());
+        assert_eq!(r.s.tick(last + bound, &mut out), Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Interrupted)
+        );
+    }
+
     /// An element larger than the session's first buffer is read after the
     /// buffer grows, and is sent whole.
     ///
@@ -4555,6 +4665,7 @@ mod tests {
     fn a_pulled_chunk_over_the_limit_is_stream_end_corrupt_and_recorded() {
         let mut r = stream_rig(Fail::None, Some(1_100));
         let claim = start_stream(&mut r);
+        let call = backend_correlation(&mut r);
         let element = vec![7u8; 1_200];
         assert_eq!(
             r.p.push_claim(claim, REPLY_STREAM, &element),
@@ -4576,8 +4687,8 @@ mod tests {
         );
         let corrupt = CallError::Transport(Transport::Corrupt);
         assert_eq!(r.aborted.borrow().len(), 1);
-        assert_eq!(r.aborted.borrow()[0].1, corrupt);
-        assert_eq!(r.forgotten.borrow().len(), 1);
+        assert_eq!(r.aborted.borrow()[0], (call, corrupt));
+        assert_eq!(*r.forgotten.borrow(), vec![call]);
         let (_, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
         assert_eq!(out.len(), 1);
         assert_eq!(
@@ -4596,6 +4707,7 @@ mod tests {
     fn an_abandoned_stream_is_forgotten_on_the_backend_and_kept() {
         let mut r = stream_rig(Fail::None, None);
         start_stream(&mut r);
+        let call = backend_correlation(&mut r);
         let later = now() + std::time::Duration::from_secs(3_600);
         let mut out = Vec::new();
         assert_eq!(r.s.tick(later, &mut out), Step::Continue);
@@ -4608,7 +4720,7 @@ mod tests {
             *r.notes.lock().unwrap(),
             vec![Note::CallAbandoned { seq: 1 }]
         );
-        assert_eq!(r.forgotten.borrow().len(), 1);
+        assert_eq!(*r.forgotten.borrow(), vec![call]);
         let (_, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
         assert_eq!(out.len(), 1);
         assert_eq!(
@@ -4642,9 +4754,10 @@ mod tests {
     fn the_end_of_a_session_forgets_an_open_reply_stream() {
         let mut r = stream_rig(Fail::None, None);
         start_stream(&mut r);
+        let call = backend_correlation(&mut r);
         assert!(r.forgotten.borrow().is_empty());
         r.s.close();
-        assert_eq!(r.forgotten.borrow().len(), 1);
+        assert_eq!(*r.forgotten.borrow(), vec![call]);
     }
 
     /// A client `stream_end` with `interrupted`, `contract` or `corrupt` is
@@ -4672,12 +4785,13 @@ mod tests {
         for (outcome, error) in cases {
             let mut r = stream_rig(Fail::None, None);
             start_stream(&mut r);
+            let call = backend_correlation(&mut r);
             let (step, out) = send(&mut r.s, &msg(client_stream_end(0, outcome)));
             assert_eq!(step, Step::Continue, "{outcome:?}");
             assert!(out.is_empty(), "{outcome:?}");
             assert_eq!(r.aborted.borrow().len(), 1, "{outcome:?}");
-            assert_eq!(r.aborted.borrow()[0].1, error, "{outcome:?}");
-            assert_eq!(r.forgotten.borrow().len(), 1, "{outcome:?}");
+            assert_eq!(r.aborted.borrow()[0], (call, error), "{outcome:?}");
+            assert_eq!(*r.forgotten.borrow(), vec![call], "{outcome:?}");
             assert_eq!(
                 *r.notes.lock().unwrap(),
                 vec![Note::StreamStopped { seq: 1 }],
@@ -4747,10 +4861,13 @@ mod tests {
             stream_outcome(CallError::Transport(Transport::Busy)),
             StreamOutcome::Busy
         );
-        assert_eq!(
-            stream_outcome(CallError::Transport(Transport::Down)),
-            StreamOutcome::Interrupted
-        );
+        for e in [Transport::Down, Transport::Timeout, Transport::Undelivered] {
+            assert_eq!(
+                stream_outcome(CallError::Transport(e)),
+                StreamOutcome::Interrupted,
+                "{e:?}"
+            );
+        }
     }
 
     #[test]

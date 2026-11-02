@@ -578,12 +578,12 @@ bytes are the value the provider set.
 
 **D-15. The unit tests.** All under `packages/ridl-transport-ws/tests/`.
 
-- **The vectors** (`vectors_test.ts`). Reads the binding version 1 and the
-  binding version 2 vector tables out of
-  `docs/specification/frame-specification.md`, as the crate's `tests/vectors.rs`
-  does, decodes each row to the frame its `Vector` cell describes, and encodes
-  that frame back to the same bytes. It fails on an unknown `Id` and on a known
-  `Id` that its table lacks, so a new vector cannot be skipped.
+- **The vectors** (`vectors_test.ts`). Reads the three vector tables (binding
+  versions 1, 2 and 3) out of `docs/specification/frame-specification.md`, as
+  the crate's `tests/vectors.rs` does, decodes each row to the frame its
+  `Vector` cell describes, and encodes that frame back to the same bytes. It
+  fails on an unknown `Id` and on a known `Id` that its table lacks, so a new
+  vector cannot be skipped.
 - **Every code** (`codes_test.ts`). Every code of §4 and §9.6, written as bytes
   by hand, in both directions; signedness of extreme integers, a message at a
   nonzero byte offset, and payloads as views.

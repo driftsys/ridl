@@ -34,8 +34,8 @@ removes a line. The FlatBuffers backend refuses the ros2 corpus, so ros2 has no
 `.fbs` line. A refresh of the veh-cluster copy for the `generated-crate` surface
 therefore also changes `wire.txt`. An edit to `examples/` or to `evals/corpus/`
 therefore changes no dump. The `wire` dump also holds the test vectors of the
-WebSocket binding: one `frame-vector <id> <hex>` line per row of the two vector
-tables (binding version 1, then binding version 2) in
+WebSocket binding: one `frame-vector <id> <hex>` line per row of the three
+vector tables (binding versions 1, 2 and 3) in
 `docs/specification/frame-specification.md` §11.1, read from that document by
 the row's `Id`, so an edit to a vector changes the dump. The checker also reads
 the payload that a row's `Vector` cell names as `` payload `<hex>` `` and fails
