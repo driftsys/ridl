@@ -26,7 +26,10 @@
 //! `verify` checks the rules of ADR-0031 decision 8 in one pass over the
 //! data present: the preamble, each boolean and flags byte, the value of each
 //! strict enum and strict enum set (an `open` one is left unchecked: every
-//! value of its width is valid, ADR-0031 decision 12), each typl constraint,
+//! value of its width is valid, ADR-0031 decision 12; the raw value of a
+//! 64-bit one is its bit pattern held in the `i64`, so a `u64` of 2^63 or more
+//! reads as a negative raw value and is written back unchanged), each typl
+//! constraint,
 //! each descriptor's bounds, stride, terminator and key order, and each
 //! element, entry and arm with the same rules. It is not recursive:
 //! a nested head is checked by that type's own `__ridl_podbuf_verify_at`,
@@ -2401,22 +2404,24 @@ impl<'a> Codec<'a> {
     /// an open declaration admits every `i64` through `From<i64>`, so such
     /// a value can reach the encoder from the caller or from an encoding of
     /// a wider integer. Empty for a strict declaration, whose values fit the
-    /// width by construction, for an `i64`, which holds every value, and for
-    /// an enum set of width 64, whose bit 63 is the sign of its `i64`.
+    /// width by construction, and for a 64-bit width, which holds every raw
+    /// value: a `u64` as its bit pattern in the `i64`.
     fn open_width_check(
         &self,
         ty: &v1::Type,
         prim: Prim,
         lang: &TokenStream,
     ) -> Result<TokenStream, GenerateError> {
-        // An `i64` holds every value. A 64-bit enum set holds every value
-        // too: its bit 63 is the sign bit of the `i64`. A `u64` enum holds no
-        // negative value, so it is checked like a narrower width.
-        let checked = match self.scalar_of(ty)? {
-            ScalarShape::Enum(ed, _) => ed.open && prim.0 != "i64",
-            ScalarShape::EnumSet(esd, _) => esd.open && !matches!(prim.0, "i64" | "u64"),
+        // A 64-bit width holds every raw value: an `i64` as itself, and a
+        // `u64` as its bit pattern in the `i64`, so a wire value of 2^63 or
+        // more is a negative raw value and is written back unchanged, as bit
+        // 63 of a 64-bit enum set is.
+        let open = match self.scalar_of(ty)? {
+            ScalarShape::Enum(ed, _) => ed.open,
+            ScalarShape::EnumSet(esd, _) => esd.open,
             _ => false,
         };
+        let checked = open && !matches!(prim.0, "i64" | "u64");
         let Some(v1::r#type::Kind::Named(reference)) = ty.kind.as_ref() else {
             return Ok(TokenStream::new());
         };
@@ -2992,7 +2997,9 @@ impl<'a> Codec<'a> {
                 named_scalar_check(&named, quote! { &(#widened) }).unwrap_or_default()
             }
             // An open enum accepts every value of its width, and an open enum
-            // set every bit (ADR-0031 decision 12): no check.
+            // set every bit (ADR-0031 decision 12): no check. A `u64` is read
+            // as its bit pattern in the `i64` (`as i64`), so a value of 2^63 or
+            // more is a negative raw value that `encode` writes back unchanged.
             ScalarShape::Enum(v1::Enum { open: true, .. }, _)
             | ScalarShape::EnumSet(v1::EnumSet { open: true, .. }, _) => TokenStream::new(),
             ScalarShape::Enum(_, path) | ScalarShape::EnumSet(_, path) => quote! {

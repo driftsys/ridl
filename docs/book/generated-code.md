@@ -622,7 +622,8 @@ In the Rust column:
   value can only come from another encoding. The podbuf codec carries an
   enum or enum set at the width its declared values infer, so its `encode`
   refuses with the range error an `open` value whose integer does not fit
-  that width.
+  that width when it is below 64 bits; at 64 bits the raw value is the bit
+  pattern of the wire integer, so every value is written back unchanged.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a

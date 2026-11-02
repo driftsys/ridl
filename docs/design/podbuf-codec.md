@@ -128,10 +128,10 @@ encoder sorts the entries of a map by key; it refuses with
 `EncodeError::Contract` a string that holds U+0000 (`Pattern`), a duplicate map
 key (`Unique`) and a NaN map key (`Range`), a collection outside its bounds
 (`Length`), a value outside its typl constraints, and a value of an `open` enum
-or enum set whose integer does not fit the width its declared values infer
-(`Range`, naming the declaration). A deprecated field is written as its init
-value. A buffer that does not start on an 8-byte boundary gives
-`EncodeError::Unaligned`; a store outside the bytes written gives
+or enum set whose integer does not fit the width its declared values infer, when
+that width is below 64 bits (`Range`, naming the declaration). A deprecated
+field is written as its init value. A buffer that does not start on an 8-byte
+boundary gives `EncodeError::Unaligned`; a store outside the bytes written gives
 `EncodeError::Layout`.
 
 **`verify`** is a call tree, not a worklist: each head type has its own
@@ -166,7 +166,10 @@ checked, is ADR-0031 decision 8.
 and allocates for `String`, `Vec` and maps as the other codecs do. The view and
 `decode` read a value that an `open` enum does not declare as its `Unknown`
 variant, which holds the integer, and an `open` enum set keeps every bit, so
-`encode` writes such a value back unchanged.
+`encode` writes such a value back unchanged. The raw value of a 64-bit enum or
+enum set is the bit pattern of its wire integer held in an `i64`: a `u64` of
+2^63 or more reads as a negative raw value and is written back as the same
+`u64`.
 
 **The view.** The accessors read through `Region`. A scalar read is one bounds
 check and one load. A `string` accessor returns a `&str` built by

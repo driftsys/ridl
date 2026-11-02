@@ -80,6 +80,18 @@ macro_rules! enc {
     }};
 }
 
+/// The buffer `value` encodes to, or the encoder's error.
+macro_rules! try_enc {
+    ($value:expr) => {{
+        let value = $value;
+        let mut out = Aligned([0u8; 4096]);
+        let mut writer = Writer::new(&mut out.0);
+        value
+            .__ridl_podbuf_encode(&mut writer)
+            .map(|()| writer.finish().expect("the buffer finishes").to_vec())
+    }};
+}
+
 /// An 8-aligned copy of `bytes`, which a `Vec<u8>` does not promise.
 fn aligned(bytes: &[u8]) -> Aligned<[u8; 4096]> {
     let mut out = Aligned([0u8; 4096]);
@@ -406,18 +418,41 @@ fn the_encoder_refuses_an_open_value_past_a_signed_or_a_16_bit_width() {
     );
 }
 
-/// The 64-bit widths: `Big` declares a value above `u32::MAX` and none
-/// below 0, so its podbuf integer is a `u64`, which holds no negative value,
-/// and the encoder refuses one with the range rule rather than write its two's
-/// complement. `Signed64` is an `i64`, which holds every value. An enum set
-/// of width 64 carries bit 63 as the sign bit of its `i64`, so a negative
-/// value is a set with bit 63 and is written and read back.
+/// The 64-bit widths. `Big` declares a value above `u32::MAX` and none below
+/// 0, so its podbuf integer is a `u64`, and its raw value is that `u64`'s bit
+/// pattern held in an `i64`: a wire value of 2^63 or more reads as a negative
+/// `raw()` and is written back unchanged, as bit 63 of a 64-bit enum set is.
+/// `Big` sits at head offset 0 (buffer 8). `Signed64` is an `i64`, which holds
+/// every value, and `WideFlags` an enum set of width 64.
 #[test]
 fn the_64_bit_widths_of_an_open_enum_and_an_open_enum_set() {
     let out = run(
         "podbuf_open_64",
         &[
-            r#"encode_rule!(Wide64 { big: Big::from(-1), signed: Signed64::Neg, wide: WideFlags::LOW })"#,
+            // `Big::from(-1)` is written as the bit pattern of `u64::MAX`.
+            r#"match try_enc!(Wide64 { big: Big::from(-1), signed: Signed64::Neg, wide: WideFlags::LOW }) {
+                Ok(bytes) => (bytes[8..16] == u64::MAX.to_le_bytes()).to_string(),
+                Err(error) => format!("{error:?}"),
+            }"#,
+            // 2^63 and `u64::MAX` on the wire verify, read as `Unknown` with
+            // the raw `i64::MIN` and -1, and re-encode to the same bytes.
+            r#"{
+                let mut out = Vec::new();
+                for wire in [1u64 << 63, u64::MAX] {
+                    let mut bytes = enc!(Wide64 { big: Big::A, signed: Signed64::Neg, wide: WideFlags::LOW });
+                    bytes[8..16].copy_from_slice(&wire.to_le_bytes());
+                    let buf = aligned(&bytes);
+                    let v = Wide64::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                    let d = Wide64::__ridl_podbuf_decode(v);
+                    let raw = match d.big {
+                        Big::Unknown(u) => u.raw().to_string(),
+                        _ => "declared".to_string(),
+                    };
+                    let same = try_enc!(d).map(|again| again == bytes).unwrap_or(false);
+                    out.push(format!("{raw} {same}"));
+                }
+                out.join(" ")
+            }"#,
             r#"roundtrip!(Wide64, Wide64 { big: Big::from(i64::MAX), signed: Signed64::Neg, wide: WideFlags::LOW })"#,
             r#"roundtrip!(Wide64, Wide64 { big: Big::A, signed: Signed64::from(i64::MIN), wide: WideFlags::LOW })"#,
             r#"roundtrip!(Wide64, Wide64 { big: Big::A, signed: Signed64::Neg, wide: WideFlags::from(i64::MIN | 0b10) })"#,
@@ -429,7 +464,17 @@ fn the_64_bit_widths_of_an_open_enum_and_an_open_enum_set() {
             }"#,
         ],
     );
-    assert_eq!(out, ["Big Range", "true", "true", "true", "0x2"]);
+    assert_eq!(
+        out,
+        [
+            "true",
+            "-9223372036854775808 true -1 true",
+            "true",
+            "true",
+            "true",
+            "0x2"
+        ]
+    );
 }
 
 /// §7 rule 2: an absent optional whose descriptor bytes are not zero is

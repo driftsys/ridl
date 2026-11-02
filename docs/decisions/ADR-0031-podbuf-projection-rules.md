@@ -777,12 +777,15 @@ a field is appended.
     check for a strict declaration and checks no value of an open one; the view
     and `decode` read an undeclared value of an open enum as `Unknown`, which
     holds the integer, and an open enum set keeps every bit; `encode` writes the
-    integer back unchanged. The width stays the one the declared values infer
-    (decision 5), so `encode` refuses with the range rule, naming the
-    declaration, an open enum or enum set whose integer does not fit it, as the
-    proto3 codec does for its int32; a truncating cast would change the value
-    without an error. The codegen `Model` needs no new podbuf field: the codec
-    and the header read `Enum.open` and `EnumSet.open`. The C header writes the
+    integer back unchanged. The raw value of a 64-bit enum or enum set is the
+    bit pattern of its wire integer held in an `i64`, so a `u64` value of 2^63
+    or more reads as a negative raw value and is written back as the same `u64`.
+    The width stays the one the declared values infer (decision 5), so `encode`
+    refuses with the range rule, naming the declaration, an open enum or enum
+    set of a width below 64 bits whose integer does not fit it, as the proto3
+    codec does for its int32; a truncating cast would change the value without
+    an error. The codegen `Model` needs no new podbuf field: the codec and the
+    header read `Enum.open` and `EnumSet.open`. The C header writes the
     constants as before, after one comment per enum and enum set that states its
     rule, and not how the rule is enforced, as the comment of the `.proto` and
     `.fbs` output does: a value (or a bit) outside the constants is not valid,
