@@ -904,11 +904,12 @@ trusted with no `unsafe` and no second verification pass.
     — and the caller may retry later. It crosses as a `response` outcome: `busy`
     joins `corrupt` as a bare value of the frame's `outcome` field (frame
     specification §5.3, §5.4 and §5.6), the caller's runtime maps it to
-    `Err(CallError::Transport(Busy))` (§5.3), §9.6 states it as the second of
-    exactly two `Transport` variants that cross, and §8's cell on refusing a
-    faster call says the answer is `busy`. `Transport` is `#[non_exhaustive]`
-    (decision 9), so the variant is additive. `SendError::Busy`, the local case,
-    is unchanged. Note F-13.
+    `Err(CallError::Transport(Busy))` (§5.3), §9.6 states it as one of the
+    `Transport` variants that cross (the second of two when this amendment was
+    written, three since frame version 3), and §8's cell on refusing a faster
+    call says the answer is `busy`. `Transport` is `#[non_exhaustive]` (decision
+    9), so the variant is additive. `SendError::Busy`, the local case, is
+    unchanged. Note F-13.
 
 15. **Amendment (2026-09-26) — the `correlate` module: `Table<const N: usize>`
     and `Waiters` (story E11.18).** A seventh unconditional module,

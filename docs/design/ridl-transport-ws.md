@@ -17,11 +17,11 @@ the `descriptor` feature). ADR-0020 decision 7 and
 7 place the transport;
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) fixes the port
 contracts the server reads and calls. The wire rules are the frame specification
-§4 to §9 and §11.1 (binding versions 1 and 2).
+§4 to §9 and §11.1 (binding versions 1, 2 and 3).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions below keep their numbers D-1 to D-26, because comments in
+decisions below keep their numbers D-1 to D-27, because comments in
 `crates/ridl-transport-ws/src/server/session.rs` and in the `justfile` cite
 them. Read this record together with [the `ridl-rt` design record](ridl-rt.md),
 whose "The ports" section states the contract the server consumes.
@@ -39,11 +39,13 @@ must be right.
 
 **What the crate does.**
 
-- Encodes and decodes every one of the eleven forms of frame specification §4
-  exactly as §11.1 item 2 and "Binding version 2" lay them out, and reproduces
-  every test vector of §11.1 byte for byte.
+- Encodes and decodes every one of the fourteen forms of frame specification §4
+  exactly as §11.1 item 2, "Binding version 2" and "Binding version 3" lay them
+  out, and reproduces every test vector of §11.1 byte for byte.
 - Serves the observe-and-call ports — `SignalReader`, `EventSource`, `Caller` —
-  plus `FixedReader` for a `read` of a `fixed`, over WebSocket.
+  plus `FixedReader` for a `read` of a `fixed`, over WebSocket, and, through
+  `StreamCaller`, the reply stream of a query on a session of frame version 3
+  (D-27).
 - Detects changed signals with `ScannableSignals` when the backend has it, and
   by reading each subscribed signal when it does not.
 - Builds the member table, which checks `kind` and gives the response bounds,
@@ -128,7 +130,9 @@ carry no version, as in `ridl-loopback`.
 ## The codec (`frame`)
 
 The codec is `crates/ridl-transport-ws/src/frame.rs`. It also defines the
-constants `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`), `SUBPROTOCOL_V1`
+constants `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`), `FRAME_VERSION_3`
+(3), `SUBPROTOCOL_V3` (`ridl-ws-v3`), `INITIAL_CREDIT` (4, the chunks a sender
+of a stream may send before the first `stream_credit`), `SUBPROTOCOL_V1`
 (`ridl-ws-v1`, selected only to refuse an `attach`, D-20), `MIN_MESSAGE_LIMIT`
 (294, the largest `attach`), `MAX_MESSAGE_LIMIT`, `ENVELOPE_BYTES` (16) and
 `BLOCK_BYTES` (4,096, the payload bytes of every `block` but the last), and
@@ -176,8 +180,17 @@ differently, so the error says which:
   message; a `name` that is not valid UTF-8; and a block that is wrong by
   itself, `ProtocolViolation::BadBlock` (the cases are in
   [frame specification](../specification/frame-specification.md) §11.1, "Binding
-  version 2", "Framing"). A `kind` outside the table stays `UnknownCode` and an
-  `interface` or `ordinal` 0 stays `ZeroNumber`, as for every form.
+  version 2", "Framing"); and a stream form that is wrong by itself,
+  `ProtocolViolation::BadStream` for a stream form whose `kind` is not `command`
+  or `query` and for bytes after the header of a `stream_end` or a
+  `stream_credit`, which are a violation and not a discard, because discarding
+  an end or a credit would leave its stream stuck (§11.1, "Binding version 3",
+  "Framing"). The other cases of a stream form that is wrong by itself keep the
+  violation of the same case on every form: an outcome not allowed on a
+  `stream_end` is `OutcomeNotAllowed`, a `detail` where the outcome has none is
+  `NonzeroDetail`, and a `credit` of 0 is `ZeroNumber`. A `kind` outside the
+  table stays `UnknownCode` and an `interface` or `ordinal` 0 stays
+  `ZeroNumber`, as for every form.
 - `DecodeError::Discard(_)`: a `publish` or a `response` whose header says it
   carries no payload and which has bytes after the header. A consumer records it
   and drops it, and its session continues; the server, which receives neither
@@ -209,9 +222,10 @@ an `AttachError` (`Empty`, `TooLong { len }` or `UnknownEncoding(tag)`). That is
 the "reports an error when the session is opened and sends nothing" of §11.1
 item 2.
 
-**D-6. Every form in both directions.** The codec encodes and decodes all eleven
-forms, whichever side calls it. The server uses half of each, and the test
-client uses the other half. "Adding the stand-in ports later" depends on this.
+**D-6. Every form in both directions.** The codec encodes and decodes all
+fourteen forms, whichever side calls it. The server uses half of each, and the
+test client uses the other half. "Adding the stand-in ports later" depends on
+this.
 
 ## The server
 
@@ -319,8 +333,9 @@ outlive its port value releases them in its own `Drop`.
 discarded frame included, is a protocol violation (close 1002). The server
 answers:
 
-- `frame_version` not 2, or an `attach` on a `ridl-ws-v1` connection:
-  `refused(frame_version_unsupported)` (D-20);
+- `frame_version` that differs from the version of the subprotocol the server
+  selected (2 on `ridl-ws-v2`, 3 on `ridl-ws-v3`), or an `attach` on a
+  `ridl-ws-v1` connection: `refused(frame_version_unsupported)` (D-20);
 - the unit name differs from `Attached::catalog().name`:
   `refused(unknown_catalog)`;
 - the name matches and the hash is neither the catalog's own nor, with a member
@@ -543,6 +558,8 @@ responses kept for duplicates are `server/calls.rs`.
   provider defect the client reads as `Transport::Corrupt`, and the call ends at
   once instead of at the client's bound. A `request` with `seq` 0 is recorded
   and dropped.
+- **A streamed reply** is not answered by a `response`; D-27 states how the
+  server serves it. The table above applies to every other call.
 - **Abandoned calls.** A call whose outcome is still unknown
   `config.call_abandon_after` (default 60 s) after it was sent is forgotten on
   the backend, noted as `CallAbandoned`, and nothing is sent: the client's own
@@ -617,13 +634,84 @@ longer than its member's limit, which a runtime that refuses on send never
 stores, is answered the same way, and so is a `read` of a signal whose value is
 longer than the signal's limit or than one message.
 
+**D-27. A streamed reply over frame version 3.** The code is in
+`server/session.rs`. The wire rules are frame specification §5.4, §7, §8, §9.6
+and §11.1 "Binding version 3"; this decision records only what the server
+chooses.
+
+- **Selection.** The server selects `ridl-ws-v3` when the client offers it, the
+  backend answers `Backend::streams()` with `Some`, and `Backend::members()` is
+  `Some`; otherwise it selects as D-20 states. The public wrapper `Streaming<B>`
+  is how a server serves streams: for example
+  `Described::new(Streaming(Scanning(rt)), table)`, where the ports of `rt`
+  implement `StreamCaller`. `Polling` and `Scanning` keep the default `None`,
+  because stable Rust cannot forward a method conditionally on a bound of the
+  wrapped type, and `Described` forwards `streams()`. A table with no streamed
+  member makes version 3 harmless. `FRAME_VERSION` and `SUBPROTOCOL` keep
+  meaning version 2, because the crate is frozen and changing a constant's value
+  would be a break; version 3 has its own constants. An `attach` must name the
+  frame version the handshake selected (D-11).
+- **Dispatch.** A `request` whose member's reply is a stream, read from the
+  member table, calls `Caller::query` and then follows the stream through
+  `StreamCaller`. A `SendError` of `Busy`, `Contract` or `TooLarge`, and an
+  argument longer than the member's limit (`corrupt`), are answered with one
+  `stream_end` of the mapped outcome, `seq` 1 and stream 0, never a `response`.
+  The frame kept for a retransmit is `stream_end interrupted` with `seq` 1,
+  whatever the first answer was. Any other `SendError` is `Detached`, which ends
+  the session with 1001 (D-18). A retransmit while the stream is open is
+  `DuplicateDropped` and sends nothing.
+- **Pulling.** Each tick, for each streamed call, the server pulls chunks with
+  `StreamCaller::pull` and sends each as a `chunk` with the next `seq` of the
+  stream, from 1, while the client's credit lasts, for at most 64 chunks per
+  stream per tick (`CHUNKS_PER_TICK`), so that a provider that pushes
+  continuously cannot keep a tick from returning. With credit 0, the server
+  pulls once into a one-chunk hold for the stream: an end or a failure is sent
+  at once as a `stream_end`, and a held chunk waits for credit. So a stream that
+  spends its last credit on its last chunk still ends without waiting for a
+  credit that the client may not send; the cost is one chunk, at most the
+  member's limit, held per stream. A chunk longer than the member's limit, or
+  than one message carries, stops the stream with `stream_end corrupt` and is
+  recorded as `ValueTooLarge`. The server grants no credit of its own: no member
+  it serves has a parameter stream. After a `stream_end` the server forgets the
+  call.
+- **Abandonment.** The clock of `call_abandon_after` for a streamed call
+  restarts at each `chunk` sent and each `stream_credit` received. When it
+  passes with neither, the server sends `stream_end interrupted`, forgets the
+  call and records `Note::CallAbandoned`. The clock is the host's monotonic
+  clock (`Instant`), not the backend's.
+- **What the client may send.** A `stream_credit` adds to the credit; one for a
+  call that is not streaming, which can arrive just after the end, is ignored
+  and records no note. A `stream_end` stops the stream: the server aborts it,
+  forgets the call at once, records `Note::StreamStopped`, sends nothing more
+  for the call, and keeps a `stream_end interrupted` for a later retransmit of
+  the `request`. The server aborts the stream on the backend with the error of
+  the client's outcome (`interrupted`, `contract` or `corrupt`) and then forgets
+  the call, so a provider on the loopback reads `Interrupted` whatever the abort
+  carried: after a forget a push answers `Interrupted`. The verdict reaches a
+  provider only on a parameter stream, which is not built. A `stream_end` with
+  `end` or `busy` closes 1002 with `ProtocolViolation::OutcomeNotAllowed`. A
+  `stream_credit` or a `stream_end` on a stream other than 0 is ignored and
+  records no note. A client `chunk` on stream 0 is `Note::UnexpectedDirection`
+  and a client `chunk` on any other stream is `Note::StreamCreditExceeded`, each
+  closing 1002.
+- **A streamed member on a session below version 3.** A `request` for a member
+  whose reply is a stream is answered `response` with
+  `contract(UnknownInteraction)` and `Note::UnknownInteraction`, because version
+  2 has no outcome that names a missing capability. A conforming client never
+  sends it (`ridl-transport-ws-ts.md`).
+- **The end of a session.** The server forgets every call, and the port's
+  `forget` stops every open stream with `Transport::Interrupted`
+  (`ridl_rt::error::Transport`). The provider cannot read `Transport::Down`
+  through the port, so none is sent.
+
 ### The end of a session
 
-**D-18. The session's end.** At every end, in-flight backend calls are
-forgotten, and every backend subscription is dropped with the `Backend` value;
-then the connection is dropped. A backend port that reports `Detached` from any
-call ends the session with close 1001, because the provider is going away.
-`serve` returns an `Ended`:
+**D-18. The session's end.** At every end, in-flight backend calls are forgotten
+(the provider of a streamed reply reads `Transport::Interrupted`, D-27), and
+every backend subscription is dropped with the `Backend` value; then the
+connection is dropped. A backend port that reports `Detached` from any call ends
+the session with close 1001, because the provider is going away. `serve` returns
+an `Ended`:
 
 | `Ended`              | When                                                                                                                                                   |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -639,11 +727,14 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 `Violation` (closes 1002), `MessageBeforeAttach` (closes 1002), `SecondAttach`
 (closes 1002), `UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an
 `unsubscribe` of a kind the form does not admit; dropped), `ValueTooLarge`,
-`DuplicateDropped`, `CallAbandoned`, `RuleNotCarried` (a violation's rule the
-frame has no code for; the outcome is replaced), `UnknownInteraction` (an
-interaction the member table does not hold; dropped or answered as D-12 says)
-and `MessageLimitTooSmall` (the member whose messages the `Config` cannot carry,
-with the limit it needs; `serve` returns `ConfigRefused`, D-26).
+`DuplicateDropped`, `CallAbandoned`, `StreamCreditExceeded` (a `chunk` from the
+client on a stream the server granted it no credit for; closes 1002),
+`StreamStopped` (the client stopped a reply stream), `RuleNotCarried` (a
+violation's rule the frame has no code for; the outcome is replaced),
+`UnknownInteraction` (an interaction the member table does not hold; dropped or
+answered as D-12 says) and `MessageLimitTooSmall` (the member whose messages the
+`Config` cannot carry, with the limit it needs; `serve` returns `ConfigRefused`,
+D-26).
 
 ### `Config`
 
@@ -683,10 +774,10 @@ bytes for a signal and an event, 16,128 for a command and a query, 65,280 for a
   `ridl-loopback` does, the path is reached only by a backend that does not.
 
 **The message limit.** `MAX_MESSAGE_LIMIT` is 36 + 16,128 = 16,164 bytes: the
-largest data-plane header with its envelope plus the default ceiling of a
-command and a query, the largest payload one message carries (ADR-0030 decision
-10). It is the default of `max_message_bytes` and the largest value accepted,
-and the smallest `max_retained_bytes` accepted.
+largest header with its envelope of a message that carries a payload, plus the
+default ceiling of a command and a query, the largest payload one message
+carries (ADR-0030 decision 10). It is the default of `max_message_bytes` and the
+largest value accepted, and the smallest `max_retained_bytes` accepted.
 
 **The `Config` check.** With a member table, `serve` first checks that
 `max_message_bytes` is at least 36 plus the largest limit over the members of
@@ -741,18 +832,21 @@ address, which is the same for any web page a local browser loads, so a
 browser-facing embedder should set the check; the crate rustdoc says so, and
 that the crate authenticates no one.
 
-**D-20. The subprotocol.** The server selects `ridl-ws-v2` when the client
-offers it, in any position of `Sec-WebSocket-Protocol`. When the client offers
-`ridl-ws-v1` and not `ridl-ws-v2`, the server selects `ridl-ws-v1`, refuses
-every `attach` on that connection `frame_version_unsupported` (D-11) and closes
-with 1000, so that a version 1 client learns the reason instead of a failed
-handshake. When the client offers neither, the server answers `400 Bad Request`
-and does not upgrade. §11.1 says that the client fails a connection on which the
-server selected none; answering 400 makes the failure visible at once, also to a
-client that does not check. The selection is two comparisons, with `ridl-ws-v2`
-and with `ridl-ws-v1`, and neither selects a role: a table from subprotocol name
-to session role would have no row to hold, so it is left until the reversed role
-of "Adding the stand-in ports later" adds one.
+**D-20. The subprotocol.** The server selects `ridl-ws-v3` when the client
+offers it, in any position of `Sec-WebSocket-Protocol`, and the session serves
+streams (D-27). Otherwise it selects `ridl-ws-v2` when the client offers it.
+When the client offers `ridl-ws-v1` and not `ridl-ws-v2`, the server selects
+`ridl-ws-v1`, refuses every `attach` on that connection
+`frame_version_unsupported` (D-11) and closes with 1000, so that a version 1
+client learns the reason instead of a failed handshake. When the client offers
+no subprotocol the server serves (`ridl-ws-v3` counts only when D-27's condition
+holds), the server answers `400 Bad Request` and does not upgrade. §11.1 says
+that the client fails a connection on which the server selected none; answering
+400 makes the failure visible at once, also to a client that does not check. The
+selection is three comparisons, with `ridl-ws-v3`, `ridl-ws-v2` and
+`ridl-ws-v1`, and none selects a role: a table from subprotocol name to session
+role would have no row to hold, so it is left until the reversed role of "Adding
+the stand-in ports later" adds one.
 
 **D-21. Messages.** Binary messages only; a text message closes with 1003.
 Fragmented messages are reassembled, also when a frame is split across socket
@@ -792,7 +886,8 @@ connection. It waits no longer than that for the client to close the connection
 All under `crates/ridl-transport-ws/`.
 
 - **The vectors** (`tests/vectors.rs`). One test reads the binding version 1
-  test-vector table, and one reads the binding version 2 table, both out of
+  test-vector table, one reads the binding version 2 table and one reads the
+  binding version 3 table, all out of
   `docs/specification/frame-specification.md`. Each decodes every `Hex` cell,
   checks that it decodes to the frame its `Vector` cell describes, and that
   encoding that frame gives the same bytes. Each fails on a row whose id it does
@@ -806,10 +901,20 @@ All under `crates/ridl-transport-ws/`.
   lengths 0, 1 and 255, a `response` under `reply` encodes to exactly
   `frame_header_max_bytes + envelope_bytes + len` bytes, read from the
   `websocket` row of `ridl_ir::codegen::known_bindings()`, and the row's version
-  is the binding version 2; every other data-plane form encodes to no more; an
-  `attach` with a 255-byte name is 294 bytes. `known_bindings()` is a public
-  function added to `ridl-ir` for this test, because the only other public route
-  to the row needs a whole lowered system.
+  is the binding version 3; every other form that carries a payload (`publish`,
+  `occurrence`, `request`, `block`, `chunk`) encodes to no more; an `attach`
+  with a 255-byte name is 294 bytes. `known_bindings()` is a public function
+  added to `ridl-ir` for this test, because the only other public route to the
+  row needs a whole lowered system.
+- **The streamed reply** (`tests/serve.rs`, the stream group). Over a
+  `Described` `Streaming` backend on a loopback with a stepped provider: the
+  selection of each version for each backend (D-27); 64 elements and the end
+  with the next `seq`; an empty stream; four chunks and no more without credit;
+  a credit stall that does not block a signal; a retransmit after the end; a
+  refusal at dispatch; a provider error that crosses as a `stream_end`; the
+  abandonment clock; a client `stream_end`, a client `chunk` and a `stream_end`
+  with `end`; and the stream forms on a session below version 3, which are an
+  unknown code. The frame codes of the three forms are in `tests/codes.rs`.
 - **The constraints** (`tests/constraints.rs`). D-1's "no `alloc`" and D-2's
   dependency set, read from the sources and the manifests (see "Gates").
 - **The codec's failures** (`tests/decode_errors.rs`). One test per case of D-4
@@ -901,10 +1006,10 @@ stand-in client is a session in the other direction: the WebSocket client
 provides, and the server consumes and forwards what it receives into the
 backend's `SignalWriter`, `EventSink` and `Handler`. The server sends `attach`,
 `subscribe` and `request`; the client sends `attached`, `publish`, `occurrence`
-and `response`. All eleven forms exist already, so the frame does not change.
+and `response`. All fourteen forms exist already, so the frame does not change.
 What changes is the binding's item 1, by a new subprotocol name that selects the
-reversed roles, offered beside `ridl-ws-v2` and `ridl-ws-v1`, in an amendment of
-§11.1. The name is chosen with that amendment.
+reversed roles, offered beside `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, in
+an amendment of §11.1. The name is chosen with that amendment.
 
 What the crate already does so that the addition is local:
 
@@ -918,6 +1023,10 @@ What the crate already does so that the addition is local:
 ## What is not built
 
 - The stand-in ports (driftsys/ridl#988).
+- A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
+  of a `<string>` stream. A chunk from the client is refused (D-27). The `Rule`
+  for UTF-8 is added with the parameter streams: to version 3 if it has not been
+  released, else to a later version.
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
   `temperature` signal to a TypeScript client, with the member table read from

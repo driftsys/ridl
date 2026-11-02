@@ -8,7 +8,8 @@ use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    decode, AnswerOutcome, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome, Target,
+    decode, AnswerOutcome, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
+    StreamOutcome, Target,
 };
 
 /// Interface 1, ordinal 2, kind byte as the caller writes it.
@@ -249,4 +250,77 @@ fn every_rule_has_its_tag() {
     for (i, rule) in rules.into_iter().enumerate() {
         assert_eq!(rule_tag(rule), Some(i as u8 + 1), "{rule:?}");
     }
+}
+
+/// Every `StreamOutcome` as bytes written by hand: the `outcome` and `detail`
+/// codes of a `stream_end`, and the frame decoded from them.
+#[test]
+fn every_stream_outcome_maps_to_its_code_and_back() {
+    let stream_end = |outcome: u8, detail: u8| {
+        [&control(13, 4, &ENV)[..], &CORR, &[0, outcome, detail]].concat()
+    };
+    let cases = [
+        (10, 0, StreamOutcome::End),
+        (11, 0, StreamOutcome::Interrupted),
+        (7, 0, StreamOutcome::Corrupt),
+        (8, 0, StreamOutcome::Busy),
+        (4, 0, StreamOutcome::Contract(Contract::PreconditionFailed)),
+        (5, 0, StreamOutcome::Contract(Contract::ContractBroken)),
+        (6, 0, StreamOutcome::Contract(Contract::UnknownInteraction)),
+        (3, 1, StreamOutcome::Contract(invalid(Rule::Range))),
+        (3, 2, StreamOutcome::Contract(invalid(Rule::Step))),
+        (3, 3, StreamOutcome::Contract(invalid(Rule::Length))),
+        (3, 4, StreamOutcome::Contract(invalid(Rule::Pattern))),
+        (3, 5, StreamOutcome::Contract(invalid(Rule::Variant))),
+        (3, 6, StreamOutcome::Contract(invalid(Rule::Unique))),
+    ];
+    for (outcome, detail, want) in cases {
+        check(
+            "stream_end",
+            &stream_end(outcome, detail),
+            Frame::StreamEnd {
+                target: target(Kind::Query),
+                envelope: envelope(),
+                correlation: 5,
+                stream: 0,
+                outcome: want,
+            },
+        );
+    }
+}
+
+#[test]
+fn a_chunk_and_a_credit_decode_and_encode_as_written() {
+    check(
+        "chunk",
+        &[&control(12, 3, &ENV)[..], &CORR, &[2], &[9, 8]].concat(),
+        Frame::Chunk {
+            target: target(Kind::Command),
+            envelope: envelope(),
+            correlation: 5,
+            stream: 2,
+            payload: &[9, 8],
+        },
+    );
+    check(
+        "empty chunk",
+        &[&control(12, 4, &ENV)[..], &CORR, &[0]].concat(),
+        Frame::Chunk {
+            target: target(Kind::Query),
+            envelope: envelope(),
+            correlation: 5,
+            stream: 0,
+            payload: &[],
+        },
+    );
+    check(
+        "stream_credit",
+        &[&control(14, 4, &CORR)[..], &[1], &[0x78, 0x56, 0x34, 0x12]].concat(),
+        Frame::StreamCredit {
+            target: target(Kind::Query),
+            correlation: 5,
+            stream: 1,
+            credit: 0x1234_5678,
+        },
+    );
 }

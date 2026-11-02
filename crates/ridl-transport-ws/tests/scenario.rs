@@ -24,7 +24,7 @@ use ridl_rt::port::Caller;
 use ridl_transport_ws::{serve, Config, Described, Scanning};
 
 use support::client::WsClient;
-use support::provider::{member_table, provider, provider_step, CATALOG, IFACE};
+use support::provider::{member_table, provider, provider_step, Streams, CATALOG, IFACE};
 use support::scenario::{run, Rig};
 
 /// The environment variable that makes `provider_process` serve.
@@ -42,6 +42,7 @@ const START_LIMIT: Duration = Duration::from_secs(10);
 /// aggregates on one loopback store, and a step is one pass of the provider.
 struct LoopbackRig {
     provider: Loopback,
+    streams: Streams,
     ports: Loopback,
 }
 
@@ -53,7 +54,7 @@ impl Rig for LoopbackRig {
     }
 
     fn step(&mut self) {
-        provider_step(&mut self.provider);
+        provider_step(&mut self.provider, &mut self.streams);
     }
 }
 
@@ -61,7 +62,11 @@ impl Rig for LoopbackRig {
 fn the_scenario_runs_over_the_loopback_with_no_socket() {
     let provider = provider();
     let ports = provider.attach();
-    run(&mut LoopbackRig { provider, ports });
+    run(&mut LoopbackRig {
+        provider,
+        streams: Streams::default(),
+        ports,
+    });
 }
 
 /// The child process. Dropping it kills it and waits for it, so that a test
@@ -190,8 +195,9 @@ fn provider_process() {
     let port = listener.local_addr().expect("an address").port();
     println!("port {port}");
     std::io::stdout().flush().expect("flushed");
+    let mut streams = Streams::default();
     thread::spawn(move || loop {
-        provider_step(&mut rt);
+        provider_step(&mut rt, &mut streams);
         thread::sleep(Duration::from_millis(5));
     });
     listener

@@ -17,13 +17,15 @@ use std::time::{Duration, Instant};
 use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
 use ridl_rt::sample::{Envelope, Timestamp};
 
-pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
+pub use backend::{Backend, Described, Polling, Scanning, Streaming, TableMismatch};
 pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
 #[cfg(feature = "descriptor")]
 pub use descriptor::DescriptorError;
 pub use members::MemberTable;
 
-use crate::frame::{Frame, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES};
+use crate::frame::{
+    Frame, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES, FRAME_VERSION, FRAME_VERSION_3,
+};
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
 
@@ -127,9 +129,11 @@ pub enum Ended {
     ServerClosed(u16),
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
-    /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it did not
-    /// offer `ridl-ws-v2` or `ridl-ws-v1`; or `403 Forbidden`, because the
-    /// check set by [`Config::with_origin_check`] refused its `Origin`.
+    /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it offered
+    /// no subprotocol this server serves (`ridl-ws-v3` counts only when the
+    /// backend serves streams and holds a member table); or `403 Forbidden`,
+    /// because the check set by [`Config::with_origin_check`] refused its
+    /// `Origin`.
     Rejected,
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
@@ -248,7 +252,7 @@ const LINGER: Duration = Duration::from_millis(100);
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
-pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config) -> Ended {
+pub fn serve<C: Connection, B: Backend>(mut conn: C, mut backend: B, config: &Config) -> Ended {
     if let Some((target, needed)) = backend
         .members()
         .and_then(|table| limit_short(table, config.max_message_bytes()))
@@ -258,20 +262,28 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config
         }
         return Ended::ConfigRefused;
     }
+    // Frame version 3 carries streams, so the server offers it only when it
+    // can serve them: the ports carry streams and a member table says which
+    // members reply with one.
+    let max_version = if backend.streams().is_some() && backend.members().is_some() {
+        FRAME_VERSION_3
+    } else {
+        FRAME_VERSION
+    };
     let mut session = Session::new(backend, config);
-    let ended = run(&mut conn, &mut session, config);
+    let ended = run(&mut conn, &mut session, config, max_version);
     session.close();
     ended
 }
 
 /// The member of `table` whose messages need the most bytes, with that
-/// number, when it is above `limit`: the largest data-plane header and
-/// envelope plus the member's limit. A `fixed` needs at most one block
-/// message, 4,130 bytes, because a value that one `publish` does not carry
-/// crosses in blocks: the smaller of 36 bytes plus its limit and 4,130. The
-/// code clamps the limit of a `fixed` before it adds the header and adds with
-/// `saturating_add`; no test on a 64-bit host checks the order of these
-/// steps. On a tie, the first member in key order.
+/// number, when it is above `limit`: the largest header and envelope of a
+/// message that carries a payload, plus the member's limit. A `fixed` needs
+/// at most one block message, 4,130 bytes, because a value that one `publish`
+/// does not carry crosses in blocks: the smaller of 36 bytes plus its limit
+/// and 4,130. The code clamps the limit of a `fixed` before it adds the header
+/// and adds with `saturating_add`; no test on a 64-bit host checks the order
+/// of these steps. On a tie, the first member in key order.
 fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     let header = largest_header();
     let block_cap = block_message() - header;
@@ -293,8 +305,8 @@ fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     largest.filter(|(_, needed)| *needed > limit)
 }
 
-/// The size of the largest data-plane header with its envelope: a
-/// `response` under `reply` with an empty payload, 36 bytes.
+/// The size of the largest header with its envelope of a message that carries
+/// a payload: a `response` under `reply` with an empty payload, 36 bytes.
 fn largest_header() -> usize {
     let header = Frame::Response {
         target: Target {
@@ -341,13 +353,18 @@ fn run<C: Connection, B: Backend>(
     conn: &mut C,
     session: &mut Session<B>,
     config: &Config,
+    max_version: u32,
 ) -> Ended {
     if let Err(e) = conn.set_write_timeout(Some(config.liveness_timeout)) {
         return Ended::Io(e.kind());
     }
     let deadline = Instant::now() + config.liveness_timeout;
     let accept_origin = |origin: Option<&str>| config.origin_accepted(origin);
-    match ws::handshake(&mut Deadline { conn, at: deadline }, accept_origin) {
+    match ws::handshake(
+        &mut Deadline { conn, at: deadline },
+        max_version,
+        accept_origin,
+    ) {
         Ok(Upgrade::Accepted(frame_version)) => session.upgraded(frame_version),
         Ok(Upgrade::Rejected | Upgrade::Forbidden) => {
             linger(conn);

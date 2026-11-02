@@ -647,7 +647,7 @@ For these, the archived design note is the record of the agreed direction.
 | Item                                                                                                 | Issue              |
 | ---------------------------------------------------------------------------------------------------- | ------------------ |
 | Narrow a string's byte capacity from an ASCII-only match pattern, after #597                         | driftsys/ridl#665  |
-| Streams (ridl §12): the frame version and the generated face follow the port and the descriptor      | driftsys/ridl#1116 |
+| Streams (ridl §12): parameter, byte and text streams are not carried by a transport yet              | driftsys/ridl#1116 |
 | debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling              | driftsys/ridl#670  |
 | debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                              | driftsys/ridl#679  |
 | debt: review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684  |

@@ -6,7 +6,7 @@ use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
     Attach, Frame, PublishState, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
-    FRAME_VERSION, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
+    FRAME_VERSION_3, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
 };
 
 /// The frame header maximum and the envelope size of the `websocket` row.
@@ -16,7 +16,7 @@ fn row() -> (usize, usize) {
         .iter()
         .find(|b| b.name == "websocket")
         .expect("the websocket row exists");
-    assert_eq!(row.version, FRAME_VERSION.to_string());
+    assert_eq!(row.version, FRAME_VERSION_3.to_string());
     (
         row.frame_header_max_bytes.expect("the row states a header") as usize,
         row.envelope_bytes.expect("the row states an envelope") as usize,
@@ -64,7 +64,7 @@ fn the_largest_data_plane_message_is_header_plus_envelope_plus_payload() {
 }
 
 #[test]
-fn every_other_data_plane_form_is_no_larger() {
+fn every_other_form_that_carries_a_payload_is_no_larger() {
     let (header, envelope_bytes) = row();
     for len in [0usize, 1, 255] {
         let payload = vec![0u8; len];
@@ -90,6 +90,13 @@ fn every_other_data_plane_form_is_no_larger() {
                 envelope: envelope(),
                 total: len.max(1) as u32,
                 index: 0,
+                payload: &payload,
+            },
+            Frame::Chunk {
+                target: target(Kind::Query),
+                envelope: envelope(),
+                correlation: 5,
+                stream: 0,
                 payload: &payload,
             },
         ];

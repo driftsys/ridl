@@ -245,7 +245,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-transport-ws/tests/descriptor.rs",
-        lines: 8,
+        lines: 9,
         why: "a test fixture building and editing the owned descriptor \
               `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
