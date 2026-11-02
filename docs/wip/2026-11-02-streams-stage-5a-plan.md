@@ -137,8 +137,23 @@ document's rulings; S5-n are this plan's.
 - The IR, the catalog descriptor and every catalog hash are unchanged. No
   diagnostic is added or changed (ADR-0032 decision 14).
 - A generated crate allocates nothing for a stream. The staging buffer of R-21
-  is an inline `[u8; LIMIT]` field, `LIMIT` the member's limit constant the face
-  already emits.
+  is an inline `[u8; LIMIT]` field.
+- **S5-12. `LIMIT` is an associated constant the face emits on each byte or text
+  consumer value** (`FetchStream`, `TextStream`, and in Task 3 the byte and text
+  sinks): `pub const LIMIT: usize = <n>;`, with `<n>` a literal the emitter
+  computes from the codegen model: `Interaction.limit` when present, else the
+  default ceiling of the member's kind, the value
+  `ridl_rt::contract::default_ceiling` returns (16,128 for a command or a query;
+  emit the literal, not a call, and add a backend test that the emitted literal
+  equals `default_ceiling(Kind::Query)` so the two cannot drift). `serve` uses
+  the same literal for its staging buffer and chunk size. An associated constant
+  cannot collide with a name the author declares, which a module-level constant
+  could. The backend refuses, with a `GenerateError` naming the member, a byte
+  or text stream member whose limit is below 4, because a text chunk must hold
+  one code point of up to 4 bytes and a byte chunk of 0 bytes makes no progress.
+  The fixtures keep the default limit; a test that needs a smaller one lowers
+  the runtime's limit with `Loopback::set_limit`, as stage 3's limit test does,
+  and sizes its data from the emitted `LIMIT`.
 - The `StreamCaller` / `StreamHandler` bounds appear only on an interface that
   declares a member the face carries with a stream (R-32).
 - A chunk is at most the member's limit in both directions (design, "As built").
@@ -282,8 +297,8 @@ document's rulings; S5-n are this plan's.
   (`Ok(0)` is the end) and
   `async fn read(&mut self, buf: &mut [u8]) ->
   Result<usize, ClientError>`; a
-  staging field `[u8; LIMIT]` serves a short `buf` (R-21). `Provider`:
-  `type Fetch: ridl_rt::face::ByteSource;` and
+  staging field `[u8; LIMIT]` serves a short `buf` (R-21), `LIMIT` per S5-12.
+  `Provider`: `type Fetch: ridl_rt::face::ByteSource;` and
   `fn fetch(&mut self, <args>) -> Self::Fetch;`.
 - Produces, for `query text(..): <string>`: `TextStream::poll_next` and `next`
   as S5-4; `Provider`: `type Text: ridl_rt::face::ByteSource;`.
