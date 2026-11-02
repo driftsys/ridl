@@ -302,3 +302,114 @@ Deno.test("the 16 blocks of a 65,280-byte payload encode to the shared sequence"
     "218da22426f9259c2bd8bad291c6f70c5ca96a5f402c503f5700e2f7ba2a0ba7",
   );
 });
+
+/**
+ * Every row of the version 3 vector table of the frame specification, as
+ * `[Id, bytes]` in the table's order.
+ */
+async function specVersion3Vectors(): Promise<[string, Uint8Array][]> {
+  const text = await Deno.readTextFile(
+    new URL(
+      "../../../docs/specification/frame-specification.md",
+      import.meta.url,
+    ),
+  );
+  const start = text.indexOf("**Version 3 test vectors.**");
+  assert.ok(start >= 0, "no version 3 vector paragraph");
+  const lines = text.slice(start).split("\n");
+  const first = lines.findIndex((l) => l.startsWith("|"));
+  assert.ok(first >= 0, "no version 3 vector table");
+  const rows: [string, Uint8Array][] = [];
+  for (let i = first + 2; i < lines.length && lines[i].startsWith("|"); i++) {
+    const cells = lines[i].split("|").map((c) => c.trim());
+    rows.push([cells[1].replace(/`/g, ""), hex(cells[3])]);
+  }
+  assert.ok(rows.length > 0, "no version 3 vector rows found");
+  return rows;
+}
+
+const KNOWN_3 = ["attach-3", "chunk-reply", "stream-end-end", "stream-credit"];
+
+function expected3(id: string): Frame | undefined {
+  const hash = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) hash[i] = i;
+  const query = target(Kind.Query, 1, 4);
+  switch (id) {
+    case "attach-3":
+      return {
+        form: "attach",
+        frameVersion: 3,
+        encoding: 1,
+        hash,
+        name: "veh.cabin",
+      };
+    case "chunk-reply":
+      return {
+        form: "chunk",
+        target: query,
+        envelope: { stamp: 0x0123456789ACn, seq: 1n },
+        correlation: 2n,
+        stream: 0,
+        payload: Uint8Array.of(0xff, 0x01),
+      };
+    case "stream-end-end":
+      return {
+        form: "stream_end",
+        target: query,
+        envelope: { stamp: 0x0123456789ACn, seq: 2n },
+        correlation: 2n,
+        stream: 0,
+        outcome: { kind: "end" },
+      };
+    case "stream-credit":
+      return {
+        form: "stream_credit",
+        target: query,
+        correlation: 2n,
+        stream: 0,
+        credit: 4,
+      };
+    default:
+      return undefined;
+  }
+}
+
+Deno.test("every version 3 spec vector decodes and re-encodes byte for byte", async () => {
+  const seen: string[] = [];
+  for (const [id, bytes] of await specVersion3Vectors()) {
+    const want = expected3(id);
+    assert.ok(want, `version 3 vector ${id} is not known to this test`);
+    const got = decode(bytes);
+    assert.ok(got.ok, `vector ${id} did not decode`);
+    assert.deepEqual(got.frame, want, `vector ${id}`);
+    assert.deepEqual(encode(want), bytes, `encoding of ${id}`);
+    seen.push(id);
+  }
+  assert.deepEqual([...seen].sort(), [...KNOWN_3].sort());
+});
+
+Deno.test("the stream byte of each stream form is read and written at its place", async () => {
+  const rows = new Map(await specVersion3Vectors());
+  // The distance of the `stream` byte from the end of each message.
+  for (
+    const [id, fromEnd] of [
+      ["chunk-reply", 3],
+      ["stream-end-end", 3],
+      ["stream-credit", 5],
+    ] as const
+  ) {
+    const bytes = rows.get(id)!.slice();
+    const at = bytes.length - fromEnd;
+    assert.equal(bytes[at], 0, id);
+    bytes[at] = 7;
+    const got = decode(bytes);
+    assert.ok(got.ok, `vector ${id} did not decode`);
+    assert.ok(
+      got.frame.form === "chunk" || got.frame.form === "stream_end" ||
+        got.frame.form === "stream_credit",
+      id,
+    );
+    assert.equal(got.frame.stream, 7, id);
+    assert.deepEqual(encode(got.frame), bytes, `encoding of ${id}`);
+  }
+});

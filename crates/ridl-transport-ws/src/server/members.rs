@@ -37,6 +37,7 @@ struct Entry {
     kind: Kind,
     max: Option<Duration>,
     limit: Option<u32>,
+    reply_stream: bool,
 }
 
 impl MemberTable {
@@ -64,6 +65,7 @@ impl MemberTable {
             kind,
             max,
             limit: None,
+            reply_stream: false,
         };
         self.members
             .insert((iface, ord), entry)
@@ -88,6 +90,23 @@ impl MemberTable {
         self.members
             .get(&(iface, ord))
             .and_then(|entry| entry.limit)
+    }
+
+    /// Marks the member under `(iface, ord)` as one whose reply is a stream;
+    /// stores nothing when the table holds no entry under the key. A later
+    /// [`insert`](Self::insert) under the same key clears the mark.
+    pub fn set_reply_stream(&mut self, iface: InterfaceNo, ord: Ordinal) {
+        if let Some(entry) = self.members.get_mut(&(iface, ord)) {
+            entry.reply_stream = true;
+        }
+    }
+
+    /// Whether the member under `(iface, ord)` replies with a stream: `false`
+    /// for a member that does not, and for a key the catalog does not hold.
+    pub fn reply_stream(&self, iface: InterfaceNo, ord: Ordinal) -> bool {
+        self.members
+            .get(&(iface, ord))
+            .is_some_and(|entry| entry.reply_stream)
     }
 
     /// Adds an earlier catalog hash this catalog is compatible with (§6.1).
@@ -206,6 +225,20 @@ mod tests {
         t.set_limit(InterfaceNo(1), Ordinal(1), 64);
         t.insert(InterfaceNo(1), Ordinal(1), Kind::Command, None);
         assert_eq!(t.limit(InterfaceNo(1), Ordinal(1)), None);
+    }
+
+    #[test]
+    fn a_reply_stream_is_set_on_an_existing_entry_and_cleared_by_insert() {
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        t.set_reply_stream(InterfaceNo(1), Ordinal(1));
+        assert!(!t.reply_stream(InterfaceNo(1), Ordinal(1)));
+        t.insert(InterfaceNo(1), Ordinal(1), Kind::Query, None);
+        assert!(!t.reply_stream(InterfaceNo(1), Ordinal(1)));
+        t.set_reply_stream(InterfaceNo(1), Ordinal(1));
+        assert!(t.reply_stream(InterfaceNo(1), Ordinal(1)));
+        assert!(!t.reply_stream(InterfaceNo(1), Ordinal(2)));
+        t.insert(InterfaceNo(1), Ordinal(1), Kind::Query, None);
+        assert!(!t.reply_stream(InterfaceNo(1), Ordinal(1)));
     }
 
     #[test]

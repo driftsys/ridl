@@ -339,7 +339,7 @@ fn a_layout_plugin_computes_cabin_from_the_request_alone() {
         deployment.bindings,
         vec![v1::Binding {
             name: "websocket".to_string(),
-            version: "2".to_string(),
+            version: "3".to_string(),
             frame_header_max_bytes: Some(20),
             envelope_bytes: Some(16),
         }]
@@ -405,9 +405,9 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
     assert_eq!(max_message_bytes(&request, "warning"), Value::Null);
 }
 
-/// The `Header size` column of the frame specification §11.1 header tables,
-/// by form name: the table of binding version 1 and the one row that binding
-/// version 2 adds, `block`. `attach`'s `39 + name` is read as 39.
+/// The `Header size` column of every header table of the frame specification
+/// §11.1 (the table of item 2 and the rows that versions 2 and 3 add), by form
+/// name. `attach`'s `39 + name` is read as 39.
 fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../docs/specification/frame-specification.md");
@@ -415,16 +415,19 @@ fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
     let (_, section) = text
         .split_once("### 11.1 WebSocket\n")
         .expect("a section 11.1");
-    let mut lines = section.lines();
+    let (section, _) = section
+        .split_once("\n### 11.2 ")
+        .expect("a section 11.2 after 11.1");
+    let mut lines = section.lines().peekable();
     let mut sizes = std::collections::BTreeMap::new();
-    // Two tables: version 1 first, then the `block` row of version 2.
-    for table in ["binding version 1", "binding version 2"] {
-        lines
-            .by_ref()
-            .find(|line| line.starts_with("| Form ") && line.contains("| Header size |"))
-            .unwrap_or_else(|| panic!("the header table of {table}"));
+    let mut tables = 0;
+    while let Some(line) = lines.next() {
+        if !(line.starts_with("| Form ") && line.contains("| Header size |")) {
+            continue;
+        }
+        tables += 1;
         lines.next();
-        for line in lines.by_ref().take_while(|line| line.starts_with('|')) {
+        while let Some(line) = lines.next_if(|line| line.starts_with('|')) {
             let cells: Vec<&str> = line.trim_matches('|').split('|').map(str::trim).collect();
             let size: u32 = cells[2]
                 .split_whitespace()
@@ -436,6 +439,7 @@ fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
             }
         }
     }
+    assert_eq!(tables, 3, "the header tables of versions 1, 2 and 3");
     sizes
 }
 
@@ -452,11 +456,18 @@ fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
 fn the_websocket_row_is_derived_from_the_frame_specification_header_table() {
     let sizes = frame_header_sizes();
     let envelope = sizes["occurrence"] - sizes["subscribe"];
-    let largest = ["publish", "occurrence", "request", "response", "block"]
-        .iter()
-        .map(|form| sizes[*form])
-        .max()
-        .expect("five data-plane forms");
+    let largest = [
+        "publish",
+        "occurrence",
+        "request",
+        "response",
+        "block",
+        "chunk",
+    ]
+    .iter()
+    .map(|form| sizes[*form])
+    .max()
+    .expect("the data-plane forms that carry a payload");
     let (request, _) = request_for(&cabin(), "veh.cabin");
     let deployment = request.deployment.as_ref().expect("a deployment");
     let row = deployment

@@ -12,15 +12,35 @@
  * last carries {@link BLOCK_BYTES} bytes. The codec reads and writes the form
  * on any session; whether a session accepts it is the session's to decide.
  *
+ * The stream forms `chunk`, `stream_end` and `stream_credit` (form codes 12,
+ * 13 and 14) belong to binding version 3 (frame specification §11.1, binding
+ * version 3). The decoder checks each by itself: the `kind` of a stream frame
+ * is `Command` or `Query`, a `stream_end` has one of the outcomes of
+ * {@link StreamOutcome}, and a `stream_credit` grants at least one chunk. The
+ * codec reads and writes the forms on any session; whether a session accepts
+ * them is the session's to decide.
+ *
  * @module
  */
 
 import { BLOCK_BYTES, blockCount, FORM_BLOCK } from "./blocks.ts";
 
-/** The frame version this binding carries. */
+/**
+ * The newest frame version without streams, 2, which this binding carries
+ * with {@link FRAME_VERSION_3}, the frame version that adds the stream forms.
+ */
 export const FRAME_VERSION = 2;
 /** The WebSocket subprotocol name of binding version 2. */
 export const SUBPROTOCOL = "ridl-ws-v2";
+/** The frame version that adds the stream forms. */
+export const FRAME_VERSION_3 = 3;
+/** The WebSocket subprotocol name of binding version 3. */
+export const SUBPROTOCOL_V3 = "ridl-ws-v3";
+/**
+ * The number of chunks the receiver of a stream grants the sender before it
+ * sends any `stream_credit` (frame specification §11.1, binding version 3).
+ */
+export const INITIAL_CREDIT = 4;
 /**
  * The subprotocol name of binding version 1, which a server of frame version
  * 1 selects.
@@ -153,6 +173,14 @@ export type ResponseOutcome =
   | { outcome: "corrupt" }
   | { outcome: "busy" };
 
+/** How a stream ended, as a `stream_end` carries it. */
+export type StreamOutcome =
+  | { kind: "end" }
+  | { kind: "interrupted" }
+  | { kind: "corrupt" }
+  | { kind: "busy" }
+  | { kind: "contract"; contract: Contract };
+
 /** One frame. */
 export type Frame =
   | {
@@ -204,6 +232,37 @@ export type Frame =
     index: number;
     /** The bytes of the block: a view of the message. */
     payload: Uint8Array;
+  }
+  | {
+    form: "chunk";
+    target: Target;
+    envelope: Envelope;
+    /** The `seq` of the request, the caller's name for the call. */
+    correlation: bigint;
+    /** The stream of the call, from 0. */
+    stream: number;
+    /** The bytes of the chunk, possibly empty: a view of the message. */
+    payload: Uint8Array;
+  }
+  | {
+    form: "stream_end";
+    target: Target;
+    envelope: Envelope;
+    /** The `seq` of the request, the caller's name for the call. */
+    correlation: bigint;
+    /** The stream of the call, from 0. */
+    stream: number;
+    outcome: StreamOutcome;
+  }
+  | {
+    form: "stream_credit";
+    target: Target;
+    /** The `seq` of the request, the caller's name for the call. */
+    correlation: bigint;
+    /** The stream of the call, from 0. */
+    stream: number;
+    /** The number of chunks granted, 1 to 4294967295. */
+    credit: number;
   };
 
 /**
@@ -221,7 +280,8 @@ export type Violation =
   | "zero-number"
   | "bad-name-length"
   | "bad-name"
-  | "bad-block";
+  | "bad-block"
+  | "bad-stream";
 
 /** The result of {@link decode}. */
 export type Decoded =
@@ -239,6 +299,12 @@ const FORM_PUBLISH = 7;
 const FORM_OCCURRENCE = 8;
 const FORM_REQUEST = 9;
 const FORM_RESPONSE = 10;
+/** The form code of `chunk`, which frame versions 1 and 2 do not have. */
+export const FORM_CHUNK = 12;
+/** The form code of `stream_end`, which frame versions 1 and 2 do not have. */
+export const FORM_STREAM_END = 13;
+/** The form code of `stream_credit`, which frame versions 1 and 2 do not have. */
+export const FORM_STREAM_CREDIT = 14;
 
 const OUT_ACCEPTED = 1;
 const OUT_REPLY = 2;
@@ -249,6 +315,8 @@ const OUT_UNKNOWN_INTERACTION = 6;
 const OUT_CORRUPT = 7;
 const OUT_BUSY = 8;
 const OUT_REFUSED = 9;
+const OUT_END = 10;
+const OUT_INTERRUPTED = 11;
 
 const PROV_INIT = 1;
 const PROV_LIVE = 2;
@@ -263,6 +331,12 @@ const DATA_LEN = COMMON + ENVELOPE_BYTES;
 const RESPONSE_LEN = COMMON + ENVELOPE_BYTES + 8 + 2;
 /** The header of a `block`: the common fields, the envelope, `total` and `index`. */
 const BLOCK_LEN = COMMON + ENVELOPE_BYTES + 4 + 4;
+/** The header of a `chunk`: the common fields, the envelope, `correlation` and `stream`. */
+const CHUNK_LEN = COMMON + ENVELOPE_BYTES + 8 + 1;
+/** The header of a `stream_end`: a `chunk`'s, then `outcome` and `detail`. */
+const STREAM_END_LEN = CHUNK_LEN + 2;
+/** The header of a `stream_credit`: the common fields, `correlation`, `stream` and `credit`. */
+const STREAM_CREDIT_LEN = COMMON + 8 + 1 + 4;
 /** `form`, `frame_version`, `encoding`, `hash` and `name_len`. */
 const ATTACH_FIXED = 1 + 4 + 1 + 32 + 1;
 
@@ -332,6 +406,57 @@ function contractCodes(contract: Contract): [number, number] {
     case "unknown-interaction":
       return [OUT_UNKNOWN_INTERACTION, 0];
   }
+}
+
+function streamCodes(outcome: StreamOutcome): [number, number] {
+  switch (outcome.kind) {
+    case "end":
+      return [OUT_END, 0];
+    case "interrupted":
+      return [OUT_INTERRUPTED, 0];
+    case "corrupt":
+      return [OUT_CORRUPT, 0];
+    case "busy":
+      return [OUT_BUSY, 0];
+    case "contract":
+      return contractCodes(outcome.contract);
+  }
+}
+
+/** A `stream_end` outcome from its `outcome` and `detail` codes. */
+function streamFrom(code: number, detail: number): StreamOutcome {
+  if (code >= OUT_INVALID_VALUE && code <= OUT_UNKNOWN_INTERACTION) {
+    return { kind: "contract", contract: contractFrom(code, detail) };
+  }
+  if (code === OUT_ACCEPTED || code === OUT_REPLY || code === OUT_REFUSED) {
+    return fail("outcome-not-allowed");
+  }
+  if (
+    code !== OUT_CORRUPT && code !== OUT_BUSY && code !== OUT_END &&
+    code !== OUT_INTERRUPTED
+  ) {
+    return fail("unknown-code");
+  }
+  if (detail !== 0) fail("nonzero-detail");
+  switch (code) {
+    case OUT_CORRUPT:
+      return { kind: "corrupt" };
+    case OUT_BUSY:
+      return { kind: "busy" };
+    case OUT_END:
+      return { kind: "end" };
+    default:
+      return { kind: "interrupted" };
+  }
+}
+
+/** The target of a stream frame, whose `kind` is `Command` or `Query`. */
+function streamTargetAt(msg: Uint8Array, view: DataView): Target {
+  const target = targetAt(msg, view);
+  if (target.kind !== Kind.Command && target.kind !== Kind.Query) {
+    fail("bad-stream");
+  }
+  return target;
 }
 
 function targetAt(msg: Uint8Array, view: DataView): Target {
@@ -496,6 +621,49 @@ function decodeFrame(msg: Uint8Array): Frame {
     }
     case FORM_BLOCK:
       return decodeBlock(msg, view);
+    case FORM_CHUNK: {
+      need(msg, CHUNK_LEN);
+      const target = streamTargetAt(msg, view);
+      return {
+        form: "chunk",
+        target,
+        envelope: envelopeAt(view, COMMON),
+        correlation: view.getBigUint64(COMMON + ENVELOPE_BYTES, true),
+        stream: msg[CHUNK_LEN - 1],
+        payload: msg.subarray(CHUNK_LEN),
+      };
+    }
+    case FORM_STREAM_END: {
+      need(msg, STREAM_END_LEN);
+      const target = streamTargetAt(msg, view);
+      const outcome = streamFrom(
+        msg[STREAM_END_LEN - 2],
+        msg[STREAM_END_LEN - 1],
+      );
+      if (msg.length > STREAM_END_LEN) fail("bad-stream");
+      return {
+        form: "stream_end",
+        target,
+        envelope: envelopeAt(view, COMMON),
+        correlation: view.getBigUint64(COMMON + ENVELOPE_BYTES, true),
+        stream: msg[STREAM_END_LEN - 3],
+        outcome,
+      };
+    }
+    case FORM_STREAM_CREDIT: {
+      need(msg, STREAM_CREDIT_LEN);
+      const target = streamTargetAt(msg, view);
+      const credit = view.getUint32(STREAM_CREDIT_LEN - 4, true);
+      if (credit === 0) fail("zero-number");
+      if (msg.length > STREAM_CREDIT_LEN) fail("bad-stream");
+      return {
+        form: "stream_credit",
+        target,
+        correlation: view.getBigUint64(COMMON, true),
+        stream: msg[STREAM_CREDIT_LEN - 5],
+        credit,
+      };
+    }
     default:
       return fail("unknown-code");
   }
@@ -636,6 +804,12 @@ function encodedLength(frame: Frame, nameBytes: Uint8Array): number {
         (frame.outcome.outcome === "reply" ? frame.outcome.payload.length : 0);
     case "block":
       return BLOCK_LEN + frame.payload.length;
+    case "chunk":
+      return CHUNK_LEN + frame.payload.length;
+    case "stream_end":
+      return STREAM_END_LEN;
+    case "stream_credit":
+      return STREAM_CREDIT_LEN;
   }
 }
 
@@ -754,6 +928,29 @@ export function encode(frame: Frame): Uint8Array {
       view.setUint32(COMMON + ENVELOPE_BYTES, frame.total, true);
       view.setUint32(COMMON + ENVELOPE_BYTES + 4, frame.index, true);
       out.set(frame.payload, BLOCK_LEN);
+      break;
+    case "chunk":
+      targetBytes(out, view, FORM_CHUNK, frame.target);
+      writeEnvelope(view, frame.envelope);
+      view.setBigUint64(COMMON + ENVELOPE_BYTES, frame.correlation, true);
+      out[CHUNK_LEN - 1] = frame.stream;
+      out.set(frame.payload, CHUNK_LEN);
+      break;
+    case "stream_end": {
+      targetBytes(out, view, FORM_STREAM_END, frame.target);
+      writeEnvelope(view, frame.envelope);
+      view.setBigUint64(COMMON + ENVELOPE_BYTES, frame.correlation, true);
+      out[STREAM_END_LEN - 3] = frame.stream;
+      const [code, detail] = streamCodes(frame.outcome);
+      out[STREAM_END_LEN - 2] = code;
+      out[STREAM_END_LEN - 1] = detail;
+      break;
+    }
+    case "stream_credit":
+      targetBytes(out, view, FORM_STREAM_CREDIT, frame.target);
+      view.setBigUint64(COMMON, frame.correlation, true);
+      out[STREAM_CREDIT_LEN - 5] = frame.stream;
+      view.setUint32(STREAM_CREDIT_LEN - 4, frame.credit, true);
       break;
   }
   return out;

@@ -14,16 +14,22 @@ Written from the owner's decisions of 2026-10-28 (decisions 1 to 8) and of
 2026-10-31 (decisions 9 to 14, which answer the six open questions the record
 was proposed with). It adds no syntax, no interaction kind and no diagnostic
 code. The documents in "Documents amended" are changed with the acceptance.
-Built: the stream port of `ridl-rt` and the `streams` entries of the catalog
-descriptor. Not built: the frame version and the generated face
-(driftsys/ridl#1116).
+Built: the stream port of `ridl-rt`, the `streams` entries of the catalog
+descriptor, frame version 3, which carries a query's streamed reply over
+WebSocket
+([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
+and the Rust face for a streamed reply of named elements. Not carried yet:
+parameter streams, byte streams and text streams (driftsys/ridl#1116).
 
 Amended 2026-10-31. Decision 10's example spelled the result union inline as
 `<DocChunk | DocError>`, which the grammar does not admit; the example now
 declares a named union (`union DocChunkResult`) and writes `<DocChunkResult>`,
 as ridl §12.4 does. Decisions 9 and 11 are built as the stream port of `ridl-rt`
-0.x (the signatures are in [the ridl-rt design](../design/ridl-rt.md)); the
-frame version and the generated face are still to come (driftsys/ridl#1116).
+0.x (the signatures are in [the ridl-rt design](../design/ridl-rt.md)).
+
+Amended 2026-11-02. The frame version and the Rust face for a streamed reply of
+named elements are built: frame version 3 carries a query's streamed reply over
+WebSocket. The other cases of this record are not carried by a transport yet.
 
 ## Context
 
@@ -267,8 +273,11 @@ order the questions were listed.
   which are made to state what the checker does.
 - `<bytes>` and `<string>` change meaning in the references, from a stream of
   elements of at most 256 bytes or characters each to a stream of bytes with no
-  contracted boundary. No transport carries a stream today, so no deployed
-  behaviour changes.
+  contracted boundary. No transport carried a stream when this record was
+  accepted, so no deployed behaviour changed. Frame version 3 now carries a
+  query's streamed reply over WebSocket
+  ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3));
+  parameter, byte and text streams are not carried yet.
 - The stream port of `ridl-rt`, the WebSocket stream framing, and the codegen
   for `<T>` and `<bytes>` in the Rust and TypeScript backends are new work. The
   port adds fields to `Member` or `PayloadInfo`, so it is a breaking change of

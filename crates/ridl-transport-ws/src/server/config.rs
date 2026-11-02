@@ -53,9 +53,27 @@ pub enum Note {
         seq: u64,
     },
     /// A call whose outcome stayed unknown for [`Config::call_abandon_after`]
-    /// was forgotten on the backend. Nothing is sent for it.
+    /// was forgotten on the backend. Nothing is sent for it, except for a
+    /// call whose reply is a stream: its bound is measured from the last
+    /// `chunk` sent or `stream_credit` received, and the stream is ended
+    /// with a `stream_end interrupted`.
     CallAbandoned {
         /// The `seq` of the abandoned request.
+        seq: u64,
+    },
+    /// A `chunk` arrived from the client on a stream for which the server
+    /// granted it no credit: a stream parameter, which no member the server
+    /// serves over frame version 3 has. The session closes with 1002.
+    StreamCreditExceeded {
+        /// The `correlation` of the `chunk`: the `seq` of the request it
+        /// names.
+        seq: u64,
+    },
+    /// The client stopped the reply stream of a call with a `stream_end`.
+    /// The call was forgotten on the backend, and nothing more is sent for
+    /// it.
+    StreamStopped {
+        /// The `seq` of the request whose reply stream was stopped.
         seq: u64,
     },
     /// The backend reported a `contract(InvalidValue)` whose `Rule` the

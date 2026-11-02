@@ -203,54 +203,64 @@ set is closed: a binding carries exactly these fields, adds none, and omits none
 that the form requires. Header fields have no default: a field the form requires
 is present on every frame of that form.
 
-| Field         | Domain                                                                                  | Present on                                              |
-| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `form`        | one of the eleven forms below                                                           | every frame                                             |
-| `interface`   | `InterfaceNo`, `u32`, never 0                                                           | every frame but `attach` and `attached`                 |
-| `ordinal`     | `Ordinal`, `u32`, never 0                                                               | every frame but `attach` and `attached`                 |
-| `kind`        | `Kind`, values 1 to 5                                                                   | every frame but `attach` and `attached`                 |
-| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                                                    | `publish`, `occurrence`, `request`, `response`, `block` |
-| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                                                   | `publish`                                               |
-| `correlation` | `u64`: the `seq` of the request answered                                                | `response`                                              |
-| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries                           | `response`, `attached`, `answer`                        |
-| `total`       | `u32`: the length in bytes of the whole payload that the block is a part of, at least 1 | `block`                                                 |
-| `index`       | `u32`: the position of the block in that payload, counted from 0                        | `block`                                                 |
-| `payload`     | bytes in the session's encoding                                                         | as §5 states per form and per kind                      |
+| Field         | Domain                                                                                  | Present on                                                                     |
+| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `form`        | one of the fourteen forms below                                                         | every frame                                                                    |
+| `interface`   | `InterfaceNo`, `u32`, never 0                                                           | every frame but `attach` and `attached`                                        |
+| `ordinal`     | `Ordinal`, `u32`, never 0                                                               | every frame but `attach` and `attached`                                        |
+| `kind`        | `Kind`, values 1 to 5                                                                   | every frame but `attach` and `attached`                                        |
+| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                                                    | `publish`, `occurrence`, `request`, `response`, `block`, `chunk`, `stream_end` |
+| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                                                   | `publish`                                                                      |
+| `correlation` | `u64`: the `seq` of the request answered                                                | `response`, `chunk`, `stream_end`, `stream_credit`                             |
+| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries                           | `response`, `attached`, `answer`, `stream_end`                                 |
+| `total`       | `u32`: the length in bytes of the whole payload that the block is a part of, at least 1 | `block`                                                                        |
+| `index`       | `u32`: the position of the block in that payload, counted from 0                        | `block`                                                                        |
+| `stream`      | `u8`: the number of the stream of the call, counted from 0                              | `chunk`, `stream_end`, `stream_credit`                                         |
+| `credit`      | `u32`: the number of chunks the receiver of a stream grants the sender, at least 1      | `stream_credit`                                                                |
+| `payload`     | bytes in the session's encoding                                                         | as §5 states per form and per kind                                             |
 
-**Frame versions.** This document defines **frame version 2**: frame version 1
-and the `block` form with its two fields `total` and `index`. Frame version 1 is
-the same frame without them, ten forms and no `total` and no `index`. Every
-other field, code and rule is the same in both versions. A session carries one
-frame version, which its `attach` names (§6.1).
+**Frame versions.** This document defines **frame version 3**: frame version 2
+and the three stream forms `chunk`, `stream_end` and `stream_credit`, with their
+fields `stream` and `credit`, and the two `outcome` values `end` and
+`interrupted`. Frame version 2 is frame version 1 and the `block` form with its
+two fields `total` and `index`. Frame version 1 is the same frame without them,
+ten forms and no `total` and no `index`. Every other field, code and rule is the
+same in all versions. A session carries one frame version, which its `attach`
+names (§6.1).
 
-**The eleven forms**, by plane and direction:
+**The fourteen forms**, by plane and direction:
 
-| Form          | Plane   | Direction           | Meaning                                                                      |
-| ------------- | ------- | ------------------- | ---------------------------------------------------------------------------- |
-| `attach`      | control | consumer → provider | opens the session for one catalog and one encoding (§6.1)                    |
-| `attached`    | control | provider → consumer | accepts or refuses the `attach` (§6.1)                                       |
-| `subscribe`   | control | consumer → provider | starts delivery of one signal or one event (§6.2)                            |
-| `answer`      | control | provider → consumer | accepts or refuses a `subscribe`; refuses a `read` (§6.2, §6.3)              |
-| `unsubscribe` | control | consumer → provider | stops delivery of one signal or one event (§6.2)                             |
-| `read`        | control | consumer → provider | asks for the current state of one signal, or the value of one `fixed` (§6.3) |
-| `publish`     | data    | provider → consumer | one publication of a signal's state, or the value of a `fixed` (§5.1, §5.5)  |
-| `occurrence`  | data    | provider → consumer | one occurrence of an event (§5.2)                                            |
-| `request`     | data    | consumer → provider | one call of a command or a query (§5.3, §5.4)                                |
-| `response`    | data    | provider → consumer | the acknowledgment of a command, or the reply of a query (§5.3, §5.4)        |
-| `block`       | data    | provider → consumer | one part of a `publish` of a `fixed` that is sent in parts (§5.5)            |
+| Form            | Plane   | Direction           | Meaning                                                                      |
+| --------------- | ------- | ------------------- | ---------------------------------------------------------------------------- |
+| `attach`        | control | consumer → provider | opens the session for one catalog and one encoding (§6.1)                    |
+| `attached`      | control | provider → consumer | accepts or refuses the `attach` (§6.1)                                       |
+| `subscribe`     | control | consumer → provider | starts delivery of one signal or one event (§6.2)                            |
+| `answer`        | control | provider → consumer | accepts or refuses a `subscribe`; refuses a `read` (§6.2, §6.3)              |
+| `unsubscribe`   | control | consumer → provider | stops delivery of one signal or one event (§6.2)                             |
+| `read`          | control | consumer → provider | asks for the current state of one signal, or the value of one `fixed` (§6.3) |
+| `publish`       | data    | provider → consumer | one publication of a signal's state, or the value of a `fixed` (§5.1, §5.5)  |
+| `occurrence`    | data    | provider → consumer | one occurrence of an event (§5.2)                                            |
+| `request`       | data    | consumer → provider | one call of a command or a query (§5.3, §5.4)                                |
+| `response`      | data    | provider → consumer | the acknowledgment of a command, or the reply of a query (§5.3, §5.4)        |
+| `block`         | data    | provider → consumer | one part of a `publish` of a `fixed` that is sent in parts (§5.5)            |
+| `chunk`         | data    | both                | one chunk of one stream of one call                                          |
+| `stream_end`    | data    | both                | the end of one stream, normal or not; also the receiver's stop of a stream   |
+| `stream_credit` | data    | both                | the receiver of a stream grants the sender `credit` more chunks              |
 
 **The codes.** A binding that carries a field as a numeric code uses these
 values. `form`: `attach` 1, `attached` 2, `subscribe` 3, `answer` 4,
 `unsubscribe` 5, `read` 6, `publish` 7, `occurrence` 8, `request` 9, `response`
-10, `block` 11 — the order of the table above; `block` 11 is a code of frame
-version 2 only. `provenance`: `Init` 1, `Live` 2, `Invalid(Declared)` 3.
-`outcome`: `accepted` 1, `reply` 2, `contract(InvalidValue)` 3,
-`contract(PreconditionFailed)` 4, `contract(ContractBroken)` 5,
-`contract(UnknownInteraction)` 6, `corrupt` 7, `busy` 8, `refused` 9. A
-`refused` reason: `unknown_catalog` 1, `catalog_mismatch` 2,
-`encoding_unsupported` 3, `frame_version_unsupported` 4, `range` 5. The `Rule`
-of an `InvalidValue`: §9.6. A new value in any of these tables is a new frame
-version.
+10, `block` 11, `chunk` 12, `stream_end` 13, `stream_credit` 14 — the order of
+the table above; `block` 11 is a code of frame version 2 and later, and 12 to 14
+are codes of frame version 3 only. `provenance`: `Init` 1, `Live` 2,
+`Invalid(Declared)` 3. `outcome`: `accepted` 1, `reply` 2,
+`contract(InvalidValue)` 3, `contract(PreconditionFailed)` 4,
+`contract(ContractBroken)` 5, `contract(UnknownInteraction)` 6, `corrupt` 7,
+`busy` 8, `refused` 9, `end` 10, `interrupted` 11; `end` and `interrupted` are
+codes of frame version 3 and only a `stream_end` carries them. A `refused`
+reason: `unknown_catalog` 1, `catalog_mismatch` 2, `encoding_unsupported` 3,
+`frame_version_unsupported` 4, `range` 5. The `Rule` of an `InvalidValue`: §9.6.
+A new value in any of these tables is a new frame version.
 
 **The `block` form.** A `block` is one part of a `publish` of a `fixed` under
 `Live`, sent when a binding carries that `publish` in parts (§5.5, §10 item 10).
@@ -266,6 +276,29 @@ size in bytes, and the last carries the rest, so a payload of `total` bytes has
 whose `kind` is not `Fixed`, whose `total` is 0, whose `index` is n or more, or
 whose number of payload bytes is not the one its `index` and `total` give is not
 a frame the receiver can read (§9.5): the check needs no session state.
+
+**The stream forms.** A stream is one of the ordered sequences of chunks of a
+call of a `command` or a `query`. The three stream forms carry `interface`,
+`ordinal` and `kind` of that call, with `kind` `Command` or `Query`; any other
+`kind` is a value outside the forms' table. Each carries `correlation`, the
+`seq` of the `request` that opened the call, the caller's name for it, and
+`stream`. A `chunk` carries an `envelope` and a payload, which may be zero
+bytes. A `stream_end` carries an `envelope`, an `outcome` and a `detail`, and no
+payload. A `stream_credit` carries no `envelope` and no payload.
+
+On a `chunk` and a `stream_end`, `seq` is one counter per stream and direction,
+from 1 for the first chunk, and the `stream_end` takes the next value, so a
+receiver that sees a gap treats the stream as interrupted without waiting. On a
+`stream_end`, `outcome` is one of `end` 10 (normal), `contract(c)` 3 to 6,
+`corrupt` 7, `busy` 8 and `interrupted` 11; `detail` is the `Rule` code under
+`contract(InvalidValue)` (§9.6) and 0 otherwise. Any other `outcome` is not
+allowed on a `stream_end`, and `end` and `interrupted` are not allowed on any
+other form. A `stream_end` travels against the stream's direction when its
+receiver stops the stream. A `stream_credit` grants `credit` more chunks to the
+sender of the stream, and a `credit` of 0 is a value outside the form's table.
+Every stream has an initial credit that binds the sender before the first
+`stream_credit`; the binding states it (§11.1, "Binding version 3"). Each of
+these checks needs no session state.
 
 **Why `kind` is on the frame at all.** Both sides hold the catalog, so either
 could look the kind up from the ordinal. It crosses because a relay, a recorder
@@ -432,6 +465,8 @@ runtime's local name for the outcome it will read back through `Caller::ack`; a
 runtime may use the request's `seq` as its value, and nothing on the frame
 depends on that choice.
 
+A command with a stream parameter is carried by no binding yet (§13).
+
 **What the provider does.** A providing runtime that cannot admit the call — no
 slot, no budget, or a call faster than the member's `min` (§8) — does not
 present it and answers with a `response` whose outcome is `busy`. Otherwise, on
@@ -502,6 +537,44 @@ bytes for `reply`, `Err(CallError::Contract(c))` for `contract(c)`,
 `Err(CallError::Transport(Busy))` for `busy`. The generated binding verifies the
 reply bytes (§9.3). No `response` within the query's response bound is
 `Transport::Timeout` (§8), detected by the caller's runtime.
+
+**A query whose reply is a stream** is answered by the frames of its stream and
+never by a `response`. The `request` is as above and `correlation` on every
+frame of the reply is the request's `seq`. The provider sends the elements as
+`chunk` frames on stream 0, each carrying one chunk of at most the member's
+limit (§9), and one `stream_end` that takes the next stream `seq` (§4). The
+reply opens with its first `chunk` or its `stream_end`. Every outcome of the
+call is a `stream_end` outcome:
+
+- `end` when the stream finished;
+- `busy`, `contract(c)` or `corrupt`, with `seq` 1 and no `chunk` before it,
+  when the provider refused the call at admission or at dispatch;
+- `contract(c)`, `corrupt` or `busy` under the next stream `seq`, after one or
+  more chunks, when the provider failed the stream with that outcome, or when a
+  chunk was longer than the member's limit (`corrupt`);
+- `interrupted` when the provider stopped the stream without an end, or when its
+  port reported `Timeout`, `Undelivered` or `Down` for the stream (§9.6).
+
+A `response` that answers a call the provider presented as a streamed reply is a
+protocol violation of the provider. A provider that does not know the member
+answers `response` `contract(UnknownInteraction)` (§6.4), because it cannot know
+which members stream. A consumer of a streamed reply therefore takes a
+`response` whose outcome is `contract`, `corrupt` or `busy` before the first
+`chunk` or `stream_end` as that stream's refusal, with that outcome, and the
+session continues. A `response` after the first frame of the reply, or one whose
+outcome is `reply` or `accepted`, is a protocol violation of item 4.
+
+**Flow of a streamed reply.** The consumer grants the provider credit with
+`stream_credit` on stream 0, as it hands chunks to its application and frees its
+buffer; the initial credit is 4 chunks (§11.1, "Binding version 3"). A `chunk`
+beyond the credit granted is a protocol violation of the consumer's peer. The
+consumer stops the stream by sending `stream_end` against its direction with
+`interrupted` when it cancels, `contract(c)` when it refused a chunk at its
+boundary, or `corrupt` when it could not decode a chunk or the chunk was longer
+than the member's limit. A consumer's `stream_end` with `end` or `busy` is a
+protocol violation of item 4: a receiver cancels a stream and does not end it.
+After the provider receives a consumer's `stream_end`, it sends nothing more for
+the call.
 
 ### 5.5 Fixed
 
@@ -601,11 +674,11 @@ a buffer and one that frames it.
 
 `attach` opens the session. It carries:
 
-| Field           | Domain                                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------------------------- |
-| `frame_version` | `u32`: the version of the frame the session carries, **1** or **2**; this document defines version 2 (§4) |
-| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash                                                          |
-| `encoding`      | the encoding tag (§3)                                                                                     |
+| Field           | Domain                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `frame_version` | `u32`: the version of the frame the session carries, **1**, **2** or **3**; this document defines version 3 (§4) |
+| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash                                                                 |
+| `encoding`      | the encoding tag (§3)                                                                                            |
 
 `attached` answers with an `outcome`:
 
@@ -777,6 +850,9 @@ scope depends on the kind:
   decision 5), and it is what a `response` echoes as `correlation`.
 - **A provider's responses have one counter** per session, starting at 1. It
   orders the responses; nothing depends on it beyond that.
+- **A stream has one counter per direction**, starting at 1, over the `chunk`
+  frames of the stream and its `stream_end` (§4). A streamed reply's frames do
+  not use the provider's counter of responses.
 
 **Ordering on a signal.** A consuming runtime accepts a `publish` for a channel
 only when its `seq` is greater than the one it holds for that channel (§5.1). So
@@ -794,6 +870,17 @@ has not. Two callers are never merged, even under one `seq`. A provider keeps a
 settled call's response for a call with a response bound until that bound has
 passed, measured from the request's `stamp`; for a call with no response bound,
 the binding fixes the retention and states it.
+
+**A retransmitted `request` of a streamed reply** is answered, once the stream
+has ended, with one `stream_end` whose outcome is `interrupted` and whose `seq`
+is 1, and the provider presents the call no second time. While the stream is
+still open, the retransmit is dropped and nothing is sent. The provider keeps
+that one frame as its kept response for the call, whatever the outcome of the
+first answer was, including a refusal at dispatch, and not the chunks it sent: a
+provider cannot keep a streamed reply whole. It keeps the frame until the bound
+has passed, as for any response. A consumer that lost chunks asks again with an
+`offset` parameter, as [ADR-0032](../decisions/ADR-0032-byte-streams.md)
+decision 5 states.
 
 The retransmission budget is bounded by the response bound
 ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
@@ -823,6 +910,16 @@ failure outside this document (ridl §10.4).
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max`, staleness bound | the **consuming** runtime computes `Freshness` on every read: `Fresh` while `now − stamp ≤ max`, else `Stale { by: now − stamp − max }`; `Unbounded` with no `max` | the **consuming** runtime discards an occurrence with `now − stamp > max` inside `EventSource::next` | the **calling** runtime reports `Transport::Undelivered` (command) or `Transport::Timeout` (query) through `ack` or `reply` once `now − request stamp > max` with no `response`; the **providing** runtime presents `Claim.remaining = max − (now − request stamp)`, `None` with no `max` |
 | `min`, rate floor      | the **providing** runtime coalesces a faster `set` into the next publication                                                                                       | the **providing** runtime refuses a faster `raise` with `RaiseError::Busy`, or delays it             | the **providing** runtime may refuse a faster call at admission, and answers with `busy`                                                                                                                                                                                                  |
+
+**A streamed reply.** The response bound of a query whose reply is a stream
+covers the start of the reply and not the whole stream
+([ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13): the **calling**
+runtime reports `Transport::Timeout` when neither a `chunk` nor a `stream_end`
+of the reply arrived within `max` of the request's stamp, and it stops the
+stream with `stream_end` `interrupted` (§5.4). After the first frame the bound
+no longer applies, and what stops a stalled stream is the provider's own
+abandonment of a call, which a binding states (the design record of
+`ridl-transport-ws`, D-27).
 
 Under `@Xms`, the strict period, the providing runtime publishes the signal
 every `X` whether or not it changed, which is a `touch` when nothing changed
@@ -943,14 +1040,18 @@ as §3 states.
 
 ### 9.6 Which failures cross
 
-Of the five `Transport` variants, exactly two cross a boundary, each as a
-`response` outcome: **`Corrupt`**, because the provider detected it, and
-**`Busy`**, because the provider refused the call at admission. `Timeout`,
-`Undelivered` and `Down` are the **absence** of a frame, detected by the
-caller's runtime against its own clock and its binding's session state, and
-never sent by anyone. Of the four `Contract` categories, every one may cross as
-a `response` or `answer` outcome. `Detected(_)` never crosses: it is the
-consumer's own finding about bytes it received.
+Of the five `Transport` variants, exactly three cross a boundary: **`Corrupt`**,
+because the provider detected it, and **`Busy`**, because the provider refused
+the call at admission, each as a `response` outcome (or, for a streamed reply, a
+`stream_end` outcome); and **`Interrupted`**, which crosses only as a
+`stream_end` outcome, because a stream that stopped without an end would
+otherwise wait with no bound, and a receiver that cancels a stream states it.
+`Timeout`, `Undelivered` and `Down` are the **absence** of a frame, detected by
+the caller's runtime against its own clock and its binding's session state, and
+never sent by anyone. A provider whose port reports one of them for a streamed
+reply sends `stream_end` `interrupted`. Of the four `Contract` categories, every
+one may cross as a `response` or `answer` outcome. `Detected(_)` never crosses:
+it is the consumer's own finding about bytes it received.
 
 **What a violation carries.** `contract(InvalidValue(violation))` crosses as the
 violation's `Rule` alone; the name of the typl type whose constraint failed does
@@ -1035,13 +1136,14 @@ decision 6) is its Rust crate, and `@driftsys/ridl-transport-ws`
 browser; it carries payload bytes without decoding them, so the two ends of one
 connection may be a Rust runtime and a TypeScript one. This section is the
 binding document: it states the ten items of §10 and adds nothing to the frame.
-It specifies two binding versions: **version 1**, under the subprotocol
-`ridl-ws-v1`, carries frame version 1, and **version 2**, under `ridl-ws-v2`,
-carries frame version 2. Items 1 to 9 hold for both versions, item 10 holds for
-version 2 only (version 1 has no `block` form), the test vectors below are
-version 1's, and version 2 adds what "Binding version 2", at the end of this
-section, states. The reasoning behind each rule, with the alternatives
-considered, is in
+It specifies three binding versions: **version 1**, under the subprotocol
+`ridl-ws-v1`, carries frame version 1, **version 2**, under `ridl-ws-v2`,
+carries frame version 2, and **version 3**, under `ridl-ws-v3`, carries frame
+version 3. Items 1 to 9 hold for all versions, item 10 holds for versions 2 and
+3 (version 1 has no `block` form), the test vectors below are version 1's, and
+versions 2 and 3 add what "Binding version 2" and "Binding version 3", at the
+end of this section, state. The reasoning behind each rule, with the
+alternatives considered, is in
 [the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
 **1. The transport and the session.** One WebSocket connection carries one
@@ -1100,47 +1202,53 @@ by the `outcome` of a `response`. From §5: an `occurrence` and a `request`
 always carry one; a `publish` carries one under `Live` (a signal's publication,
 and every `publish` of a `fixed`) and none under `Init` or `Invalid(Declared)`;
 a `response` carries one under `reply` and none under any other outcome; a
-`block` always carries one (frame version 2); `attach`, `attached`, `subscribe`,
-`answer`, `unsubscribe` and `read` never carry one. `kind` does not change the
-answer. A payload that is present may be zero bytes long — a proto3 value whose
-fields all hold their defaults encodes to no bytes — and is handed to the
-generated binding as it is.
+`block` always carries one (frame version 2); a `chunk` always carries one,
+possibly zero bytes long (frame version 3); `attach`, `attached`, `subscribe`,
+`answer`, `unsubscribe`, `read`, `stream_end` and `stream_credit` never carry
+one. `kind` does not change the answer. A payload that is present may be zero
+bytes long — a proto3 value whose fields all hold their defaults encodes to no
+bytes — and is handed to the generated binding as it is.
 
 **The sizes.** The envelope is 16 bytes. The largest data-plane header without
-its envelope is 20 bytes (`response`), so a data-plane message is at most 36
-bytes plus the payload bound. The largest header of any message is the `attach`
-at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
-limit admits at least 294 bytes. A payload is bounded by its interaction's
+its envelope is 20 bytes (`response`) among the forms that carry a payload, so a
+data-plane message that carries a payload is at most 36 bytes plus the payload
+bound; this holds in every version, because the largest header of a form added
+by version 2 or 3 is smaller. A `stream_end` and a `stream_credit` carry no
+payload and are outside this bound. The largest header of any message is the
+`attach` at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message
+size limit admits at least 294 bytes. A payload is bounded by its interaction's
 limit: the limit a `[limits]` entry of the catalog's manifest gives it, or the
 default ceiling of its kind, 3,840 bytes for a signal and an event, 16,128 for a
 command and a query, and 65,280 for a `fixed`
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
 16). The largest payload one message carries is 16,128 bytes, so the largest
 data-plane message is 36 + 16,128 = 16,164 bytes. The Rust provider
-`ridl-transport-ws` serves binding version 2. It limits a message to 16,164
-bytes by default and refuses a configured limit above it (ADR-0030 decision 10);
-with a member table it also refuses, before the opening handshake, a configured
-limit below what one message of a member of the catalog needs: 36 bytes plus the
-member's limit, where a `fixed` counts the smaller of 36 bytes plus its limit
-and 4,130 bytes, one block message of binding version 2. So a limit the provider
-accepts carries every payload the catalog allows, whole or in blocks. The check
-counts the 36-byte header of a `response` for every member, although a signal
-and a `fixed` cross in a 27-byte `publish`, so it can refuse a limit that is up
-to 9 bytes larger than such a member needs. A `fixed` above the message limit
-minus the 27-byte `publish` header, 16,137 bytes at the default limit, crosses
-in blocks (binding version 2). A provider whose message limit is below 4,130
-bytes sends no block: it sends a `fixed` that fits one `publish`, records a
-larger value and answers its `read` with an `answer` carrying
-`contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read`, so
-that the read ends instead of waiting until the session ends; with a member
-table, the check above admits such a limit only when every `fixed` of the
-catalog fits one message. The Rust provider answers a `read` of a signal or of a
-`fixed` whose value is above the member's limit the same way, so that no read
-waits on a value that is not sent. The codegen model carries the data-plane
-numbers as the `websocket` row, binding version `"2"`, `frame_header_max_bytes`
-20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
-derived from this layout: the layout is frozen through the vectors below, and
-the row is a derived value, corrected in a patch release if it is wrong
+`ridl-transport-ws` serves binding version 3 when its backend carries streams
+and it holds a member table, else binding version 2 (its design record, D-27).
+It limits a message to 16,164 bytes by default and refuses a configured limit
+above it (ADR-0030 decision 10); with a member table it also refuses, before the
+opening handshake, a configured limit below what one message of a member of the
+catalog needs: 36 bytes plus the member's limit, where a `fixed` counts the
+smaller of 36 bytes plus its limit and 4,130 bytes, one block message of binding
+version 2. So a limit the provider accepts carries every payload the catalog
+allows, whole or in blocks. The check counts the 36-byte header of a `response`
+for every member, although a signal and a `fixed` cross in a 27-byte `publish`,
+so it can refuse a limit that is up to 9 bytes larger than such a member needs.
+A `fixed` above the message limit minus the 27-byte `publish` header, 16,137
+bytes at the default limit, crosses in blocks (binding version 2). A provider
+whose message limit is below 4,130 bytes sends no block: it sends a `fixed` that
+fits one `publish`, records a larger value and answers its `read` with an
+`answer` carrying `contract(UnknownInteraction)`, the one refusal §6.3 defines
+for a `read`, so that the read ends instead of waiting until the session ends;
+with a member table, the check above admits such a limit only when every `fixed`
+of the catalog fits one message. The Rust provider answers a `read` of a signal
+or of a `fixed` whose value is above the member's limit the same way, so that no
+read waits on a value that is not sent. The codegen model carries the data-plane
+numbers as the `websocket` row, binding version `"3"`, `frame_header_max_bytes`
+20 (the largest header, without the envelope, of a message that carries a
+payload), `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The
+row is derived from this layout: the layout is frozen through the vectors below,
+and the row is a derived value, corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the
@@ -1158,21 +1266,23 @@ empty or not valid UTF-8, a first provider-to-consumer message that is not
 `attached` — is a protocol violation: the receiver records the frame (§9.5) and
 closes with 1002, and the session ends as §3 states. A `publish` or a `response`
 whose header says it carries no payload and which has bytes after its header is
-discarded and recorded (§9.5). A frame whose header says it carries a payload is
-never answered or discarded for the payload's length: the payload, zero bytes
-included, goes to `Payload::verify`, and a payload that fails to decode follows
-§9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
-payload is absent does not occur on this binding. One exception: a provider
-answers a `request` whose payload is longer than its member's limit — the limit
-its member table gives the member, or the default ceiling of the request's
-`kind`, 16,128 bytes, when the table gives none or the provider holds no table —
-`corrupt` without verifying it (§9; ADR-0030 decisions 15 and 19). A message
-above the receiver's configured size limit, which admits at least 294 bytes, is
-closed with 1009. Either side ends the session on purpose with 1000, the
-provider with 1001 when it shuts down; after `attached(refused)` the provider
-closes with 1000, and the reason is in the frame. A provider may close with 1008
-when a session passes a resource limit it states, such as a cap on the responses
-it keeps for §7. The binding defines no close code of its own.
+discarded and recorded (§9.5). A `stream_end` or a `stream_credit` with bytes
+after its header is a protocol violation, not a discard, because discarding an
+end or a credit would leave its stream stuck. A frame whose header says it
+carries a payload is never answered or discarded for the payload's length: the
+payload, zero bytes included, goes to `Payload::verify`, and a payload that
+fails to decode follows §9 — a `request`'s is answered `corrupt` (§5.3). So the
+`request` of §9.5 whose payload is absent does not occur on this binding. One
+exception: a provider answers a `request` whose payload is longer than its
+member's limit — the limit its member table gives the member, or the default
+ceiling of the request's `kind`, 16,128 bytes, when the table gives none or the
+provider holds no table — `corrupt` without verifying it (§9; ADR-0030 decisions
+15 and 19). A message above the receiver's configured size limit, which admits
+at least 294 bytes, is closed with 1009. Either side ends the session on purpose
+with 1000, the provider with 1001 when it shuts down; after `attached(refused)`
+the provider closes with 1000, and the reason is in the frame. A provider may
+close with 1008 when a session passes a resource limit it states, such as a cap
+on the responses it keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls
@@ -1197,25 +1307,25 @@ a runtime over this binding does not present `CoherentSignals`.
 be refused at admission and answered `busy`. The binding adds nothing.
 
 **10. Parts of a payload.** Version 1 carries every payload whole, one frame in
-one message, and has no `block` form. Version 2 carries a `fixed` that does not
-fit one message in blocks of 4,096 bytes, as "Binding version 2" states.
+one message, and has no `block` form. Versions 2 and 3 carry a `fixed` that does
+not fit one message in blocks of 4,096 bytes, as "Binding version 2" states.
 
 **Later versions.** An addition to the frame — a form, a field, a code — is a
 new frame version carried by a new binding version, offered beside the earlier
 ones in the subprotocol list. Version 1's layout, codes and vectors are never
-edited, and neither are version 2's. Binding version 2, below, is the first such
-version; streams (ridl §12, driftsys/ridl#336) arrive as version 3 the same way.
+edited, and neither are version 2's or version 3's. Binding version 2, below, is
+the first such version; binding version 3 adds the stream forms the same way.
 
 **Test vectors.** Each line is one complete message in hexadecimal, spaces for
 reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
-column, which is stable and never renamed, and it reads the table of "Binding
-version 2" the same way. The stamp in every data-plane vector is
-`0x0123456789AB` microseconds (and `0x0123456789AC` on the responses), chosen to
-show the byte order; the hash in `attach` is the bytes `00` to `1f`; the unit
-name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell names as
-`` payload `<hex>` `` and fails a row whose bytes after the header differ from
-it, or from no bytes when the cell names none; it decides from the header
-whether a frame carries a payload, by the rule "Whether a frame carries a
+column, which is stable and never renamed, and it reads the tables of "Binding
+version 2" and "Binding version 3" the same way. The stamp in every data-plane
+vector is `0x0123456789AB` microseconds (and `0x0123456789AC` on the responses),
+chosen to show the byte order; the hash in `attach` is the bytes `00` to `1f`;
+the unit name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell
+names as `` payload `<hex>` `` and fails a row whose bytes after the header
+differ from it, or from no bytes when the cell names none; it decides from the
+header whether a frame carries a payload, by the rule "Whether a frame carries a
 payload" above.
 
 | Id                   | Vector                                                          | Hex                                                                                                     |
@@ -1243,8 +1353,9 @@ offers `ridl-ws-v2, ridl-ws-v1`, newest first, as item 1 states, and sends
 `attach.frame_version` is 2 or the `attach` is refused
 `frame_version_unsupported`. On a version 1 session no `block` crosses, and a
 message whose `form` is 11 there is a code outside its table (item 4). The Rust
-provider serves frame version 2 only. It selects `ridl-ws-v2` when the client
-offers it; when the client offers `ridl-ws-v1` and not `ridl-ws-v2`, it selects
+provider serves frame version 2, or 3 (its design record, D-27), and never
+version 1. Without version 3, it selects `ridl-ws-v2` when the client offers it;
+when the client offers `ridl-ws-v1` and not `ridl-ws-v2`, it selects
 `ridl-ws-v1`, refuses every `attach` on that connection
 `frame_version_unsupported`, whatever its `frame_version`, and closes with 1000
 (item 4); a handshake that offers neither is answered `400 Bad Request`.
@@ -1297,6 +1408,60 @@ row, so no such block is a vector of this table.
 | `attach-2`   | `attach` frame 2, FlatBuffers, `veh.cabin`                                         | `01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
 | `block-last` | `block` fixed, interface 1, ordinal 5, seq 0, total 4,098, index 1, payload `abcd` | `0b 05 01000000 05000000 ab89674523010000 0000000000000000 02100000 01000000 abcd`                      |
 | `block-one`  | `block` fixed, interface 1, ordinal 5, seq 0, total 1, index 0, payload `ab`       | `0b 05 01000000 05000000 ab89674523010000 0000000000000000 01000000 00000000 ab`                        |
+
+#### Binding version 3
+
+Binding version 3 carries frame version 3 (§4) under the subprotocol
+`ridl-ws-v3`. It is version 2 with the three stream forms: every layout, code
+and rule of version 2 holds unchanged, blocks included; an `attach` carries
+`frame_version` 3.
+
+**The subprotocol and the frame version.** A client that speaks the three
+versions offers `ridl-ws-v3, ridl-ws-v2, ridl-ws-v1`, newest first, and sends
+`attach` with the frame version of the subprotocol the server selected: 3 on
+`ridl-ws-v3`, 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`. On a `ridl-ws-v3`
+connection, `attach.frame_version` is 3 or the `attach` is refused
+`frame_version_unsupported`. On a version 1 or version 2 session no stream form
+crosses, and a message whose `form` is 12, 13 or 14 there is a code outside its
+table (item 4).
+
+**The header encoding.** Version 3 adds three rows to the table of item 2:
+
+| Form            | Bytes                                                                                                 | Header size |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ----------- |
+| `chunk`         | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `stream` u8                            | 35          |
+| `stream_end`    | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `stream` u8, `outcome` u8, `detail` u8 | 37          |
+| `stream_credit` | the common 10, then `correlation` u64, `stream` u8, `credit` u32                                      | 23          |
+
+A chunk's payload is every byte after its header. A `stream_end` and a
+`stream_credit` carry no payload. The largest data-plane message is a `chunk`
+with 16,128 bytes of payload, 16,163 bytes, which is below the limit of 16,164
+bytes of item 2, so that limit holds unchanged. A `chunk`'s header without its
+envelope is 19 bytes, below the `response`'s 20, so "The sizes" of item 2 holds
+unchanged.
+
+**Initial credit.** The sender of a stream may send 4 chunks before it has
+received a `stream_credit` for that stream. Each `stream_credit` adds its
+`credit` to the number of chunks the sender may send.
+
+**Framing.** A stream frame that is wrong by itself (§4, "The stream forms") is
+a protocol violation of item 4: a `kind` other than `Command` or `Query`, an
+`outcome` not allowed on a `stream_end`, a `detail` other than 0 where the
+`outcome` has none, a `credit` of 0, and bytes after the header of a
+`stream_end` or a `stream_credit`. The receiver records it and closes with 1002,
+as §3 states.
+
+**Version 3 test vectors.** Each line is one complete message in hexadecimal,
+spaces for reading only, with the stamp, the hash and the unit name of the
+version 1 table. A `chunk` and a `stream_end` are sent by the provider here, so
+their stamp is `0x0123456789AC`.
+
+| Id               | Vector                                                                                | Hex                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `attach-3`       | `attach` frame 3, FlatBuffers, `veh.cabin`                                            | `01 03000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `chunk-reply`    | `chunk` query, interface 1, ordinal 4, seq 1, correlation 2, stream 0, payload `ff01` | `0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 ff01`                    |
+| `stream-end-end` | `stream_end` `end`, query, interface 1, ordinal 4, seq 2, correlation 2, stream 0     | `0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00`                   |
+| `stream-credit`  | `stream_credit` 4, query, interface 1, ordinal 4, correlation 2, stream 0             | `0e 04 01000000 04000000 0200000000000000 00 04000000`                                                  |
 
 ### 11.2 Binder on Android
 
@@ -1429,9 +1594,13 @@ Each item is left out on purpose, with the record that takes it.
 
 - **Streams.** `<T>` on a call's parameter or return (ridl §12) has no frame in
   version 1 or version 2: `ridl-rt` 0.1 leaves streams out (driftsys/ridl#336).
-  They arrive as frame version 3, negotiated as §11.1 "Later versions" states,
-  so that a version 1 or a version 2 peer is unchanged. Frame version 2 holds
-  the blocks of a `fixed` (§4, §5.5).
+  Frame version 3 holds the reply stream of a query (§5.4), negotiated as §11.1
+  "Later versions" states, so that a version 1 or a version 2 peer is unchanged.
+  A parameter stream on a command or a query is not built: no frame direction
+  carries a consumer's `chunk` yet, and a `chunk` from the consumer is refused.
+  A `<string>` stream has no UTF-8 check on the frame yet; the `Rule` that names
+  it arrives with the parameter streams. Frame version 2 holds the blocks of a
+  `fixed` (§4, §5.5).
 - **The family.** Which of ridl §3.2's five boundaries an interaction sits on is
   not on the frame, because `ridl-rt` 0.1 carries no `Family` and the IR has no
   family field yet; it returns as a `Member` field, a breaking change under

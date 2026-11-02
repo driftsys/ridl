@@ -7,7 +7,7 @@ use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::Contract;
 use ridl_rt::port::{
     Attached, Caller, Clock, Encoded, EventSource, FixedReader, ReadError, ScannableSignals,
-    SignalReader,
+    SignalReader, StreamCaller,
 };
 
 use super::members::MemberTable;
@@ -25,8 +25,9 @@ use super::members::MemberTable;
 /// that an embedder can serve a runtime type it does not own: the orphan rule
 /// forbids implementing this trait on another crate's type, and [`Polling`]
 /// and [`Scanning`] cover the two common cases with no code. A backend with
-/// one optional capability and not the other implements the three methods
-/// itself.
+/// one optional capability and not the other implements the optional methods
+/// itself. [`Streaming`] wraps a backend whose ports are a [`StreamCaller`]
+/// and serves streams, for example `Streaming(Scanning(rt))`.
 pub trait Backend {
     /// The port set every session needs.
     type Ports: Attached + Encoded + Clock + SignalReader + EventSource + Caller;
@@ -38,6 +39,14 @@ pub trait Backend {
     /// `Some`, a tick with no change costs one `scan` call; with `None`, a
     /// tick reads every subscribed signal.
     fn scannable(&self) -> Option<&dyn ScannableSignals> {
+        None
+    }
+
+    /// The ports as a [`StreamCaller`], when the runtime carries streams.
+    /// With `Some` and a member table, the server selects frame version 3
+    /// when the client offers it. The default is `None`: the server then
+    /// selects frame version 2 at most.
+    fn streams(&mut self) -> Option<&mut dyn StreamCaller> {
         None
     }
 
@@ -112,11 +121,52 @@ where
     }
 }
 
+/// A backend whose ports also carry streams: it forwards every method of the
+/// backend it wraps and answers [`Backend::streams`] with those ports.
+///
+/// [`Polling`] and [`Scanning`] cannot do this themselves, because their port
+/// type is not required to implement [`StreamCaller`].
+pub struct Streaming<B>(pub B);
+
+impl<B> Backend for Streaming<B>
+where
+    B: Backend,
+    B::Ports: StreamCaller,
+{
+    type Ports = B::Ports;
+
+    fn ports(&mut self) -> &mut B::Ports {
+        self.0.ports()
+    }
+
+    fn scannable(&self) -> Option<&dyn ScannableSignals> {
+        self.0.scannable()
+    }
+
+    fn streams(&mut self) -> Option<&mut dyn StreamCaller> {
+        Some(self.0.ports())
+    }
+
+    fn read_fixed(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError> {
+        self.0.read_fixed(iface, ord, out)
+    }
+
+    fn members(&self) -> Option<&MemberTable> {
+        self.0.members()
+    }
+}
+
 /// A backend paired with the member table of the catalog its ports serve.
 ///
-/// It forwards the ports, the scannable view and `read_fixed` of the backend
-/// it wraps, and returns the table from [`Backend::members`], so the server
-/// refuses an interaction the catalog does not hold.
+/// It forwards the ports, the scannable view, the stream port and
+/// `read_fixed` of the backend it wraps, and returns the table from
+/// [`Backend::members`], so the server refuses an interaction the catalog
+/// does not hold.
 pub struct Described<B: Backend> {
     inner: B,
     table: Arc<MemberTable>,
@@ -151,6 +201,10 @@ impl<B: Backend> Backend for Described<B> {
 
     fn scannable(&self) -> Option<&dyn ScannableSignals> {
         self.inner.scannable()
+    }
+
+    fn streams(&mut self) -> Option<&mut dyn StreamCaller> {
+        self.inner.streams()
     }
 
     fn read_fixed(
@@ -197,3 +251,34 @@ impl fmt::Display for TableMismatch {
 }
 
 impl std::error::Error for TableMismatch {}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use ridl_loopback::Loopback;
+    use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
+
+    use super::{Backend, Described, MemberTable, Scanning, Streaming};
+
+    const CATALOG: CatalogRef = CatalogRef {
+        name: "ws.test",
+        hash: CatalogHash([7u8; 32]),
+    };
+
+    /// A `Streaming` wrapper around a described, scanning backend still
+    /// serves the member table, the scannable view and the stream port.
+    ///
+    /// Mutations: answer `members` or `scannable` of `Streaming` with `None`.
+    #[test]
+    fn streaming_as_the_outer_wrapper_forwards_the_table_and_the_scan() {
+        let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
+        table.insert(InterfaceNo(1), Ordinal(1), Kind::Signal, None);
+        let rt = Loopback::new(CATALOG);
+        let described = Described::new(Scanning(rt), Arc::new(table)).unwrap();
+        let mut backend = Streaming(described);
+        assert_eq!(backend.members().map(MemberTable::len), Some(1));
+        assert!(backend.scannable().is_some());
+        assert!(backend.streams().is_some());
+    }
+}

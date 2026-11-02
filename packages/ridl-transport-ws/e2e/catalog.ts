@@ -34,12 +34,39 @@ export const FIXED_LARGE = 7;
 export const FIXED_WHOLE = 8;
 /** The `fixed` of 16,138 bytes, which crosses the binding in 4 blocks. */
 export const FIXED_SPLIT = 9;
+/**
+ * The query whose reply is a stream. Its argument is one byte `n`; the reply
+ * is `n` chunks, chunk `i` from 0 being {@link ELEMENT_LEN} bytes of value
+ * `i`, then the end of the stream.
+ */
+export const STREAM_QUERY = 10;
+/** The length of each chunk of the reply of {@link STREAM_QUERY}. */
+export const ELEMENT_LEN = 1024;
 /** The length of each large `fixed`, by ordinal. */
 export const FIXED_LENGTHS: ReadonlyMap<number, number> = new Map([
   [FIXED_LARGE, 65_280],
   [FIXED_WHOLE, 16_137],
   [FIXED_SPLIT, 16_138],
 ]);
+
+/**
+ * Reads the whole reply of {@link STREAM_QUERY} for `n`, and returns how many
+ * chunks arrived and whether chunk `i` is {@link ELEMENT_LEN} bytes of value
+ * `i` for each `i`. It rejects when the stream errors, so a stream that
+ * closes normally is the only one it describes.
+ */
+export async function readElements(
+  stream: ReadableStream<Uint8Array>,
+): Promise<{ count: number; match: boolean }> {
+  let count = 0;
+  let match = true;
+  for await (const chunk of stream) {
+    const i = count;
+    match &&= chunk.length === ELEMENT_LEN && chunk.every((b) => b === i);
+    count += 1;
+  }
+  return { count, match };
+}
 
 /** The `n` bytes whose byte `i` is `i mod 251`. */
 export function pattern(n: number): Uint8Array {
