@@ -94,6 +94,11 @@ its include guard before the names it derives, and `ridl build` checks the C
 names of the headers of one build against each other, by the identity of the
 entity each name stands for; decision 7 carries the dated note.
 
+**Amended 2026-11-02 — decision 7, the names of the standard headers, from
+driftsys/ridl#1158.** Every header also claims the C17 names that the included
+`<stdint.h>` and `<stddef.h>` define, in the same first group as the preamble
+names and the include guard; decision 7 carries the dated note.
+
 **Amended 2026-10-31 — decision 13, remote packages in the diff's context, from
 driftsys/ridl#1141.** The remote packages a side compiled are the context of
 `ridl diff`, the `ridl_diff` tool, `ridl build` and `ridl baseline`, so an
@@ -467,6 +472,17 @@ a field is appended.
    `Cargo.toml` are not, as on any error of a build), and the build exits 1. Two
    headers of two separate builds are not checked against each other;
    [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) lists the gap.
+
+   _Amended 2026-11-02, from driftsys/ridl#1158._ The first group of claims also
+   holds the C17 names that the `<stdint.h>` and `<stddef.h>` the preamble
+   includes define: the fixed-width, least-width, fast-width and pointer-width
+   types, their `_MIN`, `_MAX` and `_C` macros, `SIZE_MAX`, `PTRDIFF_*`,
+   `SIG_ATOMIC_*`, `WCHAR_*` and `WINT_*`, and `size_t`, `ptrdiff_t`, `wchar_t`,
+   `max_align_t`, `NULL` and `offsetof`. A package that derives one of these
+   names, such as the accessor `max_align_t` of the field `t` of `max.Align`, is
+   refused naming the header that defines it. The names of the reserved patterns
+   (`int*_t`, `uint*_t`, `INT*_MAX`) are claimed only when C17 lists them, so a
+   name such as `uint_custom_t` is accepted. The C23 additions are not claimed.
 
    _Amended 2026-11-01, from driftsys/ridl#1150._ The wire name an importing
    header gives a foreign tuple's head comes from the declaring package's own
