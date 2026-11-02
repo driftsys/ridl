@@ -48,6 +48,7 @@
 //! carries a byte range and no diagnostic code.
 
 use core::fmt;
+use core::hash::Hash;
 use core::str::FromStr;
 use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "fs")]
@@ -98,6 +99,23 @@ impl fmt::Display for InvalidLockKey {
 
 impl std::error::Error for InvalidLockKey {}
 
+/// What a line table needs from its key: a text form, an order, and the
+/// constants of the file that holds the table.
+pub trait TableKey: Clone + Eq + Ord + Hash + fmt::Display + FromStr<Err = InvalidLockKey> {
+    /// The file's name inside its directory.
+    const FILE_NAME: &'static str;
+    /// The first line of every written file.
+    const HEADER: &'static str;
+    /// The highest number the file may hold.
+    const MAX_NUMBER: u32;
+}
+
+impl TableKey for LockKey {
+    const FILE_NAME: &'static str = FILE_NAME;
+    const HEADER: &'static str = HEADER;
+    const MAX_NUMBER: u32 = u32::MAX - 1;
+}
+
 impl FromStr for LockKey {
     type Err = InvalidLockKey;
 
@@ -128,7 +146,7 @@ impl FromStr for LockKey {
 }
 
 /// The lexer's identifier: a letter, then letters, digits or `_`.
-fn is_ident(text: &str) -> bool {
+pub(crate) fn is_ident(text: &str) -> bool {
     let mut bytes = text.bytes();
     bytes
         .next()
@@ -138,29 +156,32 @@ fn is_ident(text: &str) -> bool {
 
 /// One line of the table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LockEntry {
-    pub key: LockKey,
+pub struct LockEntry<K = LockKey> {
+    pub key: K,
     /// 1-based; 0 is never allocated (lock design §1).
     pub number: u32,
     pub retired: bool,
     /// The line's bytes in the file text the entry was parsed from, trailing
     /// whitespace and the line terminator excluded — where RIDL-409 points
-    /// (plan decision PD-3). An entry [`allocate`](InterfaceLock::allocate)
+    /// (plan decision PD-3). An entry [`allocate`](LockTable::allocate)
     /// created has no line yet and carries the empty range at 0.
     pub range: TextRange,
 }
 
-/// The parsed table.
+/// The parsed table of `interfaces.lock`.
+pub type InterfaceLock = LockTable<LockKey>;
+
+/// The parsed table, generic over the key of its entries.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct InterfaceLock {
+pub struct LockTable<K = LockKey> {
     /// The next number to allocate; greater than every entry's number.
     pub next: u32,
     /// Every entry, live and retired, in file order. [`render`](Self::render)
     /// sorts them by number.
-    pub entries: Vec<LockEntry>,
+    pub entries: Vec<LockEntry<K>>,
 }
 
-impl Default for InterfaceLock {
+impl<K> Default for LockTable<K> {
     /// `next 1` with no entries — what the merge driver reads an empty BASE
     /// as (lock design §6), and what the first plain `ridl lock` starts from.
     fn default() -> Self {
@@ -183,28 +204,38 @@ pub struct LockError {
 
 /// Why an in-memory edit cannot be applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LockEditError {
+pub enum LockEditError<K = LockKey> {
     /// No live entry holds the key (it is absent, or every entry with it is
     /// retired).
-    NoLiveEntry(LockKey),
+    NoLiveEntry(K),
     /// A live entry already holds the key.
-    KeyAlreadyLive(LockKey),
+    KeyAlreadyLive(K),
+    /// No entry is keyed under the named component.
+    NoEntryUnder(String),
+    /// The next number is above the highest number the file may hold.
+    Exhausted,
 }
 
-impl fmt::Display for LockEditError {
+impl<K: TableKey> fmt::Display for LockEditError<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LockEditError::NoLiveEntry(key) => {
-                write!(f, "no live entry `{key}` in {FILE_NAME}")
+                write!(f, "no live entry `{key}` in {}", K::FILE_NAME)
             }
             LockEditError::KeyAlreadyLive(key) => {
-                write!(f, "`{key}` is already a live entry in {FILE_NAME}")
+                write!(f, "`{key}` is already a live entry in {}", K::FILE_NAME)
+            }
+            LockEditError::NoEntryUnder(component) => {
+                write!(f, "no entry under `{component}` in {}", K::FILE_NAME)
+            }
+            LockEditError::Exhausted => {
+                write!(f, "{} has no number left to allocate", K::FILE_NAME)
             }
         }
     }
 }
 
-impl std::error::Error for LockEditError {}
+impl<K: TableKey + fmt::Debug> std::error::Error for LockEditError<K> {}
 
 /// Parses the text of an `interfaces.lock`.
 ///
@@ -220,8 +251,14 @@ impl std::error::Error for LockEditError {}
 /// with two `next` lines is still caught: the second one's number must be
 /// below the first one's, or the file is malformed.
 pub fn parse(text: &str) -> Result<InterfaceLock, LockError> {
+    parse_table(text)
+}
+
+/// [`parse`] for any key. A number above `K::MAX_NUMBER`, or a `next` above
+/// `K::MAX_NUMBER + 1`, is malformed.
+pub fn parse_table<K: TableKey>(text: &str) -> Result<LockTable<K>, LockError> {
     let mut next: Option<u32> = None;
-    let mut entries: Vec<LockEntry> = Vec::new();
+    let mut entries: Vec<LockEntry<K>> = Vec::new();
     let mut offset = 0usize;
 
     for raw_line in text.split_inclusive('\n') {
@@ -234,10 +271,10 @@ pub fn parse(text: &str) -> Result<InterfaceLock, LockError> {
         let range = byte_range(start, start + line.len());
 
         let Some(bound) = next else {
-            next = Some(parse_next_line(line, range)?);
+            next = Some(parse_next_line::<K>(line, range)?);
             continue;
         };
-        let entry = parse_entry_line(line, range)?;
+        let entry = parse_entry_line::<K>(line, range)?;
         if entry.number >= bound {
             return Err(LockError {
                 message: format!(
@@ -273,7 +310,7 @@ pub fn parse(text: &str) -> Result<InterfaceLock, LockError> {
     }
 
     match next {
-        Some(next) => Ok(InterfaceLock { next, entries }),
+        Some(next) => Ok(LockTable { next, entries }),
         None => Err(LockError {
             message: "no `next` line: the first line after the header must be `next N`".to_string(),
             range: TextRange::default(),
@@ -284,7 +321,7 @@ pub fn parse(text: &str) -> Result<InterfaceLock, LockError> {
 /// The first content line: `next N`. A line that does not open with the word
 /// `next` means the file has no `next` line, reported at 0..0; one that opens
 /// with it and does not parse is reported on the line.
-fn parse_next_line(line: &str, range: TextRange) -> Result<u32, LockError> {
+fn parse_next_line<K: TableKey>(line: &str, range: TextRange) -> Result<u32, LockError> {
     let mut fields = line.split(' ');
     if fields.next() != Some("next") {
         return Err(LockError {
@@ -293,7 +330,7 @@ fn parse_next_line(line: &str, range: TextRange) -> Result<u32, LockError> {
         });
     }
     match (fields.next().and_then(parse_number), fields.next()) {
-        (Some(next), None) => Ok(next),
+        (Some(next), None) if u64::from(next) <= u64::from(K::MAX_NUMBER) + 1 => Ok(next),
         _ => Err(LockError {
             message: "the `next` line does not parse: expected `next N` with N at least 1"
                 .to_string(),
@@ -304,7 +341,7 @@ fn parse_next_line(line: &str, range: TextRange) -> Result<u32, LockError> {
 
 /// An entry line: `Key number` or `Key number retired`, fields separated by
 /// one space.
-fn parse_entry_line(line: &str, range: TextRange) -> Result<LockEntry, LockError> {
+fn parse_entry_line<K: TableKey>(line: &str, range: TextRange) -> Result<LockEntry<K>, LockError> {
     let does_not_parse = |reason: &str| LockError {
         message: format!("line does not parse: {reason}"),
         range,
@@ -313,12 +350,13 @@ fn parse_entry_line(line: &str, range: TextRange) -> Result<LockEntry, LockError
     let key = fields
         .next()
         .unwrap_or_default()
-        .parse::<LockKey>()
+        .parse::<K>()
         .map_err(|InvalidLockKey(reason)| does_not_parse(&reason))?;
     let number = fields
         .next()
         .and_then(parse_number)
-        .ok_or_else(|| does_not_parse("expected `Key N` with N at least 1"))?;
+        .filter(|number| *number <= K::MAX_NUMBER)
+        .ok_or_else(|| does_not_parse("expected `Key N` with N at least 1 and within range"))?;
     let retired = match fields.next() {
         None => false,
         Some("retired") => true,
@@ -352,12 +390,12 @@ fn byte_range(start: usize, end: usize) -> TextRange {
     TextRange::new(TextSize::from(start as u32), TextSize::from(end as u32))
 }
 
-impl InterfaceLock {
+impl<K: TableKey> LockTable<K> {
     /// The file text: the header, `next N`, then every entry in number order,
     /// one `\n` after each line.
     pub fn render(&self) -> String {
-        let mut out = format!("{HEADER}\nnext {}\n", self.next);
-        let mut entries: Vec<&LockEntry> = self.entries.iter().collect();
+        let mut out = format!("{}\nnext {}\n", K::HEADER, self.next);
+        let mut entries: Vec<&LockEntry<K>> = self.entries.iter().collect();
         entries.sort_by_key(|entry| entry.number);
         for entry in entries {
             push_line(&mut out, entry);
@@ -366,7 +404,7 @@ impl InterfaceLock {
     }
 
     /// The live entry holding `key`, if any. A retired entry never matches.
-    pub fn live(&self, key: &LockKey) -> Option<&LockEntry> {
+    pub fn live(&self, key: &K) -> Option<&LockEntry<K>> {
         self.entries
             .iter()
             .find(|entry| !entry.retired && entry.key == *key)
@@ -385,14 +423,15 @@ impl InterfaceLock {
     /// Allocates `next` to a new live entry for `key` and raises `next` by
     /// one. A retired entry with the same key does not stand in the way: the
     /// old name is free for a later, unrelated interface (lock design §4).
-    pub fn allocate(&mut self, key: LockKey) -> Result<u32, LockEditError> {
+    pub fn allocate(&mut self, key: K) -> Result<u32, LockEditError<K>> {
         if self.live(&key).is_some() {
             return Err(LockEditError::KeyAlreadyLive(key));
         }
         let number = self.next;
-        self.next = number
-            .checked_add(1)
-            .expect("interface numbers stay far below u32::MAX");
+        if number > K::MAX_NUMBER {
+            return Err(LockEditError::Exhausted);
+        }
+        self.next = number + 1;
         self.entries.push(LockEntry {
             key,
             number,
@@ -404,7 +443,7 @@ impl InterfaceLock {
 
     /// Rewrites the live entry `old` to hold the key `new`, in place; the
     /// number does not change and nothing is allocated. Returns the number.
-    pub fn rename(&mut self, old: &LockKey, new: LockKey) -> Result<u32, LockEditError> {
+    pub fn rename(&mut self, old: &K, new: K) -> Result<u32, LockEditError<K>> {
         let index = self
             .entries
             .iter()
@@ -420,7 +459,7 @@ impl InterfaceLock {
 
     /// Marks the live entry `key` retired; the line and its number stay and
     /// `next` does not move. Returns the number.
-    pub fn retire(&mut self, key: &LockKey) -> Result<u32, LockEditError> {
+    pub fn retire(&mut self, key: &K) -> Result<u32, LockEditError<K>> {
         let entry = self
             .entries
             .iter_mut()
@@ -433,7 +472,7 @@ impl InterfaceLock {
 
 /// One entry as a line of the file: `Key number`, then ` retired` for a
 /// retired entry, then `\n`.
-fn push_line(out: &mut String, entry: &LockEntry) {
+fn push_line<K: TableKey>(out: &mut String, entry: &LockEntry<K>) {
     out.push_str(&entry.key.to_string());
     out.push(' ');
     out.push_str(&entry.number.to_string());
@@ -445,10 +484,10 @@ fn push_line(out: &mut String, entry: &LockEntry) {
 
 /// What `ridl lock merge` writes to OURS (lock design §6).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MergeOutcome {
+pub enum MergeOutcome<K = LockKey> {
     /// Every entry agreed: the merged table, which the driver renders. Its
     /// entries carry the empty range at 0, as allocated entries do.
-    Clean(InterfaceLock),
+    Clean(LockTable<K>),
     /// At least one entry disagreed: the whole file text, with git conflict
     /// markers around only the disagreeing entries. The text does not parse
     /// (RIDL-410) until an author resolves it.
@@ -465,10 +504,10 @@ enum Side {
 
 /// One block between conflict markers: what OURS holds and what THEIRS holds,
 /// placed in the file at the number `at`.
-struct Conflict {
+struct Conflict<K> {
     at: u32,
-    ours: Vec<LockEntry>,
-    theirs: Vec<LockEntry>,
+    ours: Vec<LockEntry<K>>,
+    theirs: Vec<LockEntry<K>>,
 }
 
 /// A three-way merge over entries, not lines (lock design §6): the git merge
@@ -497,12 +536,12 @@ struct Conflict {
 /// `marker_size` is the length of each marker line (`<<<<<<< ours`,
 /// `=======`, `>>>>>>> theirs`); git passes its `conflict-marker-size`
 /// attribute, 7 by default, and the caller passes at least 1.
-pub fn merge(
-    base: &InterfaceLock,
-    ours: &InterfaceLock,
-    theirs: &InterfaceLock,
+pub fn merge<K: TableKey>(
+    base: &LockTable<K>,
+    ours: &LockTable<K>,
+    theirs: &LockTable<K>,
     marker_size: usize,
-) -> MergeOutcome {
+) -> MergeOutcome<K> {
     let base_at = by_number(base);
     let ours_at = by_number(ours);
     let theirs_at = by_number(theirs);
@@ -514,8 +553,8 @@ pub fn merge(
         .collect();
 
     let mut next = base.next.max(ours.next).max(theirs.next);
-    let mut resolved: Vec<(Side, LockEntry)> = Vec::new();
-    let mut conflicts: Vec<Conflict> = Vec::new();
+    let mut resolved: Vec<(Side, LockEntry<K>)> = Vec::new();
+    let mut conflicts: Vec<Conflict<K>> = Vec::new();
     for number in numbers {
         let b = base_at.get(&number).copied();
         let o = ours_at.get(&number).copied();
@@ -551,7 +590,7 @@ pub fn merge(
 
     // A live key on two numbers: the entries the two sides brought are one
     // conflict, and leave the merged table.
-    let mut by_key: BTreeMap<&LockKey, Vec<usize>> = BTreeMap::new();
+    let mut by_key: BTreeMap<&K, Vec<usize>> = BTreeMap::new();
     for (index, (_, entry)) in resolved.iter().enumerate() {
         if !entry.retired {
             by_key.entry(&entry.key).or_default().push(index);
@@ -582,7 +621,7 @@ pub fn merge(
         conflicts.push(conflict);
     }
 
-    let mut entries: Vec<LockEntry> = resolved
+    let mut entries: Vec<LockEntry<K>> = resolved
         .into_iter()
         .zip(in_conflict)
         .filter(|(_, taken)| !taken)
@@ -590,11 +629,11 @@ pub fn merge(
         .collect();
     entries.sort_by_key(|entry| entry.number);
     if conflicts.is_empty() {
-        return MergeOutcome::Clean(InterfaceLock { next, entries });
+        return MergeOutcome::Clean(LockTable { next, entries });
     }
 
     // The file in number order, each conflict block at its number.
-    let mut text = format!("{HEADER}\nnext {next}\n");
+    let mut text = format!("{}\nnext {next}\n", K::HEADER);
     conflicts.sort_by_key(|conflict| conflict.at);
     let mut conflicts = conflicts.into_iter().peekable();
     for entry in &entries {
@@ -612,7 +651,7 @@ pub fn merge(
     MergeOutcome::Conflict { text }
 }
 
-fn by_number(lock: &InterfaceLock) -> BTreeMap<u32, &LockEntry> {
+fn by_number<K>(lock: &LockTable<K>) -> BTreeMap<u32, &LockEntry<K>> {
     lock.entries
         .iter()
         .map(|entry| (entry.number, entry))
@@ -621,7 +660,7 @@ fn by_number(lock: &InterfaceLock) -> BTreeMap<u32, &LockEntry> {
 
 /// Whether two sides hold the same thing at a number: both absent, or both
 /// present with the same key and retired flag.
-fn agree(a: Option<&LockEntry>, b: Option<&LockEntry>) -> bool {
+fn agree<K: PartialEq>(a: Option<&LockEntry<K>>, b: Option<&LockEntry<K>>) -> bool {
     match (a, b) {
         (None, None) => true,
         (Some(a), Some(b)) => a.key == b.key && a.retired == b.retired,
@@ -630,14 +669,14 @@ fn agree(a: Option<&LockEntry>, b: Option<&LockEntry>) -> bool {
 }
 
 /// A copy of `entry` with no line yet.
-fn fresh(entry: &LockEntry) -> LockEntry {
+fn fresh<K: Clone>(entry: &LockEntry<K>) -> LockEntry<K> {
     LockEntry {
         range: TextRange::default(),
         ..entry.clone()
     }
 }
 
-fn push_conflict(out: &mut String, conflict: &Conflict, marker_size: usize) {
+fn push_conflict<K: TableKey>(out: &mut String, conflict: &Conflict<K>, marker_size: usize) {
     out.push_str(&"<".repeat(marker_size));
     out.push_str(" ours\n");
     for entry in &conflict.ours {
