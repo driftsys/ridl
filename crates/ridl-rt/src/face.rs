@@ -430,6 +430,7 @@ mod tests {
         bytes: [u8; 8],
         len: usize,
         ended: bool,
+        failure: Option<CallError>,
     }
 
     impl Consumer for Receiver {
@@ -449,8 +450,8 @@ mod tests {
             self.ended = true;
         }
 
-        fn failed(&mut self, _e: CallError) {
-            panic!("the test stream does not fail");
+        fn failed(&mut self, e: CallError) {
+            self.failure = Some(e);
         }
     }
 
@@ -481,8 +482,8 @@ mod tests {
             self.ended = true;
         }
 
-        fn failed(&mut self, _e: CallError) {
-            panic!("the test stream does not fail");
+        fn failed(&mut self, e: CallError) {
+            self.failure = Some(e);
         }
     }
 
@@ -506,5 +507,23 @@ mod tests {
         feed_bytes(&mut receiver, b"abcdefgh");
         assert_eq!(&receiver.bytes[..receiver.len], b"abcdefgh");
         assert!(receiver.ended);
+    }
+
+    #[test]
+    fn a_consumer_records_failure_through_a_trait_object() {
+        let mut receiver = Receiver::default();
+        let consumer: &mut dyn Consumer<Item = u8> = &mut receiver;
+        let error = CallError::Transport(crate::error::Transport::Interrupted);
+        consumer.failed(error);
+        assert_eq!(receiver.failure, Some(error));
+    }
+
+    #[test]
+    fn a_byte_consumer_records_failure_through_a_trait_object() {
+        let mut receiver = Receiver::default();
+        let consumer: &mut dyn ByteConsumer = &mut receiver;
+        let error = CallError::Transport(crate::error::Transport::Down);
+        consumer.failed(error);
+        assert_eq!(receiver.failure, Some(error));
     }
 }
