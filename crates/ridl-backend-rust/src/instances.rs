@@ -70,10 +70,17 @@ pub fn generate_instances_module(system: &v2::System) -> Result<Generated, Gener
             );
         }
     }
-    render(items_of(&root))
+    render(items_of(&root, MODULE))
 }
 
-fn items_of(node: &Node) -> Vec<TokenStream> {
+/// The name `ridlc` mounts the generated module under.
+const MODULE: &str = "instances";
+
+/// The items of `node`, whose module is named `parent`. A child module named
+/// like its parent (component `veh.adas.Adas` gives `adas::adas`) carries
+/// `#[allow(clippy::module_inception)]`, because the generated crate is linted
+/// with `-D warnings`.
+fn items_of(node: &Node, parent: &str) -> Vec<TokenStream> {
     let mut items = Vec::new();
     for (name, constant) in &node.constants {
         let name = format_ident!("{name}");
@@ -93,11 +100,13 @@ fn items_of(node: &Node) -> Vec<TokenStream> {
     }
     for (segment, child) in &node.children {
         let module = ident(segment);
-        let inner = items_of(child);
+        let inner = items_of(child, segment);
         if inner.is_empty() {
             continue;
         }
+        let inception = (segment == parent).then(|| quote! { #[allow(clippy::module_inception)] });
         items.push(quote! {
+            #inception
             pub mod #module {
                 #(#inner)*
             }
@@ -159,6 +168,30 @@ mod tests {
             "{source}"
         );
         assert_eq!(source.matches("Provisional:").count(), 1, "{source}");
+    }
+
+    /// A component named like the last segment of its package gives a module
+    /// inside a module of the same name, which clippy's `module_inception`
+    /// lint refuses under `-D warnings` unless it is allowed there.
+    #[test]
+    fn a_module_named_like_its_parent_allows_module_inception() {
+        let source = generate_instances_module(&system_of(&[
+            ("veh.adas", "Adas", &[("Unit", 1, false)]),
+            ("veh.adas", "Cruise", &[("Unit", 2, false)]),
+        ]))
+        .unwrap()
+        .rust_source;
+        let allow = "#[allow(clippy::module_inception)]";
+        assert_eq!(source.matches(allow).count(), 1, "{source}");
+        let at = source.find(allow).unwrap();
+        assert!(
+            source[at + allow.len()..].trim_start().starts_with("pub mod adas {"),
+            "{source}"
+        );
+        assert!(
+            source[..at].trim_end().ends_with("pub mod adas {"),
+            "{source}"
+        );
     }
 
     #[test]
