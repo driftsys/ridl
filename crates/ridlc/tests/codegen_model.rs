@@ -1048,7 +1048,7 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
     "bindings": [
       {
         "name": "websocket",
-        "version": "2",
+        "version": "3",
         "frameHeaderMaxBytes": 20,
         "envelopeBytes": 16
       }

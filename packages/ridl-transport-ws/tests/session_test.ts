@@ -148,12 +148,16 @@ async function subscribed(h: Harness & { session: Session }, t: Target) {
   await done;
 }
 
-Deno.test("connect offers ridl-ws-v2 then ridl-ws-v1 and attaches with frame version 2 on ridl-ws-v2", async () => {
+Deno.test("connect offers ridl-ws-v3, ridl-ws-v2 then ridl-ws-v1 and attaches with frame version 2 on ridl-ws-v2", async () => {
   const h = start();
   assert.equal(h.sockets.length, 1);
   const socket = h.sockets[0];
   assert.equal(socket.url, "ws://127.0.0.1:9000");
-  assert.deepEqual(socket.protocols, ["ridl-ws-v2", "ridl-ws-v1"]);
+  assert.deepEqual(socket.protocols, [
+    "ridl-ws-v3",
+    "ridl-ws-v2",
+    "ridl-ws-v1",
+  ]);
   assert.equal(socket.binaryType, "arraybuffer");
   assert.equal(socket.sent.length, 0);
   socket.open("ridl-ws-v2");
@@ -201,10 +205,10 @@ Deno.test("connect rejects with no-subprotocol and closes without a code when th
   }]);
 });
 
-Deno.test("a server that selects ridl-ws-v3 is a no-subprotocol violation", async () => {
+Deno.test("a server that selects a subprotocol the client did not offer is a no-subprotocol violation", async () => {
   const h = start();
   const socket = h.sockets[0];
-  socket.open("ridl-ws-v3");
+  socket.open("ridl-ws-v4");
   await assert.rejects(
     h.pending,
     (e: unknown) => e instanceof ProtocolError && e.cause === "no-subprotocol",
@@ -252,6 +256,50 @@ Deno.test("a malformed form 11 message on a frame version 1 session is an unknow
   );
   assert.deepEqual(socket.closes, [{}]);
   assert.deepEqual(h.notes, [{ note: "violation", violation: "unknown-code" }]);
+});
+
+Deno.test("a stream form on a frame version 1 or 2 session is an unknown-code violation", async () => {
+  const target: Target = { kind: Kind.Query, iface: 1, ord: 10 };
+  const envelope = { stamp: 1n, seq: 1n };
+  const streamFrames: Frame[] = [
+    {
+      form: "chunk",
+      target,
+      envelope,
+      correlation: 1n,
+      stream: 0,
+      payload: Uint8Array.of(1),
+    },
+    {
+      form: "stream_end",
+      target,
+      envelope,
+      correlation: 1n,
+      stream: 0,
+      outcome: { kind: "end" },
+    },
+    { form: "stream_credit", target, correlation: 1n, stream: 0, credit: 1 },
+  ];
+  for (const protocol of [SUBPROTOCOL_V1, SUBPROTOCOL]) {
+    for (const frame of streamFrames) {
+      const h = await attached(protocol);
+      h.socket.deliver(frame);
+      assert.deepEqual(h.socket.closes, [{}]);
+      assert.deepEqual(h.notes, [{
+        note: "violation",
+        violation: "unknown-code",
+      }]);
+    }
+    // Before `attached`, as after it.
+    const h = start();
+    const socket = h.sockets[0];
+    socket.open(protocol);
+    socket.deliver(streamFrames[0]);
+    await assert.rejects(
+      h.pending,
+      (e: unknown) => e instanceof ProtocolError && e.cause === "unknown-code",
+    );
+  }
 });
 
 Deno.test("a malformed form 11 message on a frame version 2 session is the decoder's violation", async () => {

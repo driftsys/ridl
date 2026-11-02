@@ -167,13 +167,15 @@ common cases:
   enum set of the package, whether or not an interface reaches it and whether
   or not it is `internal`. The Rust codecs built from the old declaration refuse
   a value it does not name, under every encoding, so the verdict does not
-  depend on `--encoding`; the TypeScript codec does not check it yet
-  ([driftsys/ridl#1173](https://github.com/driftsys/ridl/issues/1173)). Declare the enum or the enum set
+  depend on `--encoding`. The generated TypeScript codec module, which reads
+  FlatBuffers only, refuses it too. Declare the enum or the enum set
   `open` to make the same append compatible. Closing an `open` declaration is
   breaking (`enum_closed`), because a producer of the old version may still
   send a value the new reader refuses.
 - **Compatible, for an `open` declaration**: an enum value or an enum-set flag
   appended (no category of its own: the append is a compatible `decl_added`),
+  under every encoding, podbuf included, when the podbuf integer of the
+  declaration stays the same (the next item gives the case where it changes),
   and the `open` keyword gained (`enum_opened`). Opening is a source break for
   Rust callers: the generated enum gains an unknown variant and
   `#[non_exhaustive]`, so a `match` over it needs a wildcard arm.

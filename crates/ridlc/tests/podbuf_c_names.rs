@@ -726,3 +726,33 @@ fn a_build_without_the_podbuf_emit_does_not_run_the_check() {
         vec!["veh.common.fbs", "veh.fbs"]
     );
 }
+
+/// A package whose header would define a name that `<stddef.h>` defines is
+/// refused by the build, naming the name and the header, and no header is
+/// written: `max.Align` with a field `t` derives the accessor `max_align_t`.
+#[test]
+fn a_name_equal_to_a_standard_header_name_is_refused_by_the_build() {
+    let (diagnostics, out) = build(
+        &[(
+            "max",
+            "max",
+            "package max\nstruct Align { t : integer [0..10] }\n",
+        )],
+        &[Emit::Podbuf],
+    );
+    let refusal = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.message.contains("`max_align_t`"))
+        .unwrap_or_else(|| panic!("no refusal naming `max_align_t`: {diagnostics:?}"));
+    assert!(
+        refusal.message.contains("`<stddef.h>`"),
+        "{}",
+        refusal.message
+    );
+    assert_eq!(
+        refusal.severity,
+        ridl_core::diag::Severity::Error,
+        "{refusal:?}"
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}

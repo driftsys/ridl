@@ -16,6 +16,16 @@ function absent(type: string, field: string): never {
   throw new RangeError(`field ${field} of ${type} is absent`);
 }
 
+/** Thrown for a value the codec refuses, with the text of the rule it breaks. */
+export class RuleError extends RangeError {
+  readonly rule: (typeof RULES)[number];
+  constructor(rule: (typeof RULES)[number], message: string) {
+    super(message);
+    this.name = "RuleError";
+    this.rule = rule;
+  }
+}
+
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "veh.common";
 /** The hash of the catalog unit, which the wasm module carries. */
@@ -142,7 +152,15 @@ export function encodeGearPosition(value: t.GearPosition): Uint8Array {
 }
 /** Decodes a `veh.common.GearPosition` payload the codec has verified. */
 export function decodeGearPosition(bytes: Uint8Array): t.GearPosition {
-  return Number(fb.GearPositionBox.getRootAsGearPositionBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.GearPosition;
+  return unpackGearPosition(fb.GearPositionBox.getRootAsGearPositionBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackGearPosition(raw: number | bigint): t.GearPosition {
+  const n = Number(raw);
+  if (!([0, 1, 2, 3] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${raw} is not a value of veh.common.GearPosition`);
+  }
+  return n as t.GearPosition;
 }
 
 /** Encodes a `veh.common.Warning` payload. */
@@ -153,7 +171,15 @@ export function encodeWarning(value: t.Warning): Uint8Array {
 }
 /** Decodes a `veh.common.Warning` payload the codec has verified. */
 export function decodeWarning(bytes: Uint8Array): t.Warning {
-  return Number(fb.WarningBox.getRootAsWarningBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Warning;
+  return unpackWarning(fb.WarningBox.getRootAsWarningBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackWarning(raw: number | bigint): t.Warning {
+  const n = Number(raw);
+  if (!([0, 1, 2, 3] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${raw} is not a value of veh.common.Warning`);
+  }
+  return n as t.Warning;
 }
 
 /** Encodes a `veh.common.WarningFlags` payload. */
@@ -164,7 +190,14 @@ export function encodeWarningFlags(value: t.WarningFlags): Uint8Array {
 }
 /** Decodes a `veh.common.WarningFlags` payload the codec has verified. */
 export function decodeWarningFlags(bytes: Uint8Array): t.WarningFlags {
-  return fb.WarningFlagsBox.getRootAsWarningFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.WarningFlags;
+  return unpackWarningFlags(fb.WarningFlagsBox.getRootAsWarningFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackWarningFlags(value: number): t.WarningFlags {
+  if ((value & ~15) !== 0) {
+    throw new RuleError("variant", `value ${value} has a bit that veh.common.WarningFlags does not declare`);
+  }
+  return value as t.WarningFlags;
 }
 
 /** Encodes a `veh.common.SpeedLimitPayload` payload. */
@@ -334,7 +367,15 @@ export function encodeMode(value: t.Mode): Uint8Array {
 }
 /** Decodes a `veh.common.Mode` payload the codec has verified. */
 export function decodeMode(bytes: Uint8Array): t.Mode {
-  return Number(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Mode;
+  return unpackMode(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackMode(raw: number | bigint | null): t.Mode {
+  const n = raw === null ? absent("veh.common.Mode", "value") : Number(raw);
+  if (!([1, 2] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${raw} is not a value of veh.common.Mode`);
+  }
+  return n as t.Mode;
 }
 
 /** Encodes a `veh.common.Setting` payload. */
@@ -355,7 +396,7 @@ function packSetting(value: t.Setting): fb.SettingT {
 }
 function unpackSetting(object: fb.SettingT): t.Setting {
   return {
-    mode: object.mode === null ? absent("veh.common.Setting", "mode") : Number(object.mode) as t.Mode,
+    mode: object.mode === null ? absent("veh.common.Setting", "mode") : unpackMode(object.mode),
   };
 }
 
@@ -476,7 +517,7 @@ function unpackExtras(object: fb.ExtrasT): t.Extras {
     wide: object.wide === null ? absent("veh.common.Extras", "wide") : unpackExtrasWide(object.wide),
     blob: Uint8Array.from(object.blob) as Uint8Array,
     readings: object.readings.map((element) => unpackSensorReading(element)),
-    gears: object.gears.map((element) => Number(element) as t.GearPosition),
+    gears: object.gears.map((element) => unpackGearPosition(element)),
     maybe: object.maybe.map((element) => element as t.Speed),
     tag: Uint8Array.from(object.tag) as Uint8Array,
     notes: object.notes.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),
@@ -512,7 +553,7 @@ function unpackPick(object: fb.PickT): t.Pick {
     case fb.PickUnion.speed:
       return { kind: "speed", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };
     case fb.PickUnion.gear:
-      return { kind: "gear", value: Number((object.value as fb.PickGearBoxT).value) as t.GearPosition };
+      return { kind: "gear", value: unpackGearPosition((object.value as fb.PickGearBoxT).value) };
     case fb.PickUnion.reading:
       return { kind: "reading", value: unpackSensorReading(object.value as fb.SensorReadingT) };
     default:

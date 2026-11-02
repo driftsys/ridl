@@ -800,7 +800,7 @@ mod tests {
             bindings(),
             vec![v1::Binding {
                 name: "websocket".to_string(),
-                version: "2".to_string(),
+                version: "3".to_string(),
                 frame_header_max_bytes: Some(20),
                 envelope_bytes: Some(16),
             }]

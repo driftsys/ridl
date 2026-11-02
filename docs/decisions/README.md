@@ -590,21 +590,20 @@ other entry below is Accepted.
   to zero every pad; the evolution rules (an append that reads as 0 is
   compatible, an append that grows a struct held inline is a break, a field
   removal breaks under every encoding); strict and open enums, decided, with the
-  typl `open` keyword built 2026-11-01 (an open declaration is refused under
-  podbuf until driftsys/ridl#1168); the `podbuf_inline_append` and
-  `podbuf_width_change` diff categories, `strict_enum_append` (breaking for
-  every encoding) and RIDL-156 `podbuf-padding-order`; and what the backend
-  generates and exposes in the codegen model. It lists where it departs from the
-  design it restates, which is archived, and carries five open items. Amends
-  ADR-0020 decision 4 and closes its open item 1. Amended 2026-10-30 by
-  ADR-0030: `verify` no longer refuses a buffer longer than its own `MAX_SIZE`,
-  which closes open item 2, and RIDL-157 replaces RIDL-150; built 2026-10-30
-  (driftsys/ridl#1128). Amended 2026-10-31, decision 13: `ridl build` and
-  `ridl baseline` judge the catalog history for the root manifest's encodings,
-  which closes open item 3 (driftsys/ridl#1095). Amended 2026-10-31, decision 7:
-  the C header reads a boxed root, which closes open item 4
-  (driftsys/ridl#1096). Amended 2026-10-31, decision 13: the remote packages a
-  side compiled are the context of `ridl diff`, `ridl build` and
+  typl `open` keyword built 2026-11-01 (podbuf carries an open declaration since
+  driftsys/ridl#1168); the `podbuf_inline_append` and `podbuf_width_change` diff
+  categories, `strict_enum_append` (breaking for every encoding) and RIDL-156
+  `podbuf-padding-order`; and what the backend generates and exposes in the
+  codegen model. It lists where it departs from the design it restates, which is
+  archived, and carries five open items. Amends ADR-0020 decision 4 and closes
+  its open item 1. Amended 2026-10-30 by ADR-0030: `verify` no longer refuses a
+  buffer longer than its own `MAX_SIZE`, which closes open item 2, and RIDL-157
+  replaces RIDL-150; built 2026-10-30 (driftsys/ridl#1128). Amended 2026-10-31,
+  decision 13: `ridl build` and `ridl baseline` judge the catalog history for
+  the root manifest's encodings, which closes open item 3 (driftsys/ridl#1095).
+  Amended 2026-10-31, decision 7: the C header reads a boxed root, which closes
+  open item 4 (driftsys/ridl#1096). Amended 2026-10-31, decision 13: the remote
+  packages a side compiled are the context of `ridl diff`, `ridl build` and
   `ridl baseline`, so an inline append whose head reaches a remote type is
   judged by the layout, and a head no side can lay out is read as grown
   (driftsys/ridl#1141). Amended 2026-11-01, decision 7: an importing header
@@ -637,8 +636,11 @@ other entry below is Accepted.
   an entry can only lower the chunk size. Amended 2026-10-31: decision 10's
   example declares a named result union instead of the inline `<A | B>`, which
   the grammar does not admit. The stream port of `ridl-rt` (decisions 9 and 11)
-  is built; the frame version and the generated face are not
-  (driftsys/ridl#1116).
+  is built, and so are frame version 3, which carries a query's streamed reply
+  over WebSocket
+  ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
+  and the Rust face for a streamed reply of named elements; parameter, byte and
+  text streams are not carried yet (driftsys/ridl#1116).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

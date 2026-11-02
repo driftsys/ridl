@@ -9,17 +9,18 @@ use ridl_rt::contract::{default_ceiling, CatalogRef, InterfaceNo, Kind, Ordinal,
 use ridl_rt::encoding::Encoding;
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
-    Attached, Caller, Changed, Clock, Correlation, Encoded, EventSource, RawSample, ReadError,
-    SendError, SignalReader, SubscribeError, Watermark,
+    Attached, Caller, Changed, Clock, Correlation, Encoded, EventSource, Pull, RawSample,
+    ReadError, SendError, SignalReader, SubscribeError, Watermark, REPLY_STREAM,
 };
 use ridl_rt::sample::{Envelope, Provenance, Timestamp};
 
-use super::calls::{Calls, InFlight, Seen};
+use super::calls::{Calls, InFlight, ReplyStream, Seen};
 use super::config::Record;
 use super::{Backend, Config, Note};
 use crate::frame::{
-    self, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, PublishState, Reason,
-    ResponseOutcome, Target, BLOCK_BYTES, FRAME_VERSION,
+    self, AnswerOutcome, Attach, AttachOutcome, DecodeError, Frame, ProtocolViolation,
+    PublishState, Reason, ResponseOutcome, StreamOutcome, Target, BLOCK_BYTES, FRAME_VERSION,
+    FRAME_VERSION_3, INITIAL_CREDIT,
 };
 use crate::ws::CloseCode;
 
@@ -84,6 +85,10 @@ const FIRST_SCAN: usize = 16;
 /// included, so that a provider that raises continuously cannot keep a tick
 /// from returning. The rest wait for the next tick.
 const OCCURRENCES_PER_TICK: usize = 64;
+/// The most chunks one tick pulls from one reply stream, so that a client
+/// that grants a large credit and a provider that pushes continuously cannot
+/// keep a tick from returning. The rest wait for the next tick.
+const CHUNKS_PER_TICK: u32 = 64;
 
 /// One session over one backend.
 pub(crate) struct Session<B: Backend> {
@@ -99,6 +104,8 @@ pub(crate) struct Session<B: Backend> {
     occurrence_cap: usize,
     /// The same for one `response` under `reply`.
     reply_cap: usize,
+    /// The same for one `chunk`.
+    chunk_cap: usize,
     /// The size of one `block` message with a full block, 4,130 bytes: a
     /// message limit below it cannot carry a `block`.
     block_message: usize,
@@ -111,7 +118,8 @@ pub(crate) struct Session<B: Backend> {
     call_abandon_after: Duration,
     record: Option<Record>,
     /// The frame version of the subprotocol the opening handshake selected:
-    /// `FRAME_VERSION` for `ridl-ws-v2`, 1 for `ridl-ws-v1`.
+    /// `FRAME_VERSION_3` for `ridl-ws-v3`, `FRAME_VERSION` for `ridl-ws-v2`,
+    /// 1 for `ridl-ws-v1`.
     frame_version: u32,
     /// Whether an `attach` has been accepted.
     attached: bool,
@@ -161,6 +169,13 @@ impl<B: Backend> Session<B> {
             correlation: 0,
             outcome: ResponseOutcome::Reply(&[]),
         };
+        let empty_chunk = Frame::Chunk {
+            target,
+            envelope,
+            correlation: 0,
+            stream: 0,
+            payload: &[],
+        };
         let limit = config.max_message_bytes();
         Session {
             backend,
@@ -169,6 +184,7 @@ impl<B: Backend> Session<B> {
             payload_cap: limit - empty_publish.encoded_len(),
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
+            chunk_cap: limit - empty_chunk.encoded_len(),
             block_message: super::block_message(),
             message_limit: limit,
             max_retained_bytes: config.max_retained_bytes(),
@@ -261,6 +277,16 @@ impl<B: Backend> Session<B> {
                 return Step::Close(CloseCode::PROTOCOL.0);
             }
         };
+        // The stream forms are a code outside the table below frame version
+        // 3, before the `attach` as after it.
+        let stream_form = matches!(
+            frame,
+            Frame::Chunk { .. } | Frame::StreamEnd { .. } | Frame::StreamCredit { .. }
+        );
+        if stream_form && self.frame_version < FRAME_VERSION_3 {
+            self.note(Note::Violation(ProtocolViolation::UnknownCode));
+            return Step::Close(CloseCode::PROTOCOL.0);
+        }
         if !self.attached {
             return match frame {
                 Frame::Attach(attach) => self.attach(attach, out),
@@ -283,6 +309,32 @@ impl<B: Backend> Session<B> {
             | Frame::Block { .. } => {
                 self.note(Note::UnexpectedDirection);
                 Step::Close(CloseCode::PROTOCOL.0)
+            }
+            // The server sends stream 0, the reply stream, and receives no
+            // other: no member it serves has a stream parameter, so it has
+            // granted the client no credit on any stream.
+            Frame::Chunk { stream: 0, .. } => {
+                self.note(Note::UnexpectedDirection);
+                Step::Close(CloseCode::PROTOCOL.0)
+            }
+            Frame::Chunk { correlation, .. } => {
+                self.note(Note::StreamCreditExceeded { seq: correlation });
+                Step::Close(CloseCode::PROTOCOL.0)
+            }
+            Frame::StreamEnd {
+                correlation,
+                stream,
+                outcome,
+                ..
+            } => self.stop_stream(correlation, stream, outcome),
+            Frame::StreamCredit {
+                correlation,
+                stream,
+                credit,
+                ..
+            } => {
+                self.grant(correlation, stream, credit, now);
+                Step::Continue
             }
             Frame::Subscribe(target) => self.subscribe(target, out),
             Frame::Unsubscribe(target) => self.unsubscribe(target),
@@ -427,8 +479,9 @@ impl<B: Backend> Session<B> {
         Step::Continue
     }
 
-    /// Reads the outcome of each call in flight. A known outcome is one
-    /// `response`, or nothing for the three outcomes that never cross (frame
+    /// Reads the outcome of each call in flight. A call whose reply is a
+    /// stream is read by [`Session::poll_stream`]. Any other known outcome is
+    /// one `response`, or nothing for the three outcomes that never cross (frame
     /// specification §9.6); either way the call is then forgotten. A reply
     /// longer than its member's limit, or than one message carries, is
     /// answered `corrupt` and recorded: the backend holds a value the
@@ -441,6 +494,13 @@ impl<B: Backend> Session<B> {
         let clock = self.backend.ports().now();
         self.calls.expire(clock);
         for call in self.calls.in_flight() {
+            if let Some(stream) = call.stream.clone() {
+                let step = self.poll_stream(call, stream, now, out);
+                if step != Step::Continue {
+                    return step;
+                }
+                continue;
+            }
             let outcome = match call.target.kind {
                 Kind::Command => self
                     .backend
@@ -520,13 +580,12 @@ impl<B: Backend> Session<B> {
 
     /// Checks an `attach` in the order of its refusal reasons, so that one
     /// reason is given: frame version, unit name, hash, encoding. The frame
-    /// version is refused when the `attach` names another one or when the
-    /// handshake selected the subprotocol of another one: the provider
-    /// serves frame version 2 only, so every `attach` on a `ridl-ws-v1`
-    /// connection is refused.
+    /// version is refused when the `attach` names another one than the
+    /// handshake selected: the provider serves frame versions 2 and 3, so
+    /// every `attach` on a `ridl-ws-v1` connection is refused.
     fn attach(&mut self, attach: Attach<'_>, out: &mut Vec<Vec<u8>>) -> Step {
         let refusal =
-            if attach.frame_version() != FRAME_VERSION || self.frame_version != FRAME_VERSION {
+            if attach.frame_version() != self.frame_version || self.frame_version < FRAME_VERSION {
                 Some(Reason::FrameVersionUnsupported)
             } else if attach.name() != self.catalog.name {
                 Some(Reason::UnknownCatalog)
@@ -844,10 +903,31 @@ impl<B: Backend> Session<B> {
                 out,
             );
         }
+        let streamed = target.kind == Kind::Query
+            && self
+                .backend
+                .members()
+                .is_some_and(|t| t.reply_stream(target.iface, target.ord));
+        // A session that carries no stream form has no answer for a
+        // streamed reply: the member is not one it serves.
+        if streamed && !self.carries_streams() {
+            self.note(Note::UnknownInteraction { target });
+            return self.respond(
+                target,
+                seq,
+                ResponseOutcome::Contract(Contract::UnknownInteraction),
+                stamp,
+                receipt,
+                out,
+            );
+        }
         // Only a command or a query is answered; any other kind falls to the
         // unknown-interaction answer below whatever the length.
         let over_limit = matches!(target.kind, Kind::Command | Kind::Query)
             && payload.len() > self.limit(target);
+        if over_limit && streamed {
+            return self.refuse_stream(target, seq, StreamOutcome::Corrupt, stamp, receipt, out);
+        }
         if over_limit {
             return self.respond(target, seq, ResponseOutcome::Corrupt, stamp, receipt, out);
         }
@@ -875,8 +955,33 @@ impl<B: Backend> Session<B> {
                     sent: now,
                     stamp,
                     receipt,
+                    stream: streamed.then_some(ReplyStream {
+                        seq_out: 0,
+                        credit: INITIAL_CREDIT,
+                        last_activity: now,
+                        held: None,
+                    }),
                 });
                 return Step::Continue;
+            }
+            // A streamed reply refused before its first chunk is one
+            // `stream_end` with that outcome and `seq` 1, never a `response`.
+            Err(SendError::Busy) if streamed => {
+                return self.refuse_stream(target, seq, StreamOutcome::Busy, stamp, receipt, out);
+            }
+            Err(SendError::Contract(c)) if streamed => {
+                let outcome = StreamOutcome::Contract(c);
+                return self.refuse_stream(target, seq, outcome, stamp, receipt, out);
+            }
+            Err(SendError::TooLarge { .. }) if streamed => {
+                return self.refuse_stream(
+                    target,
+                    seq,
+                    StreamOutcome::Corrupt,
+                    stamp,
+                    receipt,
+                    out,
+                );
             }
             Err(SendError::Busy) => ResponseOutcome::Busy,
             Err(SendError::Contract(c)) => ResponseOutcome::Contract(c),
@@ -951,6 +1056,234 @@ impl<B: Backend> Session<B> {
         let max = max?;
         let max_micros = i64::try_from(max.as_micros()).unwrap_or(i64::MAX);
         Some(Timestamp(stamp.0.min(receipt.0).saturating_add(max_micros)))
+    }
+
+    /// Whether the session carries the stream forms: frame version 3, over a
+    /// backend whose ports carry streams.
+    fn carries_streams(&mut self) -> bool {
+        self.frame_version >= FRAME_VERSION_3 && self.backend.streams().is_some()
+    }
+
+    /// Moves the reply stream of `call` forward: while the client's credit
+    /// lasts, each chunk the backend has is sent as one `chunk` under the
+    /// next `seq` of the stream, from 1, at most [`CHUNKS_PER_TICK`] of them.
+    /// With no credit left, one more chunk is pulled and held, and sent first
+    /// once credit arrives, so that an end or a failure that follows the last
+    /// chunk the credit allows is sent at once. The end of the stream, or its
+    /// failure, is sent as one `stream_end` under the next `seq`, and the
+    /// call is then forgotten; no `response` is sent for it. A chunk longer
+    /// than its member's limit, or than one message carries, stops the
+    /// stream with `corrupt` and is recorded. A stream with no `chunk` sent
+    /// and no `stream_credit` received for `call_abandon_after` is ended
+    /// `interrupted`, forgotten and recorded.
+    fn poll_stream(
+        &mut self,
+        call: InFlight,
+        mut stream: ReplyStream,
+        now: Instant,
+        out: &mut Vec<Vec<u8>>,
+    ) -> Step {
+        let cap = self.chunk_cap.min(self.limit(call.target));
+        let mut sent = 0;
+        let ended = loop {
+            if sent == CHUNKS_PER_TICK {
+                break None;
+            }
+            if stream.held.is_some() {
+                if stream.credit == 0 {
+                    break None;
+                }
+                let held = stream.held.take().expect("a chunk is held");
+                let stamp = self.backend.ports().now();
+                push_chunk(out, &call, &mut stream, stamp, &held, now);
+                sent += 1;
+                continue;
+            }
+            let Some(streams) = self.backend.streams() else {
+                return Step::Close(CloseCode::GOING_AWAY.0);
+            };
+            match streams.pull(call.correlation, REPLY_STREAM, room(&mut self.buf, cap)) {
+                Ok(Pull::Chunk(len)) if stream.credit == 0 => {
+                    stream.held = Some(self.buf[..len].to_vec());
+                }
+                Ok(Pull::Chunk(len)) => {
+                    let stamp = self.backend.ports().now();
+                    push_chunk(out, &call, &mut stream, stamp, &self.buf[..len], now);
+                    sent += 1;
+                }
+                Ok(Pull::End) => break Some(StreamOutcome::End),
+                Ok(Pull::Failed(e)) => break Some(stream_outcome(e)),
+                Ok(Pull::Pending) => break None,
+                Err(ReadError::Short { needed }) if needed <= cap => {
+                    self.buf.resize(needed, 0);
+                }
+                // The backend holds a chunk the catalog does not allow; the
+                // provider learns that its stream was refused.
+                Err(ReadError::Short { needed }) => {
+                    self.note(Note::ValueTooLarge {
+                        target: call.target,
+                        needed,
+                    });
+                    if let Some(streams) = self.backend.streams() {
+                        let corrupt = CallError::Transport(Transport::Corrupt);
+                        let _ = streams.abort(call.correlation, REPLY_STREAM, corrupt);
+                    }
+                    break Some(StreamOutcome::Corrupt);
+                }
+                Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
+            }
+        };
+        let outcome = match ended {
+            Some(outcome) => outcome,
+            None if now.duration_since(stream.last_activity) >= self.call_abandon_after => {
+                self.note(Note::CallAbandoned { seq: call.seq });
+                StreamOutcome::Interrupted
+            }
+            None => {
+                self.calls.update(call.correlation, stream);
+                return Step::Continue;
+            }
+        };
+        self.forget(call.correlation);
+        self.send_stream_end(call.target, call.seq, stream.seq_out + 1, outcome, out);
+        let until = self.retention(call.target, call.stamp, call.receipt);
+        self.keep_stream_end(call.target, call.seq, until)
+    }
+
+    /// Answers a request whose reply is a stream, refused before its first
+    /// chunk, with one `stream_end` carrying `outcome` under `seq` 1.
+    fn refuse_stream(
+        &mut self,
+        target: Target,
+        correlation: u64,
+        outcome: StreamOutcome,
+        stamp: Timestamp,
+        receipt: Timestamp,
+        out: &mut Vec<Vec<u8>>,
+    ) -> Step {
+        self.send_stream_end(target, correlation, 1, outcome, out);
+        let until = self.retention(target, stamp, receipt);
+        self.keep_stream_end(target, correlation, until)
+    }
+
+    /// Sends the `stream_end` of the reply stream of the request
+    /// `correlation`, under the stream `seq` `seq` and the backend's clock as
+    /// the stamp. A `contract(InvalidValue)` whose rule the frame cannot
+    /// carry is sent as `corrupt` and recorded.
+    fn send_stream_end(
+        &mut self,
+        target: Target,
+        correlation: u64,
+        seq: u64,
+        outcome: StreamOutcome,
+        out: &mut Vec<Vec<u8>>,
+    ) {
+        let outcome = match outcome {
+            StreamOutcome::Contract(c) if !carried(c) => {
+                self.note(Note::RuleNotCarried { target });
+                StreamOutcome::Corrupt
+            }
+            outcome => outcome,
+        };
+        let stamp = self.backend.ports().now();
+        push(
+            out,
+            &Frame::StreamEnd {
+                target,
+                envelope: Envelope { stamp, seq },
+                correlation,
+                stream: 0,
+                outcome,
+            },
+        );
+    }
+
+    /// Keeps, for a repeat of the request `correlation` whose reply stream
+    /// has ended, a `stream_end interrupted` under `seq` 1 and the backend's
+    /// clock as the stamp: the chunks are not kept, and a client that lost
+    /// some asks for them again. It is kept until `until` as a `response` is
+    /// (see [`Session::respond`]). Returns a close with 1008 when the kept
+    /// responses then pass [`Config::max_retained_bytes`].
+    fn keep_stream_end(
+        &mut self,
+        target: Target,
+        correlation: u64,
+        until: Option<Timestamp>,
+    ) -> Step {
+        let mut kept = Vec::with_capacity(1);
+        push(
+            &mut kept,
+            &Frame::StreamEnd {
+                target,
+                envelope: Envelope {
+                    stamp: self.backend.ports().now(),
+                    seq: 1,
+                },
+                correlation,
+                stream: 0,
+                outcome: StreamOutcome::Interrupted,
+            },
+        );
+        self.calls.settle(correlation, &kept[0], until);
+        if self.calls.retained_bytes() > self.max_retained_bytes {
+            return Step::Close(CloseCode::POLICY.0);
+        }
+        Step::Continue
+    }
+
+    /// Handles a client `stream_end`: the client, the receiver of the reply
+    /// stream, stops it. With `interrupted`, `contract` or `corrupt` on
+    /// stream 0, the stream of the call is aborted with that outcome on the
+    /// backend, the call is forgotten and recorded, and a `stream_end
+    /// interrupted` is kept for a repeat of its request. A receiver stops a
+    /// stream and does not end it, so `end`, and `busy`, which only an
+    /// admission gives, are a violation. A `stream_end` for a call whose
+    /// stream already ended is ignored: it can cross the stream's own end.
+    /// So is one on another stream: no member the server serves has a
+    /// stream parameter.
+    fn stop_stream(&mut self, correlation: u64, stream: u8, outcome: StreamOutcome) -> Step {
+        if stream != 0 {
+            return Step::Continue;
+        }
+        let e = match outcome {
+            StreamOutcome::Interrupted => CallError::Transport(Transport::Interrupted),
+            StreamOutcome::Contract(c) => CallError::Contract(c),
+            StreamOutcome::Corrupt => CallError::Transport(Transport::Corrupt),
+            StreamOutcome::End | StreamOutcome::Busy => {
+                self.note(Note::Violation(ProtocolViolation::OutcomeNotAllowed));
+                return Step::Close(CloseCode::PROTOCOL.0);
+            }
+        };
+        let Some(call) = self.calls.streamed(correlation).cloned() else {
+            return Step::Continue;
+        };
+        if let Some(streams) = self.backend.streams() {
+            // An abort of a stream that already ended answers `Ended` and
+            // changes nothing; the forget below ends the call either way.
+            let _ = streams.abort(call.correlation, REPLY_STREAM, e);
+        }
+        self.forget(call.correlation);
+        self.note(Note::StreamStopped { seq: correlation });
+        let until = self.retention(call.target, call.stamp, call.receipt);
+        self.keep_stream_end(call.target, correlation, until)
+    }
+
+    /// Adds a client `stream_credit` on stream 0 to the credit of the reply
+    /// stream of the call `correlation`, saturating, and restarts its abandon
+    /// bound. A credit for a call that is not streaming is ignored: it can
+    /// arrive just after the stream's end.
+    fn grant(&mut self, correlation: u64, stream: u8, credit: u32, now: Instant) {
+        if stream != 0 {
+            return;
+        }
+        if let Some(reply) = self
+            .calls
+            .streamed(correlation)
+            .and_then(|call| call.stream.as_mut())
+        {
+            reply.credit = reply.credit.saturating_add(credit);
+            reply.last_activity = now;
+        }
     }
 
     /// The payload limit of a member, in bytes: the limit the member table
@@ -1144,6 +1477,20 @@ impl Outcome {
     }
 }
 
+/// The `stream_end` outcome of a stream that stopped with `e`. `Timeout`,
+/// `Undelivered`, `Down` and `Interrupted` all stop the stream without its
+/// end, which the frame carries as `interrupted`; `Transport` is
+/// non-exhaustive, and a variant this crate does not know is read the same
+/// way.
+fn stream_outcome(e: CallError) -> StreamOutcome {
+    match e {
+        CallError::Contract(c) => StreamOutcome::Contract(c),
+        CallError::Transport(Transport::Corrupt) => StreamOutcome::Corrupt,
+        CallError::Transport(Transport::Busy) => StreamOutcome::Busy,
+        CallError::Transport(_) => StreamOutcome::Interrupted,
+    }
+}
+
 /// What a backend read of a signal gave.
 enum Fetch {
     Sample(RawSample),
@@ -1180,6 +1527,35 @@ fn signal_target(key: Key) -> Target {
 fn room(buf: &mut [u8], cap: usize) -> &mut [u8] {
     let n = buf.len().min(cap);
     &mut buf[..n]
+}
+
+/// Pushes `payload` as the next `chunk` of the reply stream of `call`,
+/// stamped `stamp`: the stream's `seq` advances, its credit goes down by
+/// one, and its abandon bound restarts at `now`.
+fn push_chunk(
+    out: &mut Vec<Vec<u8>>,
+    call: &InFlight,
+    stream: &mut ReplyStream,
+    stamp: Timestamp,
+    payload: &[u8],
+    now: Instant,
+) {
+    stream.seq_out += 1;
+    stream.credit -= 1;
+    stream.last_activity = now;
+    push(
+        out,
+        &Frame::Chunk {
+            target: call.target,
+            envelope: Envelope {
+                stamp,
+                seq: stream.seq_out,
+            },
+            correlation: call.seq,
+            stream: 0,
+            payload,
+        },
+    );
 }
 
 /// Encodes one frame as one entry of `out`.
@@ -1228,19 +1604,21 @@ mod tests {
     use ridl_rt::payload::{Rule, Violation};
     use ridl_rt::port::{
         Attached, Caller, Changed, Claim, Clock, Correlation, Encoded, EventSink, EventSource,
-        FixedReader, Handler, RawOccurrence, RawSample, ReadError, ScannableSignals, SendError,
-        SignalReader, SignalWriter, SubscribeError, Watermark,
+        FixedReader, Handler, Pull, PushError, RawOccurrence, RawSample, ReadError,
+        ScannableSignals, SendError, SignalReader, SignalWriter, StreamCaller, StreamHandler,
+        StreamNo, SubscribeError, Watermark, REPLY_STREAM,
     };
     use ridl_rt::sample::{Cause, Detection, Duration, Envelope, Freshness, Provenance, Timestamp};
     use ridl_rt::trace::TraceContext;
 
     use super::{Session, Step};
     use crate::frame::{
-        decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
-        Target, BLOCK_BYTES, FRAME_VERSION,
+        decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState,
+        Reason, ResponseOutcome, StreamOutcome, Target, BLOCK_BYTES, FRAME_VERSION,
+        FRAME_VERSION_3,
     };
     use crate::server::{
-        Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
+        Backend, Config, Described, MemberTable, Note, Polling, Scanning, Streaming, TableMismatch,
     };
 
     const CATALOG: CatalogRef = CatalogRef {
@@ -1452,7 +1830,7 @@ mod tests {
         }
     }
 
-    /// The provider serves frame version 2 only, so a connection upgraded
+    /// The provider serves no frame version 1, so a connection upgraded
     /// with `ridl-ws-v1` refuses every `attach`. The check runs with the
     /// frame-version check, before the unit name.
     #[test]
@@ -1579,6 +1957,158 @@ mod tests {
                 correlation: 17,
                 outcome: ResponseOutcome::Contract(Contract::UnknownInteraction),
             }
+        );
+    }
+
+    /// One of each stream form, addressed to a query.
+    fn stream_forms() -> [Frame<'static>; 3] {
+        let target = Target {
+            kind: Kind::Query,
+            iface: InterfaceNo(1),
+            ord: Ordinal(4),
+        };
+        let envelope = Envelope {
+            stamp: Timestamp(0),
+            seq: 0,
+        };
+        [
+            Frame::Chunk {
+                target,
+                envelope,
+                correlation: 1,
+                stream: 0,
+                payload: &[1],
+            },
+            Frame::StreamEnd {
+                target,
+                envelope,
+                correlation: 1,
+                stream: 0,
+                outcome: StreamOutcome::End,
+            },
+            Frame::StreamCredit {
+                target,
+                correlation: 1,
+                stream: 0,
+                credit: 1,
+            },
+        ]
+    }
+
+    #[test]
+    fn a_stream_form_on_a_session_below_version_3_is_an_unknown_code() {
+        for version in [1, FRAME_VERSION] {
+            for frame in stream_forms() {
+                let (mut s, _p, notes) = scanning();
+                open(&mut s);
+                s.upgraded(version);
+                let (step, out) = send(&mut s, &msg(frame));
+                assert_eq!(step, Step::Close(1002), "version {version}");
+                assert!(out.is_empty());
+                assert_eq!(
+                    *notes.lock().unwrap(),
+                    vec![Note::Violation(ProtocolViolation::UnknownCode)],
+                    "version {version}"
+                );
+            }
+        }
+    }
+
+    /// Before the `attach` too, a stream form below frame version 3 is a
+    /// code outside the table, not a message before the `attach`.
+    ///
+    /// Mutation: check the frame version after the `attach` check.
+    #[test]
+    fn a_stream_form_before_the_attach_below_version_3_is_an_unknown_code() {
+        for frame in stream_forms() {
+            let (mut s, _p, notes) = scanning();
+            let (step, out) = send(&mut s, &msg(frame));
+            assert_eq!(step, Step::Close(1002));
+            assert!(out.is_empty());
+            assert_eq!(
+                *notes.lock().unwrap(),
+                vec![Note::Violation(ProtocolViolation::UnknownCode)]
+            );
+        }
+    }
+
+    /// On a version 3 session, a client `chunk` on stream 0 has the wrong
+    /// direction, a `stream_end end` or `busy` is an outcome a receiver does
+    /// not send, and a `stream_credit` for a call that is not streaming is
+    /// ignored.
+    ///
+    /// Mutation: accept a client `stream_end busy`.
+    #[test]
+    fn the_client_stream_forms_on_a_version_3_session() {
+        let [chunk, end, credit] = stream_forms();
+        let Frame::StreamEnd {
+            target,
+            envelope,
+            correlation,
+            stream,
+            ..
+        } = end
+        else {
+            unreachable!("the second stream form is a stream_end")
+        };
+        let busy = Frame::StreamEnd {
+            target,
+            envelope,
+            correlation,
+            stream,
+            outcome: StreamOutcome::Busy,
+        };
+        let not_allowed = Some(Note::Violation(ProtocolViolation::OutcomeNotAllowed));
+        let cases = [
+            (chunk, Some(Note::UnexpectedDirection)),
+            (end, not_allowed),
+            // `busy` is an admission's outcome, which a receiver does not
+            // give.
+            (busy, not_allowed),
+            (credit, None),
+        ];
+        for (frame, note) in cases {
+            let (mut s, _p, notes) = scanning();
+            s.upgraded(FRAME_VERSION_3);
+            let (step, _) = send(
+                &mut s,
+                &attach_msg(FRAME_VERSION_3, 1, [7u8; 32], "ws.test"),
+            );
+            assert_eq!(step, Step::Continue);
+            let (step, out) = send(&mut s, &msg(frame));
+            assert!(out.is_empty());
+            match note {
+                Some(note) => {
+                    assert_eq!(step, Step::Close(1002));
+                    assert_eq!(*notes.lock().unwrap(), vec![note]);
+                }
+                None => {
+                    assert_eq!(step, Step::Continue);
+                    assert!(notes.lock().unwrap().is_empty());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_attach_must_name_the_frame_version_of_a_version_3_connection() {
+        let (mut s, _p, _n) = scanning();
+        s.upgraded(FRAME_VERSION_3);
+        let (step, out) = send(
+            &mut s,
+            &attach_msg(FRAME_VERSION_3, 1, [7u8; 32], "ws.test"),
+        );
+        assert_eq!(step, Step::Continue);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Attached(AttachOutcome::Accepted)
+        );
+        let (mut s, _p, _n) = scanning();
+        s.upgraded(FRAME_VERSION_3);
+        refused(
+            &mut s,
+            &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"),
+            Reason::FrameVersionUnsupported,
         );
     }
 
@@ -3560,6 +4090,8 @@ mod tests {
         Query,
         /// `Caller::query` answers `Contract(PreconditionFailed)`.
         QueryContract,
+        /// `Caller::query` answers `TooLarge`.
+        QueryTooLarge,
         /// `Caller::reply` answers `Detached`.
         Reply,
         /// `Caller::command` answers `TooLarge`.
@@ -3584,6 +4116,7 @@ mod tests {
         inner: Loopback,
         fail: Rc<Cell<Fail>>,
         forgotten: Rc<RefCell<Vec<Correlation>>>,
+        aborted: Rc<RefCell<Vec<(Correlation, CallError)>>>,
     }
 
     /// A scanning backend over [`Faulty`], with the loopback's `fixed`.
@@ -3642,6 +4175,7 @@ mod tests {
             inner: rt,
             fail: Rc::clone(&fail),
             forgotten: Rc::clone(&forgotten),
+            aborted: Rc::default(),
         });
         let notes = Notes::default();
         let n = Arc::clone(&notes);
@@ -3739,6 +4273,7 @@ mod tests {
             match self.fail.get() {
                 Fail::Query => Err(SendError::Detached),
                 Fail::QueryContract => Err(SendError::Contract(Contract::PreconditionFailed)),
+                Fail::QueryTooLarge => Err(SendError::TooLarge { cap: 8 }),
                 _ => self.inner.query(iface, ord, args, trace),
             }
         }
@@ -3758,6 +4293,580 @@ mod tests {
         fn forget(&mut self, c: Correlation) {
             self.forgotten.borrow_mut().push(c);
             self.inner.forget(c);
+        }
+    }
+
+    impl StreamCaller for Faulty {
+        fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError> {
+            self.inner.pull(c, s, out)
+        }
+        fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError> {
+            self.inner.push(c, s, chunk)
+        }
+        fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError> {
+            self.inner.end(c, s)
+        }
+        fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError> {
+            self.aborted.borrow_mut().push((c, e));
+            self.inner.abort(c, s, e)
+        }
+    }
+
+    /// The query of the streaming rig whose reply is a stream.
+    const STREAMED: Target = Target {
+        kind: Kind::Query,
+        iface: IFACE,
+        ord: Ordinal(10),
+    };
+
+    /// A streaming rig: a version 3 session over [`Faulty`] ports that carry
+    /// streams, with a member table that holds [`QUERY`] and [`STREAMED`]; the
+    /// provider's handle, which serves both queries; the notes; the
+    /// correlations forgotten on the backend; and the aborts the backend saw.
+    struct StreamRig {
+        s: Session<Described<Streaming<FaultyBackend>>>,
+        p: Loopback,
+        notes: Notes,
+        forgotten: Rc<RefCell<Vec<Correlation>>>,
+        aborted: Rc<RefCell<Vec<(Correlation, CallError)>>>,
+    }
+
+    /// A [`StreamRig`] whose [`STREAMED`] has the payload limit `limit` when
+    /// one is given, and whose backend fails as `fail` says.
+    fn stream_rig(fail: Fail, limit: Option<u32>) -> StreamRig {
+        stream_rig_with(fail, limit, |c| c)
+    }
+
+    /// The same, with `configure` applied to the session's configuration.
+    fn stream_rig_with(
+        fail: Fail,
+        limit: Option<u32>,
+        configure: impl FnOnce(Config) -> Config,
+    ) -> StreamRig {
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        p.serve(IFACE, &[QUERY.ord, STREAMED.ord]).unwrap();
+        let mut t = MemberTable::new(CATALOG.name, CATALOG.hash);
+        t.insert(IFACE, QUERY.ord, Kind::Query, None);
+        t.insert(IFACE, STREAMED.ord, Kind::Query, None);
+        t.set_reply_stream(IFACE, STREAMED.ord);
+        if let Some(limit) = limit {
+            assert!(t.set_limit(IFACE, STREAMED.ord, limit));
+        }
+        let forgotten = Rc::new(RefCell::new(Vec::new()));
+        let aborted = Rc::new(RefCell::new(Vec::new()));
+        let backend = FaultyBackend(Faulty {
+            inner: rt,
+            fail: Rc::new(Cell::new(fail)),
+            forgotten: Rc::clone(&forgotten),
+            aborted: Rc::clone(&aborted),
+        });
+        let backend = Described::new(Streaming(backend), Arc::new(t)).unwrap();
+        let notes = Notes::default();
+        let mut s = Session::new(backend, &configure(config(&notes)));
+        s.upgraded(FRAME_VERSION_3);
+        let (step, _) = send(
+            &mut s,
+            &attach_msg(FRAME_VERSION_3, 1, [7u8; 32], "ws.test"),
+        );
+        assert_eq!(step, Step::Continue);
+        StreamRig {
+            s,
+            p,
+            notes,
+            forgotten,
+            aborted,
+        }
+    }
+
+    /// A version 3 session over [`Faulty`] ports that carry streams, with a
+    /// member table that holds [`QUERY`] and [`STREAMED`], the second with
+    /// the payload limit `limit` when one is given; the provider's handle,
+    /// which serves both queries; and the notes.
+    fn streaming(
+        fail: Fail,
+        limit: Option<u32>,
+    ) -> (
+        Session<Described<Streaming<FaultyBackend>>>,
+        Loopback,
+        Notes,
+    ) {
+        let rig = stream_rig(fail, limit);
+        (rig.s, rig.p, rig.notes)
+    }
+
+    /// The `stream_end` of the reply stream of [`STREAMED`] for the request
+    /// `correlation`, under the stream `seq` `seq`.
+    fn streamed_end(correlation: u64, seq: u64, outcome: StreamOutcome) -> Frame<'static> {
+        Frame::StreamEnd {
+            target: STREAMED,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq,
+            },
+            correlation,
+            stream: 0,
+            outcome,
+        }
+    }
+
+    /// A refusal before the first chunk is one `stream_end` with the mapped
+    /// outcome and `seq` 1, never a `response`.
+    ///
+    /// Mutations: answer a `Contract` or a `TooLarge` refusal, or arguments
+    /// over the limit, with a `response`.
+    #[test]
+    fn a_refused_dispatch_of_a_streamed_reply_is_one_stream_end_with_seq_1() {
+        let cases: [(Fail, Option<u32>, &[u8], StreamOutcome); 3] = [
+            (
+                Fail::QueryContract,
+                None,
+                &[1],
+                StreamOutcome::Contract(Contract::PreconditionFailed),
+            ),
+            (Fail::QueryTooLarge, None, &[1], StreamOutcome::Corrupt),
+            (Fail::None, Some(2), &[1, 2, 3], StreamOutcome::Corrupt),
+        ];
+        for (fail, limit, args, outcome) in cases {
+            let (mut s, _p, _n) = streaming(fail, limit);
+            let (step, out) = send(&mut s, &request(STREAMED, 1, args));
+            assert_eq!(step, Step::Continue, "{fail:?}");
+            assert_eq!(out.len(), 1, "{fail:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                streamed_end(1, 1, outcome),
+                "{fail:?}"
+            );
+        }
+    }
+
+    /// Mutation: send every `Pull::Failed` as `interrupted`.
+    #[test]
+    fn a_provider_contract_error_crosses_as_a_stream_end_contract() {
+        let (mut s, mut p, _n) = streaming(Fail::None, None);
+        let (_, out) = send(&mut s, &request(STREAMED, 1, &[1]));
+        assert!(out.is_empty());
+        let claim = p.next_claim(&mut [0; 64]).unwrap().expect("a claim");
+        let refused = Err(CallError::Contract(Contract::PreconditionFailed));
+        p.settle(claim.id, refused).unwrap();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Contract(Contract::PreconditionFailed))
+        );
+    }
+
+    /// Mutation: add the credit with a wrapping add.
+    #[test]
+    fn a_credit_saturates_at_the_largest_u32() {
+        let (mut s, _p, _n) = streaming(Fail::None, None);
+        send(&mut s, &request(STREAMED, 1, &[1]));
+        let credit = msg(Frame::StreamCredit {
+            target: STREAMED,
+            correlation: 1,
+            stream: 0,
+            credit: u32::MAX,
+        });
+        assert_eq!(send(&mut s, &credit).0, Step::Continue);
+        let call = s.calls.streamed(1).expect("the call streams");
+        assert_eq!(call.stream.as_ref().map(|r| r.credit), Some(u32::MAX));
+    }
+
+    /// A client `stream_end` that names a plain query in flight, or no call,
+    /// changes nothing: the plain query is still answered.
+    ///
+    /// Mutations: let `Calls::streamed` find a plain call; close the session
+    /// on a `stream_end` for a call that is not streaming.
+    #[test]
+    fn a_client_stream_end_for_a_call_that_is_not_streaming_is_ignored() {
+        let (mut s, mut p, notes) = streaming(Fail::None, None);
+        send(&mut s, &request(QUERY, 1, &[1]));
+        for correlation in [1, 99] {
+            let stop = msg(Frame::StreamEnd {
+                target: QUERY,
+                envelope: Envelope {
+                    stamp: Timestamp(0),
+                    seq: 1,
+                },
+                correlation,
+                stream: 0,
+                outcome: StreamOutcome::Interrupted,
+            });
+            let (step, out) = send(&mut s, &stop);
+            assert_eq!(step, Step::Continue);
+            assert!(out.is_empty());
+        }
+        let claim = p.next_claim(&mut [0; 64]).unwrap().expect("a claim");
+        p.settle(claim.id, Ok(&[5])).unwrap();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Reply(&[5]))
+        );
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    /// The `chunk` of `payload` the session sends as the element after
+    /// `seq - 1` others of the reply stream of the request 1.
+    fn streamed_chunk(seq: u64, payload: &[u8]) -> Frame<'_> {
+        Frame::Chunk {
+            target: STREAMED,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq,
+            },
+            correlation: 1,
+            stream: 0,
+            payload,
+        }
+    }
+
+    /// A `request` of [`STREAMED`] under `seq` 1, and the claim the provider
+    /// takes for it.
+    fn start_stream(r: &mut StreamRig) -> ridl_rt::port::ClaimId {
+        let (step, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
+        assert_eq!(step, Step::Continue);
+        assert!(out.is_empty());
+        r.p.next_claim(&mut [0; 64]).unwrap().expect("a claim").id
+    }
+
+    /// The backend's correlation of the streamed call started by
+    /// [`start_stream`].
+    fn backend_correlation(r: &mut StreamRig) -> Correlation {
+        r.s.calls.streamed(1).expect("the call streams").correlation
+    }
+
+    /// A pulled chunk of exactly the member's limit is sent, and one byte
+    /// more stops the stream with `corrupt`.
+    ///
+    /// Mutation: the `Short` arm accepts `needed < cap`.
+    #[test]
+    fn a_chunk_of_exactly_the_members_limit_is_sent_and_one_byte_more_is_not() {
+        for (len, sent) in [(1_100, true), (1_101, false)] {
+            let mut r = stream_rig(Fail::None, Some(1_100));
+            let claim = start_stream(&mut r);
+            let element = vec![7u8; len];
+            assert_eq!(
+                r.p.push_claim(claim, REPLY_STREAM, &element),
+                Ok(element.len())
+            );
+            let (_, out) = tick(&mut r.s);
+            assert_eq!(out.len(), 1, "{len}");
+            let want = if sent {
+                streamed_chunk(1, &element)
+            } else {
+                streamed_end(1, 1, StreamOutcome::Corrupt)
+            };
+            assert_eq!(decode(&out[0]).unwrap(), want, "{len}");
+        }
+    }
+
+    /// A member limit above the message limit does not raise the cap: a
+    /// chunk is at most what one message carries.
+    ///
+    /// Mutations: take the member's limit alone as the cap; leave the header
+    /// out of the message cap.
+    #[test]
+    fn a_member_limit_above_the_message_limit_is_capped_by_the_message() {
+        let header = Frame::Chunk {
+            target: STREAMED,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 0,
+            },
+            correlation: 0,
+            stream: 0,
+            payload: &[],
+        }
+        .encoded_len();
+        let cap = 2_048 - header;
+        for (len, sent) in [(cap, true), (cap + 1, false)] {
+            let mut r = stream_rig_with(Fail::None, Some(5_000), |c| {
+                c.with_max_message_bytes(2_048).expect("above the minimum")
+            });
+            let claim = start_stream(&mut r);
+            let element = vec![7u8; len];
+            assert_eq!(
+                r.p.push_claim(claim, REPLY_STREAM, &element),
+                Ok(element.len())
+            );
+            let (_, out) = tick(&mut r.s);
+            assert_eq!(out.len(), 1, "{len}");
+            if sent {
+                assert_eq!(out[0].len(), 2_048);
+                assert_eq!(decode(&out[0]).unwrap(), streamed_chunk(1, &element));
+            } else {
+                assert_eq!(
+                    decode(&out[0]).unwrap(),
+                    streamed_end(1, 1, StreamOutcome::Corrupt)
+                );
+            }
+        }
+    }
+
+    /// A tick exactly `call_abandon_after` after the last activity of a
+    /// stream abandons it; one just before does not.
+    ///
+    /// Mutation: abandon only when the time is above the bound.
+    #[test]
+    fn a_stream_is_abandoned_exactly_at_the_bound() {
+        let mut r = stream_rig(Fail::None, None);
+        start_stream(&mut r);
+        let last =
+            r.s.calls
+                .streamed(1)
+                .and_then(|call| call.stream.as_ref())
+                .map(|stream| stream.last_activity)
+                .expect("the call streams");
+        let bound = Config::default().call_abandon_after;
+        let mut out = Vec::new();
+        let before = last + bound - std::time::Duration::from_nanos(1);
+        assert_eq!(r.s.tick(before, &mut out), Step::Continue);
+        assert!(out.is_empty());
+        assert_eq!(r.s.tick(last + bound, &mut out), Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Interrupted)
+        );
+    }
+
+    /// An element larger than the session's first buffer is read after the
+    /// buffer grows, and is sent whole.
+    ///
+    /// Mutation: never grow the buffer (the guard of the `Short` arm that
+    /// grows it made `false`).
+    #[test]
+    fn a_chunk_larger_than_the_first_buffer_is_sent_whole() {
+        let mut r = stream_rig(Fail::None, None);
+        let claim = start_stream(&mut r);
+        let element = vec![7u8; super::FIRST_BUFFER + 476];
+        assert_eq!(
+            r.p.push_claim(claim, REPLY_STREAM, &element),
+            Ok(element.len())
+        );
+        let (step, out) = tick(&mut r.s);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), streamed_chunk(1, &element));
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+
+    /// A pulled chunk longer than its member's limit stops the stream with
+    /// `stream_end corrupt`, is recorded, aborts the stream on the backend
+    /// with `corrupt`, and forgets the call; a repeat of the request is
+    /// answered from the kept `stream_end interrupted`.
+    ///
+    /// Mutations: leave out the note; leave out the abort; leave out the
+    /// forget; send `stream_end interrupted`; send the chunk.
+    #[test]
+    fn a_pulled_chunk_over_the_limit_is_stream_end_corrupt_and_recorded() {
+        let mut r = stream_rig(Fail::None, Some(1_100));
+        let claim = start_stream(&mut r);
+        let call = backend_correlation(&mut r);
+        let element = vec![7u8; 1_200];
+        assert_eq!(
+            r.p.push_claim(claim, REPLY_STREAM, &element),
+            Ok(element.len())
+        );
+        let (step, out) = tick(&mut r.s);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Corrupt)
+        );
+        assert_eq!(
+            *r.notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: STREAMED,
+                needed: 1_200
+            }]
+        );
+        let corrupt = CallError::Transport(Transport::Corrupt);
+        assert_eq!(r.aborted.borrow().len(), 1);
+        assert_eq!(r.aborted.borrow()[0], (call, corrupt));
+        assert_eq!(*r.forgotten.borrow(), vec![call]);
+        let (_, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Interrupted)
+        );
+    }
+
+    /// A stream abandoned after `call_abandon_after` is ended `interrupted`,
+    /// forgotten on the backend, and a repeat of the request is answered
+    /// from the kept `stream_end interrupted`.
+    ///
+    /// Mutations: remove the call from the session without forgetting it on
+    /// the backend; leave out the kept `stream_end` after an abandon.
+    #[test]
+    fn an_abandoned_stream_is_forgotten_on_the_backend_and_kept() {
+        let mut r = stream_rig(Fail::None, None);
+        start_stream(&mut r);
+        let call = backend_correlation(&mut r);
+        let later = now() + std::time::Duration::from_secs(3_600);
+        let mut out = Vec::new();
+        assert_eq!(r.s.tick(later, &mut out), Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Interrupted)
+        );
+        assert_eq!(
+            *r.notes.lock().unwrap(),
+            vec![Note::CallAbandoned { seq: 1 }]
+        );
+        assert_eq!(*r.forgotten.borrow(), vec![call]);
+        let (_, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Interrupted)
+        );
+    }
+
+    /// A refusal before the first chunk keeps a `stream_end interrupted` for
+    /// a repeat of the request, as a client stop does.
+    ///
+    /// Mutation: leave out the kept `stream_end` on the refusal path.
+    #[test]
+    fn a_refused_stream_is_kept_as_stream_end_interrupted() {
+        let mut r = stream_rig(Fail::QueryContract, None);
+        let (_, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
+        assert_eq!(out.len(), 1);
+        let (_, out) = send(&mut r.s, &request(STREAMED, 1, &[1]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            streamed_end(1, 1, StreamOutcome::Interrupted)
+        );
+    }
+
+    /// The end of a session forgets a reply stream still open, as it does a
+    /// plain call.
+    ///
+    /// Mutation: leave a streamed call out of the calls the end forgets.
+    #[test]
+    fn the_end_of_a_session_forgets_an_open_reply_stream() {
+        let mut r = stream_rig(Fail::None, None);
+        start_stream(&mut r);
+        let call = backend_correlation(&mut r);
+        assert!(r.forgotten.borrow().is_empty());
+        r.s.close();
+        assert_eq!(*r.forgotten.borrow(), vec![call]);
+    }
+
+    /// A client `stream_end` with `interrupted`, `contract` or `corrupt` is
+    /// accepted: the stream is aborted on the backend with that error, the
+    /// call is forgotten and the stop is recorded.
+    ///
+    /// Mutations: make `contract` or `corrupt` a violation; abort with
+    /// another error.
+    #[test]
+    fn a_client_stream_end_of_any_stopping_outcome_aborts_the_stream() {
+        let cases = [
+            (
+                StreamOutcome::Interrupted,
+                CallError::Transport(Transport::Interrupted),
+            ),
+            (
+                StreamOutcome::Corrupt,
+                CallError::Transport(Transport::Corrupt),
+            ),
+            (
+                StreamOutcome::Contract(Contract::PreconditionFailed),
+                CallError::Contract(Contract::PreconditionFailed),
+            ),
+        ];
+        for (outcome, error) in cases {
+            let mut r = stream_rig(Fail::None, None);
+            start_stream(&mut r);
+            let call = backend_correlation(&mut r);
+            let (step, out) = send(&mut r.s, &msg(client_stream_end(0, outcome)));
+            assert_eq!(step, Step::Continue, "{outcome:?}");
+            assert!(out.is_empty(), "{outcome:?}");
+            assert_eq!(r.aborted.borrow().len(), 1, "{outcome:?}");
+            assert_eq!(r.aborted.borrow()[0], (call, error), "{outcome:?}");
+            assert_eq!(*r.forgotten.borrow(), vec![call], "{outcome:?}");
+            assert_eq!(
+                *r.notes.lock().unwrap(),
+                vec![Note::StreamStopped { seq: 1 }],
+                "{outcome:?}"
+            );
+        }
+    }
+
+    /// The client's `stream_end` for the request 1 of [`STREAMED`] on
+    /// `stream`.
+    fn client_stream_end(stream: u8, outcome: StreamOutcome) -> Frame<'static> {
+        Frame::StreamEnd {
+            target: STREAMED,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream,
+            outcome,
+        }
+    }
+
+    /// A client `stream_end` or `stream_credit` on a stream other than 0 is
+    /// ignored: the reply stream keeps its credit and is not stopped.
+    ///
+    /// Mutations: drop the stream check of `stop_stream`; drop that of
+    /// `grant`.
+    #[test]
+    fn a_client_stream_end_or_credit_on_another_stream_is_ignored() {
+        let mut r = stream_rig(Fail::None, None);
+        start_stream(&mut r);
+        let (step, out) = send(
+            &mut r.s,
+            &msg(client_stream_end(1, StreamOutcome::Interrupted)),
+        );
+        assert_eq!(step, Step::Continue);
+        assert!(out.is_empty());
+        let credit = msg(Frame::StreamCredit {
+            target: STREAMED,
+            correlation: 1,
+            stream: 1,
+            credit: 9,
+        });
+        let (step, out) = send(&mut r.s, &credit);
+        assert_eq!(step, Step::Continue);
+        assert!(out.is_empty());
+        assert!(r.aborted.borrow().is_empty());
+        assert!(r.forgotten.borrow().is_empty());
+        assert!(r.notes.lock().unwrap().is_empty());
+        let call = r.s.calls.streamed(1).expect("the call still streams");
+        assert_eq!(call.stream.as_ref().map(|s| s.credit), Some(4));
+    }
+
+    /// A stream failed with `corrupt` or `busy` keeps that outcome in its
+    /// `stream_end`; another transport error is sent as `interrupted`.
+    ///
+    /// Mutations: map `Corrupt` or `Busy` to `Interrupted`.
+    #[test]
+    fn a_stream_failure_keeps_corrupt_and_busy() {
+        use super::stream_outcome;
+        assert_eq!(
+            stream_outcome(CallError::Transport(Transport::Corrupt)),
+            StreamOutcome::Corrupt
+        );
+        assert_eq!(
+            stream_outcome(CallError::Transport(Transport::Busy)),
+            StreamOutcome::Busy
+        );
+        for e in [Transport::Down, Transport::Timeout, Transport::Undelivered] {
+            assert_eq!(
+                stream_outcome(CallError::Transport(e)),
+                StreamOutcome::Interrupted,
+                "{e:?}"
+            );
         }
     }
 

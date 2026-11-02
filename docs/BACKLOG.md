@@ -95,11 +95,11 @@ These estimates help planning and do not set delivery dates.
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
    normative defects are disposed of.
-5. **Remaining Rust release work:** the open enums and enum sets of `podbuf`,
-   which wait for the typl `open` keyword. The `podbuf` codec #317 (with its
-   projection record, ADR-0031), the proto3 codec #264 and the WebSocket
-   transport #265 have landed (PR #990 for #265). The frame specification,
-   loopback runtime and plugin protocol are available.
+5. **Remaining Rust release work:** the open enums and enum sets of `podbuf`
+   have landed with #1168, after the typl `open` keyword (#1121). The `podbuf`
+   codec #317 (with its projection record, ADR-0031), the proto3 codec #264 and
+   the WebSocket transport #265 have landed (PR #990 for #265). The frame
+   specification, loopback runtime and plugin protocol are available.
 6. **Step 2:** deliver the TypeScript/wasm surface #287 and emulator #290. The
    TypeScript WebSocket transport package #982 has landed (PR #993). The
    attribute registry #268, its enforcement #269 and boundary IR #270, plus

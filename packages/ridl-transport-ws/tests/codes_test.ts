@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { decode, encode, encodingTag, Kind } from "../mod.ts";
-import type { Contract, Frame, Reason, Rule } from "../mod.ts";
+import type { Contract, Frame, Reason, Rule, StreamOutcome } from "../mod.ts";
 
 /** Little-endian bytes of a u32. */
 function u32(v: number): number[] {
@@ -361,5 +361,70 @@ Deno.test("a name that starts with a byte order mark keeps it", () => {
     encoding: 1,
     hash,
     name: "\uFEFFv",
+  });
+});
+
+Deno.test("each stream outcome maps to its code and back", () => {
+  const CORR = u64(5n);
+  const invalid = (rule: Rule): Contract => ({
+    category: "invalid-value",
+    rule,
+  });
+  const cases: [number, number, StreamOutcome][] = [
+    [10, 0, { kind: "end" }],
+    [11, 0, { kind: "interrupted" }],
+    [7, 0, { kind: "corrupt" }],
+    [8, 0, { kind: "busy" }],
+    [4, 0, {
+      kind: "contract",
+      contract: { category: "precondition-failed" },
+    }],
+    [5, 0, { kind: "contract", contract: { category: "contract-broken" } }],
+    [6, 0, {
+      kind: "contract",
+      contract: { category: "unknown-interaction" },
+    }],
+    [3, 1, { kind: "contract", contract: invalid("range") }],
+    [3, 2, { kind: "contract", contract: invalid("step") }],
+    [3, 3, { kind: "contract", contract: invalid("length") }],
+    [3, 4, { kind: "contract", contract: invalid("pattern") }],
+    [3, 5, { kind: "contract", contract: invalid("variant") }],
+    [3, 6, { kind: "contract", contract: invalid("unique") }],
+  ];
+  for (const [code, detail, outcome] of cases) {
+    roundTrip([13, ...T(4), ...E, ...CORR, 0, code, detail], {
+      form: "stream_end",
+      target: target(Kind.Query),
+      envelope,
+      correlation: 5n,
+      stream: 0,
+      outcome,
+    });
+  }
+});
+
+Deno.test("a chunk and a stream_credit map to their bytes", () => {
+  roundTrip([12, ...T(3), ...E, ...u64(5n), 2, 9, 8], {
+    form: "chunk",
+    target: target(Kind.Command),
+    envelope,
+    correlation: 5n,
+    stream: 2,
+    payload: new Uint8Array([9, 8]),
+  });
+  roundTrip([12, ...T(4), ...E, ...u64(5n), 0], {
+    form: "chunk",
+    target: target(Kind.Query),
+    envelope,
+    correlation: 5n,
+    stream: 0,
+    payload: new Uint8Array(0),
+  });
+  roundTrip([14, ...T(4), ...u64(5n), 1, 0x78, 0x56, 0x34, 0x12], {
+    form: "stream_credit",
+    target: target(Kind.Query),
+    correlation: 5n,
+    stream: 1,
+    credit: 0x12345678,
   });
 });

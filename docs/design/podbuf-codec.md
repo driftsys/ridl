@@ -37,7 +37,7 @@ the view in place
 | The `Sizes<Podbuf>` table and the aligned buffers                        | `crates/ridl-backend-rust/src/descriptors.rs`  |
 | The claim table entries for the generated names                          | `crates/ridl-backend-rust/src/claims.rs`       |
 | The C header emitter                                                     | `crates/ridl-backend-podbuf/src/lib.rs`        |
-| RIDL-153 to RIDL-155 and RIDL-158, the build-time errors                 | `crates/ridlc/src/design_lints/podbuf.rs`      |
+| RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`      |
 | RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
 | `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
 | `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |
@@ -127,9 +127,11 @@ word and an absent optional's bytes are zero without a separate write. The
 encoder sorts the entries of a map by key; it refuses with
 `EncodeError::Contract` a string that holds U+0000 (`Pattern`), a duplicate map
 key (`Unique`) and a NaN map key (`Range`), a collection outside its bounds
-(`Length`) and a value outside its typl constraints. A deprecated field is
-written as its init value. A buffer that does not start on an 8-byte boundary
-gives `EncodeError::Unaligned`; a store outside the bytes written gives
+(`Length`), a value outside its typl constraints, and a value of an `open` enum
+or enum set whose integer does not fit the width its declared values infer, when
+that width is below 64 bits (`Range`, naming the declaration). A deprecated
+field is written as its init value. A buffer that does not start on an 8-byte
+boundary gives `EncodeError::Unaligned`; a store outside the bytes written gives
 `EncodeError::Layout`.
 
 **`verify`** is a call tree, not a worklist: each head type has its own
@@ -139,12 +141,15 @@ has no recursive shape, so the depth is bounded by the type. It allocates
 nothing. A union arm whose type has no field is bounds-checked through its
 descriptor and has no content check, so an older reader accepts the arm a newer
 producer wrote after the arm type gained a field. A boolean above 1 is
-`Contract` with the rule `Range`; an absent optional whose bytes are not zero is
-`Contract` with the rule `Variant`; the structure faults are `Malformed`
-variants. `Payload<Podbuf>::verify` applies no length check: it reads what the
-preamble, the head and the descriptors reference and ignores the bytes past
-them, so an older reader accepts the longer buffer a newer writer produces after
-a compatible append
+`Contract` with the rule `Range`; a value that a strict enum does not declare,
+or a bit that a strict enum set does not declare, is `Contract`; an `open` enum
+accepts every value of its width and an `open` enum set every bit (ADR-0031
+decision 12); an absent optional whose bytes are not zero is `Contract` with the
+rule `Variant`; the structure faults are `Malformed` variants.
+`Payload<Podbuf>::verify` applies no length check: it reads what the preamble,
+the head and the descriptors reference and ignores the bytes past them, so an
+older reader accepts the longer buffer a newer writer produces after a
+compatible append
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 19,
 which closes [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) open
 item 2). Its work is bounded by the maxima the reader's type declares, not by
@@ -158,7 +163,13 @@ returned by no generated codec. The full list of checks, and what is not
 checked, is ADR-0031 decision 8.
 
 **`decode`** builds the owned domain value from a view that `verify` returned,
-and allocates for `String`, `Vec` and maps as the other codecs do.
+and allocates for `String`, `Vec` and maps as the other codecs do. The view and
+`decode` read a value that an `open` enum does not declare as its `Unknown`
+variant, which holds the integer, and an `open` enum set keeps every bit, so
+`encode` writes such a value back unchanged. The raw value of a 64-bit enum or
+enum set is the bit pattern of its wire integer held in an `i64`: a `u64` of
+2^63 or more reads as a negative raw value and is written back as the same
+`u64`.
 
 **The view.** The accessors read through `Region`. A scalar read is one bounds
 check and one load. A `string` accessor returns a `&str` built by
@@ -193,20 +204,22 @@ descriptor structs and the helper functions, each behind its own guard so that
 the headers of two packages can be included together; one `struct` per head,
 with `_Alignas(8)` on its first member and every gap as a `_padN` member;
 `_Static_assert` checks on `sizeof` and `offsetof` for every head and field; the
-constants of the enums, enum sets and union tags; and inline accessor functions.
-`<owner>_<member>_at` reads a field from a head of a size the caller gives and
-answers 0 (or `NULL`) for a field past it; the head of a declaration also has
-`<owner>_<member>`, which reads a whole buffer through the preamble's
-`head_size`. `<member>` is the C member name: the typl name of a struct field or
-a tuple member under the pinned `snake_case`, without the trailing underscore a
-reserved word takes, so the accessor names follow the member names. A tuple
-whose spelled member names would clash falls back to positional members (`f1`,
-`f2`) and accessors, in every header that defines its head (ADR-0016, amendment
-of 2026-10-28). A foreign struct, tuple or union that a field lays out inline is
-defined again behind a `<PKG>_<TYPE>_HEAD_DEFINED` guard. Each tuple has one
-head, which every position that lays the tuple out inline names, in the
-declaring header and in an importing header alike; when two positions share one
-tuple, and so one head, is stated in
+constants of the enums, enum sets and union tags, with a comment before the
+constants of each enum and enum set that states whether it is strict (a value or
+bit outside the constants is not valid) or open (it is valid and is kept); and
+inline accessor functions. `<owner>_<member>_at` reads a field from a head of a
+size the caller gives and answers 0 (or `NULL`) for a field past it; the head of
+a declaration also has `<owner>_<member>`, which reads a whole buffer through
+the preamble's `head_size`. `<member>` is the C member name: the typl name of a
+struct field or a tuple member under the pinned `snake_case`, without the
+trailing underscore a reserved word takes, so the accessor names follow the
+member names. A tuple whose spelled member names would clash falls back to
+positional members (`f1`, `f2`) and accessors, in every header that defines its
+head (ADR-0016, amendment of 2026-10-28). A foreign struct, tuple or union that
+a field lays out inline is defined again behind a `<PKG>_<TYPE>_HEAD_DEFINED`
+guard. Each tuple has one head, which every position that lays the tuple out
+inline names, in the declaring header and in an importing header alike; when two
+positions share one tuple, and so one head, is stated in
 [ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md)
 (amendment of 2026-10-31). The importing header names a foreign tuple's head by
 the declaring package's induced name, so the two headers define the head under
@@ -231,19 +244,26 @@ the header of the package that declares the type: a consumer of an interface
 that sends a foreign boxed root includes that package's header.
 
 Every C name the header defines is claimed once: first the fixed names of the
-preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`) and the include guard of
-the header (`RIDL_PODBUF_<PKG>_H`), then the constants of the enums, enum sets
-and union tags, the head type names, the guard macro of each head, and the
-accessor and presence-test functions. A package where two are equal is refused,
-with a message that names both claimants: a constant equal to the guard of a
-head (an enum `Gear` with a value `BOX_HEAD_DEFINED` next to a struct
-`GearBox`), which would make the `#ifndef` drop the head; a box head whose name
-equals the name of a tuple head (a scalar `HubSize` next to the tuple at
-`Hub.size`), which the Rust backend refuses too; or an accessor equal to a
-preamble helper (a struct `Desc` with a field `at` in a package `ridl.podbuf`,
-`ridl_podbuf_desc_at`). A struct, a union or a box with no podbuf size bound is
-refused. The header carries `#error` on a big-endian target, and has no
-`verify`: the gate is Rust.
+preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`), the C17 names defined
+by the included `<stdint.h>` and `<stddef.h>`, and the include guard of the
+header (`RIDL_PODBUF_<PKG>_H`), then the constants of the enums, enum sets and
+union tags, the head type names, the guard macro of each head, and the accessor
+and presence-test functions. A package where two are equal is refused, with a
+message that names both claimants: a constant equal to the guard of a head (an
+enum `Gear` with a value `BOX_HEAD_DEFINED` next to a struct `GearBox`), which
+would make the `#ifndef` drop the head; a box head whose name equals the name of
+a tuple head (a scalar `HubSize` next to the tuple at `Hub.size`), which the
+Rust backend refuses too; or an accessor equal to a preamble helper (a struct
+`Desc` with a field `at` in a package `ridl.podbuf`, `ridl_podbuf_desc_at`). The
+standard-header claims cover the integer types, limit macros and constant
+macros, including the optional fixed-width forms, and `size_t`, `ptrdiff_t`,
+`wchar_t`, `max_align_t`, `NULL` and `offsetof`. They use one fixed table beside
+the preamble-name table. An accessor named `max_align_t` (`package max`,
+`struct Align`, field `t`) or a constant named `UINT_LEAST8_MAX` is refused with
+the same message naming both claimants. Names that only match a future-use
+reserved pattern, such as `UINT_CUSTOM_MAX`, are not claimed. A struct, a union
+or a box with no podbuf size bound is refused. The header carries `#error` on a
+big-endian target, and has no `verify`: the gate is Rust.
 
 **The headers of one build are checked against each other.** The C names are not
 unique across packages: the `.` of a package name and a `_` from the snake case
@@ -326,9 +346,9 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 | Gap                                                                                                                                                                                                                                                                                                        | Issue                                                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| The `open` keyword is built, and podbuf refuses an open enum or enum set with RIDL-158 until the podbuf codec carries one (ADR-0031 decision 12)                                                                                                                                                           | [driftsys/ridl#1168](https://github.com/driftsys/ridl/issues/1168)     |
 | A string that holds U+0000 cannot be encoded                                                                                                                                                                                                                                                               | a limit of the encoding                                                |
 | The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                                                                                                                                 | the check is per build                                                 |
+| The claimed names of `<stdint.h>` and `<stddef.h>` are the C17 ones; the C23 additions (the `*_WIDTH` macros, `nullptr_t`) are not claimed, so a header built with `-std=c23` can still meet one of them                                                                                                   | the list is C17                                                        |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                                                                                                                                | ADR-0020 decision 2                                                    |
 | When the pin of a remote `[imports]` unit moves and a remote struct held inline changes layout in the same step as a consumer append, `ridl diff` lays the old head out with the new pin's struct, so the inline-append verdict can be wrong in either direction; the remote's change is the remote's diff | ADR-0031 decision 13, the 2026-10-31 amendment from driftsys/ridl#1141 |
 

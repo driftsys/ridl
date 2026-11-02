@@ -759,7 +759,8 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), which restates
   the design as decisions corrected to the code and lists where it departs from
   the design, and [the podbuf codec design record](../design/podbuf-codec.md).
-  Its plan stays in `docs/wip/` until Tasks 13 and 14 are built.
+  Its plan, [2026-10-24-podbuf-plan.md](2026-10-24-podbuf-plan.md), was archived
+  on 2026-11-02, once the open enums of podbuf were built (driftsys/ridl#1168).
 
 - **2026-10-30-size-rules-plan.md** — the plan for the code of the ADR-0030
   amendments of 2026-10-28 and 2026-10-30: `ridl_core::limits`, the `ridlc` size
@@ -810,3 +811,14 @@ provenance. Nothing here is normative — the current references live in
   with the pull request that builds it (driftsys/ridl#1171). The durable record
   is [`../design/interaction-face.md`](../design/interaction-face.md). Stages 4
   to 6 continue from `docs/wip/2026-10-31-streams-design.md`.
+
+- **2026-11-01-streams-stage-4-plan.md** — the plan for stage 4 of the streams
+  work: a query's streamed reply over the WebSocket binding (frame version 3
+  under `ridl-ws-v3`, the `chunk`, `stream_end` and `stream_credit` forms), in
+  the Rust provider and in both clients. Archived verbatim, on 2026-11-02, once
+  the work landed in driftsys/ridl#1182 (squash `fe60eeee`). The durable records
+  are [the frame specification](../specification/frame-specification.md),
+  [the WebSocket binding design](../design/ridl-transport-ws.md),
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md) and
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+  Stages 5 and 6 continue from `docs/wip/2026-10-31-streams-design.md`.

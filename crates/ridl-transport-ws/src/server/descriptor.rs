@@ -167,6 +167,14 @@ impl MemberTable {
                 if let Some(limit) = member.limit().map_err(invalid)? {
                     table.set_limit(iface, ord, limit);
                 }
+                // Absent in a file written before the field existed.
+                if let Some(streams) = member.streams().map_err(invalid)? {
+                    for stream in streams {
+                        if stream.map_err(invalid)?.no().map_err(invalid)? == 0 {
+                            table.set_reply_stream(iface, ord);
+                        }
+                    }
+                }
             }
         }
         // Absent in a file written before the field existed.

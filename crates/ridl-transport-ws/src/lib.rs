@@ -92,7 +92,7 @@ pub use server::DescriptorError;
 #[cfg(feature = "server")]
 pub use server::{
     serve, Backend, Config, Connection, Described, Ended, LimitOutOfRange, MemberTable, Note,
-    Polling, RetainedTooSmall, Scanning, TableMismatch,
+    Polling, RetainedTooSmall, Scanning, Streaming, TableMismatch,
 };
 
 #[cfg(feature = "server")]

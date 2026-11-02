@@ -80,10 +80,9 @@ The package module holds:
   with `From<i64>`, which keeps every bit, and `unknown_bits` returns the bits
   that no declared bit names. In both forms `From<Name> for i64` returns the
   integer, an `Unknown` value's included, so a value read from the wire is
-  written back unchanged. The doc of an open declaration says so. The podbuf
-  encoding does not carry an open declaration yet: `ridl build` reports
-  RIDL-158 on one when a `[backend.<name>]` table names `podbuf`
-  ([driftsys/ridl#1168](https://github.com/driftsys/ridl/issues/1168)).
+  written back unchanged. The doc of an open declaration says so. Every
+  codec the manifest names reads and writes an open declaration this way,
+  `podbuf` included.
 - **The codecs** of each payload type, one per encoding the manifest names
   under `[backend.rust] encodings`: `flatbuffers`, `proto3`, or both. Each
   codec is `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list
@@ -496,11 +495,12 @@ array, bytes or map field reads back as empty, because the object API cannot
 leave a vector out of the buffer), and an induced tuple of an interaction,
 which the codec file exports as an `interface` (`export type X = Record<string,
 never>` for one with no field). An optional array element, map
-key or map value is refused, as the Rust codec refuses it. A named scalar or an
-enum set of another package converts by a type assertion, and a payload type of
-another package that is one goes through that package's own codec file; a
-payload type that reaches a struct, a union or an enum of another package is
-refused with an error that names both. An internal payload type has no
+key or map value is refused, as the Rust codec refuses it. A named scalar of
+another package converts by a type assertion, and an enum set of another
+package through a checking function of the file. A payload type of another
+package that is a named scalar or an enum set goes through that package's own
+codec file; a payload type that reaches a struct, a union or an enum of another
+package is refused with an error that names both. An internal payload type has no
 `encode`/`decode`, because `<base>.ts` does not export its type.
 [The codec table design record][codec-table] gives the rules in full.
 
@@ -521,10 +521,11 @@ is `range`.
 The `.proto` and `.fbs` files that the build writes carry one comment line above
 each enum that states the rule of its declaration: `// strict: a value outside
 this list is not valid` or `// open: a value outside this list is valid and is
-kept`. The comment states the rule, not who enforces it. The Rust codecs refuse
-a value outside the list of a strict enum, and the TypeScript codec does not
-check it yet ([driftsys/ridl#1173](https://github.com/driftsys/ridl/issues/1173)).
-The enum type itself is the same in both cases.
+kept`. The comment states the rule, not who enforces it. The Rust codecs and
+the TypeScript codec refuse a value outside the list of a strict enum, and a
+bit outside the declared bits of a strict enum set, when they read it. The
+TypeScript codec throws a `RuleError` whose `rule` is `variant`. The enum type
+itself is the same in both cases.
 
 ## Documentation in the generated code
 
@@ -631,7 +632,11 @@ In the Rust column:
   one nothing refuses it (see [What the crate contains](#what-the-crate-contains)).
   The proto3 codec carries an enum as an int32, so its `encode` refuses an
   `Unknown` whose integer does not fit int32 with the range error; such a
-  value can only come from another encoding.
+  value can only come from another encoding. The podbuf codec carries an
+  enum or enum set at the width its declared values infer, so its `encode`
+  refuses with the range error an `open` value whose integer does not fit
+  that width when it is below 64 bits; at 64 bits the raw value is the bit
+  pattern of the wire integer, so every value is written back unchanged.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a

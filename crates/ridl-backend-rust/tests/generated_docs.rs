@@ -154,14 +154,7 @@ const PROTO3_REFUSED: [(&str, &str); 4] = [
 /// The fixtures the podbuf codec refuses by design, each with the text its
 /// refusal must carry: an array with no count bound, whose largest buffer
 /// has no finite podbuf bound.
-const PODBUF_REFUSED: [(&str, &str); 2] = [
-    ("proto3_free.ridl", "` has no finite podbuf bound"),
-    // The podbuf codec keeps every enum strict until driftsys/ridl#1168.
-    (
-        "open_enums.ridl",
-        "` is an open enum, which the podbuf encoding does not carry yet",
-    ),
-];
+const PODBUF_REFUSED: [(&str, &str); 1] = [("proto3_free.ridl", "` has no finite podbuf bound")];
 
 /// The fixtures that carry a payload with no finite bound on purpose, which
 /// the checker reports as RIDL-157: compiled through

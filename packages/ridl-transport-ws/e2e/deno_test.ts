@@ -119,6 +119,50 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
   }
 });
 
+Deno.test("queryStream_receives_64_elements_over_loopback_server", async () => {
+  const server = await startServer();
+  const notes: Note[] = [];
+  try {
+    const session = await connect(`ws://127.0.0.1:${server.port}`, {
+      catalog: { name: catalog.NAME, hash: catalog.HASH },
+      encoding: catalog.ENCODING,
+      onNote(note) {
+        notes.push(note);
+      },
+    });
+    const stream = session.queryStream(
+      catalog.IFACE,
+      catalog.STREAM_QUERY,
+      Uint8Array.of(64),
+      { bound: 2000 },
+    );
+    // More chunks than the initial credit of 4: the reply arrives in full
+    // only if the credit the reader grants reaches the server. Without that
+    // credit the server waits, so the read has a time limit.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("the stream did not end within 5 s")),
+        5000,
+      );
+    });
+    try {
+      assert.deepEqual(
+        await Promise.race([catalog.readElements(stream), late]),
+        { count: 64, match: true },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    session.close();
+    const ended = await session.closed;
+    assert.equal(ended.code, 1000);
+    assert.deepEqual(notes, []);
+  } finally {
+    await server.stop();
+  }
+});
+
 Deno.test("the server answers a read of a fixed in one publish up to 16,137 bytes and in blocks above", async () => {
   const server = await startServer();
   let raw: WebSocket | undefined;

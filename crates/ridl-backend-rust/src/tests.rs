@@ -2514,36 +2514,21 @@ fn an_open_enum_and_enum_set_compile() {
     assert!(status.success(), "generated Rust must compile:\n{source}");
 }
 
-/// The podbuf codec keeps every enum strict until driftsys/ridl#1168, so an
-/// open declaration in a package whose encodings name podbuf is refused by
-/// the backend rather than emitted as strict code. `ridl build` refuses it
-/// before this backend is reached (RIDL-158); this is the plugin path.
+/// An open declaration generates with podbuf among the encodings: the podbuf
+/// codec reads an undeclared value of an open enum as `Unknown` and keeps an
+/// undeclared bit of an open enum set (ADR-0031 decision 12), so the backend
+/// refuses neither.
 #[test]
-fn an_open_declaration_with_podbuf_among_the_encodings_is_refused() {
-    for decl in [open_enum_decl(), open_enum_set_decl()] {
-        let name = decl.name.clone();
-        let error = generate_pipeline(
-            &package("veh.common", vec![decl]),
-            &[WireEncoding::FlatBuffers, WireEncoding::Podbuf],
-            false,
-            &[],
-        )
-        .expect_err("an open declaration is refused under podbuf");
-        assert!(error.message.contains(&name), "{}", error.message);
-        assert!(
-            error.message.contains("driftsys/ridl#1168"),
-            "{}",
-            error.message
-        );
-    }
-    // Without podbuf among the encodings the same package generates.
-    generate_pipeline(
+fn an_open_declaration_with_podbuf_among_the_encodings_generates() {
+    let source = generate_pipeline(
         &package("veh.common", vec![open_enum_decl(), open_enum_set_decl()]),
-        &[WireEncoding::FlatBuffers, WireEncoding::Proto3],
+        &[WireEncoding::FlatBuffers, WireEncoding::Podbuf],
         false,
         &[],
     )
-    .expect("generates without podbuf");
+    .expect("an open declaration generates under podbuf")
+    .rust_source;
+    assert!(source.contains("__ridl_podbuf_verify"), "{source}");
 }
 
 #[test]
