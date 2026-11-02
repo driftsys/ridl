@@ -707,7 +707,7 @@ fn an_accessor_equal_to_a_stddef_type_is_refused_naming_both() {
     let err = generate_fixture_err("package max\nstruct Align {\n  t : integer [0..10]\n}\n");
     assert!(
         err.message.contains("`max_align_t`")
-            && err.message.contains("<stdint.h> and <stddef.h>")
+            && err.message.contains("claimed by `<stddef.h>` and by")
             && err
                 .message
                 .contains("the accessor of `t` of the head of `Align`"),
@@ -721,15 +721,18 @@ fn a_constant_equal_to_a_stdint_limit_is_refused_naming_both() {
     let err = generate_fixture_err("package uint\nenum Least8 {\n  MAX = 0\n}\n");
     assert!(
         err.message.contains("`UINT_LEAST8_MAX`")
-            && err.message.contains("<stdint.h> and <stddef.h>")
+            && err.message.contains("claimed by `<stdint.h>` and by")
             && err.message.contains("the enum value `MAX`"),
         "{}",
         err.message
     );
 }
 
-/// Exercise the collision path for an independently specified C17 inventory,
+/// Exercise the collision path for a C17 inventory written out in this test,
 /// including names that the current source-to-C naming rules cannot derive.
+/// The inventory is a second copy of `STANDARD_HEADER_NAMES`, not an
+/// independent specification: the test fails when either copy holds a name the
+/// other lacks, so a change to one has to be made to both on purpose.
 #[test]
 fn every_c17_standard_header_name_is_claimed() {
     let expected = "
@@ -762,7 +765,25 @@ fn every_c17_standard_header_name_is_claimed() {
     let (_, mut claims) = crate::Header::new(&model, projection)
         .render_with_claims()
         .expect("generate");
+    let mut table: Vec<&str> = crate::STANDARD_HEADER_NAMES.to_vec();
+    table.sort_unstable();
+    let mut inventory: Vec<&str> = expected.split_ascii_whitespace().collect();
+    inventory.sort_unstable();
+    assert_eq!(table, inventory, "the table and the inventory differ");
+    let stddef = [
+        "size_t",
+        "ptrdiff_t",
+        "wchar_t",
+        "max_align_t",
+        "NULL",
+        "offsetof",
+    ];
     for name in expected.split_ascii_whitespace() {
+        let header = if stddef.contains(&name) {
+            "`<stddef.h>`"
+        } else {
+            "`<stdint.h>`"
+        };
         let err = claims
             .claim(
                 name,
@@ -776,7 +797,7 @@ fn every_c17_standard_header_name_is_claimed() {
             .expect_err(name);
         assert!(
             err.message.contains(&format!("`{name}`"))
-                && err.message.contains("<stdint.h> and <stddef.h>")
+                && err.message.contains(&format!("claimed by {header} and by"))
                 && err.message.contains("the test declaration"),
             "{}",
             err.message
@@ -807,7 +828,7 @@ fn standard_header_type_families_are_refused_through_generation() {
         let err = generate_fixture_err(source);
         assert!(
             err.message.contains(&format!("`{name}`"))
-                && err.message.contains("<stdint.h> and <stddef.h>")
+                && err.message.contains("claimed by `<stdint.h>` and by")
                 && err.message.contains("the accessor of `t`"),
             "{}",
             err.message
@@ -847,7 +868,7 @@ fn standard_header_limit_families_are_refused_through_generation() {
         let err = generate_fixture_err(source);
         assert!(
             err.message.contains(&format!("`{name}`"))
-                && err.message.contains("<stdint.h> and <stddef.h>")
+                && err.message.contains("claimed by `<stdint.h>` and by")
                 && err.message.contains("the enum value"),
             "{}",
             err.message
@@ -864,6 +885,10 @@ fn names_near_standard_header_names_are_accepted() {
     assert!(h.contains("#define UINT_LEAST8_MAXIMUM 0"), "{h}");
     let h = generate_fixture("package uint\nenum Custom {\n  MAX = 0\n}\n").header_source;
     assert!(h.contains("#define UINT_CUSTOM_MAX 0"), "{h}");
+    // A lowercase name of a reserved pattern (`uint*_t`) is not claimed.
+    let h =
+        generate_fixture("package uint\nstruct Custom {\n  t : integer [0..10]\n}\n").header_source;
+    assert!(h.contains("uint_custom_t("), "{h}");
 }
 
 /// The include guard of the header is claimed too: the enum `RidlPodbuf` of

@@ -336,6 +336,16 @@ impl Identity {
             role: "preamble".to_string(),
         }
     }
+
+    /// The one identity of a name that a standard header defines, shared by
+    /// every header.
+    fn standard_header(name: &str) -> Self {
+        Self {
+            package: String::new(),
+            key: name.to_string(),
+            role: "standard header".to_string(),
+        }
+    }
 }
 
 /// One claim of a C name: what the name stands for in the message of a
@@ -496,6 +506,20 @@ const STANDARD_HEADER_NAMES: &[&str] = &[
     "UINT64_C",
     "INTMAX_C",
     "UINTMAX_C",
+    "size_t",
+    "ptrdiff_t",
+    "wchar_t",
+    "max_align_t",
+    "NULL",
+    "offsetof",
+];
+
+/// The names of `STANDARD_HEADER_NAMES` that `<stddef.h>` defines; every other
+/// name of the table is defined by `<stdint.h>`. `wchar_t` and `NULL` are also
+/// defined by other headers, and `WCHAR_MIN` and `WCHAR_MAX` belong to
+/// `<stdint.h>` only; each name is attributed to the header that C17 lists it
+/// under among these two.
+const STDDEF_HEADER_NAMES: &[&str] = &[
     "size_t",
     "ptrdiff_t",
     "wchar_t",
@@ -1119,15 +1143,12 @@ impl<'a> Header<'a> {
             )?;
         }
         for &name in STANDARD_HEADER_NAMES {
-            claims.claim(
-                name,
-                "<stdint.h> and <stddef.h>".to_string(),
-                Identity {
-                    package: String::new(),
-                    key: name.to_string(),
-                    role: "standard header".to_string(),
-                },
-            )?;
+            let header = if STDDEF_HEADER_NAMES.contains(&name) {
+                "`<stddef.h>`"
+            } else {
+                "`<stdint.h>`"
+            };
+            claims.claim(name, header.to_string(), Identity::standard_header(name))?;
         }
         let guard = format!("RIDL_PODBUF_{}_H", self.prefix.to_uppercase());
         claims.claim(
