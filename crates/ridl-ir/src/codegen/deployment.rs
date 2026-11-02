@@ -1748,6 +1748,45 @@ mod tests {
         assert!(section.instances[1].attributes.is_empty());
     }
 
+    #[test]
+    fn a_list_nested_in_a_list_is_carried_whole() {
+        let scalar = |text: &str| v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::Scalar(text.to_string())),
+        };
+        let list = |items| v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::List(v2::AttributeList { items })),
+        };
+        let mut system = system();
+        system.deployments[0].placements[0].attributes = vec![v2::Attribute {
+            namespace: "linux".to_string(),
+            key: "groups".to_string(),
+            value: Some(list(vec![
+                scalar("a"),
+                list(vec![scalar("b"), scalar("c")]),
+            ])),
+        }];
+        let package = package();
+        let section =
+            lower_deployment(&system, "prod", &[&package]).expect("the deployment is named prod");
+        let carried = |value: &v1::AttributeValue| -> String {
+            fn text(value: &v1::AttributeValue) -> String {
+                match value.kind.as_ref().expect("a kind") {
+                    v1::attribute_value::Kind::Scalar(text) => text.clone(),
+                    v1::attribute_value::Kind::List(list) => {
+                        let items: Vec<String> = list.items.iter().map(text).collect();
+                        format!("[{}]", items.join(","))
+                    }
+                }
+            }
+            text(value)
+        };
+        let value = section.instances[0].attributes[0]
+            .value
+            .as_ref()
+            .expect("the key has a value");
+        assert_eq!(carried(value), "[a,[b,c]]");
+    }
+
     /// The bytes of one section, for a comparison that covers every field.
     fn bytes(section: &v1::Deployment) -> String {
         let request = v1::CodegenRequest {

@@ -189,3 +189,93 @@ fn lists_that_share_one_child_many_times_are_refused() {
     assert!(matches!(result, Err(VerifyError::TooManyAttributeValues)));
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }
+
+/// A deployment that embeds two catalogs, `aaa` and `veh`, in that order.
+fn two_catalogs(second: Vec<u8>, second_hash: Vec<u8>) -> Vec<u8> {
+    let mut owned = valid();
+    owned.catalogs.insert(
+        0,
+        ridl_descriptor::deployment::EmbeddedCatalog {
+            name: "aaa".to_owned(),
+            hash: vec![7u8; 32],
+            bytes: catalog_bytes(),
+        },
+    );
+    owned.catalogs[1].bytes = second;
+    owned.catalogs[1].hash = second_hash;
+    finish(&owned)
+}
+
+#[test]
+fn a_second_embedded_catalog_that_is_not_a_catalog_is_refused() {
+    let bytes = two_catalogs(vec![0u8; 16], vec![7u8; 32]);
+    match verify(&bytes) {
+        Err(VerifyError::EmbeddedCatalog { catalog, .. }) => assert_eq!(catalog, "veh"),
+        other => panic!("expected an embedded catalog error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_second_embedded_catalog_with_a_wrong_stored_hash_is_refused() {
+    let bytes = two_catalogs(catalog_bytes(), vec![1u8; 32]);
+    match verify(&bytes) {
+        Err(VerifyError::CatalogHashMismatch { catalog }) => assert_eq!(catalog, "veh"),
+        other => panic!("expected a hash mismatch, got {other:?}"),
+    }
+}
+
+/// Writes `value` over each byte of a valid buffer in turn and collects the
+/// message of the error `verify` gives, if any.
+fn refusals_after_overwriting(value: u8) -> Vec<String> {
+    let bytes = finish(&valid());
+    let mut messages = Vec::new();
+    for at in 8..bytes.len() {
+        let mut damaged = bytes.clone();
+        damaged[at] = value;
+        if let Err(error) = verify(&damaged) {
+            messages.push(format!("{error:?}"));
+        }
+    }
+    messages
+}
+
+#[test]
+fn an_unknown_crossing_is_refused_by_verify() {
+    let messages = refusals_after_overwriting(0x7f);
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("method: \"crossing\"")),
+        "no overwritten byte was refused as a crossing"
+    );
+}
+
+#[test]
+fn an_unknown_surface_direction_is_refused_by_verify() {
+    let messages = refusals_after_overwriting(0x7f);
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("method: \"direction\"")),
+        "no overwritten byte was refused as a surface direction"
+    );
+}
+
+/// The promise of `verify`: when it returns a view, reading every field of it
+/// cannot fail. Overwriting any one byte must give either a refusal or a
+/// buffer that converts to the owned form.
+#[test]
+fn a_verified_buffer_reads_in_full_whatever_byte_was_damaged() {
+    let bytes = finish(&valid());
+    for value in [0x00, 0x01, 0x7f, 0xff] {
+        for at in 8..bytes.len() {
+            let mut damaged = bytes.clone();
+            damaged[at] = value;
+            if let Ok(view) = verify(&damaged) {
+                ridl_descriptor::deployment::Deployment::try_from(view).unwrap_or_else(|error| {
+                    panic!("byte {at} set to {value:#x} verified but does not read: {error}")
+                });
+            }
+        }
+    }
+}

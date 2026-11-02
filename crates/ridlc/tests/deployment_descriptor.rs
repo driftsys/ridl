@@ -141,6 +141,50 @@ fn every_deployment_gets_its_own_descriptor() {
             "veh.cabin.Single.deployment.binfb"
         ]
     );
+
+    // Each file holds its own deployment: its machines, its placements and
+    // the crossings of its links differ.
+    let read = |name: &str| {
+        let bytes = std::fs::read(out.path().join(name)).unwrap();
+        deployment::to_json(deployment::verify(&bytes).unwrap()).unwrap()
+    };
+    let machines = |json: &serde_json::Value| -> Vec<String> {
+        json["machines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|machine| machine["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let machine_of = |json: &serde_json::Value, component: &str| -> String {
+        json["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|instance| instance["component"] == component)
+            .expect("the component is placed")["machine"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let crossings = |json: &serde_json::Value| -> Vec<String> {
+        json["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|link| link["crossing"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let bench = read("veh.cabin.Bench.deployment.binfb");
+    let single = read("veh.cabin.Single.deployment.binfb");
+    assert_eq!(bench["name"], "Bench");
+    assert_eq!(single["name"], "Single");
+    assert_eq!(machines(&bench), ["Hpc", "Gateway"]);
+    assert_eq!(machines(&single), ["All"]);
+    assert_eq!(machine_of(&bench, "veh.cabin.Telemetry"), "Gateway");
+    assert_eq!(machine_of(&single, "veh.cabin.Telemetry"), "All");
+    assert!(crossings(&bench).iter().any(|c| c == "DifferentMachine"));
+    assert!(crossings(&single).iter().all(|c| c == "SameMachine"));
 }
 
 #[test]
@@ -189,11 +233,35 @@ fn a_blocked_deployment_writes_no_file() {
     );
 }
 
+/// A system with one component and one deployment, in one file.
+const LONE: &str = "package solo\n\
+    /// The world.\nsystem World { Alpha }\n\
+    /// The only component.\ncomponent Alpha {}\n\
+    /// The lab.\ndeployment Lab for World {\n  /// One machine.\n  machine One { Alpha }\n}\n";
+
 #[test]
 fn single_file_mode_writes_no_deployment_descriptor() {
-    let dir = tempfile::tempdir().unwrap();
-    let file = dir.path().join("lone.ridl");
-    std::fs::copy(cabin().join("cabin.ridl"), &file).unwrap();
+    // The same declarations write a descriptor when the entry is a package
+    // with a manifest, so the missing file below is the single-file rule and
+    // not an absent system.
+    let package = tempfile::tempdir().unwrap();
+    std::fs::write(package.path().join("lone.rsdl"), LONE).unwrap();
+    std::fs::write(
+        package.path().join("ridl.toml"),
+        "[package]\nname = \"solo\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    let written = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(package.path(), written.path(), "deployment");
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        files_ending(written.path(), deployment::FILE_SUFFIX),
+        ["solo.Lab.deployment.binfb"]
+    );
+
+    let alone = tempfile::tempdir().unwrap();
+    let file = alone.path().join("lone.rsdl");
+    std::fs::write(&file, LONE).unwrap();
     let out = tempfile::tempdir().unwrap();
     let (code, stderr) = build(&file, out.path(), "deployment");
     assert_eq!(code, 0, "{stderr}");
