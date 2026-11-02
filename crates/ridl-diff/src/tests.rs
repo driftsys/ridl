@@ -2395,6 +2395,53 @@ mod podbuf {
         assert_eq!(change.verdict, Verdict::Breaking);
     }
 
+    #[test]
+    fn partial_context_report_retains_known_verdicts_and_local_ownership() {
+        let unknown = package(
+            "unknown",
+            vec![struct_decl("S", vec![field("x", 1, named("absent.S"))])],
+        );
+        let known = remote_holder(named("dep.types.Reading"));
+        let local_dep = package(
+            "local.dep",
+            vec![struct_decl("S", vec![field("x", 1, wide())])],
+        );
+        let local_user = package(
+            "local.user",
+            vec![struct_decl("S", vec![field("x", 1, named("local.dep.S"))])],
+        );
+        let old_remote = remote_reading(false);
+        let new_remote = remote_reading(true);
+        let packages = [&unknown, &known, &local_dep, &local_user];
+        let (report, issues) = crate::diff_refs_with_contexts_partial(
+            &packages,
+            &packages,
+            &[&old_remote],
+            &[&new_remote],
+            &["podbuf"],
+        );
+        assert_eq!(
+            issues.len(),
+            2,
+            "only the unknown remote has missing evidence on each side"
+        );
+        assert!(issues.iter().all(|issue| issue.path == "unknown/S/x"));
+        let verdicts = crate::UnitVerdicts::from_refs(&report, &packages, &packages);
+        assert_eq!(verdicts.verdict("app.api"), Verdict::Breaking);
+        assert_eq!(verdicts.verdict("local.user"), Verdict::Identical);
+        assert_eq!(verdicts.verdict("local.dep"), Verdict::Identical);
+        assert!(
+            crate::diff_refs_with_contexts(
+                &packages,
+                &packages,
+                &[&old_remote],
+                &[&new_remote],
+                &["podbuf"]
+            )
+            .is_err()
+        );
+    }
+
     fn remote_reading(extra: bool) -> v2::Package {
         let mut members = vec![field("value", 1, wide())];
         if extra {

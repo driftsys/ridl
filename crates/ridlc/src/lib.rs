@@ -1127,6 +1127,7 @@ pub fn run_build_with(
         deployment,
         compatible,
         None,
+        None,
     )
 }
 
@@ -1147,6 +1148,49 @@ pub type CompatibleCatalogsFn<'a, E = std::io::Error> = dyn FnMut(
         &[&ridl_ir::v2::Package],
     ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, E>
     + 'a;
+
+/// A build callback with complete context captured from the same checked compile.
+/// The final argument binds local snapshots to the verified remote packages and
+/// pins in the preceding argument; neither requires another compile or lock read.
+pub type CompatibleCatalogsWithContextFn<'a, E = std::io::Error> = dyn FnMut(
+        &[&ridl_ir::v2::Package],
+        &ridl_ir::v2::Package,
+        bool,
+        &baseline_context::RemoteContext,
+        &baseline_context::BaselineContext,
+    ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, E>
+    + 'a;
+
+/// [`run_build_computing`] with verified side-specific context from its compile.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the build's options, passed once from each command"
+)]
+pub fn run_build_computing_with_context<E: From<std::io::Error>>(
+    entry: &Path,
+    out_dir: &Path,
+    emits: &[Emit],
+    plugins: &[plugin::PluginSpec],
+    plugin_timeout: Duration,
+    frozen: Frozen,
+    apply_lints: ApplyLints,
+    deployment: Option<&str>,
+    compute: Option<&mut CompatibleCatalogsWithContextFn<'_, E>>,
+) -> Result<CliRun, E> {
+    run_build_inner(
+        entry,
+        out_dir,
+        emits,
+        plugins,
+        plugin_timeout,
+        frozen,
+        apply_lints,
+        deployment,
+        &BTreeMap::new(),
+        None,
+        compute,
+    )
+}
 
 /// [`run_build_with`], with the list computed from the build's own compile
 /// instead of given. `compute` is called once, right after the compile — the
@@ -1190,6 +1234,7 @@ pub fn run_build_computing<E: From<std::io::Error>>(
         deployment,
         &BTreeMap::new(),
         compute,
+        None,
     )
 }
 
@@ -1208,6 +1253,7 @@ fn run_build_inner<E: From<std::io::Error>>(
     deployment: Option<&str>,
     given: &BTreeMap<String, Vec<[u8; 32]>>,
     compute: Option<&mut CompatibleCatalogsFn<'_, E>>,
+    compute_with_context: Option<&mut CompatibleCatalogsWithContextFn<'_, E>>,
 ) -> Result<CliRun, E> {
     let mut db = RidlDatabase::default();
     let cache = Cache::user_default();
@@ -1274,31 +1320,43 @@ fn run_build_inner<E: From<std::io::Error>>(
     // The list covers the workspace's own units: a remote unit's catalog is
     // its owner's to publish, so its packages are given apart, for the types
     // the workspace's units reach in them.
-    let computed = match compute {
-        Some(compute)
-            if !diagnostics
+    let computed = if (compute.is_some() || compute_with_context.is_some())
+        && !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let (remotes, packages): (Vec<&ridl_ir::v2::Package>, Vec<&ridl_ir::v2::Package>) = checked
+            .iter()
+            .map(|package| &package.ir)
+            .partition(|ir| is_remote(ir, &remote_units));
+        let std_for_catalogs = check_package(&db, workspace, std, std).ir;
+        let names_imports = !workspace.imports(&db).is_empty()
+            || workspace
+                .packages(&db)
                 .iter()
-                .any(|diagnostic| diagnostic.severity == Severity::Error) =>
-        {
-            let (remotes, packages): (Vec<&ridl_ir::v2::Package>, Vec<&ridl_ir::v2::Package>) =
-                checked
-                    .iter()
-                    .map(|package| &package.ir)
-                    .partition(|ir| is_remote(ir, &remote_units));
-            let std_for_catalogs = check_package(&db, workspace, std, std).ir;
-            let names_imports = !workspace.imports(&db).is_empty()
-                || workspace
-                    .packages(&db)
-                    .iter()
-                    .any(|package| !package.imports(&db).is_empty());
+                .any(|package| !package.imports(&db).is_empty());
+        if let Some(compute) = compute_with_context {
+            let context = baseline_context::capture_context(&packages, &remotes, &remote_units)
+                .map_err(|err| E::from(std::io::Error::other(err)))?;
+            Some(compute(
+                &packages,
+                &std_for_catalogs,
+                names_imports,
+                &context.remote_context(),
+                &context,
+            )?)
+        } else if let Some(compute) = compute {
             Some(compute(
                 &packages,
                 &std_for_catalogs,
                 names_imports,
                 &remotes,
             )?)
+        } else {
+            None
         }
-        _ => None,
+    } else {
+        None
     };
     let compatible = computed.as_ref().unwrap_or(given);
 

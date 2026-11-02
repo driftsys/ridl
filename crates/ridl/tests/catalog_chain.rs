@@ -1839,3 +1839,382 @@ fn a_member_entry_is_judged_for_the_root_manifest_encodings() {
         "ridl baseline <member> restarts the chain"
     );
 }
+
+const REMOTE_INLINE_OLD: &str = "package veh.common
+type Word: integer [0..9223372036854775807]
+struct Reading { value: Word }
+";
+const REMOTE_INLINE_GROWN: &str = "package veh.common
+type Word: integer [0..9223372036854775807]
+struct Reading { value: Word extra: Word }
+";
+const REMOTE_INLINE_CONSUMER: &str = "package veh.cluster
+import veh.common.Reading
+struct Envelope { reading: Reading }
+interface VehicleStatus { signal reading: Envelope @10ms }
+";
+
+fn remote_inline_stub(source: &str) -> Stub {
+    Stub::serving(unit_tar(&[
+        (
+            "ridl.toml",
+            "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+        ),
+        ("common.typl", source),
+    ]))
+}
+
+fn remote_inline_workspace(dir: &TempDir, home: &Path, url: &str) -> PathBuf {
+    dir.write("ridl.toml", &format!(
+        "[workspace]\nmembers = [\"cluster\", \"body\"]\n[imports]\n\"veh.common\" = \"{url}\"\n[backend.rust]\nencodings = [\"podbuf\"]\n"
+    ));
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", REMOTE_INLINE_CONSUMER);
+    dir.write(
+        "body/ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("body/body.ridl", BODY);
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = remote_support::ridl(&root, home, &["check"]);
+    assert_eq!(code, 0, "pin fixture imports: {stderr}");
+    let (code, _, stderr) = remote_support::ridl(&root, home, &["lock"]);
+    assert_eq!(code, 0, "allocate fixture locks: {stderr}");
+    root
+}
+
+fn remote_command(root: &Path, home: &Path, args: &[&str]) -> String {
+    let (code, _, stderr) = remote_support::ridl(root, home, args);
+    assert_eq!(code, 0, "{args:?}: {stderr}");
+    stderr
+}
+
+#[test]
+fn remote_inline_pin_growth_ends_only_affected_catalog_chain() {
+    let dir = TempDir::new("remote-inline-growth");
+    let home = TempDir::new("remote-inline-growth-home");
+    let out = TempDir::new("remote-inline-growth-out");
+    let old = remote_inline_stub(REMOTE_INLINE_OLD);
+    let root = remote_inline_workspace(&dir, home.path(), old.url());
+    remote_command(&root, home.path(), &["baseline"]);
+    // A preceding compatible step proves that a pin-only break clears history.
+    dir.write("body/body.ridl", BODY_APPENDED);
+    remote_command(&root, home.path(), &["lock"]);
+    remote_command(&root, home.path(), &["baseline"]);
+    let body_history = history_lines_of(&root, "veh.body");
+    assert_eq!(body_history.len(), 2);
+    let prior = baseline_inventory(&root);
+    let grown = remote_inline_stub(REMOTE_INLINE_GROWN);
+    remote_inline_workspace(&dir, home.path(), grown.url());
+    dir.write("body/body.ridl", BODY_APPENDED);
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    assert!(
+        compatible_of(out.path(), UNIT).is_empty(),
+        "the inline consumer loses compatibility"
+    );
+    assert_eq!(compatible_of(out.path(), "veh.body"), body_history[1..]);
+    let current = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    remote_command(&root, home.path(), &["baseline"]);
+    assert_eq!(
+        history_lines_of(&root, UNIT),
+        vec![current],
+        "the chain starts with the emitted canonical hash"
+    );
+    assert_eq!(history_lines_of(&root, "veh.body"), body_history);
+    assert_eq!(
+        directory_inventory(&root.join(".ridl/baseline.previous.2")),
+        prior,
+        "a proved break preserves every previous baseline byte"
+    );
+    assert_eq!(
+        std::fs::read(baseline_dir(&root).join("veh.cluster.ir.json")).unwrap(),
+        std::fs::read(root.join(".ridl/baseline.previous.2/veh.cluster.ir.json")).unwrap(),
+        "a remote-only change leaves the local declarations identical"
+    );
+}
+
+fn directory_inventory(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            (
+                path.file_name().unwrap().to_str().unwrap().to_string(),
+                std::fs::read(path).unwrap(),
+            )
+        })
+        .collect();
+    files.sort();
+    files
+}
+fn baseline_inventory(root: &Path) -> Vec<(String, Vec<u8>)> {
+    directory_inventory(&baseline_dir(root))
+}
+
+#[test]
+fn unchanged_remote_context_carries_history_with_emitted_canonical_hashes() {
+    let dir = TempDir::new("remote-context-unchanged");
+    let home = TempDir::new("remote-context-unchanged-home");
+    let out = TempDir::new("remote-context-unchanged-out");
+    let stub = remote_inline_stub(REMOTE_INLINE_OLD);
+    let root = remote_inline_workspace(&dir, home.path(), stub.url());
+    remote_command(&root, home.path(), &["baseline"]);
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    let first = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_eq!(history_lines(&root), vec![first.clone()]);
+    dir.write(
+        "cluster/cluster.ridl",
+        &REMOTE_INLINE_CONSUMER.replace(
+            "signal reading: Envelope @10ms",
+            "signal reading: Envelope @10ms signal next: Envelope @10ms",
+        ),
+    );
+    remote_command(&root, home.path(), &["lock"]);
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    let current = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_eq!(compatible_of(out.path(), UNIT), vec![first.clone()]);
+    remote_command(&root, home.path(), &["baseline"]);
+    let history = vec![current, first.clone()];
+    assert_eq!(history_lines(&root), history);
+    let context = ridlc::baseline_context::read_context(
+        &baseline_dir(&root),
+        &ridlc::load_diff_side(
+            &mut ridl_core::RidlDatabase::default(),
+            &baseline_dir(&root),
+            &[],
+        )
+        .unwrap()
+        .packages,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(context.remote_units.len(), 1);
+    remote_command(&root, home.path(), &["baseline"]);
+    assert_eq!(
+        history_lines(&root),
+        history,
+        "unchanged enriched republishing keeps history"
+    );
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(compatible_of(out.path(), UNIT), vec![first]);
+}
+
+#[test]
+fn legacy_inline_context_warns_only_for_affected_unit_and_refuses_publication() {
+    let dir = TempDir::new("legacy-inline-context");
+    let home = TempDir::new("legacy-inline-context-home");
+    let out = TempDir::new("legacy-inline-context-out");
+    let stub = remote_inline_stub(REMOTE_INLINE_OLD);
+    let root = remote_inline_workspace(&dir, home.path(), stub.url());
+    remote_command(&root, home.path(), &["baseline"]);
+    dir.write("body/body.ridl", BODY_APPENDED);
+    remote_command(&root, home.path(), &["lock"]);
+    remote_command(&root, home.path(), &["baseline"]);
+    let body_history = history_lines_of(&root, "veh.body");
+    std::fs::remove_file(baseline_dir(&root).join("context.json")).unwrap();
+    let prior = baseline_inventory(&root);
+    let stderr = remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    assert!(
+        stderr.contains("warning:")
+            && stderr.contains("unit `veh.cluster`")
+            && stderr.contains("--repair-context")
+            && stderr.contains("--reset-history"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("unit `veh.body`"),
+        "unaffected units get no warning: {stderr}"
+    );
+    assert!(compatible_of(out.path(), UNIT).is_empty());
+    assert_eq!(compatible_of(out.path(), "veh.body"), body_history[1..]);
+    let (code, _, stderr) = remote_support::ridl(&root, home.path(), &["baseline"]);
+    assert_eq!(
+        code, 2,
+        "unknown evidence requires explicit recovery: {stderr}"
+    );
+    assert!(
+        stderr.contains("--repair-context") && stderr.contains("--reset-history"),
+        "{stderr}"
+    );
+    assert_eq!(
+        baseline_inventory(&root),
+        prior,
+        "refusal changes no baseline byte"
+    );
+    assert!(!root.join(".ridl/baseline.previous.2").exists());
+}
+
+#[test]
+fn remote_context_is_published_even_for_units_without_interfaces() {
+    let dir = TempDir::new("remote-context-no-interface");
+    let home = TempDir::new("remote-context-no-interface-home");
+    let stub = remote_inline_stub(REMOTE_INLINE_OLD);
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "{MANIFEST}\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    dir.write(
+        "types.typl",
+        "package veh.cluster\nimport veh.common.Reading\nstruct Envelope { reading: Reading }\n",
+    );
+    let root = dir.path();
+    remote_command(root, home.path(), &["baseline"]);
+    let side = ridlc::load_diff_side(
+        &mut ridl_core::RidlDatabase::default(),
+        &baseline_dir(root),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(side.remote_context.unwrap().packages.len(), 1);
+    assert!(!baseline_dir(root).join("veh.cluster.catalogs").exists());
+    remote_command(root, home.path(), &["baseline"]);
+}
+
+#[test]
+fn remote_pin_append_that_fits_padding_carries_the_actual_prior_emitted_hash() {
+    let dir = TempDir::new("remote-pin-padding");
+    let home = TempDir::new("remote-pin-padding-home");
+    let out = TempDir::new("remote-pin-padding-out");
+    let old_source = REMOTE_INLINE_OLD.replace("9223372036854775807", "4294967295");
+    let new_source = REMOTE_INLINE_GROWN.replace("9223372036854775807", "4294967295");
+    let old = remote_inline_stub(&old_source);
+    let root = remote_inline_workspace(&dir, home.path(), old.url());
+    remote_command(&root, home.path(), &["baseline"]);
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    let first = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_eq!(history_lines(&root), vec![first.clone()]);
+    let new = remote_inline_stub(&new_source);
+    remote_inline_workspace(&dir, home.path(), new.url());
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    let current = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(current, first, "the canonical remote declarations changed");
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        vec![first.clone()],
+        "equal aligned head size carries the actual old catalog hash"
+    );
+    remote_command(&root, home.path(), &["baseline"]);
+    assert_eq!(history_lines(&root), vec![current, first]);
+}
+
+#[test]
+fn proved_remote_inline_break_overrides_an_unchanged_catalog_hash() {
+    let dir = TempDir::new("remote-break-unchanged-hash");
+    let home = TempDir::new("remote-break-unchanged-hash-home");
+    let out = TempDir::new("remote-break-unchanged-hash-out");
+    let old = remote_inline_stub(REMOTE_INLINE_OLD);
+    let root = remote_inline_workspace(&dir, home.path(), old.url());
+    let source = |base: &str| {
+        format!(
+            "{}\nstruct Spare {{ reading: Reading }}\n",
+            base.replace(
+                "package veh.cluster",
+                "package veh.cluster\nimport veh.common.Reading"
+            )
+        )
+    };
+    dir.write("cluster/cluster.ridl", &source(BASE));
+    remote_command(&root, home.path(), &["baseline"]);
+    dir.write("cluster/cluster.ridl", &source(APPENDED));
+    remote_command(&root, home.path(), &["baseline"]);
+    let history = history_lines(&root);
+    assert_eq!(history.len(), 2);
+    let grown = remote_inline_stub(REMOTE_INLINE_GROWN);
+    remote_inline_workspace(&dir, home.path(), grown.url());
+    dir.write("cluster/cluster.ridl", &source(APPENDED));
+    remote_command(
+        &root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(
+        hex_of_bytes(&describe(out.path(), UNIT)["hash"]),
+        history[0],
+        "the changed remote is reached only by an unexposed struct"
+    );
+    assert!(
+        compatible_of(out.path(), UNIT).is_empty(),
+        "the proved per-unit podbuf break takes precedence over unchanged hash carry"
+    );
+    remote_command(&root, home.path(), &["baseline"]);
+    assert_eq!(history_lines(&root), history[..1]);
+}

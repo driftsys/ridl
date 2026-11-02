@@ -580,15 +580,31 @@ pub fn diff_refs_with_contexts(
     new_context: &[&Package],
     encodings: &[&str],
 ) -> Result<DiffReport, ContextError> {
-    let old_scope: Vec<_> = old.iter().chain(old_context).copied().collect();
-    let new_scope: Vec<_> = new.iter().chain(new_context).copied().collect();
-    let (mut remote, issues) = remote_inline::compare(old, &old_scope, &new_scope, encodings);
+    let (result, issues) =
+        diff_refs_with_contexts_partial(old, new, old_context, new_context, encodings);
     if encodings.contains(&"podbuf") && !issues.is_empty() {
         return Err(ContextError { issues });
     }
+    Ok(result)
+}
+
+/// Compares complete scopes while retaining independent missing-evidence issues.
+/// The report is not an affirmative compatibility judgment for any unit that
+/// owns or reaches an issue's consumer declaration. Such units require recovery;
+/// callers may use the report's proved verdicts for unaffected units.
+pub fn diff_refs_with_contexts_partial(
+    old: &[&Package],
+    new: &[&Package],
+    old_context: &[&Package],
+    new_context: &[&Package],
+    encodings: &[&str],
+) -> (DiffReport, Vec<ContextIssue>) {
+    let old_scope: Vec<_> = old.iter().chain(old_context).copied().collect();
+    let new_scope: Vec<_> = new.iter().chain(new_context).copied().collect();
+    let (mut remote, issues) = remote_inline::compare(old, &old_scope, &new_scope, encodings);
     let mut result = diff_refs_scoped(old, new, old_context, new_context, encodings);
     result.changes.append(&mut remote);
-    Ok(report(result.changes))
+    (report(result.changes), issues)
 }
 
 fn diff_refs_scoped(

@@ -280,12 +280,13 @@ interface VehicleStatus {
     assert_eq!(
         written,
         vec![
+            "context.json".to_string(),
             "veh.cluster.catalogs".to_string(),
             "veh.cluster.ir.json".to_string(),
             "veh.common.ir.json".to_string(),
         ],
         "two packages produce two snapshot files, and the one unit with an interface \
-         shape produces one catalog history",
+         shape produces one catalog history, beside the versioned context",
     );
 }
 
@@ -2297,6 +2298,8 @@ fn baseline_drops_a_snapshot_whose_package_is_gone() {
     // The rename below leaves the package's unit, which the gate refuses for
     // a number the lock allocated (RIDL-412). The snapshot is rewritten as a
     // pre-lock one (number 0), which the gate does not hold to a number.
+    // This pre-lock fixture predates the context artifact and its fingerprints.
+    std::fs::remove_file(root.join(".ridl/baseline/context.json")).expect("make a legacy baseline");
     let stale = root.join(".ridl/baseline/veh.cluster.ir.json");
     let text = std::fs::read_to_string(&stale).expect("read the published snapshot");
     std::fs::write(&stale, text.replace("\"number\": 1", "\"number\": 0"))
@@ -2315,6 +2318,10 @@ fn baseline_drops_a_snapshot_whose_package_is_gone() {
     assert!(
         baseline.join("veh.dash.ir.json").is_file(),
         "the new package is published",
+    );
+    assert!(
+        baseline.join("context.json").is_file(),
+        "the replacement is enriched"
     );
     assert!(
         !baseline.join("veh.cluster.ir.json").exists(),

@@ -1,7 +1,4 @@
-//! The `<unit>.catalogs` files `ridl baseline` publishes beside the snapshots:
-//! for every unit with an interface shape, the catalog hash of the baseline
-//! being published, then the hashes of the earlier baselines a consumer built
-//! against still works with, back to the last breaking change.
+//! Per-unit catalog histories, judged with each baseline's own remote evidence.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -9,175 +6,129 @@ use std::process::ExitCode;
 
 use ridl_core::RidlDatabase;
 use ridl_core::catalog_history::{CatalogHistory, FILE_SUFFIX, parse};
-use ridl_diff::Verdict;
-use ridl_ir::catalog_hash::catalog_hash;
+use ridl_diff::{ContextIssue, Verdict};
+use ridl_ir::catalog_hash::{catalog_hash, reachable_decls};
 use ridl_ir::v2::{Package, unit_of};
+use ridlc::baseline_context::RemoteContext;
 
 use crate::{default_baseline_dir, report_diff_side_error};
 
-/// The earlier catalogs each unit of the workspace at `entry` is compatible
-/// with, per unit name, for `ridl build` to write into the unit's descriptor
-/// and codegen request. `checked`, `std` and `remotes` are the build's own
-/// checked packages, `ridl.std` package and the checked packages of its
-/// remote units, so the workspace is not compiled again. `std` and `remotes`
-/// are the context of the diff ([`judged_diff`]); the published snapshots
-/// carry no remote package, so the remotes of this compile stand for both
-/// sides.
-///
-/// The chain is read from `.ridl/baseline/` at the workspace root
-/// ([`default_baseline_dir`]). With no such directory, one holding no
-/// `.ir.json` snapshot, or one holding no `<unit>.catalogs` file, there is no
-/// history to carry and no unit has a list, as `ridl check` treats a missing
-/// baseline; the snapshots are then not loaded. Otherwise the published
-/// snapshots are compared with the workspace, and each unit with an interface
-/// shape, a published snapshot and a published `<unit>.catalogs` file gets the
-/// file's hashes less the unit's current catalog hash when the unit's verdict
-/// is compatible or identical, or when the current catalog hash is the file's
-/// first hash: the catalog did not change, so every hash the file lists still
-/// applies. Otherwise the unit's list is empty. The verdict is judged by
-/// [`judged_diff`], for the root manifest's encodings.
-///
-/// A history is carried only when its first hash is the hash recomputed from
-/// the published snapshots of that unit, so a history that does not describe
-/// the snapshots beside it — a partially hand-edited baseline — restarts the
-/// chain rather than carrying a hash that may reach past a breaking change
-/// (driftsys/ridl#808). This is a check on the pair, not a recorded value:
-/// the hashes carried are still read from the file and never recomputed.
-///
-/// The hashes are read from the file and never recomputed from a snapshot; a
-/// file that cannot be read is an error (exit 2), and so is a baseline that
-/// cannot be loaded once a history file exists.
+/// Computes compatible hashes from the build's own compile. Historical scopes
+/// never borrow current remote packages, including during canonical hashing.
 pub(crate) fn compatible_catalogs(
     db: &mut RidlDatabase,
     entry: &Path,
     checked: &[&Package],
     std: &Package,
     names_imports: bool,
-    remotes: &[&Package],
+    current: &RemoteContext,
 ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, ExitCode> {
     let published = default_baseline_dir(entry);
     let mut compatible = BTreeMap::new();
     if !holds_history_and_snapshot(&published)? {
         return Ok(compatible);
     }
-    let old = ridlc::load_diff_side(db, &published, &[])
-        .map_err(report_diff_side_error)?
-        .packages;
-    let old_refs: Vec<&Package> = old.iter().collect();
-    let context: Vec<&Package> = std::iter::once(std)
-        .chain(remotes.iter().copied())
+    let old = ridlc::load_diff_side(db, &published, &[]).map_err(report_diff_side_error)?;
+    let old_refs: Vec<_> = old.packages.iter().collect();
+    let old_context = ridlc::diff_side_context(&old);
+    let old_context: Vec<_> = old_context.iter().collect();
+    let new_context: Vec<_> = std::iter::once(std)
+        .chain(current.packages.iter())
         .collect();
-    let report = judged_diff(entry, &old_refs, checked, &context);
-    let verdicts = ridl_diff::UnitVerdicts::from_refs(&report, &old_refs, checked);
-    let scope = ridlc::catalog_scope(checked, Some(std));
-    let published_scope = ridlc::catalog_scope(&old_refs, Some(std));
+    let judgment = Judgment::new(entry, &old_refs, checked, &old_context, &new_context);
+    let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &old_refs, checked);
+    let scope = complete_scope(checked, std, &current.packages);
+    let published_scope = complete_scope(&old_refs, std, &old.remotes);
     for unit in shaped_units(checked.iter().copied()) {
-        // A unit with no published snapshot has no earlier baseline, so a
-        // history file left under its name is not read, whatever the verdict.
-        if !old.iter().any(|package| unit_of(package) == unit) {
+        if !old.packages.iter().any(|package| unit_of(package) == unit) {
             continue;
         }
         let Some(history) = read_history_if_present(&published, unit)? else {
             continue;
         };
+        let unknown = judgment.unknown(unit, &published_scope, &scope);
+        if unknown {
+            eprintln!(
+                "warning: cannot establish podbuf compatibility for unit `{unit}`: historical inline context is missing; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
+            );
+        }
         let current_hash = catalog_hash(unit, &scope);
-        let describes_published =
-            history.hashes.first() == Some(&catalog_hash(unit, &published_scope));
-        let carried = describes_published
+        let carried = !unknown
+            && !judgment.podbuf_break(unit, &old_refs, checked)
+            && history.hashes.first() == Some(&catalog_hash(unit, &published_scope))
             && (history.hashes.first() == Some(&current_hash)
-                || matches!(
-                    verdicts.verdict(unit),
-                    Verdict::Compatible | Verdict::Identical
-                ));
-        let hashes = if carried {
-            history
-                .hashes
-                .into_iter()
-                .filter(|hash| *hash != current_hash)
-                .collect()
-        } else {
-            Vec::new()
-        };
-        compatible.insert(unit.to_string(), hashes);
+                || verdicts.verdict(unit) != Verdict::Breaking);
+        compatible.insert(
+            unit.to_string(),
+            if carried {
+                history
+                    .hashes
+                    .into_iter()
+                    .filter(|hash| *hash != current_hash)
+                    .collect()
+            } else {
+                Vec::new()
+            },
+        );
     }
     if names_imports && !compatible.is_empty() {
         eprintln!(
-            "note: the workspace names `[imports]`; a remote unit's catalog is published by its \
-             owner, so a unit's list covers the workspace's own packages only"
+            "note: the workspace names `[imports]`; a remote unit's catalog is published by its owner, so a unit's list covers the workspace's own packages only"
         );
     }
     Ok(compatible)
 }
 
-/// Writes `staging/<unit>.catalogs` for every unit of the snapshots `fresh`
-/// (the ones in `staging`) that has at least one interface shape. The
-/// verdicts are judged by [`judged_diff`] for the root manifest of the
-/// workspace at `entry`, as [`compatible_catalogs`] judges them, so
-/// `ridl baseline` and `ridl build` give one verdict. `remotes` are the
-/// checked packages of the remote units of the compile that wrote `fresh`,
-/// passed with `ridl.std` as the diff's context: neither snapshot set carries
-/// them, and a type a unit reaches in one must resolve for the podbuf rule to
-/// lay the unit's heads out.
-///
-/// Each file holds the unit's catalog hash, computed over `fresh` as
-/// `ridl build --emit catalog` computes it. When the unit's verdict between
-/// the snapshots `old` (the ones in `published`) and `fresh` is compatible or
-/// identical, or when the new catalog hash is the first hash of
-/// `published/<unit>.catalogs` (the catalog did not change), the hashes of
-/// that file follow, read as they are and never recomputed from a snapshot.
-/// Otherwise the chain starts again from the one new hash. A hash is listed
-/// once.
-///
-/// The file is carried only when its first hash is the hash recomputed from
-/// `old` for that unit, so a history that does not describe the snapshots
-/// beside it — a partially hand-edited baseline — restarts the chain rather
-/// than carrying a hash that may reach past a breaking change
-/// (driftsys/ridl#808).
-///
-/// A unit with no snapshot in `old` has nothing to compare against, so it
-/// starts a chain, and a history file left under its name is not read. A
-/// published history file of a unit with a published snapshot that cannot be
-/// read is an error (exit 2), and the caller publishes nothing.
+/// Stages complete canonical chains. Returns whether a proved break requires
+/// retaining the prior baseline. Missing inline evidence requires explicit
+/// repair or reset and refuses normal publication before anything is replaced.
 pub(crate) fn write_catalog_histories(
     staging: &Path,
     published: &Path,
     old: &[Package],
     fresh: &[Package],
-    remotes: &[Package],
+    current: &RemoteContext,
     entry: &Path,
-) -> Result<(), ExitCode> {
+) -> Result<bool, ExitCode> {
     let std = ridlc::std_ir();
-    let fresh_refs: Vec<&Package> = fresh.iter().collect();
-    let old_refs: Vec<&Package> = old.iter().collect();
-    let context: Vec<&Package> = std::iter::once(&std).chain(remotes.iter()).collect();
-    let report = (!old.is_empty()).then(|| judged_diff(entry, &old_refs, &fresh_refs, &context));
-    let verdicts = report
+    let old_remote = crate::baseline::read_context(published, old)?;
+    let old_remote = old_remote.as_ref().map(|context| context.remote_context());
+    let old_remotes = old_remote
         .as_ref()
-        .map(|report| ridl_diff::UnitVerdicts::new(report, old, fresh));
-    let scope = ridlc::catalog_scope(&fresh_refs, Some(&std));
-    let published_scope = ridlc::catalog_scope(&old_refs, Some(&std));
+        .map_or(&[][..], |context| context.packages.as_slice());
+    let old_refs: Vec<_> = old.iter().collect();
+    let fresh_refs: Vec<_> = fresh.iter().collect();
+    let old_context: Vec<_> = std::iter::once(&std).chain(old_remotes.iter()).collect();
+    let new_context: Vec<_> = std::iter::once(&std)
+        .chain(current.packages.iter())
+        .collect();
+    let judgment = Judgment::new(entry, &old_refs, &fresh_refs, &old_context, &new_context);
+    let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &old_refs, &fresh_refs);
+    let scope = complete_scope(&fresh_refs, &std, &current.packages);
+    let published_scope = complete_scope(&old_refs, &std, old_remotes);
+    let mut preserve = false;
     for unit in shaped_units(fresh.iter()) {
-        // A unit with no published snapshot has no earlier baseline, so a
-        // history file left under its name is not carried, whatever the verdict.
         let published_before = old.iter().any(|package| unit_of(package) == unit);
-        // The published file is read whatever the verdict, so a file that
-        // cannot be read refuses the publication even when the chain restarts.
         let earlier = if published_before {
             read_history(published, unit)?
         } else {
             CatalogHistory::default()
         };
+        if published_before && judgment.unknown(unit, &published_scope, &scope) {
+            eprintln!(
+                "error: cannot publish unit `{unit}`: historical inline context is missing; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
+                published.display(),
+                published.display()
+            );
+            return Err(ExitCode::from(2));
+        }
+        let breaking = verdicts.verdict(unit) == Verdict::Breaking;
         let new_hash = catalog_hash(unit, &scope);
-        let describes_published = published_before
-            && earlier.hashes.first() == Some(&catalog_hash(unit, &published_scope));
-        let carried = describes_published
-            && (earlier.hashes.first() == Some(&new_hash)
-                || verdicts.as_ref().is_some_and(|verdicts| {
-                    matches!(
-                        verdicts.verdict(unit),
-                        Verdict::Compatible | Verdict::Identical
-                    )
-                }));
+        let carried = published_before
+            && !judgment.podbuf_break(unit, &old_refs, &fresh_refs)
+            && earlier.hashes.first() == Some(&catalog_hash(unit, &published_scope))
+            && (earlier.hashes.first() == Some(&new_hash) || !breaking);
+        preserve |= published_before && breaking && !carried;
         let mut history = if carried {
             earlier
         } else {
@@ -186,32 +137,81 @@ pub(crate) fn write_catalog_histories(
         history.push_front(new_hash);
         write_history(staging, unit, &history)?;
     }
-    Ok(())
+    Ok(preserve)
 }
 
-/// The diff from the snapshots `old` to `new`, with `context` — `ridl.std`
-/// and the remote packages the compile of `new` resolved — as context, judged
-/// for the root manifest's encodings of the workspace at `entry`
-/// ([`crate::root_manifest_encodings`]): the one report both catalog history
-/// verdicts read. Under `podbuf`, a podbuf break makes the unit's verdict
-/// breaking as any other break does; the heads of both sides are laid out
-/// with the context, so a struct that reaches a remote type has a head on
-/// the old side too.
-///
-/// Only this step, from the latest published snapshots to `new`, is judged
-/// for the current encodings. A snapshot does not record encodings, so the
-/// step from a baseline published before `podbuf` was listed is judged by the
-/// podbuf rules; the hashes the history carried before then were judged
-/// without them and stay in it.
-fn judged_diff(
-    entry: &Path,
-    old: &[&Package],
-    new: &[&Package],
-    context: &[&Package],
-) -> ridl_diff::DiffReport {
-    let encodings = crate::root_manifest_encodings(entry);
-    let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
-    ridl_diff::diff_refs_with(old, new, context, &encodings)
+fn complete_scope<'a>(
+    local: &[&'a Package],
+    std: &'a Package,
+    remotes: &'a [Package],
+) -> Vec<&'a Package> {
+    let packages: Vec<_> = local.iter().copied().chain(remotes.iter()).collect();
+    ridlc::catalog_scope(&packages, Some(std))
+}
+
+struct Judgment {
+    report: ridl_diff::DiffReport,
+    podbuf_report: ridl_diff::DiffReport,
+    issues: Vec<ContextIssue>,
+}
+impl Judgment {
+    fn new(
+        entry: &Path,
+        old: &[&Package],
+        new: &[&Package],
+        old_context: &[&Package],
+        new_context: &[&Package],
+    ) -> Self {
+        let encodings = crate::root_manifest_encodings(entry);
+        let encodings: Vec<_> = encodings.iter().map(String::as_str).collect();
+        let (report, issues) = ridl_diff::diff_refs_with_contexts_partial(
+            old,
+            new,
+            old_context,
+            new_context,
+            &encodings,
+        );
+        let mut podbuf_report = report.clone();
+        podbuf_report.changes.retain(|change| {
+            matches!(
+                change.category,
+                ridl_diff::Category::PodbufInlineAppend
+                    | ridl_diff::Category::PodbufRemoteInlineGrowth
+                    | ridl_diff::Category::PodbufWidthChange
+                    | ridl_diff::Category::PodbufStrictEnumAppend
+            )
+        });
+        Self {
+            report,
+            podbuf_report,
+            issues: if encodings.contains(&"podbuf") {
+                issues
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    fn podbuf_break(&self, unit: &str, old: &[&Package], new: &[&Package]) -> bool {
+        ridl_diff::UnitVerdicts::from_refs(&self.podbuf_report, old, new).verdict(unit)
+            == Verdict::Breaking
+    }
+
+    fn unknown(&self, unit: &str, old: &[&Package], new: &[&Package]) -> bool {
+        let reached_old = reachable_decls(unit, old);
+        let reached_new = reachable_decls(unit, new);
+        self.issues.iter().any(|issue| {
+            let mut path = issue.path.split('/');
+            let package = path.next().unwrap_or_default();
+            let declaration = path.next().map(|name| format!("{package}.{name}"));
+            old.iter()
+                .chain(new)
+                .any(|p| p.name == package && unit_of(p) == unit)
+                || declaration.is_some_and(|name| {
+                    reached_old.contains_key(&name) || reached_new.contains_key(&name)
+                })
+        })
+    }
 }
 
 /// Whether `dir` holds at least one entry named `<unit>.catalogs` and at
