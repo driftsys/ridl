@@ -2218,3 +2218,50 @@ fn proved_remote_inline_break_overrides_an_unchanged_catalog_hash() {
     remote_command(&root, home.path(), &["baseline"]);
     assert_eq!(history_lines(&root), history[..1]);
 }
+
+#[test]
+fn legacy_type_only_podbuf_unit_requires_explicit_context_recovery() {
+    let dir = TempDir::new("legacy-type-only-podbuf");
+    let home = TempDir::new("legacy-type-only-podbuf-home");
+    let stub = remote_inline_stub(REMOTE_INLINE_OLD);
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "{PODBUF_MANIFEST}\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    dir.write(
+        "types.typl",
+        "package veh.cluster\nimport veh.common.Reading\nstruct Envelope { reading: Reading }\n",
+    );
+    let root = dir.path();
+    remote_command(root, home.path(), &["baseline"]);
+    assert!(
+        baseline_dir(root).join("context.json").is_file(),
+        "first publication with complete current evidence is allowed"
+    );
+    assert!(
+        !baseline_dir(root).join("veh.cluster.catalogs").exists(),
+        "a type-only unit has no catalog history"
+    );
+    std::fs::remove_file(baseline_dir(root).join("context.json")).unwrap();
+    let prior = baseline_inventory(root);
+    let (code, _, stderr) = remote_support::ridl(root, home.path(), &["baseline"]);
+    assert_eq!(
+        code, 2,
+        "type-only consumers still require historical inline evidence: {stderr}"
+    );
+    assert!(
+        stderr.contains("unit `veh.cluster`")
+            && stderr.contains("--repair-context")
+            && stderr.contains("--reset-history"),
+        "{stderr}"
+    );
+    assert_eq!(
+        baseline_inventory(root),
+        prior,
+        "refusal preserves every prior baseline byte"
+    );
+    assert!(!root.join(".ridl/baseline.previous.1").exists());
+}

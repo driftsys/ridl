@@ -79,8 +79,8 @@ pub(crate) fn compatible_catalogs(
     Ok(compatible)
 }
 
-/// Stages complete canonical chains. Returns whether a proved break requires
-/// retaining the prior baseline. Missing inline evidence requires explicit
+/// Stages complete canonical chains. Returns whether any published unit has
+/// a proved break, including units without an interface. Missing inline evidence requires explicit
 /// repair or reset and refuses normal publication before anything is replaced.
 pub(crate) fn write_catalog_histories(
     staging: &Path,
@@ -106,15 +106,9 @@ pub(crate) fn write_catalog_histories(
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &old_refs, &fresh_refs);
     let scope = complete_scope(&fresh_refs, &std, &current.packages);
     let published_scope = complete_scope(&old_refs, &std, old_remotes);
-    let mut preserve = false;
-    for unit in shaped_units(fresh.iter()) {
-        let published_before = old.iter().any(|package| unit_of(package) == unit);
-        let earlier = if published_before {
-            read_history(published, unit)?
-        } else {
-            CatalogHistory::default()
-        };
-        if published_before && judgment.unknown(unit, &published_scope, &scope) {
+    let published_units: std::collections::BTreeSet<_> = old.iter().map(unit_of).collect();
+    for unit in &published_units {
+        if judgment.unknown(unit, &published_scope, &scope) {
             eprintln!(
                 "error: cannot publish unit `{unit}`: historical inline context is missing; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
                 published.display(),
@@ -122,13 +116,23 @@ pub(crate) fn write_catalog_histories(
             );
             return Err(ExitCode::from(2));
         }
+    }
+    let preserve = published_units
+        .iter()
+        .any(|unit| verdicts.verdict(unit) == Verdict::Breaking);
+    for unit in shaped_units(fresh.iter()) {
+        let published_before = old.iter().any(|package| unit_of(package) == unit);
+        let earlier = if published_before {
+            read_history(published, unit)?
+        } else {
+            CatalogHistory::default()
+        };
         let breaking = verdicts.verdict(unit) == Verdict::Breaking;
         let new_hash = catalog_hash(unit, &scope);
         let carried = published_before
             && !judgment.podbuf_break(unit, &old_refs, &fresh_refs)
             && earlier.hashes.first() == Some(&catalog_hash(unit, &published_scope))
             && (earlier.hashes.first() == Some(&new_hash) || !breaking);
-        preserve |= published_before && breaking && !carried;
         let mut history = if carried {
             earlier
         } else {
@@ -288,4 +292,59 @@ fn write_history(staging: &Path, unit: &str, history: &CatalogHistory) -> Result
         eprintln!("error: cannot write {}: {err}", path.display());
         ExitCode::from(2)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ridl_ir::v2::{Backing, PrimitiveType, TypeDef, backing, decl};
+
+    #[test]
+    fn a_proved_type_only_break_requires_preserving_prior_artifacts() {
+        let root = std::env::temp_dir().join(format!(
+            "ridl-type-only-preservation-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(root.join("published")).unwrap();
+        std::fs::create_dir(root.join("staging")).unwrap();
+        std::fs::write(
+            root.join("ridl.toml"),
+            "[package]\nname = \"types\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let fresh = Package {
+            name: "types".to_string(),
+            unit: "types".to_string(),
+            ..Default::default()
+        };
+        let mut old = fresh.clone();
+        old.decls.push(ridl_ir::v2::Decl {
+            name: "Value".to_string(),
+            kind: Some(decl::Kind::TypeDef(TypeDef {
+                backing: Some(Backing {
+                    kind: Some(backing::Kind::Primitive(PrimitiveType::Integer as i32)),
+                }),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        let preserve = write_catalog_histories(
+            &root.join("staging"),
+            &root.join("published"),
+            &[old],
+            &[fresh],
+            &RemoteContext {
+                packages: Vec::new(),
+                pins: BTreeMap::new(),
+            },
+            &root,
+        )
+        .unwrap();
+        assert!(
+            preserve,
+            "a removed declaration is a proved break even without an interface"
+        );
+        assert_eq!(std::fs::read_dir(root.join("staging")).unwrap().count(), 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

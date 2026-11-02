@@ -146,16 +146,30 @@ fn replace_with(
     })();
     if let Err(commit_error) = commit {
         let mut recovery_errors = Vec::new();
+        let mut retained_new = std::collections::BTreeSet::new();
         for name in installed.into_iter().rev() {
             let from = out.join(name);
             let to = staging.join(name);
             if let Err(err) = rename(&from, &to) {
+                retained_new.insert(name);
                 recovery_errors.push(format!("{} -> {}: {err}", from.display(), to.display()));
             }
         }
         for name in moved_old.into_iter().rev() {
             let from = backup.join(name);
             let to = out.join(name);
+            // A failed retraction leaves new bytes at the destination. A
+            // same-name restore could overwrite them on some platforms.
+            if retained_new.contains(name) {
+                recovery_errors.push(format!(
+                    "pending restore {} -> {}: first retract the retained new entry {} -> {}",
+                    from.display(),
+                    to.display(),
+                    to.display(),
+                    staging.join(name).display()
+                ));
+                continue;
+            }
             if let Err(err) = rename(&from, &to) {
                 recovery_errors.push(format!("{} -> {}: {err}", from.display(), to.display()));
             }
@@ -395,6 +409,63 @@ mod tests {
             inventory(&fixture.stage),
             retained,
             "retry allocation preserves recovery evidence"
+        );
+    }
+
+    #[test]
+    fn failed_new_file_retraction_does_not_overwrite_its_recovery_bytes() {
+        let fixture = Fixture::new();
+        let backup = fixture.root.join("baseline.previous.1");
+        let mut attempted_same_name_restore = false;
+        let error = replace_with(&fixture.stage, &fixture.out, |from, to| {
+            if from == fixture.stage.join("new.ir.json") {
+                return Err(std::io::Error::other("commit failure"));
+            }
+            if from == fixture.out.join("a.ir.json") && to == fixture.stage.join("a.ir.json") {
+                return Err(std::io::Error::other("retraction failure"));
+            }
+            if from == backup.join("a.ir.json") && to == fixture.out.join("a.ir.json") {
+                attempted_same_name_restore = true;
+            }
+            std::fs::rename(from, to)
+        })
+        .unwrap_err();
+        assert_eq!(
+            std::fs::read(fixture.out.join("a.ir.json")).unwrap(),
+            b"new a",
+            "the still-installed new bytes must not be overwritten during restoration"
+        );
+        assert_eq!(
+            std::fs::read(backup.join("a.ir.json")).unwrap(),
+            b"old a",
+            "the original bytes remain in the backup until the new entry is retracted"
+        );
+        assert!(
+            !attempted_same_name_restore,
+            "a pending new entry blocks its same-name old restore"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("retraction failure") && message.contains("pending restore"),
+            "{message}"
+        );
+        for path in [
+            fixture.out.join("a.ir.json"),
+            fixture.stage.join("a.ir.json"),
+            backup.join("a.ir.json"),
+        ] {
+            assert!(
+                message.contains(path.to_str().unwrap()),
+                "the recovery moves name all retained paths: {message}"
+            );
+        }
+        assert_eq!(
+            std::fs::read(fixture.stage.join("new.ir.json")).unwrap(),
+            b"new unit"
+        );
+        assert_eq!(
+            std::fs::read(fixture.out.join("context.json")).unwrap(),
+            b"old context"
         );
     }
 
