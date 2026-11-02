@@ -824,8 +824,17 @@ still reported.
   added to or removed from a distribution — a component moved from one
   distribution to another is both — is listed under this heading, and its
   backend keys are compared with an empty side.
-- Which of these changes are breaking, and for whom, is decided by the stability
-  policy ([IR specification](ir-specification.md)), not here.
+- A locked instance number (§7) that differs between the two sides is listed
+  under a third heading, **instance number changed**, and is **breaking**: a
+  client built against the old number addresses another instance, or none. So is
+  a new instance that takes a locked number the old side gave to another
+  instance that is still present. A rename that keeps the number
+  (`ridl lock --rename`) is not listed, because a client built before the rename
+  sends the same number to the same instance. A provisional old number is never
+  listed, and an instance on one side only is not listed for its own number.
+  This is the one system heading that sets the verdict and the exit code.
+- Which of the other changes are breaking, and for whom, is decided by the
+  stability policy ([IR specification](ir-specification.md)), not here.
 
 ---
 

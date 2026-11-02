@@ -185,20 +185,23 @@ nothing.
    RSDL-7xx error never publishes a baseline.
 
 9. **`ridl diff` compares every package's contracts, then the system, and the
-   system changes carry no verdict** (plan decisions P-B5 and P-B9). The
-   contract comparison is unchanged: every package of each side, by the ridl
+   system changes carry no verdict, except one** (plan decisions P-B5 and P-B9).
+   The contract comparison is unchanged: every package of each side, by the ridl
    categories, and they alone decide the verdict and the exit code. Restricting
    it to the closure's reachable contracts would hide a breaking change to a
    published package this workspace does not use. The rsdl changes are listed
    after them under the two rsdl §14 headings — "placement changed" and
    "composition changed" — as a `SystemHeading` in `ridl_diff::system`, beside
    `Category` and never inside it, because a `Category` carries a verdict and
-   these do not; `--explain` does not list them. The rsdl reference §14 owns the
-   compared system facts, including the registry's reported attributes and added
-   or removed distributions. **Both sides must be source trees:** only a
-   compiled workspace carries a lowered system, an `.ir.json` snapshot carries
-   none, so `ridl diff .ridl/baseline .` lists no system change rather than
-   reporting the whole system as added.
+   these do not; `--explain` does not list them. The one exception is the
+   heading "instance number changed" (rsdl §14): a changed locked instance
+   number carries the verdict `breaking`, which enters the report verdict and
+   the exit code. The rsdl reference §14 owns the compared system facts,
+   including the registry's reported attributes and added or removed
+   distributions. **Both sides must be source trees:** only a compiled workspace
+   carries a lowered system, an `.ir.json` snapshot carries none, so
+   `ridl diff .ridl/baseline .` lists no system change rather than reporting the
+   whole system as added.
 
 10. **The book holds exactly one `system` fence** (plan decision P-B3). The
     book-example harness stages the whole book as one workspace and now compiles
