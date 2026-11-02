@@ -592,7 +592,8 @@ fn a_link_missing_a_part_is_an_internal_error() {
         clear(&mut system.deployments[0].links[0]);
         let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
         assert!(
-            matches!(&error, DeploymentLowerError::Internal(text) if text.contains(part)),
+            matches!(&error, DeploymentLowerError::Internal(text)
+                if text.contains(&format!("has no {part}"))),
             "{part}: {error:?}"
         );
     }

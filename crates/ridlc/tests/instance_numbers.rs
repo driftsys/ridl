@@ -186,7 +186,7 @@ fn the_lock_changes_no_catalog_hash() {
 /// The corpus entry with a fourth member, package `instances`, copied into a
 /// temporary directory. With `with_system` false the entry's `system` file is
 /// left out.
-fn entry_with_instances_package(with_system: bool) -> tempfile::TempDir {
+fn entry_with_instances_package(package: &str, with_system: bool) -> tempfile::TempDir {
     let entry = tempfile::tempdir().unwrap();
     copy_dir(&corpus_entry(), entry.path());
     if !with_system {
@@ -200,12 +200,12 @@ fn entry_with_instances_package(with_system: bool) -> tempfile::TempDir {
     std::fs::create_dir(entry.path().join("inst")).unwrap();
     std::fs::write(
         entry.path().join("inst/ridl.toml"),
-        "[package]\nname = \"instances\"\nversion = \"1.0.0\"\n",
+        format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
     )
     .unwrap();
     std::fs::write(
         entry.path().join("inst/types.typl"),
-        "package instances\n\ntype Flag: boolean\n",
+        format!("package {package}\n\ntype Flag: boolean\n"),
     )
     .unwrap();
     entry
@@ -213,7 +213,7 @@ fn entry_with_instances_package(with_system: bool) -> tempfile::TempDir {
 
 #[test]
 fn a_package_named_instances_is_refused_with_a_system() {
-    let entry = entry_with_instances_package(true);
+    let entry = entry_with_instances_package("instances", true);
     let out = tempfile::tempdir().unwrap();
     let output = build(entry.path(), out.path(), "rust");
     assert_eq!(output.status.code(), Some(1));
@@ -228,11 +228,30 @@ fn a_package_named_instances_is_refused_with_a_system() {
     );
 }
 
+/// The refusal covers every package whose first segment is `instances`, not
+/// only the package named `instances`.
+#[test]
+fn a_package_starting_with_instances_is_refused_with_a_system() {
+    let entry = entry_with_instances_package("instances.extra", true);
+    let out = tempfile::tempdir().unwrap();
+    let output = build(entry.path(), out.path(), "rust");
+    assert_eq!(output.status.code(), Some(1));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        text.contains("package `instances.extra` already uses that module name"),
+        "{text}"
+    );
+}
+
 /// The refusal is tied to the `instances` module, which only a workspace
 /// that declares a system has: without one, package `instances` builds.
 #[test]
 fn a_package_named_instances_builds_without_a_system() {
-    let entry = entry_with_instances_package(false);
+    let entry = entry_with_instances_package("instances", false);
     let out = tempfile::tempdir().unwrap();
     let output = build(entry.path(), out.path(), "rust");
     assert!(
