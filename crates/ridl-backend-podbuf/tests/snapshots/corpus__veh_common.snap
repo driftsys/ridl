@@ -101,14 +101,17 @@ static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h,
 
 #endif
 
+/* strict: a value outside these constants is not valid */
 #define VEH_COMMON_GEAR_POSITION_PARK 0
 #define VEH_COMMON_GEAR_POSITION_DRIVE 1
 #define VEH_COMMON_GEAR_POSITION_REVERSE 2
 #define VEH_COMMON_GEAR_POSITION_NEUTRAL 3
+/* strict: a value outside these constants is not valid */
 #define VEH_COMMON_WARNING_LOW_FUEL 0
 #define VEH_COMMON_WARNING_CHECK_ENGINE 1
 #define VEH_COMMON_WARNING_DOOR_OPEN 2
 #define VEH_COMMON_WARNING_SEATBELT 3
+/* strict: a bit outside these constants is not valid */
 #define VEH_COMMON_WARNING_FLAGS_LOW_FUEL (UINT64_C(1) << 0)
 #define VEH_COMMON_WARNING_FLAGS_CHECK_ENGINE (UINT64_C(1) << 1)
 #define VEH_COMMON_WARNING_FLAGS_DOOR_OPEN (UINT64_C(1) << 2)

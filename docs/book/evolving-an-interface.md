@@ -174,6 +174,8 @@ common cases:
   send a value the new reader refuses.
 - **Compatible, for an `open` declaration**: an enum value or an enum-set flag
   appended (no category of its own: the append is a compatible `decl_added`),
+  under every encoding, podbuf included, when the podbuf integer of the
+  declaration stays the same (the next item gives the case where it changes),
   and the `open` keyword gained (`enum_opened`). Opening is a source break for
   Rust callers: the generated enum gains an unknown variant and
   `#[non_exhaustive]`, so a `match` over it needs a wildcard arm.

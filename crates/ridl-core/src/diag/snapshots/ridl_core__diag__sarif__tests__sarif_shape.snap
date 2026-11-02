@@ -911,15 +911,6 @@ expression: log
               }
             },
             {
-              "id": "RIDL-158",
-              "shortDescription": {
-                "text": "open enum or enum set in a package that podbuf encodes"
-              },
-              "defaultConfiguration": {
-                "level": "error"
-              }
-            },
-            {
               "id": "RIDL-201",
               "shortDescription": {
                 "text": "stream `<T>` on a `signal` or `event` payload"
@@ -1869,7 +1860,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 183,
+          "ruleIndex": 182,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

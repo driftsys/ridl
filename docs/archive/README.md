@@ -759,7 +759,8 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), which restates
   the design as decisions corrected to the code and lists where it departs from
   the design, and [the podbuf codec design record](../design/podbuf-codec.md).
-  Its plan stays in `docs/wip/` until Tasks 13 and 14 are built.
+  Its plan, [2026-10-24-podbuf-plan.md](2026-10-24-podbuf-plan.md), was archived
+  on 2026-11-02, once the open enums of podbuf were built (driftsys/ridl#1168).
 
 - **2026-10-30-size-rules-plan.md** — the plan for the code of the ADR-0030
   amendments of 2026-10-28 and 2026-10-30: `ridl_core::limits`, the `ridlc` size
