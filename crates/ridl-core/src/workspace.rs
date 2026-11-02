@@ -46,6 +46,7 @@ use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 #[cfg(feature = "fetch")]
 use crate::fetch::{Frozen, detached, materialize_imports};
+use crate::instance_lock;
 use crate::interface_lock;
 use crate::lint::{LintLevels, LintScopes};
 #[cfg(feature = "fetch")]
@@ -53,7 +54,9 @@ use crate::lock::{read_lockfile, write_lockfile};
 use crate::manifest::{
     BackendTable, Limits, Manifest, ManifestKind, TimingDefaults, parse_manifest,
 };
-use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
+use crate::package::{
+    InstanceLockFile, Package, PackageLock, PackageOrigin, Workspace, package_declarations,
+};
 
 /// One unit's `[limits]` table and the manifest it was read from. A unit with
 /// no `[limits]` table has no [`UnitLimits`].
@@ -127,6 +130,14 @@ pub struct LoadedWorkspace {
     /// its name is here under its name; the second key draws MANI-105 and
     /// binds nothing.
     pub remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The `instances.lock` beside the root manifest, or beside the bare
+    /// source file in single-file mode (rsdl §7). `None` when the file is
+    /// absent, and when it is malformed, which is RSDL-315 in `diagnostics`.
+    pub instance_lock: Option<InstanceLockFile>,
+    /// The directory `instance_lock` is read from, and `ridl lock` is given:
+    /// the root manifest's directory, or the bare file's directory. Empty for
+    /// a source text with no directory.
+    pub instance_lock_dir: PathBuf,
 }
 
 /// The union of a consumer's `[imports]` (ADR-0002 §5): every URL, mapped to
@@ -438,6 +449,13 @@ fn load_inner(
             .find(|member| absolute(member).is_some_and(|member| entry.starts_with(member)))
             .cloned()
     });
+    // The system is one per workspace, so its instance numbers live in one
+    // file: beside the root manifest, or beside the bare source file.
+    let instance_lock_dir = match &root {
+        Some(root) => root.clone(),
+        None => entry.parent().map(Path::to_path_buf).unwrap_or_default(),
+    };
+    let instance_lock = loader.read_instance_lock(&instance_lock_dir)?;
     let workspace = Workspace::new(&*db, loader.packages, loader.workspace_imports);
     Ok(LoadedWorkspace {
         workspace,
@@ -452,6 +470,8 @@ fn load_inner(
         root_package: loader.root_package,
         imports: loader.imports,
         remote_units: loader.remote_units,
+        instance_lock,
+        instance_lock_dir,
     })
 }
 
@@ -1643,7 +1663,10 @@ impl Loader {
                     DiagCode::RIDL_410,
                     file_id,
                     byte_range(0, 0),
-                    malformed_lock_message("the file is not valid UTF-8"),
+                    malformed_lock_message(
+                        interface_lock::FILE_NAME,
+                        "the file is not valid UTF-8",
+                    ),
                 ));
                 return Ok(None);
             }
@@ -1657,7 +1680,45 @@ impl Loader {
                     DiagCode::RIDL_410,
                     file_id,
                     malformed.range,
-                    malformed_lock_message(&malformed.message),
+                    malformed_lock_message(interface_lock::FILE_NAME, &malformed.message),
+                ));
+                Ok(None)
+            }
+        }
+    }
+
+    /// Reads `dir/instances.lock`, the system's instance numbers (rsdl §7). An
+    /// absent file is `None`. A malformed file — one that is not valid UTF-8
+    /// included — is RSDL-315 on the offending line of the lock file itself,
+    /// at the empty range 0..0 when there is no line to point at, and the
+    /// system is then numbered as if there were no file. Any other I/O
+    /// failure is the error.
+    fn read_instance_lock(&mut self, dir: &Path) -> io::Result<Option<InstanceLockFile>> {
+        let path = path_string(&dir.join(instance_lock::FILE_NAME));
+        let text = match instance_lock::read(dir) {
+            Ok(Some(text)) => text,
+            Ok(None) => return Ok(None),
+            Err(err) if err.kind() == io::ErrorKind::InvalidData => {
+                let file_id = self.sources.file_id(&path, "");
+                self.diagnostics.push(error(
+                    DiagCode::RSDL_315,
+                    file_id,
+                    byte_range(0, 0),
+                    malformed_lock_message(instance_lock::FILE_NAME, "the file is not valid UTF-8"),
+                ));
+                return Ok(None);
+            }
+            Err(err) => return Err(err),
+        };
+        match instance_lock::parse(&text) {
+            Ok(lock) => Ok(Some(InstanceLockFile { path, text, lock })),
+            Err(malformed) => {
+                let file_id = self.sources.file_id(&path, &text);
+                self.diagnostics.push(error(
+                    DiagCode::RSDL_315,
+                    file_id,
+                    malformed.range,
+                    malformed_lock_message(instance_lock::FILE_NAME, &malformed.message),
                 ));
                 Ok(None)
             }
@@ -1776,13 +1837,12 @@ fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// The RIDL-410 message: what is wrong with the lock file, then the fix the
-/// lock design §8 names.
-fn malformed_lock_message(reason: &str) -> String {
+/// The RIDL-410 and RSDL-315 message: what is wrong with the lock file named
+/// `file`, then the fix the lock design §8 names.
+fn malformed_lock_message(file: &str, reason: &str) -> String {
     format!(
-        "`{}` is malformed: {reason} — resolve the conflict or restore the file from version \
-         control, then run `ridl lock`",
-        interface_lock::FILE_NAME
+        "`{file}` is malformed: {reason} — resolve the conflict or restore the file from version \
+         control, then run `ridl lock`"
     )
 }
 
@@ -3284,6 +3344,60 @@ service:veh.common.climate 2
             None,
             "a malformed lock does not ride on the package"
         );
+    }
+
+    /// The `instances.lock` beside the root manifest is read once for the
+    /// workspace: its path, its text and the parsed table, and the directory
+    /// `ridl lock` names.
+    #[test]
+    fn an_instance_lock_beside_the_root_manifest_is_loaded() {
+        let dir = TempDir::new("instance-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        let text = "# instances.lock — written by ridl lock; do not edit by hand.\n\
+                    next 3\n\
+                    veh.Cruise/primary 1\n\
+                    veh.Cruise/backup 2\n";
+        let lock_path = dir.write("instances.lock", text);
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let lock = loaded.instance_lock.expect("the instance lock is loaded");
+        assert_eq!(lock.path, path_string(&lock_path));
+        assert_eq!(lock.text, text);
+        assert_eq!(lock.lock.next, 3);
+        assert_eq!(lock.lock.entries.len(), 2);
+        assert_eq!(loaded.instance_lock_dir, dir.path());
+    }
+
+    /// A malformed `instances.lock` is RSDL-315 on its own offending line, and
+    /// the workspace then has no instance lock.
+    #[test]
+    fn a_malformed_instance_lock_is_rsdl_315() {
+        let dir = TempDir::new("bad-instance-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        let lock_path = dir.write("instances.lock", "next x\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), ["RSDL-315"]);
+        let diagnostic = &loaded.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Error);
+        assert_eq!(
+            loaded.sources.path(diagnostic.primary.file),
+            Some(path_string(&lock_path).as_str()),
+            "the span is in the lock file"
+        );
+        assert!(
+            diagnostic
+                .message
+                .starts_with("`instances.lock` is malformed: "),
+            "{}",
+            diagnostic.message
+        );
+        assert!(loaded.instance_lock.is_none());
     }
 
     /// PD-3: an empty lock file, which has no `next` line, is reported at

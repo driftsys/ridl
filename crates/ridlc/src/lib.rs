@@ -98,15 +98,16 @@ use ridl_core::diag::{
 use ridl_core::lint::{
     LintScopes, apply_lint_levels, drop_allowed_by_default, report_lint_directives,
 };
-use ridl_core::package::{Package, PackageOrigin, Workspace};
+use ridl_core::package::{InstanceLockFile, Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, MaterializedUnit, RemoteAccess, RidlDatabase,
     load_workspace_with_remotes, parse_file, std_package,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
-    CheckedPackage, CheckedSystem, CheckedWorkspace, Resolution, check_package, check_workspace,
-    lower_system, resolve_package, unclaimed_backend_keys,
+    CheckedPackage, CheckedSystem, CheckedWorkspace, InstanceNumbering, Resolution, check_package,
+    check_workspace, instance_lock_diagnostics, lower_system, number_instances, resolve_package,
+    unclaimed_backend_keys,
 };
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
@@ -190,6 +191,9 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no `[imports]` and no remote unit.
             imports: BTreeMap::new(),
             remote_units: BTreeMap::new(),
+            // A source text has no directory, so no `instances.lock`.
+            instance_lock: None,
+            instance_lock_dir: PathBuf::new(),
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -409,6 +413,12 @@ pub struct WorkspaceOutput {
     /// publishes, locks, tests or diffs the workspace's own packages tells
     /// them apart with [`is_remote`].
     pub remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The number of every instance of the system (rsdl §7), from the root
+    /// `instances.lock`. Empty when the workspace declares no `system`.
+    pub instances: InstanceNumbering,
+    /// The directory the `instances.lock` is read from and `ridl lock` is
+    /// given ([`LoadedWorkspace::instance_lock_dir`]).
+    pub instance_lock_dir: PathBuf,
 }
 
 /// The lowered IR of the built-in `ridl.std` package (typl Appendix A), checked
@@ -487,6 +497,8 @@ pub fn compile_workspace_with_access(
         lints,
         report_scope,
         remote_units,
+        instances,
+        instance_lock_dir,
         ..
     } = load_and_check(db, entry, overlays, access)?;
     // System lowering resolves references into the standard package.
@@ -506,6 +518,8 @@ pub fn compile_workspace_with_access(
         lints,
         report_scope,
         remote_units,
+        instances,
+        instance_lock_dir,
     })
 }
 
@@ -2508,6 +2522,13 @@ struct Compiled {
     /// The remote units the load took
     /// ([`LoadedWorkspace::remote_units`]); their packages are in `checked`.
     remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The number of every instance of the system
+    /// ([`number_workspace_instances`]); its diagnostics are already in
+    /// `diagnostics`.
+    instances: InstanceNumbering,
+    /// The directory the root `instances.lock` is read from
+    /// ([`LoadedWorkspace::instance_lock_dir`]).
+    instance_lock_dir: PathBuf,
 }
 
 /// Loads the workspace at `entry`, with the remote units of its `[imports]`
@@ -2544,6 +2565,8 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         root_package,
         imports: _,
         remote_units,
+        instance_lock,
+        instance_lock_dir,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -2613,6 +2636,9 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
             &workspace_render_ids,
         ));
     }
+    let (instances, instance_diagnostics) =
+        number_workspace_instances(&system, instance_lock.as_ref(), &mut sources);
+    diagnostics.extend(instance_diagnostics);
     // RSDL-804 is raised here, not in the query, because only a driver knows
     // which backends are configured. No backend declares the namespaces it
     // consumes until the codegen plugin contract exists (ADR-0020), so the
@@ -2687,11 +2713,36 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         report_scope,
         root_package,
         remote_units,
+        instances,
+        instance_lock_dir,
     };
     // After the checks, which read the IR without a limit, the limit is
     // recorded on the interactions for every consumer of the checked IR.
     design_lints::annotate_payload_limits(db, &packages, &mut compiled.checked, &compiled.limits);
     compiled
+}
+
+/// Numbers every instance of `system`'s closure against `lock`, the root
+/// `instances.lock` (rsdl §7), and returns the numbering with the RSDL-314 and
+/// RSDL-315 diagnostics of the lock. The lock file is interned into `sources`,
+/// so the diagnostics point into it. `check_loaded` and the language server
+/// both call it, so `ridl check` and the editor report the same findings.
+pub fn number_workspace_instances(
+    system: &CheckedSystem,
+    lock: Option<&InstanceLockFile>,
+    sources: &mut SourceMap,
+) -> (InstanceNumbering, Vec<Diagnostic>) {
+    let numbering = number_instances(system, lock.map(|file| &file.lock));
+    let Some(file) = lock else {
+        return (numbering, Vec::new());
+    };
+    let lock_file = sources.file_id(&file.path, &file.text);
+    let lock_dir = match Path::new(&file.path).parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
+        _ => ".".to_string(),
+    };
+    let diagnostics = instance_lock_diagnostics(&numbering, &file.lock, lock_file, &lock_dir);
+    (numbering, diagnostics)
 }
 
 /// The encoding names that every `[backend.<name>]` table enables, as one

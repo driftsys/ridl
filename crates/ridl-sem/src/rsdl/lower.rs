@@ -74,10 +74,7 @@ impl<'a> Lowering<'a> {
     /// or the service's dotted name for an implicit component. It equals
     /// `v2::Component::qualified_name` of the lowered component.
     fn component_name(&self, index: usize) -> String {
-        match &self.closure.components[index].id {
-            ComponentId::Declared { package, name } => format!("{package}.{name}"),
-            ComponentId::Implicit { service } => service.clone(),
-        }
+        self.closure.components[index].qualified_name()
     }
 
     /// An interface by identity (rsdl §11): the catalog is the unit of the
@@ -650,7 +647,9 @@ mod tests {
     use super::*;
     use crate::check_package;
     use crate::rsdl::check_system;
-    use crate::rsdl::tests::{ADAS, BENCH, COMMON, DIAG, PRODUCTION, SYSTEM, package};
+    use crate::rsdl::tests::{
+        ADAS, BENCH, COMMON, DIAG, PRODUCTION, SIZED_CLOSURE, SYSTEM, package,
+    };
 
     /// Checks and lowers Appendix A's three contract packages beside
     /// `topology`, the files of the package `veh.topology`. Returns the
@@ -1990,16 +1989,6 @@ mod tests {
         assert_eq!(warnings, ["RSDL-409", "RSDL-409"]);
         assert!(lowered.is_some());
     }
-
-    /// A closure on one machine: `Panel` consumes an event channel, `Backend`
-    /// a query channel, `Lane` nothing, and `Pair` has two instances.
-    const SIZED_CLOSURE: &str = "package veh.topology\n\
-                                 import veh.adas.LaneAssist\n\
-                                 component Lane { offers veh.adas.lane }\n\
-                                 component Panel { requires LaneAssist }\n\
-                                 component Backend [ external ] { requires veh.diag.access }\n\
-                                 component Pair [ instances = (primary, backup) ] {}\n\
-                                 system Vehicle { Lane, Panel, Backend, Pair, veh.diag.access }\n";
 
     /// Lowers `SIZED_CLOSURE` with the given deployment block and returns the
     /// lowered deployment.

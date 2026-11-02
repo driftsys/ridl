@@ -979,6 +979,26 @@ const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RSDL-311", Showcase),
     ("RSDL-312", Showcase),
     ("RSDL-313", Showcase),
+    (
+        "RSDL-314",
+        Elsewhere {
+            fixture: "crates/ridl/tests/instance_lock_cli.rs",
+            reason: "the finding reads the `instances.lock` beside the root manifest, which a \
+                     compile of the showcase directory does not carry. Provoked by \
+                     `check_reports_an_orphan_instance_entry_as_rsdl_314` in \
+                     `crates/ridl/tests/instance_lock_cli.rs`",
+        },
+    ),
+    (
+        "RSDL-315",
+        Elsewhere {
+            fixture: "crates/ridl/tests/instance_lock_cli.rs",
+            reason: "the finding reads the `instances.lock` beside the root manifest, which a \
+                     compile of the showcase directory does not carry. Provoked by \
+                     `check_reports_a_malformed_instance_lock_as_rsdl_315` in \
+                     `crates/ridl/tests/instance_lock_cli.rs`",
+        },
+    ),
     ("RSDL-403", Showcase),
     ("RSDL-408", Showcase),
     ("RSDL-409", Showcase),

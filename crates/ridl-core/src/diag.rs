@@ -1237,6 +1237,27 @@ diag_codes! {
         RSDL_313 = "RSDL-313", Error,
             "`external` written with a value";
 
+        /// A live entry of the root `instances.lock` names a component or an
+        /// instance that the system does not have (rsdl §7, §16.1). Error.
+        /// Raised by the driver, on the entry's line of the lock file. The
+        /// message names `ridl lock --retire` when the instance is gone, and
+        /// `ridl lock --rename` when an instance without an entry may be the
+        /// same instance under a new name; it names `--retire` alone when
+        /// every instance of the system has an entry. Not raised when the
+        /// closure has errors, because the instances are then not known.
+        RSDL_314 = "RSDL-314", Error,
+            "live `instances.lock` entry with no instance";
+
+        /// The root `instances.lock` is malformed (a line that does not parse,
+        /// a number outside 1 to 2147483647, `next` not greater than every
+        /// entry's number), or no number is left for a provisional instance
+        /// (rsdl §7, §16.1). Error. A malformed file is reported by the
+        /// loader on the offending line of the lock file, and the system is
+        /// then numbered as if the file were absent; the exhausted range is
+        /// reported by the driver at the start of the file.
+        RSDL_315 = "RSDL-315", Error,
+            "`instances.lock` is malformed";
+
         /// A closure component requires an interface that no closure service
         /// lists — a missing provider (rsdl §8, §16.1). Error. Raised by the rsdl
         /// resolution.

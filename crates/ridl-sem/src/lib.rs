@@ -35,5 +35,8 @@ pub use resolve::{
     LinkError, LinkTarget, Resolution, Symbol, SymbolKind, declared_symbols, doc_link_members,
     resolve_doc_link, resolve_package,
 };
-pub use rsdl::{CheckedSystem, check_system, lower_system, unclaimed_backend_keys};
+pub use rsdl::{
+    CheckedSystem, InstanceNumbering, check_system, instance_lock_diagnostics, lower_system,
+    number_instances, unclaimed_backend_keys,
+};
 pub use workspace::{CheckedWorkspace, check_workspace};

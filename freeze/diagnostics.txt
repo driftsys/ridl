@@ -104,6 +104,8 @@ RSDL-310 error
 RSDL-311 error
 RSDL-312 error
 RSDL-313 error
+RSDL-314 error
+RSDL-315 error
 RSDL-403 error
 RSDL-408 error
 RSDL-409 warning lint=redundant-provider-set default=warn

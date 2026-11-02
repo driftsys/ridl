@@ -492,8 +492,9 @@ catalog (D-1).
 
 ## 7. Instances and Redundancy
 
-`instances` on a component names its copies. Instances are named, never
-numbered, so a name tells a team what the copy is for.
+`instances` on a component names its copies. Instances are named in source, and
+the toolchain numbers them: the name tells a team what the copy is for, and the
+number is what a runtime checks.
 
 ```rsdl
 component Cruise [ instances = (primary, backup) ] { offers veh.adas.cruise }
@@ -510,7 +511,28 @@ component Cruise [ instances = (primary, backup) ] { offers veh.adas.cruise }
 - Instance names are unique within a component; a duplicate is RSDL-306.
   `Cruise.primary` and `Lane.primary` are two instances of two components.
 - Instances share the component's offers and requires, and are
-  **indistinguishable on the wire** (V-02): no instance identifier travels.
+  **indistinguishable on the wire** (V-02): no instance identifier travels in a
+  data frame. The number is sent at attach only.
+- **The number.** Every instance of every closure component, an `external` one
+  included, has one number, the same in every deployment. The numbers are in
+  `instances.lock`, beside the root `ridl.toml` (beside the file itself, for a
+  bare source file). A line is `component/instance number`: the component's
+  qualified name, a `/`, then the instance name, which is `Unit` for the unit
+  instance. A number is from 1 to 2147483647; 0 is invalid, and negative numbers
+  are reserved for a runtime's own use. The number is never written in source.
+- **Provisional numbers.** An instance with no live entry takes a provisional
+  number: counting from the file's `next`, in the byte order of its key text, so
+  that moving a source file does not change it. A missing file makes every
+  number provisional, and is not an error. `ridl lock` writes the provisional
+  numbers into the file.
+- **The lock rules.** `next` is never lowered, and a retired entry is never
+  removed, so a number is never given to a second instance. A live entry whose
+  component or instance is not in the system is RSDL-314; the message names
+  `ridl lock --retire` for an instance that is gone, and `ridl lock --rename`
+  when an instance without an entry may be the same instance under a new name. A
+  component whose entries are all unused draws one RSDL-314. The check is
+  skipped while the closure has an error. A file that does not parse, or a
+  number that would pass 2147483647, is RSDL-315.
 - **Redundancy is derived.** An offering component with more than one instance
   is that service's **redundant provider set**. The lowering derives it, lowers
   every link to every member of the set (§13), and reports each `requires` that
@@ -860,6 +882,8 @@ shown in any table were never allocated.
 | RSDL-311 | a `requires` line names a service whose shape is a list of interfaces — the diagnostic lists them                                                                  | error                        | §3.2    |
 | RSDL-312 | a `requires` line names something that is neither an interface nor an inline-shape service, or nothing                                                             | error                        | §3.2    |
 | RSDL-313 | `external` written with a value — it is a flag                                                                                                                     | error                        | §5      |
+| RSDL-314 | live `instances.lock` entry with no instance — an entry whose component or instance is not in the system; the message names `--retire` and `--rename`              | error                        | §7      |
+| RSDL-315 | `instances.lock` is malformed (a line that does not parse, a number outside 1 to 2147483647), or no number is left for a provisional instance                      | error                        | §7      |
 | RSDL-403 | a closure component requires an interface that no closure service lists (missing provider)                                                                         | error                        | §8      |
 | RSDL-408 | an interface listed by two services of the closure — raised for every interface they list                                                                          | error                        | §8      |
 | RSDL-409 | a `requires` resolves to a redundant provider set — an offering component with more than one instance                                                              | warning (not yet realizable) | §7      |

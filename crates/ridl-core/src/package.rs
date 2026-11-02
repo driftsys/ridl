@@ -21,6 +21,7 @@ use rowan::TextRange;
 
 use crate::db::InputFile;
 use crate::diag::{DiagCode, Diagnostic, Label, Severity, SourceMap, Span};
+use crate::instance_lock::InstanceLock;
 use crate::interface_lock::InterfaceLock;
 use crate::manifest::TimingDefaults;
 
@@ -49,6 +50,20 @@ pub struct PackageLock {
     pub text: String,
     /// The parsed table.
     pub lock: InterfaceLock,
+}
+
+/// The root `instances.lock` as the loader read it (rsdl §7): the file's path
+/// and text, kept so a diagnostic can point into the file (RSDL-314 is
+/// reported on an entry's line), and the parsed table.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InstanceLockFile {
+    /// The file's path, in the loader's path form; its parent directory is
+    /// the directory `ridl lock` names.
+    pub path: String,
+    /// The file's text, byte for byte.
+    pub text: String,
+    /// The parsed table.
+    pub lock: InstanceLock,
 }
 
 /// One loaded package: its dotted name (e.g. `veh.common`), its files, where
