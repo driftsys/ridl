@@ -1,5 +1,8 @@
 // The test catalog that the example server provides. These values are defined
 // in crates/ridl-transport-ws/tests/support/provider.rs; keep them equal to it.
+// The test `the_e2e_catalog_holds_the_ordinals_and_lengths_of_the_test_provider`
+// in crates/ridl-transport-ws/tests/ts_ceilings.rs fails when the ordinals 7 to
+// 9 or their three lengths differ.
 
 /** The unit name of the test catalog. */
 export const NAME = "test.ws";

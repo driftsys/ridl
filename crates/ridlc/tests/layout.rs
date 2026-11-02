@@ -405,8 +405,9 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
     assert_eq!(max_message_bytes(&request, "warning"), Value::Null);
 }
 
-/// The `Header size` column of the frame specification §11.1 header table,
-/// by form name. `attach`'s `39 + name` is read as 39.
+/// The `Header size` column of the frame specification §11.1 header tables,
+/// by form name: the table of binding version 1 and the one row that binding
+/// version 2 adds, `block`. `attach`'s `39 + name` is read as 39.
 fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../docs/specification/frame-specification.md");
@@ -415,21 +416,24 @@ fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
         .split_once("### 11.1 WebSocket\n")
         .expect("a section 11.1");
     let mut lines = section.lines();
-    lines
-        .by_ref()
-        .find(|line| line.starts_with("| Form ") && line.contains("| Header size |"))
-        .expect("the header table");
-    lines.next();
     let mut sizes = std::collections::BTreeMap::new();
-    for line in lines.take_while(|line| line.starts_with('|')) {
-        let cells: Vec<&str> = line.trim_matches('|').split('|').map(str::trim).collect();
-        let size: u32 = cells[2]
-            .split_whitespace()
-            .next()
-            .and_then(|n| n.parse().ok())
-            .unwrap_or_else(|| panic!("a size in {line}"));
-        for form in cells[0].split(", ") {
-            sizes.insert(form.trim_matches('`').to_string(), size);
+    // Two tables: version 1 first, then the `block` row of version 2.
+    for table in ["binding version 1", "binding version 2"] {
+        lines
+            .by_ref()
+            .find(|line| line.starts_with("| Form ") && line.contains("| Header size |"))
+            .unwrap_or_else(|| panic!("the header table of {table}"));
+        lines.next();
+        for line in lines.by_ref().take_while(|line| line.starts_with('|')) {
+            let cells: Vec<&str> = line.trim_matches('|').split('|').map(str::trim).collect();
+            let size: u32 = cells[2]
+                .split_whitespace()
+                .next()
+                .and_then(|n| n.parse().ok())
+                .unwrap_or_else(|| panic!("a size in {line}"));
+            for form in cells[0].split(", ") {
+                sizes.insert(form.trim_matches('`').to_string(), size);
+            }
         }
     }
     sizes
@@ -448,11 +452,11 @@ fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
 fn the_websocket_row_is_derived_from_the_frame_specification_header_table() {
     let sizes = frame_header_sizes();
     let envelope = sizes["occurrence"] - sizes["subscribe"];
-    let largest = ["publish", "occurrence", "request", "response"]
+    let largest = ["publish", "occurrence", "request", "response", "block"]
         .iter()
         .map(|form| sizes[*form])
         .max()
-        .expect("four data-plane forms");
+        .expect("five data-plane forms");
     let (request, _) = request_for(&cabin(), "veh.cabin");
     let deployment = request.deployment.as_ref().expect("a deployment");
     let row = deployment

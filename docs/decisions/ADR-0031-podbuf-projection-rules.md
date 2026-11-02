@@ -766,8 +766,10 @@ a field is appended.
       when a user declaration takes them.
     - The audit before the change found that `ridl diff` reported an append as
       compatible outside podbuf while every Rust codec refused the new value,
-      and that the TypeScript codec checks no enum value; the first is the
-      reason for Q-1, the second is driftsys/ridl#1173.
+      and that the TypeScript codec checked no enum value; the first is the
+      reason for Q-1, the second was driftsys/ridl#1173, which the TypeScript
+      codec now closes by refusing an undeclared value of a strict enum and an
+      undeclared bit of a strict enum set with the variant rule.
 
     **Note, 2026-11-01: podbuf carries an open declaration**
     (driftsys/ridl#1168). Q-2 is lifted: `ridl build` no longer refuses an open

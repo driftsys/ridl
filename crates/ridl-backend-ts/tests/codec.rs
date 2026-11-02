@@ -551,7 +551,7 @@ fn the_common_codec_module() {
         "{source}"
     );
     // The required enum with no zero member reads as absent.
-    assert!(source.contains("mode: object.mode === null ? absent(\"veh.common.Setting\", \"mode\") : Number(object.mode) as t.Mode,"), "{source}");
+    assert!(source.contains("mode: object.mode === null ? absent(\"veh.common.Setting\", \"mode\") : unpackMode(object.mode),"), "{source}");
     // The induced tuples of the interactions are exported interfaces.
     let set_limit = induced_name(&model, "setLimit", "Params");
     assert!(
@@ -910,7 +910,7 @@ fn the_extras_and_pick_conversions() {
         "  object.readings = value.readings.map((element) => packSensorReading(element));",
         "    readings: object.readings.map((element) => unpackSensorReading(element)),",
         "  object.gears = value.gears.map((element) => BigInt(element));",
-        "    gears: object.gears.map((element) => Number(element) as t.GearPosition),",
+        "    gears: object.gears.map((element) => unpackGearPosition(element)),",
         "  object.maybe = value.maybe === undefined ? [] : [...value.maybe];",
         "    maybe: object.maybe.map((element) => element as t.Speed),",
         "  object.tag = value.tag === undefined ? [] : Array.from(value.tag);",
@@ -923,7 +923,7 @@ fn the_extras_and_pick_conversions() {
         "      return new fb.PickT(fb.PickUnion.speed, new fb.PickSpeedBoxT(value.value));",
         "      return { kind: \"speed\", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };",
         "      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(BigInt(value.value)));",
-        "      return { kind: \"gear\", value: Number((object.value as fb.PickGearBoxT).value) as t.GearPosition };",
+        "      return { kind: \"gear\", value: unpackGearPosition((object.value as fb.PickGearBoxT).value) };",
     ] {
         assert!(source.contains(line), "no `{line}` in:\n{source}");
     }
@@ -1374,4 +1374,353 @@ fn a_foreign_open_enum_set_is_checked_against_its_width() {
             "{source}"
         );
     }
+}
+
+/// The model of the fixture `tests/fixtures/codec-strict`, package
+/// `strict.demo`.
+fn strict_model() -> v1::Model {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-strict");
+    let output = ridlc::compile_workspace(&mut db, &entry)
+        .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
+        "the fixture must compile with no error, got: {:?}",
+        output.diagnostics,
+    );
+    let package = output
+        .checked
+        .iter()
+        .find(|checked| checked.ir.name == "strict.demo")
+        .expect("the fixture declares strict.demo")
+        .ir
+        .clone();
+    codegen::lower(&package, &[&output.std_ir])
+}
+
+/// A strict enum and a strict enum set unpack through a function that throws
+/// a `RuleError` with the `variant` rule, in every position a type can stand.
+#[test]
+fn the_strict_codec_module() {
+    let source = module(&strict_model(), "strict.demo");
+    assert!(
+        source.contains("function unpackDtcStatus(raw: number | bigint): t.DtcStatus {"),
+        "a strict enum must unpack through a checking function, got:\n{source}"
+    );
+    assert!(
+        source.contains("throw new RuleError(\"variant\""),
+        "a strict value must be refused with the variant rule, got:\n{source}"
+    );
+    assert!(
+        source.contains("function unpackFlags(value: number): t.Flags {"),
+        "a narrow strict set must check its declared bits, got:\n{source}"
+    );
+    assert!(
+        source.contains("function unpackWideFlags(value: bigint): t.WideFlags {"),
+        "a wide strict set must check its declared bits, got:\n{source}"
+    );
+    assert!(
+        !source.contains("Number(object.") && !source.contains("Number(element)"),
+        "no strict enum may be read by an unchecked cast, got:\n{source}"
+    );
+    assert!(
+        source.contains("unpackDtcStatus(fb.DtcStatusBox"),
+        "a strict enum payload must unpack through the checking function, got:\n{source}"
+    );
+    insta::assert_snapshot!("strict", source);
+}
+
+/// A field of a strict enum set of another package is checked against the
+/// declared bits through a function of the module.
+#[test]
+fn a_foreign_strict_enum_set_is_checked_against_its_bits() {
+    let mut model = strict_model();
+    let reference = foreign_thing(
+        &mut model,
+        v1::declaration::Kind::EnumSet(v1::EnumSet {
+            open: false,
+            width: v1::IntWidth::U8 as i32,
+            declared_mask: 0b101,
+            ..Default::default()
+        }),
+    );
+    field(&mut model, "Report", 2).kind = Some(v1::r#type::Kind::Named(reference));
+    let source = module(&model, "strict.demo");
+    assert!(
+        source.contains("function unpack_veh_other_Thing(value: number): veh_other.Thing {"),
+        "{source}"
+    );
+    assert!(source.contains("(value & ~5) !== 0"), "{source}");
+    assert!(
+        source.contains("flags: unpack_veh_other_Thing(object.flags)"),
+        "{source}"
+    );
+}
+
+/// A foreign enum set `name` of `package`, with a one-byte width.
+fn foreign_set(
+    model: &mut v1::Model,
+    package: &str,
+    name: &str,
+    open: bool,
+    mask: i64,
+) -> v1::TypeRef {
+    let index = model.foreign.len() as u32;
+    model.foreign.push(v1::ForeignDeclaration {
+        package: package.to_string(),
+        declaration: Some(v1::Declaration {
+            name: Some(v1::Spellings {
+                declared: name.to_string(),
+                ..Default::default()
+            }),
+            visibility: v1::Visibility::Public as i32,
+            kind: Some(v1::declaration::Kind::EnumSet(v1::EnumSet {
+                open,
+                width: v1::IntWidth::U8 as i32,
+                declared_mask: mask,
+                ..Default::default()
+            })),
+            ..Default::default()
+        }),
+    });
+    v1::TypeRef {
+        reference: format!("{package}.{name}"),
+        resolved: true,
+        package: package.to_string(),
+        foreign: true,
+        index,
+        kind: v1::DeclKind::Unspecified as i32,
+    }
+}
+
+/// The model of a package `only` with one struct, `Holder`, of two fields, and
+/// no enum or enum set of its own.
+fn holder_model() -> v1::Model {
+    let output = ridlc::compile(
+        "only.ridl",
+        "package only\n\n/// A struct.\nstruct Holder {\n  /// A value.\n  a : integer [0..9]\n  /// A value.\n  b : integer [0..9]\n}\n",
+    );
+    codegen::lower(&output.package, &[])
+}
+
+/// A module whose only enum reach is a strict enum set of another package
+/// still exports `RuleError`, because the checking function throws it.
+#[test]
+fn a_foreign_strict_set_alone_exports_the_rule_error() {
+    let mut model = holder_model();
+    let reference = foreign_set(&mut model, "veh.other", "Thing", false, 1);
+    field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(reference));
+    let source = module(&model, "only");
+    assert!(
+        source.contains("export class RuleError extends RangeError {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function unpack_veh_other_Thing(value: number): veh_other.Thing {"),
+        "{source}"
+    );
+}
+
+/// Two sets of other packages whose alias and name spell one function name
+/// are refused, for a strict set and for an open set.
+#[test]
+fn two_foreign_sets_that_spell_one_function_are_refused() {
+    for open in [false, true] {
+        let mut model = holder_model();
+        let first = foreign_set(&mut model, "veh.body", "door_flags", open, 1);
+        let second = foreign_set(&mut model, "veh.body.door", "flags", open, 1);
+        field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(first));
+        field(&mut model, "Holder", 1).kind = Some(v1::r#type::Kind::Named(second));
+        assert_eq!(
+            refusal(&model),
+            "`veh.body.door_flags` in package `only` collides with `veh.body.door.flags`, which the codec module also declares"
+        );
+    }
+}
+
+/// `RuleError` is a name of the file whenever a strict enum is reached, so an
+/// interface of that name is refused.
+#[test]
+fn an_interface_named_rule_error_beside_a_strict_enum_is_refused() {
+    let mut model = strict_model();
+    interface(&mut model, "Control").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "RuleError".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`RuleError` in package `strict.demo` collides with `RuleError`, which the codec module also declares"
+    );
+}
+
+/// The unpack function of a strict enum is a name of the file, so an
+/// interface of that name is refused.
+#[test]
+fn an_interface_named_as_the_unpack_of_a_strict_enum_is_refused() {
+    let mut model = strict_model();
+    interface(&mut model, "Control").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "unpackDtcStatus".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`unpackDtcStatus` in package `strict.demo` collides with `DtcStatus`, which the codec module also declares"
+    );
+}
+
+/// An enum with no zero member is held as `T | null` by `flatc`, so its
+/// unpack reports a value the buffer leaves out as absent; an enum with a zero
+/// member never receives `null`.
+#[test]
+fn a_strict_enum_with_no_zero_member_reports_an_absent_value() {
+    let source = module(&strict_model(), "strict.demo");
+    assert!(
+        source.contains("function unpackMode(raw: number | bigint | null): t.Mode {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("raw === null ? absent(\"strict.demo.Mode\", \"value\") : Number(raw)"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function unpackDtcStatus(raw: number | bigint): t.DtcStatus {"),
+        "{source}"
+    );
+}
+
+/// A module whose only enum reach is an open enum set of another package
+/// still exports `RuleError`, because the width check throws it.
+#[test]
+fn a_foreign_open_set_alone_exports_the_rule_error() {
+    let mut model = holder_model();
+    let reference = foreign_set(&mut model, "veh.other", "Thing", true, 1);
+    field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(reference));
+    let source = module(&model, "only");
+    assert!(
+        source.contains("export class RuleError extends RangeError {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function pack_veh_other_Thing(value: veh_other.Thing): number {"),
+        "{source}"
+    );
+}
+
+/// Two foreign sets of one name in two packages each get a function with
+/// the mask of their own declaration.
+#[test]
+fn foreign_sets_of_one_name_get_a_function_and_a_mask_each() {
+    let mut model = holder_model();
+    let first = foreign_set(&mut model, "veh.a", "Flags", false, 0b1);
+    let second = foreign_set(&mut model, "veh.b", "Flags", false, 0b110);
+    field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(first));
+    field(&mut model, "Holder", 1).kind = Some(v1::r#type::Kind::Named(second));
+    let source = module(&model, "only");
+    assert!(
+        source.contains(
+            "function unpack_veh_a_Flags(value: number): veh_a.Flags {\n  if ((value & ~1) !== 0) {"
+        ),
+        "{source}"
+    );
+    assert!(
+        source.contains(
+            "function unpack_veh_b_Flags(value: number): veh_b.Flags {\n  if ((value & ~6) !== 0) {"
+        ),
+        "{source}"
+    );
+}
+
+/// The model of a package with an interface named `RuleError` and no enum.
+fn rule_error_model(declarations: &str, extra: &str) -> v1::Model {
+    let text = format!(
+        "package only\n\n{declarations}/// A struct.\nstruct Holder {{\n  /// A value.\n  a : integer [0..9]\n{extra}}}\n\n/// An interface.\ninterface RuleError {{\n  /// Sends.\n  command send(holder: Holder) @[..50ms]\n}}\n"
+    );
+    let output = ridlc::compile("only.ridl", &text);
+    codegen::lower(&output.package, &[])
+}
+
+/// `RuleError` is reserved only when the module reaches an enum or an enum
+/// set: without one, the module has no such class and an interface may take
+/// the name.
+#[test]
+fn rule_error_is_not_reserved_without_an_enum() {
+    let source = module(&rule_error_model("", ""), "only");
+    assert!(source.contains("export const RuleError = {"), "{source}");
+    assert!(!source.contains("class RuleError"), "{source}");
+}
+
+/// A no-zero strict enum reached only as a payload root, or only as a map
+/// value, still gets the `absent` function its unpack calls.
+#[test]
+fn a_strict_enum_reached_alone_emits_the_absent_function() {
+    let root = ridlc::compile(
+        "only.ridl",
+        "package only\n\n/// An enum.\nenum Mode {\n  LOW = 1\n  HIGH = 2\n}\n",
+    );
+    let root = module(&codegen::lower(&root.package, &[]), "only");
+    assert!(root.contains("absent(\"only.Mode\", \"value\")"), "{root}");
+    assert!(
+        root.contains("function absent(type: string, field: string): never {"),
+        "{root}"
+    );
+
+    let map = ridlc::compile(
+        "only.ridl",
+        "package only\n\n/// An enum.\ninternal enum Mode {\n  LOW = 1\n  HIGH = 2\n}\n\n/// A key.\ntype Key : string [0..8]\n\n/// A struct.\nstruct Holder {\n  /// A map.\n  table : [Key : Mode; 0..3]\n}\n",
+    );
+    let map = module(&codegen::lower(&map.package, &[]), "only");
+    assert!(map.contains("unpackMode(entry.value)"), "{map}");
+    assert!(
+        map.contains("function absent(type: string, field: string): never {"),
+        "{map}"
+    );
+}
+
+/// `RuleError` is reserved when the module reaches an open enum, so an
+/// interface of that name is refused there too.
+#[test]
+fn an_interface_named_rule_error_beside_an_open_enum_is_refused() {
+    let model = rule_error_model(
+        "/// An open enum.\nopen enum Kind {\n  /// A.\n  A = 1\n}\n\n",
+        "  /// A kind.\n  kind : Kind\n",
+    );
+    assert_eq!(
+        refusal(&model),
+        "`RuleError` in package `only` collides with `RuleError`, which the codec module also declares"
+    );
+}
+
+/// Two open sets of other packages that share a name but not a width each get
+/// a `pack_<alias>_<Name>` with the width check of their own declaration.
+#[test]
+fn foreign_open_sets_of_one_name_check_their_own_width() {
+    let mut model = holder_model();
+    let first = foreign_set(&mut model, "veh.a", "Flags", true, 1);
+    let second = foreign_set(&mut model, "veh.b", "Flags", true, 1);
+    for (index, width) in [(0, v1::IntWidth::U8), (1, v1::IntWidth::U16)] {
+        let Some(v1::declaration::Kind::EnumSet(shape)) = model.foreign[index]
+            .declaration
+            .as_mut()
+            .and_then(|declaration| declaration.kind.as_mut())
+        else {
+            panic!("the foreign declaration is an enum set");
+        };
+        shape.width = width as i32;
+    }
+    field(&mut model, "Holder", 0).kind = Some(v1::r#type::Kind::Named(first));
+    field(&mut model, "Holder", 1).kind = Some(v1::r#type::Kind::Named(second));
+    let source = module(&model, "only");
+    assert!(
+        source.contains("function pack_veh_a_Flags(value: veh_a.Flags): number {\n  if (!Number.isInteger(value) || value < 0 || value > 255) {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("function pack_veh_b_Flags(value: veh_b.Flags): number {\n  if (!Number.isInteger(value) || value < 0 || value > 65535) {"),
+        "{source}"
+    );
 }
