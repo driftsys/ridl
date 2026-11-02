@@ -187,7 +187,11 @@ macro_rules! diag_codes {
 ///
 /// RIDL-150 (`payload-above-ceiling`) was retired on 2026-10-30 (ADR-0030
 /// decision 7 as amended): the error RIDL-157 reports the case it reported.
-pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 150, 415];
+///
+/// RIDL-158 (an `open` enum or enum set in a package that podbuf encodes) was
+/// retired on 2026-11-01 (ADR-0031 decision 12): the podbuf codec and the C
+/// header carry an open declaration, so the case it refused is valid.
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 150, 158, 415];
 
 /// The lint names of retired codes. A released lint name is a stable contract
 /// (ADR-0024 decision 7): a `ridl.toml` refers to it, so the name of a retired
@@ -630,6 +634,13 @@ diag_codes! {
         /// `ridl_core::lint::report_lint_directives`.
         TYPL_412 = "TYPL-412", Info,
             "malformed lint directive", lint = "malformed-lint-directive";
+
+        /// An `open enum` that declares no value, or an `open enumset` that
+        /// declares no bit (typl §8.1): nothing has a name, so every value is
+        /// unknown. Warning. Emitted by the checker
+        /// (`ridl_sem::check`).
+        TYPL_413 = "TYPL-413", Warning,
+            "open enum or enum set declares no value or bit", lint = "open-enum-without-values";
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -2491,6 +2502,7 @@ mod tests {
             ("TYPL-410", "doc-comment-style"),
             ("TYPL-411", "unused-lint-directive"),
             ("TYPL-412", "malformed-lint-directive"),
+            ("TYPL-413", "open-enum-without-values"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),

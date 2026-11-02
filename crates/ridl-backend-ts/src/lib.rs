@@ -18,10 +18,13 @@
 //! - **Enum** — `export enum` with the declared discriminants. TypeScript
 //!   enums are number-valued, so a discriminant beyond
 //!   `Number.MAX_SAFE_INTEGER` is [`GenerateError::Unrepresentable`].
+//!   An `open` enum adds `<Name>Value = <Name> | { readonly unknown: number }`,
+//!   the type of a field of it.
 //! - **Enumset** — a branded number plus a `<Name>Bits` const object
 //!   (typl §9). U64/I64 widths brand `bigint`: JS number bitwise operators
 //!   truncate to 32 bits, so a narrow-branded set past bit 31 would be
 //!   silently wrong and is rejected instead.
+//!   An `open` set adds `unknownBits` to `<Name>Bits`.
 //! - **Union** — a discriminated union of `{ kind: '<arm>'; value: T }`
 //!   members (typl §10).
 //! - **Tuple** — an inline object type with the named fields (typl §11).
@@ -224,12 +227,38 @@ impl<'a> Ctx<'a> {
     /// for a same-package reference, `pkg_alias.Name` (with the namespace
     /// import registered) for a cross-package `pkg.Name` reference.
     fn type_ref(&self, reference: &str) -> String {
+        let suffix = if self.is_open_enum(reference) {
+            "Value"
+        } else {
+            ""
+        };
         match reference.rsplit_once('.') {
             Some((package, name)) => {
                 self.imports.borrow_mut().insert(package.to_string());
-                format!("{}.{}", package_alias(package), name)
+                format!("{}.{}{suffix}", package_alias(package), name)
             }
-            None => reference.to_string(),
+            None => format!("{reference}{suffix}"),
+        }
+    }
+
+    /// Whether `reference` names an open enum of this package or of one the
+    /// model reaches. A value of an open enum has the type `<Name>Value`.
+    fn is_open_enum(&self, reference: &str) -> bool {
+        match reference.rsplit_once('.') {
+            Some((package, name)) => self.model.foreign.iter().any(|foreign| {
+                foreign.package == package
+                    && foreign.declaration.as_ref().is_some_and(|declaration| {
+                        declared(declaration.name.as_ref()) == name
+                            && matches!(
+                                &declaration.kind,
+                                Some(v1::declaration::Kind::Enum(enum_def)) if enum_def.open
+                            )
+                    })
+            }),
+            None => matches!(
+                self.lookup(reference).and_then(|decl| decl.kind.as_ref()),
+                Some(v2::decl::Kind::EnumDef(enum_def)) if enum_def.open
+            ),
         }
     }
 
@@ -449,11 +478,29 @@ fn emit_enum(ctx: &Ctx, decl: &v2::Decl, ed: &v2::EnumDef) -> Result<String, Gen
         ));
     }
 
-    if members.is_empty() {
-        Ok(format!("{doc}{export}enum {name} {{}}\n"))
+    let declaration = if members.is_empty() {
+        format!("{doc}{export}enum {name} {{}}\n")
     } else {
-        Ok(format!("{doc}{export}enum {name} {{\n{members}}}\n"))
+        format!("{doc}{export}enum {name} {{\n{members}}}\n")
+    };
+    if !ed.open {
+        return Ok(declaration);
     }
+    // An open enum keeps its `enum` and adds the type of a value that may be
+    // outside it. A caller who writes `{ unknown: n }` for a declared `n` is
+    // not stopped: the encoder writes `n`, which decodes as the member.
+    Ok(format!(
+        "{declaration}\n\
+         /**\n \
+         * A `{name}`, or a value that the enum does not declare.\n \
+         *\n \
+         * The codec decodes a declared value to the enum member and any other value to\n \
+         * `{{ unknown: n }}`, and it encodes `{{ unknown: n }}` as `n`. A value\n \
+         * `{{ unknown: n }}` whose `n` is declared is encoded as `n` and decodes as the\n \
+         * member.\n \
+         */\n\
+         {export}type {name}Value = {name} | {{ readonly unknown: number }};\n"
+    ))
 }
 
 /// An enum set becomes a branded scalar plus a `<Name>Bits` const object
@@ -479,6 +526,7 @@ fn emit_enum_set(
     };
 
     let mut bits = String::new();
+    let mut declared_mask = 0u128;
     for bit in &esd.bits {
         if bit.value < 0 || bit.value > max_bit {
             return Err(GenerateError::Unrepresentable(format!(
@@ -489,8 +537,28 @@ fn emit_enum_set(
             )));
         }
         let mask = 1u128 << bit.value;
+        declared_mask |= mask;
         bits.push_str(&jsdoc(ctx, "  ", &ctx.value_parts(decl, &bit.name), &[]));
         bits.push_str(&format!("  {member}: {mask}{suffix},\n", member = bit.name));
+    }
+
+    if esd.open {
+        // The bitwise operators of a number work on 32 signed bits, and a
+        // bigint has unbounded sign extension, so the result is wrapped to
+        // the width of the set.
+        let kept = format!("value & ~{declared_mask}{suffix}");
+        let expr = match v2::IntWidth::try_from(esd.width) {
+            Ok(v2::IntWidth::U8 | v2::IntWidth::U16 | v2::IntWidth::U32) => {
+                format!("(({kept}) >>> 0)")
+            }
+            Ok(v2::IntWidth::U64) => format!("BigInt.asUintN(64, {kept})"),
+            Ok(v2::IntWidth::I64) => format!("BigInt.asIntN(64, {kept})"),
+            _ => format!("({kept})"),
+        };
+        bits.push_str(&format!(
+            "  /** The bits of `value` that no bit of this set declares. */\n  \
+             unknownBits(value: {name}): {name} {{\n    return {expr} as {name};\n  }},\n"
+        ));
     }
 
     let brand = ts_string(&format!("{}.{}", ctx.package, decl.name));
@@ -726,8 +794,10 @@ fn init_function(ctx: &Ctx, decl: &v2::Decl) -> Option<String> {
     let expr = decl_init_expr(ctx, decl)?;
     let export = export_kw(decl.visibility);
     let name = &decl.name;
+    // The init of an open enum can be `{ unknown: 0 }`, which is not a member.
+    let ty = ctx.type_ref(name);
     Some(format!(
-        "{export}function init{name}(): {name} {{\n  return {expr};\n}}\n"
+        "{export}function init{name}(): {ty} {{\n  return {expr};\n}}\n"
     ))
 }
 
@@ -1003,11 +1073,15 @@ fn array_from(count: u64, body: &str) -> String {
 
 fn enum_init(name: &str, ed: &v2::EnumDef) -> Option<String> {
     // The value 0 if declared, else the lowest declared value (typl §5.8).
+    // An open enum with no declared value has only `{ unknown: 0 }`.
     let chosen = ed
         .values
         .iter()
         .find(|value| value.value == 0)
-        .or_else(|| ed.values.iter().min_by_key(|value| value.value))?;
+        .or_else(|| ed.values.iter().min_by_key(|value| value.value));
+    let Some(chosen) = chosen else {
+        return ed.open.then(|| "{ unknown: 0 }".to_string());
+    };
     Some(format!("{name}.{}", chosen.name))
 }
 

@@ -410,6 +410,7 @@ mod tests {
                         ..Default::default()
                     })
                     .collect(),
+                open: false,
             })),
             ..Default::default()
         };

@@ -45,8 +45,9 @@ pub fn check_design_lints(
     })
 }
 
-/// RIDL-153, RIDL-154 and RIDL-155 over one source set: the build-time errors
-/// of the podbuf encoding, raised only when `encodings` names `podbuf`.
+/// RIDL-153, RIDL-154 and RIDL-155 over one source set: the
+/// build-time errors of the podbuf encoding, raised only when `encodings`
+/// names `podbuf`.
 /// `encodings` are the names that every `[backend.<name>]` table of the
 /// workspace manifest enables, as one set. `std_ir` is the lowered
 /// `ridl.std`, which a package's references resolve against besides

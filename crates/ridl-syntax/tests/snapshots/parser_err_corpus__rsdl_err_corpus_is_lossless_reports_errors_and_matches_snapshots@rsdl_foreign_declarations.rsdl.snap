@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_err_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/rsdl_foreign_declarations.rsdl
 ---
-SourceFile@0..474
+SourceFile@0..557
   PackageDecl@0..20
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -83,7 +83,7 @@ SourceFile@0..474
     Whitespace@357..358 "\n"
     RBrace@358..359 "}"
   Whitespace@359..360 "\n"
-  ErrorNode@360..432
+  ErrorNode@360..437
     ReservedWord@360..367 "service"
     Whitespace@367..368 " "
     Ident@368..371 "veh"
@@ -110,30 +110,82 @@ SourceFile@0..474
     RBracket@429..430 "]"
     Whitespace@430..431 "\n"
     RBrace@431..432 "}"
-  Whitespace@432..434 "\n\n"
-  ComponentDef@434..473
-    ComponentKw@434..443 "component"
-    Whitespace@443..444 " "
-    Name@444..448
-      Ident@444..448 "Lane"
-    Whitespace@448..449 " "
-    LBrace@449..450 "{"
-    Whitespace@450..451 " "
-    ComponentLine@451..471
-      OffersKw@451..457 "offers"
-      Whitespace@457..458 " "
-      Reference@458..471
-        QualifiedName@458..471
-          Ident@458..461 "veh"
-          Dot@461..462 "."
-          Ident@462..466 "adas"
-          Dot@466..467 "."
-          Ident@467..471 "lane"
-    Whitespace@471..472 " "
-    RBrace@472..473 "}"
-  Whitespace@473..474 "\n"
+    Whitespace@432..433 "\n"
+    Ident@433..437 "open"
+  Whitespace@437..438 " "
+  ErrorNode@438..467
+    EnumKw@438..442 "enum"
+    Whitespace@442..443 " "
+    Ident@443..447 "Mode"
+    Whitespace@447..448 " "
+    LBrace@448..449 "{"
+    Whitespace@449..450 " "
+    Ident@450..453 "OFF"
+    Whitespace@453..454 " "
+    Eq@454..455 "="
+    Whitespace@455..456 " "
+    IntNumber@456..457 "0"
+    Comma@457..458 ","
+    Whitespace@458..459 " "
+    Ident@459..461 "ON"
+    Whitespace@461..462 " "
+    Eq@462..463 "="
+    Whitespace@463..464 " "
+    IntNumber@464..465 "1"
+    Whitespace@465..466 " "
+    RBrace@466..467 "}"
+  Whitespace@467..468 "\n"
+  ErrorNode@468..515
+    InternalKw@468..476 "internal"
+    Whitespace@476..477 " "
+    Ident@477..481 "open"
+    Whitespace@481..482 " "
+    EnumKw@482..486 "enum"
+    Whitespace@486..487 " "
+    Ident@487..491 "Gear"
+    Whitespace@491..492 " "
+    LBrace@492..493 "{"
+    Whitespace@493..494 " "
+    Ident@494..498 "PARK"
+    Whitespace@498..499 " "
+    Eq@499..500 "="
+    Whitespace@500..501 " "
+    IntNumber@501..502 "0"
+    Comma@502..503 ","
+    Whitespace@503..504 " "
+    Ident@504..509 "DRIVE"
+    Whitespace@509..510 " "
+    Eq@510..511 "="
+    Whitespace@511..512 " "
+    IntNumber@512..513 "1"
+    Whitespace@513..514 " "
+    RBrace@514..515 "}"
+  Whitespace@515..517 "\n\n"
+  ComponentDef@517..556
+    ComponentKw@517..526 "component"
+    Whitespace@526..527 " "
+    Name@527..531
+      Ident@527..531 "Lane"
+    Whitespace@531..532 " "
+    LBrace@532..533 "{"
+    Whitespace@533..534 " "
+    ComponentLine@534..554
+      OffersKw@534..540 "offers"
+      Whitespace@540..541 " "
+      Reference@541..554
+        QualifiedName@541..554
+          Ident@541..544 "veh"
+          Dot@544..545 "."
+          Ident@545..549 "adas"
+          Dot@549..550 "."
+          Ident@550..554 "lane"
+    Whitespace@554..555 " "
+    RBrace@555..556 "}"
+  Whitespace@556..557 "\n"
 errors:
   RSDL-604 208..212 `type` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
   RSDL-604 247..255 `struct` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
   RSDL-604 297..306 `interface` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
   RSDL-604 360..367 `service` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
+  RSDL-604 438..442 `enum` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
+  RSDL-604 468..476 `enum` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)

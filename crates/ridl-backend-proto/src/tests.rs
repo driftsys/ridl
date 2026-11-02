@@ -340,6 +340,7 @@ fn an_enum_prefixes_its_values_and_gains_a_zero_member() {
                     value: Some(3),
                     ..Default::default()
                 }],
+                open: false,
             })),
             ..Default::default()
         }],
@@ -389,6 +390,7 @@ fn an_enum_that_already_declares_zero_gains_no_synthetic_member() {
                     },
                 ],
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -440,6 +442,7 @@ fn a_declared_zero_leads_even_when_it_is_not_declared_first() {
                     },
                 ],
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -481,6 +484,7 @@ fn a_retired_zero_slot_synthesizes_unspecified_without_a_conflicting_reserved() 
                     value: Some(0),
                     ..Default::default()
                 }],
+                open: false,
             })),
             ..Default::default()
         }],
@@ -530,6 +534,7 @@ fn a_struct_field_typed_by_an_enum_projects_and_compiles() {
                         },
                     ],
                     reserved: Vec::new(),
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -571,6 +576,7 @@ fn an_enum_value_outside_int32_is_refused() {
                     since: Vec::new(),
                 }],
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -646,6 +652,7 @@ fn an_enum_set_becomes_an_integer_with_its_bits_in_a_comment() {
                         },
                     ],
                     width: v2::IntWidth::U32 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -981,6 +988,7 @@ fn a_named_enum_set_map_key_is_the_integer_of_its_width() {
                 since: Vec::new(),
             }],
             width: v2::IntWidth::U32 as i32,
+            open: false,
         })),
         ..Default::default()
     });
@@ -1155,6 +1163,7 @@ fn a_foreign_enum_set_inlines_with_no_import() {
                     since: Vec::new(),
                 }],
                 width: v2::IntWidth::U32 as i32,
+                open: false,
             })),
             ..Default::default()
         }],
@@ -1388,6 +1397,7 @@ fn an_optional_tuple_field_takes_the_proto3_optional_keyword() {
                 kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                     values: vec![gear_value("PARK", 1), gear_value("DRIVE", 2)],
                     reserved: Vec::new(),
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -1760,6 +1770,7 @@ fn an_enum_value_named_unspecified_collides_with_the_synthesized_zero() {
                     },
                 ],
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -1839,6 +1850,7 @@ fn a_name_based_enum_tombstone_reserves_the_projected_name_not_zero() {
                     name: Some("retired".to_string()),
                     value: None,
                 }],
+                open: false,
             })),
             ..Default::default()
         }],
@@ -1883,6 +1895,7 @@ fn a_name_based_enum_tombstone_colliding_with_a_live_value_is_refused() {
                     name: Some("foo_bar".to_string()),
                     value: None,
                 }],
+                open: false,
             })),
             ..Default::default()
         }],
@@ -1931,6 +1944,7 @@ fn two_enum_values_colliding_after_the_transform_are_refused() {
                     },
                 ],
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -2044,6 +2058,7 @@ fn a_declared_type_colliding_with_a_generated_ordinal_table_is_refused() {
                     since: Vec::new(),
                 }],
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -2121,6 +2136,7 @@ fn two_enums_sharing_a_prefix_collide_on_the_synthesized_zero() {
             since: Vec::new(),
         }],
         reserved: Vec::new(),
+        open: false,
     };
     let package = v2::Package {
         name: "veh.common".to_string(),
@@ -2456,6 +2472,7 @@ fn a_named_scalar_an_enum_and_an_enum_set_each_get_a_root_box_message() {
                         since: Vec::new(),
                     }],
                     reserved: Vec::new(),
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -2482,6 +2499,7 @@ fn a_named_scalar_an_enum_and_an_enum_set_each_get_a_root_box_message() {
                         },
                     ],
                     width: v2::IntWidth::U32 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -2574,4 +2592,46 @@ fn a_declared_type_colliding_with_a_root_box_message_is_refused() {
         "got: {}",
         error.message
     );
+}
+
+#[test]
+fn an_enum_states_whether_it_is_strict_or_open() {
+    for (open, comment) in [
+        (
+            false,
+            "// strict: a value outside this list is not valid\nenum Gear {",
+        ),
+        (
+            true,
+            "// open: a value outside this list is valid and is kept\nenum Gear {",
+        ),
+    ] {
+        let package = v2::Package {
+            name: "veh.common".to_string(),
+            decls: vec![v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![v2::EnumValue {
+                        name: "PARK".to_string(),
+                        value: 0,
+                        doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
+                    }],
+                    reserved: Vec::new(),
+                    open,
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let generated = generate(&package).expect("generate");
+        assert!(
+            generated.proto_source.contains(comment),
+            "got:\n{}",
+            generated.proto_source
+        );
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
 }

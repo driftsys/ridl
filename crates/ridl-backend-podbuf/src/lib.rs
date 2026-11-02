@@ -11,7 +11,9 @@
 //!   out as the layout law does on every little-endian target;
 //! - `_Static_assert` checks on `sizeof` and `offsetof` for every head and
 //!   field, so a toolchain that disagrees fails the build;
-//! - the constants of the enums, enum sets and union tags;
+//! - the constants of the enums, enum sets and union tags, with a comment
+//!   before the constants of each enum and enum set that states whether it
+//!   is strict or open;
 //! - inline accessor functions, `<owner>_<field>_at`, that read a field from a
 //!   head of a size the caller gives and answer 0 (or `NULL`) for a field that
 //!   lies past it, so a reader built from a newer type reads the data of an
@@ -1060,6 +1062,10 @@ impl<'a> Header<'a> {
             };
             match decl.kind.as_ref() {
                 Some(v1::declaration::Kind::Enum(value)) => {
+                    // A declaration with no constant gets no comment.
+                    if value.values.iter().any(|entry| entry.name.is_some()) {
+                        let _ = writeln!(out, "{}", strictness_comment("value", value.open));
+                    }
                     for entry in &value.values {
                         let Some(spelled) = entry.name.as_ref() else {
                             continue;
@@ -1074,6 +1080,9 @@ impl<'a> Header<'a> {
                     }
                 }
                 Some(v1::declaration::Kind::EnumSet(value)) => {
+                    if value.bits.iter().any(|entry| entry.name.is_some()) {
+                        let _ = writeln!(out, "{}", strictness_comment("bit", value.open));
+                    }
                     for entry in &value.bits {
                         let Some(spelled) = entry.name.as_ref() else {
                             continue;
@@ -1571,3 +1580,18 @@ static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h,
 #endif
 
 ";
+
+/// The comment line above the constants of an enum (`what` is `value`) or an
+/// enum set (`what` is `bit`) that states which rule a reader applies to a
+/// value outside them, and not how the rule is enforced, as the comment of
+/// the `.proto` and `.fbs` output does: a strict declaration states that such
+/// a value is not valid, an open one that it is valid and is kept. The
+/// constants are the same for both. A declaration that writes no constant
+/// gets no comment.
+fn strictness_comment(what: &str, open: bool) -> String {
+    if open {
+        format!("/* open: a {what} outside these constants is valid and is kept */")
+    } else {
+        format!("/* strict: a {what} outside these constants is not valid */")
+    }
+}

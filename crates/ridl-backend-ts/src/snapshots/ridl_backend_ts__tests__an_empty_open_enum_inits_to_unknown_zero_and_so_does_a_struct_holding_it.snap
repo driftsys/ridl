@@ -1,0 +1,29 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+export enum Empty {}
+
+/**
+ * A `Empty`, or a value that the enum does not declare.
+ *
+ * The codec decodes a declared value to the enum member and any other value to
+ * `{ unknown: n }`, and it encodes `{ unknown: n }` as `n`. A value
+ * `{ unknown: n }` whose `n` is declared is encoded as `n` and decodes as the
+ * member.
+ */
+export type EmptyValue = Empty | { readonly unknown: number };
+
+export function initEmpty(): EmptyValue {
+  return { unknown: 0 };
+}
+
+export interface Holder {
+  value: EmptyValue;
+}
+
+export function initHolder(): Holder {
+  return {
+    value: initEmpty(),
+  };
+}

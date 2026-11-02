@@ -237,7 +237,8 @@ fn every_reported_category_is_explainable() {
 /// `podbuf_inline_append`, `podbuf_width_change` and
 /// `podbuf_strict_enum_append`, whose verdict the classifier reads from the
 /// encodings `--encoding` names: each row prints one label per case, and
-/// `diff_cli.rs` covers both.
+/// `diff_cli.rs` covers both. (The last of the three is superseded and no
+/// longer reported, but its row keeps its two labels.)
 #[test]
 fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
     use ridl_diff::{Category, Change, Verdict};
@@ -344,6 +345,9 @@ fn the_category_spellings_are_pinned() {
             "podbuf_inline_append",
             "podbuf_width_change",
             "podbuf_strict_enum_append",
+            "strict_enum_append",
+            "enum_opened",
+            "enum_closed",
         ],
         "a category word is part of the stable report schema"
     );

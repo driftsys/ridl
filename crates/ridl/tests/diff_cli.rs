@@ -647,7 +647,7 @@ fn an_appended_enum_value_flag_or_union_arm_that_widens_is_a_podbuf_break() {
         let values: String = (0..count)
             .map(|value| format!("  V{value} = {value}\n"))
             .collect();
-        format!("package veh.cluster\nenum Mode {{\n{values}}}\n")
+        format!("package veh.cluster\nopen enum Mode {{\n{values}}}\n")
     }
     fn union_source(count: usize) -> String {
         let arms: String = (1..=count)
@@ -671,8 +671,8 @@ fn an_appended_enum_value_flag_or_union_arm_that_widens_is_a_podbuf_break() {
         ),
         (
             "enumset",
-            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 7\n}\n".to_string(),
-            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 7\n  C = 8\n}\n".to_string(),
+            "package veh.cluster\nopen enumset Flags {\n  A = 0\n  B = 7\n}\n".to_string(),
+            "package veh.cluster\nopen enumset Flags {\n  A = 0\n  B = 7\n  C = 8\n}\n".to_string(),
             "podbuf_width_change veh.cluster/Flags: u8 -> u16",
         ),
     ] {
@@ -713,10 +713,9 @@ fn an_appended_enum_value_flag_or_union_arm_that_widens_is_a_podbuf_break() {
             v1.as_os_str(),
             v2.as_os_str(),
         ]);
-        // A kept width draws no width line; an enum append is still a strict
-        // enum break, a union arm append is not.
-        let expected = i32::from(name == "enum-kept");
-        assert_eq!(code, expected, "{name}: stderr:\n{stderr}");
+        // A kept width draws no width line, and an append to an open enum or
+        // a union is compatible.
+        assert_eq!(code, 0, "{name}: stderr:\n{stderr}");
         assert!(
             !stdout.contains("podbuf_width_change"),
             "{name} stdout:\n{stdout}"
@@ -724,45 +723,56 @@ fn an_appended_enum_value_flag_or_union_arm_that_widens_is_a_podbuf_break() {
     }
 }
 
-/// An enum value or an enum-set flag appended: `podbuf_strict_enum_append`,
-/// exit 1 under `--encoding podbuf` and exit 0 without the flag.
+/// An enum value or an enum-set flag appended to a strict declaration:
+/// `strict_enum_append`, exit 1 with no `--encoding` and under each one. The
+/// same append to an `open` declaration exits 0. Opening exits 0 and closing
+/// exits 1.
 #[test]
-fn an_appended_enum_value_or_flag_is_a_strict_enum_break_under_podbuf() {
+fn an_appended_enum_value_or_flag_is_breaking_unless_the_declaration_is_open() {
     let dir = TempDir::new("strict-enum");
-    for (name, old, new, line) in [
-        (
-            "enum",
-            "package veh.cluster\nenum Mode {\n  A = 0\n}\n",
-            "package veh.cluster\nenum Mode {\n  A = 0\n  B = 1\n}\n",
-            "podbuf_strict_enum_append veh.cluster/Mode",
-        ),
+    for (name, keyword, line) in [
+        ("enum", "enum Mode", "strict_enum_append veh.cluster/Mode"),
         (
             "enumset",
-            "package veh.cluster\nenumset Flags {\n  A = 0\n}\n",
-            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 1\n}\n",
-            "podbuf_strict_enum_append veh.cluster/Flags",
+            "enumset Flags",
+            "strict_enum_append veh.cluster/Flags",
         ),
     ] {
-        let v1 = dir.write(&format!("{name}-v1.typl"), old);
-        let v2 = dir.write(&format!("{name}-v2.typl"), new);
-        let (code, stdout, stderr) = ridl(&[
-            "diff".as_ref(),
-            "--encoding".as_ref(),
-            "podbuf".as_ref(),
-            v1.as_os_str(),
-            v2.as_os_str(),
-        ]);
-        assert_eq!(code, 1, "{name}: exits 1 under podbuf, stderr:\n{stderr}");
-        assert!(
-            stdout.contains(&format!("breaking under podbuf:\n  [breaking] {line}")),
-            "{name} stdout:\n{stdout}"
-        );
-        let (code, stdout, _) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
-        assert_eq!(code, 0, "{name}: exits 0 without the flag");
-        assert!(
-            stdout.contains(&format!("breaking under podbuf:\n  [compatible] {line}")),
-            "{name} stdout:\n{stdout}"
-        );
+        let source = |open: &str, members: &str| {
+            format!("package veh.cluster\n{open}{keyword} {{\n  A = 0\n{members}}}\n")
+        };
+        let v1 = dir.write(&format!("{name}-v1.typl"), &source("", ""));
+        let v2 = dir.write(&format!("{name}-v2.typl"), &source("", "  B = 1\n"));
+        for encoding in [None, Some("flatbuffers"), Some("proto3"), Some("podbuf")] {
+            let mut args: Vec<&std::ffi::OsStr> = vec!["diff".as_ref()];
+            if let Some(encoding) = encoding {
+                args.push("--encoding".as_ref());
+                args.push(encoding.as_ref());
+            }
+            args.extend([v1.as_os_str(), v2.as_os_str()]);
+            let (code, stdout, stderr) = ridl(&args);
+            assert_eq!(
+                code, 1,
+                "{name} {encoding:?}: exits 1, stderr:\n{stderr}\nstdout:\n{stdout}"
+            );
+            assert!(
+                stdout.contains(&format!("[breaking] {line}")),
+                "{name} {encoding:?} stdout:\n{stdout}"
+            );
+        }
+
+        let o1 = dir.write(&format!("{name}-o1.typl"), &source("open ", ""));
+        let o2 = dir.write(&format!("{name}-o2.typl"), &source("open ", "  B = 1\n"));
+        let (code, stdout, stderr) = ridl(&["diff".as_ref(), o1.as_os_str(), o2.as_os_str()]);
+        assert_eq!(code, 0, "{name}: open append, stderr:\n{stderr}");
+        assert!(!stdout.contains("strict_enum_append"), "{name}: {stdout}");
+
+        let (code, stdout, _) = ridl(&["diff".as_ref(), v1.as_os_str(), o1.as_os_str()]);
+        assert_eq!(code, 0, "{name}: opening exits 0");
+        assert!(stdout.contains("[compatible] enum_opened"), "{stdout}");
+        let (code, stdout, _) = ridl(&["diff".as_ref(), o1.as_os_str(), v1.as_os_str()]);
+        assert_eq!(code, 1, "{name}: closing exits 1");
+        assert!(stdout.contains("[breaking] enum_closed"), "{stdout}");
     }
 }
 

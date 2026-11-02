@@ -1,0 +1,9 @@
+[package]
+name = "strict.demo"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+
+[backend.typescript]
+codec = true

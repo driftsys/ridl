@@ -397,8 +397,13 @@ enum GearPosition {
 #[test]
 fn an_enum_reorder_with_an_added_value_reports_the_addition_alone() {
     let dir = TempDir::new("enum-reorder-extend");
-    let old = workspace(&dir, "old", GEARS);
-    let new = workspace(&dir, "new", GEARS_REORDERED_AND_EXTENDED);
+    // Open, so that the appended value is compatible.
+    let old = workspace(&dir, "old", &GEARS.replace("enum ", "open enum "));
+    let new = workspace(
+        &dir,
+        "new",
+        &GEARS_REORDERED_AND_EXTENDED.replace("enum ", "open enum "),
+    );
 
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
@@ -987,8 +992,13 @@ enumset WarningFlags {
 #[test]
 fn an_enum_set_reorder_with_an_added_bit_reports_the_addition_alone() {
     let dir = TempDir::new("enumset-reorder-extend");
-    let old = workspace(&dir, "old", FLAGS);
-    let new = workspace(&dir, "new", FLAGS_REORDERED_AND_EXTENDED);
+    // Open, so that the appended bit is compatible.
+    let old = workspace(&dir, "old", &FLAGS.replace("enumset ", "open enumset "));
+    let new = workspace(
+        &dir,
+        "new",
+        &FLAGS_REORDERED_AND_EXTENDED.replace("enumset ", "open enumset "),
+    );
 
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");

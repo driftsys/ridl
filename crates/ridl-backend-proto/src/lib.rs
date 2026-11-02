@@ -364,6 +364,17 @@ fn emit_root_boxes(
     Ok(())
 }
 
+/// The comment line above an emitted enum that states which rule the RIDL
+/// codecs apply to a value outside its list. The schema type itself is the
+/// same for both: this target keeps any integer on the wire.
+fn strictness_comment(open: bool) -> &'static str {
+    if open {
+        "// open: a value outside this list is valid and is kept"
+    } else {
+        "// strict: a value outside this list is not valid"
+    }
+}
+
 /// One enum as one proto3 `enum` (design §3.1, §3.4): values keep their
 /// explicitly assigned numbers, and a `Reserved` retires its number rather
 /// than let it be reused (typl §7.4). Two proto3 rules force choices no typl
@@ -405,7 +416,10 @@ fn emit_enum(
 ) -> Result<(), GenerateError> {
     let prefix = screaming_snake_case(name);
     names.claim(name, &format!("enum `{name}`"))?;
-    out.push_str(&format!("\nenum {name} {{\n"));
+    out.push_str(&format!(
+        "\n{}\nenum {name} {{\n",
+        strictness_comment(def.open)
+    ));
 
     // The value names this enum itself emits, for the reserved-name check
     // below: a reserved name conflicts only with its own enum's live values,

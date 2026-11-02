@@ -1,6 +1,6 @@
-//! RIDL-153, RIDL-154 and RIDL-155: the build-time errors of the podbuf
-//! encoding. They run only when a `[backend.<name>]` table of the workspace
-//! manifest enables `podbuf`.
+//! RIDL-153, RIDL-154 and RIDL-155: the build-time errors of the
+//! podbuf encoding. They run only when a `[backend.<name>]` table of the
+//! workspace manifest enables `podbuf`.
 //!
 //! - RIDL-153: a struct, a union, or a named tuple (the argument struct a
 //!   call with several parameters induces, or a tuple reply) whose largest

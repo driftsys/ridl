@@ -158,7 +158,7 @@ TupleField =
 // ---------- Enum ----------
 
 EnumDef =
-  'internal'? 'error'? 'enum' Name '{' ((values:EnumValue | reserved:ReservedEntry) ','?)* '}'
+  'internal'? 'error'? 'open'? 'enum' Name '{' ((values:EnumValue | reserved:ReservedEntry) ','?)* '}'
 
 EnumValue =
   Name '=' value:Literal
@@ -167,8 +167,8 @@ EnumValue =
 
 // Standalone form and derived form (typl reference §9.1–§9.2).
 EnumSetDef =
-  'internal'? 'error'? 'enumset' Name '{' (bits:EnumSetBit ','?)* '}'
-| 'internal'? 'error'? 'enumset' Name ':' backing_ref:PathType
+  'internal'? 'error'? 'open'? 'enumset' Name '{' (bits:EnumSetBit ','?)* '}'
+| 'internal'? 'error'? 'open'? 'enumset' Name ':' backing_ref:PathType
 
 EnumSetBit =
   Name '=' value:Literal

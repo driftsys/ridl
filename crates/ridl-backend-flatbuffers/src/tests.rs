@@ -670,6 +670,7 @@ fn a_union_arm_typed_by_an_enum_set_gets_a_wrapper_table() {
                     backing_enum: None,
                     bits: enum_values(vec![("LOW_FUEL", 0)]),
                     width: v2::IntWidth::U8 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -1073,6 +1074,7 @@ fn enum_package(name: &str, values: Vec<(&str, i64)>) -> v2::Package {
             kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
                 values: enum_values(values),
                 reserved: Vec::new(),
+                open: false,
             })),
             ..Default::default()
         }],
@@ -1110,6 +1112,7 @@ fn enum_set_and_field(name: &str, bits: Vec<(&str, i64)>) -> v2::Package {
                     backing_enum: None,
                     bits: enum_values(bits),
                     width: v2::IntWidth::U8 as i32,
+                    open: false,
                 })),
                 ..Default::default()
             },
@@ -2369,4 +2372,31 @@ fn a_corpus_type_with_no_unbounded_member_is_bounded() {
         )
         .is_some()
     );
+}
+
+#[test]
+fn an_enum_states_whether_it_is_strict_or_open() {
+    for (open, comment) in [
+        (
+            false,
+            "// strict: a value outside this list is not valid\nenum Gear : long {",
+        ),
+        (
+            true,
+            "// open: a value outside this list is valid and is kept\nenum Gear : long {",
+        ),
+    ] {
+        let mut package = enum_package("Gear", vec![("PARK", 0)]);
+        let Some(v2::decl::Kind::EnumDef(def)) = package.decls[0].kind.as_mut() else {
+            panic!("enum_package builds an enum");
+        };
+        def.open = open;
+        let generated = generate(&package).expect("generate");
+        assert!(
+            generated.fbs_source.contains(comment),
+            "got:\n{}",
+            generated.fbs_source
+        );
+        compile_with_planus("veh.common.fbs", &generated.fbs_source);
+    }
 }

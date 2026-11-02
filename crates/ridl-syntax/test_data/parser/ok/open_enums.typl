@@ -1,0 +1,16 @@
+package veh.open
+
+open enum DtcStatus { INACTIVE = 0 ACTIVE = 1 }
+
+internal error open enum Fault { NONE = 0 }
+
+open enumset Flags { A = 0 }
+
+open enumset Warnings : Fault
+
+// `open` is an ordinary identifier outside a modifier position.
+struct S { open: bool }
+
+// An identifier `open` directly before a declaration is not the modifier.
+enumset Others: open
+enum Next { A = 0 }

@@ -319,7 +319,8 @@ fn map_default(ctx: &Ctx, map: &v1::MapType, slot: &Slot) -> Option<TokenStream>
 
 fn enum_default(name: &str, ed: &v1::Enum) -> Option<TokenStream> {
     // The value 0 if declared, else the lowest declared value (typl §5.8).
-    // The lowering picks the member once, as `Enum.init_member`.
+    // The lowering picks the member once, as `Enum.init_member`. An open
+    // enum's init is a declared member too, never `Unknown`.
     let chosen = ed.values.get(ed.init_member? as usize)?;
     let name_id = ident(name);
     let variant = ident(&pascal_of(chosen.name.as_ref()));

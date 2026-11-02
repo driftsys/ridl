@@ -1,6 +1,5 @@
 ---
 source: crates/ridlc/tests/corpus.rs
-assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
@@ -604,7 +603,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         ],
         "retired": [],
         "zeroMember": 0,
-        "initMember": 0
+        "initMember": 0,
+        "open": false
       }
     },
     {
@@ -708,7 +708,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         ],
         "retired": [],
         "zeroMember": 0,
-        "initMember": 0
+        "initMember": 0,
+        "open": false
       }
     },
     {
@@ -819,7 +820,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           }
         ],
         "width": "INT_WIDTH_U8",
-        "declaredMask": "15"
+        "declaredMask": "15",
+        "open": false
       }
     },
     {

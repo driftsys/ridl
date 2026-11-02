@@ -82,6 +82,7 @@ fn token_info(name: &str) -> (&'static str, &'static str) {
         "match" => ("MatchKw", "match"),
         "reserved" => ("ReservedKw", "reserved"),
         "error" => ("ErrorKw", "error"),
+        "open" => ("OpenKw", "open"),
         "interface" => ("InterfaceKw", "interface"),
         "service" => ("ServiceKw", "service"),
         "signal" => ("SignalKw", "signal"),

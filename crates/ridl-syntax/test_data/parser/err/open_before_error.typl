@@ -1,0 +1,3 @@
+package veh.open
+
+open error enum E { A = 0 }

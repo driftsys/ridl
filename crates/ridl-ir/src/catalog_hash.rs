@@ -857,6 +857,7 @@ mod tests {
             kind: Some(decl::Kind::EnumDef(EnumDef {
                 values: vec![enum_value("OFF", 0), enum_value("ON", 1)],
                 reserved: vec![reserved_value(3), reserved_value(4)],
+                open: false,
             })),
             ..Default::default()
         });
@@ -920,6 +921,33 @@ mod tests {
         let mut bits = p.clone();
         enum_set_def(&mut bits).bits.reverse();
         assert_ne!(hash_of(&bits, &fw), before, "bits reordered");
+    }
+
+    fn hex_of(hash: [u8; 32]) -> String {
+        hash.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    /// The `open` flag of an enum or an enum set changes which payloads a
+    /// reader accepts, so it moves the hash. A strict declaration serializes
+    /// no `open` field, so its hash is the value that was computed before the
+    /// flag existed.
+    #[test]
+    fn the_open_flag_moves_the_hash_and_a_strict_enum_keeps_its_hash() {
+        let (p, fw) = enum_fixture(true);
+        let strict = hash_of(&p, &fw);
+        assert_eq!(
+            hex_of(strict),
+            "cf3fccacc3d87efce002d6d2d4ef881d2f4006300cdf60e2b400523c6064ff13",
+            "a strict declaration hashes as it did before the flag existed"
+        );
+
+        let mut open_enum = p.clone();
+        enum_def(&mut open_enum).open = true;
+        assert_ne!(hash_of(&open_enum, &fw), strict, "open enum");
+
+        let mut open_set = p.clone();
+        enum_set_def(&mut open_set).open = true;
+        assert_ne!(hash_of(&open_set, &fw), strict, "open enum set");
     }
 
     /// An enum and an enum set that no interface reaches are outside the

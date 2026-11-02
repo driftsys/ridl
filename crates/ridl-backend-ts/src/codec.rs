@@ -6,16 +6,22 @@
 //! is every FlatBuffers root of the package with a finite bound, except an
 //! internal one, whose type `<base>.ts` does not export. A private converter
 //! pair `pack<Name>` and `unpack<Name>` is written for each struct, union and
-//! induced tuple a payload type reaches. An induced tuple of an interaction
+//! induced tuple a payload type reaches. Each strict enum and strict enum set
+//! it reaches gets an `unpack<Name>` that refuses a value the declaration does
+//! not name. Each open enum gets a pair `pack<Name>` and `unpack<Name>` that
+//! keeps every value, and each open enum set gets a `pack<Name>` that refuses a
+//! value outside the width of the set with the `range` rule. An induced tuple of an interaction
 //! is exported as an `interface`, or as the type alias
-//! `Record<string, never>` when it has no field. The module also exports the catalog's name
+//! `Record<string, never>` when it has no field. The module also exports the
+//! `RuleError` class when it reaches an enum or an enum set, the catalog's name
 //! and hash, the qualified names of the payload types, the text of the rule
 //! codes of the wasm module, and one member table per declared interface,
 //! whose entry carries the member's payload limit when the model records one.
 //!
-//! A named scalar or an enum set of another package converts by a type
-//! assertion, and a payload type of another package that is one goes through
-//! that package's own codec module. A struct, a union or an enum of another
+//! A named scalar of another package converts by a type assertion, an enum set
+//! of another package by a checking function of the module, and a payload type
+//! of another package that is a named scalar or an enum set goes through that
+//! package's own codec module. A struct, a union or an enum of another
 //! package needs a converter of its own, which the module does not write yet:
 //! a payload type that reaches one is refused with a [`GenerateError`] that
 //! names both.
@@ -30,6 +36,9 @@ use crate::{GenerateError, GeneratedTs};
 /// The text of the rule codes the wasm module reports, rule code `n` at
 /// index `n - 2`: the order of `WASM_RULES` in the generated crate.
 const RULES: [&str; 6] = ["length", "pattern", "range", "step", "unique", "variant"];
+
+/// The largest integer a TypeScript number holds exactly.
+const MAX_SAFE: u64 = 9_007_199_254_740_991;
 
 /// The length of `Catalog.hash`.
 const HASH_LEN: usize = 32;
@@ -140,6 +149,21 @@ struct Codec<'a> {
     used_locals: BTreeSet<String>,
     /// Whether a converter reads a required field the buffer may leave out.
     needs_absent: bool,
+    /// The open enums and open enum sets of this package that a payload type
+    /// reaches, by index: each gets a converter pair of its own.
+    reached_open: BTreeSet<usize>,
+    /// The open enum sets of other packages a payload type reaches, by
+    /// qualified name: each gets a function that checks a value against the
+    /// width of the set.
+    foreign_open_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
+    /// The strict enums and strict enum sets of this package that a payload
+    /// type reaches, by index: each gets an unpack function that refuses a
+    /// value the declaration does not name.
+    reached_strict: BTreeSet<usize>,
+    /// The strict enum sets of other packages a payload type reaches, by
+    /// qualified name: each gets a function that checks a value against the
+    /// declared bits.
+    foreign_strict_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
 }
 
 impl<'a> Codec<'a> {
@@ -195,6 +219,10 @@ impl<'a> Codec<'a> {
             foreign_types: BTreeSet::new(),
             used_locals: BTreeSet::new(),
             needs_absent: false,
+            reached_open: BTreeSet::new(),
+            foreign_open_sets: BTreeMap::new(),
+            reached_strict: BTreeSet::new(),
+            foreign_strict_sets: BTreeMap::new(),
         };
         let roots = model
             .flatbuffers
@@ -318,6 +346,9 @@ impl<'a> Codec<'a> {
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
+        if self.needs_rule_error() {
+            register("RuleError".to_string(), "RuleError".to_string())?;
+        }
         for package in &self.foreign_types {
             let alias = package_alias(package);
             register(alias.clone(), alias)?;
@@ -360,6 +391,30 @@ impl<'a> Codec<'a> {
                 register(format!("{prefix}{name}"), name.to_string())?;
             }
         }
+        for index in &self.reached_open {
+            let name = declared_name(&self.model.declarations[*index]);
+            for prefix in ["pack", "unpack"] {
+                register(format!("{prefix}{name}"), name.to_string())?;
+            }
+        }
+        for index in &self.reached_strict {
+            let name = declared_name(&self.model.declarations[*index]);
+            register(format!("unpack{name}"), name.to_string())?;
+        }
+        // The checking functions of the enum sets of other packages are named
+        // from the package alias and the set name, so two sets can spell one
+        // function.
+        for (package, declaration) in self.foreign_open_sets.values() {
+            let name = declared_name(declaration);
+            register(foreign_set_pack(package, name), format!("{package}.{name}"))?;
+        }
+        for (package, declaration) in self.foreign_strict_sets.values() {
+            let name = declared_name(declaration);
+            register(
+                foreign_set_unpack(package, name),
+                format!("{package}.{name}"),
+            )?;
+        }
         let mut reached_tuples: Vec<&usize> = self.reached_tuples.iter().collect();
         reached_tuples.sort();
         for index in reached_tuples {
@@ -380,6 +435,27 @@ impl<'a> Codec<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Whether a converter of the module throws a `RuleError`: some enum or
+    /// enum set is reached.
+    fn needs_rule_error(&self) -> bool {
+        !self.reached_open.is_empty()
+            || !self.foreign_open_sets.is_empty()
+            || !self.reached_strict.is_empty()
+            || !self.foreign_strict_sets.is_empty()
+    }
+
+    /// Whether `ty` names an open enum of this package.
+    fn is_open_enum(&self, ty: &v1::Type) -> bool {
+        let Some(v1::r#type::Kind::Named(reference)) = &ty.kind else {
+            return false;
+        };
+        matches!(
+            self.resolve(reference, "").ok(),
+            Some(Target::Local(_, declaration))
+                if matches!(&declaration.kind, Some(v1::declaration::Kind::Enum(shape)) if shape.open)
+        )
     }
 
     /// The payload types, in the order of the roots.
@@ -485,9 +561,23 @@ impl<'a> Codec<'a> {
                 }
                 Ok(())
             }
-            Some(Kind::Scalar(_) | Kind::Enum(_) | Kind::EnumSet(_) | Kind::Constant(_)) | None => {
+            Some(Kind::Enum(shape)) => {
+                if shape.open {
+                    self.reached_open.insert(index);
+                } else {
+                    self.reached_strict.insert(index);
+                }
                 Ok(())
             }
+            Some(Kind::EnumSet(shape)) => {
+                if shape.open {
+                    self.reached_open.insert(index);
+                } else {
+                    self.reached_strict.insert(index);
+                }
+                Ok(())
+            }
+            Some(Kind::Scalar(_) | Kind::Constant(_)) | None => Ok(()),
         }
     }
 
@@ -511,6 +601,19 @@ impl<'a> Codec<'a> {
                     // The converter names the type through the package's
                     // alias, which the name check needs before emit.
                     self.foreign_types.insert(package.to_string());
+                    if let Some(v1::declaration::Kind::EnumSet(shape)) = &declaration.kind {
+                        if shape.open {
+                            self.foreign_open_sets.insert(
+                                format!("{package}.{}", declared_name(declaration)),
+                                (package, declaration),
+                            );
+                        } else {
+                            self.foreign_strict_sets.insert(
+                                format!("{package}.{}", declared_name(declaration)),
+                                (package, declaration),
+                            );
+                        }
+                    }
                     Ok(())
                 }
             },
@@ -599,7 +702,7 @@ impl<'a> Codec<'a> {
         use v1::r#type::Kind;
         match &ty.kind {
             Some(Kind::Named(reference)) => match self.resolve(reference, qualified)? {
-                Target::Local(_, declaration) => Ok(format!("t.{}", declared_name(declaration))),
+                Target::Local(_, declaration) => Ok(value_type(declaration)),
                 Target::Foreign(package, declaration) => {
                     self.foreign_types.insert(package.to_string());
                     Ok(format!(
@@ -670,11 +773,14 @@ impl<'a> Codec<'a> {
         use v1::r#type::Kind as TypeKind;
         match &ty.kind {
             Some(TypeKind::Named(reference)) => {
-                let (spelled, declaration, nested) = match self.resolve(reference, qualified)? {
+                let (spelled, declaration, nested, home) = match self
+                    .resolve(reference, qualified)?
+                {
                     Target::Local(_, declaration) => (
                         format!("t.{}", declared_name(declaration)),
                         declaration,
                         true,
+                        "",
                     ),
                     Target::Foreign(package, declaration) => {
                         // `reach_reference` refused a foreign struct, union
@@ -691,14 +797,47 @@ impl<'a> Codec<'a> {
                             format!("{}.{}", package_alias(package), declared_name(declaration)),
                             declaration,
                             false,
+                            package,
                         )
                     }
                 };
                 let name = declared_name(declaration);
                 Ok(match &declaration.kind {
+                    Some(Kind::Enum(shape)) if shape.open && nested => Rule {
+                        pack: format!("pack{name}({{}})"),
+                        unpack: format!("unpack{name}({{}})"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
+                    Some(Kind::EnumSet(shape)) if shape.open && nested => Rule {
+                        pack: format!("pack{name}({{}})"),
+                        unpack: format!("{{}} as {spelled}"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
+                    Some(Kind::EnumSet(shape)) if shape.open => Rule {
+                        pack: format!("{}({{}})", foreign_set_pack(home, name)),
+                        unpack: format!("{{}} as {spelled}"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
                     Some(Kind::Enum(_)) => Rule {
                         pack: "BigInt({})".to_string(),
-                        unpack: format!("Number({{}}) as {spelled}"),
+                        unpack: format!("unpack{name}({{}})"),
+                        plain: false,
+                        nullable: false,
+                        vector: false,
+                    },
+                    Some(Kind::EnumSet(_)) => Rule {
+                        pack: "{}".to_string(),
+                        unpack: if nested {
+                            format!("unpack{name}({{}})")
+                        } else {
+                            format!("{}({{}})", foreign_set_unpack(home, name))
+                        },
                         plain: false,
                         nullable: false,
                         vector: false,
@@ -713,7 +852,7 @@ impl<'a> Codec<'a> {
                     Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
                         bytes_rule(&spelled)
                     }
-                    Some(Kind::Scalar(_) | Kind::EnumSet(_)) => Rule {
+                    Some(Kind::Scalar(_)) => Rule {
                         pack: "{}".to_string(),
                         unpack: format!("{{}} as {spelled}"),
                         plain: true,
@@ -900,6 +1039,12 @@ impl<'a> Codec<'a> {
             if self.reached.contains(&index) {
                 self.emit_converters(&mut body, index, declaration)?;
             }
+            if self.reached_open.contains(&index) {
+                self.emit_open_converters(&mut body, declaration);
+            }
+            if self.reached_strict.contains(&index) {
+                self.emit_strict_converters(&mut body, declaration);
+            }
         }
         for (index, tuple) in self.model.tuples.iter().enumerate() {
             if self.is_payload_tuple(index, tuple) {
@@ -907,6 +1052,34 @@ impl<'a> Codec<'a> {
             }
             if self.reached_tuples.contains(&index) {
                 self.emit_tuple_converters(&mut body, index, tuple)?;
+            }
+        }
+
+        for (package, declaration) in self.foreign_open_sets.values() {
+            if let Some(v1::declaration::Kind::EnumSet(shape)) = &declaration.kind {
+                let name = declared_name(declaration);
+                body.push('\n');
+                emit_set_pack(
+                    &mut body,
+                    &foreign_set_pack(package, name),
+                    &format!("{}.{name}", package_alias(package)),
+                    &format!("{package}.{name}"),
+                    shape,
+                );
+            }
+        }
+
+        for (package, declaration) in self.foreign_strict_sets.values() {
+            if let Some(v1::declaration::Kind::EnumSet(shape)) = &declaration.kind {
+                let name = declared_name(declaration);
+                body.push('\n');
+                emit_strict_set_unpack(
+                    &mut body,
+                    &foreign_set_unpack(package, name),
+                    &format!("{}.{name}", package_alias(package)),
+                    &format!("{package}.{name}"),
+                    shape,
+                );
             }
         }
 
@@ -920,7 +1093,7 @@ impl<'a> Codec<'a> {
                 continue;
             }
             let spelled = match payload.declaration {
-                Some(_) => format!("t.{}", payload.name),
+                Some(declaration) => value_type(declaration),
                 None => payload.name.to_string(),
             };
             let _ = writeln!(
@@ -1000,6 +1173,17 @@ impl<'a> Codec<'a> {
                 "/** Throws for a required field the buffer leaves out. */\n\
                  function absent(type: string, field: string): never {\n  \
                  throw new RangeError(`field ${field} of ${type} is absent`);\n}\n\n",
+            );
+        }
+        if self.needs_rule_error() {
+            out.push_str(
+                "/** Thrown for a value the codec refuses, with the text of the rule it breaks. */\n\
+                 export class RuleError extends RangeError {\n  \
+                 readonly rule: (typeof RULES)[number];\n  \
+                 constructor(rule: (typeof RULES)[number], message: string) {\n    \
+                 super(message);\n    \
+                 this.name = \"RuleError\";\n    \
+                 this.rule = rule;\n  }\n}\n\n",
             );
         }
         out.push_str(&body);
@@ -1115,13 +1299,19 @@ impl<'a> Codec<'a> {
                 self.emit_encode_decode(out, name, &format!("t.{name}"), name, &qualified);
                 return Ok(());
             }
-            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Some(true)),
+            Some(Kind::Enum(shape)) if shape.open => {
+                (format!("new fb.{name}BoxT(pack{name}(value))"), Read::Open)
+            }
+            Some(Kind::EnumSet(shape)) if shape.open => (
+                format!("new fb.{name}BoxT(pack{name}(value))"),
+                Read::Assertion,
+            ),
+            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Read::Strict),
+            Some(Kind::EnumSet(_)) => (format!("new fb.{name}BoxT(value)"), Read::Strict),
             Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
-                (format!("new fb.{name}BoxT(Array.from(value))"), None)
+                (format!("new fb.{name}BoxT(Array.from(value))"), Read::Bytes)
             }
-            Some(Kind::Scalar(_) | Kind::EnumSet(_)) => {
-                (format!("new fb.{name}BoxT(value)"), Some(false))
-            }
+            Some(Kind::Scalar(_)) => (format!("new fb.{name}BoxT(value)"), Read::Assertion),
             _ => {
                 return refuse(format!(
                     "malformed codegen model: the payload type `{qualified}` is not a scalar, \
@@ -1129,12 +1319,13 @@ impl<'a> Codec<'a> {
                 ));
             }
         };
-        let (packed, is_enum) = boxed;
+        let (packed, read_as) = boxed;
+        let spelled = value_type(declaration);
         out.push('\n');
         let _ = writeln!(out, "/** Encodes a `{qualified}` payload. */");
         let _ = writeln!(
             out,
-            "export function encode{name}(value: t.{name}): Uint8Array {{"
+            "export function encode{name}(value: {spelled}): Uint8Array {{"
         );
         out.push_str("  const builder = new flatbuffers.Builder();\n");
         let _ = writeln!(out, "  builder.finish({packed}.pack(builder));");
@@ -1145,24 +1336,130 @@ impl<'a> Codec<'a> {
         );
         let _ = writeln!(
             out,
-            "export function decode{name}(bytes: Uint8Array): t.{name} {{"
+            "export function decode{name}(bytes: Uint8Array): {spelled} {{"
         );
         let read = format!(
             "fb.{name}Box.getRootAs{name}Box(new flatbuffers.ByteBuffer(bytes)).unpack().value"
         );
-        match is_enum {
-            Some(true) => {
-                let _ = writeln!(out, "  return Number({read}) as t.{name};");
+        match read_as {
+            Read::Strict => {
+                let _ = writeln!(out, "  return unpack{name}({read});");
             }
-            Some(false) => {
+            Read::Open => {
+                let _ = writeln!(out, "  return unpack{name}({read});");
+            }
+            Read::Assertion => {
                 let _ = writeln!(out, "  return {read} as t.{name};");
             }
-            None => {
+            Read::Bytes => {
                 let _ = writeln!(out, "  return Uint8Array.from({read}) as t.{name};");
             }
         }
         out.push_str("}\n");
         Ok(())
+    }
+
+    /// The unpack function of a strict enum or a strict enum set. It refuses a
+    /// value the declaration does not name with the `variant` rule, as every
+    /// Rust codec does. An enum with no zero member has no default value, so a
+    /// value the buffer leaves out is reported as absent, as a field is.
+    fn emit_strict_converters(&mut self, out: &mut String, declaration: &v1::Declaration) {
+        use v1::declaration::Kind;
+        let name = declared_name(declaration);
+        let qualified = self.qualified(name);
+        out.push('\n');
+        match &declaration.kind {
+            Some(Kind::Enum(shape)) => {
+                let declared: Vec<String> = shape
+                    .values
+                    .iter()
+                    .map(|value| value.value.to_string())
+                    .collect();
+                // `flatc` holds the value as `T | null` when the enum has no
+                // zero member.
+                let nullable = !shape.values.iter().any(|value| value.value == 0);
+                let (parameter, read) = if nullable {
+                    self.needs_absent = true;
+                    (
+                        "number | bigint | null",
+                        format!("raw === null ? absent(\"{qualified}\", \"value\") : Number(raw)"),
+                    )
+                } else {
+                    ("number | bigint", "Number(raw)".to_string())
+                };
+                let _ = writeln!(
+                    out,
+                    "function unpack{name}(raw: {parameter}): t.{name} {{\n  \
+                     const n = {read};\n  \
+                     if (!([{declared}] as readonly number[]).includes(n)) {{\n    \
+                     throw new RuleError(\"variant\", `value ${{raw}} is not a value of \
+                     {qualified}`);\n  }}\n  \
+                     return n as t.{name};\n}}",
+                    declared = declared.join(", ")
+                );
+            }
+            Some(Kind::EnumSet(shape)) => {
+                emit_strict_set_unpack(
+                    out,
+                    &format!("unpack{name}"),
+                    &format!("t.{name}"),
+                    &qualified,
+                    shape,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    /// The converter pair of an open enum or an open enum set. The enum pair
+    /// keeps every value: an undeclared one is `{ unknown: n }`, and a value
+    /// beyond the safe integers is refused. The enum set pair refuses a value
+    /// that does not fit the width of the set.
+    fn emit_open_converters(&self, out: &mut String, declaration: &v1::Declaration) {
+        use v1::declaration::Kind;
+        let name = declared_name(declaration);
+        let qualified = self.qualified(name);
+        out.push('\n');
+        match &declaration.kind {
+            Some(Kind::Enum(shape)) => {
+                let declared: Vec<String> = shape
+                    .values
+                    .iter()
+                    .map(|value| value.value.to_string())
+                    .collect();
+                let _ = writeln!(
+                    out,
+                    "function pack{name}(value: t.{name}Value): bigint {{\n  \
+                     const raw = typeof value === \"number\" ? value : value.unknown;\n  \
+                     if (!Number.isSafeInteger(raw)) {{\n    \
+                     throw new RuleError(\"variant\", `value ${{raw}} of {qualified} is not a \
+                     safe integer`);\n  }}\n  \
+                     return BigInt(raw);\n}}"
+                );
+                let _ = writeln!(
+                    out,
+                    "function unpack{name}(raw: bigint | null): t.{name}Value {{\n  \
+                     const value = raw ?? 0n;\n  \
+                     if (value > {MAX_SAFE}n || value < -{MAX_SAFE}n) {{\n    \
+                     throw new RuleError(\"variant\", `value ${{value}} of {qualified} is outside \
+                     the safe integers`);\n  }}\n  \
+                     const n = Number(value);\n  \
+                     return ([{declared}] as readonly number[]).includes(n)\n    \
+                     ? n as t.{name}\n    : {{ unknown: n }};\n}}",
+                    declared = declared.join(", ")
+                );
+            }
+            Some(Kind::EnumSet(shape)) => {
+                emit_set_pack(
+                    out,
+                    &format!("pack{name}"),
+                    &format!("t.{name}"),
+                    &qualified,
+                    shape,
+                );
+            }
+            _ => {}
+        }
     }
 
     fn emit_converters(
@@ -1200,7 +1497,8 @@ impl<'a> Codec<'a> {
                         accessor: accessor(declared),
                         rule: self.rule(ty, &qualified)?,
                         optional: ty.optional,
-                        null_default,
+                        // An open enum has no absent value: 0 is a value of it.
+                        null_default: null_default && !self.is_open_enum(ty),
                     });
                 }
                 self.emit_record(
@@ -1259,7 +1557,7 @@ impl<'a> Codec<'a> {
                 accessor: format!("field{}", position + 1),
                 rule: self.rule(ty, &qualified)?,
                 optional: ty.optional,
-                null_default,
+                null_default: null_default && !self.is_open_enum(ty),
             });
         }
         self.emit_record(
@@ -1707,8 +2005,8 @@ fn not_converted(qualified: &str, kind: &str) -> String {
 }
 
 /// The word of a foreign declaration's kind when the module needs a
-/// converter for it; `None` for a named scalar or an enum set, which
-/// convert by assertion.
+/// converter for it; `None` for a named scalar, which converts by assertion,
+/// and for an enum set, which converts by a checking function.
 fn foreign_kind(declaration: &v1::Declaration) -> Option<&'static str> {
     use v1::declaration::Kind;
     match &declaration.kind {
@@ -1724,6 +2022,117 @@ fn foreign_refusal(site: &str, package: &str, name: &str, word: &str) -> String 
         "{site} `{package}.{name}`, a {word} of another package, which the codec module does not \
          convert yet"
     )
+}
+
+/// The function `function_name` that refuses a value of the open enum set
+/// `shape`, written `ts_type` in the module, that does not fit the width of
+/// the set, with the `range` rule.
+fn emit_set_pack(
+    out: &mut String,
+    function_name: &str,
+    ts_type: &str,
+    qualified: &str,
+    shape: &v1::EnumSet,
+) {
+    let (wide, signed, bits) = set_width(shape);
+    let (low, high) = if signed {
+        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+    } else {
+        (0, (1i128 << bits) - 1)
+    };
+    let (suffix, base, check) = if wide {
+        ("n", "bigint", "")
+    } else {
+        ("", "number", "!Number.isInteger(value) || ")
+    };
+    let _ = writeln!(
+        out,
+        "function {function_name}(value: {ts_type}): {base} {{\n  \
+         if ({check}value < {low}{suffix} || value > {high}{suffix}) {{\n    \
+         throw new RuleError(\"range\", `value ${{value}} of {qualified} does not fit \
+         {bits} bits`);\n  }}\n  \
+         return value;\n}}"
+    );
+}
+
+/// Whether the width of `shape` is held as a `bigint`, whether it is signed,
+/// and its number of bits.
+fn set_width(shape: &v1::EnumSet) -> (bool, bool, u32) {
+    match shape.width() {
+        v1::IntWidth::U8 => (false, false, 8),
+        v1::IntWidth::I8 => (false, true, 8),
+        v1::IntWidth::U16 => (false, false, 16),
+        v1::IntWidth::I16 => (false, true, 16),
+        v1::IntWidth::U32 => (false, false, 32),
+        v1::IntWidth::I32 => (false, true, 32),
+        v1::IntWidth::U64 => (true, false, 64),
+        v1::IntWidth::I64 | v1::IntWidth::Unspecified => (true, true, 64),
+    }
+}
+
+/// The function `function_name` that returns a value of the strict enum set
+/// `shape`, written `ts_type` in the module, or throws a `RuleError` with the
+/// `variant` rule when the value has a bit that the set does not declare.
+fn emit_strict_set_unpack(
+    out: &mut String,
+    function_name: &str,
+    ts_type: &str,
+    qualified: &str,
+    shape: &v1::EnumSet,
+) {
+    let (wide, _, _) = set_width(shape);
+    // The declared mask holds the bits 0 to 63 in a signed 64-bit field.
+    let mask = shape.declared_mask as u64;
+    let (base, undeclared) = if wide {
+        (
+            "bigint",
+            format!("(BigInt.asUintN(64, value) & ~{mask}n) !== 0n"),
+        )
+    } else {
+        ("number", format!("(value & ~{mask}) !== 0"))
+    };
+    let _ = writeln!(
+        out,
+        "function {function_name}(value: {base}): {ts_type} {{\n  \
+         if ({undeclared}) {{\n    \
+         throw new RuleError(\"variant\", `value ${{value}} has a bit that {qualified} does \
+         not declare`);\n  }}\n  \
+         return value as {ts_type};\n}}"
+    );
+}
+
+/// The name of the function that checks a value of the strict enum set `name`
+/// of `package` against the declared bits of the set.
+fn foreign_set_unpack(package: &str, name: &str) -> String {
+    format!("unpack_{}_{name}", package_alias(package))
+}
+
+/// The name of the function that checks a value of the open enum set `name`
+/// of `package` against the width of the set.
+fn foreign_set_pack(package: &str, name: &str) -> String {
+    format!("pack_{}_{name}", package_alias(package))
+}
+
+/// How the decode function of a boxed payload type reads the value of its box.
+enum Read {
+    /// The unpack function of a strict enum or enum set.
+    Strict,
+    /// The unpack function of an open enum.
+    Open,
+    /// A type assertion over the box value.
+    Assertion,
+    /// `Uint8Array.from` of the box value.
+    Bytes,
+}
+
+/// The TypeScript type of a value of `declaration`: `t.<Name>`, or
+/// `t.<Name>Value` for an open enum.
+fn value_type(declaration: &v1::Declaration) -> String {
+    let name = declared_name(declaration);
+    match &declaration.kind {
+        Some(v1::declaration::Kind::Enum(shape)) if shape.open => format!("t.{name}Value"),
+        _ => format!("t.{name}"),
+    }
 }
 
 /// The conversion of a position whose value is copied as it is.

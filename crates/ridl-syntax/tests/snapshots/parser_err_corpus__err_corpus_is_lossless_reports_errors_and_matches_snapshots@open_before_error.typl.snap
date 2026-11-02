@@ -1,0 +1,40 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/open_before_error.typl
+---
+SourceFile@0..46
+  PackageDecl@0..16
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..16
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..16 "open"
+  Whitespace@16..18 "\n\n"
+  ErrorNode@18..22
+    Ident@18..22 "open"
+  Whitespace@22..23 " "
+  EnumDef@23..45
+    ErrorKw@23..28 "error"
+    Whitespace@28..29 " "
+    EnumKw@29..33 "enum"
+    Whitespace@33..34 " "
+    Name@34..35
+      Ident@34..35 "E"
+    Whitespace@35..36 " "
+    LBrace@36..37 "{"
+    Whitespace@37..38 " "
+    EnumValue@38..43
+      Name@38..39
+        Ident@38..39 "A"
+      Whitespace@39..40 " "
+      Eq@40..41 "="
+      Whitespace@41..42 " "
+      Literal@42..43
+        IntNumber@42..43 "0"
+    Whitespace@43..44 " "
+    RBrace@44..45 "}"
+  Whitespace@45..46 "\n"
+errors:
+  FORM-102 18..22 unexpected token after `open`: expected `enum` or `enumset`, because `open` modifies only an enum or an enumset definition and directly precedes its keyword

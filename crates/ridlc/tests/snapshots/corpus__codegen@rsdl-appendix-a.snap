@@ -689,7 +689,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             }
           ],
           "retired": [],
-          "initMember": 0
+          "initMember": 0,
+          "open": false
         }
       }
     }
@@ -915,7 +916,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           }
         ],
         "retired": [],
-        "initMember": 0
+        "initMember": 0,
+        "open": false
       }
     },
     {

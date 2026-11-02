@@ -1,0 +1,57 @@
+package open.demo
+
+/// An open enum with a zero member.
+open enum DtcStatus {
+  INACTIVE = 0
+  ACTIVE   = 1
+}
+
+/// An open enum with no zero member, so an absent field reads as 0.
+open enum Mode {
+  LOW  = 1
+  HIGH = 2
+}
+
+/// An open enum with no declared value.
+open enum Empty {}
+
+/// An open enum set of a narrow width.
+open enumset Flags {
+  A = 0
+  B = 1
+}
+
+/// An open enum set of a wide width.
+open enumset WideFlags {
+  LOW = 0
+  TOP = 40
+}
+
+/// A struct that holds every kind of field of the types above.
+struct Report {
+  status : DtcStatus
+  mode   : Mode
+  flags  : Flags
+  wide   : WideFlags
+  list   : [DtcStatus; 0..4]
+  maybe  : DtcStatus?
+}
+
+/// A struct that holds the empty open enum.
+struct EmptyReport {
+  value : Empty
+}
+
+/// A union with an open enum arm.
+union Pick {
+  status : DtcStatus
+  flags  : Flags
+}
+
+/// An interface whose command takes open enums as parameters, so the
+/// converter of its request tuple holds a required open enum with no zero
+/// member.
+interface Control {
+  /// Selects a status and a mode.
+  command select(status: DtcStatus, mode: Mode) @[..50ms]
+}

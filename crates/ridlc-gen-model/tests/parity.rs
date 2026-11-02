@@ -126,6 +126,51 @@ fn the_plugin_answers_every_corpus_request_as_the_in_process_backend_does() {
     assert!(compared > 0, "the corpus yielded no package");
 }
 
+/// The `open` flag of an enum and of an enum set reaches the `Model` and its
+/// JSON form, so a codegen plugin can read it.
+#[test]
+fn the_model_carries_the_open_flag_of_an_enum_and_an_enum_set() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    std::fs::write(
+        dir.path().join("ridl.toml"),
+        "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        dir.path().join("p.typl"),
+        "package p\n\nopen enum Mode { OFF = 0, ON = 1 }\n\nopen enumset Flags : Mode\n\nenum Strict { A = 0 }\n\nenumset StrictFlags : Strict\n\nopen enumset OpenOverStrict : Strict\n\nenumset StrictOverOpen : Mode\n",
+    )
+    .expect("the source is written");
+
+    let mut db = RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, dir.path()).expect("the workspace loads");
+    let package = &output.checked[0].ir;
+    let request = ridlc::codegen_request("p", package, &[package], &[], Vec::new(), None, None);
+    let model = request.model.as_ref().expect("a model");
+    let open_of = |name: &str| -> (bool, bool) {
+        let declaration = model
+            .declarations
+            .iter()
+            .find(|d| d.name.as_ref().is_some_and(|n| n.declared == name))
+            .unwrap_or_else(|| panic!("no declaration `{name}`"));
+        match &declaration.kind {
+            Some(v1::declaration::Kind::Enum(e)) => (e.open, false),
+            Some(v1::declaration::Kind::EnumSet(e)) => (false, e.open),
+            other => panic!("`{name}` is not an enum or an enum set: {other:?}"),
+        }
+    };
+    assert_eq!(open_of("Mode"), (true, false));
+    assert_eq!(open_of("Flags"), (false, true));
+    assert_eq!(open_of("Strict"), (false, false));
+    assert_eq!(open_of("StrictFlags"), (false, false));
+    // A derived set carries its own openness, not the one of its enum.
+    assert_eq!(open_of("OpenOverStrict"), (false, true));
+    assert_eq!(open_of("StrictOverOpen"), (false, false));
+
+    let json = codegen::to_json_pretty(model).expect("the model renders");
+    assert_eq!(json.matches("\"open\": true").count(), 3, "{json}");
+}
+
 /// Every regular file under `dir`, keyed by its path relative to `dir`.
 fn files_under(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {

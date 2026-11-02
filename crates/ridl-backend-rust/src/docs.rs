@@ -430,6 +430,16 @@ pub(crate) fn doc_block(parts: &DocParts<'_>, links: &Links<'_>) -> TokenStream 
     DocLines::new(parts, links).render(None, &[])
 }
 
+/// [`doc_block`] with `sentence`, the generator's own text for the carrier,
+/// as its own paragraph after the doc text.
+pub(crate) fn doc_block_with_sentence(
+    parts: &DocParts<'_>,
+    links: &Links<'_>,
+    sentence: Option<&str>,
+) -> TokenStream {
+    DocLines::new(parts, links).render(sentence, &[])
+}
+
 /// The bullets of a call's `# Parameters` section, which
 /// [`DocLines::render`] puts under its heading, or none for a call with no
 /// parameter. Each parameter is one ``- `<snake name>`: <doc>`` bullet, its

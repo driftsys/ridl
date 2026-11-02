@@ -116,7 +116,8 @@ expression: json
             ]
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     },
     {
@@ -156,7 +157,8 @@ expression: json
             "since": []
           }
         ],
-        "width": "INT_WIDTH_U8"
+        "width": "INT_WIDTH_U8",
+        "open": false
       }
     },
     {
@@ -195,7 +197,8 @@ expression: json
             "since": []
           }
         ],
-        "width": "INT_WIDTH_U8"
+        "width": "INT_WIDTH_U8",
+        "open": false
       }
     },
     {

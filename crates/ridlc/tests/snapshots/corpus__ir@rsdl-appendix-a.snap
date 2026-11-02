@@ -265,7 +265,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "since": []
           }
         ],
-        "reserved": []
+        "reserved": [],
+        "open": false
       }
     },
     {

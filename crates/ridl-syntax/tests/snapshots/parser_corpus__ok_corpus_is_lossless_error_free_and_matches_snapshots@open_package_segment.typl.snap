@@ -1,0 +1,32 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/open_package_segment.typl
+---
+SourceFile@0..30
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "open"
+  Whitespace@12..13 "\n"
+  EnumDef@13..29
+    EnumKw@13..17 "enum"
+    Whitespace@17..18 " "
+    Name@18..19
+      Ident@18..19 "E"
+    Whitespace@19..20 " "
+    LBrace@20..21 "{"
+    Whitespace@21..22 " "
+    EnumValue@22..27
+      Name@22..23
+        Ident@22..23 "A"
+      Whitespace@23..24 " "
+      Eq@24..25 "="
+      Whitespace@25..26 " "
+      Literal@26..27
+        IntNumber@26..27 "0"
+    Whitespace@27..28 " "
+    RBrace@28..29 "}"
+  Whitespace@29..30 "\n"
+errors: none

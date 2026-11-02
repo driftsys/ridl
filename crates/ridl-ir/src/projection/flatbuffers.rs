@@ -275,6 +275,10 @@ pub fn union_arm_discriminant(arm: &v2::UnionArm) -> u32 {
 /// of 0 is not a member of its enum. `= null` is the rendering that never
 /// fabricates a reading, which is also why the codec treats such a field's
 /// absence as a missing required field rather than as a value.
+///
+/// An `open` enum follows the same rule: the answer is about the schema text
+/// `flatc` accepts, not about the values a reader holds. The codecs read an
+/// absent open-enum field as the unknown value 0 whatever this answers.
 #[must_use]
 pub fn enum_field_needs_null_default(def: &v2::EnumDef) -> bool {
     !def.values.iter().any(|value| value.value == 0)

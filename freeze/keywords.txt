@@ -28,6 +28,7 @@ attribute require query predicate
 attribute slots deployment assignment
 attribute slots placement assignment
 attribute tier distribution assignment
+contextual open typl
 reserved as
 reserved automaton
 reserved boolean
