@@ -953,9 +953,13 @@ git commit -m "feat(ridl-backend-rust): generate a constant for every instance n
     (`component/instance`) whose old number is not provisional and whose new
     number differs, `path = key, before = old number, after = new number`; then
     for each new key that holds a number the old side gave, not provisionally,
-    to another key, `path = new key, before = "{n} ({old key})", after = "{n}"`.
-    A provisional old number is never reported; a key absent on one side is not
-    reported under this heading.
+    to another key **that is still present on the new side**,
+    `path = new key, before = "{n} ({old key})", after = "{n}"`. When the old
+    holder is absent on the new side, the change is a rename
+    (`ridl lock --rename` keeps the number), and it is not reported: a client
+    built before the rename sends the same number and is still the same
+    instance. A provisional old number is never reported; a key absent on one
+    side is not reported under this heading.
   - `diff_workspaces_with` sets the report verdict to `Verdict::Breaking` when
     any system change has this heading. `render_text` prints the heading as
     `instance number changed (breaking)`; `render_json` adds the key
@@ -979,11 +983,18 @@ fn a_changed_locked_number_is_listed() {
 #[test]
 fn a_number_given_to_another_instance_is_listed() {
     let changes = diff_systems(&numbered(&[("veh.C", "a", 1, false)]),
-                               &numbered(&[("veh.C", "b", 1, false)]));
+                               &numbered(&[("veh.C", "a", 2, false), ("veh.C", "b", 1, false)]));
     let listed: Vec<_> = changes.iter()
         .filter(|c| c.heading == SystemHeading::InstanceNumberChanged).collect();
-    assert_eq!(listed[0].path, "veh.C/b");
-    assert_eq!(listed[0].before.as_deref(), Some("1 (veh.C/a)"));
+    assert_eq!(listed.len(), 2);
+    assert!(listed.iter().any(|c| c.path == "veh.C/b" && c.before.as_deref() == Some("1 (veh.C/a)")));
+}
+
+#[test]
+fn a_renamed_instance_that_keeps_its_number_is_not_listed() {
+    let changes = diff_systems(&numbered(&[("veh.C", "a", 1, false)]),
+                               &numbered(&[("veh.C", "b", 1, false)]));
+    assert!(changes.iter().all(|c| c.heading != SystemHeading::InstanceNumberChanged));
 }
 
 #[test]
@@ -1049,7 +1060,9 @@ git commit -m "feat(ridl-diff): report a changed instance number as breaking"
   with the `wasm` option.
 - `ridl lock merge` tells the two files apart by the instance header line.
 - The text heading reads `instance number changed (breaking)`; a reused number
-  is reported on the new key with the old holder in `before`.
+  is reported on the new key with the old holder in `before` only while the old
+  holder is still present; a number whose old holder is absent is a rename and
+  is not reported.
 
 ## Self-review notes
 
