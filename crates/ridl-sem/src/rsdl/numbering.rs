@@ -179,9 +179,15 @@ fn instance_message(key: &InstanceKey, dir: &str, any_provisional: bool) -> Stri
 /// in the system.
 fn component_message(component: &str, dir: &str, any_provisional: bool) -> String {
     if any_provisional {
+        // `--rename` takes a fully qualified component on both sides, so the
+        // example new name sits in the same package as the old one.
+        let renamed = match component.rsplit_once('.') {
+            Some((package, _)) => format!("{package}.New"),
+            None => "New".to_owned(),
+        };
         format!(
             "`{component}` has live entries in `{FILE_NAME}` and is not in the system: run \
-             `ridl lock {dir} --rename {component}=New` when the component was renamed, or \
+             `ridl lock {dir} --rename {component}={renamed}` when the component was renamed, or \
              `ridl lock {dir} --retire {component}` when it is gone"
         )
     } else {
@@ -321,7 +327,7 @@ mod tests {
         assert!(
             diagnostics
                 .iter()
-                .any(|d| d.message.contains("--rename veh.topology.Gone=New"))
+                .any(|d| d.message.contains("--rename veh.topology.Gone=veh.topology.New"))
         );
         assert!(
             diagnostics

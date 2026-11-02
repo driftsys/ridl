@@ -2072,7 +2072,10 @@ mod tests {
     }
 
     /// rsdl §7, §13: a live lock entry gives its number and clears the
-    /// provisional flag; the other instances count from `next`.
+    /// provisional flag; the other instances count from `next` in the byte
+    /// order of their keys. Three unlocked keys sort before
+    /// `veh.topology.Pair/primary` (`veh.diag.access`, `veh.topology.Backend`
+    /// and `veh.topology.Lane`), so `primary` takes 10 + 3 = 13.
     #[test]
     fn a_locked_instance_keeps_its_number() {
         let system = lower_sized_with_lock(Some("next 10\nveh.topology.Pair/backup 9\n"))
@@ -2087,7 +2090,7 @@ mod tests {
             .iter()
             .map(|n| (n.instance.as_str(), n.number, n.provisional))
             .collect();
-        assert_eq!(numbers, [("primary", 10, true), ("backup", 9, false)]);
+        assert_eq!(numbers, [("primary", 13, true), ("backup", 9, false)]);
     }
 
     /// rsdl §7, §13: an instance that would take a number above 2147483647

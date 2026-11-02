@@ -754,6 +754,13 @@ expression: json
       ],
       "since": [
         "1.0"
+      ],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 1,
+          "provisional": true
+        }
       ]
     },
     {
@@ -800,7 +807,14 @@ expression: json
       "doc": "The panel component.",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 2,
+          "provisional": true
+        }
+      ]
     }
   ],
   "producers": [
