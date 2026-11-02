@@ -433,6 +433,39 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       }
     },
     {
+      "name": "Faults",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "An open enum set of width 64.",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "enumSetDef": {
+        "bits": [
+          {
+            "name": "FIRST",
+            "value": "0",
+            "doc": "The first fault.",
+            "links": [],
+            "see": [],
+            "since": []
+          },
+          {
+            "name": "LAST",
+            "value": "63",
+            "doc": "The last bit of the 64-bit width.",
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        ],
+        "width": "INT_WIDTH_U64",
+        "open": true
+      }
+    },
+    {
       "name": "Inner",
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
@@ -976,7 +1009,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       "name": "Lights",
       "visibility": "VISIBILITY_PUBLIC",
       "isError": false,
-      "doc": "An open enum and an open enum set, alone and in an array.",
+      "doc": "Open enums and open enum sets, alone and in an array, and an open enum set\nof width 64. An open enum whose podbuf integer is a `u64` has no place\nhere: its values are outside int32, which the proto3 codec of this corpus\nrefuses.",
       "labels": [],
       "ordinal": 0,
       "links": [],
@@ -1039,6 +1072,50 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               },
               "init": {
                 "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "sets",
+              "ordinal": 4,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "Lamps"
+                  },
+                  "min": "0",
+                  "max": "4"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
+            }
+          },
+          {
+            "field": {
+              "name": "faults",
+              "ordinal": 5,
+              "type": {
+                "optional": false,
+                "named": "Faults"
+              },
+              "init": {
+                "derivable": true,
+                "value": ""
               },
               "doc": "",
               "labels": [],

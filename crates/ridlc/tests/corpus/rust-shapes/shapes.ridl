@@ -81,6 +81,14 @@ open enumset Lamps {
   HIGH = 1
 }
 
+/// An open enum set of width 64.
+open enumset Faults {
+  /// The first fault.
+  FIRST = 0
+  /// The last bit of the 64-bit width.
+  LAST  = 63
+}
+
 // --- composites ---
 
 /// A struct that nests inside `Panel`.
@@ -119,11 +127,16 @@ struct Panel {
   legacy : Count?
 }
 
-/// An open enum and an open enum set, alone and in an array.
+/// Open enums and open enum sets, alone and in an array, and an open enum set
+/// of width 64. An open enum whose podbuf integer is a `u64` has no place
+/// here: its values are outside int32, which the proto3 codec of this corpus
+/// refuses.
 struct Lights {
-  lamp  : Lamp
-  lamps : Lamps
-  trail : [Lamp; 0..4]
+  lamp     : Lamp
+  lamps    : Lamps
+  trail    : [Lamp; 0..4]
+  sets     : [Lamps; 0..4]
+  faults   : Faults
 }
 
 /// A union with data arms only.

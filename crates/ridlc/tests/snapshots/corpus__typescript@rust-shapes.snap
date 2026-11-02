@@ -240,6 +240,30 @@ export function initLamps(): Lamps {
 }
 
 /**
+ * An open enum set of width 64.
+ */
+export type Faults = bigint & { readonly __ridl: 'lint.shapes.Faults' };
+
+export const FaultsBits = {
+  /**
+   * The first fault.
+   */
+  FIRST: 1n,
+  /**
+   * The last bit of the 64-bit width.
+   */
+  LAST: 9223372036854775808n,
+  /** The bits of `value` that no bit of this set declares. */
+  unknownBits(value: Faults): Faults {
+    return BigInt.asUintN(64, value & ~9223372036854775809n) as Faults;
+  },
+} as const;
+
+export function initFaults(): Faults {
+  return 0n as Faults;
+}
+
+/**
  * A struct that nests inside `Panel`.
  */
 export interface Inner {
@@ -401,7 +425,10 @@ export interface Panel {
 }
 
 /**
- * An open enum and an open enum set, alone and in an array.
+ * Open enums and open enum sets, alone and in an array, and an open enum set
+ * of width 64. An open enum whose podbuf integer is a `u64` has no place
+ * here: its values are outside int32, which the proto3 codec of this corpus
+ * refuses.
  */
 export interface Lights {
   lamp: LampValue;
@@ -414,6 +441,15 @@ export interface Lights {
    * @bounds 0..4
    */
   trail: readonly LampValue[];
+  /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 4
+   *
+   * @bounds 0..4
+   */
+  sets: readonly Lamps[];
+  faults: Faults;
 }
 
 export function initLights(): Lights {
@@ -421,6 +457,8 @@ export function initLights(): Lights {
     lamp: initLamp(),
     lamps: initLamps(),
     trail: [],
+    sets: [],
+    faults: initFaults(),
   };
 }
 
