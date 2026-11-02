@@ -11,8 +11,10 @@
 //! allocates: a branch never allocates,
 //! and the release recipe or the merge queue runs this on `main` (lock
 //! design §4). `--rename OLD=NEW` and
-//! `--retire NAME` rewrite one entry each, in place, and never allocate. They
-//! are the fix RIDL-409 and RSDL-314 name, so they run with either present.
+//! `--retire NAME` rewrite entries in place and never allocate: one entry for
+//! an interface or an instance, and every entry under the component for a
+//! component. They are the fix RIDL-409 and RSDL-314 name, so they run with
+//! either present.
 //! A key with a `/` is an instance (`component/instance`); a key without one
 //! is a component when `instances.lock` has an entry under it, else an
 //! interface. An interface edit needs `PATH` to resolve to exactly one unit;
@@ -37,13 +39,14 @@
 //! path or I/O failure.
 //!
 //! `ridl lock merge BASE OURS THEIRS MARKER_SIZE` is the git merge driver for
-//! the file (lock design §6): it reads the three sides, runs
+//! both files (lock design §6): it reads the three sides, runs
 //! [`interface_lock::merge`] — a three-way merge over entries matched by
 //! number, with no file access — and writes the result to OURS. Exit 0 when
 //! the merge is clean, 1 when entries disagree (OURS then holds git conflict
-//! markers around only the disagreeing entries and is RIDL-410 until an
-//! author resolves it), 2 when an input cannot be read or does not parse
-//! (OURS is then left as it was).
+//! markers around only the disagreeing entries and is RIDL-410 for
+//! `interfaces.lock`, or RSDL-315 for `instances.lock`, until an author
+//! resolves it), 2 when an input cannot be read or does not parse (OURS is
+//! then left as it was).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

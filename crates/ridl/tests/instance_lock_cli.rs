@@ -185,6 +185,40 @@ fn plain_lock_allocates_every_instance_in_key_byte_order() {
     );
 }
 
+/// Two lone services whose keys sort one way as text and the other way field
+/// by field: `veh.cruise.x/Unit` comes first as text, because `.` sorts
+/// before `/`, but component `veh.cruise` comes before `veh.cruise.x`. The
+/// checker numbers in text order, and `ridl lock` must write those numbers.
+#[test]
+fn plain_lock_writes_the_numbers_in_key_text_order() {
+    let dir = TempDir::new("text-order");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "services.ridl",
+        "package veh\n\
+         type Flag: integer [0..1]\n\
+         service veh.cruise { signal a: Flag @[100ms..1s] }\n\
+         service veh.cruise.x { signal b: Flag @[100ms..1s] }\n",
+    );
+    dir.write(
+        "system.rsdl",
+        "package veh\nsystem Vehicle { veh.cruise, veh.cruise.x }\n",
+    );
+    let (code, stdout, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    assert_in_order(
+        &stdout,
+        &[
+            "allocated veh.cruise.x/Unit 1",
+            "allocated veh.cruise/Unit 2",
+        ],
+    );
+    assert_eq!(
+        lock_text(&dir),
+        format!("{HEADER}next 3\nveh.cruise.x/Unit 1\nveh.cruise/Unit 2\n")
+    );
+}
+
 #[test]
 fn plain_lock_with_nothing_to_change_writes_nothing() {
     let dir = lock_workspace("nothing", None);
@@ -266,6 +300,65 @@ fn rename_an_instance_keeps_its_number() {
         "{stdout}"
     );
     assert!(lock_text(&dir).contains("veh.Cruise/spare 1\n"));
+}
+
+/// The new side of an instance rename must be an instance of the system
+/// without an entry; `veh.Cruise/ghost` is no instance at all.
+#[test]
+fn rename_onto_a_key_that_is_no_instance_exits_two() {
+    let dir = lock_workspace("rename-ghost", Some(&allocated_lock()));
+    dir.write(
+        "system.rsdl",
+        &LOCK_SYSTEM.replace("(primary, backup)", "(primary)"),
+    );
+    let (code, _, stderr) = run_lock(&dir, &["--rename", "veh.Cruise/backup=veh.Cruise/ghost"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains("`veh.Cruise/ghost` is not an instance without an entry"),
+        "{stderr}"
+    );
+    assert_eq!(lock_text(&dir), allocated_lock());
+}
+
+/// A component rename needs every moved key to be an instance of the system
+/// without an entry; component `veh.Ghost` is not in the system.
+#[test]
+fn rename_a_component_onto_one_not_in_the_system_exits_two() {
+    let dir = lock_workspace("rename-component-ghost", Some(&allocated_lock()));
+    dir.write(
+        "system.rsdl",
+        "package veh\nsystem Vehicle { veh.status }\n",
+    );
+    let (code, _, stderr) = run_lock(&dir, &["--rename", "veh.Cruise=veh.Ghost"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains("is not an instance without an entry"),
+        "{stderr}"
+    );
+    assert_eq!(lock_text(&dir), allocated_lock());
+}
+
+/// The rename the RSDL-314 message suggests for a component, with a fully
+/// qualified new name, is accepted.
+#[test]
+fn the_component_rename_rsdl_314_suggests_is_accepted() {
+    let dir = lock_workspace("rename-component-hint", Some(&allocated_lock()));
+    dir.write("system.rsdl", &LOCK_SYSTEM.replace("Cruise", "New"));
+    let (code, _, stderr) = check(&dir);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("--rename veh.Cruise=veh.New"), "{stderr}");
+    let (code, stdout, stderr) = run_lock(&dir, &["--rename", "veh.Cruise=veh.New"]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    assert!(lock_text(&dir).contains("veh.New/backup 1\n"));
+}
+
+#[test]
+fn retire_of_a_component_still_in_the_system_exits_two() {
+    let dir = lock_workspace("retire-component-live", Some(&allocated_lock()));
+    let (code, _, stderr) = run_lock(&dir, &["--retire", "veh.Cruise"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("still has instances"), "{stderr}");
+    assert_eq!(lock_text(&dir), allocated_lock());
 }
 
 #[test]
