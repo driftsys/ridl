@@ -2461,6 +2461,52 @@ mod podbuf {
     }
 
     #[test]
+    fn remote_growth_in_fixed_array_inside_bounded_array_is_breaking() {
+        let local = remote_holder(array(array(named("dep.types.Reading"), 2, 2), 0, 4));
+        let report = checked_remote(
+            &local,
+            &remote_reading(false),
+            &remote_reading(true),
+            &["podbuf"],
+        );
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(changes[0].verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_growth_in_fixed_array_inside_map_value_is_breaking() {
+        let local = remote_holder(map(wide(), array(named("dep.types.Reading"), 2, 2)));
+        let report = checked_remote(
+            &local,
+            &remote_reading(false),
+            &remote_reading(true),
+            &["podbuf"],
+        );
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(changes[0].verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_growth_in_exact_array_root_has_no_inline_head() {
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![fixed("reading", 1, array(named("dep.types.Reading"), 2, 2))],
+        )];
+        let report = checked_remote(
+            &local,
+            &remote_reading(false),
+            &remote_reading(true),
+            &["podbuf"],
+        );
+        assert!(remote_changes(&report).is_empty(), "{report:?}");
+    }
+
+    #[test]
     fn remote_roots_can_grow_but_their_nested_inline_members_cannot() {
         let old = remote_reading(false);
         let new = remote_reading(true);

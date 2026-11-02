@@ -78,9 +78,18 @@ pub(crate) fn compare(
                         });
                     }
                     for ty in roots {
+                        // Exact arrays at the root have no head. Inside a
+                        // head or descriptor element, they fix element offsets.
+                        let mut root = &ty;
+                        while let Some(v2::field_type::Kind::Array(array)) = &root.kind
+                            && array.min == array.max
+                            && let Some(element) = &array.element
+                        {
+                            root = element;
+                        }
                         pass.visit(
                             home,
-                            &ty,
+                            root,
                             &format!("{}/{}/{}", home.name, shape.name, interaction.name),
                             false,
                             side,
@@ -231,14 +240,7 @@ impl Pass<'_> {
             }
             Some(Kind::Array(array)) => {
                 if let Some(ty) = &array.element {
-                    self.visit(
-                        home,
-                        ty,
-                        path,
-                        fixed && array.min == array.max,
-                        side,
-                        active,
-                    );
+                    self.visit(home, ty, path, array.min == array.max, side, active);
                 }
             }
             Some(Kind::Map(map)) => {
