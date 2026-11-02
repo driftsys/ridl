@@ -407,8 +407,10 @@ Arguments:
   [PATH]  [default: .]
 
 Options:
-      --out <DIR>  Write the snapshots and the catalog files here instead of `.ridl/baseline/`
-  -h, --help       Print help
+      --out <DIR>       Write the snapshots and the catalog files here instead of `.ridl/baseline/`
+      --repair-context  Restore missing context from the original historical source checkout and lockfile, read frozen. Local snapshots must match exactly
+      --reset-history   Preserve the prior baseline and start fresh catalog histories from current source, retaining the normal publication refusal checks
+  -h, --help            Print help
 ```
 
 **It writes** one `<package-name>.ir.json` file per package in the workspace,

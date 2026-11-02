@@ -27,6 +27,81 @@ pub(crate) fn stage_context(
     Ok(())
 }
 
+/// Validate historical identity before replacing staged snapshots with their
+/// original bytes. Canonical equality permits harmless JSON formatting changes.
+pub(crate) fn prepare_repair(
+    published: &Path,
+    staging: &Path,
+    old: &[ridl_ir::v2::Package],
+    fresh: &[ridl_ir::v2::Package],
+    current: &BaselineContext,
+) -> std::io::Result<()> {
+    fn canonical(
+        packages: &[ridl_ir::v2::Package],
+    ) -> std::io::Result<std::collections::BTreeMap<&str, String>> {
+        packages
+            .iter()
+            .map(|package| {
+                ridl_ir::v2::to_json_pretty(package)
+                    .map(|json| (package.name.as_str(), json))
+                    .map_err(std::io::Error::other)
+            })
+            .collect()
+    }
+    if old.is_empty() || canonical(old)? != canonical(fresh)? {
+        return Err(std::io::Error::other(
+            "the complete historical local snapshot set does not match SOURCE; supply the original historical checkout and lockfile",
+        ));
+    }
+    if let Some(previous) = read(published, old).map_err(std::io::Error::other)? {
+        let previous = previous.remote_context();
+        let current = current.remote_context();
+        if previous.pins != current.pins
+            || canonical(&previous.packages)? != canonical(&current.packages)?
+        {
+            return Err(std::io::Error::other(
+                "historical context does not match SOURCE and its frozen pins",
+            ));
+        }
+    }
+    // Remove only this invocation's newly emitted local snapshots. Original
+    // filenames and bytes are restored after the complete inventory matches.
+    let originals = crate::snapshot_files(published).map_err(std::io::Error::other)?;
+    for file in crate::snapshot_files(staging).map_err(std::io::Error::other)? {
+        std::fs::remove_file(file)?;
+    }
+    for file in originals {
+        std::fs::copy(
+            &file,
+            staging.join(file.file_name().expect("snapshot filename")),
+        )?;
+    }
+    Ok(())
+}
+
+/// Only the backup created by this committed transaction may be discarded.
+/// Cleanup failure cannot turn a successful publication into a reported failure.
+pub(crate) fn finish_backup(backup: &Path, preserve: bool) {
+    finish_backup_with(backup, preserve, |path| std::fs::remove_dir_all(path));
+}
+fn finish_backup_with(
+    backup: &Path,
+    preserve: bool,
+    remove: impl FnOnce(&Path) -> std::io::Result<()>,
+) {
+    if preserve {
+        eprintln!(
+            "note: preserved the prior managed baseline at {}",
+            backup.display()
+        );
+    } else if let Err(err) = remove(backup) {
+        eprintln!(
+            "warning: baseline published, but cannot remove transaction backup {}: {err}; backup retained",
+            backup.display()
+        );
+    }
+}
+
 /// Reserve a sibling staging directory without deleting any retained recovery
 /// evidence from an earlier invocation, including a symlink occupying a name.
 pub(crate) fn reserve_staging(out: &Path) -> std::io::Result<PathBuf> {
@@ -201,10 +276,6 @@ fn replace_with(
             staging.display()
         );
     }
-    eprintln!(
-        "note: preserved the prior managed baseline at {}",
-        backup.display()
-    );
     Ok(backup)
 }
 
@@ -255,6 +326,24 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn backup_cleanup_failure_keeps_committed_baseline_and_recovery_bytes() {
+        let fixture = Fixture::new();
+        let backup = replace_preserving(&fixture.stage, &fixture.out).unwrap();
+        let old = inventory(&backup);
+        let committed = inventory(&fixture.out);
+        finish_backup_with(&backup, false, |path| {
+            assert_eq!(path, backup);
+            Err(std::io::Error::other("injected cleanup failure"))
+        });
+        assert_eq!(inventory(&backup), old);
+        assert_eq!(inventory(&fixture.out), committed);
+        finish_backup_with(&backup, true, |_| {
+            panic!("a required backup cannot be cleaned")
+        });
+        assert_eq!(inventory(&backup), old);
     }
 
     fn inventory(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {

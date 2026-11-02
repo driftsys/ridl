@@ -1932,13 +1932,13 @@ fn remote_inline_pin_growth_ends_only_affected_catalog_chain() {
     );
     assert_eq!(history_lines_of(&root, "veh.body"), body_history);
     assert_eq!(
-        directory_inventory(&root.join(".ridl/baseline.previous.2")),
+        directory_inventory(&root.join(".ridl/baseline.previous.1")),
         prior,
         "a proved break preserves every previous baseline byte"
     );
     assert_eq!(
         std::fs::read(baseline_dir(&root).join("veh.cluster.ir.json")).unwrap(),
-        std::fs::read(root.join(".ridl/baseline.previous.2/veh.cluster.ir.json")).unwrap(),
+        std::fs::read(root.join(".ridl/baseline.previous.1/veh.cluster.ir.json")).unwrap(),
         "a remote-only change leaves the local declarations identical"
     );
 }
@@ -2091,7 +2091,7 @@ fn legacy_inline_context_warns_only_for_affected_unit_and_refuses_publication() 
         prior,
         "refusal changes no baseline byte"
     );
-    assert!(!root.join(".ridl/baseline.previous.2").exists());
+    assert!(!root.join(".ridl/baseline.previous.1").exists());
 }
 
 #[test]

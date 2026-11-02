@@ -119,6 +119,14 @@ enum Command {
         /// `.ridl/baseline/`.
         #[arg(long, value_name = "DIR")]
         out: Option<PathBuf>,
+        /// Restore missing context from the original historical source checkout
+        /// and lockfile, read frozen. Local snapshots must match exactly.
+        #[arg(long, conflicts_with = "reset_history")]
+        repair_context: bool,
+        /// Preserve the prior baseline and start fresh catalog histories from
+        /// current source, retaining the normal publication refusal checks.
+        #[arg(long, conflicts_with = "repair_context")]
+        reset_history: bool,
     },
     /// Compile to the selected artifacts (defaults to the current directory).
     Build {
@@ -363,7 +371,12 @@ fn main() -> ExitCode {
             baseline,
             format,
         } => run_check(&path, frozen, baseline.as_deref(), format),
-        Command::Baseline { path, out } => run_baseline(&path, out.as_deref()),
+        Command::Baseline {
+            path,
+            out,
+            repair_context,
+            reset_history,
+        } => run_baseline(&path, out.as_deref(), repair_context, reset_history),
         Command::Build {
             path,
             out_dir,
@@ -861,7 +874,12 @@ impl From<std::io::Error> for BuildFailure {
 /// through a staging directory to get that without risking the opposite
 /// failure — clearing the directory up front would destroy a good baseline
 /// whenever the workspace happens not to compile.
-fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
+fn run_baseline(
+    path: &Path,
+    out: Option<&Path>,
+    repair_context: bool,
+    reset_history: bool,
+) -> ExitCode {
     let out_dir = out
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_baseline_dir(path));
@@ -910,7 +928,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         &[Emit::IrJson],
         &[],
         std::time::Duration::from_secs(ridlc::plugin::DEFAULT_TIMEOUT_SECONDS),
-        false.into(),
+        repair_context.into(),
         ApplyLints::No,
         None,
         Some(&mut keep_context),
@@ -950,6 +968,18 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         }
     };
     let context = context.expect("a successful compile captured its baseline context");
+    if repair_context {
+        if let Err(err) =
+            baseline::prepare_repair(&out_dir, &staging, &sets.published, &sets.fresh, &context)
+        {
+            let _ = std::fs::remove_dir_all(&staging);
+            eprintln!("error: cannot repair historical baseline: {err}");
+            return ExitCode::from(2);
+        }
+        eprintln!(
+            "note: repair relies on the operator supplying the original historical source checkout and lockfile; frozen verification confirms the declared pins, but legacy snapshots cannot prove their historical provenance"
+        );
+    }
     if let Err(code) = baseline::stage_context(&staging, &sets.fresh, &context) {
         let _ = std::fs::remove_dir_all(&staging);
         return code;
@@ -971,21 +1001,27 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 
     // The histories are written into the staging directory only once both
     // gates passed, so a refused run leaves every published history as it was.
-    match catalogs::write_catalog_histories(
-        &staging,
-        &out_dir,
-        &sets.published,
-        &sets.fresh,
-        &context.remote_context(),
-        path,
-    ) {
-        Ok(_) => (),
+    let histories = if repair_context || reset_history {
+        catalogs::write_fresh_histories(&staging, &sets.fresh, &context.remote_context())
+            .map(|()| true)
+    } else {
+        catalogs::write_catalog_histories(
+            &staging,
+            &out_dir,
+            &sets.published,
+            &sets.fresh,
+            &context.remote_context(),
+            path,
+        )
+    };
+    let preserve = match histories {
+        Ok(preserve) => preserve,
         Err(code) => {
             let _ = std::fs::remove_dir_all(&staging);
             return code;
         }
     };
-    if let Err(err) = publish_baseline(&staging, &out_dir) {
+    if let Err(err) = publish_baseline(&staging, &out_dir, preserve) {
         eprintln!(
             "error: cannot publish the baseline to {}: {err}; staged files remain at {}",
             out_dir.display(),
@@ -1451,9 +1487,13 @@ fn dropped_number_message(
 
 /// Publishes only the managed files, retaining unrelated output entries and
 /// rolling completed renames back on a publication failure.
-fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
+fn publish_baseline(staging: &Path, out_dir: &Path, preserve: bool) -> std::io::Result<()> {
     match std::fs::symlink_metadata(out_dir) {
-        Ok(_) => baseline::replace_preserving(staging, out_dir).map(|_| ()),
+        Ok(_) => {
+            let backup = baseline::replace_preserving(staging, out_dir)?;
+            baseline::finish_backup(&backup, preserve);
+            Ok(())
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => std::fs::rename(staging, out_dir),
         Err(err) => Err(err),
     }
@@ -3313,7 +3353,7 @@ mod tests {
         std::fs::write(out_dir.join("b.ir.json"), "{}").unwrap();
         std::fs::write(out_dir.join("b.catalogs"), "marker\n").unwrap();
 
-        let result = publish_baseline(&staging, &out_dir);
+        let result = publish_baseline(&staging, &out_dir, true);
 
         let left = std::fs::read_to_string(out_dir.join("b.catalogs")).unwrap_or_default();
         let _ = std::fs::remove_dir_all(&root);
@@ -3347,7 +3387,7 @@ mod tests {
             std::fs::write(staging.join(name), "fresh\n").unwrap();
         }
 
-        let result = publish_baseline(&staging, &out_dir);
+        let result = publish_baseline(&staging, &out_dir, true);
 
         let histories = catalogs_files(&out_dir).unwrap();
         let _ = std::fs::remove_dir_all(&root);

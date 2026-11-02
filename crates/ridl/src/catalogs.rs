@@ -144,6 +144,24 @@ pub(crate) fn write_catalog_histories(
     Ok(preserve)
 }
 
+/// Recovery starts a new chain at the current canonical hash. It does not
+/// read or certify any earlier catalog-chain metadata.
+pub(crate) fn write_fresh_histories(
+    staging: &Path,
+    fresh: &[Package],
+    current: &RemoteContext,
+) -> Result<(), ExitCode> {
+    let std = ridlc::std_ir();
+    let refs: Vec<_> = fresh.iter().collect();
+    let scope = complete_scope(&refs, &std, &current.packages);
+    for unit in shaped_units(fresh.iter()) {
+        let mut history = CatalogHistory::default();
+        history.push_front(catalog_hash(unit, &scope));
+        write_history(staging, unit, &history)?;
+    }
+    Ok(())
+}
+
 fn complete_scope<'a>(
     local: &[&'a Package],
     std: &'a Package,
