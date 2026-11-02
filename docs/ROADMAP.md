@@ -197,6 +197,11 @@ before the epic was split out, and retitled) and driftsys/ridl#1089 to
 driftsys/ridl#1091. Its carried defect is driftsys/ridl#1092. E18.0, the design,
 was added on 2026-10-27 with the schedule, as driftsys/ridl#1093.
 
+**Filed 2026-11-02, with the deployment descriptor.** Epic 19 is new, with its
+own milestone; its stories are driftsys/ridl#1184 to driftsys/ridl#1198 (E19.0
+to E19.14). They come from driftsys/ridl#1176; E19.1 is built on
+driftsys/ridl#1179.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
