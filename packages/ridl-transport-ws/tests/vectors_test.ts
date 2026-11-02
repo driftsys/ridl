@@ -387,3 +387,29 @@ Deno.test("every version 3 spec vector decodes and re-encodes byte for byte", as
   }
   assert.deepEqual([...seen].sort(), [...KNOWN_3].sort());
 });
+
+Deno.test("the stream byte of each stream form is read and written at its place", async () => {
+  const rows = new Map(await specVersion3Vectors());
+  // The distance of the `stream` byte from the end of each message.
+  for (
+    const [id, fromEnd] of [
+      ["chunk-reply", 3],
+      ["stream-end-end", 3],
+      ["stream-credit", 5],
+    ] as const
+  ) {
+    const bytes = rows.get(id)!.slice();
+    const at = bytes.length - fromEnd;
+    assert.equal(bytes[at], 0, id);
+    bytes[at] = 7;
+    const got = decode(bytes);
+    assert.ok(got.ok, `vector ${id} did not decode`);
+    assert.ok(
+      got.frame.form === "chunk" || got.frame.form === "stream_end" ||
+        got.frame.form === "stream_credit",
+      id,
+    );
+    assert.equal(got.frame.stream, 7, id);
+    assert.deepEqual(encode(got.frame), bytes, `encoding of ${id}`);
+  }
+});

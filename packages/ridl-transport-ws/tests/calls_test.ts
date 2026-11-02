@@ -564,13 +564,14 @@ function streamEnd(
   seq: bigint,
   outcome: StreamOutcome,
   target = STREAMED,
+  stream = 0,
 ): Frame {
   return {
     form: "stream_end",
     target,
     envelope: { stamp: 600n + seq, seq },
     correlation,
-    stream: 0,
+    stream,
     outcome,
   };
 }
@@ -872,7 +873,7 @@ test("a stream_end or a stream_credit for a plain query is a protocol error", as
   }
 });
 
-test("a stream_credit, or a chunk on a stream other than 0, for a streamed reply is a protocol error", async () => {
+test("a stream_credit, or a chunk or a stream_end on a stream other than 0, for a streamed reply is a protocol error", async () => {
   const frames: Frame[] = [
     {
       form: "stream_credit",
@@ -882,6 +883,7 @@ test("a stream_credit, or a chunk on a stream other than 0, for a streamed reply
       credit: 1,
     },
     chunk(1n, 1n, [1], 1),
+    streamEnd(1n, 1n, { kind: "end" }, STREAMED, 1),
   ];
   for (const frame of frames) {
     const { socket, session, notes } = await attachedV3();
@@ -1044,6 +1046,19 @@ test("a chunk above the member's limit sends stream_end corrupt and errors corru
   ]);
   await assert.rejects(reader.read(), isFailure("corrupt"));
   assert.deepEqual(notes, []);
+});
+
+test("queryStream with arguments above the member's limit errors corrupt and sends nothing", async () => {
+  const { socket, session } = await attachedV3({ interfaces: [SMALL_STREAM] });
+  const sent = socket.sent.length;
+  const reader = session.queryStream(1, 10, Uint8Array.of(1, 2, 3), BOUND)
+    .getReader();
+  await assert.rejects(reader.read(), isFailure("corrupt"));
+  assert.equal(socket.sent.length, sent);
+  // Arguments of exactly the limit are sent.
+  const exact = session.queryStream(1, 10, Uint8Array.of(1, 2), BOUND);
+  assert.equal(sentOf(socket, "request").length, 1);
+  await exact.cancel();
 });
 
 test("the session ending errors a stream in flight with down", async () => {

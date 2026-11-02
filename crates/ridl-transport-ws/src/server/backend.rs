@@ -163,9 +163,10 @@ where
 
 /// A backend paired with the member table of the catalog its ports serve.
 ///
-/// It forwards the ports, the scannable view, the stream port and `read_fixed` of the backend
-/// it wraps, and returns the table from [`Backend::members`], so the server
-/// refuses an interaction the catalog does not hold.
+/// It forwards the ports, the scannable view, the stream port and
+/// `read_fixed` of the backend it wraps, and returns the table from
+/// [`Backend::members`], so the server refuses an interaction the catalog
+/// does not hold.
 pub struct Described<B: Backend> {
     inner: B,
     table: Arc<MemberTable>,
@@ -250,3 +251,34 @@ impl fmt::Display for TableMismatch {
 }
 
 impl std::error::Error for TableMismatch {}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use ridl_loopback::Loopback;
+    use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
+
+    use super::{Backend, Described, MemberTable, Scanning, Streaming};
+
+    const CATALOG: CatalogRef = CatalogRef {
+        name: "ws.test",
+        hash: CatalogHash([7u8; 32]),
+    };
+
+    /// A `Streaming` wrapper around a described, scanning backend still
+    /// serves the member table, the scannable view and the stream port.
+    ///
+    /// Mutations: answer `members` or `scannable` of `Streaming` with `None`.
+    #[test]
+    fn streaming_as_the_outer_wrapper_forwards_the_table_and_the_scan() {
+        let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
+        table.insert(InterfaceNo(1), Ordinal(1), Kind::Signal, None);
+        let rt = Loopback::new(CATALOG);
+        let described = Described::new(Scanning(rt), Arc::new(table)).unwrap();
+        let mut backend = Streaming(described);
+        assert_eq!(backend.members().map(MemberTable::len), Some(1));
+        assert!(backend.scannable().is_some());
+        assert!(backend.streams().is_some());
+    }
+}

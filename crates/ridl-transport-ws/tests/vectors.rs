@@ -341,3 +341,34 @@ fn every_version_3_vector_decodes_and_reencodes_byte_for_byte() {
         "the version 3 table and this test disagree on the vectors"
     );
 }
+
+/// The `stream` byte of each stream form is read and written at its place:
+/// the version 3 vectors, with that byte set to 7, decode with `stream` 7
+/// and encode to the same bytes.
+///
+/// Mutations: decode or encode a stream form with `stream` 0.
+#[test]
+fn the_stream_byte_of_each_stream_form_is_read_and_written() {
+    let rows = spec_version_3_vectors();
+    // The distance of the `stream` byte from the end of each message.
+    for (id, from_end) in [
+        ("chunk-reply", 3),
+        ("stream-end-end", 3),
+        ("stream-credit", 5),
+    ] {
+        let (_, original) = rows.iter().find(|(row, _)| row == id).unwrap();
+        let mut bytes = original.clone();
+        let at = bytes.len() - from_end;
+        assert_eq!(bytes[at], 0, "{id}");
+        bytes[at] = 7;
+        let got = decode(&bytes).unwrap();
+        let stream = match got {
+            Frame::Chunk { stream, .. }
+            | Frame::StreamEnd { stream, .. }
+            | Frame::StreamCredit { stream, .. } => stream,
+            other => panic!("{id}: unexpected frame {other:?}"),
+        };
+        assert_eq!(stream, 7, "{id}");
+        assert_round_trip(id, got, &bytes);
+    }
+}
