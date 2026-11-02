@@ -328,8 +328,14 @@ then `None`.
     caller's stream yields the `Utf8` violation after the whole chunks before
     it);
   - `a_text_source_with_invalid_bytes_is_refused_before_they_are_pushed` (`0xff`
-    in the middle: the bytes before it arrive, the `0xff` never crosses — check
-    with `RecordingPorts` that no push carries it);
+    in the middle: the bytes before it arrive, the `0xff` never crosses — run
+    the generated `serve` over `Loopback` and pull every chunk of the reply
+    stream through the caller's `StreamCaller` port, below the face: no chunk
+    holds `0xff`, the chunks before the refusal concatenate to the bytes before
+    `0xff`, and the stream ends `Pull::Failed` with the `Utf8` violation.
+    `Loopback` delivers every chunk the provider pushes, so this proves that no
+    push carried the byte. `RecordingPorts` is caller-side only and is not used
+    here);
   - `an_invalid_text_chunk_pushed_by_hand_is_refused_before_the_application` (a
     chunk `b"a\xffb"` pushed through `StreamHandler`: `poll_next` yields the
     `Utf8` violation, never `"a"`, and the provider's next push answers
