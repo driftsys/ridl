@@ -13,8 +13,7 @@ reference, and lowers the checked system to the IR beside the package IR.
 
 **What is not built.** No runtime reads the lowered system. The links, the
 routing table and the grants this chapter shows are facts the compiler writes
-down; nothing delivers a message along them. No descriptor is emitted from the
-lowered system, and there is no transport.
+down; nothing delivers a message along them. `ridl build --emit deployment` writes a deployment descriptor from the lowered system, but no runtime in this workspace reads it, and there is no transport.
 
 ## Contracts first
 

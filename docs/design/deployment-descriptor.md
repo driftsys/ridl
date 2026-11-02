@@ -262,8 +262,9 @@ reason. They bind later changes to the artifact.
   for a bare file.** The type is `i32`, the type of the attach field; a newtype
   is left to the runtime work that defines the debug twin on it
   (driftsys/ridl#1176). A single-file build writes no crate `lib.rs`, so it gets
-  no `instances` module; its numbers still reach the IR, the section and the
-  descriptor. A workspace with no `system` gets no module.
+  no `instances` module; its numbers still reach the IR and the codegen section.
+  A single-file build writes no deployment descriptor (see "The artifact"). A
+  workspace with no `system` gets no module.
 - **The codegen deployment section carries the placement's backend keys**
   (`Instance.attributes`) and the instance's number and provisional flag
   (`Instance.number`, `Instance.provisional`), so that a plugin generates a
