@@ -702,6 +702,195 @@ fn a_constant_equal_to_a_preamble_macro_is_refused_naming_both() {
     );
 }
 
+#[test]
+fn an_accessor_equal_to_a_stddef_type_is_refused_naming_both() {
+    let err = generate_fixture_err("package max\nstruct Align {\n  t : integer [0..10]\n}\n");
+    assert!(
+        err.message.contains("`max_align_t`")
+            && err.message.contains("claimed by `<stddef.h>` and by")
+            && err
+                .message
+                .contains("the accessor of `t` of the head of `Align`"),
+        "{}",
+        err.message
+    );
+}
+
+#[test]
+fn a_constant_equal_to_a_stdint_limit_is_refused_naming_both() {
+    let err = generate_fixture_err("package uint\nenum Least8 {\n  MAX = 0\n}\n");
+    assert!(
+        err.message.contains("`UINT_LEAST8_MAX`")
+            && err.message.contains("claimed by `<stdint.h>` and by")
+            && err.message.contains("the enum value `MAX`"),
+        "{}",
+        err.message
+    );
+}
+
+/// Exercise the collision path for a C17 inventory written out in this test,
+/// including names that the current source-to-C naming rules cannot derive.
+/// The inventory is a second copy of `STANDARD_HEADER_NAMES`, not an
+/// independent specification: the test fails when either copy holds a name the
+/// other lacks, so a change to one has to be made to both on purpose.
+#[test]
+fn every_c17_standard_header_name_is_claimed() {
+    let expected = "
+        int8_t int16_t int32_t int64_t
+        uint8_t uint16_t uint32_t uint64_t
+        int_least8_t int_least16_t int_least32_t int_least64_t
+        uint_least8_t uint_least16_t uint_least32_t uint_least64_t
+        int_fast8_t int_fast16_t int_fast32_t int_fast64_t
+        uint_fast8_t uint_fast16_t uint_fast32_t uint_fast64_t
+        intptr_t uintptr_t intmax_t uintmax_t
+        INT8_MIN INT16_MIN INT32_MIN INT64_MIN
+        INT8_MAX INT16_MAX INT32_MAX INT64_MAX
+        UINT8_MAX UINT16_MAX UINT32_MAX UINT64_MAX
+        INT_LEAST8_MIN INT_LEAST16_MIN INT_LEAST32_MIN INT_LEAST64_MIN
+        INT_LEAST8_MAX INT_LEAST16_MAX INT_LEAST32_MAX INT_LEAST64_MAX
+        UINT_LEAST8_MAX UINT_LEAST16_MAX UINT_LEAST32_MAX UINT_LEAST64_MAX
+        INT_FAST8_MIN INT_FAST16_MIN INT_FAST32_MIN INT_FAST64_MIN
+        INT_FAST8_MAX INT_FAST16_MAX INT_FAST32_MAX INT_FAST64_MAX
+        UINT_FAST8_MAX UINT_FAST16_MAX UINT_FAST32_MAX UINT_FAST64_MAX
+        INTPTR_MIN INTPTR_MAX UINTPTR_MAX INTMAX_MIN INTMAX_MAX UINTMAX_MAX
+        PTRDIFF_MIN PTRDIFF_MAX SIG_ATOMIC_MIN SIG_ATOMIC_MAX SIZE_MAX
+        WCHAR_MIN WCHAR_MAX WINT_MIN WINT_MAX
+        INT8_C INT16_C INT32_C INT64_C INTMAX_C
+        UINT8_C UINT16_C UINT32_C UINT64_C UINTMAX_C
+        size_t ptrdiff_t wchar_t max_align_t NULL offsetof
+    ";
+    let package = compile("package inventory\nstruct S {\n  x : integer [0..10]\n}\n");
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    let (_, mut claims) = crate::Header::new(&model, projection)
+        .render_with_claims()
+        .expect("generate");
+    let mut table: Vec<&str> = crate::STANDARD_HEADER_NAMES.to_vec();
+    table.sort_unstable();
+    let mut inventory: Vec<&str> = expected.split_ascii_whitespace().collect();
+    inventory.sort_unstable();
+    assert_eq!(table, inventory, "the table and the inventory differ");
+    let stddef = [
+        "size_t",
+        "ptrdiff_t",
+        "wchar_t",
+        "max_align_t",
+        "NULL",
+        "offsetof",
+    ];
+    for name in expected.split_ascii_whitespace() {
+        let header = if stddef.contains(&name) {
+            "`<stddef.h>`"
+        } else {
+            "`<stdint.h>`"
+        };
+        let err = claims
+            .claim(
+                name,
+                "the test declaration".to_string(),
+                crate::Identity {
+                    package: "inventory".to_string(),
+                    key: name.to_string(),
+                    role: "test declaration".to_string(),
+                },
+            )
+            .expect_err(name);
+        assert!(
+            err.message.contains(&format!("`{name}`"))
+                && err.message.contains(&format!("claimed by {header} and by"))
+                && err.message.contains("the test declaration"),
+            "{}",
+            err.message
+        );
+    }
+}
+
+#[test]
+fn standard_header_type_families_are_refused_through_generation() {
+    for (source, name) in [
+        (
+            "package int\nstruct Fast8 {\n  t : integer [0..10]\n}\n",
+            "int_fast8_t",
+        ),
+        (
+            "package uint\nstruct Fast16 {\n  t : integer [0..10]\n}\n",
+            "uint_fast16_t",
+        ),
+        (
+            "package int\nstruct Least32 {\n  t : integer [0..10]\n}\n",
+            "int_least32_t",
+        ),
+        (
+            "package uint\nstruct Least64 {\n  t : integer [0..10]\n}\n",
+            "uint_least64_t",
+        ),
+    ] {
+        let err = generate_fixture_err(source);
+        assert!(
+            err.message.contains(&format!("`{name}`"))
+                && err.message.contains("claimed by `<stdint.h>` and by")
+                && err.message.contains("the accessor of `t`"),
+            "{}",
+            err.message
+        );
+    }
+}
+
+#[test]
+fn standard_header_limit_families_are_refused_through_generation() {
+    for (source, name) in [
+        ("package int\nenum Fast8 {\n  MIN = 0\n}\n", "INT_FAST8_MIN"),
+        (
+            "package int\nenum Fast16 {\n  MAX = 0\n}\n",
+            "INT_FAST16_MAX",
+        ),
+        (
+            "package uint\nenum Fast16 {\n  MAX = 0\n}\n",
+            "UINT_FAST16_MAX",
+        ),
+        (
+            "package int\nenum Least32 {\n  MIN = 0\n}\n",
+            "INT_LEAST32_MIN",
+        ),
+        (
+            "package int\nenum Least64 {\n  MAX = 0\n}\n",
+            "INT_LEAST64_MAX",
+        ),
+        (
+            "package sig\nenum Atomic {\n  MIN = 0\n}\n",
+            "SIG_ATOMIC_MIN",
+        ),
+        (
+            "package sig\nenum Atomic {\n  MAX = 0\n}\n",
+            "SIG_ATOMIC_MAX",
+        ),
+    ] {
+        let err = generate_fixture_err(source);
+        assert!(
+            err.message.contains(&format!("`{name}`"))
+                && err.message.contains("claimed by `<stdint.h>` and by")
+                && err.message.contains("the enum value"),
+            "{}",
+            err.message
+        );
+    }
+}
+
+#[test]
+fn names_near_standard_header_names_are_accepted() {
+    let h = generate_fixture("package max\nstruct Align {\n  time : integer [0..10]\n}\n")
+        .header_source;
+    assert!(h.contains("max_align_time("), "{h}");
+    let h = generate_fixture("package uint\nenum Least8 {\n  MAXIMUM = 0\n}\n").header_source;
+    assert!(h.contains("#define UINT_LEAST8_MAXIMUM 0"), "{h}");
+    let h = generate_fixture("package uint\nenum Custom {\n  MAX = 0\n}\n").header_source;
+    assert!(h.contains("#define UINT_CUSTOM_MAX 0"), "{h}");
+    // A lowercase name of a reserved pattern (`uint*_t`) is not claimed.
+    let h =
+        generate_fixture("package uint\nstruct Custom {\n  t : integer [0..10]\n}\n").header_source;
+    assert!(h.contains("uint_custom_t("), "{h}");
+}
+
 /// The include guard of the header is claimed too: the enum `RidlPodbuf` of
 /// `ridl.podbuf` with a value `H` spells `RIDL_PODBUF_RIDL_PODBUF_H`, the
 /// guard of its own header, and the `#define` would end the header early.
@@ -833,6 +1022,16 @@ fn a_package_whose_projection_refuses_a_head_is_left_out_of_the_check() {
         "the edited struct is refused by the projection"
     );
     assert_eq!(crate::check_c_names(&packages), Ok(()));
+}
+
+/// Every header claims the preamble names and the names `<stdint.h>` and
+/// `<stddef.h>` define, and these claims belong to no package, so two
+/// unrelated packages, each with its own header, do not clash on them.
+#[test]
+fn two_unrelated_packages_do_not_clash_on_the_fixed_names() {
+    let a = compile("package veh.a\nstruct Speed {\n  v : integer [0..1000]\n}\n");
+    let b = compile("package veh.b\nstruct Load {\n  w : integer [0..1000]\n}\n");
+    assert_eq!(crate::check_c_names(&[&a, &b]), Ok(()));
 }
 
 /// A strict enum, an open enum, a strict enum set and an open enum set.

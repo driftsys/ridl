@@ -244,19 +244,26 @@ the header of the package that declares the type: a consumer of an interface
 that sends a foreign boxed root includes that package's header.
 
 Every C name the header defines is claimed once: first the fixed names of the
-preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`) and the include guard of
-the header (`RIDL_PODBUF_<PKG>_H`), then the constants of the enums, enum sets
-and union tags, the head type names, the guard macro of each head, and the
-accessor and presence-test functions. A package where two are equal is refused,
-with a message that names both claimants: a constant equal to the guard of a
-head (an enum `Gear` with a value `BOX_HEAD_DEFINED` next to a struct
-`GearBox`), which would make the `#ifndef` drop the head; a box head whose name
-equals the name of a tuple head (a scalar `HubSize` next to the tuple at
-`Hub.size`), which the Rust backend refuses too; or an accessor equal to a
-preamble helper (a struct `Desc` with a field `at` in a package `ridl.podbuf`,
-`ridl_podbuf_desc_at`). A struct, a union or a box with no podbuf size bound is
-refused. The header carries `#error` on a big-endian target, and has no
-`verify`: the gate is Rust.
+preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`), the C17 names defined
+by the included `<stdint.h>` and `<stddef.h>`, and the include guard of the
+header (`RIDL_PODBUF_<PKG>_H`), then the constants of the enums, enum sets and
+union tags, the head type names, the guard macro of each head, and the accessor
+and presence-test functions. A package where two are equal is refused, with a
+message that names both claimants: a constant equal to the guard of a head (an
+enum `Gear` with a value `BOX_HEAD_DEFINED` next to a struct `GearBox`), which
+would make the `#ifndef` drop the head; a box head whose name equals the name of
+a tuple head (a scalar `HubSize` next to the tuple at `Hub.size`), which the
+Rust backend refuses too; or an accessor equal to a preamble helper (a struct
+`Desc` with a field `at` in a package `ridl.podbuf`, `ridl_podbuf_desc_at`). The
+standard-header claims cover the integer types, limit macros and constant
+macros, including the optional fixed-width forms, and `size_t`, `ptrdiff_t`,
+`wchar_t`, `max_align_t`, `NULL` and `offsetof`. They use one fixed table beside
+the preamble-name table. An accessor named `max_align_t` (`package max`,
+`struct Align`, field `t`) or a constant named `UINT_LEAST8_MAX` is refused with
+the same message naming both claimants. Names that only match a future-use
+reserved pattern, such as `UINT_CUSTOM_MAX`, are not claimed. A struct, a union
+or a box with no podbuf size bound is refused. The header carries `#error` on a
+big-endian target, and has no `verify`: the gate is Rust.
 
 **The headers of one build are checked against each other.** The C names are not
 unique across packages: the `.` of a package name and a `_` from the snake case
@@ -341,6 +348,7 @@ The encoding has no second implementation, so the oracle is the law itself.
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | A string that holds U+0000 cannot be encoded                                                                                                                                                                                                                                                               | a limit of the encoding                                                |
 | The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                                                                                                                                 | the check is per build                                                 |
+| The claimed names of `<stdint.h>` and `<stddef.h>` are the C17 ones; the C23 additions (the `*_WIDTH` macros, `nullptr_t`) are not claimed, so a header built with `-std=c23` can still meet one of them                                                                                                   | the list is C17                                                        |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                                                                                                                                | ADR-0020 decision 2                                                    |
 | When the pin of a remote `[imports]` unit moves and a remote struct held inline changes layout in the same step as a consumer append, `ridl diff` lays the old head out with the new pin's struct, so the inline-append verdict can be wrong in either direction; the remote's change is the remote's diff | ADR-0031 decision 13, the 2026-10-31 amendment from driftsys/ridl#1141 |
 
