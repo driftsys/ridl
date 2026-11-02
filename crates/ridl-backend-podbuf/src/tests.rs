@@ -999,6 +999,16 @@ fn a_package_whose_projection_refuses_a_head_is_left_out_of_the_check() {
     assert_eq!(crate::check_c_names(&packages), Ok(()));
 }
 
+/// Every header claims the preamble names and the names `<stdint.h>` and
+/// `<stddef.h>` define, and these claims belong to no package, so two
+/// unrelated packages, each with its own header, do not clash on them.
+#[test]
+fn two_unrelated_packages_do_not_clash_on_the_fixed_names() {
+    let a = compile("package veh.a\nstruct Speed {\n  v : integer [0..1000]\n}\n");
+    let b = compile("package veh.b\nstruct Load {\n  w : integer [0..1000]\n}\n");
+    assert_eq!(crate::check_c_names(&[&a, &b]), Ok(()));
+}
+
 /// A strict enum, an open enum, a strict enum set and an open enum set.
 const STRICTNESS: &str = "package veh.common\n\
 enum Gear {\n  PARK = 0\n  DRIVE = 1\n}\n\
