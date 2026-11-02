@@ -1,0 +1,550 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.codegen
+input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
+---
+// ===== package veh.adas =====
+{
+  "name": {
+    "dotted": "veh.adas",
+    "segments": [
+      "veh",
+      "adas"
+    ],
+    "joinedCamel": "VehAdas",
+    "underscored": "veh_adas"
+  },
+  "scope": {
+    "package": "veh.adas",
+    "others": [
+      "veh.adas",
+      "veh.ego"
+    ]
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "Engaged",
+        "snake": "engaged",
+        "camel": "Engaged",
+        "screaming": "ENGAGED",
+        "pascal": "Engaged"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "false",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_BOOLEAN",
+        "vacuous": true
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "engaged",
+              "snake": "engaged",
+              "camel": "Engaged",
+              "screaming": "ENGAGED",
+              "pascal": "Engaged"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "2"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [],
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Engaged",
+                  "resolved": true,
+                  "package": "veh.adas",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 2
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              }
+            }
+          }
+        }
+      ],
+      "inlineOfService": 0,
+      "tableBudget": {
+        "proto3": {
+          "bytes": "2"
+        },
+        "flatbuffers": {
+          "bytes": "43"
+        },
+        "podbuf": {
+          "bytes": "16"
+        }
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "service": {
+        "dotted": "veh.adas.cruise",
+        "segments": [
+          "veh",
+          "adas",
+          "cruise"
+        ],
+        "joinedCamel": "VehAdasCruise",
+        "underscored": "veh_adas_cruise"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": {
+        "dotted": "veh.adas.cruise",
+        "segments": [
+          "veh",
+          "adas",
+          "cruise"
+        ],
+        "joinedCamel": "VehAdasCruise",
+        "underscored": "veh_adas_cruise"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interfaceRefs": [],
+      "inlineShape": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
+    }
+  ],
+  "catalog": {
+    "package": "veh.adas",
+    "hash": "jrEDJYpcqYAicg1izSh9HlgbR0+nBc4WjRsSSmrg61I=",
+    "retired": [],
+    "compatible": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      }
+    ],
+    "tables": [
+      {
+        "name": "EngagedBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BOOL",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "boolean": true
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// ===== package veh.ego =====
+{
+  "name": {
+    "dotted": "veh.ego",
+    "segments": [
+      "veh",
+      "ego"
+    ],
+    "joinedCamel": "VehEgo",
+    "underscored": "veh_ego"
+  },
+  "scope": {
+    "package": "veh.ego",
+    "others": [
+      "veh.adas",
+      "veh.ego"
+    ]
+  },
+  "declarations": [
+    {
+      "name": {
+        "declared": "Moving",
+        "snake": "moving",
+        "camel": "Moving",
+        "screaming": "MOVING",
+        "pascal": "Moving"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "value": "false",
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": true
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
+      },
+      "scalar": {
+        "class": "SCALAR_CLASS_BOOLEAN",
+        "vacuous": true
+      }
+    }
+  ],
+  "tuples": [],
+  "interfaces": [
+    {
+      "number": 1,
+      "provisional": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "slots": [
+        {
+          "ordinal": 1,
+          "interaction": {
+            "name": {
+              "declared": "moving",
+              "snake": "moving",
+              "camel": "Moving",
+              "screaming": "MOVING",
+              "pascal": "Moving"
+            },
+            "kind": "KIND_SIGNAL",
+            "row": 0,
+            "doc": "",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "2"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [],
+            "signal": {
+              "payload": {
+                "type": {
+                  "reference": "Moving",
+                  "resolved": true,
+                  "package": "veh.ego",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_SCALAR"
+                },
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 2
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "false",
+                "source": "INIT_SOURCE_DERIVED",
+                "oneLevel": true
+              }
+            }
+          }
+        }
+      ],
+      "inlineOfService": 0,
+      "tableBudget": {
+        "proto3": {
+          "bytes": "2"
+        },
+        "flatbuffers": {
+          "bytes": "43"
+        },
+        "podbuf": {
+          "bytes": "16"
+        }
+      },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
+      "service": {
+        "dotted": "veh.ego.status",
+        "segments": [
+          "veh",
+          "ego",
+          "status"
+        ],
+        "joinedCamel": "VehEgoStatus",
+        "underscored": "veh_ego_status"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": {
+        "dotted": "veh.ego.status",
+        "segments": [
+          "veh",
+          "ego",
+          "status"
+        ],
+        "joinedCamel": "VehEgoStatus",
+        "underscored": "veh_ego_status"
+      },
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interfaceRefs": [],
+      "inlineShape": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
+    }
+  ],
+  "catalog": {
+    "package": "veh.ego",
+    "hash": "YP5bC/ShuCE/A4as6VufGJLPmSEyI39kosGyv3/e5vE=",
+    "retired": [],
+    "compatible": []
+  },
+  "flatbuffers": {
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_BOX",
+        "maxSize": 43
+      }
+    ],
+    "tables": [
+      {
+        "name": "MovingBox",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_BOOL",
+                "widthBytes": 1
+              }
+            },
+            "needsNullDefault": false,
+            "wrapped": true
+          }
+        ],
+        "vtableSlots": 1,
+        "rootBox": 0
+      }
+    ]
+  },
+  "foreign": [],
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "boolean": true
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -2418,12 +2418,14 @@ fn populated_deployment() -> v1::Deployment {
             }],
             maps: vec!["veh.cabin".to_string()],
             attributes: vec![v1::Attribute {
-                namespace: "shm".to_string(),
-                key: "service".to_string(),
+                namespace: "linux".to_string(),
+                key: "priority".to_string(),
                 value: Some(v1::AttributeValue {
                     kind: Some(v1::attribute_value::Kind::Scalar("3".to_string())),
                 }),
             }],
+            number: 5,
+            provisional: true,
         }],
         channels: vec![v1::Channel {
             catalog: "veh.cabin".to_string(),
@@ -2531,13 +2533,15 @@ fn a_populated_deployment_section_renders_the_keys_a_plugin_reads() {
         ],
         "attributes": [
           {
-            "namespace": "shm",
-            "key": "service",
+            "namespace": "linux",
+            "key": "priority",
             "value": {
               "scalar": "3"
             }
           }
-        ]
+        ],
+        "number": 5,
+        "provisional": true
       }
     ],
     "channels": [
@@ -2668,6 +2672,8 @@ fn the_deployment_sections_field_numbers_are_the_schemas() {
             ("offers", 5),
             ("maps", 6),
             ("attributes", 7),
+            ("number", 8),
+            ("provisional", 9),
         ])
     );
     assert_eq!(

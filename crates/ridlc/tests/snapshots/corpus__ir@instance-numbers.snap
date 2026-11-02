@@ -1,0 +1,170 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.ir_json
+input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
+---
+// ===== package veh.adas =====
+{
+  "name": "veh.adas",
+  "decls": [
+    {
+      "name": "Engaged",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+        },
+        "init": {
+          "derivable": true,
+          "value": "false"
+        }
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": [
+    {
+      "name": "veh.adas.cruise",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "shapes": [
+        {
+          "inline": {
+            "name": "",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "doc": "",
+            "labels": [],
+            "interactions": [
+              {
+                "name": "engaged",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 1,
+                "links": [],
+                "see": [],
+                "since": [],
+                "signalDef": {
+                  "payload": "Engaged",
+                  "init": {
+                    "derivable": true,
+                    "value": "false"
+                  },
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "minUs": "100000",
+                    "maxUs": "1000000",
+                    "defaultApplied": false
+                  },
+                  "family": "FAMILY_DISPATCH"
+                }
+              }
+            ],
+            "number": 1,
+            "provisional": true,
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        }
+      ]
+    }
+  ],
+  "retired": [],
+  "unit": "veh.adas"
+}
+
+// ===== package veh.ego =====
+{
+  "name": "veh.ego",
+  "decls": [
+    {
+      "name": "Moving",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+        },
+        "init": {
+          "derivable": true,
+          "value": "false"
+        }
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": [
+    {
+      "name": "veh.ego.status",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "shapes": [
+        {
+          "inline": {
+            "name": "",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "doc": "",
+            "labels": [],
+            "interactions": [
+              {
+                "name": "moving",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 1,
+                "links": [],
+                "see": [],
+                "since": [],
+                "signalDef": {
+                  "payload": "Moving",
+                  "init": {
+                    "derivable": true,
+                    "value": "false"
+                  },
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "minUs": "100000",
+                    "maxUs": "1000000",
+                    "defaultApplied": false
+                  },
+                  "family": "FAMILY_DISPATCH"
+                }
+              }
+            ],
+            "number": 1,
+            "provisional": true,
+            "links": [],
+            "see": [],
+            "since": []
+          }
+        }
+      ]
+    }
+  ],
+  "retired": [],
+  "unit": "veh.ego"
+}

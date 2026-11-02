@@ -3110,6 +3110,18 @@ mod system_round_trip {
                     implicit: false,
                     external: true,
                     instances: vec!["primary".to_string(), "backup".to_string()],
+                    numbers: vec![
+                        v2::InstanceNumber {
+                            instance: "primary".to_string(),
+                            number: 1,
+                            provisional: false,
+                        },
+                        v2::InstanceNumber {
+                            instance: "backup".to_string(),
+                            number: 2,
+                            provisional: true,
+                        },
+                    ],
                     offers: vec![v2::Offer {
                         service: "veh.adas.cruise".to_string(),
                         attributes: vec![attribute("someip", "serviceId", Some(scalar("4097")))],
@@ -3146,6 +3158,11 @@ mod system_round_trip {
                     implicit: true,
                     external: false,
                     instances: vec!["Unit".to_string()],
+                    numbers: vec![v2::InstanceNumber {
+                        instance: "Unit".to_string(),
+                        number: 3,
+                        provisional: false,
+                    }],
                     offers: vec![v2::Offer {
                         service: "veh.diag.access".to_string(),
                         attributes: vec![],

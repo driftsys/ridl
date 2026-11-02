@@ -89,6 +89,12 @@ message Instance {
   // The backend keys of the placement line that placed the instance, as
   // declared (rsdl §5).
   repeated Attribute attributes = 7;
+  // The instance's number (rsdl §7), between 1 and 2147483647; 0 when the
+  // system IR carries none.
+  int32 number = 8;
+  // True when the number is provisional: the instance has no live entry in
+  // the root `instances.lock`.
+  bool provisional = 9;
 }
 
 // A backend key as declared (rsdl §5): `namespace.key`, a flag or a value,

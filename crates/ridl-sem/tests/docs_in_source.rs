@@ -18,7 +18,7 @@ use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::std_package;
 use ridl_ir::catalog_hash::catalog_hash;
 use ridl_ir::v2;
-use ridl_sem::{check_package, check_system, lower_system, resolve_package};
+use ridl_sem::{check_package, check_system, lower_system, number_instances, resolve_package};
 use ridl_syntax::{SyntaxKind, parse};
 
 /// The fixture workspace: `(package, path, text)` per file.
@@ -91,7 +91,8 @@ fn compile(files: &[(&str, &str, String)]) -> Compiled {
     let system = check_system(&db, ws, std);
     record(&system.diagnostics);
     let refs: Vec<&v2::Package> = irs.iter().collect();
-    let lowered = lower_system(&system, &refs);
+    let numbering = number_instances(&system, None);
+    let lowered = lower_system(&system, &refs, &numbering);
     Compiled {
         packages: irs,
         system: lowered,

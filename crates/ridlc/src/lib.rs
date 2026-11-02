@@ -505,7 +505,7 @@ pub fn compile_workspace_with_access(
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
     let declared_deployments = declared_deployments(&system);
-    let system = lower_workspace_system(&system, &packages, &std_ir);
+    let system = lower_workspace_system(&system, &packages, &std_ir, &instances);
     Ok(WorkspaceOutput {
         checked,
         resolutions,
@@ -1255,6 +1255,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         report_scope,
         root_package,
         remote_units,
+        instances,
         ..
     } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
         .map_err(|err| E::from(load_io_error(err)))?;
@@ -1580,7 +1581,7 @@ fn run_build_inner<E: From<std::io::Error>>(
             None => None,
         };
         let lowered_system = if wants_system {
-            lower_system(&system, &packages).map(|mut lowered| {
+            lower_system(&system, &packages, &instances).map(|mut lowered| {
                 embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
                 lowered
             })
@@ -2396,13 +2397,15 @@ fn wasm_unit<'a>(root_unit: Option<&'a str>, units: &BTreeSet<&'a str>) -> Resul
 /// hash the catalog's descriptor carries (driftsys/ridl#367).
 ///
 /// `packages` is every checked package of the workspace and `std_ir` the
-/// lowered `ridl.std`. `None` when [`lower_system`] is.
+/// lowered `ridl.std`. `numbering` is the instance numbering of the workspace
+/// ([`WorkspaceOutput::instances`]). `None` when [`lower_system`] is.
 pub fn lower_workspace_system(
     system: &CheckedSystem,
     packages: &[&ridl_ir::v2::Package],
     std_ir: &ridl_ir::v2::Package,
+    numbering: &InstanceNumbering,
 ) -> Option<ridl_ir::v2::System> {
-    let mut lowered = lower_system(system, packages)?;
+    let mut lowered = lower_system(system, packages, numbering)?;
     let others = catalog_scope(packages, Some(std_ir));
     embed_catalog_hashes(&mut lowered, packages, &others);
     Some(lowered)

@@ -132,6 +132,16 @@ fn instances(system: &v2::System, deployment: &v2::Deployment) -> Vec<v1::Instan
                 .find(|grant| grant.component == placement.component)
                 .map(|grant| grant.regions.clone())
                 .unwrap_or_default();
+            // `(0, true)` when the system IR carries no number for the
+            // placement: the descriptor refuses 0.
+            let (number, provisional) = component
+                .and_then(|component| {
+                    component
+                        .numbers
+                        .iter()
+                        .find(|number| number.instance == placement.instance)
+                })
+                .map_or((0, true), |number| (number.number, number.provisional));
             v1::Instance {
                 component: placement.component.clone(),
                 instance: placement.instance.clone(),
@@ -140,6 +150,8 @@ fn instances(system: &v2::System, deployment: &v2::Deployment) -> Vec<v1::Instan
                 offers,
                 maps,
                 attributes: placement.attributes.iter().map(attribute).collect(),
+                number,
+                provisional,
             }
         })
         .collect()
@@ -1686,6 +1698,46 @@ mod tests {
     }
 
     #[test]
+    fn an_instance_carries_its_number_and_provisional_flag() {
+        let mut system = system();
+        let placement = system.deployments[0].placements[0].clone();
+        system
+            .components
+            .iter_mut()
+            .find(|component| component.qualified_name() == placement.component)
+            .expect("the placed component is in the system")
+            .numbers = vec![v2::InstanceNumber {
+            instance: placement.instance.clone(),
+            number: 7,
+            provisional: false,
+        }];
+        let package = package();
+        let section =
+            lower_deployment(&system, "prod", &[&package]).expect("the deployment is named prod");
+        assert_eq!(
+            (
+                section.instances[0].number,
+                section.instances[0].provisional
+            ),
+            (7, false)
+        );
+    }
+
+    #[test]
+    fn an_instance_without_a_number_entry_is_zero_and_provisional() {
+        let system = system();
+        let package = package();
+        let section =
+            lower_deployment(&system, "prod", &[&package]).expect("the deployment is named prod");
+        assert!(
+            section
+                .instances
+                .iter()
+                .all(|instance| (instance.number, instance.provisional) == (0, true))
+        );
+    }
+
+    #[test]
     fn an_instance_carries_its_placement_line_keys() {
         let scalar = |text: &str| v2::AttributeValue {
             kind: Some(v2::attribute_value::Kind::Scalar(text.to_string())),
@@ -1693,8 +1745,8 @@ mod tests {
         let mut system = system();
         system.deployments[0].placements[0].attributes = vec![
             v2::Attribute {
-                namespace: "shm".to_string(),
-                key: "service".to_string(),
+                namespace: "linux".to_string(),
+                key: "priority".to_string(),
                 value: Some(scalar("3")),
             },
             v2::Attribute {
@@ -1720,8 +1772,8 @@ mod tests {
             section.instances[0].attributes,
             [
                 v1::Attribute {
-                    namespace: "shm".to_string(),
-                    key: "service".to_string(),
+                    namespace: "linux".to_string(),
+                    key: "priority".to_string(),
                     value: value(v1::attribute_value::Kind::Scalar("3".to_string())),
                 },
                 v1::Attribute {

@@ -594,6 +594,7 @@ mod tests {
                 .iter()
                 .map(|instance| instance.to_string())
                 .collect(),
+            numbers: Vec::new(),
             offers: offers
                 .iter()
                 .map(|service| v2::Offer {

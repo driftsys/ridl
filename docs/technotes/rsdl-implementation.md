@@ -69,8 +69,8 @@ carried into the IR either way — the warning never blocks (rsdl §13).
 
 ## The lowering is a plain function over the checked model
 
-`ridl_sem::lower_system(system: &CheckedSystem, packages: &[&v2::Package]) ->
-Option<v2::System>`
+`ridl_sem::lower_system(system: &CheckedSystem, packages: &[&v2::Package],
+numbering: &InstanceNumbering) -> Option<v2::System>`
 is a plain function, not a salsa query. Only `ridlc` and `ridl diff` lower, once
 per command run and after every query has returned; the language server never
 lowers, so nothing would reuse a memoized result.
@@ -78,14 +78,17 @@ lowers, so nothing would reuse a memoized result.
 It reads the lowered package IR as its second argument, because rsdl §13's
 inputs from outside rsdl live there: each interface's number and provisional
 flag (`Interface.number`, `Interface.provisional`, from the unit's lock) and
-each member's ordinal (`Decl.ordinal`, ridl §11). An interface is found by
-identity through `Package::shapes()`, the walk that sees an inline shape;
+each member's ordinal (`Decl.ordinal`, ridl §11). Its third argument is the
+instance numbering of `number_instances`, which gives each instance its number
+and provisional flag (`Component.numbers`). An interface is found by identity
+through `Package::shapes()`, the walk that sees an inline shape;
 `Package.interfaces` alone misses one.
 
 **Gating** is the function's own, and it is rsdl §13's:
 
 - an error in the closure blocks every deployment, so the function returns
-  `None` when `CheckedSystem::closure_has_errors` is set;
+  `None` when `CheckedSystem::closure_has_errors` is set, or when
+  `InstanceNumbering::overflow` is not empty (RSDL-315);
 - an RSDL-7xx error blocks its own deployment only, which
   `DeploymentPlacement::has_errors` records, as does a deployment whose closure
   was never placed with no RSDL-7xx error raised for it: that deployment is left

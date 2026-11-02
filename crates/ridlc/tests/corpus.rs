@@ -294,7 +294,13 @@ fn compile_entry(entry: &Path) -> Compiled {
     // artifacts above get none.
     let system_json = std_ir.as_ref().and_then(|std_ir| {
         let irs: Vec<&ridl_ir::v2::Package> = checked_irs.iter().map(|(_, ir)| ir).collect();
-        ridlc::lower_workspace_system(&system, &irs, std_ir).map(|lowered| {
+        ridlc::lower_workspace_system(
+            &system,
+            &irs,
+            std_ir,
+            &ridl_sem::number_instances(&system, None),
+        )
+        .map(|lowered| {
             ridl_ir::v2::system_to_json_pretty(&lowered)
                 .expect("a clean entry's system serializes as IR JSON")
         })

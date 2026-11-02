@@ -723,12 +723,13 @@ The lowering runs over the closure once and then once per deployment. It
 produces **facts**, stated here as facts and not as a schema; a runtime's
 descriptor is an emitter over them and is specified with the runtime. Inputs
 from outside rsdl, cited once: the interface numbers, read from each unit's
-generated lock file; the member ordinals, from position (ridl §11); and the
-**catalog hash** per catalog, computed by ridl over the interfaces, their
-numbers and every type they reach (D-8) — embedded here as an input, never
-computed by rsdl. The lock file is `interfaces.lock`, one per unit, written by
-`ridl lock` alone (ridl §11); an inline shape is numbered from it too, under the
-key `service:` and the service's dotted name (ridl §14.5).
+generated lock file; the instance numbers, read from the root `instances.lock`
+(§7); the member ordinals, from position (ridl §11); and the **catalog hash**
+per catalog, computed by ridl over the interfaces, their numbers and every type
+they reach (D-8) — embedded here as an input, never computed by rsdl. The lock
+file is `interfaces.lock`, one per unit, written by `ridl lock` alone (ridl
+§11); an inline shape is numbered from it too, under the key `service:` and the
+service's dotted name (ridl §14.5).
 
 Per deployment:
 
