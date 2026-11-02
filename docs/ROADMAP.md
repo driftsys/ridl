@@ -1463,17 +1463,41 @@ its own, approved before code starts.
    - Done when: an end-to-end test publishes a value on every interface of a
      loopback machine, and a client attached through the gateway receives each
      of them.
-4. **Injection over the WebSocket.** To inject on an interface, the gateway
-   finds the instance N that offers it in the descriptor, attaches as −N, and
-   writes through −N's ports. Commands and queries already travel as `request`.
-   A `publish` goes only from the provider to the consumer (frame specification
-   §5), so a client cannot send a signal value or an event today. The design
-   note chooses between a session in which the client is the providing side and
-   a debug control channel of the gateway, and records the other as the
-   alternative.
-   - Done when: an end-to-end test with N detached injects a signal value, an
-     event and a command through the gateway, a consumer on the machine receives
-     each of them, and an attach of N while −N writes is refused.
+4. **Injection over the WebSocket, with the client as the providing side.** To
+   inject on an interface, the gateway finds the instance N that offers it in
+   the deployment descriptor, attaches to the node as −N, and writes through
+   −N's ports. Commands and queries already travel as `request` on a listening
+   connection. A signal value or an event needs the client to provide: the
+   frame's sessions already have a direction (frame specification §3), but the
+   WebSocket binding fixes the client as the consumer (§11.1, item 1). Decided
+   with the owner on 2026-11-02:
+   - **A subprotocol with the roles reversed.** §11.1 gains a subprotocol in
+     which the client provides and the server consumes: the server sends
+     `attach` first, the client answers `attached`, and the server still sends
+     the pings, because a browser cannot. The frame does not change, so a client
+     injects with ordinary `publish` and `occurrence` frames under their rules
+     for provenance, `invalidate` and sequence numbers. `ridl-transport-ws`
+     gains the consuming side and `@driftsys/ridl-transport-ws` the providing
+     side. Only the −N attach is debug; the subprotocol also serves a browser
+     that provides an interface in production.
+   - **Injection has its own listener.** A connection carries one session in one
+     direction, so listening and injection never share a connection. The gateway
+     also accepts them on separate listeners, a port each, so that each has its
+     own access policy (the embedder's, D-7 of
+     [the `ridl-transport-ws` design record](design/ridl-transport-ws.md)), and
+     a gateway that does not bind the injection listener cannot inject. The
+     binding still places nothing in the URL.
+   - **Alternatives considered.** A debug control channel of the gateway, with
+     its own messages: simpler, but it restates without a specification what the
+     frame already defines, and serves the gateway only. A consumer that
+     publishes, as a new frame form: rejected, because it breaks the direction
+     of a session that the port contracts rely on, and would allow a second
+     writer in production.
+   - Done when: the binding section states the reversed subprotocol and its test
+     vectors; an end-to-end test with N detached injects a signal value, an
+     event and a command through the gateway's injection listener, a consumer on
+     the machine receives each of them, and an attach of N while −N writes is
+     refused; and the listening listener refuses the reversed subprotocol.
 
 ---
 
