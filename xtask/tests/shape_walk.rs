@@ -447,13 +447,18 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 8,
+        lines: 12,
         why: "a test mutating one fixture interface, two lines in the \
               name-stability test indexing into the single fixture interface \
               both the old and new packages share, three lines in the \
               doc-field tests editing the single fixture interface or its \
-              one interaction, and two lines in the podbuf inline-use tests \
-              setting a fixture package's named interfaces",
+              one interaction, and six lines in the podbuf inline-use tests \
+              setting a fixture package's named interfaces: two existing \
+              local-use helpers and four remote-growth fixtures for exact \
+              array roots, producer-sized roots, induced request/reply \
+              tuples, and signal/event roots; these fixtures declare no \
+              service, and the assignments construct the named store \
+              rather than walk interface shapes",
     },
     Allowed {
         path: "crates/ridl-diff/src/unit_verdict.rs",
