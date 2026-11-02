@@ -191,6 +191,24 @@ open enumset WideFlags {
   TOP = 63
 }
 
+/// An open enum with a value above `u16::MAX` and none below 0: a `u32`.
+open enum Wide32 {
+  A = 0
+  B = 65536
+}
+
+/// An open enum with a value below `i16::MIN`: an `i32`.
+open enum Signed32 {
+  LOW = -32769
+  A   = 0
+}
+
+/// The two 32-bit open enums.
+struct Tuning32 {
+  wide   : Wide32
+  signed : Signed32
+}
+
 /// The three 64-bit open declarations.
 struct Wide64 {
   big    : Big

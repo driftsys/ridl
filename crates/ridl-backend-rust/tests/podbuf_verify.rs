@@ -418,6 +418,35 @@ fn the_encoder_refuses_an_open_value_past_a_signed_or_a_16_bit_width() {
     );
 }
 
+/// The 32-bit widths: `Wide32` is a `u32` (0..=4294967295) and `Signed32` an
+/// `i32`. A value one past either end is refused with the range rule, and
+/// each end itself is written and read back.
+#[test]
+fn the_encoder_refuses_an_open_value_past_a_32_bit_width() {
+    let out = run(
+        "podbuf_open_32",
+        &[
+            r#"encode_rule!(Tuning32 { wide: Wide32::from(4294967296), signed: Signed32::A })"#,
+            r#"encode_rule!(Tuning32 { wide: Wide32::from(-1), signed: Signed32::A })"#,
+            r#"encode_rule!(Tuning32 { wide: Wide32::A, signed: Signed32::from(-2147483649) })"#,
+            r#"encode_rule!(Tuning32 { wide: Wide32::A, signed: Signed32::from(2147483648) })"#,
+            r#"roundtrip!(Tuning32, Tuning32 { wide: Wide32::from(0), signed: Signed32::from(i64::from(i32::MIN)) })"#,
+            r#"roundtrip!(Tuning32, Tuning32 { wide: Wide32::from(4294967295), signed: Signed32::from(i64::from(i32::MAX)) })"#,
+        ],
+    );
+    assert_eq!(
+        out,
+        [
+            "Wide32 Range",
+            "Wide32 Range",
+            "Signed32 Range",
+            "Signed32 Range",
+            "true",
+            "true"
+        ]
+    );
+}
+
 /// The 64-bit widths. `Big` declares a value above `u32::MAX` and none below
 /// 0, so its podbuf integer is a `u64`, and its raw value is that `u64`'s bit
 /// pattern held in an `i64`: a wire value of 2^63 or more reads as a negative
@@ -443,13 +472,17 @@ fn the_64_bit_widths_of_an_open_enum_and_an_open_enum_set() {
                     bytes[8..16].copy_from_slice(&wire.to_le_bytes());
                     let buf = aligned(&bytes);
                     let v = Wide64::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                    let viewed = match v.big() {
+                        Big::Unknown(u) => u.raw().to_string(),
+                        _ => "declared".to_string(),
+                    };
                     let d = Wide64::__ridl_podbuf_decode(v);
                     let raw = match d.big {
                         Big::Unknown(u) => u.raw().to_string(),
                         _ => "declared".to_string(),
                     };
                     let same = try_enc!(d).map(|again| again == bytes).unwrap_or(false);
-                    out.push(format!("{raw} {same}"));
+                    out.push(format!("{viewed} {raw} {same}"));
                 }
                 out.join(" ")
             }"#,
@@ -468,7 +501,7 @@ fn the_64_bit_widths_of_an_open_enum_and_an_open_enum_set() {
         out,
         [
             "true",
-            "-9223372036854775808 true -1 true",
+            "-9223372036854775808 -9223372036854775808 true -1 -1 true",
             "true",
             "true",
             "true",

@@ -1063,7 +1063,7 @@ impl<'a> Header<'a> {
             match decl.kind.as_ref() {
                 Some(v1::declaration::Kind::Enum(value)) => {
                     // A declaration with no constant gets no comment.
-                    if !value.values.is_empty() {
+                    if value.values.iter().any(|entry| entry.name.is_some()) {
                         let _ = writeln!(out, "{}", strictness_comment("value", value.open));
                     }
                     for entry in &value.values {
@@ -1080,7 +1080,7 @@ impl<'a> Header<'a> {
                     }
                 }
                 Some(v1::declaration::Kind::EnumSet(value)) => {
-                    if !value.bits.is_empty() {
+                    if value.bits.iter().any(|entry| entry.name.is_some()) {
                         let _ = writeln!(out, "{}", strictness_comment("bit", value.open));
                     }
                     for entry in &value.bits {
