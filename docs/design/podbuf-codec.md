@@ -52,14 +52,15 @@ A type's head, its placements, its flags fields, its pads, the form of each
 field and the size bound are computed in `ridl_ir::projection::podbuf` and read
 by every consumer: the Rust codec, the C header, the sizer, the
 `podbuf_inline_append`, `podbuf_remote_inline_growth` and `podbuf_width_change`
-rules of `ridl diff`, the padding lint and the build-time errors. They read it
-from the codegen `Model` (`Model.podbuf`, `PodbufProjection`), not from the IR,
-so that an out-of-tree plugin reads the same numbers (ADR-0020 decisions 8 and
-9; the model's layout is described in
-[`codegen-plugins.md`](codegen-plugins.md), "The podbuf projection"). Nothing in
-the projection spells a Rust or C name. The `strict_enum_append` rule of
-`ridl diff` reads no layout, only the kind of the declaration and whether it is
-`open`.
+rules of `ridl diff`, the padding lint and the build-time errors. Emitters and
+plugins read the layout from the codegen `Model` (`Model.podbuf`,
+`PodbufProjection`), so an out-of-tree plugin reads the same numbers (ADR-0020
+decisions 8 and 9; the model's layout is described in
+[`codegen-plugins.md`](codegen-plugins.md), "The podbuf projection"). Analysis
+consumers call the shared projection over their IR package scopes; diff uses the
+respective old and new resolution scopes. Nothing in the projection spells a
+Rust or C name. The `strict_enum_append` rule of `ridl diff` reads no layout,
+only the kind of the declaration and whether it is `open`.
 
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.

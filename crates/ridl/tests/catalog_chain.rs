@@ -1943,6 +1943,126 @@ fn remote_inline_pin_growth_ends_only_affected_catalog_chain() {
     );
 }
 
+/// Reachability must cross remote context to find another local consumer's break.
+#[test]
+fn remote_local_remote_pin_growth_ends_reaching_catalog_chains() {
+    let dir = TempDir::new("remote-local-remote-growth");
+    let home = TempDir::new("remote-local-remote-growth-home");
+    let out = TempDir::new("remote-local-remote-growth-out");
+    let deep = |grown| {
+        Stub::serving(unit_tar(&[
+            (
+                "ridl.toml",
+                "[package]\nname = \"deep\"\nversion = \"1.0.0\"\n",
+            ),
+            (
+                "deep.typl",
+                if grown {
+                    "package deep\ntype Word: integer [0..9223372036854775807]\nstruct Inner { value: Word extra: Word }\n"
+                } else {
+                    "package deep\ntype Word: integer [0..9223372036854775807]\nstruct Inner { value: Word }\n"
+                },
+            ),
+        ]))
+    };
+    let old = deep(false);
+    let dep = Stub::serving(unit_tar(&[
+        (
+            "ridl.toml",
+            "[package]\nname = \"dep\"\nversion = \"1.0.0\"\n",
+        ),
+        (
+            "dep.typl",
+            "package dep\nimport b.Held\ntype Word: integer [0..9223372036854775807]\nstruct Outer { held: Held tail: Word }\n",
+        ),
+    ]));
+    let manifest = format!(
+        "[workspace]\nmembers = [\"a\", \"b\", \"other\"]\n[imports]\n\"dep\" = \"{}\"\n\"deep\" = \"{}\"\n[backend.rust]\nencodings = [\"podbuf\"]\n",
+        dep.url(),
+        old.url()
+    );
+    dir.write("ridl.toml", &manifest);
+    for unit in ["a", "b", "other"] {
+        dir.write(
+            &format!("{unit}/ridl.toml"),
+            &format!("[package]\nname = \"{unit}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let a = "package a\nimport dep.Outer\ninterface Api { signal reading: Outer @10ms }\n";
+    let other = "package other\ntype Word: integer [0..100]\ninterface Api { signal reading: Word @10ms }\n";
+    dir.write("a/a.ridl", a);
+    dir.write("b/b.ridl", "package b\nimport deep.Inner\nstruct Held { inner: Inner }\ninterface Api { signal reading: Held @10ms }\n");
+    dir.write("other/other.ridl", other);
+    let root = dir.path();
+    remote_command(root, home.path(), &["check"]);
+    remote_command(root, home.path(), &["lock"]);
+    remote_command(root, home.path(), &["baseline"]);
+    // Give both the reaching unit and the unrelated unit carried hashes.
+    dir.write(
+        "a/a.ridl",
+        &a.replace("@10ms }", "@10ms signal next: Outer @10ms }"),
+    );
+    dir.write(
+        "other/other.ridl",
+        &other.replace("@10ms }", "@10ms signal next: Word @10ms }"),
+    );
+    remote_command(root, home.path(), &["lock"]);
+    remote_command(root, home.path(), &["baseline"]);
+    let a_history = history_lines_of(root, "a");
+    let other_history = history_lines_of(root, "other");
+    assert_eq!(a_history.len(), 2);
+    assert_eq!(other_history.len(), 2);
+    let prior = baseline_inventory(root);
+    let grown = deep(true);
+    dir.write("ridl.toml", &manifest.replace(old.url(), grown.url()));
+    remote_command(root, home.path(), &["check"]);
+    remote_command(
+        root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    for unit in ["a", "b"] {
+        assert!(
+            compatible_of(out.path(), unit).is_empty(),
+            "{unit} loses compatibility across the remote-to-local path"
+        );
+    }
+    assert_eq!(compatible_of(out.path(), "other"), other_history[1..]);
+    let a_hash = hex_of_bytes(&describe(out.path(), "a")["hash"]);
+    let b_hash = hex_of_bytes(&describe(out.path(), "b")["hash"]);
+    assert_ne!(
+        a_hash, a_history[0],
+        "the deepest pin changes the complete catalog"
+    );
+    remote_command(root, home.path(), &["baseline"]);
+    assert_eq!(history_lines_of(root, "a"), vec![a_hash]);
+    assert_eq!(history_lines_of(root, "b"), vec![b_hash]);
+    assert_eq!(history_lines_of(root, "other"), other_history);
+    assert_eq!(
+        directory_inventory(&root.join(".ridl/baseline.previous.1")),
+        prior
+    );
+    for unit in ["a", "b", "other"] {
+        let snapshot = format!("{unit}.ir.json");
+        assert_eq!(
+            std::fs::read(baseline_dir(root).join(&snapshot)).unwrap(),
+            std::fs::read(root.join(".ridl/baseline.previous.1").join(snapshot)).unwrap(),
+            "only the deepest remote pin changes"
+        );
+    }
+    for unit in ["dep", "deep"] {
+        assert!(!baseline_dir(root).join(format!("{unit}.ir.json")).exists());
+        assert!(!baseline_dir(root).join(format!("{unit}.catalogs")).exists());
+        assert!(!out.path().join(format!("{unit}.catalog.binfb")).exists());
+    }
+}
+
 fn directory_inventory(dir: &Path) -> Vec<(String, Vec<u8>)> {
     let mut files: Vec<_> = std::fs::read_dir(dir)
         .unwrap()

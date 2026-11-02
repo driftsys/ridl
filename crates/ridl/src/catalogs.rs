@@ -36,9 +36,9 @@ pub(crate) fn compatible_catalogs(
         .chain(current.packages.iter())
         .collect();
     let judgment = Judgment::new(entry, &old_refs, checked, &old_context, &new_context);
-    let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &old_refs, checked);
     let scope = complete_scope(checked, std, &current.packages);
     let published_scope = complete_scope(&old_refs, std, &old.remotes);
+    let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &published_scope, &scope);
     for unit in shaped_units(checked.iter().copied()) {
         if !old.packages.iter().any(|package| unit_of(package) == unit) {
             continue;
@@ -54,7 +54,7 @@ pub(crate) fn compatible_catalogs(
         }
         let current_hash = catalog_hash(unit, &scope);
         let carried = !unknown
-            && !judgment.podbuf_break(unit, &old_refs, checked)
+            && !judgment.podbuf_break(unit, &published_scope, &scope)
             && history.hashes.first() == Some(&catalog_hash(unit, &published_scope))
             && (history.hashes.first() == Some(&current_hash)
                 || verdicts.verdict(unit) != Verdict::Breaking);
@@ -103,9 +103,9 @@ pub(crate) fn write_catalog_histories(
         .chain(current.packages.iter())
         .collect();
     let judgment = Judgment::new(entry, &old_refs, &fresh_refs, &old_context, &new_context);
-    let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &old_refs, &fresh_refs);
     let scope = complete_scope(&fresh_refs, &std, &current.packages);
     let published_scope = complete_scope(&old_refs, &std, old_remotes);
+    let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &published_scope, &scope);
     let published_units: std::collections::BTreeSet<_> = old.iter().map(unit_of).collect();
     for unit in &published_units {
         if judgment.unknown(unit, &published_scope, &scope) {
@@ -130,7 +130,7 @@ pub(crate) fn write_catalog_histories(
         let breaking = verdicts.verdict(unit) == Verdict::Breaking;
         let new_hash = catalog_hash(unit, &scope);
         let carried = published_before
-            && !judgment.podbuf_break(unit, &old_refs, &fresh_refs)
+            && !judgment.podbuf_break(unit, &published_scope, &scope)
             && earlier.hashes.first() == Some(&catalog_hash(unit, &published_scope))
             && (earlier.hashes.first() == Some(&new_hash) || !breaking);
         let mut history = if carried {

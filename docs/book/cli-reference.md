@@ -1737,8 +1737,14 @@ ridl diff --explain podbuf_remote_inline_growth
 podbuf_remote_inline_growth
 A remote struct held inline by an old consumer has a larger podbuf head.
 The path belongs to the consumer; the values name the remote declaration
-and its old and new head sizes. Producer-sized roots, array elements,
-map entries and union arms may grow, but their inline members may not.
+and its old and new head sizes. An inline member has no nested producer-size
+boundary, so its growth can move the fields after it even when only a remote
+pin changes and the local consumer declaration is unchanged. Producer-sized
+roots, array elements, map entries and union arms may grow, but their inline
+members may not. An append that fits entirely in the old head's pad bytes
+keeps the head size and draws no line; verify does not check pads.
+Shrinkage, other equal-size layout changes and general dependency semantic
+changes are deferred; this category judges only remote inline head growth.
   breaking    with `--encoding podbuf`
   compatible  otherwise; listed under the heading "breaking under podbuf"
 ```
