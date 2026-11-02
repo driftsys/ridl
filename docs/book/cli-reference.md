@@ -771,6 +771,9 @@ interface ([the design record](https://github.com/driftsys/ridl/blob/main/docs/d
 gives the rule). Beside the per-package files it
 writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
 encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
+When the workspace declares a `system`, it also writes `__ridl_instances.rs`,
+which the crate root declares as the `instances` module: one constant for the
+number of each instance, from `instances.lock`.
 [Using the generated Rust code](generated-code.md) shows how a program uses
 the crate, and lists its Cargo features.
 

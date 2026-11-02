@@ -130,6 +130,13 @@ and the deployment descriptor copies it from the section into the `number` and
 an integer reads `number` from the descriptor, and a plugin reads the same value
 from the section.
 
+`ridl build` also writes each instance's number as a constant in the `instances`
+module of the generated Rust crate. A component is a module and an instance is a
+constant, so the number of instance `primary` of component `veh.adas.Cruise` is
+`instances::veh::adas::cruise::PRIMARY`. The module is not per deployment: the
+numbers belong to the system, and every deployment of the system shares them. A
+constant of a provisional number says so in its documentation.
+
 `provisional` is true when the instance has no live entry in `instances.lock`.
 Its number is then the next free one at the time of the build, and a later
 `ridl lock` may assign another. A runtime that stores the number outside the

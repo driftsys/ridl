@@ -97,3 +97,120 @@ fn the_descriptor_and_the_section_carry_the_locked_number() {
         );
     }
 }
+
+/// Copies the directory `from` into `to`, which exists.
+fn copy_dir(from: &Path, to: &Path) {
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            std::fs::create_dir(&target).unwrap();
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// Runs `ridlc build <entry> --out-dir <out> --emit <emit>`.
+fn build(entry: &Path, out: &Path, emit: &str) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_ridlc"))
+        .args(["build".as_ref(), entry.as_os_str()])
+        .args(["--out-dir".as_ref(), out.as_os_str()])
+        .args(["--emit", emit])
+        .output()
+        .expect("the ridlc binary must run")
+}
+
+#[test]
+fn the_crate_holds_the_locked_constants() {
+    let out = tempfile::tempdir().unwrap();
+    let output = build(&corpus_entry(), out.path(), "rust");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
+    assert!(lib.contains("pub mod instances;"), "{lib}");
+    let instances = std::fs::read_to_string(out.path().join("__ridl_instances.rs")).unwrap();
+    assert!(
+        instances.contains("pub const PRIMARY: i32 = 1;"),
+        "{instances}"
+    );
+    assert!(
+        instances.contains("pub const BACKUP: i32 = 2;"),
+        "{instances}"
+    );
+    assert!(
+        instances.contains("pub const UNIT: i32 = 3;"),
+        "{instances}"
+    );
+    assert!(!instances.contains("Provisional:"), "{instances}");
+}
+
+#[test]
+fn the_lock_changes_no_catalog_hash() {
+    let catalogs = |with_lock: bool| {
+        let entry = tempfile::tempdir().unwrap();
+        copy_dir(&corpus_entry(), entry.path());
+        if !with_lock {
+            std::fs::remove_file(entry.path().join("instances.lock")).unwrap();
+        }
+        let out = tempfile::tempdir().unwrap();
+        let output = build(entry.path(), out.path(), "catalog");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let mut files: Vec<(String, Vec<u8>)> = std::fs::read_dir(out.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.to_string_lossy().ends_with(".catalog.binfb"))
+            .map(|path| {
+                (
+                    path.file_name().unwrap().to_string_lossy().into_owned(),
+                    std::fs::read(path).unwrap(),
+                )
+            })
+            .collect();
+        files.sort();
+        files
+    };
+    let with_lock = catalogs(true);
+    assert!(!with_lock.is_empty());
+    assert_eq!(with_lock, catalogs(false));
+}
+
+#[test]
+fn a_package_named_instances_is_refused_with_a_system() {
+    let entry = tempfile::tempdir().unwrap();
+    copy_dir(&corpus_entry(), entry.path());
+    std::fs::write(
+        entry.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"adas\", \"ego\", \"inst\"]\n",
+    )
+    .unwrap();
+    std::fs::create_dir(entry.path().join("inst")).unwrap();
+    std::fs::write(
+        entry.path().join("inst/ridl.toml"),
+        "[package]\nname = \"instances\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        entry.path().join("inst/types.typl"),
+        "package instances\n\ntype Flag: boolean\n",
+    )
+    .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let output = build(entry.path(), out.path(), "rust");
+    assert_eq!(output.status.code(), Some(1));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(text.contains("`instances`"), "{text}");
+    assert!(text.contains("module"), "{text}");
+}

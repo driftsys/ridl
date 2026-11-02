@@ -1681,7 +1681,11 @@ fn run_build_inner<E: From<std::io::Error>>(
         // names, so this is the check that keeps a build from truncating
         // sources a person wrote.
         if writes_crate_files {
-            let refusals = crate_file_refusals(out_dir, wasm_backends.contains("rust"))?;
+            let refusals = crate_file_refusals(
+                out_dir,
+                wasm_backends.contains("rust"),
+                lowered_system.is_some(),
+            )?;
             if !refusals.is_empty() {
                 diagnostics.extend(refusals);
                 return Ok(CliRun {
@@ -1826,6 +1830,11 @@ fn run_build_inner<E: From<std::io::Error>>(
             } else {
                 None
             };
+            // The `instances` module is one per crate, over the system of the
+            // root workspace.
+            let instances_source = lowered_system.as_ref().and_then(|lowered| {
+                instances_module_source(lowered, &package_names, &mut diagnostics)
+            });
             write_crate_files(
                 out_dir,
                 &crate_name_for(root_package.as_deref()),
@@ -1834,6 +1843,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 codegen_header.as_deref(),
                 rust_encodings,
                 wasm_source.as_deref(),
+                instances_source.as_deref(),
                 &diagnostics,
             )?;
         }
@@ -1922,6 +1932,7 @@ fn write_crate_files(
     header: Option<&str>,
     encodings: &[String],
     wasm: Option<&str>,
+    instances: Option<&str>,
     diagnostics: &[Diagnostic],
 ) -> std::io::Result<()> {
     if diagnostics
@@ -1939,6 +1950,7 @@ fn write_crate_files(
             package_names,
             &codegen::comment_preamble(&marker, header, "//"),
             wasm.is_some(),
+            instances.is_some(),
         ),
     )?;
     std::fs::write(
@@ -1970,11 +1982,30 @@ fn write_crate_files(
             ),
         )?;
     }
+    // The same rule for the `instances` module: a build without a system
+    // removes the file an earlier build with one wrote.
+    let instances_path = out_dir.join(INSTANCES_FILE);
+    if instances.is_none() && instances_path.is_file() {
+        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&instances_path)?.starts_with(&marker) {
+            std::fs::remove_file(&instances_path)?;
+        }
+    }
+    if let Some(source) = instances {
+        std::fs::write(
+            instances_path,
+            format!(
+                "{}{source}",
+                codegen::comment_preamble(&marker, header, "//")
+            ),
+        )?;
+    }
     Ok(())
 }
 
 /// The overwrite gate for the crate files: `lib.rs`, `Cargo.toml`, and
-/// [`WASM_FILE`] when `wasm` is on. One error diagnostic per destination that
+/// [`WASM_FILE`] when `wasm` is on, and [`INSTANCES_FILE`] when `instances` is
+/// on. One error diagnostic per destination that
 /// exists and was not written by a previous build, and an empty vector when
 /// every one is safe to write.
 ///
@@ -1989,7 +2020,11 @@ fn write_crate_files(
 /// Every destination is checked even once the first has refused, so a build
 /// into a hand-written crate reports every file it declined rather than one at
 /// a time.
-fn crate_file_refusals(out_dir: &Path, wasm: bool) -> std::io::Result<Vec<Diagnostic>> {
+fn crate_file_refusals(
+    out_dir: &Path,
+    wasm: bool,
+    instances: bool,
+) -> std::io::Result<Vec<Diagnostic>> {
     let mut refusals = Vec::new();
     let mut files = vec![
         (out_dir.join("lib.rs"), "//", Some(OLD_LIB_RS_MARKER)),
@@ -1999,6 +2034,10 @@ fn crate_file_refusals(out_dir: &Path, wasm: bool) -> std::io::Result<Vec<Diagno
     // wrote it under another marker, so it has no old marker.
     if wasm {
         files.push((out_dir.join(WASM_FILE), "//", None));
+    }
+    // The `instances` module's file, when the workspace declares a system.
+    if instances {
+        files.push((out_dir.join(INSTANCES_FILE), "//", None));
     }
     for (path, comment, old_marker) in files {
         if let Some(diagnostic) = refuse_overwrite(&path, comment, old_marker)? {
@@ -2172,7 +2211,7 @@ const NO_STD: &str = r#"not(any(feature = "std", feature = "validate-pattern"))"
 /// reference: a package segment that is a Rust keyword (`veh.mod` is a legal
 /// typl package name) must be escaped identically on both surfaces, or the
 /// crate either does not parse or does not resolve.
-fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String {
+fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool, instances: bool) -> String {
     #[derive(Default)]
     struct Node {
         children: std::collections::BTreeMap<String, Node>,
@@ -2290,7 +2329,54 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
             "#[rustfmt::skip]\n#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"
         ));
     }
+    if instances {
+        // The numbers of the instances of the system (`instances_module_source`).
+        // A package whose first segment is `instances` would claim the same
+        // module name, and `instances_module_source` refuses that build.
+        out.push_str(&format!(
+            "/// The number of every instance of the system, from `instances.lock`.\n\
+             #[rustfmt::skip]\n#[path = \"{INSTANCES_FILE}\"]\npub mod instances;\n"
+        ));
+    }
     out
+}
+
+/// The file the `instances` module of the generated crate is written to. No
+/// package writes it: a package file is `<package name>.rs`, and a package
+/// name starts with a letter.
+const INSTANCES_FILE: &str = "__ridl_instances.rs";
+
+/// The source of the `instances` module for the lowered `system`, or `None`
+/// with an error diagnostic pushed when the build cannot have one: a package
+/// whose first segment is `instances` already uses the module name, and two
+/// instances can map to one constant.
+fn instances_module_source(
+    system: &ridl_ir::v2::System,
+    package_names: &[String],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    let mut refuse = |message: String| {
+        diagnostics.push(error_diagnostic(
+            "",
+            message,
+            FileId::DETACHED,
+            TextRange::default(),
+        ));
+        None
+    };
+    if let Some(name) = package_names
+        .iter()
+        .find(|name| name.split('.').next() == Some("instances"))
+    {
+        return refuse(format!(
+            "a workspace that declares a system adds a module `instances` to the generated \
+             crate, and package `{name}` already uses that module name"
+        ));
+    }
+    match ridl_backend_rust::generate_instances_module(system) {
+        Ok(generated) => Some(generated.rust_source),
+        Err(err) => refuse(err.message),
+    }
 }
 
 /// The file the `wasm` module of the generated crate is written to. No package
@@ -3604,7 +3690,7 @@ mod render_lib_rs_tests {
             "veh.common".to_string(),
             "ridl.std".to_string(),
         ];
-        let lib = render_lib_rs(&names, "", true);
+        let lib = render_lib_rs(&names, "", true, false);
         let lines: Vec<&str> = lib.lines().map(str::trim).collect();
 
         let mut files = 0;
@@ -3639,7 +3725,7 @@ mod render_lib_rs_tests {
     #[test]
     fn a_package_name_that_is_a_prefix_of_another_keeps_both_files_reachable() {
         let names = ["veh".to_string(), "veh.common".to_string()];
-        let lib = render_lib_rs(&names, "", false);
+        let lib = render_lib_rs(&names, "", false, false);
 
         assert!(
             lib.contains("#[path = \"veh.rs\"]"),
@@ -3753,7 +3839,7 @@ mod render_lib_rs_tests {
     /// The lines themselves, and their order, are pinned as literals.
     #[test]
     fn the_crate_root_is_no_std_exactly_without_std_and_validate_pattern() {
-        let lib = render_lib_rs(&["veh".to_string()], "", false);
+        let lib = render_lib_rs(&["veh".to_string()], "", false, false);
         assert!(
             compiles_with(&lib, &[], Some("thumbv7em-none-eabihf")),
             "no feature on, for a target with no standard library: lib.rs was:\n{lib}"
