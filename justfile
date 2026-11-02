@@ -310,7 +310,7 @@ wasm-check:
 # manifest is built
 # unchanged apart from the appended tables, in three feature sets: the
 # defaults, none, and only `dedup`. The unit tests and the integration tests
-# lower, round_trip and verify run with the defaults; codec_agreement (it
+# the deployment_* tests, lower, round_trip and verify run with the defaults; codec_agreement (it
 # needs a dev-dependency the package drops, and it reads a corpus snapshot
 # under crates/ridl/, outside the package), golden_hash (it reads a file
 # outside the package) and the doctests do not run at the minimum, and the
@@ -565,11 +565,11 @@ compat-check: toolchain-check
     # dev-dependency the package drops, and it also reads a corpus snapshot
     # under crates/ridl/, outside the package. golden_hash reads a corpus
     # snapshot under crates/ridl/ too. The pin runs both in the workspace.
-    # `descriptor_tests` is the list of the other three, and the only list:
+    # `descriptor_tests` is the list of the others, and the only list:
     # the --test arguments below are derived from it. The packaged manifest
     # names every test target in a [[test]] table; if those names differ from
     # the two skipped tests plus this list, the list is stale.
-    descriptor_tests="lower round_trip verify"
+    descriptor_tests="deployment_common deployment_lower deployment_lower_content deployment_round_trip deployment_verify lower round_trip verify"
     descriptor_skipped="codec_agreement golden_hash"
     found_tests="$(awk '
         /^\[\[test\]\]$/ { in_test = 1; next }
