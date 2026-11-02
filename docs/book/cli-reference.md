@@ -2417,7 +2417,8 @@ ridl describe out/corpus.baseline.catalog.binfb
 ```
 
 **Exit codes.** 0 when the descriptor was printed. 2 for a missing or
-unreadable path, a file that is not a catalog descriptor, a version this
+unreadable path, a file that is neither a catalog descriptor nor a deployment
+descriptor, a version this
 toolchain does not read, a malformed buffer, a deployment descriptor with a
 damaged embedded catalog, or an I/O failure writing to stdout (a pipe whose
 reader has gone); the message names the path and the cause. There is no exit 1: `ridl describe` answers no question that can come

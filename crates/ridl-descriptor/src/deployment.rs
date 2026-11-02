@@ -140,7 +140,9 @@ pub fn finish(deployment: &Deployment) -> Vec<u8> {
 }
 
 /// Checks the identifier and the version, walks every table, vector and
-/// string once through the checked accessors, and verifies each embedded
+/// string through the checked accessors (an attribute value table that
+/// several lists share is walked once per reference, within a bound), and
+/// verifies each embedded
 /// catalog with [`crate::verify`], so that a later read of the returned view
 /// cannot fail on a malformed offset.
 pub fn verify(bytes: &[u8]) -> Result<DeploymentRef<'_>, VerifyError> {
@@ -160,7 +162,7 @@ pub fn verify(bytes: &[u8]) -> Result<DeploymentRef<'_>, VerifyError> {
     Ok(deployment)
 }
 
-/// Touches every field once, verifies the embedded catalogs, and checks the
+/// Touches every field, verifies the embedded catalogs, and checks the
 /// stored hash of each against the hash inside it.
 fn walk(deployment: DeploymentRef<'_>, budget: usize) -> Result<(), VerifyError> {
     walk_fields(deployment, &mut Budget(budget))?;

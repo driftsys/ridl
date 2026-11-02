@@ -112,9 +112,11 @@ deployment section resolves the precedence of the sizing values; a later version
 appends them when a runtime reads them.
 
 The JSON view that `ridl describe` prints uses the schema's field names as keys
-(`ns` for the namespace), names enum members, prints a hash as an array of bytes
-and prints an absent field as `null`. Keys are in alphabetical order, as in the
-catalog's view.
+(`ns` for the namespace), except that an embedded catalog prints no `bytes`: it
+prints `bytes_len`, the length of the buffer, and `catalog`, the catalog's own
+JSON view (`null` for a buffer that fails the catalog verifier). It names enum
+members, prints a hash as an array of bytes and prints an absent field as
+`null`. Keys are in alphabetical order, as in the catalog's view.
 
 ## Identifying an instance
 
@@ -221,7 +223,9 @@ reason. They bind later changes to the artifact.
   module per deployment with each instance's names and attributes as constants;
   it can return as an opt-in option when a second runtime asks for it.
 - **The descriptor and the deployment section share one rule** for `offers` and
-  `maps`, by calling `lower_deployment`; a test asserts that the two agree.
+  `maps`, by calling `lower_deployment`; a test compares the complete `offers`
+  and `maps` lists of every instance with the codegen section, over several
+  catalogs and interfaces.
 - **The verifier is bounded, and the writer never emits what the reader
   refuses.** The attribute walk is limited in depth and in visits because a
   hostile buffer can share one subtree many times. The lowering applies the same

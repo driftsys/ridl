@@ -1,6 +1,8 @@
 //! The JSON view of a deployment descriptor, in the conventions of
 //! [`crate::describe`]: the schema's field names as keys, enums by member
-//! name, a hash as an array of bytes, an absent field as `null`. The
+//! name, a hash as an array of bytes, an absent field as `null`. An embedded
+//! catalog prints `bytes_len` and `catalog` in place of `bytes` (see
+//! [`to_json`]). The
 //! serialized object prints its keys in alphabetical order, as
 //! [`crate::describe`] does.
 
