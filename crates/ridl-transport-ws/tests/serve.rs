@@ -959,7 +959,10 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
         latency < bound,
         "the change arrived after {latency:?}, over {bound:?}"
     );
-    drop(client);
+    // Drain pending subscribe answers so teardown does not reset the connection.
+    client.set_read_timeout(Some(TEST_LIMIT)).unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    std::io::copy(&mut client, &mut std::io::sink()).unwrap();
     assert_eq!(
         handle.join().0,
         Ended::Io(std::io::ErrorKind::UnexpectedEof)
