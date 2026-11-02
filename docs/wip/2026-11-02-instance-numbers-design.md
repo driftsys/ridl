@@ -244,8 +244,13 @@ author, for the owner to check.
    `ridl build` call the step.
 2. **`ridl diff` reports only a locked number.** "instance number changed" is
    reported when the old side's number is not provisional and the new side gives
-   that key another number, or gives that number to another key. A provisional
-   number on the old side is never reported, because it was never a promise.
+   that key another number, or gives that number to another key while the old
+   key is still present. When the old key is absent, the change is a rename
+   (`ridl lock --rename` keeps the number) and is not reported: a client built
+   before the rename sends the same number and is still the same instance. A
+   diff cannot tell such a rename from a reuse, and the lock never reuses a
+   number. A provisional number on the old side is never reported, because it
+   was never a promise.
 3. **A component rename moves all its instances.** `--rename OLD=NEW` without
    `/` renames a component: every live and retired `OLD/*` entry becomes `NEW/*`
    with its number. With `/` it renames one instance. `--retire` with a
@@ -270,8 +275,9 @@ author, for the owner to check.
    composition of some `system` lists, explicitly or as the implicit component
    of a lone service. Wiring alone adds none, because every `requires` resolves
    to a component in the composition.
-7. **A bare file** gets constants like a workspace, each with the provisional
-   doc line until `ridl lock` writes its `instances.lock`.
+7. **A bare file** gets no constants: a single-file build writes no crate
+   `lib.rs`, so there is no place for the `instances` module. Its numbers still
+   reach the IR, the codegen section and the descriptor.
 8. **The merge driver** is registered for `instances.lock` wherever it is
    registered for `interfaces.lock`, in the same task as the lock.
 
