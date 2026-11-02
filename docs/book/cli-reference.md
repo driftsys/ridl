@@ -773,7 +773,9 @@ writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
 encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
 When the workspace declares a `system`, it also writes `__ridl_instances.rs`,
 which the crate root declares as the `instances` module: one constant for the
-number of each instance, from `instances.lock`.
+number of each instance, from `instances.lock`. A package whose first segment
+is `instances` then makes the build fail with exit 1, because the module name
+is taken.
 [Using the generated Rust code](generated-code.md) shows how a program uses
 the crate, and lists its Cargo features.
 

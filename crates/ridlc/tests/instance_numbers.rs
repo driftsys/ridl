@@ -183,10 +183,15 @@ fn the_lock_changes_no_catalog_hash() {
     assert_eq!(with_lock, catalogs(false));
 }
 
-#[test]
-fn a_package_named_instances_is_refused_with_a_system() {
+/// The corpus entry with a fourth member, package `instances`, copied into a
+/// temporary directory. With `with_system` false the entry's `system` file is
+/// left out.
+fn entry_with_instances_package(with_system: bool) -> tempfile::TempDir {
     let entry = tempfile::tempdir().unwrap();
     copy_dir(&corpus_entry(), entry.path());
+    if !with_system {
+        std::fs::remove_file(entry.path().join("adas/car.rsdl")).unwrap();
+    }
     std::fs::write(
         entry.path().join("ridl.toml"),
         "[workspace]\nmembers = [\"adas\", \"ego\", \"inst\"]\n",
@@ -203,6 +208,12 @@ fn a_package_named_instances_is_refused_with_a_system() {
         "package instances\n\ntype Flag: boolean\n",
     )
     .unwrap();
+    entry
+}
+
+#[test]
+fn a_package_named_instances_is_refused_with_a_system() {
+    let entry = entry_with_instances_package(true);
     let out = tempfile::tempdir().unwrap();
     let output = build(entry.path(), out.path(), "rust");
     assert_eq!(output.status.code(), Some(1));
@@ -211,6 +222,22 @@ fn a_package_named_instances_is_refused_with_a_system() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(text.contains("`instances`"), "{text}");
-    assert!(text.contains("module"), "{text}");
+    assert!(
+        text.contains("package `instances` already uses that module name"),
+        "{text}"
+    );
+}
+
+/// The refusal is tied to the `instances` module, which only a workspace
+/// that declares a system has: without one, package `instances` builds.
+#[test]
+fn a_package_named_instances_builds_without_a_system() {
+    let entry = entry_with_instances_package(false);
+    let out = tempfile::tempdir().unwrap();
+    let output = build(entry.path(), out.path(), "rust");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
