@@ -247,8 +247,8 @@ member; rsdl is the apex.
                          over the schema, check the
                          format and lint of examples/cabin/server and build it,
                          build cabin's wasm codec (wasm32 cdylib), lint,
-                         type-check and round-trip the generated TypeScript
-                         codec modules of the two fixtures under
+                         type-check and test the generated TypeScript
+                         codec modules of the fixtures under
                          crates/ridl-backend-ts/tests/fixtures/ against
                          flatc's output (_codec-ts-check), run the
                          unit tests of the check (check_test.ts),

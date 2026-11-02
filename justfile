@@ -3005,8 +3005,11 @@ _cabin-web-generate name:
 # for the fixture crates/ridl-backend-ts/tests/fixtures/codec-foreign-only,
 # a package whose only payload root is `ridl.std.Name`, so its module holds
 # an interface table over `ridl.std.codec.ts` and imports no barrel of its
-# own. `cabin-ws-demo` runs it once, after `_cabin-web-generate` has checked
-# the `flatc` and `deno` versions.
+# own. The same for crates/ridl-backend-ts/tests/fixtures/codec-open, whose
+# open enums and open enum sets keep a value the declaration does not name, and
+# crates/ridl-backend-ts/tests/fixtures/codec-strict, whose strict enums and
+# strict enum sets refuse one with the `variant` rule. `cabin-ws-demo` runs it
+# once, after `_cabin-web-generate` has checked the `flatc` and `deno` versions.
 [private]
 _codec-ts-check:
     #!/usr/bin/env bash
@@ -3046,6 +3049,17 @@ _codec-ts-check:
     deno lint --config "$open/deno.json" "$open/open.demo.codec.ts"
     deno check --config "$open/deno.json" "$open/open.demo.codec.ts" "$open/open.demo.ts"
     deno test --config "$open/deno.json" "$open/open_test.ts"
+    # The fourth fixture: strict enums and strict enum sets, which the codec
+    # refuses a value of that the declaration does not name.
+    strict="$tmp/strict"
+    mkdir -p "$strict"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-strict --emit typescript --emit flatbuffers --out-dir "$strict"
+    flatc --ts --gen-object-api -I "$strict" -o "$strict" "$strict/strict.demo.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-strict/deno.json > "$strict/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-strict/strict_test.ts "$strict/strict_test.ts"
+    deno lint --config "$strict/deno.json" "$strict/strict.demo.codec.ts"
+    deno check --config "$strict/deno.json" "$strict/strict.demo.codec.ts" "$strict/strict.demo.ts"
+    deno test --config "$strict/deno.json" "$strict/strict_test.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because

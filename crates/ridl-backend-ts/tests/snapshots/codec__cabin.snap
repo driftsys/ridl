@@ -1,6 +1,5 @@
 ---
 source: crates/ridl-backend-ts/tests/codec.rs
-assertion_line: 76
 expression: "module(&cabin_model(), \"veh.cabin\")"
 ---
 import * as flatbuffers from "flatbuffers";
@@ -9,6 +8,16 @@ import type * as t from "./veh.cabin.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
 import * as fb from "./veh/cabin.js";
+
+/** Thrown for a value the codec refuses, with the text of the rule it breaks. */
+export class RuleError extends RangeError {
+  readonly rule: (typeof RULES)[number];
+  constructor(rule: (typeof RULES)[number], message: string) {
+    super(message);
+    this.name = "RuleError";
+    this.rule = rule;
+  }
+}
 
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "veh.cabin";
@@ -81,7 +90,15 @@ export function encodeHealth(value: t.Health): Uint8Array {
 }
 /** Decodes a `veh.cabin.Health` payload the codec has verified. */
 export function decodeHealth(bytes: Uint8Array): t.Health {
-  return Number(fb.HealthBox.getRootAsHealthBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Health;
+  return unpackHealth(fb.HealthBox.getRootAsHealthBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackHealth(raw: number | bigint): t.Health {
+  const n = Number(raw);
+  if (!([0, 1, 2] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${raw} is not a value of veh.cabin.Health`);
+  }
+  return n as t.Health;
 }
 
 /** Encodes a `veh.cabin.Warning` payload. */
@@ -104,7 +121,7 @@ function packWarning(value: t.Warning): fb.WarningT {
 function unpackWarning(object: fb.WarningT): t.Warning {
   return {
     code: object.code as t.Level,
-    health: Number(object.health) as t.Health,
+    health: unpackHealth(object.health),
   };
 }
 
@@ -116,7 +133,14 @@ export function encodeSubsystems(value: t.Subsystems): Uint8Array {
 }
 /** Decodes a `veh.cabin.Subsystems` payload the codec has verified. */
 export function decodeSubsystems(bytes: Uint8Array): t.Subsystems {
-  return fb.SubsystemsBox.getRootAsSubsystemsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Subsystems;
+  return unpackSubsystems(fb.SubsystemsBox.getRootAsSubsystemsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackSubsystems(value: number): t.Subsystems {
+  if ((value & ~3) !== 0) {
+    throw new RuleError("variant", `value ${value} has a bit that veh.cabin.Subsystems does not declare`);
+  }
+  return value as t.Subsystems;
 }
 
 /** Encodes a `veh.cabin.Diagnostic` payload. */
@@ -139,8 +163,8 @@ function packDiagnostic(value: t.Diagnostic): fb.DiagnosticT {
 }
 function unpackDiagnostic(object: fb.DiagnosticT): t.Diagnostic {
   return {
-    covers: object.covers as t.Subsystems,
-    health: Number(object.health) as t.Health,
+    covers: unpackSubsystems(object.covers),
+    health: unpackHealth(object.health),
     loop: object.loop as t.Level,
   };
 }
