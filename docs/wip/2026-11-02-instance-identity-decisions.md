@@ -46,6 +46,19 @@ one deployment.
 5. **Service numbers are not in the MVP.** No attach check needs them: the owner
    of an interface is reached through the instance.
 
+6. **Instance numbers are workspace-wide (MVP).** The lock is keyed by the
+   component's qualified name and the instance name, and does not depend on the
+   system or the deployment. The owner will run several deployments: production
+   v1 and v2, a virtual platform, and debug or staging builds that add
+   diagnostic or injection services. One instance therefore has one number in
+   every system and every deployment, so its generated constant is the same in
+   every build. A component that only a debug or staging build deploys gets its
+   own number, which no production instance uses. A removed instance's number is
+   retired and never reused, so a newer daemon never confuses an older client. A
+   deployment descriptor lists only the instances that deployment places, each
+   with its number, so a release daemon refuses an attach that claims a
+   debug-only instance's number.
+
 ## Questions for the MVP design
 
 - The lock file: its name and place (beside `interfaces.lock`, or one per
@@ -54,10 +67,11 @@ one deployment.
   provisional, as an interface number is.
 - The number's type and range: the runtime's attach field is a signed 32-bit
   integer, so 1 to 2^31 − 1, starting at 1.
-- Numbering scope: one sequence per system, or one per component (then the
-  attach identity is the pair component and instance). The owner's runtime
-  authenticates the component from the platform principal, so a per-component
-  sequence may be enough; decide with decision 2 in view.
+- A component declared in a dependency unit: which workspace's lock numbers its
+  instances, and where its generated constant lives.
+- How a debug or staging variant is written in rsdl today (a second `system`
+  that lists the production components and the diagnostic ones), and whether a
+  lighter form is needed later.
 - Where the generated constants go: the Rust backend generates per IR package;
   the system is declared in an rsdl package.
 - `ridl diff`: a changed instance number is breaking.
