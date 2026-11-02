@@ -67,7 +67,7 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+  lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
   lsp       Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
@@ -1955,21 +1955,21 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
 
 Usage: ridl lock [OPTIONS] [PATH]
        ridl lock <COMMAND>
 
 Commands:
-  merge  The git merge driver for `interfaces.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
+  merge  The git merge driver for `interfaces.lock` and `instances.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410, or RSDL-315 for `instances.lock`, until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
   help   Print this message or the help of the given subcommand(s)
 
 Arguments:
   [PATH]  A unit directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
 
 Options:
-      --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry
-      --retire <NAME>     Mark the live entry NAME retired, keeping its line and its number (repeatable). NAME must no longer be declared
+      --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry, or an instance (`component/instance`) without one. A component name renames every entry of `instances.lock` under it
+      --retire <NAME>     Mark the live entry NAME retired, keeping its line and its number (repeatable). NAME must no longer be declared; an instance is `component/instance`, and a component name retires every instance of it
   -h, --help              Print help
 ```
 
@@ -2060,14 +2060,65 @@ renamed Zone Lane 2
 exit: 0
 ```
 
-**The merge driver.** Two branches that each edited `interfaces.lock` merge
-through `ridl lock merge`, a three-way merge over entries matched by number
+**The instance lock.** Over a workspace whose `system` has instances, plain
+`ridl lock` also gives every instance without an entry its number and writes
+one `instances.lock`, beside the root `ridl.toml`: a `#` header, `next N`, then
+one entry per instance, `component/instance N`, with the word `retired` after
+the number when the instance is gone. The key is the component's dotted name, a
+`/`, and the instance name; a lone service and a component without an
+`instances` attribute have the one instance `Unit`. Numbers are given in
+ascending order of the provisional numbers `ridl check` showed, which is the
+byte order of the key text, so the number written is the number checked. The
+file is written only when a number is allocated, and only when `PATH` resolves
+to the workspace root: a `PATH` inside a member allocates no instance. Over
+a system with `Cruise [ instances = (primary, backup) ]` and a lone service
+`veh.status`, in package `veh`:
+
+```text
+allocated veh.Cruise/backup 1
+allocated veh.Cruise/primary 2
+allocated veh.status/Unit 3
+```
+
+```text
+# instances.lock — written by ridl lock; do not edit by hand.
+next 4
+veh.Cruise/backup 1
+veh.Cruise/primary 2
+veh.status/Unit 3
+```
+
+A live entry whose instance is gone from the system is RSDL-314, and plain
+`ridl lock` refuses it as it refuses RIDL-409. The two flags are its fix, and
+they accept the same two diagnostics. A key with a `/` names an instance. A
+key without one names a component when `instances.lock` has an entry under it,
+else an interface; when the interface lock of the unit and `instances.lock`
+both hold the key, the command exits 2 and names both files.
+
+- `--rename veh.Cruise/backup=veh.Cruise/spare` moves one entry, keeping its
+  number, when `veh.Cruise/spare` is an instance of the system without an
+  entry. `--rename veh.Cruise=veh.Speed` moves every entry under the component,
+  retired ones included, when each live one has an instance of the new
+  component without an entry. A `/` on one side only exits 2. Printed as
+  `renamed Old New N`, one line per entry.
+- `--retire veh.Cruise/backup` marks one entry retired, and `--retire
+  veh.Cruise` marks every live entry under the component retired, when the
+  system has no such instance any more. Printed as `retired Key N`, one line per
+  entry.
+
+An instance or component edit does not need `PATH` to resolve to one unit, and
+it exits 2 with `` `instances.lock` belongs to the workspace root: run `ridl
+lock <root>` `` when `PATH` is inside a member.
+
+**The merge driver.** Two branches that each edited `interfaces.lock` or
+`instances.lock` merge through `ridl lock merge`, a three-way merge over entries matched by number
 rather than over lines. git runs it when the repository registers it: one
 versioned line in `.gitattributes`, and one `git config` line per clone,
 which git does not version.
 
 ```text
 interfaces.lock merge=ridl-lock
+instances.lock merge=ridl-lock
 ```
 
 ```sh
@@ -2079,7 +2130,7 @@ ridl lock merge --help
 ```
 
 ```text
-The git merge driver for `interfaces.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
+The git merge driver for `interfaces.lock` and `instances.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410, or RSDL-315 for `instances.lock`, until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
 
 Usage: ridl lock merge <BASE> <OURS> <THEIRS> <MARKER_SIZE>
 
@@ -2117,7 +2168,10 @@ Bee 2
 ```
 
 The file is malformed (RIDL-410) until an author keeps one side and deletes
-the markers, and `ridl check` refuses it until then. git's `union` driver is
+the markers, and `ridl check` refuses it until then. The driver reads the file
+as an instance lock when the OURS text, else the THEIRS text, holds the
+`instances.lock` header line, and as an interface lock otherwise; a conflicted
+instance lock is RSDL-315 until resolved. git's `union` driver is
 not a substitute: it discards the base, and resurrects a renamed or retired
 entry silently. An empty BASE — what git passes when both branches created
 the file — reads as `next 1` with no entries. A package directory named
@@ -2126,12 +2180,16 @@ the file — reads as `next 1` with no entries. A package directory named
 **Exit codes.** 0 when the file is written or there is nothing to change. 1
 on a diagnostic error over the source, with nothing written: a live entry with
 no declaration when plain `ridl lock` is asked to allocate (RIDL-409), a
-malformed lock file — a git conflict left in it included — (RIDL-410), or any
-other compile error, in any package of the workspace. 2 when the path is
+malformed lock file — a git conflict left in it included — (RIDL-410, or
+RSDL-315 for `instances.lock`), a live instance entry with no instance
+(RSDL-314), or any other compile error, in any package of the workspace. 2 when the path is
 missing or unreadable, on a bad flag — `--rename` naming no live entry or a
 `NEW` that is not a declaration without an entry, `--retire` naming an
-interface that is still declared, either flag over more than one package — or
-on an I/O failure writing the file. Every cell is confirmed against the built
+interface that is still declared, an interface edit over more than one package,
+an instance edit from inside a member, `--rename` with a `/` on one side only,
+`--rename` to an instance that has an entry, `--retire` of an instance the
+system still has, or a key that both locks hold — or on an I/O failure writing
+the file. Every cell is confirmed against the built
 binary by `crates/ridl/tests/lock_cli.rs`. `ridl lock merge` exits 0 when the
 three sides merge clean and OURS is written; 1 when entries disagree — OURS is
 written with the conflict markers and is malformed until resolved; 2 when an
@@ -2716,7 +2774,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, is `vendor/` at the manifest root or lies under it, or a directory the walk reaches is unreadable — named in the message, unlike `ridl check`, `ridl build`, `ridl baseline`, `ridl lock`, `ridlc check` and `ridlc build`, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
-| `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
+| `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one package, an instance edit from inside a member; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
 | `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written |
 | `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |

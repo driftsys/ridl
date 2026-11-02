@@ -119,3 +119,258 @@ fn check_inside_a_member_still_reports_the_root_instance_lock() {
     assert_eq!(code, 1, "stderr: {stderr}");
     assert!(stderr.contains("error[RSDL-314]"), "{stderr}");
 }
+
+// ---- `ridl lock` and `ridl lock merge` over `instances.lock` ----
+
+/// `SYSTEM` with a lone service, which numbers as `veh.status/Unit`.
+const LOCK_SYSTEM: &str = "package veh\n\
+                           component Cruise [ instances = (primary, backup) ] {}\n\
+                           system Vehicle { Cruise, veh.status }\n";
+
+/// The lone service of `LOCK_SYSTEM`.
+const STATUS_SERVICE: &str =
+    "package veh\ntype Flag: integer [0..1]\nservice veh.status { signal a: Flag @[100ms..1s] }\n";
+
+/// A one-package workspace on `LOCK_SYSTEM`, with the given `instances.lock`
+/// body, or none.
+fn lock_workspace(label: &str, lock: Option<&str>) -> TempDir {
+    let dir = TempDir::new(label);
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("system.rsdl", LOCK_SYSTEM);
+    dir.write("status.ridl", STATUS_SERVICE);
+    if let Some(body) = lock {
+        dir.write("instances.lock", body);
+    }
+    dir
+}
+
+fn run_lock(dir: &TempDir, args: &[&str]) -> (i32, String, String) {
+    let mut all: Vec<&std::ffi::OsStr> = vec!["lock".as_ref(), dir.path().as_os_str()];
+    all.extend(args.iter().map(std::ffi::OsStr::new));
+    ridl(&all)
+}
+
+fn lock_text(dir: &TempDir) -> String {
+    std::fs::read_to_string(dir.path().join("instances.lock")).expect("instances.lock exists")
+}
+
+/// The positions of `needles` in `haystack`, which must all be present and in
+/// the order given.
+fn assert_in_order(haystack: &str, needles: &[&str]) {
+    let mut from = 0;
+    for needle in needles {
+        let at = haystack[from..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("`{needle}` not found in order in:\n{haystack}"));
+        from += at + needle.len();
+    }
+}
+
+#[test]
+fn plain_lock_allocates_every_instance_in_key_byte_order() {
+    let dir = lock_workspace("alloc", None);
+    let (code, stdout, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    assert_in_order(
+        &stdout,
+        &[
+            "allocated veh.Cruise/backup 1",
+            "allocated veh.Cruise/primary 2",
+            "allocated veh.status/Unit 3",
+        ],
+    );
+    assert_eq!(
+        lock_text(&dir),
+        format!("{HEADER}next 4\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.status/Unit 3\n")
+    );
+}
+
+#[test]
+fn plain_lock_with_nothing_to_change_writes_nothing() {
+    let dir = lock_workspace("nothing", None);
+    let (code, _, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 0, "{stderr}");
+    let before = std::fs::read(dir.path().join("instances.lock")).unwrap();
+    let (code, stdout, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stdout.contains("allocated"), "{stdout}");
+    assert_eq!(
+        std::fs::read(dir.path().join("instances.lock")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn a_workspace_with_no_system_gets_no_instance_lock() {
+    let dir = TempDir::new("nosystem");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("a.ridl", "package veh\n/// A.\ntype A: u8\n");
+    let (code, _, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!dir.path().join("instances.lock").exists());
+}
+
+#[test]
+fn plain_lock_refuses_an_orphan_instance_entry() {
+    let lock = format!("{HEADER}next 5\nveh.Cruise/spare 4\n");
+    let dir = lock_workspace("refuse", Some(&lock));
+    let (code, _, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("RSDL-314"), "{stderr}");
+    assert_eq!(lock_text(&dir), lock);
+}
+
+/// The lock for `LOCK_SYSTEM` after plain `ridl lock`.
+fn allocated_lock() -> String {
+    format!("{HEADER}next 4\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.status/Unit 3\n")
+}
+
+#[test]
+fn retire_an_instance_marks_its_line_retired() {
+    let dir = lock_workspace("retire", Some(&allocated_lock()));
+    dir.write(
+        "system.rsdl",
+        &LOCK_SYSTEM.replace("(primary, backup)", "(primary)"),
+    );
+    let (code, stdout, stderr) = run_lock(&dir, &["--retire", "veh.Cruise/backup"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("retired veh.Cruise/backup 1"), "{stdout}");
+    assert_eq!(
+        lock_text(&dir),
+        format!(
+            "{HEADER}next 4\nveh.Cruise/backup 1 retired\nveh.Cruise/primary 2\nveh.status/Unit 3\n"
+        )
+    );
+}
+
+#[test]
+fn retire_of_an_instance_still_in_the_system_exits_two() {
+    let dir = lock_workspace("retire-live", Some(&allocated_lock()));
+    let (code, _, stderr) = run_lock(&dir, &["--retire", "veh.Cruise/backup"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert_eq!(lock_text(&dir), allocated_lock());
+}
+
+#[test]
+fn rename_an_instance_keeps_its_number() {
+    let dir = lock_workspace("rename", Some(&allocated_lock()));
+    dir.write(
+        "system.rsdl",
+        &LOCK_SYSTEM.replace("(primary, backup)", "(primary, spare)"),
+    );
+    let (code, stdout, stderr) =
+        run_lock(&dir, &["--rename", "veh.Cruise/backup=veh.Cruise/spare"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stdout.contains("renamed veh.Cruise/backup veh.Cruise/spare 1"),
+        "{stdout}"
+    );
+    assert!(lock_text(&dir).contains("veh.Cruise/spare 1\n"));
+}
+
+#[test]
+fn rename_a_component_moves_every_entry_with_its_number() {
+    let lock = format!(
+        "{HEADER}next 5\nveh.Cruise/primary 2\nveh.Cruise/backup 1\nveh.Cruise/old 4 retired\nveh.status/Unit 3\n"
+    );
+    let dir = lock_workspace("rename-component", Some(&lock));
+    dir.write("system.rsdl", &LOCK_SYSTEM.replace("Cruise", "Speed"));
+    let (code, stdout, stderr) = run_lock(&dir, &["--rename", "veh.Cruise=veh.Speed"]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    let text = lock_text(&dir);
+    for line in [
+        "veh.Speed/backup 1\n",
+        "veh.Speed/primary 2\n",
+        "veh.Speed/old 4 retired\n",
+    ] {
+        assert!(text.contains(line), "{line} missing from:\n{text}");
+    }
+    assert!(!text.contains("Cruise"), "{text}");
+}
+
+#[test]
+fn retire_a_component_retires_all_its_instances() {
+    let dir = lock_workspace("retire-component", Some(&allocated_lock()));
+    dir.write(
+        "system.rsdl",
+        "package veh\nsystem Vehicle { veh.status }\n",
+    );
+    let (code, stdout, stderr) = run_lock(&dir, &["--retire", "veh.Cruise"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("retired veh.Cruise/backup 1"), "{stdout}");
+    assert!(stdout.contains("retired veh.Cruise/primary 2"), "{stdout}");
+    assert_eq!(
+        lock_text(&dir),
+        format!(
+            "{HEADER}next 4\nveh.Cruise/backup 1 retired\nveh.Cruise/primary 2 retired\nveh.status/Unit 3\n"
+        )
+    );
+}
+
+/// A workspace of one member `veh` under a root manifest, on `LOCK_SYSTEM`.
+fn member_workspace(label: &str, lock: Option<&str>) -> TempDir {
+    let dir = TempDir::new(label);
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"veh\"]\n");
+    dir.write("veh/ridl.toml", MANIFEST);
+    dir.write("veh/system.rsdl", LOCK_SYSTEM);
+    dir.write("veh/status.ridl", STATUS_SERVICE);
+    if let Some(body) = lock {
+        dir.write("instances.lock", body);
+    }
+    dir
+}
+
+#[test]
+fn lock_on_a_member_path_writes_no_instance_lock() {
+    let dir = member_workspace("member", None);
+    let member = dir.path().join("veh");
+    let (code, stdout, stderr) = ridl(&["lock".as_ref(), member.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stdout.contains("allocated veh.Cruise"), "{stdout}");
+    assert!(!dir.path().join("instances.lock").exists());
+}
+
+#[test]
+fn an_instance_edit_on_a_member_path_exits_two() {
+    let dir = member_workspace("member-edit", Some(&allocated_lock()));
+    let member = dir.path().join("veh");
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        member.as_os_str(),
+        "--retire".as_ref(),
+        "veh.Cruise/backup".as_ref(),
+    ]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains("`instances.lock` belongs to the workspace root: run `ridl lock <root>`"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_slash_on_one_side_of_a_rename_exits_two() {
+    let dir = lock_workspace("slash", Some(&allocated_lock()));
+    let (code, _, stderr) = run_lock(&dir, &["--rename", "veh.Cruise/backup=veh.Speed"]);
+    assert_eq!(code, 2, "{stderr}");
+}
+
+#[test]
+fn the_merge_driver_merges_two_instance_allocations() {
+    let dir = TempDir::new("merge");
+    let base = dir.write("base", &format!("{HEADER}next 2\nveh.C/a 1\n"));
+    let ours = dir.write("ours", &format!("{HEADER}next 3\nveh.C/a 1\nveh.C/b 2\n"));
+    let theirs = dir.write("theirs", &format!("{HEADER}next 3\nveh.C/a 1\nveh.C/c 2\n"));
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        "merge".as_ref(),
+        base.as_os_str(),
+        ours.as_os_str(),
+        theirs.as_os_str(),
+        "7".as_ref(),
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(&ours).unwrap(),
+        format!("{HEADER}next 4\nveh.C/a 1\nveh.C/b 2\nveh.C/c 3\n")
+    );
+}

@@ -36,9 +36,10 @@
 //! `ridl init` and `ridl new` scaffold a package or a workspace; the work is in
 //! the `scaffold` module.
 //!
-//! `ridl lock` writes a unit's `interfaces.lock` (lock design §5): plain, it
-//! allocates a number to every interface that has none; with `--rename` or
-//! `--retire`, it rewrites one unit's entries in place. It lives here
+//! `ridl lock` writes a unit's `interfaces.lock` (lock design §5) and the
+//! workspace's `instances.lock`: plain, it allocates a number to every
+//! interface and every instance that has none; with `--rename` or
+//! `--retire`, it rewrites entries in place. It lives here
 //! beside `ridl baseline` because it reads and writes a file in the workspace
 //! that is not a source (`ridlc` gains no `lock` subcommand); the compile it
 //! runs first is `ridlc`'s own.
@@ -195,10 +196,12 @@ enum Command {
         encoding: Vec<DiffEncoding>,
     },
     /// Allocate a number to every interface that has none and write each
-    /// unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
-    /// unit's entries in place instead. Exit 0 when the file is written or
-    /// nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or
-    /// I/O failure. `ridl lock merge` is the git merge driver for the file.
+    /// unit's `interfaces.lock`, and to every instance of the system that has
+    /// none and write the root `instances.lock`; with `--rename` or
+    /// `--retire`, rewrite entries in place instead. Exit 0 when the files
+    /// are written or nothing changes, 1 on a diagnostic error, 2 on a bad
+    /// flag or a path or I/O failure. `ridl lock merge` is the git merge
+    /// driver for both files.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
         /// A unit directory, a workspace root, or a file. A directory
@@ -207,11 +210,15 @@ enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
         /// Rewrite the live entry OLD to hold the key NEW, keeping its number
-        /// (repeatable). NEW must be a declaration without an entry.
+        /// (repeatable). NEW must be a declaration without an entry, or an
+        /// instance (`component/instance`) without one. A component name
+        /// renames every entry of `instances.lock` under it.
         #[arg(long, value_name = "OLD=NEW")]
         rename: Vec<String>,
         /// Mark the live entry NAME retired, keeping its line and its number
-        /// (repeatable). NAME must no longer be declared.
+        /// (repeatable). NAME must no longer be declared; an instance is
+        /// `component/instance`, and a component name retires every instance
+        /// of it.
         #[arg(long, value_name = "NAME")]
         retire: Vec<String>,
         #[command(subcommand)]
@@ -300,11 +307,12 @@ enum Command {
 /// The subcommands of `ridl lock`.
 #[derive(Subcommand)]
 enum LockCommand {
-    /// The git merge driver for `interfaces.lock`: a three-way merge over
-    /// entries matched by number, written to OURS. Exit 0 when the merge is
-    /// clean, 1 when entries disagree (they are left between conflict markers
-    /// of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an
-    /// input cannot be read or does not parse (OURS is left as it was).
+    /// The git merge driver for `interfaces.lock` and `instances.lock`: a
+    /// three-way merge over entries matched by number, written to OURS. Exit
+    /// 0 when the merge is clean, 1 when entries disagree (they are left
+    /// between conflict markers of MARKER_SIZE, and the file is RIDL-410, or
+    /// RSDL-315 for `instances.lock`, until resolved), 2 when an input cannot
+    /// be read or does not parse (OURS is left as it was).
     /// Register it with `.gitattributes` and `git config` as the CLI
     /// reference documents.
     Merge {
