@@ -217,6 +217,11 @@ const ALLOWED: &[Allowed] = &[
         why: "a test asserting the length of the lowered deployment descriptor's own `interfaces` field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/tests/deployment_lower_content.rs",
+        lines: 2,
+        why: "a test fixture adding interfaces to the regions of a hand-built system, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/src/describe.rs",
         lines: 1,
         why: "`to_json` reading the descriptor's own `interfaces` vector \
