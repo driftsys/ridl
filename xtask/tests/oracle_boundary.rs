@@ -553,9 +553,13 @@ fn the_demo_inputs_name_the_proto3_encoding() {
 /// whole workspace, and other members turn on `ridl-descriptor`'s defaults.
 /// `cargo tree -p` resolves the named package with its own feature flags.
 fn descriptor_tree(extra: &[&str]) -> String {
+    package_tree("ridl-descriptor", extra)
+}
+
+fn package_tree(package: &str, extra: &[&str]) -> String {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let output = Command::new(cargo)
-        .args(["tree", "--locked", "-p", "ridl-descriptor", "-e", "normal"])
+        .args(["tree", "--locked", "-p", package, "-e", "normal"])
         .args(["--prefix", "none"])
         .args(extra)
         .output()
@@ -603,5 +607,29 @@ fn the_descriptor_reader_reaches_no_hashing_crate() {
             .lines()
             .any(|line| line.starts_with("hashbrown") || line.starts_with("foldhash")),
         "`std` brings a hashing crate:\n{std_only}"
+    );
+}
+
+/// Descriptor access is optional for the in-process runtime.
+#[test]
+fn the_loopback_without_node_reaches_no_planus() {
+    let plain = package_tree("ridl-loopback", &["--no-default-features"]);
+    for forbidden in ["ridl-descriptor", "planus", "ridl-ir"] {
+        assert!(
+            !plain.lines().any(|l| l.starts_with(forbidden)),
+            "{forbidden} in plain loopback graph:\n{plain}"
+        );
+    }
+    let node = package_tree(
+        "ridl-loopback",
+        &["--no-default-features", "--features", "node"],
+    );
+    assert!(
+        node.lines().any(|l| l.starts_with("planus ")),
+        "node must exercise the positive control:\n{node}"
+    );
+    assert!(
+        !node.lines().any(|l| l.starts_with("ridl-ir ")),
+        "node must use the reader only:\n{node}"
     );
 }

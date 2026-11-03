@@ -2173,6 +2173,7 @@ dependencies = [
 name = "ridl-loopback"
 version = "0.14.0"
 dependencies = [
+ "ridl-descriptor",
  "ridl-rt",
  "ridl-rt-conformance",
 ]

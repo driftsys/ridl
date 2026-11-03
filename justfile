@@ -131,6 +131,8 @@ test:
         # same line is what builds the `task` module under the `std` feature
         # and runs crates/ridl-rt/tests/task.rs.
         cargo test -p ridl-rt --all-features --locked
+        cargo test --locked -p ridl-loopback --features debug
+        cargo test --locked -p ridl-rt-conformance --features debug
         # No workspace member turns on the `descriptor` feature of
         # `ridl-transport-ws`, so its test target `descriptor`, which requires
         # the feature, runs only from this line.
@@ -650,8 +652,9 @@ compat-check: toolchain-check
     # dev-dependency has no version, so packaging drops it), so the test is
     # copied in from the source tree and the packaged ridl-rt-conformance is
     # added as a path dev-dependency, with a test target for the copy. The test
-    # expands `suite!` with every extension flag. Compile only: the pin runs
-    # this test in the workspace.
+    # expands `suite!` with every extension flag. Optional descriptor
+    # dependencies are patched, resolved and fetched as in the transport cell.
+    # Compile only: the pin runs this test in the workspace.
     #
     # `cargo package` leaves an empty [dev-dependencies] table as the last
     # table of the manifest, where the dropped dependency was. The dependency
@@ -667,9 +670,12 @@ compat-check: toolchain-check
     cp crates/ridl-loopback/tests/conformance.rs "$pkg_loopback/tests/conformance.rs"
     printf 'ridl-rt-conformance = { path = "%s" }\n' "$pkg_conformance" >> "$pkg_loopback/Cargo.toml"
     printf '\n[[test]]\nname = "conformance"\npath = "tests/conformance.rs"\n' >> "$pkg_loopback/Cargo.toml"
-    append_tables "$pkg_loopback/Cargo.toml" "ridl-rt=$pkg"
+    append_tables "$pkg_loopback/Cargo.toml" "ridl-rt=$pkg" "ridl-descriptor=$pkg_descriptor" "ridl-ir=$pkg_ir"
+    resolve_for "$descriptor_home" "$pkg_loopback/Cargo.toml" "$minimum" ridl-loopback
+    CARGO_HOME="$descriptor_home" \
+        cargo "+$minimum" fetch --locked --manifest-path "$pkg_loopback/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-loopback, suite! expanded)"
-    cargo "+$minimum" test --no-run --offline --manifest-path "$pkg_loopback/Cargo.toml"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" test --no-run --offline --locked --all-features --manifest-path "$pkg_loopback/Cargo.toml"
 
     # ridl-transport-ws as published, except that its tungstenite
     # dev-dependency table is removed and the tables below are appended. Its
@@ -1091,6 +1097,8 @@ lint:
         # As in `just test`: the workspace resolves `ridl-rt` with default
         # features, so its feature-gated modules are otherwise never linted.
         cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
+        cargo clippy -p ridl-loopback --features debug --all-targets -- -D warnings
+        cargo clippy -p ridl-rt-conformance --features debug --all-targets -- -D warnings
         # As in `just test`: no workspace member turns on the `descriptor`
         # feature of `ridl-transport-ws`.
         cargo clippy -p ridl-transport-ws --features descriptor --all-targets -- -D warnings

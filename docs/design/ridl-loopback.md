@@ -852,8 +852,9 @@ there is no member table, and therefore:
   a port, so an ordinal with no provisioned value is a read the store cannot
   serve at all, where an unpublished signal is one it serves as `Init`.
 - **no unowned member.** `WriteError::NotOwner`, `RaiseError::NotOwner` and
-  `ServeError::NotOwner` are never returned: a provider's ownership is a fact of
-  the descriptor.
+  `ServeError::NotOwner` are never returned by raw loopback handles. A `Node`
+  attachment for the debug listener refuses publishing, raising and serving with
+  those errors. Other attachments have no per-member write ownership check.
 - **no freshness and no remaining time.** Every sample reads
   `Freshness::Unbounded` and every claim reads `remaining: None`, because both
   are measured against a member's timing annotation.

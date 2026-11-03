@@ -668,3 +668,6 @@ mod tests {
         assert!(!carries_trace("    // TRACE_A\n    None"));
     }
 }
+
+/// Descriptor fixture catalog identities for attachment tests.
+pub mod identity;

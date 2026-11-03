@@ -3,7 +3,7 @@
 //! This crate implements the fourteen port traits of
 //! [`ridl_rt::port`](https://docs.rs/ridl-rt) over one in-memory store. It is
 //! the first runtime in this workspace (ADR-0020 decision 6, which names the
-//! crate and fixes `ridl-rt` as its only dependency), and it is what the
+//! crate and keeps descriptor access behind `node`), and it is what the
 //! generated interaction face runs against in a test, an example or a
 //! single-process application.
 //!
@@ -65,9 +65,10 @@
 //!
 //! # What it reports, and what it cannot
 //!
-//! The loopback holds no catalog descriptor — driftsys/ridl#381
-//! writes the descriptor file, and giving the loopback one is not yet
-//! assigned — so it has no member table, and there is no ordinal
+//! The raw `Loopback` holds no catalog descriptor. With `node`, `Node` reads
+//! deployment grants and returns restricted attachments; a debug listener
+//! attachment returns `WriteError::NotOwner`, `RaiseError::NotOwner` and
+//! `ServeError::NotOwner`. The raw loopback has no member table, and no ordinal
 //! it can call unknown, no member it can call unowned, and no timing
 //! annotation it can measure a value's freshness or a call's remaining time
 //! against. What it therefore never returns:
@@ -149,6 +150,11 @@ use ridl_rt::trace::TraceContext;
 
 mod handle;
 mod store;
+
+#[cfg(feature = "node")]
+mod node;
+#[cfg(feature = "node")]
+pub use node::{AttachError, Attachment, Node, NodeError};
 
 pub use handle::{
     CallerHandle, HandlerHandle, ReaderHandle, SinkHandle, SourceHandle, WriterHandle,

@@ -22,6 +22,9 @@ rust-version = "1.88"
 
 # `ridl-rt` is its only dependency: the suite drives a runtime through the
 # port traits and through the hooks of its own `Factory` trait.
+[features]
+debug = ["ridl-rt/debug"]
+
 [dependencies]
 ridl-rt.workspace = true
 

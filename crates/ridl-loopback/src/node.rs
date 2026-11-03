@@ -1,0 +1,235 @@
+//! Descriptor-based attachments to one machine's catalog stores.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use ridl_descriptor::deployment;
+use ridl_rt::contract::{CatalogHash, CatalogRef, InstanceNo};
+
+use crate::Loopback;
+mod attachment;
+pub use attachment::Attachment;
+
+type CatalogKey = (&'static str, CatalogHash);
+type Reservations = Arc<Mutex<BTreeMap<i32, usize>>>;
+
+fn reservations(state: &Reservations) -> MutexGuard<'_, BTreeMap<i32, usize>> {
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// A failure to construct a machine's node.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum NodeError {
+    /// The descriptor or an embedded catalog failed verification.
+    InvalidDescriptor(deployment::VerifyError),
+    /// The requested machine is absent from the descriptor.
+    UnknownMachine,
+    /// An offer or map names a catalog not embedded in the descriptor.
+    MissingCatalog,
+}
+impl fmt::Display for NodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidDescriptor(e) => write!(f, "invalid deployment descriptor: {e}"),
+            Self::UnknownMachine => f.write_str("unknown machine"),
+            Self::MissingCatalog => f.write_str("an offer or map names a missing catalog"),
+        }
+    }
+}
+impl std::error::Error for NodeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidDescriptor(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+/// A refusal to attach an identity to a catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AttachError {
+    /// The positive instance is not placed on this machine.
+    UnknownInstance,
+    /// No local store has this catalog name and hash.
+    UnknownCatalog,
+    /// The instance neither offers nor maps this catalog.
+    CatalogNotGranted,
+    /// An attachment of the opposite identity is still alive.
+    IdentityConflict,
+}
+impl fmt::Display for AttachError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::UnknownInstance => "unknown local instance",
+            Self::UnknownCatalog => "unknown local catalog",
+            Self::CatalogNotGranted => "catalog not granted to instance",
+            Self::IdentityConflict => "opposite identity is attached",
+        })
+    }
+}
+impl std::error::Error for AttachError {}
+
+/// The catalog stores and attachment grants of one machine.
+///
+/// Available with `node`. `debug` additionally permits twins and read-only
+/// listeners. Stores and reservations outlive this value while attachments live.
+pub struct Node {
+    stores: BTreeMap<CatalogKey, Loopback>,
+    grants: BTreeMap<i32, BTreeSet<CatalogKey>>,
+    reservations: Reservations,
+}
+impl Node {
+    /// Verifies the descriptor before selecting the machine and its catalogs.
+    /// The bytes remain alive because catalog names borrow them.
+    pub fn from_descriptor(bytes: &'static [u8], machine: &str) -> Result<Self, NodeError> {
+        let view = deployment::verify(bytes).map_err(NodeError::InvalidDescriptor)?;
+        if !view
+            .machines()
+            .expect("verified")
+            .into_iter()
+            .any(|m| m.expect("verified").name().expect("verified") == machine)
+        {
+            return Err(NodeError::UnknownMachine);
+        }
+        let catalogs: Vec<_> = view
+            .catalogs()
+            .expect("verified")
+            .into_iter()
+            .map(|c| {
+                let c = c.expect("verified");
+                (
+                    c.name().expect("verified"),
+                    CatalogHash(
+                        c.hash()
+                            .expect("verified")
+                            .try_into()
+                            .expect("verified hash"),
+                    ),
+                )
+            })
+            .collect();
+        let mut grants = BTreeMap::new();
+        let mut stores = BTreeMap::new();
+        for instance in view.instances().expect("verified") {
+            let instance = instance.expect("verified");
+            if instance.machine().expect("verified") != machine {
+                continue;
+            }
+            let mut names = BTreeSet::new();
+            for offer in instance.offers().expect("verified") {
+                names.insert(offer.expect("verified").catalog().expect("verified"));
+            }
+            for name in instance.maps().expect("verified") {
+                names.insert(name.expect("verified"));
+            }
+            let mut granted = BTreeSet::new();
+            for name in names {
+                let mut found = false;
+                for &(embedded_name, hash) in &catalogs {
+                    if embedded_name != name {
+                        continue;
+                    }
+                    found = true;
+                    let key = (embedded_name, hash);
+                    granted.insert(key);
+                    stores.entry(key).or_insert_with(|| {
+                        Loopback::new(CatalogRef {
+                            name: embedded_name,
+                            hash,
+                        })
+                    });
+                }
+                if !found {
+                    return Err(NodeError::MissingCatalog);
+                }
+            }
+            grants.insert(instance.number().expect("verified"), granted);
+        }
+        Ok(Self {
+            stores,
+            grants,
+            reservations: Arc::new(Mutex::new(BTreeMap::new())),
+        })
+    }
+
+    /// The machine's deduplicated catalogs, ordered by name and hash.
+    pub fn catalogs(&self) -> impl Iterator<Item = &CatalogRef> {
+        use ridl_rt::port::Attached;
+        self.stores.values().map(|store| store.catalog())
+    }
+
+    /// Attaches with the instance's grant and reserves its identity across catalogs.
+    pub fn attach(&self, who: InstanceNo, catalog: &CatalogRef) -> Result<Attachment, AttachError> {
+        let number = who.get();
+        let listener = is_listener(who);
+        let positive = if listener {
+            number
+        } else {
+            if number < 0 && !cfg!(feature = "debug") {
+                return Err(AttachError::UnknownInstance);
+            }
+            number.checked_abs().ok_or(AttachError::UnknownInstance)?
+        };
+        let grant = if listener {
+            None
+        } else {
+            Some(
+                self.grants
+                    .get(&positive)
+                    .ok_or(AttachError::UnknownInstance)?,
+            )
+        };
+        let key = (catalog.name, catalog.hash);
+        let store = self.stores.get(&key).ok_or(AttachError::UnknownCatalog)?;
+        if grant.is_some_and(|g| !g.contains(&key)) {
+            return Err(AttachError::CatalogNotGranted);
+        }
+        {
+            let mut counts = reservations(&self.reservations);
+            if !listener && counts.contains_key(&-number) {
+                return Err(AttachError::IdentityConflict);
+            }
+            *counts.entry(number).or_default() += 1;
+        }
+        Ok(Attachment {
+            ports: store.attach(),
+            _reservation: Reservation {
+                state: Arc::clone(&self.reservations),
+                number,
+            },
+            listener,
+        })
+    }
+}
+fn is_listener(who: InstanceNo) -> bool {
+    #[cfg(feature = "debug")]
+    {
+        who.is_listener()
+    }
+    #[cfg(not(feature = "debug"))]
+    {
+        let _ = who;
+        false
+    }
+}
+
+// Dropped after the attachment's ports, so a replacement cannot overlap them.
+struct Reservation {
+    state: Reservations,
+    number: i32,
+}
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        let mut counts = reservations(&self.state);
+        let count = counts.get_mut(&self.number).expect("live reservation");
+        *count -= 1;
+        if *count == 0 {
+            counts.remove(&self.number);
+        }
+    }
+}
