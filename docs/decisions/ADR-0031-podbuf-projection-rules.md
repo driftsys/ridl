@@ -40,6 +40,11 @@ stability assessment; the
 [CLI reference](../book/cli-reference.md#baseline-context) owns the versioned
 artifact and operational contract.
 
+**Amended 2026-11-03 — decision 10, every remote declaration held inline, from
+driftsys/ridl#1163.** The remote-growth rule covers a remote union, enum, enum
+set or scalar typedef as well as a struct when its podbuf size grows. Decision
+10 carries the dated clarification.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -700,6 +705,11 @@ a field is appended.
     growth draws no line. Equal-size remote layout changes, shrinkage and
     general dependency semantic comparison remain deferred. This adds no podbuf
     layout or wire-hash change.
+
+    _Amended (2026-11-03, driftsys/ridl#1163)._ The rule covers every remote
+    declaration held inline whose podbuf size grows, including struct, union,
+    enum, enum set and scalar typedef. A union tag widening that fits inside the
+    existing pad changes no size and draws no remote-growth line.
 
     **The inline-use rule, as built (builder's call).** `ridl diff` finds an
     inline use by asking the layout law what the encoder lays out inline, so the

@@ -193,15 +193,20 @@ takes no overlays.
 
 ### `ridl_diff`
 
-Input: `old`, `new`, optional `overlays`. Each side accepts source paths,
-`.ir.json` files or snapshot directories, using the CLI's loader. Overlays apply
-to the new source side only and are refused for snapshots. Result: the object
-`ridl diff --format json` prints, including `verdict` and `changes`, with the
-standard IR and the remote packages either source side compiled supplied as
-context, as the CLI supplies them. Load failures are tool errors with the CLI's
-message. A source side that does not compile returns `isError: true` with
-structured `message` and `diagnostics`; the message identifies the old or new
-side. The diagnostics retain their full JSON shape.
+Input: `old`, `new`, optional `overlays` and `encodings`. Each side accepts
+source paths, `.ir.json` files or snapshot directories, using the CLI's loader.
+Overlays apply to the new source side only and are refused for snapshots.
+Result: the object `ridl diff --format json` prints, including `verdict` and
+`changes`, with the standard IR and separate per-side contexts, as the CLI
+supplies them. Each source side uses its own compiled remotes; each snapshot
+directory uses its own retained evidence. With `podbuf` in `encodings`,
+`podbuf_inline_append`, `podbuf_remote_inline_growth` and `podbuf_width_change`
+are breaking; without it, compatible. `strict_enum_append` is breaking for every
+encoding list. Missing or unusable inline evidence for an explicit podbuf
+comparison is a request error with repair/reset guidance. Load failures are tool
+errors with the CLI's message. A source side that does not compile returns
+`isError: true` with structured `message` and `diagnostics`; the message
+identifies the old or new side. The diagnostics retain their full JSON shape.
 
 ## Host configuration
 

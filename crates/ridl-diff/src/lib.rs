@@ -466,11 +466,11 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 }
 
 /// [`diff_sets`], with `context`: packages that a type reference resolves
-/// against without being compared. The `ridl` CLI passes the built-in
-/// `ridl.std` and the packages of the remote `[imports]` units a side
-/// compiled, so a struct field appended with a `ridl.std` type or a remote
-/// type is judged by that type's declaration (driftsys/ridl#598,
-/// driftsys/ridl#1141).
+/// against without being compared. This entry point shares one context.
+/// The `ridl` CLI and MCP use per-side contexts through
+/// [`diff_workspaces_with_contexts`]: the built-in `ridl.std` plus each side's
+/// own remote packages, compiled from source or retained in a snapshot
+/// directory, so historical layouts never borrow current remote definitions.
 pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
     let old: Vec<&Package> = old.iter().collect();
     let new: Vec<&Package> = new.iter().collect();

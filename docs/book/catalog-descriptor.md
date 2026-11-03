@@ -181,9 +181,9 @@ emits.
 The `hash` identifies one version of the unit exactly. `compatible` lists, as
 32-byte hashes, the earlier versions of the unit that `ridl diff`'s classifier,
 scoped to the unit, judged compatible with this one, newest first. When the
-current hash is the newest published one, the catalog did not change, and the
-published list is carried whatever the classifier's verdict. The current hash
-is never in it. A reader built for one of those versions can be accepted by a
+current hash is the newest published one, the published list is carried only
+if inline evidence is usable and no proved podbuf break affects the unit.
+The current hash is never in it. A reader built for one of those versions can be accepted by a
 provider that serves this one, which is the use the frame specification makes
 of the list ([section 6.1][attach]). No runtime in this repository accepts an
 `attach` on the strength of the list.
@@ -191,14 +191,17 @@ of the list ([section 6.1][attach]). No runtime in this repository accepts an
 The list comes from the published baseline. `ridl baseline` records, for each
 unit with an interface, a `<unit>.catalogs` file beside the snapshots, and
 `ridl build` reads it. The list is empty when there is no baseline, when the
-unit has no file, and after a breaking change that changes the catalog, which
-restarts the chain. A file is used only when its newest hash is the hash
-recomputed from the snapshots published beside it; a file that does not
-describe those snapshots, such as one left behind by a hand-edited baseline,
+unit has no file, and after a proved podbuf break or a breaking change that
+changes the catalog, which restarts the chain. Missing inline evidence for an
+affected podbuf unit refuses normal publication with exit 2; a build warns and
+omits that unit's compatible catalogs. A file is used only when its newest hash
+is the hash recomputed from the snapshots and context published beside it; a
+file that does not describe those snapshots, such as one left behind by a hand-edited baseline,
 restarts the chain instead. A breaking change that leaves the catalog hash as
 it was, such as the removal of a declaration no interface reaches, keeps the
-chain. A change in another unit counts for this unit only when an interface of
-this unit reaches the changed declaration. `ridlc build` reads no baseline and
+chain only when usable inline evidence and no proved podbuf break permit it. A
+change in another unit counts for this unit only when an interface of this unit
+reaches the changed declaration. `ridlc build` reads no baseline and
 writes an empty list. The [CLI reference](cli-reference.md#ridl-baseline)
 states the file format and the rules.
 

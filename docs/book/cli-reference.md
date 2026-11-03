@@ -528,11 +528,28 @@ minimum tool release and migration requirement.
 Publication stages and validates complete artifacts beside the destination.
 Managed entries are local `.ir.json` snapshots, `*.catalogs` and `context.json`.
 For an existing destination, it reserves an unused sibling
-`<baseline-name>.previous.N` directory, moves old managed entries there, and
-installs new managed entries with context last. Occupied directory, file and
-symlink names are skipped. Unrelated output entries are not moved or backed up.
+`<baseline-name>.previous.N` directory and creates a sibling
+`.<baseline-name>.transaction` marker recording its path. For each fresh file,
+it first hard-links any old file into the backup (falling back to copying a
+regular file if linking fails), then atomically renames the fresh file over the
+destination. It installs
+non-context files in filename order, then `context.json`, then moves stale
+managed entries to the backup. The marker is removed after those operations
+succeed. Occupied staging and backup names, including files and symlinks, are
+skipped. Unrelated output entries are not moved or backed up.
 Managed directory blockers are refused before replacement. First publication
 to an absent destination uses a sibling-directory rename.
+
+At the default destination, these directories and the marker sit directly under
+`.ridl/`, beside `baseline/`: `.baseline.staging`, then
+`.baseline.staging.N` when names are occupied, holds this invocation's fresh
+artifacts; `baseline.previous.N` holds prior managed artifacts; and
+`.baseline.transaction` identifies an unfinished replacement. Normal success
+removes the staging directory; compile, validation or publication-gate refusal
+also attempts to remove it. A publication failure retains staged files for
+recovery, and cleanup failure can leave a stage behind. Earlier stages are not
+reused or removed automatically. Staged system dumps are discarded before
+publication because the baseline holds no system artifact.
 
 A proved break in any unit, including a type-only unit, retains the transaction's
 backup. Repair and reset always retain it. Ordinary compatible or identical
@@ -546,10 +563,13 @@ A publication failure attempts reverse rollback and reports its stage and
 backup paths. Successful rollback restores the prior managed inventory and
 bytes. If rollback also fails, the error identifies the pending recovery moves
 and retains recoverable old and new artifacts; restoration is not guaranteed.
-Inspect those paths before retrying. Later runs reserve new stage/backup names
-and do not remove earlier recovery artifacts. There is no crash-atomic or
-cross-platform atomic replacement guarantee, automatic retry, or command that
-replays a failed journal.
+A marker left by an interruption or incomplete rollback makes the next
+`ridl baseline` refuse publication. Restore the prior files from the backup, or
+inspect the baseline and backup before removing the marker. Failure to remove
+the marker after a committed publication warns and also causes that refusal.
+Later runs reserve new stage/backup names and do not remove earlier recovery
+artifacts. There is no crash-atomic or cross-platform atomic replacement
+guarantee, automatic retry, or command that replays a failed journal.
 
 For a legacy baseline, recover historical evidence only from the original
 consumer checkout and exact historical lockfile, with its pinned trees already
@@ -2073,6 +2093,7 @@ the categories `ridl diff` reports are:
   doc_only
   visibility_changed
   podbuf_inline_append
+  podbuf_remote_inline_growth
   podbuf_width_change
   podbuf_strict_enum_append
   strict_enum_append

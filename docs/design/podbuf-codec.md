@@ -340,17 +340,22 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 ## Remote inline evolution
 
-The comparison uses a separate old/new package scope. A remote struct that grows
-while held inline by an old consumer draws `podbuf_remote_inline_growth`, even
-when only its pin changes. The consumer owns that change; imported declarations
-remain resolution context.
+The comparison uses a separate old/new package scope. A remote declaration
+(including struct, union, enum, enum set and scalar typedef) whose podbuf size
+grows while held inline by an old consumer draws `podbuf_remote_inline_growth`,
+even when only its pin changes. The consumer owns that change; imported
+declarations remain resolution context.
 [ADR-0031 decision 10](../decisions/ADR-0031-podbuf-projection-rules.md) owns
 the holder boundaries, pad-fit rule and deferred cases. Its decision 13 owns
 history handling and uncertainty. The
 [CLI reference](../book/cli-reference.md#baseline-context) owns retained
 evidence, validation and explicit recovery; enriched baselines retain complete
 reached remote packages so comparison does not depend on the old cache
-surviving.
+surviving. Any unresolved remote name encountered on the old side records a
+context issue, including at a payload root or a producer-sized boundary. This is
+deliberately conservative: it is broader than unresolved relevant inline uses
+alone. An explicit podbuf comparison refuses missing or unusable evidence rather
+than inferring compatibility.
 
 This coverage replaces the shared-current-context limitation recorded on
 2026-10-31. Local append layouts also use their respective historical scopes. It

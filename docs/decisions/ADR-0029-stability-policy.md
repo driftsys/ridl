@@ -155,9 +155,9 @@ dump lines. Wire layout, canonical catalog-hash inputs and the IR package schema
 stay unchanged.
 
 Source judgment, baseline enrichment and repair/reset must release together in a
-declared pre-1.0 minor release, with target and minimum supporting tool release
-0.15.0 after 0.14, never a 0.14.x patch. Version pins and publication remain
-separate release work. The
+declared pre-1.0 minor release, never a 0.14.x patch. The minimum supporting
+tool is the first release that writes the baseline context. Version pins and
+publication remain separate release work. The
 [stability chapter](../book/stability.md#remote-inline-compatibility-adoption)
 owns adoption and release-note requirements;
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) owns the comparison/history
