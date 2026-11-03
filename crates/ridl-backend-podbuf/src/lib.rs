@@ -258,14 +258,16 @@ fn member_name(declared: &str) -> String {
 }
 
 /// Whether the typl names of the tuple members of `head`, spelled as C
-/// members, would clash in a way the header refuses: two members equal under
-/// [`member_name`] (`minSpeed` and `min_speed`), or a member equal to the
-/// presence test `has_<member>` of an optional member (`hasX` next to `x?`).
+/// members, would clash in a way the header refuses: two members whose C names
+/// are equal once a trailing underscore is removed (`low` and `low_`, or `int`,
+/// spelled `int_`, beside `int_`), or a member equal to the presence test
+/// `has_<member>` of an optional member (`hasX` next to `x?`).
 /// Such a head names its members by position instead. The decision reads the
 /// head's own fields only, so the header that declares the tuple and a header
 /// that lays it out inline make the same choice. The names are compared
 /// without the trailing underscore of a reserved word, as the accessor names
-/// are built.
+/// are built. Two members equal under `snake_case` are refused earlier, by
+/// RIDL-149.
 fn spelled_tuple_names_clash(head: &v1::PodbufHead) -> bool {
     use v1::podbuf_source::Kind;
     let members: Vec<(String, bool)> = head

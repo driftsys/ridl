@@ -837,10 +837,12 @@ diag_codes! {
         /// names are distinct in source and only their projections collide.
         /// Scoped to the members of one interface, the parameters of one
         /// interaction (decision 4), the fields of one struct, which joined
-        /// in the commit where the proto3 backend started projecting them onto proto3, the
-        /// arms of one union, which joined with the ADR-0016 amendment of
+        /// in the commit where the proto3 backend started projecting them
+        /// onto proto3, the members of one tuple, checked under `snake_case`
+        /// like a struct's fields (ADR-0016, amendment of 2026-11-03), the arms
+        /// of one union, which joined with the ADR-0016 amendment of
         /// 2026-09-20, and the values of one enum, which joined with the
-        /// amendment of 2026-09-26. The first three namespaces are checked
+        /// amendment of 2026-09-26. The first four namespaces are checked
         /// under `snake_case` alone; a union's arms are checked under
         /// `snake_case` and `camel_case` both, because a union arm reaches
         /// both namespaces and the two collision sets are incomparable; an

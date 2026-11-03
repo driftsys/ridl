@@ -1212,6 +1212,8 @@ struct SensorBounds {
 
 - Fields are always named — positional access is not permitted
 - A field name is unique within its tuple (TYPL-215), as in a struct (§7)
+- Two field names of one tuple that become one name under the pinned
+  `snake_case` are refused (RIDL-149, ridl §16.4), as in a struct
 - The empty tuple `()` is the unit type (its interaction role is defined by
   ridl)
 - The same tuple shape used in multiple places draws a linter warning: extract a
@@ -1436,11 +1438,11 @@ attribute-block rules) and `MANI-` (the manifest). Both are tabulated once in
 the family overview §7 and are not restated here.
 
 A `.typl` file also draws one `RIDL-` code, RIDL-149: two names in one scope
-that collide after a pinned name transform (ADR-0016). Three of its scopes are
-typl declarations — the fields of one struct, the arms of one union, and the
-values of one enum — so `LEVEL_10` beside `LEVEL10` in one enum is refused, as
-both become `Level10`. Its row, with the transform each scope is checked under,
-is in ridl §16.4.
+that collide after a pinned name transform (ADR-0016). Four of its scopes are
+typl declarations — the fields of one struct, the members of one tuple, the arms
+of one union, and the values of one enum — so `LEVEL_10` beside `LEVEL10` in one
+enum is refused, as both become `Level10`. Its row, with the transform each
+scope is checked under, is in ridl §16.4.
 
 ### 16.1 Module (TYPL-0xx)
 
