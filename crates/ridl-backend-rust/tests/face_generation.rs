@@ -1364,3 +1364,67 @@ fn the_event_enum_is_not_non_exhaustive() {
         "the Event enum is not non_exhaustive",
     );
 }
+
+#[test]
+fn byte_and_text_reply_streams_get_their_consumer_and_provider_faces() {
+    let source = stream_face();
+    assert!(
+        source.contains("pub mod docs"),
+        "byte and text queries get a face"
+    );
+    let docs = dense(&module(&source, "docs"));
+    for item in [
+        "pubstructFetchStream",
+        "pubfnpoll_read(",
+        "pubasyncfnread(",
+        "pubstructTextStream",
+        "pubfnpoll_next(",
+        "pubasyncfnnext(",
+        "typeFetch:::ridl_rt::face::ByteSource;",
+        "typeText:::ridl_rt::face::ByteSource;",
+    ] {
+        assert!(docs.contains(item), "missing {item}");
+    }
+    assert!(
+        docs.contains("Result<&str,::ridl_rt::error::ClientError>"),
+        "text is borrowed from its staging buffer"
+    );
+}
+
+#[test]
+fn byte_stream_limit_literal_matches_the_runtime_default() {
+    let docs = dense(&module(&stream_face(), "docs"));
+    let limit = ridl_rt::contract::default_ceiling(ridl_rt::contract::Kind::Query);
+    assert_eq!(
+        docs.matches(&format!("pubconstLIMIT:usize={limit};"))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn byte_and_text_streams_reject_limits_below_four_and_keep_explicit_limits() {
+    for member in ["fetch", "text"] {
+        for limit in [0, 1, 2, 3, 4, 64] {
+            let mut package = ir::compile_fixture("stream_face.ridl");
+            let docs = package
+                .interfaces
+                .iter_mut()
+                .find(|i| i.name == "Docs")
+                .unwrap();
+            docs.interactions
+                .iter_mut()
+                .find(|i| i.name == member)
+                .unwrap()
+                .limit = Some(limit);
+            let result = generate_face_with(&package, &[WireEncoding::FlatBuffers]);
+            if limit < 4 {
+                let error = result.expect_err("a byte or text stream needs at least four bytes");
+                assert!(error.message.contains(member));
+            } else {
+                let docs = dense(&module(&result.unwrap().rust_source, "docs"));
+                assert!(docs.contains(&format!("pubconstLIMIT:usize={limit};")));
+            }
+        }
+    }
+}

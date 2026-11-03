@@ -279,12 +279,10 @@ interface Wide {
 }
 
 /// The same for a query that has a stream parameter: it has a descriptor and
-/// no method on the face. A query whose reply is a stream of named elements
-/// is the one stream form the face carries: its client method and its stream
-/// value are emitted beside the other members' methods, while a streamed
-/// reply of bytes or of text is still left out.
+/// no method on the face. Queries whose only stream is their reply have a
+/// face for named elements, bytes and text beside the other members.
 #[test]
-fn a_query_with_a_stream_has_a_descriptor_and_only_a_named_reply_stream_has_a_face_method() {
+fn a_query_with_a_stream_has_a_descriptor_and_each_reply_stream_has_a_face_method() {
     let source = r#"
 package face.query_shape
 
@@ -308,11 +306,13 @@ interface Wide {
     assert!(text.contains("pub struct WideDump;"), "{text}");
     assert!(text.contains("pub struct WideNotes;"), "{text}");
     assert!(text.contains("pub mod wide"), "{text}");
-    assert!(!text.contains("fn read("), "{text}");
+    assert!(!text.contains("pub struct ReadCall<"), "{text}");
     assert!(text.contains("fn history("), "{text}");
     assert!(text.contains("pub struct HistoryStream<"), "{text}");
-    assert!(!text.contains("fn dump("), "{text}");
-    assert!(!text.contains("fn notes("), "{text}");
+    assert!(text.contains("fn dump("), "{text}");
+    assert!(text.contains("pub struct DumpStream<"), "{text}");
+    assert!(text.contains("fn notes("), "{text}");
+    assert!(text.contains("pub struct NotesStream<"), "{text}");
     // The emitted face compiles with the std cfg on and off.
     face_compiles("query_shape", source);
 }

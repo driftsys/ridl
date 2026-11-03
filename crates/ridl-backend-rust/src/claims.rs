@@ -261,7 +261,8 @@ fn face_module(
                 // A query with a streamed reply adds its stream value; the
                 // table claims only what the face emits, so a plain call
                 // claims none.
-                let stream = descriptors::named_stream_reply(interaction).then_some(STREAM_SUFFIX);
+                let stream =
+                    descriptors::supported_stream_reply(interaction).then_some(STREAM_SUFFIX);
                 for suffix in CALL_SUFFIXES.into_iter().chain(stream) {
                     types.claim(
                         &face::call_type_ident(camel, suffix),

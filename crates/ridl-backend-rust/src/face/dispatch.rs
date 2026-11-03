@@ -5,7 +5,7 @@
 
 use super::{
     Call, allow_deprecated, decode_args, encode_into_settled, encoding_bounds, ident,
-    interface_number, payload_buffer,
+    interface_number, stream_buffer,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -143,7 +143,15 @@ pub(super) fn dispatch(
         let method = &member.method;
         let descriptor = &member.descriptor;
         let decode = decode_args(call.arg_type, &port);
-        let buffer = payload_buffer(call.reply_type.unwrap_or(call.arg_type), &port);
+        let buffer = stream_buffer(call, &port);
+        let slot = if call.raw_stream() {
+            ident("ByteStreamSlot")
+        } else {
+            ident("StreamSlot")
+        };
+        let raw_fields = call
+            .raw_stream()
+            .then(|| quote! { len: 0, terminal: None, });
         quote! {
             #ordinal => {
                 let decoded = #decode;
@@ -166,11 +174,12 @@ pub(super) fn dispatch(
                                         )),
                                     )
                                 } else {
-                                    streams.#method = Some(StreamSlot {
+                                    streams.#method = Some(#slot {
                                         claim: claim.id,
                                         source: p.#method(&__arg),
                                         buffer: #buffer,
                                         held: None,
+                                        #raw_fields
                                     });
                                     streams.__started = true;
                                     Ok(())

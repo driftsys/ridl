@@ -17,9 +17,9 @@
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
-//!   A query whose reply is a stream of named elements, with no stream
+//!   A query whose reply is a stream of named elements, bytes or text, with no stream
 //!   parameter, has a `Query` impl whose `Reply` is `()`: its settlement
-//!   carries no reply bytes, because the elements travel on the reply
+//!   carries no reply bytes, because the chunks travel on the reply
 //!   stream, and its `ensure` is always `Ok` (ridl refuses `result` on a
 //!   stream). Every other member with a stream, as a parameter or as the
 //!   reply, has no `Command` or `Query` impl until the face carries that
@@ -473,8 +473,7 @@ fn interaction_item(
         // generic caller of such an impl could send the call without its
         // stream. Its row of `MEMBERS` and its size-table row are written all
         // the same; a streamed reply has no reply type and no row of the
-        // table. The one form the face carries, a query whose reply is a
-        // stream of named elements and nothing else, gets a `Query` impl
+        // table. A query whose only stream is its reply gets a `Query` impl
         // whose `Reply` is `()`: the face's send evaluates `require` through
         // it, and no payload type is claimed for a settlement that carries
         // no reply bytes.
@@ -493,7 +492,7 @@ fn interaction_item(
                 row.push(reply_name.to_string());
                 sizes.calls.push(reply_name.to_string());
             }
-            if named_stream_reply(interaction) {
+            if supported_stream_reply(interaction) {
                 let args = type_path(arg_name);
                 let require = clauses::translate(
                     ctx,
@@ -970,7 +969,7 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
 }
 
 /// Whether the interaction has a stream, as a parameter or as its reply. The
-/// face carries such a member only in the form [`named_stream_reply`] names;
+/// face carries such a member only in the form [`supported_stream_reply`] names;
 /// its descriptor row is written all the same.
 pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
     !interaction.streams.is_empty()
@@ -981,15 +980,15 @@ pub(crate) fn has_stream_reply(interaction: &v1::Interaction) -> bool {
     stream_reply(interaction).is_some()
 }
 
-/// Whether the interaction is a query whose reply is a stream of named
-/// elements and whose only stream is that reply: `query f(..): <T>` with `T`
-/// a named type. It is the one stream form the face carries; the element is
-/// what [`query_reply_type`] returns for the query.
-pub(crate) fn named_stream_reply(interaction: &v1::Interaction) -> bool {
+/// Whether the only stream is the reply, in a form the Rust face carries.
+pub(crate) fn supported_stream_reply(interaction: &v1::Interaction) -> bool {
     interaction.streams.len() == 1
         && reply_stream(interaction).is_some_and(|stream| {
-            v1::StreamForm::try_from(stream.form) == Ok(v1::StreamForm::Elements)
-                && stream.element.is_some()
+            match v1::StreamForm::try_from(stream.form) {
+                Ok(v1::StreamForm::Elements) => stream.element.is_some(),
+                Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
+                _ => false,
+            }
         })
 }
 

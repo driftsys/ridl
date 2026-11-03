@@ -2288,3 +2288,411 @@ fn serve_wakes_itself_when_only_the_second_member_pushed() {
     );
     drop((left_call, right_call));
 }
+
+// Byte and text replies use raw chunks rather than encoded named elements.
+const DOCS: InterfaceNo = <generated::Docs as Interface>::NUMBER;
+const FETCH: Ordinal = <generated::DocsFetch as Interaction>::MEMBER.ordinal;
+const TEXT: Ordinal = <generated::DocsText as Interaction>::MEMBER.ordinal;
+const BYTE_LIMIT: usize = generated::docs::FetchStream::<ridl_loopback::CallerHandle>::LIMIT;
+const TEXT_LIMIT: usize = generated::docs::TextStream::<ridl_loopback::CallerHandle>::LIMIT;
+
+fn utf8_failure() -> CallError {
+    CallError::Contract(Contract::InvalidValue(Violation {
+        type_name: Some("string"),
+        rule: Rule::Utf8,
+    }))
+}
+
+struct DocumentSource {
+    bytes: Vec<u8>,
+    position: usize,
+    step: usize,
+    pending_at_end: bool,
+}
+
+impl ridl_rt::face::ByteSource for DocumentSource {
+    fn poll_read(
+        &mut self,
+        _cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, Interrupted>> {
+        if self.position == self.bytes.len() && self.pending_at_end {
+            return Poll::Pending;
+        }
+        let n = buf
+            .len()
+            .min(self.step)
+            .min(self.bytes.len() - self.position);
+        buf[..n].copy_from_slice(&self.bytes[self.position..self.position + n]);
+        self.position += n;
+        Poll::Ready(Ok(n))
+    }
+}
+
+struct Documents {
+    bytes: Vec<u8>,
+    step: usize,
+    pending_at_end: bool,
+}
+
+impl Documents {
+    fn source(&self) -> DocumentSource {
+        DocumentSource {
+            bytes: self.bytes.clone(),
+            position: 0,
+            step: self.step,
+            pending_at_end: self.pending_at_end,
+        }
+    }
+}
+
+impl generated::docs::Provider for Documents {
+    type Fetch = DocumentSource;
+    type Text = DocumentSource;
+    fn fetch(&mut self, _id: &generated::Id) -> Self::Fetch {
+        self.source()
+    }
+    fn text(&mut self, _id: &generated::Id) -> Self::Text {
+        self.source()
+    }
+}
+
+fn document_handler(rt: &Loopback, ordinal: Ordinal) -> HandlerHandle {
+    let mut handler = rt.handler();
+    handler
+        .serve(DOCS, &[ordinal])
+        .expect("serve document query");
+    handler
+}
+
+#[test]
+fn a_byte_reply_read_with_a_short_buffer_is_byte_equal_to_what_was_pushed() {
+    let rt = loopback();
+    let mut handler = document_handler(&rt, FETCH);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let mut call = client.fetch(generated::Id::new_unchecked(1));
+    let mut args = [0; 64];
+    let claim = handler.next_claim(&mut args).unwrap().unwrap().id;
+    let bytes: Vec<u8> = (0..BYTE_LIMIT * 2 + 5).map(|n| (n % 251) as u8).collect();
+    for chunk in bytes.chunks(BYTE_LIMIT) {
+        assert_eq!(
+            handler.push_claim(claim, REPLY_STREAM, chunk),
+            Ok(chunk.len())
+        );
+    }
+    handler.end_claim(claim, REPLY_STREAM).unwrap();
+    let mut stream = document_resolved(poll_once(&mut call), "first byte chunk");
+    let mut got = Vec::new();
+    let mut buf = [0; 7];
+    for _ in 0..bytes.len() + 1 {
+        let result = {
+            let mut read = pin!(stream.read(&mut buf));
+            poll_once(&mut read)
+        };
+        match result {
+            Poll::Ready(Ok(0)) => break,
+            Poll::Ready(Ok(n)) => got.extend_from_slice(&buf[..n]),
+            other => panic!("unexpected read: {other:?}"),
+        }
+    }
+    assert_eq!(got, bytes);
+    assert_eq!(
+        poll_once(&mut pin!(stream.read(&mut buf))),
+        Poll::Ready(Ok(0))
+    );
+}
+
+#[test]
+fn a_text_reply_whose_code_points_straddle_every_boundary_arrives_unsplit() {
+    let text = "€🦀🦀".repeat(TEXT_LIMIT / 2 + 3);
+    for step in [1, TEXT_LIMIT] {
+        let rt = loopback();
+        let mut documents = Documents {
+            bytes: text.as_bytes().to_vec(),
+            step,
+            pending_at_end: false,
+        };
+        let mut serve = generated::docs::serve(rt.handler(), &mut documents);
+        let mut client = generated::docs::Client::new(rt.caller());
+        let mut call = client.text(generated::Id::new_unchecked(1));
+        assert!(poll_once(&mut serve).is_pending());
+        let mut remaining = text.len() + 10;
+        let mut stream = loop {
+            assert!(remaining > 0, "the text stream must start");
+            remaining -= 1;
+            assert!(poll_once(&mut serve).is_pending());
+            if let Poll::Ready(result) = poll_once(&mut call) {
+                break result.unwrap();
+            }
+        };
+        // With full reads this fills the port window and holds the next
+        // chunk before the caller starts draining it.
+        for _ in 0..8 {
+            assert!(poll_once(&mut serve).is_pending());
+        }
+        let mut got = String::new();
+        let mut chunks = 0;
+        for _ in 0..text.len() + 10 {
+            assert!(poll_once(&mut serve).is_pending());
+            match poll_once(&mut pin!(stream.next())) {
+                Poll::Ready(Some(Ok(chunk))) => {
+                    assert!(chunk.len() <= TEXT_LIMIT);
+                    got.push_str(chunk);
+                    chunks += 1;
+                }
+                Poll::Ready(None) => break,
+                Poll::Pending => {}
+                Poll::Ready(Some(Err(error))) => panic!("text failed: {error:?}"),
+            }
+        }
+        assert!(
+            chunks >= 6,
+            "the source crosses the four-chunk loopback window"
+        );
+        assert_eq!(got, text, "source read size {step}");
+        let waker = Waker::noop();
+        assert_eq!(
+            stream.poll_next(&mut Context::from_waker(waker)),
+            Poll::Ready(None)
+        );
+    }
+}
+
+#[test]
+fn a_text_source_that_ends_inside_a_code_point_is_refused_with_utf8() {
+    let rt = loopback();
+    let expected = "a".repeat(TEXT_LIMIT + 5);
+    let mut bytes = expected.as_bytes().to_vec();
+    bytes.extend_from_slice(&[0xf0, 0x9f]);
+    let mut documents = Documents {
+        bytes,
+        step: TEXT_LIMIT,
+        pending_at_end: false,
+    };
+    let mut serve = generated::docs::serve(rt.handler(), &mut documents);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let mut call = client.text(generated::Id::new_unchecked(1));
+    for _ in 0..4 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut stream = document_resolved(poll_once(&mut call), "whole text before incomplete tail");
+    let mut got = String::new();
+    let mut refused = false;
+    for _ in 0..12 {
+        assert!(poll_once(&mut serve).is_pending());
+        match poll_once(&mut pin!(stream.next())) {
+            Poll::Ready(Some(Ok(chunk))) => got.push_str(chunk),
+            Poll::Ready(Some(Err(error))) => {
+                assert_eq!(error, ClientError::Call(utf8_failure()));
+                refused = true;
+                break;
+            }
+            other => panic!("expected text or UTF-8 refusal: {other:?}"),
+        }
+    }
+    assert!(refused);
+    assert_eq!(got, expected);
+    assert_eq!(poll_once(&mut pin!(stream.next())), Poll::Ready(None));
+}
+
+#[test]
+fn a_text_source_with_invalid_bytes_is_refused_before_they_are_pushed() {
+    let rt = loopback();
+    let expected = vec![b'b'; TEXT_LIMIT + 7];
+    let mut bytes = expected.clone();
+    bytes.extend_from_slice(b"\xfftail");
+    let mut documents = Documents {
+        bytes,
+        step: TEXT_LIMIT,
+        pending_at_end: false,
+    };
+    let mut serve = generated::docs::serve(rt.handler(), &mut documents);
+    let mut caller = rt.caller();
+    let correlation = generated::docs::send_text(&mut caller, &generated::Id::new_unchecked(1))
+        .unwrap()
+        .0;
+    let mut got = Vec::new();
+    let mut refused = false;
+    let mut buf = [0; TEXT_LIMIT];
+    for _ in 0..20 {
+        assert!(poll_once(&mut serve).is_pending());
+        match caller.pull(correlation, REPLY_STREAM, &mut buf).unwrap() {
+            Pull::Chunk(n) => {
+                assert!(!buf[..n].contains(&0xff));
+                got.extend_from_slice(&buf[..n]);
+            }
+            Pull::Pending => {}
+            Pull::Failed(error) => {
+                assert_eq!(error, utf8_failure());
+                refused = true;
+                break;
+            }
+            other => panic!("expected chunks and refusal: {other:?}"),
+        }
+    }
+    assert!(refused);
+    assert_eq!(got, expected);
+    caller.forget(correlation);
+}
+
+#[test]
+fn an_invalid_text_chunk_pushed_by_hand_is_refused_before_the_application() {
+    let rt = loopback();
+    let mut handler = document_handler(&rt, TEXT);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let mut call = client.text(generated::Id::new_unchecked(1));
+    let mut args = [0; 64];
+    let claim = handler.next_claim(&mut args).unwrap().unwrap().id;
+    assert_eq!(handler.push_claim(claim, REPLY_STREAM, b"a\xffb"), Ok(3));
+    let mut stream = document_resolved(
+        poll_once(&mut call),
+        "the stream with an invalid first chunk",
+    );
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(
+        stream.poll_next(&mut cx),
+        Poll::Ready(Some(Err(ClientError::Call(utf8_failure()))))
+    );
+    assert_eq!(stream.poll_next(&mut cx), Poll::Ready(None));
+    assert_eq!(
+        handler.push_claim(claim, REPLY_STREAM, b"next"),
+        Err(PushError::Failed(utf8_failure()))
+    );
+}
+
+#[test]
+fn a_byte_source_that_is_pending_sends_its_partial_chunk() {
+    let rt = loopback();
+    let expected = vec![42; 10];
+    let mut documents = Documents {
+        bytes: expected.clone(),
+        step: 10,
+        pending_at_end: true,
+    };
+    let mut serve = generated::docs::serve(rt.handler(), &mut documents);
+    let mut caller = rt.caller();
+    let correlation = generated::docs::send_fetch(&mut caller, &generated::Id::new_unchecked(1))
+        .unwrap()
+        .0;
+    for _ in 0..3 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut buf = [0; BYTE_LIMIT];
+    assert_eq!(
+        caller.pull(correlation, REPLY_STREAM, &mut buf),
+        Ok(Pull::Chunk(10))
+    );
+    assert_eq!(&buf[..10], expected);
+    assert_eq!(
+        caller.pull(correlation, REPLY_STREAM, &mut buf),
+        Ok(Pull::Pending)
+    );
+    caller.forget(correlation);
+}
+
+fn document_resolved<T>(polled: Poll<Result<T, ClientError>>, what: &str) -> T {
+    match polled {
+        Poll::Ready(Ok(value)) => value,
+        Poll::Ready(Err(error)) => panic!("{what}: {error:?}"),
+        Poll::Pending => panic!("{what}: still pending"),
+    }
+}
+
+struct InterruptedTextSource(bool);
+
+impl ridl_rt::face::ByteSource for InterruptedTextSource {
+    fn poll_read(
+        &mut self,
+        _cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, Interrupted>> {
+        if self.0 {
+            Poll::Ready(Err(Interrupted))
+        } else {
+            self.0 = true;
+            buf[0] = 0xf0;
+            Poll::Ready(Ok(1))
+        }
+    }
+}
+
+struct InterruptingDocuments;
+
+impl generated::docs::Provider for InterruptingDocuments {
+    type Fetch = InterruptedTextSource;
+    type Text = InterruptedTextSource;
+    fn fetch(&mut self, _id: &generated::Id) -> Self::Fetch {
+        InterruptedTextSource(false)
+    }
+    fn text(&mut self, _id: &generated::Id) -> Self::Text {
+        InterruptedTextSource(false)
+    }
+}
+
+#[test]
+fn a_text_source_interruption_with_an_incomplete_suffix_stays_interrupted() {
+    let rt = loopback();
+    let mut documents = InterruptingDocuments;
+    let mut serve = generated::docs::serve(rt.handler(), &mut documents);
+    let mut caller = rt.caller();
+    let correlation = generated::docs::send_text(&mut caller, &generated::Id::new_unchecked(1))
+        .unwrap()
+        .0;
+    for _ in 0..3 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut buf = [0; TEXT_LIMIT];
+    assert_eq!(
+        caller.pull(correlation, REPLY_STREAM, &mut buf),
+        Ok(Pull::Failed(CallError::Transport(Transport::Interrupted)))
+    );
+    caller.forget(correlation);
+}
+
+struct CountedByteSource(Rc<Cell<usize>>);
+impl ridl_rt::face::ByteSource for CountedByteSource {
+    fn poll_read(
+        &mut self,
+        _cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, Interrupted>> {
+        self.0.set(self.0.get() + 1);
+        buf[0] = b'a';
+        Poll::Ready(Ok(1))
+    }
+}
+
+struct CountedDocuments {
+    fetch: Rc<Cell<usize>>,
+    text: Rc<Cell<usize>>,
+}
+impl generated::docs::Provider for CountedDocuments {
+    type Fetch = CountedByteSource;
+    type Text = CountedByteSource;
+    fn fetch(&mut self, _id: &generated::Id) -> Self::Fetch {
+        CountedByteSource(self.fetch.clone())
+    }
+    fn text(&mut self, _id: &generated::Id) -> Self::Text {
+        CountedByteSource(self.text.clone())
+    }
+}
+
+#[test]
+fn serve_polls_each_byte_source_once_without_starving_the_next_member() {
+    let rt = loopback();
+    let fetch = Rc::new(Cell::new(0));
+    let text = Rc::new(Cell::new(0));
+    let mut documents = CountedDocuments {
+        fetch: fetch.clone(),
+        text: text.clone(),
+    };
+    let mut serve = generated::docs::serve(rt.handler(), &mut documents);
+    let mut fetch_client = generated::docs::Client::new(rt.caller());
+    let mut text_client = generated::docs::Client::new(rt.caller());
+    let _fetch = fetch_client.fetch(generated::Id::new_unchecked(1));
+    let _text = text_client.text(generated::Id::new_unchecked(1));
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!((fetch.get(), text.get()), (0, 0));
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!((fetch.get(), text.get()), (1, 1));
+}

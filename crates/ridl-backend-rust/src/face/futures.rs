@@ -6,7 +6,7 @@
 
 use super::{
     Call, Member, correlation_type, encoding_bounds, future_type, ident, interface_number,
-    phase_type, read_fn, send_fn, stream_type, ty,
+    phase_type, read_fn, send_fn, stream_buffer, stream_type, ty,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -305,7 +305,9 @@ fn stream_state() -> TokenStream {
 fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
-    let element = ty(call.reply_type.unwrap_or(call.arg_type));
+    let buffer = stream_buffer(call, &ident("P"));
+    let raw_fields = (call.stream_form == Some(ridl_ir::codegen::v1::StreamForm::Bytes))
+        .then(|| quote! { offset: 0, end: 0, });
     let arg_path = ty(call.arg_type);
     let future = future_type(call);
     let stream = stream_type(call);
@@ -330,6 +332,14 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
          to it. Polling it again after it resolved panics.",
         member.declared
     );
+    let doc = if call.raw_stream() {
+        format!(
+            "The future of query `{}`, resolving to `{stream}` when its first chunk or end arrives. It yields a send error if admission fails, or Timeout if the bound passes before the stream starts. The first chunk is retained inline. Dropping a waiting future forgets the call and interrupts the stream. A chunk above LIMIT is refused as Corrupt, and the stream yields that error once; text chunks are checked for UTF-8 before the application sees them. Polling a completed future panics.",
+            member.declared
+        )
+    } else {
+        doc
+    };
     let must_use = "the query was sent, or waits for a slot; its stream is taken only when \
                     the future is polled";
     let polled_after = format!("`{future}` polled after completion");
@@ -426,8 +436,7 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
                                 ),
                                 cx.waker(),
                             );
-                            let mut __buf =
-                                <#element as ::ridl_rt::payload::Payload<P::Encoding>>::BUFFER;
+                            let mut __buf = #buffer;
                             let buf: &mut [::core::primitive::u8] =
                                 ::core::convert::AsMut::as_mut(&mut __buf);
                             let state = match port.pull(
@@ -487,6 +496,7 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
                                 correlation,
                                 buffer: __buf,
                                 state,
+                                #raw_fields
                             }));
                         }
                     }
@@ -514,6 +524,9 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
 /// that one predicate itself, as `Serve` carries its claim buffer's; the
 /// `Drop` impl repeats it.
 fn stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
+    if call.raw_stream() {
+        return byte_stream_value(call, encoding);
+    }
     let member = &call.member;
     let element = ty(call.reply_type.unwrap_or(call.arg_type));
     let future = future_type(call);
@@ -736,6 +749,154 @@ fn next_event_future(iface: &Ident, iface_name: &str, encoding: &TokenStream) ->
                     Ok(None) => ::core::task::Poll::Pending,
                     Err(error) => ::core::task::Poll::Ready(Err(error)),
                 }
+            }
+        }
+    }
+}
+
+/// A byte or text reply keeps one whole port chunk inline. Text borrows that
+/// storage; its async wrapper waits for a length before borrowing the bytes.
+fn byte_stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
+    let stream = stream_type(call);
+    let correlation = correlation_type(call);
+    let bounds = stream_bounds();
+    let limit = proc_macro2::Literal::usize_unsuffixed(call.limit);
+    let methods = if call.stream_form == Some(ridl_ir::codegen::v1::StreamForm::Text) {
+        quote! {
+            fn poll_text_len(&mut self, cx: &mut ::core::task::Context<'_>)
+                -> ::core::task::Poll<Option<Result<usize, ::ridl_rt::error::ClientError>>>
+            {
+                match self.poll_chunk(cx) {
+                    ::core::task::Poll::Pending => ::core::task::Poll::Pending,
+                    ::core::task::Poll::Ready(Ok(None)) => ::core::task::Poll::Ready(None),
+                    ::core::task::Poll::Ready(Err(error)) => ::core::task::Poll::Ready(Some(Err(error))),
+                    ::core::task::Poll::Ready(Ok(Some(len))) => {
+                        if ::core::str::from_utf8(&self.buffer[..len]).is_err() {
+                            let error = ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
+                                    type_name: Some("string"), rule: ::ridl_rt::payload::Rule::Utf8,
+                                }),
+                            );
+                            return ::core::task::Poll::Ready(Some(Err(self.refuse(error))));
+                        }
+                        ::core::task::Poll::Ready(Some(Ok(len)))
+                    }
+                }
+            }
+
+            /// Pulls one complete UTF-8 chunk, borrowed until the next call.
+            /// Invalid UTF-8 aborts the stream and yields one error, then None.
+            pub fn poll_next(&mut self, cx: &mut ::core::task::Context<'_>)
+                -> ::core::task::Poll<Option<Result<&str, ::ridl_rt::error::ClientError>>>
+            {
+                self.poll_text_len(cx).map(|item| item.map(|result| result.map(|len|
+                    ::core::str::from_utf8(&self.buffer[..len]).expect("the text chunk was checked")
+                )))
+            }
+
+            /// Awaits the next complete text chunk.
+            pub async fn next(&mut self) -> Option<Result<&str, ::ridl_rt::error::ClientError>> {
+                let item = ::core::future::poll_fn(|cx| self.poll_text_len(cx)).await;
+                item.map(|result| result.map(|len|
+                    ::core::str::from_utf8(&self.buffer[..len]).expect("the text chunk was checked")
+                ))
+            }
+        }
+    } else {
+        quote! {
+            /// Reads bytes, retaining the rest of a chunk for a short buffer.
+            /// An empty buffer returns zero without pulling. With a nonempty
+            /// buffer, zero is the end. A failure is yielded once.
+            pub fn poll_read(&mut self, cx: &mut ::core::task::Context<'_>, buf: &mut [u8])
+                -> ::core::task::Poll<Result<usize, ::ridl_rt::error::ClientError>>
+            {
+                if buf.is_empty() { return ::core::task::Poll::Ready(Ok(0)); }
+                loop {
+                    if self.offset < self.end {
+                        let n = buf.len().min(self.end - self.offset);
+                        buf[..n].copy_from_slice(&self.buffer[self.offset..self.offset + n]);
+                        self.offset += n;
+                        return ::core::task::Poll::Ready(Ok(n));
+                    }
+                    match self.poll_chunk(cx) {
+                        ::core::task::Poll::Pending => return ::core::task::Poll::Pending,
+                        ::core::task::Poll::Ready(Err(error)) => return ::core::task::Poll::Ready(Err(error)),
+                        ::core::task::Poll::Ready(Ok(None)) => return ::core::task::Poll::Ready(Ok(0)),
+                        ::core::task::Poll::Ready(Ok(Some(len))) => { self.offset = 0; self.end = len; }
+                    }
+                }
+            }
+
+            /// Awaits a read into the supplied buffer.
+            pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize, ::ridl_rt::error::ClientError> {
+                ::core::future::poll_fn(|cx| self.poll_read(cx, buf)).await
+            }
+        }
+    };
+    // Only byte reads need positions; retaining the same fields on a text
+    // stream would emit unused fields in crates that deny dead_code.
+    let positions = if call.stream_form == Some(ridl_ir::codegen::v1::StreamForm::Bytes) {
+        quote! { offset: usize, end: usize, }
+    } else {
+        TokenStream::new()
+    };
+    quote! {
+        /// A streamed reply with one inline staging buffer. Dropping it before
+        /// the end forgets the call and interrupts the provider. A locally
+        /// refused stream keeps its call until drop, so the next provider push
+        /// can read the refusal. After end or a provider failure it is forgotten.
+        #[must_use = "dropping a reply stream before its end interrupts it"]
+        pub struct #stream<'a, P: #bounds> {
+            port: &'a mut P,
+            correlation: #correlation,
+            buffer: [u8; #limit],
+            state: StreamState,
+            #positions
+        }
+        impl<P: #bounds> #stream<'_, P> where #encoding {
+            /// The maximum number of bytes in one port chunk.
+            pub const LIMIT: usize = #limit;
+
+            fn poll_chunk(&mut self, cx: &mut ::core::task::Context<'_>)
+                -> ::core::task::Poll<Result<Option<usize>, ::ridl_rt::error::ClientError>>
+            {
+                match self.state {
+                    StreamState::Done | StreamState::Stopped => return ::core::task::Poll::Ready(Ok(None)),
+                    StreamState::Refused(error) => {
+                        self.state = StreamState::Stopped;
+                        return ::core::task::Poll::Ready(Err(::ridl_rt::error::ClientError::Call(error)));
+                    }
+                    StreamState::First(len) => {
+                        self.state = StreamState::Open;
+                        return ::core::task::Poll::Ready(Ok(Some(len)));
+                    }
+                    StreamState::Open => {}
+                }
+                self.port.wake_on(::ridl_rt::port::Interest::Stream(self.correlation.0, ::ridl_rt::port::REPLY_STREAM), cx.waker());
+                match self.port.pull(self.correlation.0, ::ridl_rt::port::REPLY_STREAM, &mut self.buffer) {
+                    Ok(::ridl_rt::port::Pull::Chunk(len)) => ::core::task::Poll::Ready(Ok(Some(len))),
+                    Ok(::ridl_rt::port::Pull::Pending) => ::core::task::Poll::Pending,
+                    Ok(::ridl_rt::port::Pull::End) => { self.finish(); ::core::task::Poll::Ready(Ok(None)) }
+                    Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                        self.finish(); ::core::task::Poll::Ready(Err(::ridl_rt::error::ClientError::Call(error)))
+                    }
+                    Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                        ::core::task::Poll::Ready(Err(self.refuse(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Corrupt))))
+                    }
+                    Err(error) => { self.finish(); ::core::task::Poll::Ready(Err(::ridl_rt::error::ClientError::Read(error))) }
+                }
+            }
+            fn finish(&mut self) { self.state = StreamState::Done; self.port.forget(self.correlation.0); }
+            fn refuse(&mut self, error: ::ridl_rt::error::CallError) -> ::ridl_rt::error::ClientError {
+                let _ = self.port.abort(self.correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+                self.state = StreamState::Stopped;
+                ::ridl_rt::error::ClientError::Call(error)
+            }
+            #methods
+        }
+        impl<P: #bounds> ::core::ops::Drop for #stream<'_, P> {
+            fn drop(&mut self) {
+                if self.state != StreamState::Done { self.port.forget(self.correlation.0); }
             }
         }
     }

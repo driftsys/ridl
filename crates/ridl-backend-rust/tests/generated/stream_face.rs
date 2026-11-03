@@ -82,6 +82,72 @@ impl ::core::default::Default for Reading {
         }
     }
 }
+/// A document identifier.
+///
+/// # Rules
+///
+/// - range 0 ..= 100
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct Id(::core::primitive::i64);
+impl Id {
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
+    pub fn new(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    pub(crate) fn check(
+        value: &::core::primitive::i64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
+        if value < 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("Id"),
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 100 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("Id"),
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(())
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: ::core::primitive::i64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> ::core::primitive::i64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<::core::primitive::i64> for Id {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(
+        value: ::core::primitive::i64,
+    ) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Id> for ::core::primitive::i64 {
+    fn from(value: Id) -> Self {
+        value.0
+    }
+}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for Id {
+    fn default() -> Self {
+        Id::new_unchecked(0)
+    }
+}
 /// A `Level` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
@@ -366,6 +432,122 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Reading {
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_Reading(__view.buf, __view.table)
+    }
+}
+/// A `Id` value in FlatBuffers bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct IdFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for IdFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> IdFbView<'a> {
+    /// The value the bytes hold. `Id` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Id {
+        __ridl_fb_decode_Id(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Id(
+    value: &Id,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
+                },
+            },
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Id(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Id::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Id(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Id {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Id::new_unchecked(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                ),
+            )
+        }
+        _ => Id::new_unchecked(0i64),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Id {
+    /// The largest FlatBuffers buffer any legal `Id` encodes to: 43 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
+    type View<'a> = IdFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, IdFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Id(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: IdFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<IdFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Id(buf, table)?;
+        ::core::result::Result::Ok(IdFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Id(__view.buf, __view.table)
     }
 }
 #[allow(deprecated, non_snake_case)]
@@ -663,6 +845,129 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Reading {
         __ridl_pb_decode_Reading(::ridl_rt::payload::View::bytes(r.view()))
     }
 }
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Id(value: &Id) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Id(
+    value: &Id,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_verify_Id(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::Varint(__raw) => {
+                    let __v = ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_u32(__raw)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                    );
+                    Id::check(&__v).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_decode_Id(buf: &[::core::primitive::u8]) -> Id {
+    let mut __f0 = Id::new_unchecked(0i64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                __f0 = Id::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Id {
+    /// The largest proto3 message any legal `Id` encodes to: 6 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 6usize;
+    type Buffer = [::core::primitive::u8; 6usize];
+    const BUFFER: Self::Buffer = [0u8; 6usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Id(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Id(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Id(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    #[allow(clippy::collapsible_if)]
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Id(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
 /// Descriptor for interface `Log`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 ///
 /// Its size table in FlatBuffers is `<Log as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
@@ -673,11 +978,11 @@ impl ::ridl_rt::contract::Interface for Log {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            42, 252, 70, 39, 222, 230, 137, 155, 108, 153, 163, 78, 148, 44, 47, 109,
-            201, 40, 56, 193, 214, 92, 111, 196, 71, 12, 182, 209, 95, 130, 205, 100,
+            177, 28, 89, 194, 184, 229, 132, 208, 53, 133, 14, 49, 3, 181, 244, 51, 177,
+            95, 101, 148, 203, 243, 74, 92, 102, 172, 209, 38, 44, 46, 147, 64,
         ]),
     };
-    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
     const PROVISIONAL: ::core::primitive::bool = true;
     const NAME: &'static ::core::primitive::str = "Log";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
@@ -848,11 +1153,11 @@ impl ::ridl_rt::contract::Interface for Plain {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            42, 252, 70, 39, 222, 230, 137, 155, 108, 153, 163, 78, 148, 44, 47, 109,
-            201, 40, 56, 193, 214, 92, 111, 196, 71, 12, 182, 209, 95, 130, 205, 100,
+            177, 28, 89, 194, 184, 229, 132, 208, 53, 133, 14, 49, 3, 181, 244, 51, 177,
+            95, 101, 148, 203, 243, 74, 92, 102, 172, 209, 38, 44, 46, 147, 64,
         ]),
     };
-    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
     const PROVISIONAL: ::core::primitive::bool = true;
     const NAME: &'static ::core::primitive::str = "Plain";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
@@ -990,11 +1295,11 @@ impl ::ridl_rt::contract::Interface for Twin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            42, 252, 70, 39, 222, 230, 137, 155, 108, 153, 163, 78, 148, 44, 47, 109,
-            201, 40, 56, 193, 214, 92, 111, 196, 71, 12, 182, 209, 95, 130, 205, 100,
+            177, 28, 89, 194, 184, 229, 132, 208, 53, 133, 14, 49, 3, 181, 244, 51, 177,
+            95, 101, 148, 203, 243, 74, 92, 102, 172, 209, 38, 44, 46, 147, 64,
         ]),
     };
-    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
     const PROVISIONAL: ::core::primitive::bool = true;
     const NAME: &'static ::core::primitive::str = "Twin";
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
@@ -1156,6 +1461,186 @@ impl ::ridl_rt::contract::Interaction for TwinRight {
 }
 impl ::ridl_rt::contract::Query for TwinRight {
     type Args = Level;
+    type Reply = ();
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(_args: &Self::Args, _reply: &()) -> ::core::result::Result<(), ()> {
+        Ok(())
+    }
+}
+/// Descriptor for interface `Docs`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<Docs as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in proto3 is `<Docs as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+pub struct Docs;
+impl ::ridl_rt::contract::Interface for Docs {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "face.stream",
+        hash: ::ridl_rt::contract::CatalogHash([
+            177, 28, 89, 194, 184, 229, 132, 208, 53, 133, 14, 49, 3, 181, 244, 51, 177,
+            95, 101, 148, 203, 243, 74, 92, 102, 172, 209, 38, 44, 46, 147, 64,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Docs";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "fetch",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Id",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "<bytes>",
+                },
+            ],
+            streams: &[
+                ::ridl_rt::contract::StreamInfo {
+                    no: ::ridl_rt::contract::StreamNo(0),
+                    form: ::ridl_rt::contract::StreamForm::Bytes,
+                    element: "",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(2),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "text",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Id",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "<string>",
+                },
+            ],
+            streams: &[
+                ::ridl_rt::contract::StreamInfo {
+                    no: ::ridl_rt::contract::StreamNo(0),
+                    form: ::ridl_rt::contract::StreamForm::Text,
+                    element: "",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Docs {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Id as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE
+            as ::core::primitive::u64,
+        <Id as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE
+            as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <Id as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Id as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3> for Docs {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Id as ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>>::MAX_SIZE
+            as ::core::primitive::u64,
+        <Id as ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>>::MAX_SIZE
+            as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <Id as ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>>::MAX_SIZE,
+            <Id as ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::Proto3,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+}
+#[doc(hidden)]
+pub struct DocsFetch;
+impl ::ridl_rt::contract::Interaction for DocsFetch {
+    type Iface = Docs;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Docs as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Query for DocsFetch {
+    type Args = Id;
+    type Reply = ();
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(_args: &Self::Args, _reply: &()) -> ::core::result::Result<(), ()> {
+        Ok(())
+    }
+}
+#[doc(hidden)]
+pub struct DocsText;
+impl ::ridl_rt::contract::Interaction for DocsText {
+    type Iface = Docs;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Docs as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
+}
+impl ::ridl_rt::contract::Query for DocsText {
+    type Args = Id;
     type Reply = ();
     fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
@@ -2158,6 +2643,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         __started: bool,
+        __port: ::core::marker::PhantomData<H>,
         history: ::core::option::Option<
             StreamSlot<P::History, ElementBuffer<H, super::Reading>>,
         >,
@@ -2347,6 +2833,7 @@ pub mod log {
             state,
             streams: Streams {
                 __started: false,
+                __port: ::core::marker::PhantomData,
                 history: None,
             },
         }
@@ -4673,6 +5160,7 @@ pub mod twin {
         super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         __started: bool,
+        __port: ::core::marker::PhantomData<H>,
         left: ::core::option::Option<
             StreamSlot<P::Left, ElementBuffer<H, super::Reading>>,
         >,
@@ -4865,6 +5353,7 @@ pub mod twin {
             state,
             streams: Streams {
                 __started: false,
+                __port: ::core::marker::PhantomData,
                 left: None,
                 right: None,
             },
@@ -5019,6 +5508,1552 @@ pub mod twin {
         }
     }
     ///The traits a consumer of interface `Twin`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
+    }
+}
+/// Documents read as bytes or text.
+///
+///The generated interaction face of interface `Docs`.
+#[allow(clippy::module_inception)]
+pub mod docs {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct FetchCorrelation(pub ::ridl_rt::port::Correlation);
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct TextCorrelation(pub ::ridl_rt::port::Correlation);
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Docs as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Docs` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `Docs`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: P,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > Client<P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        /// Fetches the document bytes.
+        ///
+        /// Sends query `fetch` and returns its future, which resolves to the reply stream, `FetchStream`, once the first element or the end of the stream arrived, and to `Transport::Timeout` when the bound passes before either. The call is sent when this method runs, not when the future is first polled. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+        ///
+        /// The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `id`
+        ///   - range 0 ..= 100
+        pub fn fetch(&mut self, id: super::Id) -> FetchCall<'_, P> {
+            let __arg = id;
+            let deadline = <super::DocsFetch as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_fetch(&mut self.port, &__arg) {
+                Ok(correlation) => FetchPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => FetchPhase::Unsent(__arg),
+                Err(error) => FetchPhase::Failed(error),
+            };
+            FetchCall {
+                port: Some(&mut self.port),
+                phase,
+                deadline,
+            }
+        }
+        /// Fetches the document text.
+        ///
+        /// Sends query `text` and returns its future, which resolves to the reply stream, `TextStream`, once the first element or the end of the stream arrived, and to `Transport::Timeout` when the bound passes before either. The call is sent when this method runs, not when the future is first polled. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+        ///
+        /// The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `id`
+        ///   - range 0 ..= 100
+        pub fn text(&mut self, id: super::Id) -> TextCall<'_, P> {
+            let __arg = id;
+            let deadline = <super::DocsText as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_text(&mut self.port, &__arg) {
+                Ok(correlation) => TextPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => TextPhase::Unsent(__arg),
+                Err(error) => TextPhase::Failed(error),
+            };
+            TextCall {
+                port: Some(&mut self.port),
+                phase,
+                deadline,
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Port = P;
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Docs as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Docs` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum StreamState {
+        First(usize),
+        Open,
+        Refused(::ridl_rt::error::CallError),
+        Stopped,
+        Done,
+    }
+    ///The future of query `fetch`, resolving to `FetchStream` when its first chunk or end arrives. It yields a send error if admission fails, or Timeout if the bound passes before the stream starts. The first chunk is retained inline. Dropping a waiting future forgets the call and interrupts the stream. A chunk above LIMIT is refused as Corrupt, and the stream yields that error once; text chunks are checked for UTF-8 before the application sees them. Polling a completed future panics.
+    #[must_use = "the query was sent, or waits for a slot; its stream is taken only when the future is polled"]
+    pub struct FetchCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: ::core::option::Option<&'a mut P>,
+        phase: FetchPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum FetchPhase {
+        Unsent(super::Id),
+        Waiting(FetchCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > FetchCall<'_, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            match (&self.port, self.deadline) {
+                (Some(port), Some(deadline)) => port.now() > deadline,
+                _ => false,
+            }
+        }
+        fn port(&mut self) -> &mut P {
+            match self.port.as_deref_mut() {
+                Some(port) => port,
+                None => panic!("`FetchCall` polled after completion"),
+            }
+        }
+    }
+    impl<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for FetchCall<'a, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            FetchStream<'a, P>,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, FetchPhase::Done) {
+                    FetchPhase::Done => panic!("`FetchCall` polled after completion"),
+                    FetchPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    FetchPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        let port = this.port();
+                        port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_fetch(port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = FetchPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = FetchPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    FetchPhase::Waiting(correlation) => {
+                        let expired = this.expired();
+                        let port = this.port();
+                        port.wake_on(
+                            ::ridl_rt::port::Interest::Stream(
+                                correlation.0,
+                                ::ridl_rt::port::REPLY_STREAM,
+                            ),
+                            cx.waker(),
+                        );
+                        let mut __buf = [0u8; 16128];
+                        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                            &mut __buf,
+                        );
+                        let state = match port
+                            .pull(correlation.0, ::ridl_rt::port::REPLY_STREAM, buf)
+                        {
+                            Ok(::ridl_rt::port::Pull::Chunk(len)) => {
+                                StreamState::First(len)
+                            }
+                            Ok(::ridl_rt::port::Pull::Pending) => {
+                                if !expired {
+                                    this.phase = FetchPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(
+                                        ::ridl_rt::error::ClientError::Call(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Timeout,
+                                            ),
+                                        ),
+                                    ),
+                                );
+                            }
+                            Ok(::ridl_rt::port::Pull::End) => {
+                                port.forget(correlation.0);
+                                StreamState::Done
+                            }
+                            Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Call(error)),
+                                );
+                            }
+                            Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                                let error = ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                );
+                                let _ = port
+                                    .abort(correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+                                StreamState::Refused(error)
+                            }
+                            Err(error) => {
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Read(error)),
+                                );
+                            }
+                        };
+                        let port = match this.port.take() {
+                            Some(port) => port,
+                            None => panic!("`FetchCall` polled after completion"),
+                        };
+                        return ::core::task::Poll::Ready(
+                            Ok(FetchStream {
+                                port,
+                                correlation,
+                                buffer: __buf,
+                                state,
+                                offset: 0,
+                                end: 0,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for FetchCall<'_, P> {
+        fn drop(&mut self) {
+            if let (Some(port), FetchPhase::Waiting(correlation)) = (
+                &mut self.port,
+                &self.phase,
+            ) {
+                port.forget(correlation.0);
+            }
+        }
+    }
+    /// A streamed reply with one inline staging buffer. Dropping it before
+    /// the end forgets the call and interrupts the provider. A locally
+    /// refused stream keeps its call until drop, so the next provider push
+    /// can read the refusal. After end or a provider failure it is forgotten.
+    #[must_use = "dropping a reply stream before its end interrupts it"]
+    pub struct FetchStream<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        correlation: FetchCorrelation,
+        buffer: [u8; 16128],
+        state: StreamState,
+        offset: usize,
+        end: usize,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > FetchStream<'_, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        /// The maximum number of bytes in one port chunk.
+        pub const LIMIT: usize = 16128;
+        fn poll_chunk(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Result<Option<usize>, ::ridl_rt::error::ClientError>> {
+            match self.state {
+                StreamState::Done | StreamState::Stopped => {
+                    return ::core::task::Poll::Ready(Ok(None));
+                }
+                StreamState::Refused(error) => {
+                    self.state = StreamState::Stopped;
+                    return ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ClientError::Call(error)),
+                    );
+                }
+                StreamState::First(len) => {
+                    self.state = StreamState::Open;
+                    return ::core::task::Poll::Ready(Ok(Some(len)));
+                }
+                StreamState::Open => {}
+            }
+            self.port
+                .wake_on(
+                    ::ridl_rt::port::Interest::Stream(
+                        self.correlation.0,
+                        ::ridl_rt::port::REPLY_STREAM,
+                    ),
+                    cx.waker(),
+                );
+            match self
+                .port
+                .pull(
+                    self.correlation.0,
+                    ::ridl_rt::port::REPLY_STREAM,
+                    &mut self.buffer,
+                )
+            {
+                Ok(::ridl_rt::port::Pull::Chunk(len)) => {
+                    ::core::task::Poll::Ready(Ok(Some(len)))
+                }
+                Ok(::ridl_rt::port::Pull::Pending) => ::core::task::Poll::Pending,
+                Ok(::ridl_rt::port::Pull::End) => {
+                    self.finish();
+                    ::core::task::Poll::Ready(Ok(None))
+                }
+                Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                    self.finish();
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ClientError::Call(error)),
+                    )
+                }
+                Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                    ::core::task::Poll::Ready(
+                        Err(
+                            self
+                                .refuse(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                ),
+                        ),
+                    )
+                }
+                Err(error) => {
+                    self.finish();
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ClientError::Read(error)),
+                    )
+                }
+            }
+        }
+        fn finish(&mut self) {
+            self.state = StreamState::Done;
+            self.port.forget(self.correlation.0);
+        }
+        fn refuse(
+            &mut self,
+            error: ::ridl_rt::error::CallError,
+        ) -> ::ridl_rt::error::ClientError {
+            let _ = self
+                .port
+                .abort(self.correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+            self.state = StreamState::Stopped;
+            ::ridl_rt::error::ClientError::Call(error)
+        }
+        /// Reads bytes, retaining the rest of a chunk for a short buffer.
+        /// An empty buffer returns zero without pulling. With a nonempty
+        /// buffer, zero is the end. A failure is yielded once.
+        pub fn poll_read(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+            buf: &mut [u8],
+        ) -> ::core::task::Poll<Result<usize, ::ridl_rt::error::ClientError>> {
+            if buf.is_empty() {
+                return ::core::task::Poll::Ready(Ok(0));
+            }
+            loop {
+                if self.offset < self.end {
+                    let n = buf.len().min(self.end - self.offset);
+                    buf[..n].copy_from_slice(&self.buffer[self.offset..self.offset + n]);
+                    self.offset += n;
+                    return ::core::task::Poll::Ready(Ok(n));
+                }
+                match self.poll_chunk(cx) {
+                    ::core::task::Poll::Pending => return ::core::task::Poll::Pending,
+                    ::core::task::Poll::Ready(Err(error)) => {
+                        return ::core::task::Poll::Ready(Err(error));
+                    }
+                    ::core::task::Poll::Ready(Ok(None)) => {
+                        return ::core::task::Poll::Ready(Ok(0));
+                    }
+                    ::core::task::Poll::Ready(Ok(Some(len))) => {
+                        self.offset = 0;
+                        self.end = len;
+                    }
+                }
+            }
+        }
+        /// Awaits a read into the supplied buffer.
+        pub async fn read(
+            &mut self,
+            buf: &mut [u8],
+        ) -> Result<usize, ::ridl_rt::error::ClientError> {
+            ::core::future::poll_fn(|cx| self.poll_read(cx, buf)).await
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for FetchStream<'_, P> {
+        fn drop(&mut self) {
+            if self.state != StreamState::Done {
+                self.port.forget(self.correlation.0);
+            }
+        }
+    }
+    ///The future of query `text`, resolving to `TextStream` when its first chunk or end arrives. It yields a send error if admission fails, or Timeout if the bound passes before the stream starts. The first chunk is retained inline. Dropping a waiting future forgets the call and interrupts the stream. A chunk above LIMIT is refused as Corrupt, and the stream yields that error once; text chunks are checked for UTF-8 before the application sees them. Polling a completed future panics.
+    #[must_use = "the query was sent, or waits for a slot; its stream is taken only when the future is polled"]
+    pub struct TextCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: ::core::option::Option<&'a mut P>,
+        phase: TextPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum TextPhase {
+        Unsent(super::Id),
+        Waiting(TextCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > TextCall<'_, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            match (&self.port, self.deadline) {
+                (Some(port), Some(deadline)) => port.now() > deadline,
+                _ => false,
+            }
+        }
+        fn port(&mut self) -> &mut P {
+            match self.port.as_deref_mut() {
+                Some(port) => port,
+                None => panic!("`TextCall` polled after completion"),
+            }
+        }
+    }
+    impl<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for TextCall<'a, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            TextStream<'a, P>,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, TextPhase::Done) {
+                    TextPhase::Done => panic!("`TextCall` polled after completion"),
+                    TextPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    TextPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        let port = this.port();
+                        port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_text(port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = TextPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = TextPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    TextPhase::Waiting(correlation) => {
+                        let expired = this.expired();
+                        let port = this.port();
+                        port.wake_on(
+                            ::ridl_rt::port::Interest::Stream(
+                                correlation.0,
+                                ::ridl_rt::port::REPLY_STREAM,
+                            ),
+                            cx.waker(),
+                        );
+                        let mut __buf = [0u8; 16128];
+                        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                            &mut __buf,
+                        );
+                        let state = match port
+                            .pull(correlation.0, ::ridl_rt::port::REPLY_STREAM, buf)
+                        {
+                            Ok(::ridl_rt::port::Pull::Chunk(len)) => {
+                                StreamState::First(len)
+                            }
+                            Ok(::ridl_rt::port::Pull::Pending) => {
+                                if !expired {
+                                    this.phase = TextPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(
+                                        ::ridl_rt::error::ClientError::Call(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Timeout,
+                                            ),
+                                        ),
+                                    ),
+                                );
+                            }
+                            Ok(::ridl_rt::port::Pull::End) => {
+                                port.forget(correlation.0);
+                                StreamState::Done
+                            }
+                            Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Call(error)),
+                                );
+                            }
+                            Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                                let error = ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                );
+                                let _ = port
+                                    .abort(correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+                                StreamState::Refused(error)
+                            }
+                            Err(error) => {
+                                port.forget(correlation.0);
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Read(error)),
+                                );
+                            }
+                        };
+                        let port = match this.port.take() {
+                            Some(port) => port,
+                            None => panic!("`TextCall` polled after completion"),
+                        };
+                        return ::core::task::Poll::Ready(
+                            Ok(TextStream {
+                                port,
+                                correlation,
+                                buffer: __buf,
+                                state,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for TextCall<'_, P> {
+        fn drop(&mut self) {
+            if let (Some(port), TextPhase::Waiting(correlation)) = (
+                &mut self.port,
+                &self.phase,
+            ) {
+                port.forget(correlation.0);
+            }
+        }
+    }
+    /// A streamed reply with one inline staging buffer. Dropping it before
+    /// the end forgets the call and interrupts the provider. A locally
+    /// refused stream keeps its call until drop, so the next provider push
+    /// can read the refusal. After end or a provider failure it is forgotten.
+    #[must_use = "dropping a reply stream before its end interrupts it"]
+    pub struct TextStream<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        correlation: TextCorrelation,
+        buffer: [u8; 16128],
+        state: StreamState,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > TextStream<'_, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        /// The maximum number of bytes in one port chunk.
+        pub const LIMIT: usize = 16128;
+        fn poll_chunk(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Result<Option<usize>, ::ridl_rt::error::ClientError>> {
+            match self.state {
+                StreamState::Done | StreamState::Stopped => {
+                    return ::core::task::Poll::Ready(Ok(None));
+                }
+                StreamState::Refused(error) => {
+                    self.state = StreamState::Stopped;
+                    return ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ClientError::Call(error)),
+                    );
+                }
+                StreamState::First(len) => {
+                    self.state = StreamState::Open;
+                    return ::core::task::Poll::Ready(Ok(Some(len)));
+                }
+                StreamState::Open => {}
+            }
+            self.port
+                .wake_on(
+                    ::ridl_rt::port::Interest::Stream(
+                        self.correlation.0,
+                        ::ridl_rt::port::REPLY_STREAM,
+                    ),
+                    cx.waker(),
+                );
+            match self
+                .port
+                .pull(
+                    self.correlation.0,
+                    ::ridl_rt::port::REPLY_STREAM,
+                    &mut self.buffer,
+                )
+            {
+                Ok(::ridl_rt::port::Pull::Chunk(len)) => {
+                    ::core::task::Poll::Ready(Ok(Some(len)))
+                }
+                Ok(::ridl_rt::port::Pull::Pending) => ::core::task::Poll::Pending,
+                Ok(::ridl_rt::port::Pull::End) => {
+                    self.finish();
+                    ::core::task::Poll::Ready(Ok(None))
+                }
+                Ok(::ridl_rt::port::Pull::Failed(error)) => {
+                    self.finish();
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ClientError::Call(error)),
+                    )
+                }
+                Err(::ridl_rt::port::ReadError::Short { .. }) => {
+                    ::core::task::Poll::Ready(
+                        Err(
+                            self
+                                .refuse(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                ),
+                        ),
+                    )
+                }
+                Err(error) => {
+                    self.finish();
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ClientError::Read(error)),
+                    )
+                }
+            }
+        }
+        fn finish(&mut self) {
+            self.state = StreamState::Done;
+            self.port.forget(self.correlation.0);
+        }
+        fn refuse(
+            &mut self,
+            error: ::ridl_rt::error::CallError,
+        ) -> ::ridl_rt::error::ClientError {
+            let _ = self
+                .port
+                .abort(self.correlation.0, ::ridl_rt::port::REPLY_STREAM, error);
+            self.state = StreamState::Stopped;
+            ::ridl_rt::error::ClientError::Call(error)
+        }
+        fn poll_text_len(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Option<Result<usize, ::ridl_rt::error::ClientError>>> {
+            match self.poll_chunk(cx) {
+                ::core::task::Poll::Pending => ::core::task::Poll::Pending,
+                ::core::task::Poll::Ready(Ok(None)) => ::core::task::Poll::Ready(None),
+                ::core::task::Poll::Ready(Err(error)) => {
+                    ::core::task::Poll::Ready(Some(Err(error)))
+                }
+                ::core::task::Poll::Ready(Ok(Some(len))) => {
+                    if ::core::str::from_utf8(&self.buffer[..len]).is_err() {
+                        let error = ::ridl_rt::error::CallError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
+                                type_name: Some("string"),
+                                rule: ::ridl_rt::payload::Rule::Utf8,
+                            }),
+                        );
+                        return ::core::task::Poll::Ready(Some(Err(self.refuse(error))));
+                    }
+                    ::core::task::Poll::Ready(Some(Ok(len)))
+                }
+            }
+        }
+        /// Pulls one complete UTF-8 chunk, borrowed until the next call.
+        /// Invalid UTF-8 aborts the stream and yields one error, then None.
+        pub fn poll_next(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Option<Result<&str, ::ridl_rt::error::ClientError>>> {
+            self.poll_text_len(cx)
+                .map(|item| {
+                    item
+                        .map(|result| {
+                            result
+                                .map(|len| {
+                                    ::core::str::from_utf8(&self.buffer[..len])
+                                        .expect("the text chunk was checked")
+                                })
+                        })
+                })
+        }
+        /// Awaits the next complete text chunk.
+        pub async fn next(
+            &mut self,
+        ) -> Option<Result<&str, ::ridl_rt::error::ClientError>> {
+            let item = ::core::future::poll_fn(|cx| self.poll_text_len(cx)).await;
+            item.map(|result| {
+                result
+                    .map(|len| {
+                        ::core::str::from_utf8(&self.buffer[..len])
+                            .expect("the text chunk was checked")
+                    })
+            })
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::StreamCaller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for TextStream<'_, P> {
+        fn drop(&mut self) {
+            if self.state != StreamState::Done {
+                self.port.forget(self.correlation.0);
+            }
+        }
+    }
+    pub(crate) fn send_fetch<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        id: &super::Id,
+    ) -> ::core::result::Result<FetchCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = id;
+        <super::DocsFetch as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::Id as ::ridl_rt::payload::Payload<P::Encoding>>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::Id,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `Id` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `Id` failed"),
+        };
+        __port
+            .query(
+                <super::Docs as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(FetchCorrelation)
+    }
+    pub(crate) fn send_text<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        id: &super::Id,
+    ) -> ::core::result::Result<TextCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = id;
+        <super::DocsText as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::Id as ::ridl_rt::payload::Payload<P::Encoding>>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::Id,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `Id` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `Id` failed"),
+        };
+        __port
+            .query(
+                <super::Docs as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(2u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(TextCorrelation)
+    }
+    /// What an application implements to serve interface `Docs`'s calls.
+    ///
+    /// An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.
+    pub trait Provider {
+        ///The byte source of query `fetch`'s reply stream.
+        type Fetch: ::ridl_rt::face::ByteSource;
+        /// Fetches the document bytes.
+        ///
+        ///Returns the byte source `serve` drives. It fills chunks up to the stream's LIMIT and sends a partial chunk when the source is pending or ends. Text is checked for UTF-8 and chunk boundaries preserve complete code points. A source interruption stops the stream with Transport::Interrupted.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `id`
+        ///   - range 0 ..= 100
+        fn fetch(&mut self, id: &super::Id) -> Self::Fetch;
+        ///The byte source of query `text`'s reply stream.
+        type Text: ::ridl_rt::face::ByteSource;
+        /// Fetches the document text.
+        ///
+        ///Returns the byte source `serve` drives. It fills chunks up to the stream's LIMIT and sends a partial chunk when the source is pending or ends. Text is checked for UTF-8 and chunk boundaries preserve complete code points. A source interruption stops the stream with Transport::Interrupted.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `id`
+        ///   - range 0 ..= 100
+        fn text(&mut self, id: &super::Id) -> Self::Text;
+    }
+    pub(crate) fn dispatch<H, P>(
+        h: &mut H,
+        p: &mut P,
+        buf: &mut [u8],
+        budget: &mut usize,
+        streams: &mut Streams<H, P>,
+    ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
+        P: Provider,
+        super::Docs: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        if buf.len()
+            < <super::Docs as ::ridl_rt::contract::Sizes<H::Encoding>>::MAX_BUFFER_SIZE
+        {
+            return Ok(0);
+        }
+        let mut settled = 0usize;
+        while *budget > 0 {
+            let settlement = match h.next_claim(buf) {
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_err() {
+                        return Ok(settled);
+                    }
+                    settlement
+                }
+                Err(error) => return Err(error),
+                Ok(Some(claim)) => {
+                    if claim.iface
+                        != <super::Docs as ::ridl_rt::contract::Interface>::NUMBER
+                    {
+                        h.settle(
+                            claim.id,
+                            Err(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::UnknownInteraction,
+                                ),
+                            ),
+                        )
+                    } else {
+                        match claim.ord {
+                            ::ridl_rt::contract::Ordinal(1u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Id,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::DocsFetch as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                if streams.fetch.is_some() {
+                                                    h.settle(
+                                                        claim.id,
+                                                        Err(
+                                                            ::ridl_rt::error::CallError::Transport(
+                                                                ::ridl_rt::error::Transport::Busy,
+                                                            ),
+                                                        ),
+                                                    )
+                                                } else {
+                                                    streams.fetch = Some(ByteStreamSlot {
+                                                        claim: claim.id,
+                                                        source: p.fetch(&__arg),
+                                                        buffer: [0u8; 16128],
+                                                        held: None,
+                                                        len: 0,
+                                                        terminal: None,
+                                                    });
+                                                    streams.__started = true;
+                                                    Ok(())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            ::ridl_rt::contract::Ordinal(2u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Id,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::DocsText as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                if streams.text.is_some() {
+                                                    h.settle(
+                                                        claim.id,
+                                                        Err(
+                                                            ::ridl_rt::error::CallError::Transport(
+                                                                ::ridl_rt::error::Transport::Busy,
+                                                            ),
+                                                        ),
+                                                    )
+                                                } else {
+                                                    streams.text = Some(ByteStreamSlot {
+                                                        claim: claim.id,
+                                                        source: p.text(&__arg),
+                                                        buffer: [0u8; 16128],
+                                                        held: None,
+                                                        len: 0,
+                                                        terminal: None,
+                                                    });
+                                                    streams.__started = true;
+                                                    Ok(())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                h.settle(
+                                    claim.id,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::UnknownInteraction,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            };
+            *budget -= 1;
+            if settlement.is_ok() {
+                settled += 1;
+            }
+        }
+        Ok(settled)
+    }
+    const SERVE_BUDGET: usize = 32;
+    struct ByteStreamSlot<S, const N: usize> {
+        claim: ::ridl_rt::port::ClaimId,
+        source: S,
+        buffer: [u8; N],
+        len: usize,
+        held: Option<usize>,
+        terminal: Option<Result<(), ::ridl_rt::error::CallError>>,
+    }
+    fn drive_bytes<H, S, const N: usize, const TEXT: bool>(
+        h: &mut H,
+        slot: &mut Option<ByteStreamSlot<S, N>>,
+        cx: &mut ::core::task::Context<'_>,
+        budget: &mut usize,
+    ) -> bool
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamHandler
+            + ::ridl_rt::port::Wakeable,
+        S: ::ridl_rt::face::ByteSource,
+    {
+        let Some(stream) = slot.as_mut() else {
+            return false;
+        };
+        let claim = stream.claim;
+        let interest = ::ridl_rt::port::Interest::ClaimStream(
+            claim,
+            ::ridl_rt::port::REPLY_STREAM,
+        );
+        let mut pending = false;
+        let mut polled = false;
+        loop {
+            if let Some(end) = stream.held {
+                h.wake_on(interest, cx.waker());
+                match h
+                    .push_claim(
+                        claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        &stream.buffer[..end],
+                    )
+                {
+                    Ok(taken) if taken == end => {
+                        stream.buffer.copy_within(end..stream.len, 0);
+                        stream.len -= end;
+                        stream.held = None;
+                    }
+                    Ok(_) => return false,
+                    Err(error) => {
+                        stop_stream(h, claim, error);
+                        *slot = None;
+                        return false;
+                    }
+                }
+                if pending {
+                    return false;
+                }
+            }
+            if let (0, Some(terminal)) = (stream.len, stream.terminal) {
+                match terminal {
+                    Ok(()) => {
+                        let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+                    }
+                    Err(error) => {
+                        let _ = h
+                            .abort_claim(claim, ::ridl_rt::port::REPLY_STREAM, error);
+                    }
+                }
+                *slot = None;
+                return false;
+            }
+            if stream.len == N || pending || stream.terminal.is_some() {
+                let mut end = stream.len;
+                let text_error = if TEXT {
+                    ::core::str::from_utf8(&stream.buffer[..stream.len]).err()
+                } else {
+                    None
+                };
+                if let Some(error) = text_error {
+                    end = error.valid_up_to();
+                    if error.error_len().is_some() || stream.terminal.is_some() {
+                        stream.terminal = Some(
+                            Err(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
+                                        type_name: Some("string"),
+                                        rule: ::ridl_rt::payload::Rule::Utf8,
+                                    }),
+                                ),
+                            ),
+                        );
+                        stream.len = end;
+                    }
+                }
+                if end != 0 {
+                    stream.held = Some(end);
+                    continue;
+                }
+                if stream.terminal.is_some() {
+                    continue;
+                }
+                if pending {
+                    return false;
+                }
+            }
+            if polled || *budget == 0 {
+                return true;
+            }
+            *budget -= 1;
+            polled = true;
+            match stream.source.poll_read(cx, &mut stream.buffer[stream.len..]) {
+                ::core::task::Poll::Pending => pending = true,
+                ::core::task::Poll::Ready(Ok(0)) => stream.terminal = Some(Ok(())),
+                ::core::task::Poll::Ready(Ok(n)) => stream.len += n,
+                ::core::task::Poll::Ready(Err(::ridl_rt::face::Interrupted)) => {
+                    let _ = h
+                        .abort_claim(
+                            claim,
+                            ::ridl_rt::port::REPLY_STREAM,
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        );
+                    *slot = None;
+                    return false;
+                }
+            }
+        }
+    }
+    pub(crate) struct Streams<H, P>
+    where
+        H: ::ridl_rt::port::Encoded,
+        P: Provider,
+    {
+        __started: bool,
+        __port: ::core::marker::PhantomData<H>,
+        fetch: Option<ByteStreamSlot<P::Fetch, 16128>>,
+        text: Option<ByteStreamSlot<P::Text, 16128>>,
+    }
+    fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
+        h: &mut H,
+        claim: ::ridl_rt::port::ClaimId,
+        error: ::ridl_rt::port::PushError,
+    ) {
+        match error {
+            ::ridl_rt::port::PushError::Failed(_) => {
+                let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+            }
+            ::ridl_rt::port::PushError::TooLarge { .. } => {
+                let _ = h
+                    .abort_claim(
+                        claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+            }
+            _ => {}
+        }
+    }
+    /// Serves interface `Docs`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Docs as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Docs` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
+    ///
+    /// # Streamed replies
+    ///
+    /// A query whose reply is a stream is served from the source its `Provider` method returns, once the arguments and the `require` clauses pass. Each poll of the future first drives every stream it holds, then takes claims: a stream whose last element found the window full pushes that element again, after it registered its interest in the stream, and polls its source only once the element was taken; otherwise the source is polled once, which counts as one of the 32 claims of the poll. An element is encoded into a buffer inline in the future and checked against its type before it is pushed; one that fails stops the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` ends the stream, and the claim is settled `Ok`; `Ready(Some(Err(Interrupted)))` stops it with `Transport::Interrupted`; a push above the member's limit (`PushError::TooLarge`) stops it with `Transport::Interrupted`; a push the caller refused or stopped reading (`PushError::Failed`) ends the claim. The source is dropped once its stream ended or stopped. The future drives one stream per member at a time: a call of a member whose stream is still running is settled `Transport::Busy`. The handler port gives the future no signal when a caller forgets the call, by its bound passing or by dropping its stream: the future reads the forget from its next push. So while a member's source answers `Pending`, a caller that stopped keeps the member busy until the source yields its next element, whose push fails, and only then is the source dropped and the member free for a new call. Dropping the future stops every stream it still drives with `Transport::Interrupted` and drops its source.
+    #[track_caller]
+    pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+        super::Docs: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        check_catalog(::ridl_rt::port::Attached::catalog(&h));
+        let state = match h
+            .serve(
+                <super::Docs as ::ridl_rt::contract::Interface>::NUMBER,
+                &[::ridl_rt::contract::Ordinal(1u32), ::ridl_rt::contract::Ordinal(2u32)],
+            )
+        {
+            Ok(()) => ServeState::Serving,
+            Err(error) => ServeState::Refused(error),
+        };
+        Serve {
+            handler: h,
+            provider: p,
+            buf: <super::Docs as ::ridl_rt::contract::Sizes<H::Encoding>>::CLAIM_BUFFER,
+            state,
+            streams: Streams {
+                __started: false,
+                __port: ::core::marker::PhantomData,
+                fetch: None,
+                text: None,
+            },
+        }
+    }
+    ///The future `serve` returns over interface `Docs`. It holds the handler, the provider, and the claim buffer of `<Docs as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
+    #[must_use = "claims are served only while the future is polled"]
+    pub struct Serve<
+        'a,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    >
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<H::Encoding>,
+    {
+        handler: H,
+        provider: &'a mut P,
+        buf: <super::Docs as ::ridl_rt::contract::Sizes<H::Encoding>>::ClaimBuffer,
+        state: ServeState,
+        streams: Streams<H, P>,
+    }
+    #[derive(Clone, Copy)]
+    enum ServeState {
+        Refused(::ridl_rt::port::ServeError),
+        Serving,
+        Done,
+    }
+    /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
+    /// frame loop that stores it in its own state polls it through
+    /// `Pin::new`.
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    > ::core::marker::Unpin for Serve<'_, H, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<H::Encoding>,
+    {}
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    > ::core::future::Future for Serve<'_, H, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Id: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            ::core::convert::Infallible,
+            ::ridl_rt::error::ProviderError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            match this.state {
+                ServeState::Done => panic!("`Serve` polled after completion"),
+                ServeState::Refused(error) => {
+                    this.state = ServeState::Done;
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ProviderError::Serve(error)),
+                    )
+                }
+                ServeState::Serving => {
+                    this.handler
+                        .wake_on(
+                            ::ridl_rt::port::Interest::Claim(
+                                <super::Docs as ::ridl_rt::contract::Interface>::NUMBER,
+                            ),
+                            cx.waker(),
+                        );
+                    let mut budget = SERVE_BUDGET;
+                    let mut again = false;
+                    again
+                        |= drive_bytes::<
+                            H,
+                            P::Fetch,
+                            16128,
+                            false,
+                        >(&mut this.handler, &mut this.streams.fetch, cx, &mut budget);
+                    again
+                        |= drive_bytes::<
+                            H,
+                            P::Text,
+                            16128,
+                            true,
+                        >(&mut this.handler, &mut this.streams.text, cx, &mut budget);
+                    match dispatch(
+                        &mut this.handler,
+                        &mut *this.provider,
+                        ::core::convert::AsMut::as_mut(&mut this.buf),
+                        &mut budget,
+                        &mut this.streams,
+                    ) {
+                        Ok(_) => {
+                            if ::core::mem::take(&mut this.streams.__started)
+                                || budget == 0 || again
+                            {
+                                cx.waker().wake_by_ref();
+                            }
+                            ::core::task::Poll::Pending
+                        }
+                        Err(error) => {
+                            this.state = ServeState::Done;
+                            ::core::task::Poll::Ready(
+                                Err(::ridl_rt::error::ProviderError::Claim(error)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable + ::ridl_rt::port::StreamHandler,
+        P: Provider,
+    > ::core::ops::Drop for Serve<'_, H, P>
+    where
+        super::Docs: ::ridl_rt::contract::Sizes<H::Encoding>,
+    {
+        fn drop(&mut self) {
+            if let Some(stream) = self.streams.fetch.take() {
+                let _ = self
+                    .handler
+                    .abort_claim(
+                        stream.claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+            }
+            if let Some(stream) = self.streams.text.take() {
+                let _ = self
+                    .handler
+                    .abort_claim(
+                        stream.claim,
+                        ::ridl_rt::port::REPLY_STREAM,
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+            }
+        }
+    }
+    ///The traits a consumer of interface `Docs`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
     pub mod prelude {
         pub use ::ridl_rt::face::Bind;
     }

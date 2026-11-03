@@ -1,4 +1,4 @@
-// The fixture of a streamed reply of named elements
+// The fixture of streamed replies of named elements, bytes and text
 // (docs/design/interaction-face.md). `Log` declares one query whose reply is
 // a stream of a named struct, beside a plain command, so its face carries the
 // caller side of the stream and a `Provider` and a `serve` for both members.
@@ -45,4 +45,16 @@ interface Twin {
   query left(limit: Level): <Reading> @[..200ms]
   /// The levels up to `limit`, oldest first.
   query right(limit: Level): <Level> @[..200ms]
+}
+
+
+/// A document identifier.
+type Id : integer [0..100]
+
+/// Documents read as bytes or text.
+interface Docs {
+  /// Fetches the document bytes.
+  query fetch(id: Id): <bytes> @[..1s]
+  /// Fetches the document text.
+  query text(id: Id): <string> @[..1s]
 }

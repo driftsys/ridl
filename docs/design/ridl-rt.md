@@ -136,8 +136,9 @@ pending poll takes nothing and stores the waker to wake when progress is
 possible. The generated `serve` notifies a consumer with `end` when the producer
 ends, or `failed` when the stream fails, including an interruption or a refusal
 by its own checks. No method is called after either notification. These traits
-use only `core` and are object safe. The generated face's use of the byte and
-parameter stream traits is not yet implemented (driftsys/ridl#1116).
+use only `core` and are object safe. The generated face drives `ByteSource` for
+byte and text reply streams. Its parameter stream traits are not yet used by
+generated code (driftsys/ridl#1116).
 
 `Ready(Some(Ok(item)))` is the next element, `Ready(None)` the end,
 `Ready(Some(Err(Interrupted)))` stops the stream before its end, which the
