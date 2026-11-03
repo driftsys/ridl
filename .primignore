@@ -11,7 +11,7 @@ evals/corpus/*/LICENSE
 xtask/tests/freeze-fixtures/sources/evals/corpus/*/LICENSE
 
 # mdBook build output.
-book/
+/book/
 
 # The committed baseline snapshot for the E2.11b desk-check corpus member. It
 # is written by `ridl baseline` and read back by `ridl check`, so it must stay
