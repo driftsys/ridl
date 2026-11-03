@@ -86,7 +86,16 @@ fn id(number: i32) -> ridl_rt::contract::InstanceNo {
 #[cfg(feature = "debug")]
 const IFACE: InterfaceNo = InterfaceNo(1);
 #[cfg(feature = "debug")]
-const ORD: Ordinal = Ordinal(1);
+// fixtures/identity/{alpha,beta,mapped,remote}/face.ridl declares Face members
+// in ordinal order: value (signal) 1, changed (event) 2, put(value) (command) 3,
+// get() -> Value (query) 4. Keep these constants and call signatures in sync.
+const SIGNAL: Ordinal = Ordinal(1);
+#[cfg(feature = "debug")]
+const EVENT: Ordinal = Ordinal(2);
+#[cfg(feature = "debug")]
+const COMMAND: Ordinal = Ordinal(3);
+#[cfg(feature = "debug")]
+const QUERY: Ordinal = Ordinal(4);
 
 /// Local instances receive only their offered and mapped catalogs.
 pub fn identity_positive_grants<F: IdentityFactory>() {
@@ -128,13 +137,24 @@ pub fn identity_twin_grants<F: IdentityFactory>() {
             assert_eq!(twin.is_ok(), granted, "{number} / {catalog:?}");
             if let Ok(mut twin) = twin {
                 assert_eq!(twin.catalog(), &catalog);
-                twin.set(IFACE, ORD, &[7]).unwrap();
+                twin.set(IFACE, SIGNAL, &[7]).unwrap();
                 twin.commit();
                 let mut out = [0; 8];
-                assert_eq!(twin.read(IFACE, ORD, &mut out).unwrap().len, 1);
+                assert_eq!(twin.read(IFACE, SIGNAL, &mut out).unwrap().len, 1);
                 assert_eq!(out[0], 7);
             }
         }
+    }
+    for (number, catalog) in [(1, ALPHA), (1, MAPPED), (3, ALPHA), (3, BETA)] {
+        let wrong = CatalogRef {
+            hash: CatalogHash([0; 32]),
+            ..catalog
+        };
+        assert!(
+            F::attach(&node, id(number).twin().unwrap(), &wrong).is_err(),
+            "twin of {number} must reject a wrong hash for {}",
+            catalog.name
+        );
     }
 }
 
@@ -177,7 +197,7 @@ pub fn identity_listener_all_catalogs<F: IdentityFactory>() {
     let mut providers = Vec::new();
     for (number, catalog, byte) in [(1, ALPHA, 11), (3, BETA, 22), (1, MAPPED, 33)] {
         let mut provider = F::attach(&node, id(number), &catalog).unwrap();
-        provider.set(IFACE, ORD, &[byte]).unwrap();
+        provider.set(IFACE, SIGNAL, &[byte]).unwrap();
         provider.commit();
         providers.push(provider);
     }
@@ -185,7 +205,7 @@ pub fn identity_listener_all_catalogs<F: IdentityFactory>() {
         let listener = F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &catalog).unwrap();
         assert_eq!(listener.catalog(), &catalog);
         let mut out = [0; 8];
-        assert_eq!(listener.read(IFACE, ORD, &mut out).unwrap().len, 1);
+        assert_eq!(listener.read(IFACE, SIGNAL, &mut out).unwrap().len, 1);
         assert_eq!(out[0], byte);
     }
     assert!(F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &REMOTE).is_err());
@@ -195,7 +215,7 @@ pub fn identity_listener_all_catalogs<F: IdentityFactory>() {
 fn listener<F: IdentityFactory>() -> (F::Node, F::Attachment, F::Attachment) {
     let node = F::node(DESCRIPTOR, "Local");
     let mut provider = F::attach(&node, id(1), &ALPHA).unwrap();
-    provider.set(IFACE, ORD, &[42]).unwrap();
+    provider.set(IFACE, SIGNAL, &[42]).unwrap();
     provider.commit();
     let listener = F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &ALPHA).unwrap();
     (node, provider, listener)
@@ -204,7 +224,7 @@ fn listener<F: IdentityFactory>() -> (F::Node, F::Attachment, F::Attachment) {
 #[cfg(feature = "debug")]
 fn unchanged(provider: &impl SignalReader) {
     let mut out = [0; 8];
-    assert_eq!(provider.read(IFACE, ORD, &mut out).unwrap().len, 1);
+    assert_eq!(provider.read(IFACE, SIGNAL, &mut out).unwrap().len, 1);
     assert_eq!(out[0], 42);
 }
 
@@ -212,7 +232,7 @@ fn unchanged(provider: &impl SignalReader) {
 #[cfg(feature = "debug")]
 pub fn identity_listener_write_refusals_set<F: IdentityFactory>() {
     let (_node, provider, mut listener) = listener::<F>();
-    assert_eq!(listener.set(IFACE, ORD, &[9]), Err(WriteError::NotOwner));
+    assert_eq!(listener.set(IFACE, SIGNAL, &[9]), Err(WriteError::NotOwner));
     listener.commit();
     unchanged(&provider);
 }
@@ -221,7 +241,10 @@ pub fn identity_listener_write_refusals_set<F: IdentityFactory>() {
 #[cfg(feature = "debug")]
 pub fn identity_listener_write_refusals_invalidate<F: IdentityFactory>() {
     let (_node, provider, mut listener) = listener::<F>();
-    assert_eq!(listener.invalidate(IFACE, ORD), Err(WriteError::NotOwner));
+    assert_eq!(
+        listener.invalidate(IFACE, SIGNAL),
+        Err(WriteError::NotOwner)
+    );
     listener.commit();
     unchanged(&provider);
 }
@@ -230,7 +253,7 @@ pub fn identity_listener_write_refusals_invalidate<F: IdentityFactory>() {
 #[cfg(feature = "debug")]
 pub fn identity_listener_write_refusals_touch<F: IdentityFactory>() {
     let (_node, provider, mut listener) = listener::<F>();
-    assert_eq!(listener.touch(IFACE, ORD), Err(WriteError::NotOwner));
+    assert_eq!(listener.touch(IFACE, SIGNAL), Err(WriteError::NotOwner));
     listener.commit();
     unchanged(&provider);
 }
@@ -239,9 +262,9 @@ pub fn identity_listener_write_refusals_touch<F: IdentityFactory>() {
 #[cfg(feature = "debug")]
 pub fn identity_listener_write_refusals_raise<F: IdentityFactory>() {
     let (_node, mut provider, mut listener) = listener::<F>();
-    provider.subscribe(IFACE, &[ORD]).unwrap();
+    provider.subscribe(IFACE, &[EVENT]).unwrap();
     assert_eq!(
-        listener.raise(IFACE, ORD, &[9], None),
+        listener.raise(IFACE, EVENT, &[9], None),
         Err(RaiseError::NotOwner)
     );
     listener.commit();
@@ -252,9 +275,9 @@ pub fn identity_listener_write_refusals_raise<F: IdentityFactory>() {
 #[cfg(feature = "debug")]
 pub fn identity_listener_write_refusals_serve<F: IdentityFactory>() {
     let (_node, mut provider, mut listener) = listener::<F>();
-    provider.serve(IFACE, &[ORD]).unwrap();
-    assert_eq!(listener.serve(IFACE, &[ORD]), Err(ServeError::NotOwner));
-    let call = listener.command(IFACE, ORD, &[9], None).unwrap();
+    provider.serve(IFACE, &[COMMAND]).unwrap();
+    assert_eq!(listener.serve(IFACE, &[COMMAND]), Err(ServeError::NotOwner));
+    let call = listener.command(IFACE, COMMAND, &[9], None).unwrap();
     assert!(listener.next_claim(&mut [0; 8]).unwrap().is_none());
     let claim = provider.next_claim(&mut [0; 8]).unwrap().unwrap();
     provider.settle(claim.id, Ok(&[])).unwrap();
@@ -265,19 +288,21 @@ pub fn identity_listener_write_refusals_serve<F: IdentityFactory>() {
 #[cfg(feature = "debug")]
 pub fn identity_listener_can_call<F: IdentityFactory>() {
     let (_node, mut provider, mut listener) = listener::<F>();
-    provider.serve(IFACE, &[ORD]).unwrap();
+    provider.serve(IFACE, &[COMMAND, QUERY]).unwrap();
     for query in [false, true] {
         let call = if query {
-            listener.query(IFACE, ORD, &[3], None)
+            listener.query(IFACE, QUERY, &[], None)
         } else {
-            listener.command(IFACE, ORD, &[3], None)
+            listener.command(IFACE, COMMAND, &[3], None)
         }
         .unwrap();
         let mut out = [0; 8];
         assert!(listener.next_claim(&mut out).unwrap().is_none());
         let claim = provider.next_claim(&mut out).unwrap().unwrap();
-        assert_eq!(&out[..claim.len], &[3]);
-        provider.settle(claim.id, Ok(&[5])).unwrap();
+        assert_eq!(&out[..claim.len], if query { &[][..] } else { &[3][..] });
+        provider
+            .settle(claim.id, Ok(if query { &[5] } else { &[] }))
+            .unwrap();
         if query {
             assert_eq!(listener.reply(call, &mut out).unwrap(), Some(Ok(1)));
             assert_eq!(out[0], 5);
