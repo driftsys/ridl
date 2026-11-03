@@ -238,9 +238,11 @@ workspace package (the message lists the packages); a declaration with no kind
 (the message advises `ridl_check`); an unknown code or category (the five
 namespaces, and that diff category words are accepted); a `ridl_diff`
 `encodings` name outside the three (the message lists them); a `ridl_diff` side
-that cannot be loaded (the `DiffSideError` message, the text the CLI prints);
-and a `ridl_diff` source side that does not compile (the message identifies the
-old or new side, and the diagnostics are in the error's structured content).
+that cannot be loaded (the `DiffSideError` message, the text the CLI prints) —
+among them a snapshot directory whose publication by `ridl baseline` was
+interrupted —; and a `ridl_diff` source side that does not compile (the message
+identifies the old or new side, and the diagnostics are in the error's
+structured content).
 
 ### 5.3 Notes
 

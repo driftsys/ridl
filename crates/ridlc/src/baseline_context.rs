@@ -10,6 +10,66 @@ use std::path::{Path, PathBuf};
 /// The artifact is evidence, never a compared package snapshot.
 pub const CONTEXT_FILE: &str = "context.json";
 
+/// The marker `ridl baseline` keeps beside `dir` while it replaces the managed files in `dir`.
+pub fn transaction_marker(out: &Path) -> std::io::Result<PathBuf> {
+    let mut name = std::ffi::OsString::from(".");
+    name.push(
+        out.file_name()
+            .ok_or_else(|| std::io::Error::other("baseline path has no final name"))?,
+    );
+    name.push(".transaction");
+    Ok(out.with_file_name(name))
+}
+
+/// An unfinished baseline publication: the marker exists beside the directory.
+#[derive(Debug)]
+pub struct InterruptedPublication {
+    message: String,
+}
+impl std::fmt::Display for InterruptedPublication {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+impl std::error::Error for InterruptedPublication {}
+
+/// Refuses a snapshot directory whose publication by `ridl baseline` started and has not finished.
+pub fn refuse_interrupted_publication(dir: &Path) -> Result<(), InterruptedPublication> {
+    let Ok(out) = std::path::absolute(dir) else {
+        return Ok(());
+    };
+    let Ok(marker) = transaction_marker(&out) else {
+        return Ok(());
+    };
+    match std::fs::read_to_string(&marker) {
+        Ok(backup) if !backup.trim().is_empty() => Err(InterruptedPublication {
+            message: format!(
+                "interrupted baseline publication; backup directory: {backup}; restore the prior files from the backup, or remove the marker {} after inspecting it",
+                marker.display()
+            ),
+        }),
+        Err(err)
+            if err.kind() == std::io::ErrorKind::NotFound
+                && matches!(std::fs::symlink_metadata(&marker), Err(error) if error.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            Ok(())
+        }
+        result => {
+            let reason = match result {
+                Ok(_) => "empty".to_owned(),
+                Err(err) => format!("unreadable: {err}"),
+            };
+            Err(InterruptedPublication {
+                message: format!(
+                    "interrupted baseline publication; marker {} is {reason}; backup path is unknown; inspect the baseline.previous.N directories beside {} before removing the marker",
+                    marker.display(),
+                    out.display()
+                ),
+            })
+        }
+    }
+}
+
 /// The content identity of a verified remote unit, without its cache path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemotePin {

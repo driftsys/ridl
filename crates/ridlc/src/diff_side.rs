@@ -33,6 +33,7 @@ pub fn diff_side_context(side: &DiffSide) -> Vec<ridl_ir::v2::Package> {
 /// A refusal to load or compile one side of a diff.
 pub enum DiffSideError {
     Context(ContextArtifactError),
+    InterruptedPublication(crate::baseline_context::InterruptedPublication),
     NonJsonIr(PathBuf),
     ArtifactDirectory {
         path: PathBuf,
@@ -78,6 +79,7 @@ impl std::fmt::Display for DiffSideError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Context(error) => write!(f, "{error}"),
+            Self::InterruptedPublication(error) => write!(f, "{error}"),
             Self::NonJsonIr(entry) => write!(
                 f,
                 "{}: `ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); \
@@ -149,6 +151,8 @@ impl std::error::Error for DiffSideError {}
 
 /// Loads a source path or a flat JSON snapshot set. Overlays apply only to source.
 ///
+/// An active or interrupted publication marker is refused before the other directory refusals.
+///
 /// The source predicate also accepts `.rsdl` files; the restored historical
 /// note below lists the earlier `.typl` and `.ridl` source extensions.
 ///
@@ -185,6 +189,8 @@ pub fn load_diff_side(
         return Err(DiffSideError::NonJsonIr(entry.to_path_buf()));
     }
     if entry.is_dir() {
+        crate::baseline_context::refuse_interrupted_publication(entry)
+            .map_err(DiffSideError::InterruptedPublication)?;
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
             refuse_snapshot_overlay(entry, overlays)?;

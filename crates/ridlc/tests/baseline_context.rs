@@ -513,3 +513,24 @@ fn dangling_context_link_is_malformed_evidence() {
             .contains("context.json")
     );
 }
+
+// Treating an empty marker as absent accepts an interrupted snapshot directory.
+#[test]
+fn empty_transaction_marker_refuses_a_snapshot_directory_side() {
+    let fixture = Fixture::new();
+    let dir = tempfile::tempdir().unwrap();
+    let baseline = dir.path().join("baseline");
+    fs::create_dir(&baseline).unwrap();
+    fixture.snapshots(&baseline);
+    assert!(load(&baseline).is_ok());
+    fs::write(dir.path().join(".baseline.transaction"), "").unwrap();
+    let ridlc::diff_side::DiffSideError::InterruptedPublication(error) =
+        load(&baseline).expect_err("an empty marker must refuse the snapshot directory")
+    else {
+        panic!("an empty marker must report an interrupted publication");
+    };
+    assert!(
+        error.to_string().contains("backup path is unknown"),
+        "{error}"
+    );
+}

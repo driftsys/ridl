@@ -189,43 +189,6 @@ fn reserve_backup(out: &Path) -> std::io::Result<PathBuf> {
     Err(std::io::Error::other("no unused baseline backup name"))
 }
 
-fn transaction_marker(out: &Path) -> std::io::Result<PathBuf> {
-    let mut name = std::ffi::OsString::from(".");
-    name.push(
-        out.file_name()
-            .ok_or_else(|| std::io::Error::other("baseline path has no final name"))?,
-    );
-    name.push(".transaction");
-    Ok(out.with_file_name(name))
-}
-
-pub(crate) fn refuse_interrupted(out: &Path) -> std::io::Result<()> {
-    let marker = transaction_marker(out)?;
-    match std::fs::read_to_string(&marker) {
-        Ok(backup) if !backup.trim().is_empty() => Err(std::io::Error::other(format!(
-            "interrupted baseline publication; backup directory: {backup}; restore the prior files from the backup, or remove the marker {} after inspecting it",
-            marker.display()
-        ))),
-        Err(err)
-            if err.kind() == std::io::ErrorKind::NotFound
-                && matches!(std::fs::symlink_metadata(&marker), Err(error) if error.kind() == std::io::ErrorKind::NotFound) =>
-        {
-            Ok(())
-        }
-        result => {
-            let reason = match result {
-                Ok(_) => "empty".to_owned(),
-                Err(err) => format!("unreadable: {err}"),
-            };
-            Err(std::io::Error::other(format!(
-                "interrupted baseline publication; marker {} is {reason}; backup path is unknown; inspect the baseline.previous.N directories beside {} before removing the marker",
-                marker.display(),
-                out.display()
-            )))
-        }
-    }
-}
-
 fn link_or_copy(
     from: &Path,
     to: &Path,
@@ -280,7 +243,7 @@ fn replace_with_io(
     }
     fresh.sort_by_key(|name| (name == ridlc::baseline_context::CONTEXT_FILE, name.clone()));
     let backup = reserve_backup(out)?;
-    let marker = transaction_marker(out)?;
+    let marker = ridlc::baseline_context::transaction_marker(out)?;
     {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
@@ -595,7 +558,9 @@ mod tests {
             } else {
                 std::fs::write(&marker, "").unwrap();
             }
-            let message = refuse_interrupted(&fixture.out).unwrap_err().to_string();
+            let message = ridlc::baseline_context::refuse_interrupted_publication(&fixture.out)
+                .unwrap_err()
+                .to_string();
             assert!(message.contains(marker.to_str().unwrap()), "{message}");
             assert!(message.contains("backup path is unknown"), "{message}");
             assert!(
@@ -612,7 +577,7 @@ mod tests {
         let fixture = Fixture::new();
         let marker = fixture.root.join(".baseline.transaction");
         std::os::unix::fs::symlink("missing-marker-target", &marker).unwrap();
-        let result = refuse_interrupted(&fixture.out);
+        let result = ridlc::baseline_context::refuse_interrupted_publication(&fixture.out);
         assert!(
             result.is_err(),
             "an unreadable marker must refuse publication"
@@ -702,7 +667,7 @@ mod tests {
             b"old stale"
         );
         assert!(marker.is_file());
-        assert!(refuse_interrupted(&fixture.out).is_err());
+        assert!(ridlc::baseline_context::refuse_interrupted_publication(&fixture.out).is_err());
         assert_eq!(warnings.len(), 1);
         let warning = &warnings[0];
         for expected in [
