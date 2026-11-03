@@ -29,6 +29,8 @@ pub struct InterfaceNo(pub u32);
 /// An instance number: positive in production, with debug identities available
 /// only under the `debug` feature.
 ///
+/// The twin of N is -N, and the listener is `i32::MIN`.
+///
 /// The field is private so construction always checks the production range.
 ///
 /// ```compile_fail,E0423
@@ -38,28 +40,28 @@ pub struct InterfaceNo(pub u32);
 #[cfg_attr(
     not(feature = "debug"),
     doc = r#"
-## listener_is_absent_without_debug
+The listener is unavailable without the `debug` feature.
 
 ```compile_fail,E0599
 use ridl_rt::contract::InstanceNo;
 let _ = InstanceNo::LISTENER;
 ```
 
-## twin_is_absent_without_debug
+Creating a twin requires the `debug` feature.
 
 ```compile_fail,E0599
 use ridl_rt::contract::InstanceNo;
 let _ = InstanceNo::new(1).unwrap().twin();
 ```
 
-## is_twin_is_absent_without_debug
+Testing for a twin requires the `debug` feature.
 
 ```compile_fail,E0599
 use ridl_rt::contract::InstanceNo;
 let _ = InstanceNo::new(1).unwrap().is_twin();
 ```
 
-## is_listener_is_absent_without_debug
+Testing for the listener requires the `debug` feature.
 
 ```compile_fail,E0599
 use ridl_rt::contract::InstanceNo;
