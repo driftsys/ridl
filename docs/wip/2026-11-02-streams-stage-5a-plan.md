@@ -235,6 +235,22 @@ amendment differ, the amendment holds.
   (A-6) or `poll_end`, not on `poll_ready` of an empty sink. Task 5 records this
   beside S5-6 in the design's "As built (stage 5a)".
 
+- **A-15 (Tasks 3, 4, and stage 3's reply push). A push is taken when its answer
+  equals the chunk's length.** The port answers `chunk.len()` when it takes a
+  chunk and 0 when the window is full (R-3), and an empty chunk is always taken
+  (design, "As built"), so for an empty chunk the two answers are the same
+  number. Every push the face makes reads the answer as: taken when
+  `n == chunk.len()`, full only when the chunk is not empty and `n == 0`. So a
+  named element that encodes to zero bytes (a Proto3 value whose fields are all
+  defaults) is pushed once and never retained or retried (S5-6), and the same
+  rule holds for `serve`'s push of a reply element. `poll_write` and
+  `poll_write_str` with an empty input answer `Ready(Ok(0))` without a port call
+  (S5-7, S5-5), as a Rust writer does. Tests: a sink that sends a zero-byte
+  Proto3 element delivers exactly one element to the consumer; the same for
+  `serve` pushing a zero-byte reply element over Proto3. If the reply-element
+  test fails at the current code (stage 3's `serve`), fix the reply push in the
+  same task and say so in the report.
+
 ## Global Constraints
 
 - `ridl-rt` stays sans-IO and `no_std`; the new `face` traits use `core::task`
@@ -480,7 +496,7 @@ then `None`.
 
 ### Task 3: Parameter streams on a command
 
-Read "Amendments after the code check" first; A-1 to A-14 override this task's
+Read "Amendments after the code check" first; A-1 to A-15 override this task's
 text.
 
 **Files:**
@@ -555,7 +571,7 @@ again (R-33 step 1). `Pull::End` calls `end()`; `Pull::Failed(e)` calls
 
 ### Task 4: Queries with a parameter stream
 
-Read "Amendments after the code check" first; A-1 to A-14 override this task's
+Read "Amendments after the code check" first; A-1 to A-15 override this task's
 text.
 
 **Files:**
@@ -606,7 +622,7 @@ text.
 
 ### Task 5: The `docstore` example and the records
 
-Read "Amendments after the code check" first; A-1 to A-14 override this task's
+Read "Amendments after the code check" first; A-1 to A-15 override this task's
 text.
 
 **Files:**
