@@ -1515,16 +1515,16 @@ pub fn explain(category: Category) -> &'static str {
             "              direction involving an unset visibility is breaking"
         ),
         Category::PodbufRemoteInlineGrowth => concat!(
-            "A remote struct held inline by an old consumer has a larger podbuf head.\n",
+            "A remote declaration held inline by an old consumer has a larger podbuf size.\n",
             "The path belongs to the consumer; the values name the remote declaration\n",
-            "and its old and new head sizes. An inline member has no nested producer-size\n",
+            "and its old and new inline sizes. An inline member has no nested producer-size\n",
             "boundary, so its growth can move the fields after it even when only a remote\n",
             "pin changes and the local consumer declaration is unchanged. Producer-sized\n",
             "roots, array elements, map entries and union arms may grow, but their inline\n",
             "members may not. An append that fits entirely in the old head's pad bytes\n",
             "keeps the head size and draws no line; verify does not check pads.\n",
             "Shrinkage, other equal-size layout changes and general dependency semantic\n",
-            "changes are deferred; this category judges only remote inline head growth.\n",
+            "changes are deferred; this category judges only remote inline growth.\n",
             "  breaking    with `--encoding podbuf`\n",
             "  compatible  otherwise; listed under the heading \"breaking under podbuf\""
         ),
