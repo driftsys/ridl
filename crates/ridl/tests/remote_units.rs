@@ -1014,10 +1014,11 @@ fn a_pad_fit_append_through_a_remote_type_carries_the_catalog_history() {
 
 /// With no edit, the catalog of a unit that reaches a remote type is the
 /// published one: `ridl build` lists no earlier catalog (the one hash is the
-/// current one) and `ridl baseline` keeps the one-hash history. The hash the
-/// history compares is computed over the unit's own packages; one computed
-/// over the remote package too would differ from the published one, which
-/// would then be listed as an earlier catalog.
+/// current one) and `ridl baseline` keeps the one-hash history. The history's hash
+/// and the build's hash are computed over the same scope, the remote package
+/// included; a history hash computed over the unit's own packages only would
+/// differ from the build's hash, which would then be listed as an earlier
+/// catalog.
 #[test]
 fn an_unchanged_unit_reaching_a_remote_type_keeps_its_catalog_hash() {
     let (compatible, history, baseline_hash) = judge_remote_edit("unchanged", "");
