@@ -2384,11 +2384,7 @@ fn generated_debug_consumer_feature_probe() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(output.status.success(), succeeds, "{features:?}:\n{stderr}");
         if !succeeds {
-            assert!(
-                stderr.contains("no associated function or constant named `LISTENER`"),
-                "{stderr}"
-            );
-            assert!(stderr.contains("no method named `twin`"), "{stderr}");
+            assert_eq!(stderr.matches("error[E0599]").count(), 2, "{stderr}");
         }
     }
 }
