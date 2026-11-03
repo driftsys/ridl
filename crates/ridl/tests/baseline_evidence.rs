@@ -114,7 +114,59 @@ fn missing_evidence_affects_a_unit_reaching_another_units_declaration() {
     let home = TempDir::new("reaching-evidence-home");
     let out = TempDir::new("reaching-evidence-out");
     setup(&dir, &home, true);
+    // Mutation: omit the reachable-declaration branch of Judgment::unknown.
+    let baseline = dir.path().join(".ridl/baseline");
+    let earlier = ridl_core::catalog_history::parse(
+        &std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap(),
+    )
+    .unwrap()
+    .hashes[0];
+    dir.write(
+        "body/body.ridl",
+        &BODY.replace("@10ms }", "@10ms\n signal extra: Envelope @20ms }"),
+    );
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    let history = ridl_core::catalog_history::parse(
+        &std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(history.hashes.len(), 2);
+    assert_eq!(history.hashes[1], earlier);
+    let earlier = serde_json::json!(earlier);
+    command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    assert!(
+        compatible(out.path(), home.path(), "veh.body").contains(&earlier),
+        "the earlier hash is carried while evidence is present"
+    );
     std::fs::remove_file(dir.path().join(".ridl/baseline/context.json")).unwrap();
+    // A legacy local-only latest hash lets reachability alone decide whether to carry the earlier hash.
+    let old =
+        ridlc::load_diff_side(&mut ridl_core::RidlDatabase::default(), &baseline, &[]).unwrap();
+    let std = ridlc::std_ir();
+    let local: Vec<_> = old.packages.iter().collect();
+    let scope = ridlc::catalog_scope(&local, Some(&std));
+    let hash = ridl_ir::catalog_hash::catalog_hash("veh.body", &scope);
+    let hash: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+    let previous = std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap();
+    let (_, earlier_history) = previous.split_once('\n').unwrap();
+    std::fs::write(
+        baseline.join("veh.body.catalogs"),
+        format!("{hash}\n{earlier_history}"),
+    )
+    .unwrap();
+
     let stderr = command(
         dir.path(),
         home.path(),
@@ -128,13 +180,20 @@ fn missing_evidence_affects_a_unit_reaching_another_units_declaration() {
         0,
     );
     for unit in ["veh.body", "veh.cluster"] {
+        let carried = compatible(out.path(), home.path(), unit);
+        if unit == "veh.body" {
+            assert!(
+                !carried.contains(&earlier),
+                "missing evidence must end the reaching unit's earlier history: {carried:?}"
+            );
+        }
+        assert!(carried.is_empty());
         assert!(
             stderr.contains(&format!(
                 "cannot establish podbuf compatibility for unit `{unit}`"
             )),
             "the reaching unit and the owner both lack evidence: {stderr}"
         );
-        assert!(compatible(out.path(), home.path(), unit).is_empty());
     }
 }
 
@@ -219,4 +278,50 @@ fn repair_refuses_packages_mismatch_with_identical_pins() {
     repair_refuses_changed_context("repair-packages-only", |context| {
         context.remote_units[0].packages[0].decls[0].doc = "Historical documentation.".into();
     });
+}
+
+#[test]
+fn baseline_new_side_issue_names_current_evidence_without_historical_repair() {
+    // Mutation: use the historical-context refusal and repair advice for every side.
+    let dir = TempDir::new("current-evidence");
+    let home = TempDir::new("current-evidence-home");
+    setup(&dir, &home, true);
+    let baseline = dir.path().join(".ridl/baseline");
+    let before = inventory(&baseline);
+    let cache = ridl_core::cache::Cache {
+        root: home.path().join(".ridl/cache"),
+    };
+    let (sha256, unpacked) = cache
+        .store(
+            URL,
+            &unit_tar(&[
+                ("ridl.toml", "[package]\nname = \"veh.common\"\n"),
+                (
+                    "common.typl",
+                    "package veh.common\nenum Reading { OFF = 0 }\n",
+                ),
+            ]),
+        )
+        .unwrap();
+    write_lockfile(
+        &dir.path().join("ridl.lock"),
+        &Lockfile {
+            entries: BTreeMap::from([(
+                URL.into(),
+                LockEntry {
+                    sha256,
+                    tree: Some(ridl_core::tree_hash(&unpacked).unwrap()),
+                },
+            )]),
+        },
+    )
+    .unwrap();
+    let stderr = command(dir.path(), home.path(), &["baseline"], 2);
+    assert!(
+        stderr.contains("current workspace's remote evidence is missing or unusable"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("historical inline context"), "{stderr}");
+    assert!(!stderr.contains("--repair-context"), "{stderr}");
+    assert_eq!(inventory(&baseline), before);
 }

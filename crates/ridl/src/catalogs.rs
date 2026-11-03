@@ -113,7 +113,13 @@ pub(crate) fn write_catalog_histories(
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &published_scope, &scope);
     let published_units: std::collections::BTreeSet<_> = old.iter().map(unit_of).collect();
     for unit in &published_units {
-        if judgment.unknown(unit, &published_scope, &scope) {
+        if let Some(side) = judgment.unknown_side(unit, &published_scope, &scope) {
+            if side == ridl_diff::ContextSide::New {
+                eprintln!(
+                    "error: cannot publish unit `{unit}`: the current workspace's remote evidence is missing or unusable; the prior baseline is unchanged. Restore usable current remote evidence before publishing."
+                );
+                return Err(ExitCode::from(2));
+            }
             eprintln!(
                 "error: cannot publish unit `{unit}`: historical inline context is missing or unusable; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
                 published.display(),
@@ -179,7 +185,7 @@ fn complete_scope<'a>(
 struct Judgment {
     report: ridl_diff::DiffReport,
     podbuf_report: ridl_diff::DiffReport,
-    issues: Vec<Change>,
+    issues: Vec<(Change, ridl_diff::ContextSide)>,
 }
 impl Judgment {
     fn new(
@@ -215,12 +221,17 @@ impl Judgment {
                 // These records use only the change path accessors for attribution.
                 issues
                     .into_iter()
-                    .map(|issue| Change {
-                        path: issue.path,
-                        category: ridl_diff::Category::PodbufRemoteInlineGrowth,
-                        verdict: Verdict::Breaking,
-                        before: None,
-                        after: None,
+                    .map(|issue| {
+                        (
+                            Change {
+                                path: issue.path,
+                                category: ridl_diff::Category::PodbufRemoteInlineGrowth,
+                                verdict: Verdict::Breaking,
+                                before: None,
+                                after: None,
+                            },
+                            issue.side,
+                        )
                     })
                     .collect()
             } else {
@@ -235,17 +246,27 @@ impl Judgment {
     }
 
     fn unknown(&self, unit: &str, old: &[&Package], new: &[&Package]) -> bool {
+        self.unknown_side(unit, old, new).is_some()
+    }
+
+    fn unknown_side(
+        &self,
+        unit: &str,
+        old: &[&Package],
+        new: &[&Package],
+    ) -> Option<ridl_diff::ContextSide> {
         let reached_old = reachable_decls(unit, old);
         let reached_new = reachable_decls(unit, new);
-        self.issues.iter().any(|issue| {
+        self.issues.iter().find_map(|(issue, side)| {
             let package = issue.package();
             let declaration = issue.declaration().map(|name| format!("{package}.{name}"));
-            old.iter()
+            (old.iter()
                 .chain(new)
                 .any(|p| p.name == package && unit_of(p) == unit)
                 || declaration.is_some_and(|name| {
                     reached_old.contains_key(&name) || reached_new.contains_key(&name)
-                })
+                }))
+            .then_some(*side)
         })
     }
 }
