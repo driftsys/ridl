@@ -47,12 +47,12 @@ shared-error-type = "allow"
 ```
 
 A package manifest and a workspace manifest both accept the table. There is no
-command-line flag that changes a level. A source comment can allow a lint on
-one declaration (see [Allowing a lint on one
-declaration](#allowing-a-lint-on-one-declaration)), but nothing in the source
-raises a level: a CI that wants stricter checks commits the levels to the
-manifest, so the editor, the command line and an agent see the same levels for
-the same entry point.
+command-line flag that changes a level. A source comment can allow a lint on one
+declaration (see
+[Allowing a lint on one declaration](#allowing-a-lint-on-one-declaration)), but
+nothing in the source raises a level: a CI that wants stricter checks commits
+the levels to the manifest, so the editor, the command line and an agent see the
+same levels for the same entry point.
 
 The level of a lint for a package is resolved key by key, and a later source
 replaces an earlier one:
@@ -63,25 +63,25 @@ replaces an earlier one:
 3. the package's own `[lints]` table.
 
 A diagnostic takes the levels of the package whose directory contains the file
-of its primary span. In a workspace, the root's `[lints]` table covers the
-whole directory tree of the root: a file under the workspace root that no
-member contains, and the root `ridl.toml` itself, take the root's levels. A
-file outside the directory tree of the entry point (the standard library, a
-fetched import, an editor buffer outside the project) uses the default levels,
-so a project's `[lints]` never applies to code outside its directory. When there
-is no manifest at all, for example `ridl check` on a single file outside any
+of its primary span. In a workspace, the root's `[lints]` table covers the whole
+directory tree of the root: a file under the workspace root that no member
+contains, and the root `ridl.toml` itself, take the root's levels. A file
+outside the directory tree of the entry point (the standard library, a fetched
+import, an editor buffer outside the project) uses the default levels, so a
+project's `[lints]` never applies to code outside its directory. When there is
+no manifest at all, for example `ridl check` on a single file outside any
 package, the default levels apply.
 
-**A member loads its workspace.** Running `ridl check` on a workspace member
-or on a file inside a member, opening an editor on a member, or passing a
-member as the `path` of the MCP tool `ridl_check` loads the workspace whose
-`members` lists the member. The workspace root's `[lints]` table applies to the
-member, and the member's own table is applied over it, as in a check from the
-root. The `[defaults]` keys and `[imports]` behave the same way. The command
-reports only the diagnostics of files under the member; check from the
-workspace root to see every member's diagnostics. A package that no workspace
-lists stays standalone, and the search for a workspace stops at the first
-`[workspace]` manifest and at a directory that holds `.git`.
+**A member loads its workspace.** Running `ridl check` on a workspace member or
+on a file inside a member, opening an editor on a member, or passing a member as
+the `path` of the MCP tool `ridl_check` loads the workspace whose `members`
+lists the member. The workspace root's `[lints]` table applies to the member,
+and the member's own table is applied over it, as in a check from the root. The
+`[defaults]` keys and `[imports]` behave the same way. The command reports only
+the diagnostics of files under the member; check from the workspace root to see
+every member's diagnostics. A package that no workspace lists stays standalone,
+and the search for a workspace stops at the first `[workspace]` manifest and at
+a directory that holds `.git`.
 
 **Known limitations of the language server.** The language server reads the
 `[lints]` tables once, when it loads the workspace: at start, or when the first
@@ -122,9 +122,9 @@ type RawTemperature: float
 
 The comment text, after `//` and optional whitespace, is `lint:`, the word
 `allow`, one or more lint names separated by commas, then `--` and a reason that
-is not empty. Without the directive, the declaration above draws `unbounded-float`.
-Only a `//` line comment is read. A `///` doc comment and a `/* */` comment are
-not, even when the text starts with `lint:`.
+is not empty. Without the directive, the declaration above draws
+`unbounded-float`. Only a `//` line comment is read. A `///` doc comment and a
+`/* */` comment are not, even when the text starts with `lint:`.
 
 A directive names a lint by its name, never by its code, and only `allow` is
 accepted: a directive cannot set `info`, `warn` or `deny`.
@@ -134,8 +134,8 @@ The declarations are the carriers of a doc comment: a `type`, `const`, `struct`,
 `enum`, `enumset`, `union`, `interface` or `service`; a field, an enum value, an
 enumset bit, a union arm, an interaction, a parameter and a `reserved` entry;
 and the rsdl `system`, `component`, `distribution`, `deployment` and `machine`
-with their body lines. The scope is the declaration with its doc comment and
-its members. A diagnostic is inside the scope when its primary span is.
+with their body lines. The scope is the declaration with its doc comment and its
+members. A diagnostic is inside the scope when its primary span is.
 
 - A directive on its own line applies to the next declaration. Only doc comment
   lines and other directive lines may come between them. A blank line may not.
@@ -149,11 +149,11 @@ the lint, `deny` included, and over the default level. The diagnostic is removed
 from the report, as `allow` in `[lints]` removes it. An error is never removed:
 an error code has no lint name, so no directive can name it.
 
-**Where it applies.** A directive is read where levels apply (see [Where levels
-apply](#where-levels-apply)): `ridl check`, `ridl build`, `ridlc check` and
-`ridlc build`, the language server and the MCP tool `ridl_check`. The other
-commands ignore directives. The formatter keeps every directive on its
-declaration.
+**Where it applies.** A directive is read where levels apply (see
+[Where levels apply](#where-levels-apply)): `ridl check`, `ridl build`,
+`ridlc check` and `ridlc build`, the language server and the MCP tool
+`ridl_check`. The other commands ignore directives. The formatter keeps every
+directive on its declaration.
 
 A lint that the entry point never raises is never reported as unused there.
 `ridl check` raises RIDL-407 (`ordinal-changed`, with a baseline) and RIDL-156
@@ -200,52 +200,52 @@ MANI-010 is itself a lint, so the table can set its level.
 
 ## The lints
 
-| Lint | Code | Default | Summary |
-| --- | --- | --- | --- |
-| `unused-import` | TYPL-007 | warn | unused import |
-| `unneeded-import-alias` | TYPL-008 | warn | import alias without an actual collision |
-| `unbounded-integer` | TYPL-101 | warn | `integer` without a range constraint |
-| `unbounded-float` | TYPL-102 | warn | `float` without both a range and a `step` |
-| `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
-| `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
-| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above what the largest payload of any kind can carry |
-| `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
-| `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
-| `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
-| `broken-doc-link` | TYPL-401 | warn | doc link or `@see` target that does not resolve |
-| `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its carrier |
-| `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
-| `missing-docs` | TYPL-406 | warn | item without a doc comment |
-| `misplaced-doc-comment` | TYPL-407 | warn | doc comment in a position that is not a carrier |
-| `unknown-doc-tag` | TYPL-408 | warn | doc tag other than `@see`, `@since`, `@deprecated` and `@labels` |
-| `malformed-doc-tag` | TYPL-409 | warn | `@see` or `@since` with a missing or malformed value |
-| `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |
-| `unused-lint-directive` | TYPL-411 | info | lint directive allows a lint that no diagnostic in its scope raises |
-| `malformed-lint-directive` | TYPL-412 | info | malformed lint directive |
-| `open-enum-without-values` | TYPL-413 | warn | open enum or enum set declares no value or bit |
-| `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
-| `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
-| `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |
-| `podbuf-padding-order` | RIDL-156 | info | struct field order wastes podbuf padding |
-| `error-typed-parameter` | RIDL-304 | warn | `error`-typed or result-union parameter on a `command` or `query` |
-| `ensure-without-result` | RIDL-305 | warn | `ensure` clause that never references `result` |
-| `contract-error-name-in-enum` | RIDL-307 | warn | contract-error category name declared in an `error` enum |
-| `named-result-union-in-query` | RIDL-308 | warn | named result union in query return position |
-| `query-named-like-mutation` | RIDL-404 | warn | query named like a mutation |
-| `shared-error-type` | RIDL-405 | info | one `error` type shared across unrelated failure domains |
-| `redeclared-envelope-metadata` | RIDL-406 | info | payload struct re-declares envelope metadata |
-| `ordinal-changed` | RIDL-407 | warn | interaction, struct field, or union arm ordinal changed against the published baseline |
-| `low-cohesion-interface` | RIDL-414 | info | interface members form disconnected type-sharing groups |
-| `lock-in-subdirectory` | RIDL-416 | warn | `interfaces.lock` in a subdirectory of a unit is not read |
-| `unsupported-source-file` | RIDL-417 | warn | `.rxdl` or `.rmdl` file is not compiled: its profile is not supported |
-| `redundant-provider-set` | RSDL-409 | warn | a `requires` resolves to a redundant provider set |
-| `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
-| `depth-below-bound` | RSDL-805 | warn | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes |
-| `depth-underivable` | RSDL-806 | warn | an event whose contract bound is not derivable is consumed by a link with no declared `depth` |
-| `link-encoding-not-emitted` | RSDL-807 | warn | a link of the selected deployment carries an encoding the emitted backend's `encodings` list does not name |
-| `unknown-manifest-key` | MANI-005 | warn | unknown manifest key |
-| `unknown-lint` | MANI-010 | warn | `[lints]` entry names no lint, or its value is not a level |
-| `vendor-source-not-loaded` | MANI-018 | warn | a source file under the root's `vendor/` is not loaded |
+| Lint                           | Code     | Default | Summary                                                                                                    |
+| ------------------------------ | -------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `unused-import`                | TYPL-007 | warn    | unused import                                                                                              |
+| `unneeded-import-alias`        | TYPL-008 | warn    | import alias without an actual collision                                                                   |
+| `unbounded-integer`            | TYPL-101 | warn    | `integer` without a range constraint                                                                       |
+| `unbounded-float`              | TYPL-102 | warn    | `float` without both a range and a `step`                                                                  |
+| `unbounded-length`             | TYPL-103 | warn    | `string`/`bytes` without explicit bounds                                                                   |
+| `no-init-value`                | TYPL-115 | info    | type has no derivable init value and no declared `= value`                                                 |
+| `bound-above-transfer`         | TYPL-116 | warn    | `string`/`bytes` bound above what the largest payload of any kind can carry                                |
+| `duplicate-reserved`           | TYPL-211 | warn    | duplicate `reserved` entry                                                                                 |
+| `inconsistent-unit`            | TYPL-222 | info    | one field name used with different units                                                                   |
+| `duplicate-shape`              | TYPL-224 | info    | duplicate declaration shape                                                                                |
+| `broken-doc-link`              | TYPL-401 | warn    | doc link or `@see` target that does not resolve                                                            |
+| `detached-doc-comment`         | TYPL-404 | warn    | blank line between a doc comment and its carrier                                                           |
+| `deprecated-without-reason`    | TYPL-405 | warn    | `@deprecated` doc tag without a reason string                                                              |
+| `missing-docs`                 | TYPL-406 | warn    | item without a doc comment                                                                                 |
+| `misplaced-doc-comment`        | TYPL-407 | warn    | doc comment in a position that is not a carrier                                                            |
+| `unknown-doc-tag`              | TYPL-408 | warn    | doc tag other than `@see`, `@since`, `@deprecated` and `@labels`                                           |
+| `malformed-doc-tag`            | TYPL-409 | warn    | `@see` or `@since` with a missing or malformed value                                                       |
+| `doc-comment-style`            | TYPL-410 | allow   | doc comment written as `/** */`                                                                            |
+| `unused-lint-directive`        | TYPL-411 | info    | lint directive allows a lint that no diagnostic in its scope raises                                        |
+| `malformed-lint-directive`     | TYPL-412 | info    | malformed lint directive                                                                                   |
+| `open-enum-without-values`     | TYPL-413 | warn    | open enum or enum set declares no value or bit                                                             |
+| `missing-timing`               | RIDL-100 | warn    | `signal` or `event` without a timing annotation                                                            |
+| `degenerate-timing-range`      | RIDL-108 | warn    | degenerate timing range `@[X..X]`                                                                          |
+| `missing-response-bound`       | RIDL-112 | warn    | `command` or `query` takes the default response bound                                                      |
+| `podbuf-padding-order`         | RIDL-156 | info    | struct field order wastes podbuf padding                                                                   |
+| `error-typed-parameter`        | RIDL-304 | warn    | `error`-typed or result-union parameter on a `command` or `query`                                          |
+| `ensure-without-result`        | RIDL-305 | warn    | `ensure` clause that never references `result`                                                             |
+| `contract-error-name-in-enum`  | RIDL-307 | warn    | contract-error category name declared in an `error` enum                                                   |
+| `named-result-union-in-query`  | RIDL-308 | warn    | named result union in query return position                                                                |
+| `query-named-like-mutation`    | RIDL-404 | warn    | query named like a mutation                                                                                |
+| `shared-error-type`            | RIDL-405 | info    | one `error` type shared across unrelated failure domains                                                   |
+| `redeclared-envelope-metadata` | RIDL-406 | info    | payload struct re-declares envelope metadata                                                               |
+| `ordinal-changed`              | RIDL-407 | warn    | interaction, struct field, or union arm ordinal changed against the published baseline                     |
+| `low-cohesion-interface`       | RIDL-414 | info    | interface members form disconnected type-sharing groups                                                    |
+| `lock-in-subdirectory`         | RIDL-416 | warn    | `interfaces.lock` in a subdirectory of a unit is not read                                                  |
+| `unsupported-source-file`      | RIDL-417 | warn    | `.rxdl` or `.rmdl` file is not compiled: its profile is not supported                                      |
+| `redundant-provider-set`       | RSDL-409 | warn    | a `requires` resolves to a redundant provider set                                                          |
+| `unclaimed-backend-key`        | RSDL-804 | warn    | a backend key whose namespace no configured backend claims                                                 |
+| `depth-below-bound`            | RSDL-805 | warn    | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                         |
+| `depth-underivable`            | RSDL-806 | warn    | an event whose contract bound is not derivable is consumed by a link with no declared `depth`              |
+| `link-encoding-not-emitted`    | RSDL-807 | warn    | a link of the selected deployment carries an encoding the emitted backend's `encodings` list does not name |
+| `unknown-manifest-key`         | MANI-005 | warn    | unknown manifest key                                                                                       |
+| `unknown-lint`                 | MANI-010 | warn    | `[lints]` entry names no lint, or its value is not a level                                                 |
+| `vendor-source-not-loaded`     | MANI-018 | warn    | a source file under the root's `vendor/` is not loaded                                                     |
 
 `vendor-source-not-loaded` (MANI-018) is raised in standalone mode only; a
 workspace has no such warning.
@@ -288,12 +288,12 @@ a package that has an error that stops `ridl build` writing artifacts, or that
 references a package that has one, and still reports on the other packages of
 the workspace. An RSDL-7xx error does not count, because a build still writes
 code after it. An error in a manifest skips the packages beneath that manifest.
-The language server sizes the workspace under the encodings and the
-`[limits]` tables that it loaded, and a file open outside the workspace under
-FlatBuffers and the default ceilings. It publishes the diagnostics of a
-`[limits]` table (RIDL-152 and MANI-022) for the `ridl.toml` that holds it, and
-reads the table when it loads the workspace, so an edit to a `[limits]` table
-or to a `[backend.<name>]` table takes effect after the server restarts.
+The language server sizes the workspace under the encodings and the `[limits]`
+tables that it loaded, and a file open outside the workspace under FlatBuffers
+and the default ceilings. It publishes the diagnostics of a `[limits]` table
+(RIDL-152 and MANI-022) for the `ridl.toml` that holds it, and reads the table
+when it loads the workspace, so an edit to a `[limits]` table or to a
+`[backend.<name>]` table takes effect after the server restarts.
 
 `podbuf-padding-order` (RIDL-156) reports a struct whose declared field order
 lays out in a larger podbuf head than the same fields sorted by descending
@@ -313,11 +313,11 @@ nothing for ordinal changes, so the baseline desk check no longer warns about
 them.
 
 `link-encoding-not-emitted` has a per-backend way to silence it, which the
-`[lints]` level does not: a `[backend.<name>]` table that names no encoding —
-an empty `encodings` list, or no `encodings` key at all — declares that the
-backend emits no codec, and that backend's links are not compared. A backend
-with no table at all is still compared. See
-[`ridl build`](cli-reference.md#ridl-build) for the rule in full.
+`[lints]` level does not: a `[backend.<name>]` table that names no encoding — an
+empty `encodings` list, or no `encodings` key at all — declares that the backend
+emits no codec, and that backend's links are not compared. A backend with no
+table at all is still compared. See [`ridl build`](cli-reference.md#ridl-build)
+for the rule in full.
 
 ## How the design lints' levels were set
 
@@ -325,10 +325,10 @@ with no table at all is still compared. See
 workspace design lints: each reports a property of the whole checked workspace
 rather than of one declaration. Their default levels and thresholds were not
 chosen by hand. Each check was run over the evaluation corpus under `evals/`,
-three workspaces translated from public interface definitions, and every
-finding was labelled, blind, by two labellers, one of them a rule-based script,
-with the maintainer deciding every disagreement. A check's precision is the
-share of its findings that the labels accept:
+three workspaces translated from public interface definitions, and every finding
+was labelled, blind, by two labellers, one of them a rule-based script, with the
+maintainer deciding every disagreement. A check's precision is the share of its
+findings that the labels accept:
 
 - at least 80 %: the lint defaults to `warn`;
 - from 50 % up to 80 %: the lint defaults to `info`;

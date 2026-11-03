@@ -4,7 +4,8 @@ An interface changes after it ships: a signal gains a sibling, a bound is
 tightened, a payload type is replaced. This chapter shows how to change one so
 that the toolchain can tell a consumer built against the old version from one
 built against the new version, and what it records about each change. It covers
-the three commands that carry the workflow — [`ridl lock`](cli-reference.md#ridl-lock),
+the three commands that carry the workflow —
+[`ridl lock`](cli-reference.md#ridl-lock),
 [`ridl baseline`](cli-reference.md#ridl-baseline) and
 [`ridl diff`](cli-reference.md#ridl-diff) — a table of the verdicts, and the
 list of compatible catalogs that the toolchain writes into the catalog
@@ -120,27 +121,25 @@ The one transport in this workspace is the WebSocket binding. The Rust crate
 side, for Deno and the browser. The crate opens no descriptor file itself. Its
 embedder may supply a member table that lists the compatible hashes, built by
 hand or, with the crate's `descriptor` feature, from the bytes of the catalog
-descriptor: with
-one, the crate accepts an `attach` naming a listed earlier hash, as the last
-column shows; without one, it accepts an exact match of the hash only. The last
-column states what the frame specification
+descriptor: with one, the crate accepts an `attach` naming a listed earlier
+hash, as the last column shows; without one, it accepts an exact match of the
+hash only. The last column states what the frame specification
 ([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an
 older consumer, built against the version before the change.
 
-| Kind of change                                                                     | Verdict    | The catalog hash | The list in the descriptor and in the history file                                          | At `attach`, by §6.1                                       |
-| ---------------------------------------------------------------------------------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| None                                                                               | identical  | unchanged        | unchanged                                                                                   | accepted: the hash is the provider's own                   |
-| A doc comment, a label or `deprecated` changes                                     | compatible | unchanged        | unchanged                                                                                   | accepted: the hash is the provider's own                   |
-| A declaration is added that no interface reaches                                   | compatible | unchanged        | unchanged                                                                                   | accepted: the hash is the provider's own                   |
-| A compatible change to an interface, or to a declaration that an interface reaches | compatible | changes          | the earlier hashes stay, and the previous one joins                                         | accepted: the earlier hash is in the list                  |
-| A breaking change to an interface, or to a declaration that an interface reaches   | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone           | refused with `catalog_mismatch`: the earlier hash is not listed |
-| A breaking change to a declaration of the unit that no interface reaches, with no proved podbuf break and usable inline evidence | breaking | unchanged | unchanged: the hash did not change | accepted: the hash is the provider's own |
+| Kind of change                                                                                                                   | Verdict    | The catalog hash | The list in the descriptor and in the history file                                | At `attach`, by §6.1                                            |
+| -------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| None                                                                                                                             | identical  | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
+| A doc comment, a label or `deprecated` changes                                                                                   | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
+| A declaration is added that no interface reaches                                                                                 | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
+| A compatible change to an interface, or to a declaration that an interface reaches                                               | compatible | changes          | the earlier hashes stay, and the previous one joins                               | accepted: the earlier hash is in the list                       |
+| A breaking change to an interface, or to a declaration that an interface reaches                                                 | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone | refused with `catalog_mismatch`: the earlier hash is not listed |
+| A breaking change to a declaration of the unit that no interface reaches, with no proved podbuf break and usable inline evidence | breaking   | unchanged        | unchanged: the hash did not change                                                | accepted: the hash is the provider's own                        |
 
 The "compatible" and "breaking" rows cover the categories that `ridl diff`
-prints. The rules are in the
-[CLI reference](cli-reference.md#ridl-diff), and
-`ridl diff --explain <category>` prints the rule for one. These are the
-common cases:
+prints. The rules are in the [CLI reference](cli-reference.md#ridl-diff), and
+`ridl diff --explain <category>` prints the rule for one. These are the common
+cases:
 
 - **Compatible**: an interaction appended after every slot that was used before
   (`interaction_appended`); an interaction retired to a `reserved` line in its
@@ -149,9 +148,9 @@ common cases:
   scalar constraint widened (`constraint_changed`); a signal or event bound
   tightened (`timing_changed`); an interface joining or leaving a service's list
   (`service_interface_added`, `service_interface_removed`).
-- **Compatible, and the hash may change**: an enum body reordered with no
-  number changed (`enum_reordered`), which changes the hash when an interface
-  reaches the enum, and a provisional interface number frozen by `ridl lock`
+- **Compatible, and the hash may change**: an enum body reordered with no number
+  changed (`enum_reordered`), which changes the hash when an interface reaches
+  the enum, and a provisional interface number frozen by `ridl lock`
   (`interface_frozen`), which always changes it.
 - **Breaking**: an interaction inserted, removed without a tombstone or
   reordered (`interaction_inserted`, `interaction_removed`,
@@ -160,90 +159,89 @@ common cases:
   constraint narrowed or a width changed (`constraint_changed`,
   `width_changed`); a declared payload limit raised, lowered, added or removed
   (`limit_changed`); a signal bound loosened or removed; a struct field, a union
-  arm or an enum value removed, an enum value renumbered, or an interface
-  number changed (`decl_removed`, `member_reordered`,
-  `interface_number_changed`).
+  arm or an enum value removed, an enum value renumbered, or an interface number
+  changed (`decl_removed`, `member_reordered`, `interface_number_changed`).
 - **Breaking, for a declaration that is not `open`**: an enum value or an
   enum-set flag appended to an enum or an enum set (`strict_enum_append`, once
   per declaration, with the appended names). The rule applies to every enum and
-  enum set of the package, whether or not an interface reaches it and whether
-  or not it is `internal`. The Rust codecs built from the old declaration refuse
-  a value it does not name, under every encoding, so the verdict does not
-  depend on `--encoding`. The generated TypeScript codec module, which reads
-  FlatBuffers only, refuses it too. Declare the enum or the enum set
-  `open` to make the same append compatible. Closing an `open` declaration is
-  breaking (`enum_closed`), because a producer of the old version may still
-  send a value the new reader refuses.
+  enum set of the package, whether or not an interface reaches it and whether or
+  not it is `internal`. The Rust codecs built from the old declaration refuse a
+  value it does not name, under every encoding, so the verdict does not depend
+  on `--encoding`. The generated TypeScript codec module, which reads
+  FlatBuffers only, refuses it too. Declare the enum or the enum set `open` to
+  make the same append compatible. Closing an `open` declaration is breaking
+  (`enum_closed`), because a producer of the old version may still send a value
+  the new reader refuses.
 - **Compatible, for an `open` declaration**: an enum value or an enum-set flag
   appended (no category of its own: the append is a compatible `decl_added`),
   under every encoding, podbuf included, when the podbuf integer of the
-  declaration and the FlatBuffers scalar stay the same (the next items give
-  the cases where they change),
-  and the `open` keyword gained (`enum_opened`). Opening is a source break for
-  Rust callers: the generated enum gains an unknown variant and
-  `#[non_exhaustive]`, so a `match` over it needs a wildcard arm.
-- **Breaking under podbuf**: a struct field appended that grows the podbuf
-  head of a struct another head of the old side holds inline
-  (`podbuf_inline_append`; the line names each inline use); growth of a remote
-  declaration held inline by an old consumer (`podbuf_remote_inline_growth`,
-  once per old consumer path and remote declaration); an enum value, an
-  enum-set flag or a union arm appended after which the podbuf integer of the
-  enum, the enum set or the union's tag is a different integer
-  (`podbuf_width_change`, once per declaration with the old and the new
-  integer). A snapshot does not record the encodings a workspace builds, so
-  the verdict follows `ridl diff --encoding podbuf`: breaking with it,
-  compatible without it, under the heading `breaking under podbuf` either way.
-  The three rules are stated in [ADR-0031][adr-0031] decision 10, and
-  `ridl diff --explain <category>` states each in full.
-  A field removed from a struct, its slot held by a tombstone, is `decl_removed`,
-  breaking under every encoding: the type is gone from the source, so its
-  bytes cannot be kept.
+  declaration and the FlatBuffers scalar stay the same (the next items give the
+  cases where they change), and the `open` keyword gained (`enum_opened`).
+  Opening is a source break for Rust callers: the generated enum gains an
+  unknown variant and `#[non_exhaustive]`, so a `match` over it needs a wildcard
+  arm.
+- **Breaking under podbuf**: a struct field appended that grows the podbuf head
+  of a struct another head of the old side holds inline (`podbuf_inline_append`;
+  the line names each inline use); growth of a remote declaration held inline by
+  an old consumer (`podbuf_remote_inline_growth`, once per old consumer path and
+  remote declaration); an enum value, an enum-set flag or a union arm appended
+  after which the podbuf integer of the enum, the enum set or the union's tag is
+  a different integer (`podbuf_width_change`, once per declaration with the old
+  and the new integer). A snapshot does not record the encodings a workspace
+  builds, so the verdict follows `ridl diff --encoding podbuf`: breaking with
+  it, compatible without it, under the heading `breaking under podbuf` either
+  way. The three rules are stated in [ADR-0031][adr-0031] decision 10, and
+  `ridl diff --explain <category>` states each in full. A field removed from a
+  struct, its slot held by a tombstone, is `decl_removed`, breaking under every
+  encoding: the type is gone from the source, so its bytes cannot be kept.
 
 - **Breaking under flatbuffers**: an enum value or an enum-set flag appended
-  after which the FlatBuffers integer differs (`flatbuffers_width_change`,
-  once per declaration with the old and the new integer). An enum set uses the
+  after which the FlatBuffers integer differs (`flatbuffers_width_change`, once
+  per declaration with the old and the new integer). An enum set uses the
   unsigned scalar of its width; every enum uses `long`, so an appended enum
-  value keeps its integer. The verdict follows `ridl diff --encoding
-  flatbuffers`: breaking with it, compatible without it, under the heading
-  `breaking under flatbuffers` either way. The rule is stated in
-  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 10.
+  value keeps its integer. The verdict follows
+  `ridl diff --encoding
+  flatbuffers`: breaking with it, compatible without it,
+  under the heading `breaking under flatbuffers` either way. The rule is stated
+  in [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md)
+  decision 10.
 
 An interface that joins the list of a service with a named interface list, or
-leaves it, is not part of the hash input, because the list is not hashed. Such
-a change is compatible, and it leaves the hash as it was.
+leaves it, is not part of the hash input, because the list is not hashed. Such a
+change is compatible, and it leaves the hash as it was.
 
 The verdict that decides the chain is the verdict **of one unit**, not the
-report's overall verdict. It is the worst verdict among the changes that
-concern the unit: a change in one of its source packages, or in a declaration
-that an interface of the unit reaches, in the unit or in another one. A breaking
-change in a declaration of another unit that the unit does not reach leaves the
-unit's chain as it was, although `ridl diff` still exits 1 for the report as a
-whole. A breaking change in a declaration of the unit's own packages that no
-interface reaches is breaking for the unit, although the hash stays as it was.
-The chain is then carried only if inline evidence is usable and no proved podbuf
-break affects the unit. A proved podbuf break overrides the unchanged hash; missing evidence
-for an affected podbuf unit refuses normal publication and omits its build list.
+report's overall verdict. It is the worst verdict among the changes that concern
+the unit: a change in one of its source packages, or in a declaration that an
+interface of the unit reaches, in the unit or in another one. A breaking change
+in a declaration of another unit that the unit does not reach leaves the unit's
+chain as it was, although `ridl diff` still exits 1 for the report as a whole. A
+breaking change in a declaration of the unit's own packages that no interface
+reaches is breaking for the unit, although the hash stays as it was. The chain
+is then carried only if inline evidence is usable and no proved podbuf break
+affects the unit. A proved podbuf break overrides the unchanged hash; missing
+evidence for an affected podbuf unit refuses normal publication and omits its
+build list.
 
 ## The compatible catalogs
 
 The catalog descriptor of a unit carries, beside the unit's own `hash`, a
-`compatible` list: the hashes of earlier versions of the unit that the
-toolchain judged compatible with this one, newest first. The current hash is
-never in it. The frame specification uses the list at `attach`: a provider may
-accept an `attach` that names one of those hashes
-([section 6.1](reference/frame.md#61-attach-and-attached) states the rule).
-**No runtime in this repository accepts an `attach` on the strength of the
-list.** The toolchain writes it, and a runtime that reads it is outside this
-repository. The generated Rust face compares its own `CATALOG` with its own
-port only, and does not read the list. This section describes what the toolchain
-writes.
+`compatible` list: the hashes of earlier versions of the unit that the toolchain
+judged compatible with this one, newest first. The current hash is never in it.
+The frame specification uses the list at `attach`: a provider may accept an
+`attach` that names one of those hashes
+([section 6.1](reference/frame.md#61-attach-and-attached) states the rule). **No
+runtime in this repository accepts an `attach` on the strength of the list.**
+The toolchain writes it, and a runtime that reads it is outside this repository.
+The generated Rust face compares its own `CATALOG` with its own port only, and
+does not read the list. This section describes what the toolchain writes.
 
 ### The chain file
 
 `ridl baseline` keeps the history in `.ridl/baseline/<unit>.catalogs`, one file
-per unit that has an interface, or a service with an inline body. The file is text: a first line that starts with
-`#`, then one catalog hash per line as 64 lowercase hexadecimal characters,
-newest first.
+per unit that has an interface, or a service with an inline body. The file is
+text: a first line that starts with `#`, then one catalog hash per line as 64
+lowercase hexadecimal characters, newest first.
 
 ```text
 # catalogs of this unit's published baselines, newest first, back to the last breaking change
@@ -258,25 +256,25 @@ provided the history's first hash matches its own snapshots and context, inline
 evidence is usable, and no proved podbuf break affects the unit. A proved podbuf
 break, even at an unchanged hash, or another breaking change that changes the
 hash restarts the file with the new hash alone; the rules are in the
-[`ridl baseline` reference](cli-reference.md#ridl-baseline). `ridl baseline`
-and `ridl build` judge the change for the encodings the root manifest's
+[`ridl baseline` reference](cli-reference.md#ridl-baseline). `ridl baseline` and
+`ridl build` judge the change for the encodings the root manifest's
 `[backend.<name>]` tables list, so when one lists `podbuf`, a podbuf break
-restarts the file ([ADR-0031][adr-0031] decision 13). A struct held inline
-whose head reaches a type from a remote package (an `[imports]` unit) is laid
-out with each side's own context: retained evidence for a snapshot directory,
-and verified remote packages from that side's compile for source. Neither side
+restarts the file ([ADR-0031][adr-0031] decision 13). A struct held inline whose
+head reaches a type from a remote package (an `[imports]` unit) is laid out with
+each side's own context: retained evidence for a snapshot directory, and
+verified remote packages from that side's compile for source. Neither side
 borrows remote definitions from the other. Missing inline evidence for an
 affected podbuf unit refuses normal publication with exit 2, leaving the prior
 baseline unchanged. A build warns and omits that unit's compatible catalogs;
-[repair or reset](cli-reference.md#baseline-publication-and-recovery) is explicit.
+[repair or reset](cli-reference.md#baseline-publication-and-recovery) is
+explicit.
 
 For a unit with a published snapshot, a file that cannot be read, or that has a
 line that is neither a comment nor a hash, or that lists a hash twice, stops
 `ridl baseline` with exit 2. `ridl build` also exits 2 when it writes a catalog
 descriptor or generates code and the workspace compiles without an error
-diagnostic. The message
-names the file and the line, and says to repair the file or remove it to start
-the unit's chain again.
+diagnostic. The message names the file and the line, and says to repair the file
+or remove it to start the unit's chain again.
 
 ### The build writes the list
 
@@ -286,11 +284,11 @@ lists the hashes of the unit's `<unit>.catalogs` file, less the current catalog
 hash, when the unit's verdict from the baseline to the working tree is
 compatible or identical, or when the current hash equals the first hash of the
 file. Carrying the list also requires the file's first hash to match its own
-snapshots and context, usable inline evidence and no proved podbuf break for
-the unit. It writes the list into the descriptor, which
-`ridl describe` prints as `compatible`, and into the `catalog.compatible` field
-of the codegen model that a plugin receives. The recorded file is not changed by
-a build; only `ridl baseline` changes it.
+snapshots and context, usable inline evidence and no proved podbuf break for the
+unit. It writes the list into the descriptor, which `ridl describe` prints as
+`compatible`, and into the `catalog.compatible` field of the codegen model that
+a plugin receives. The recorded file is not changed by a build; only
+`ridl baseline` changes it.
 
 The list is empty in these cases:
 
@@ -318,18 +316,19 @@ the same tree lists the published hash and no other.
 
 ### An example
 
-The unit `demo.cabin` declares an interface `Cabin` with a signal
-`currentSpeed` and an event `doorChanged`. After `ridl lock` and the first
-`ridl baseline`, the file holds the one hash of that baseline:
+The unit `demo.cabin` declares an interface `Cabin` with a signal `currentSpeed`
+and an event `doorChanged`. After `ridl lock` and the first `ridl baseline`, the
+file holds the one hash of that baseline:
 
 ```text
 # catalogs of this unit's published baselines, newest first, back to the last breaking change
 5ca96801a44963f58aca2dd05a73736c51fa199a2070cdf0a773360294a071db
 ```
 
-An event `doorLocked`, with a doc comment, is appended to `Cabin`. The change is compatible, and a
-build of the tree writes a descriptor whose `compatible` list holds one hash,
-the published `5ca96801...`. Publishing again puts the new hash first:
+An event `doorLocked`, with a doc comment, is appended to `Cabin`. The change is
+compatible, and a build of the tree writes a descriptor whose `compatible` list
+holds one hash, the published `5ca96801...`. Publishing again puts the new hash
+first:
 
 ```sh
 ridl diff .ridl/baseline . ; echo "exit: $?"
@@ -347,8 +346,8 @@ a5973898ecf39cce4b375906dfdbcafc795108832593b70dd49f3e75a90ca841
 
 Next, `currentSpeed` changes its payload type from `Speed` to `DoorState`. The
 change is breaking, so a build of the tree writes an empty `compatible` list.
-`ridl baseline` does not refuse the publication, because it enforces the
-numbers and the tombstones, not the verdict. It restarts the chain:
+`ridl baseline` does not refuse the publication, because it enforces the numbers
+and the tombstones, not the verdict. It restarts the chain:
 
 ```sh
 ridl diff .ridl/baseline . ; echo "exit: $?"
@@ -369,9 +368,10 @@ would not accept it.
 
 ## Further reading
 
-- [`ridl lock`](cli-reference.md#ridl-lock), [`ridl baseline`](cli-reference.md#ridl-baseline)
-  and [`ridl diff`](cli-reference.md#ridl-diff) in the CLI reference, with the
-  exit codes and the publication gate.
+- [`ridl lock`](cli-reference.md#ridl-lock),
+  [`ridl baseline`](cli-reference.md#ridl-baseline) and
+  [`ridl diff`](cli-reference.md#ridl-diff) in the CLI reference, with the exit
+  codes and the publication gate.
 - [The catalog descriptor](catalog-descriptor.md) — the file that carries the
   hash and the `compatible` list.
 - [The ridl reference, section 11](reference/ridl.md#11-interaction-identity-and-evolution)

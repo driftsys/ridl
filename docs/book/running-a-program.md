@@ -46,15 +46,16 @@ ridl build examples/cabin --emit rust --out-dir generated
 ```
 
 The crate is named after the package, with each `.` replaced by `_`, so this one
-is `veh_cabin`. [Using the generated Rust code](generated-code.md#what-the-crate-contains)
-lists what it holds.
+is `veh_cabin`.
+[Using the generated Rust code](generated-code.md#what-the-crate-contains) lists
+what it holds.
 
 ## Link the crate
 
-A Rust package names the generated crate by path, `ridl-loopback` for the
-ports, and `ridl-rt` for the items the program uses from it. This `Cargo.toml`
-fragment is an illustration and is not compiled; the program that `just demo`
-builds has the same three dependencies in `examples/cabin/consumer/Cargo.toml`:
+A Rust package names the generated crate by path, `ridl-loopback` for the ports,
+and `ridl-rt` for the items the program uses from it. This `Cargo.toml` fragment
+is an illustration and is not compiled; the program that `just demo` builds has
+the same three dependencies in `examples/cabin/consumer/Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -115,9 +116,9 @@ program. To run only the program, generate the crate as above and then:
 cargo run --manifest-path examples/cabin/Cargo.toml -p consumer
 ```
 
-The program prints one line per round trip. Each line carries the value that
-the round trip moved, and the program exits with a non-zero status when a value
-is not the expected one. The last line comes from a value that goes through the
+The program prints one line per round trip. Each line carries the value that the
+round trip moved, and the program exits with a non-zero status when a value is
+not the expected one. The last line comes from a value that goes through the
 generated podbuf codec alone, without the runtime: the program encodes it,
 verifies the bytes and decodes it again:
 

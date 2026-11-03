@@ -13,7 +13,9 @@ reference, and lowers the checked system to the IR beside the package IR.
 
 **What is not built.** No runtime reads the lowered system. The links, the
 routing table and the grants this chapter shows are facts the compiler writes
-down; nothing delivers a message along them. `ridl build --emit deployment` writes a deployment descriptor from the lowered system, but no runtime in this workspace reads it, and there is no transport.
+down; nothing delivers a message along them. `ridl build --emit deployment`
+writes a deployment descriptor from the lowered system, but no runtime in this
+workspace reads it, and there is no transport.
 
 ## Contracts first
 
@@ -185,8 +187,8 @@ deployment Bench for Cabin {
 - **`linux.cpuset` is a backend key**, carried uninterpreted on `Dashboard`'s
   placement. No configured backend claims the namespace `linux`, so it draws
   RSDL-804, which the fence allows.
-- **`slots` is a sizing key**, written on a placement line like `Dashboard`'s. It
-  sets the table entries of every command or query channel that `Dashboard`
+- **`slots` is a sizing key**, written on a placement line like `Dashboard`'s.
+  It sets the table entries of every command or query channel that `Dashboard`
   consumes, in `Car` only. `depth` and `budget` are the other two, and a
   placement line and a `deployment` declaration both take all three; the
   reference gives their ranges and the precedence
@@ -216,8 +218,8 @@ veh.climate.ir.json
 The system artifact is named after the system's qualified name. `--emit ir-text`
 and `--emit ir-binary` write `.system.txtpb` and `.system.binpb` instead.
 
-The facts inside it are stated once for the closure and once per deployment.
-For the closure:
+The facts inside it are stated once for the closure and once per deployment. For
+the closure:
 
 - **The components**, with their instances, their `offers` and `requires` lines,
   and their `external` flag.
@@ -231,9 +233,9 @@ For the closure:
 - **The region map** — one region per catalog the closure reaches, here
   `veh.climate`, holding `Climate`, `Seats` and `veh.climate.diag` with the
   number each takes from the unit's `interfaces.lock`. A region is one per unit,
-  and the interface names in a region, like those in a route, are catalog
-  names: the name relative to the unit, such as `Climate` for an interface of
-  the unit's root package or `cluster.Speed` for one of a subpackage. An inline
+  and the interface names in a region, like those in a route, are catalog names:
+  the name relative to the unit, such as `Climate` for an interface of the
+  unit's root package or `cluster.Speed` for one of a subpackage. An inline
   shape keeps its global name, so `veh.climate.diag` appears under that name.
   Each region also carries the catalog hash, computed by ridl over the unit's
   interfaces, their numbers and every type they reach: the same hash
@@ -270,10 +272,9 @@ and still exits 1.
 `ridl diff` compares the contracts by the ridl categories, and those give the
 verdict and the exit code. The changes that are not contract changes are listed
 after them, under the headings `placement changed` and `composition changed`,
-with no verdict. A changed locked instance number is the exception: it is
-listed under `instance number changed (breaking)`, and it makes the verdict
-`breaking` and the exit code 1. Moving `Dashboard` from `Head` to `ZoneRear` in
-`Car`:
+with no verdict. A changed locked instance number is the exception: it is listed
+under `instance number changed (breaking)`, and it makes the verdict `breaking`
+and the exit code 1. Moving `Dashboard` from `Head` to `ZoneRear` in `Car`:
 
 ```text
 identical
@@ -281,22 +282,21 @@ placement changed
   Car/veh.cabin.Dashboard.Unit: Head -> ZoneRear
 ```
 
-The contracts did not move, so the verdict is `identical` and the exit code 0.
-A `requires` line added, a component added to the system, `instances` changed,
-a component made `external`, or a component moved from one distribution to
-another are listed under `composition changed` instead.
-A changed `labels`, `deprecated`, `tier` or backend key is listed under the
-heading of the declaration it is on, as a before-and-after line; a changed
-sizing key (`depth`, `slots`, `budget`) is not listed, because it changes no
-link and no contract.
+The contracts did not move, so the verdict is `identical` and the exit code 0. A
+`requires` line added, a component added to the system, `instances` changed, a
+component made `external`, or a component moved from one distribution to another
+are listed under `composition changed` instead. A changed `labels`,
+`deprecated`, `tier` or backend key is listed under the heading of the
+declaration it is on, as a before-and-after line; a changed sizing key (`depth`,
+`slots`, `budget`) is not listed, because it changes no link and no contract.
 The compiler does not decide which placement or composition changes break an
 already deployed system, and for whom; the one exception is a changed locked
 instance number, which it reports as breaking.
 
 ## What is not here yet
 
-- **No runtime reads the lowered system.** `ridl build --emit deployment`
-  writes one deployment descriptor per deployment from it (see
+- **No runtime reads the lowered system.** `ridl build --emit deployment` writes
+  one deployment descriptor per deployment from it (see
   `docs/design/deployment-descriptor.md`).
 - **rsdl declares no transport, no network and no process.** A same-machine
   crossing says two instances share a machine, not how they talk. If a backend
