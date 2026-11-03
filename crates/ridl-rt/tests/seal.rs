@@ -3,85 +3,57 @@
 //!
 //! A `compile_fail` doctest passes for any compile error, and rustdoc does not
 //! check the error code written on its fence. So a doctest cannot tell that
-//! the seal failed for the right reason. Each case here compiles one snippet
-//! with `rustc` against the `ridl_rt` rlib that this test run built, and
-//! asserts the error code in the output. A change that opens the seal or makes
-//! a field public fails the code check, and so does a rename that moves the
-//! failure to an unresolved name.
+//! the seal failed for the right reason. Each case here writes one snippet
+//! into a generated crate, builds that crate with cargo against this
+//! checkout's `ridl-rt`, and asserts the error code in the output. A change
+//! that opens the seal or makes a field public fails the code check, and so
+//! does a rename that moves the failure to an unresolved name.
+//!
+//! The generated crate names `ridl-rt` by path, not by a library file found in
+//! the build directory. With one target directory shared by several checkouts,
+//! the newest `ridl_rt` library file there can belong to another checkout, and
+//! the test would then check the seal of that checkout.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
-/// The directory that holds the rlibs and the other dependency artifacts of
-/// this test run: the directory of the running test executable.
-fn deps_dir() -> PathBuf {
-    let exe = std::env::current_exe().expect("the test executable has a path");
-    exe.parent()
-        .expect("the executable is in a directory")
-        .to_path_buf()
-}
-
-/// The newest `libridl_rt-<hash>.rlib` in `deps`.
-fn ridl_rt_rlib(deps: &Path) -> PathBuf {
-    let mut found: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(deps)
-        .expect("the dependency directory is readable")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("libridl_rt-") && name.ends_with(".rlib"))
-        })
-        .filter_map(|path| {
-            let modified = std::fs::metadata(&path).ok()?.modified().ok()?;
-            Some((modified, path))
-        })
-        .collect();
-    found.sort();
-    found
-        .pop()
-        .expect("the ridl_rt rlib is next to the test executable")
-        .1
-}
-
-/// What `rustc` reported for one snippet.
+/// What `cargo check` reported for one snippet.
 struct Outcome {
     success: bool,
     stderr: String,
 }
 
-/// Compiles `source` as an edition 2021 library that links `ridl_rt`.
+/// Builds `source` as an edition 2021 library crate that depends on `ridl-rt`.
+///
+/// The crates of all cases share one target directory, so that `ridl-rt` is
+/// built once. Cargo locks that directory, which serialises the cases that the
+/// test harness runs in parallel.
 fn compile(case: &str, source: &str) -> Outcome {
-    let deps = deps_dir();
-    let rlib = ridl_rt_rlib(&deps);
-    let out_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("seal")
-        .join(case);
-    std::fs::create_dir_all(&out_dir).expect("the scratch directory can be created");
-    let file = out_dir.join("snippet.rs");
-    std::fs::write(&file, source).expect("the snippet can be written");
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("seal");
+    let crate_dir = root.join(case);
+    std::fs::create_dir_all(crate_dir.join("src")).expect("the scratch directory can be created");
+    // The empty `[workspace]` table keeps cargo from treating the generated
+    // crate as a member of the workspace that encloses the target directory.
+    let manifest = format!(
+        "[package]\nname = \"{case}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\
+         publish = false\n\n[workspace]\n\n[dependencies]\n\
+         ridl-rt = {{ path = {:?} }}\n",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let manifest_path = crate_dir.join("Cargo.toml");
+    std::fs::write(&manifest_path, manifest).expect("the manifest can be written");
+    std::fs::write(crate_dir.join("src").join("lib.rs"), source)
+        .expect("the snippet can be written");
 
-    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
-    let output = Command::new(rustc)
-        .args([
-            "--edition",
-            "2021",
-            "--crate-type",
-            "lib",
-            "--emit",
-            "metadata",
-        ])
-        .arg("--crate-name")
-        .arg(case)
-        .arg("--out-dir")
-        .arg(&out_dir)
-        .arg("-L")
-        .arg(format!("dependency={}", deps.display()))
-        .arg("--extern")
-        .arg(format!("ridl_rt={}", rlib.display()))
-        .arg(&file)
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = Command::new(cargo)
+        .args(["check", "--offline", "--quiet", "--message-format", "short"])
+        .arg("--manifest-path")
+        .arg(&manifest_path)
+        .arg("--target-dir")
+        .arg(root.join("target"))
         .output()
-        .expect("rustc can be run");
+        .expect("cargo can be run");
     Outcome {
         success: output.status.success(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -97,7 +69,7 @@ fn assert_fails_with(case: &str, code: &str, source: &str) {
     );
     assert!(
         outcome.stderr.contains(&format!("error[{code}]")),
-        "{case} must fail with {code}, but rustc said:\n{}",
+        "{case} must fail with {code}, but cargo said:\n{}",
         outcome.stderr
     );
 }
