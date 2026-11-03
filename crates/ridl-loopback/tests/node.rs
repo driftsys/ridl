@@ -92,7 +92,6 @@ fn attachments_survive_node_drop() {
 #[cfg(feature = "debug")]
 mod debug {
     use super::*;
-    use std::sync::{Arc, Barrier};
     fn twin() -> InstanceNo {
         id(1).twin().unwrap()
     }
@@ -143,33 +142,6 @@ mod debug {
         ));
         drop(b);
         assert!(n.attach(twin(), &c).is_ok());
-    }
-    #[test]
-    fn simultaneous_opposites_have_one_winner() {
-        let n = Arc::new(node());
-        let start = Arc::new(Barrier::new(3));
-        let finish = Arc::new(Barrier::new(3));
-        let threads: Vec<_> = [id(1), twin()]
-            .into_iter()
-            .map(|who| {
-                let n = n.clone();
-                let start = start.clone();
-                let finish = finish.clone();
-                std::thread::spawn(move || {
-                    start.wait();
-                    let result = n.attach(who, &catalog(&n, "alpha"));
-                    finish.wait();
-                    result
-                })
-            })
-            .collect();
-        start.wait();
-        finish.wait();
-        let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
-        assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
-        assert!(results
-            .iter()
-            .any(|r| matches!(r, Err(AttachError::IdentityConflict))));
     }
     fn listener() -> (Node, ridl_loopback::Attachment, ridl_loopback::Attachment) {
         let n = node();
@@ -303,4 +275,68 @@ fn fixture_catalog_constants_match_descriptor() {
         })
         .collect();
     assert_eq!(actual, [ALPHA, BETA, MAPPED, REMOTE]);
+}
+
+#[cfg(not(feature = "debug"))]
+#[test]
+fn runtime_debug_does_not_enable_node_debug() {
+    use std::{fs, process::Command};
+    struct Probe(std::path::PathBuf);
+    impl Drop for Probe {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let probe = Probe(std::env::temp_dir().join(format!(
+        "ridl-loopback-feature-probe-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    )));
+    fs::create_dir(&probe.0).unwrap();
+    fs::create_dir(probe.0.join("src")).unwrap();
+    fs::write(
+        probe.0.join("Cargo.toml"),
+        format!(
+            r#"[package]
+name = "loopback-feature-probe"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+ridl-loopback = {{ path = {loopback:?}, default-features = false, features = ["node"] }}
+ridl-rt = {{ path = {runtime:?}, features = ["debug"] }}
+"#,
+            loopback = root,
+            runtime = root.join("../ridl-rt"),
+        ),
+    )
+    .unwrap();
+    fs::write(probe.0.join("src/main.rs"), format!(
+        r#"use ridl_loopback::{{AttachError, Node}};
+use ridl_rt::contract::InstanceNo;
+fn main() {{
+    let node = Node::from_descriptor(include_bytes!({fixture:?}), "Local").unwrap();
+    let catalog = *node.catalogs().find(|c| c.name == "alpha").unwrap();
+    let positive = InstanceNo::new(1).unwrap();
+    // Establish the grant, then release it so conflict cannot hide the feature guard.
+    drop(node.attach(positive, &catalog).unwrap());
+    assert!(matches!(node.attach(positive.twin().unwrap(), &catalog), Err(AttachError::UnknownInstance)));
+    assert!(matches!(node.attach(InstanceNo::LISTENER, &catalog), Err(AttachError::UnknownInstance)));
+}}
+"#,
+        fixture = root.join("../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb"),
+    )).unwrap();
+    let output = Command::new(env!("CARGO"))
+        .current_dir(&probe.0)
+        .args(["run", "--offline", "--quiet"])
+        .env("RUSTC_WRAPPER", "")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "probe failed:\n{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

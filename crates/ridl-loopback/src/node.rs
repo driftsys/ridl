@@ -11,6 +11,13 @@ use crate::Loopback;
 mod attachment;
 pub use attachment::Attachment;
 
+// Only unit tests can pause an attach after its conflict check.
+#[cfg(test)]
+std::thread_local! {
+    static AFTER_CONFLICT_CHECK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 type CatalogKey = (&'static str, CatalogHash);
 type Reservations = Arc<Mutex<BTreeMap<i32, usize>>>;
 
@@ -194,6 +201,12 @@ impl Node {
             if !listener && counts.contains_key(&-number) {
                 return Err(AttachError::IdentityConflict);
             }
+            #[cfg(test)]
+            AFTER_CONFLICT_CHECK.with(|hook| {
+                if let Some(pause) = hook.borrow_mut().take() {
+                    pause();
+                }
+            });
             *counts.entry(number).or_default() += 1;
         }
         Ok(Attachment {
@@ -230,6 +243,66 @@ impl Drop for Reservation {
         *count -= 1;
         if *count == 0 {
             counts.remove(&self.number);
+        }
+    }
+}
+
+#[cfg(all(test, feature = "debug"))]
+mod tests {
+    use super::*;
+    use std::sync::{mpsc, TryLockError};
+
+    #[test]
+    fn simultaneous_opposites_have_one_winner() {
+        let catalog = CatalogRef {
+            name: "test",
+            hash: CatalogHash([0; 32]),
+        };
+        let key = (catalog.name, catalog.hash);
+        let positive = InstanceNo::new(1).unwrap();
+        let twin = positive.twin().unwrap();
+        for (first, second) in [(positive, twin), (twin, positive)] {
+            let node = Node {
+                stores: BTreeMap::from([(key, Loopback::new(catalog))]),
+                grants: BTreeMap::from([(1, BTreeSet::from([key]))]),
+                reservations: Arc::new(Mutex::new(BTreeMap::new())),
+            };
+            std::thread::scope(|scope| {
+                let (paused_tx, paused_rx) = mpsc::channel();
+                let (resume_tx, resume_rx) = mpsc::channel();
+                let node_ref = &node;
+                let first_thread = scope.spawn(move || {
+                    AFTER_CONFLICT_CHECK.with(|hook| {
+                        *hook.borrow_mut() = Some(Box::new(move || {
+                            paused_tx.send(()).unwrap();
+                            resume_rx.recv().unwrap();
+                        }));
+                    });
+                    node_ref.attach(first, &catalog)
+                });
+                paused_rx.recv().unwrap();
+                // Probe from the competing thread while the first attach is paused.
+                // If the check released its lock, complete the opposite attach first.
+                let locked = matches!(node.reservations.try_lock(), Err(TryLockError::WouldBlock));
+                let second_result = if locked {
+                    resume_tx.send(()).unwrap();
+                    node.attach(second, &catalog)
+                } else {
+                    let result = node.attach(second, &catalog);
+                    resume_tx.send(()).unwrap();
+                    result
+                };
+                let first_result = first_thread.join().unwrap();
+                let results = [first_result, second_result];
+                assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+                assert!(results
+                    .iter()
+                    .any(|r| matches!(r, Err(AttachError::IdentityConflict))));
+                assert!(
+                    locked,
+                    "conflict check must retain the reservation lock until increment"
+                );
+            });
         }
     }
 }
