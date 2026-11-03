@@ -311,6 +311,70 @@ fn the_verifier_refuses_a_number_that_is_not_positive() {
     );
 }
 
+/// A descriptor whose instances are placed in the order of `numbers`; the
+/// instance at position `at` is named `Climate{at}`.
+fn with_instance_numbers(numbers: &[i32]) -> Vec<u8> {
+    let mut d = valid();
+    let template = d.instances[0].clone();
+    d.instances = numbers
+        .iter()
+        .enumerate()
+        .map(|(at, number)| {
+            let mut instance = template.clone();
+            instance.component = format!("Component{at}");
+            instance.instance = format!("Climate{at}");
+            instance.number = *number;
+            instance
+        })
+        .collect();
+    finish(&d)
+}
+
+#[test]
+fn the_verifier_refuses_two_instances_with_the_same_number() {
+    match verify(&with_instance_numbers(&[7, 8, 7])) {
+        Err(VerifyError::DuplicateInstanceNumber {
+            number,
+            first_component,
+            first_instance,
+            second_component,
+            second_instance,
+        }) => {
+            assert_eq!(number, 7);
+            assert_eq!(
+                (first_component.as_str(), first_instance.as_str()),
+                ("Component0", "Climate0")
+            );
+            assert_eq!(
+                (second_component.as_str(), second_instance.as_str()),
+                ("Component2", "Climate2")
+            );
+        }
+        other => panic!("expected DuplicateInstanceNumber, got {other:?}"),
+    }
+    let message = verify(&with_instance_numbers(&[7, 7]))
+        .unwrap_err()
+        .to_string();
+    assert_eq!(
+        message,
+        "instances `Component0/Climate0` and `Component1/Climate1` have the same number 7; \
+         an instance number is unique within a deployment"
+    );
+}
+
+#[test]
+fn the_verifier_accepts_instances_with_distinct_numbers() {
+    verify(&with_instance_numbers(&[7, 8, 9])).expect("verifies");
+}
+
+#[test]
+fn a_repeated_number_that_is_not_positive_is_reported_as_out_of_range() {
+    match verify(&with_instance_numbers(&[0, 0])) {
+        Err(VerifyError::InstanceNumber { number: 0, .. }) => {}
+        other => panic!("expected InstanceNumber, got {other:?}"),
+    }
+}
+
 #[test]
 fn the_verifier_accepts_the_largest_number() {
     verify(&with_instance_number(i32::MAX)).expect("verifies");
