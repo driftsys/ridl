@@ -893,6 +893,7 @@ mod tests {
     #[test]
     fn rollback_failure_retains_recovery_artifacts_and_paths() {
         let fixture = Fixture::new();
+        // Mutation: remove the recovery_errors.is_empty() guard on marker removal.
         let mut failed_commit = false;
         let error = replace_with(&fixture.stage, &fixture.out, |from, to| {
             if from == fixture.stage.join("new.ir.json") {
@@ -908,6 +909,15 @@ mod tests {
             std::fs::rename(from, to)
         })
         .unwrap_err();
+        let marker = fixture.root.join(".baseline.transaction");
+        assert!(
+            marker.is_file(),
+            "failed rollback must retain its transaction marker"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            fixture.root.join("baseline.previous.1").to_string_lossy()
+        );
         let text = error.to_string();
         assert!(
             text.contains("commit failure")
@@ -940,6 +950,7 @@ mod tests {
     #[test]
     fn failed_new_file_retraction_does_not_overwrite_its_recovery_bytes() {
         let fixture = Fixture::new();
+        // Mutation: remove the recovery_errors.is_empty() guard on marker removal.
         let backup = fixture.root.join("baseline.previous.1");
         let mut attempted_same_name_restore = false;
         let error = replace_with(&fixture.stage, &fixture.out, |from, to| {
@@ -953,6 +964,15 @@ mod tests {
             std::fs::rename(from, to)
         })
         .unwrap_err();
+        let marker = fixture.root.join(".baseline.transaction");
+        assert!(
+            marker.is_file(),
+            "failed rollback must retain its transaction marker"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&marker).unwrap(),
+            fixture.root.join("baseline.previous.1").to_string_lossy()
+        );
         assert_eq!(
             std::fs::read(fixture.out.join("a.ir.json")).unwrap(),
             b"new a",
