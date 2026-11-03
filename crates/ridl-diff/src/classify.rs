@@ -52,8 +52,8 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
 /// package's declaration, and `encodings`, the list the comparison is judged
 /// for ([`diff_refs_with`](crate::diff_refs_with)). Only the appended struct
 /// field reads `scope`: whether its type is legal at 0 is decided by the
-/// declaration the new side names (driftsys/ridl#598). Only
-/// [`Category::PodbufInlineAppend`] reads `encodings`.
+/// declaration the new side names (driftsys/ridl#598). The encoding-specific
+/// categories read `encodings`.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
@@ -156,13 +156,11 @@ pub(crate) fn classify_in(
         // 12).
         Category::InteractionClassChanged => Verdict::Breaking,
 
-        // The walk emits the first two only for an append the generic rule
-        // accepts, so the verdict is the encoding's alone: an inline copy of
-        // the struct cannot grow under podbuf, and a wider enum integer or
-        // union tag moves every head that holds it. proto3 has no fixed
-        // layout for either. FlatBuffers lays out an enum set's integer at
-        // its width too, so a widening flag also changes its scalar, which
-        // no FlatBuffers rule reports yet (driftsys/ridl#1120). The third is
+        // The encoding rules read compatible appends and inline growth, so
+        // the verdict is the encoding's alone: an inline copy cannot grow
+        // under podbuf, and a wider integer moves every head that holds it.
+        // FlatBuffers has its own scalar-width rule below; proto3 has no
+        // fixed layout for these types. `PodbufStrictEnumAppend` is
         // superseded by `StrictEnumAppend` and is no longer emitted; it keeps
         // its old verdict for a report that still names it.
         Category::PodbufInlineAppend
@@ -170,6 +168,13 @@ pub(crate) fn classify_in(
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => {
             if encodings.contains(&"podbuf") {
+                Verdict::Breaking
+            } else {
+                Verdict::Compatible
+            }
+        }
+        Category::FlatbuffersWidthChange => {
+            if encodings.contains(&"flatbuffers") {
                 Verdict::Breaking
             } else {
                 Verdict::Compatible
@@ -1582,7 +1587,7 @@ pub fn explain(category: Category) -> &'static str {
             "              heading \"breaking under podbuf\", so that a workspace\n",
             "              that builds podbuf sees it. An enum-set flag that widens\n",
             "              the integer also widens the enum set's FlatBuffers\n",
-            "              scalar, which no rule reports yet (driftsys/ridl#1120)"
+            "              scalar, which `flatbuffers_width_change` reports"
         ),
         Category::PodbufStrictEnumAppend => concat!(
             "Superseded by `strict_enum_append`, which is breaking for every\n",
@@ -1622,6 +1627,26 @@ pub fn explain(category: Category) -> &'static str {
             "declaration may still send, because the old declaration accepted any\n",
             "integer. The path is the declaration's; there is no detail.\n",
             "  breaking    always"
+        ),
+        Category::FlatbuffersWidthChange => concat!(
+            "An enum value or an enum-set flag appended, compatible under the\n",
+            "generic rule, after which the FlatBuffers integer of the enum or the\n",
+            "enum set is a different integer. FlatBuffers stores an enum set as the\n",
+            "unsigned scalar of its width, the narrowest that holds its highest\n",
+            "bit: a flag at bit 8 widens a `u8` (`ubyte`) to a `u16` (`ushort`),\n",
+            "a flag at bit 16 a `u16` to a `u32` (`uint`), and a flag at bit 32 a\n",
+            "`u32` to a `u64` (`ulong`). Every enum is stored as `long` whatever\n",
+            "its values, so an appended enum value keeps the integer; a union's\n",
+            "type field is always `ubyte`. The line is reported once per\n",
+            "declaration and carries the old and the new integer. An append that\n",
+            "keeps the integer draws no such line.\n",
+            "  breaking    with `--encoding flatbuffers`: every table field and\n",
+            "              vector element of the type changes its scalar, so a\n",
+            "              reader of the new schema rejects or misreads an old\n",
+            "              buffer and a reader of the old schema drops the flag\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              flatbuffers\", so that a workspace that builds\n",
+            "              FlatBuffers sees it"
         ),
     }
 }

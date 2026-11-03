@@ -878,10 +878,11 @@ a field is appended.
       `ridl diff --explain <category>` states each in full. The compatible
       verdict without podbuf holds under proto3; an enum-set flag that widens
       the integer also widens the enum set's FlatBuffers scalar, which
-      `ridl diff` does not report yet (driftsys/ridl#1120). An appended union
-      arm that keeps the tag is reported as the generic rule judges it,
-      compatible. `ridl diff --encoding <name>` and the `ridl_diff` MCP tool
-      name the encodings, because a snapshot does not record them.
+      `ridl diff` reports as `flatbuffers_width_change`
+      ([ADR-0019](ADR-0019-flatbuffers-projection-rules.md) decision 10). An
+      appended union arm that keeps the tag is reported as the generic rule
+      judges it, compatible. `ridl diff --encoding <name>` and the `ridl_diff`
+      MCP tool name the encodings, because a snapshot does not record them.
     - RIDL-156 `podbuf-padding-order`, a lint at `info`, reports a struct whose
       declared field order lays out in a larger head than the same fields sorted
       by descending alignment (declaration order kept among equal alignments).

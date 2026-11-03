@@ -197,9 +197,10 @@ enum Command {
         explain: Option<String>,
         /// An encoding the change is judged for, as `[backend.<name>]
         /// encodings` names it; repeat the flag for several. A snapshot does
-        /// not record the encodings a workspace builds. Only `podbuf` has a
-        /// rule of its own: with it, a change under the heading "breaking
-        /// under podbuf" is breaking; without it, compatible.
+        /// not record the encodings a workspace builds. `podbuf` and
+        /// `flatbuffers` have rules of their own: with one of them, a change
+        /// under the heading "breaking under <that name>" is breaking;
+        /// without it, compatible.
         #[arg(long, value_enum, value_name = "ENCODING")]
         encoding: Vec<DiffEncoding>,
     },

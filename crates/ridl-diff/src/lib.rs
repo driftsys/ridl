@@ -306,6 +306,14 @@ declare_categories! {
         /// may still send, so the change is breaking. Reported at
         /// `<package>/<decl>`.
         EnumClosed,
+        /// An enum value or an enum-set flag appended, compatible under the
+        /// generic rule, after which the FlatBuffers integer of the enum or
+        /// the enum set is a different integer (ADR-0019 decision 10;
+        /// `ridl diff --explain flatbuffers_width_change` states it in full).
+        /// Breaking when `flatbuffers` is among the encodings the comparison
+        /// is judged for, compatible otherwise. Reported once per declaration,
+        /// at `<package>/<decl>`, with the old and the new integer.
+        FlatbuffersWidthChange,
     }
 }
 
@@ -492,18 +500,19 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
 /// does not carry the encodings a workspace builds, so the caller names them.
 ///
-/// Only `podbuf` has rules of its own: a struct field appended that does not
+/// `podbuf` and `flatbuffers` have rules of their own: a struct field appended that does not
 /// fit inside the old head of a struct another head of the old side holds
 /// inline is [`Category::PodbufInlineAppend`], and an enum value, an enum-set
 /// flag or a union arm appended that changes the integer of the enum or the
 /// enum set or the union's tag is [`Category::PodbufWidthChange`]; each is
 /// breaking when `podbuf` is in `encodings` and compatible otherwise. An enum
 /// value or an enum-set flag appended to a declaration that is not `open` is
-/// [`Category::StrictEnumAppend`], breaking under every list. An
-/// enum-set flag that widens the integer also widens its FlatBuffers scalar,
-/// which no rule under `flatbuffers` reports yet (driftsys/ridl#1120). Every
-/// other category is judged the same under every list, and a name that is
-/// not `podbuf` adds no rule. The CLI and the MCP tool refuse a name that is
+/// [`Category::StrictEnumAppend`], breaking under every list. An enum value or
+/// an enum-set flag appended that changes the FlatBuffers integer is
+/// [`Category::FlatbuffersWidthChange`], breaking when `flatbuffers` is in
+/// `encodings` and compatible otherwise. Every other category is judged the
+/// same under every list, and a name other than `podbuf` or `flatbuffers` adds
+/// no rule. The CLI and the MCP tool refuse a name that is
 /// not one of the three before calling this; the engine does not check it.
 /// The podbuf rule lays the old side out over `old` and the context packages
 /// `old` does not name, and the new side over `new` and `context`; a package
@@ -673,13 +682,17 @@ fn diff_refs_scoped(
                 walk::walk_packages(old_pkg, new_pkg, &matching, &mut pair);
                 let mut pair = walk::fold_strict_enum_appends(pair, old_pkg, new_pkg);
                 classify_all(&mut pair, old_pkg, new_pkg, &scope, encodings);
-                // The podbuf rule reads the settled verdicts of the pair and
-                // the heads of both whole sides, so it runs after the walk
-                // and the classifier of the pair.
-                let mut podbuf = walk::podbuf_inline_appends(&pair, old, &old_scope, &scope);
-                podbuf.append(&mut walk::podbuf_width_changes(&pair, old_pkg, new_pkg));
-                classify_all(&mut podbuf, old_pkg, new_pkg, &scope, encodings);
-                pair.append(&mut podbuf);
+                // The encoding rules read the settled verdicts of the pair
+                // and the heads of both whole sides, so they run after the
+                // walk and the classifier of the pair.
+                let mut encoding_changes =
+                    walk::podbuf_inline_appends(&pair, old, &old_scope, &scope);
+                encoding_changes.append(&mut walk::podbuf_width_changes(&pair, old_pkg, new_pkg));
+                encoding_changes.append(&mut walk::flatbuffers_width_changes(
+                    &pair, old_pkg, new_pkg,
+                ));
+                classify_all(&mut encoding_changes, old_pkg, new_pkg, &scope, encodings);
+                pair.append(&mut encoding_changes);
                 changes.append(&mut pair);
             }
             // A package gone while its unit stays: walked against a package
@@ -869,11 +882,12 @@ pub fn category_word(category: Category) -> &'static str {
         Category::StrictEnumAppend => "strict_enum_append",
         Category::EnumOpened => "enum_opened",
         Category::EnumClosed => "enum_closed",
+        Category::FlatbuffersWidthChange => "flatbuffers_width_change",
     }
 }
 
 /// The heading a category's changes are grouped under in the text report, or
-/// `None` for a category listed plainly. Three headings exist. "compatible on
+/// `None` for a category listed plainly. Four headings exist. "compatible on
 /// the wire, visible in source" is for a change that exits 0 but that a
 /// consumer sees in its source — an interface renamed on its number changes
 /// the generated identity-table names in both wire backends, and an interface
@@ -886,7 +900,8 @@ pub fn category_word(category: Category) -> &'static str {
 /// (the hash covers only the declarations an interface reaches). "breaking
 /// under podbuf" is for a change whose verdict depends on the encodings the
 /// comparison is judged for ([`diff_refs_with`]): it exits 0 unless `podbuf`
-/// is among them. Each such category's `--explain` text states its own
+/// is among them. "breaking under flatbuffers" follows the same rule for
+/// `flatbuffers`. Each such category's `--explain` text states its own
 /// consequence; the JSON report carries the category word and no heading
 /// field.
 ///
@@ -907,6 +922,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
         | Category::PodbufRemoteInlineGrowth
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => Some("breaking under podbuf"),
+        Category::FlatbuffersWidthChange => Some("breaking under flatbuffers"),
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired

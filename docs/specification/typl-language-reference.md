@@ -1073,9 +1073,11 @@ fits the width is valid, an undeclared bit is kept, and the named flags are the
 declared bits that are set. The rules of §8.1 for evolution apply to bits in
 place of values: appending a bit to an open enumset is compatible (except under
 the podbuf encoding when the bit changes the integer width, which is breaking
-and reported by `ridl diff` as `podbuf_width_change`), appending a bit to a
-strict enumset is breaking for every encoding, and removing a bit or moving it
-to another position is breaking.
+and reported by `ridl diff` as `podbuf_width_change`, and under the FlatBuffers
+encoding when the bit changes the FlatBuffers scalar
+(`flatbuffers_width_change`)), appending a bit to a strict enumset is breaking
+for every encoding, and removing a bit or moving it to another position is
+breaking.
 
 ### 9.1 Standalone Form
 

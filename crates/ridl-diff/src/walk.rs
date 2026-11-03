@@ -2183,6 +2183,58 @@ pub(crate) fn podbuf_width_changes(
     changes
 }
 
+/// The [`Category::FlatbuffersWidthChange`] changes of one walked and
+/// classified package pair: one per enum or enum set with a compatible member
+/// append whose FlatBuffers integer differs. Enums are read through the
+/// projection fact because it describes what the backend emits, so a narrower
+/// enum (driftsys/ridl#1020) needs no change to this rule. Unions are skipped:
+/// their FlatBuffers type field is always `ubyte`. The classifier settles the
+/// verdict from the encodings.
+pub(crate) fn flatbuffers_width_changes(
+    pair: &[Change],
+    old: &v2::Package,
+    new: &v2::Package,
+) -> Vec<Change> {
+    use ridl_ir::projection::flatbuffers::{enum_integer, enum_set_integer};
+
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    let mut changes = Vec::new();
+    for (name, _) in compatible_member_appends(pair, new) {
+        if !seen.insert(name) {
+            continue;
+        }
+        fn find<'p>(pkg: &'p v2::Package, name: &str) -> Option<&'p v2::Decl> {
+            pkg.decls.iter().find(|decl| decl.name == name)
+        }
+        let (Some(old_decl), Some(new_decl)) = (find(old, name), find(new, name)) else {
+            continue;
+        };
+        let widths = match (&old_decl.kind, &new_decl.kind) {
+            (Some(v2::decl::Kind::EnumDef(old_def)), Some(v2::decl::Kind::EnumDef(new_def))) => {
+                (enum_integer(old_def), enum_integer(new_def))
+            }
+            // An enum set's integer is its declared width, unsigned, as the
+            // layout law reads it.
+            (
+                Some(v2::decl::Kind::EnumSetDef(old_def)),
+                Some(v2::decl::Kind::EnumSetDef(new_def)),
+            ) => (enum_set_integer(old_def), enum_set_integer(new_def)),
+            _ => continue,
+        };
+        if widths.0 == widths.1 {
+            continue;
+        }
+        emit(
+            &mut changes,
+            format!("{}/{name}", new.name),
+            Category::FlatbuffersWidthChange,
+            Some(int_width_name(widths.0 as i32).to_string()),
+            Some(int_width_name(widths.1 as i32).to_string()),
+        );
+    }
+    changes
+}
+
 /// Replaces the [`Category::DeclAdded`] lines of the values or flags appended
 /// to a strict enum or enum set of `new` (one that is not `open`) with one
 /// [`Category::StrictEnumAppend`] line per declaration, at the position of the

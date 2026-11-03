@@ -253,7 +253,9 @@ other entry below is Accepted.
   frozen for 0.10; the status lists the review's rulings, and the FlatBuffers
   decisions do not change. Amended 2026-10-20: review rulings 6, 7 and 18 are
   discharged by the proto3 codec, and ruling 14 is out of date since
-  driftsys/ridl#713.
+  driftsys/ridl#713. Amended 2026-11-03, adding decision 10 from
+  driftsys/ridl#1120: an append that changes the FlatBuffers integer of an enum
+  or an enum set is `flatbuffers_width_change`, breaking under FlatBuffers.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `podbuf` joins proto3 and FlatBuffers as a
