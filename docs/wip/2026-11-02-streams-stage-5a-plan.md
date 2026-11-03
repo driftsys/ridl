@@ -222,6 +222,19 @@ amendment differ, the amendment holds.
   `Op::Push(Correlation, StreamNo)` without the chunk length, so a chunk-length
   assertion reads the handler side.
 
+- **A-14 (Tasks 3, 4). A sink learns of the peer's refusal from its next push or
+  end.** R-33 step 4 says the next `poll_ready`, `send` or `end` returns the
+  error, but the port gives a producer no way to read a refusal without pushing
+  or ending: the design's "As built" list records the same limit for a forget,
+  and driftsys/ridl#1170 tracks a port signal for it. So: `poll_ready` of a sink
+  that holds nothing answers `Ready(Ok(()))` without a port call; when it holds
+  an element it pushes it, and a `PushError::Failed(e)` from that push is
+  answered as `Err(ClientError::Call(e))`. `send`, `poll_write`,
+  `poll_write_str` and `poll_end` answer the refusal from their own push or end.
+  No port operation is added. The R-33 tests assert the error on the next `send`
+  (A-6) or `poll_end`, not on `poll_ready` of an empty sink. Task 5 records this
+  beside S5-6 in the design's "As built (stage 5a)".
+
 ## Global Constraints
 
 - `ridl-rt` stays sans-IO and `no_std`; the new `face` traits use `core::task`
@@ -467,7 +480,7 @@ then `None`.
 
 ### Task 3: Parameter streams on a command
 
-Read "Amendments after the code check" first; A-1 to A-13 override this task's
+Read "Amendments after the code check" first; A-1 to A-14 override this task's
 text.
 
 **Files:**
@@ -542,7 +555,7 @@ again (R-33 step 1). `Pull::End` calls `end()`; `Pull::Failed(e)` calls
 
 ### Task 4: Queries with a parameter stream
 
-Read "Amendments after the code check" first; A-1 to A-13 override this task's
+Read "Amendments after the code check" first; A-1 to A-14 override this task's
 text.
 
 **Files:**
@@ -593,7 +606,7 @@ text.
 
 ### Task 5: The `docstore` example and the records
 
-Read "Amendments after the code check" first; A-1 to A-13 override this task's
+Read "Amendments after the code check" first; A-1 to A-14 override this task's
 text.
 
 **Files:**
