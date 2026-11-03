@@ -776,7 +776,8 @@ pub fn diff_workspaces_with(
 }
 
 /// Compares workspace packages with independent side contexts and, when both
-/// sides carry a system, lists the system changes without changing the verdict.
+/// sides carry a system, lists the system changes, of which only an instance
+/// number change enters the verdict, as breaking ([`diff_workspaces_with`]).
 /// Missing remote evidence is an error for an explicit podbuf comparison.
 pub fn diff_workspaces_with_contexts(
     old: &[Package],
@@ -794,6 +795,13 @@ pub fn diff_workspaces_with_contexts(
     let mut report = diff_refs_with_contexts(&old, &new, &old_context, &new_context, encodings)?;
     if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
         report.system = diff_systems(old_system, new_system);
+        if report
+            .system
+            .iter()
+            .any(|change| change.heading == SystemHeading::InstanceNumberChanged)
+        {
+            report.verdict = Verdict::Breaking;
+        }
     }
     Ok(report)
 }
