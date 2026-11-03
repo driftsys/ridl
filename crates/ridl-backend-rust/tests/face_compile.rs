@@ -255,11 +255,10 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
     assert!(!source.contains("pub struct Diagnostics"), "{source}");
 }
 
-/// A call with a stream parameter has no method on the face, but its
-/// descriptor is emitted: the interface is not skipped, so it leaves no skip
-/// note. An interface whose only calls take a stream has no face module.
+/// A command with one parameter stream has a descriptor, call/sink pair,
+/// and consumer even when it is the interface's only member.
 #[test]
-fn a_command_with_a_stream_parameter_has_a_descriptor_and_no_face_method() {
+fn a_command_with_a_stream_parameter_has_a_descriptor_and_a_call_sink_pair() {
     let source = r#"
 package face.shape
 
@@ -275,7 +274,9 @@ interface Wide {
     let text = generated.rust_source;
     assert!(!text.contains("__RIDL_NO_FACE_"), "{text}");
     assert!(text.contains("pub struct WideSet;"), "{text}");
-    assert!(!text.contains("pub mod wide"), "{text}");
+    assert!(text.contains("pub mod wide"), "{text}");
+    assert!(text.contains("pub struct SetSink<"), "{text}");
+    face_compiles("command_stream", source);
 }
 
 /// The same for a query that has a stream parameter: it has a descriptor and

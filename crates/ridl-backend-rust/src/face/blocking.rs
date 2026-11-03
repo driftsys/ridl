@@ -81,9 +81,13 @@ pub(super) fn blocking(
     if events.is_empty() && !has_calls {
         return None;
     }
-    let mut items = vec![
-        deadline_after(),
-        client(
+    let mut items = vec![deadline_after()];
+    let has_client = !signals.is_empty()
+        || !events.is_empty()
+        || !queries.is_empty()
+        || commands.iter().any(|call| !call.upload());
+    if has_client {
+        items.push(client(
             iface,
             iface_name,
             &encoding_bounds(&ident("P"), iface, payloads),
@@ -92,14 +96,14 @@ pub(super) fn blocking(
             commands,
             queries,
             streams,
-        ),
-    ];
+        ));
+    }
     if has_calls {
         items.push(serve(
             iface,
             iface_name,
             &encoding_bounds(&ident("H"), iface, payloads),
-            !streams.is_empty(),
+            !streams.is_empty() || commands.iter().any(Call::upload),
         ));
     }
 
@@ -110,6 +114,13 @@ pub(super) fn blocking(
          futures, each bounded by a timeout. What a call does is the future's; \
          this module adds the thread's wait and the timeout."
     );
+    let doc = if has_client {
+        doc
+    } else {
+        format!(
+            "The blocking provider face of interface `{iface_name}`, under the crate's std feature. The serve function runs the async provider until its timeout or a port failure."
+        )
+    };
     Some(quote! {
         #[doc = #doc]
         #[cfg(feature = "std")]
@@ -188,7 +199,7 @@ fn client(
         });
     }
 
-    for call in commands {
+    for call in commands.iter().filter(|call| !call.upload()) {
         methods.push(call_method(call, "command", quote! { () }, "Undelivered"));
     }
 

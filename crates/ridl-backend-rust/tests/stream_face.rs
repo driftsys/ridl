@@ -995,6 +995,10 @@ impl Feed {
 
 impl generated::log::Provider for Feed {
     type History = Scripted;
+    type Upload = IgnoreUpload;
+    fn upload(&mut self, _: &generated::LogUploadParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
 
     fn clear(&mut self, _level: &Level) {}
 
@@ -2347,6 +2351,15 @@ impl Documents {
 }
 
 impl generated::docs::Provider for Documents {
+    type Put = IgnoreUpload;
+    type Note = IgnoreUpload;
+    fn put(&mut self, _: &generated::Info) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn note(&mut self, _: &generated::DocsNoteParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
+
     type Fetch = DocumentSource;
     type Text = DocumentSource;
     fn fetch(&mut self, _id: &generated::Id) -> Self::Fetch {
@@ -2619,6 +2632,15 @@ impl ridl_rt::face::ByteSource for InterruptedTextSource {
 struct InterruptingDocuments;
 
 impl generated::docs::Provider for InterruptingDocuments {
+    type Put = IgnoreUpload;
+    type Note = IgnoreUpload;
+    fn put(&mut self, _: &generated::Info) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn note(&mut self, _: &generated::DocsNoteParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
+
     type Fetch = InterruptedTextSource;
     type Text = InterruptedTextSource;
     fn fetch(&mut self, _id: &generated::Id) -> Self::Fetch {
@@ -2667,6 +2689,15 @@ struct CountedDocuments {
     text: Rc<Cell<usize>>,
 }
 impl generated::docs::Provider for CountedDocuments {
+    type Put = IgnoreUpload;
+    type Note = IgnoreUpload;
+    fn put(&mut self, _: &generated::Info) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn note(&mut self, _: &generated::DocsNoteParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
+
     type Fetch = CountedByteSource;
     type Text = CountedByteSource;
     fn fetch(&mut self, _id: &generated::Id) -> Self::Fetch {
@@ -3110,4 +3141,49 @@ fn text_streams_skip_initial_and_later_empty_chunks() {
     handler.push_claim(claim, REPLY_STREAM, b"").unwrap();
     handler.end_claim(claim, REPLY_STREAM).unwrap();
     assert_eq!(poll_once(&mut pin!(stream.next())), Poll::Ready(None));
+}
+
+struct IgnoreUpload;
+impl ridl_rt::face::Consumer for IgnoreUpload {
+    type Item = Reading;
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
+        Poll::Ready(())
+    }
+    fn accept(&mut self, _: Reading) {}
+    fn end(&mut self) {}
+    fn failed(&mut self, _: CallError) {}
+}
+impl ridl_rt::face::ByteConsumer for IgnoreUpload {
+    fn poll_write(&mut self, _: &mut Context<'_>, bytes: &[u8]) -> Poll<usize> {
+        Poll::Ready(bytes.len())
+    }
+    fn end(&mut self) {}
+    fn failed(&mut self, _: CallError) {}
+}
+
+#[test]
+fn serve_delivers_a_zero_byte_proto3_reply_once() {
+    let rt = Loopback::<Proto3>::with_encoding(CATALOG);
+    let script = Script {
+        elements: vec![reading(0, false)],
+        ..Script::default()
+    };
+    let (mut feed, _) = Feed::new(script);
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut call = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut serve).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    let mut stream = match poll_once(&mut call) {
+        Poll::Ready(Ok(s)) => s,
+        _ => panic!("first element missing"),
+    };
+    let w = ridl_rt::task::noop_waker();
+    let mut cx = Context::from_waker(&w);
+    assert_eq!(
+        stream.poll_next(&mut cx),
+        Poll::Ready(Some(Ok(reading(0, false))))
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(stream.poll_next(&mut cx), Poll::Ready(None));
 }

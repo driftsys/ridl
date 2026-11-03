@@ -28,8 +28,15 @@ pub(super) fn futures(
     // face's `where` clause.
     let encoding = encoding_bounds(&ident("P"), iface, payloads);
     let mut items = Vec::new();
+    if commands.iter().any(Call::upload) {
+        items.push(super::upload::state());
+    }
     for call in commands {
-        items.push(call_future(call, "command", &encoding));
+        items.push(if call.upload() {
+            super::upload::items(call, &encoding)
+        } else {
+            call_future(call, "command", &encoding)
+        });
     }
     for call in queries {
         items.push(call_future(call, "query", &encoding));

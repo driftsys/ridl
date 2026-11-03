@@ -1673,6 +1673,107 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             },
             "family": "FAMILY_DISPATCH"
           }
+        },
+        {
+          "name": "dump",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Streams bytes.",
+          "labels": [],
+          "ordinal": 15,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "stream": {
+                  "primitive": "PRIMITIVE_TYPE_BYTES"
+                }
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
+        },
+        {
+          "name": "load",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Receives bytes.",
+          "labels": [],
+          "ordinal": 16,
+          "links": [],
+          "see": [],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "data",
+                "type": {
+                  "optional": false,
+                  "stream": {
+                    "primitive": "PRIMITIVE_TYPE_BYTES"
+                  }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
+          }
+        },
+        {
+          "name": "feed",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Receives inner elements.",
+          "labels": [],
+          "ordinal": 17,
+          "links": [],
+          "see": [],
+          "since": [],
+          "commandDef": {
+            "params": [
+              {
+                "name": "samples",
+                "type": {
+                  "optional": false,
+                  "stream": {
+                    "named": "Inner"
+                  }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
+          }
         }
       ],
       "number": 3,

@@ -31,6 +31,9 @@ pub(super) fn dispatch(
     let encoding = encoding_bounds(&port, iface, payloads);
 
     let command_arms = commands.iter().map(|call| {
+        if call.upload() {
+            return super::upload::dispatch(call);
+        }
         let member = &call.member;
         let ordinal = &member.ordinal;
         let method = &member.method;
@@ -258,7 +261,12 @@ pub(super) fn dispatch(
     );
     // An interface with a stream member hands `dispatch` the slots its
     // sources are kept in; any other keeps the four parameters.
-    let streams_param = (!streams.is_empty()).then(|| quote! { streams: &mut Streams<H, P>, });
+    let has_streams = !streams.is_empty() || commands.iter().any(Call::upload);
+    let stream_bound = commands
+        .iter()
+        .any(Call::upload)
+        .then(|| quote! { + ::ridl_rt::port::StreamHandler });
+    let streams_param = has_streams.then(|| quote! { streams: &mut Streams<H, P>, });
     quote! {
         #allow
         pub(crate) fn dispatch<H, P>(
@@ -269,7 +277,7 @@ pub(super) fn dispatch(
             #streams_param
         ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
         where
-            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler #stream_bound,
             P: Provider,
             #encoding
         {

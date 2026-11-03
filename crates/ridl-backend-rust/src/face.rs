@@ -26,8 +26,9 @@
 //!   `poll_read` and `read`, serving short buffers from inline storage; a text
 //!   stream has `poll_next` and `next`, yielding borrowed UTF-8 chunks. The
 //!   `StreamCaller` bound joins the `Client`'s bounds only when the interface
-//!   declares such a member. Every parameter stream is still left out
-//!   of the face, with its descriptor written (driftsys/ridl#943), and the
+//!   declares such a member. Commands with one parameter stream return a
+//!   call/sink pair and a Consumer or ByteConsumer on the provider side;
+//!   other parameter-stream forms remain outside the face. The
 //!   blocking client carries no streamed member;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
@@ -123,7 +124,7 @@
 
 use crate::descriptors::{
     declared_name, descriptor_ident, has_stream, interactions, query_param_type, query_reply_type,
-    single_param_type, supported_stream_reply,
+    single_param_type, supported_stream_command, supported_stream_reply,
 };
 use crate::docs::{self, DocLines, DocParts, Links};
 use crate::{
@@ -138,6 +139,7 @@ mod dispatch;
 mod futures;
 mod poll;
 mod serve;
+mod upload;
 
 use self::blocking::blocking;
 use self::dispatch::dispatch;
@@ -204,13 +206,19 @@ struct Call<'a> {
     /// The bullets of the `# Parameters` section of the call's methods, as
     /// `docs::parameter_lines` gives them.
     params: Vec<String>,
-    /// The reply stream's form; absent for a plain call.
+    /// The reply or parameter stream's form; absent for a plain call.
     stream_form: Option<v1::StreamForm>,
     /// The byte or text stream's chunk bound, emitted as a literal.
     limit: usize,
+    /// A parameter stream's named element, or an empty string for bytes/text.
+    input: Option<&'a str>,
 }
 
 impl Call<'_> {
+    fn upload(&self) -> bool {
+        self.input.is_some()
+    }
+
     fn raw_stream(&self) -> bool {
         matches!(
             self.stream_form,
@@ -289,7 +297,10 @@ pub(crate) fn one_interface(
     for (ordinal, interaction) in interactions(interface) {
         // The face carries a streamed reply with no stream parameter; its
         // descriptor is emitted whatever the form.
-        if has_stream(interaction) && !supported_stream_reply(interaction) {
+        if has_stream(interaction)
+            && !supported_stream_reply(interaction)
+            && !supported_stream_command(interaction)
+        {
             continue;
         }
         let name = declared(interaction.name.as_ref());
@@ -328,8 +339,15 @@ pub(crate) fn one_interface(
                     arg: call_arg_name(&command.params, command.request.is_some()),
                     member,
                     reply_type: None,
-                    stream_form: None,
-                    limit: 0,
+                    stream_form: interaction
+                        .streams
+                        .first()
+                        .and_then(|s| v1::StreamForm::try_from(s.form).ok()),
+                    input: interaction
+                        .streams
+                        .first()
+                        .map(|s| s.element.as_ref().map_or("", |t| t.reference.as_str())),
+                    limit: interaction.limit.unwrap_or(16_128) as usize,
                     params: docs::parameter_lines(&command.params, &member_links),
                 });
             }
@@ -353,6 +371,7 @@ pub(crate) fn one_interface(
                     });
                 }
                 let call = Call {
+                    input: None,
                     stream_form,
                     limit,
                     arg_type: query_param_type(ctx, query, name)?,
@@ -380,6 +399,19 @@ pub(crate) fn one_interface(
         }
     }
 
+    for call in commands
+        .iter()
+        .filter(|call| call.upload() && call.raw_stream())
+    {
+        if call.limit < 4 {
+            return Err(GenerateError {
+                message: format!(
+                    "byte or text stream member `{}` has limit {}, below 4",
+                    call.member.declared, call.limit
+                ),
+            });
+        }
+    }
     let mut body: Vec<TokenStream> = Vec::new();
     // The payload types the face encodes or decodes, collected once: every
     // item of the face is bounded on the `Payload` of each in the encoding its
@@ -434,7 +466,16 @@ pub(crate) fn one_interface(
     let blocking = blocking(
         &iface, iface_name, &payloads, &signals, &events, &commands, &queries, &streams,
     );
-    body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
+    body.push(prelude(
+        iface_name,
+        &signals,
+        &events,
+        blocking.is_some()
+            && (!signals.is_empty()
+                || !events.is_empty()
+                || !queries.is_empty()
+                || commands.iter().any(|call| !call.upload())),
+    ));
     body.extend(blocking);
 
     let module_doc = format!("The generated interaction face of interface `{iface_name}`.");
@@ -511,7 +552,7 @@ fn client_bounds(
     if has_calls {
         bounds.push(quote! { ::ridl_rt::port::Caller });
     }
-    if !streams.is_empty() {
+    if !streams.is_empty() || commands.iter().any(Call::upload) {
         bounds.push(quote! { ::ridl_rt::port::StreamCaller });
     }
     if has_calls {
@@ -540,6 +581,22 @@ fn client(
     streams: &[Call],
 ) -> TokenStream {
     let number = interface_number(iface);
+    let shared = commands.iter().any(Call::upload);
+    let loan = if shared {
+        quote! { self.port.get_mut() }
+    } else {
+        quote! { &mut self.port }
+    };
+    let read_port = if shared {
+        quote! { self.port.borrow() }
+    } else {
+        quote! { self.port }
+    };
+    let mutable_port = if shared {
+        quote! { self.port.get_mut() }
+    } else {
+        quote! { self.port }
+    };
     let bounds = client_bounds(signals, events, commands, queries, streams);
     let port = ident("P");
     let encoding = encoding_bounds(&port, iface, payloads);
@@ -576,7 +633,7 @@ fn client(
                 ::ridl_rt::port::ReadError,
             > {
                 #buffer
-                let raw = self.port.read(#number, #ordinal, buf)?;
+                let raw = #read_port.read(#number, #ordinal, buf)?;
                 let (value, provenance) = match raw.provenance {
                     ::ridl_rt::sample::Provenance::Init
                     | ::ridl_rt::sample::Provenance::Invalid(
@@ -612,15 +669,19 @@ fn client(
     }
 
     for call in commands {
-        methods.push(call_method(call, "command"));
+        methods.push(if call.upload() {
+            upload::method(call)
+        } else {
+            call_method(call, "command", shared)
+        });
     }
 
     for call in queries {
-        methods.push(call_method(call, "query"));
+        methods.push(call_method(call, "query", shared));
     }
 
     for call in streams {
-        methods.push(stream_call_method(call));
+        methods.push(stream_call_method(call, shared));
     }
 
     // The member methods above are inherent; the fixed methods `new` and
@@ -638,7 +699,7 @@ fn client(
                 fn #method(
                     &mut self,
                 ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
-                    self.port.subscribe(#number, &[#ordinal])
+                    #mutable_port.subscribe(#number, &[#ordinal])
                 }
             }
         });
@@ -667,7 +728,7 @@ fn client(
 
                 #[doc = #doc]
                 fn next_event(&mut self) -> NextEvent<'_, P> {
-                    NextEvent { port: &mut self.port }
+                    NextEvent { port: #loan }
                 }
             }
 
@@ -707,10 +768,23 @@ fn client(
          the ports the interface's interactions need. Its member methods are \
          inherent; {traits}"
     );
+
+    let port_type = if shared {
+        quote! { ::core::cell::RefCell<P> }
+    } else {
+        quote! { P }
+    };
+    let extra_field = shared.then(|| quote! { upload: UploadState, });
+    let init = if shared {
+        quote! { port: ::core::cell::RefCell::new(port), upload: UploadState::new() }
+    } else {
+        quote! { port }
+    };
     quote! {
         #[doc = #doc]
         pub struct Client<P: #(#bounds)+*> {
-            port: P,
+            port: #port_type,
+            #extra_field
         }
 
         #inherent
@@ -725,7 +799,7 @@ fn client(
             #[track_caller]
             fn new(port: P) -> Self {
                 check_catalog(::ridl_rt::port::Attached::catalog(&port));
-                Client { port }
+                Client { #init }
             }
         }
 
@@ -914,7 +988,9 @@ pub(crate) fn is_internal(interface: &v1::Interface) -> bool {
 pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
     !is_internal(interface)
         && interactions(interface).iter().any(|(_, interaction)| {
-            (!has_stream(interaction) || supported_stream_reply(interaction))
+            (!has_stream(interaction)
+                || supported_stream_reply(interaction)
+                || supported_stream_command(interaction))
                 && matches!(
                     interaction.shape.as_ref(),
                     Some(
@@ -962,14 +1038,14 @@ fn read_fn(call: &Call) -> Ident {
 /// called. The futures' `poll` binds the same `__arg` in place of the ridl
 /// name, for the same reason, and the internal send names its port parameter
 /// `__port`. `dispatch` binds the decoded argument as `__arg` too.
-fn call_method(call: &Call, kind: &str) -> TokenStream {
+fn call_method(call: &Call, kind: &str, shared: bool) -> TokenStream {
     let doc = format!(
         "Sends {kind} `{}` and returns its future. The call is sent when this \
          method runs, not when the future is first polled, and the future \
          resolves on the outcome. {}",
         call.member.declared, CALL_METHOD_DOC_TAIL,
     );
-    call_method_with(call, &doc, quote! { &mut self.port })
+    call_method_with(call, &doc, false, shared)
 }
 
 /// The second half of a call method's generated sentence, shared by a plain
@@ -986,7 +1062,7 @@ const CALL_METHOD_DOC_TAIL: &str = "A `require` clause that fails, or a send \
 /// future that resolves to the stream value rather than to a reply. The
 /// future holds its port as an `Option`, so that it can hand the borrow to
 /// the stream when it resolves.
-fn stream_call_method(call: &Call) -> TokenStream {
+fn stream_call_method(call: &Call, shared: bool) -> TokenStream {
     let stream = stream_type(call);
     let doc = format!(
         "Sends query `{}` and returns its future, which resolves to the \
@@ -996,12 +1072,12 @@ fn stream_call_method(call: &Call) -> TokenStream {
          future is first polled. {}",
         call.member.declared, CALL_METHOD_DOC_TAIL,
     );
-    call_method_with(call, &doc, quote! { Some(&mut self.port) })
+    call_method_with(call, &doc, true, shared)
 }
 
 /// The body every call method shares: `port` is the expression the future's
 /// `port` field is built from.
-fn call_method_with(call: &Call, doc: &str, port: TokenStream) -> TokenStream {
+fn call_method_with(call: &Call, doc: &str, stream: bool, shared: bool) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
     let descriptor = &member.descriptor;
@@ -1012,6 +1088,21 @@ fn call_method_with(call: &Call, doc: &str, port: TokenStream) -> TokenStream {
     let send = send_fn(call);
     let doc = call_doc(call, doc);
     let deprecated = deprecated_attr(member.deprecated);
+    let loan = if shared {
+        quote! { self.port.get_mut() }
+    } else {
+        quote! { &mut self.port }
+    };
+    let now = if shared {
+        quote! { self.port.get_mut().now() }
+    } else {
+        quote! { self.port.now() }
+    };
+    let port = if stream {
+        quote! { Some(#loan) }
+    } else {
+        loan.clone()
+    };
     quote! {
         #doc
         #deprecated
@@ -1020,9 +1111,9 @@ fn call_method_with(call: &Call, doc: &str, port: TokenStream) -> TokenStream {
             let deadline = <#descriptor as ::ridl_rt::contract::Interaction>::MEMBER
                 .call_deadline()
                 .map(|max| ::ridl_rt::sample::Timestamp(
-                    self.port.now().0.saturating_add(max.0),
+                    #now.0.saturating_add(max.0),
                 ));
-            let phase = match #send(&mut self.port, &__arg) {
+            let phase = match #send(#loan, &__arg) {
                 Ok(correlation) => #phase::Waiting(correlation),
                 Err(::ridl_rt::port::SendError::Busy) => #phase::Unsent(__arg),
                 Err(error) => #phase::Failed(error),
@@ -1245,6 +1336,9 @@ fn provider(
         let method = &member.method;
         let arg = &call.arg;
         let path = ty(call.arg_type);
+        if call.upload() {
+            return upload::provider(call);
+        }
         let doc = format!(
             "Serves command `{}`. It returns nothing: a command has no failure \
              the application reports (ridl §6.1). Arguments that break their \
@@ -1452,6 +1546,9 @@ fn payload_types<'a>(
     }
     for call in commands.iter().chain(queries).chain(streams) {
         push(&mut types, call.arg_type);
+        if let Some(element) = call.input {
+            push(&mut types, element);
+        }
         if let Some(reply) = call.reply_type {
             push(&mut types, reply);
         }
@@ -1667,10 +1764,18 @@ fn call_arg_name(params: &[v1::Param], declared: bool) -> Ident {
     if !declared {
         return ident("args");
     }
-    params.first().map_or_else(
-        || ident("args"),
-        |param| ident(snake_of(param.name.as_ref())),
-    )
+    params
+        .iter()
+        .find(|param| {
+            !matches!(
+                param.r#type.as_ref().and_then(|ty| ty.kind.as_ref()),
+                Some(v1::r#type::Kind::Stream(_))
+            )
+        })
+        .map_or_else(
+            || ident("args"),
+            |param| ident(snake_of(param.name.as_ref())),
+        )
 }
 
 /// The canonical IR text of the type one payload names.

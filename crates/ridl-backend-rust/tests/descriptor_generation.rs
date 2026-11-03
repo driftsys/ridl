@@ -1661,7 +1661,8 @@ fn a_member_row_lists_its_streams() {
     assert!(!source.contains("type_name:\"<veh.hvac"), "{face}");
 
     // A member with a stream has its row and its `Interaction` impl, and no
-    // `Command` or `Query` impl for a stream parameter. A query whose only
+    // `Query` impl for a stream parameter. A supported command has a Command
+    // impl. A query whose only
     // stream is its reply has a `Query` impl with no reply payload, for
     // named elements, bytes and text alike.
     for streamed in [
@@ -1682,7 +1683,8 @@ fn a_member_row_lists_its_streams() {
             let has_impl =
                 source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{"));
             let expected = kind == "Query"
-                && matches!(streamed, "CabinStreamFilterHistory" | "CabinReadNotes");
+                && matches!(streamed, "CabinStreamFilterHistory" | "CabinReadNotes")
+                || kind == "Command" && matches!(streamed, "CabinReplayTrace" | "CabinPutBlob");
             assert_eq!(
                 has_impl,
                 expected,

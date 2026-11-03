@@ -21,9 +21,9 @@
 //!   parameter, has a `Query` impl whose `Reply` is `()`: its settlement
 //!   carries no reply bytes, because the chunks travel on the reply
 //!   stream, and its `ensure` is always `Ok` (ridl refuses `result` on a
-//!   stream). Every other member with a stream, as a parameter or as the
-//!   reply, has no `Command` or `Query` impl until the face carries that
-//!   form, so a generic caller cannot send it without its stream; its
+//!   stream). Commands with one parameter stream have a `Command` impl.
+//!   Other members with streams have no `Command` or `Query` impl until
+//!   the face carries their form; their
 //!   `MEMBERS` row is written all the same, and every row lists the member's
 //!   streams.
 //!
@@ -477,7 +477,9 @@ fn interaction_item(
         // whose `Reply` is `()`: the face's send evaluates `require` through
         // it, and no payload type is claimed for a settlement that carries
         // no reply bytes.
-        Some(v1::interaction::Shape::Command(command)) if has_stream(interaction) => {
+        Some(v1::interaction::Shape::Command(command))
+            if has_stream(interaction) && !supported_stream_command(interaction) =>
+        {
             let arg_name = single_param_type(ctx, command, member)?;
             row.push(arg_name.to_string());
             sizes.calls.push(arg_name.to_string());
@@ -1050,6 +1052,18 @@ fn not_an_interaction(member: &str) -> GenerateError {
     GenerateError {
         message: format!("declaration `{member}` is not an interaction"),
     }
+}
+
+/// A command with exactly one supported parameter stream.
+pub(crate) fn supported_stream_command(interaction: &v1::Interaction) -> bool {
+    matches!(interaction.shape, Some(v1::interaction::Shape::Command(_)))
+        && interaction.streams.len() == 1
+        && interaction.streams[0].no == 1
+        && match v1::StreamForm::try_from(interaction.streams[0].form) {
+            Ok(v1::StreamForm::Elements) => interaction.streams[0].element.is_some(),
+            Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
+            _ => false,
+        }
 }
 
 #[cfg(test)]

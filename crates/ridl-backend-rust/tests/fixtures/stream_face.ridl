@@ -29,6 +29,8 @@ interface Log {
   ]
   /// Clears the log.
   command clear(level: Level) @[..50ms]
+  /// Uploads readings.
+  command upload(data: <Reading>) @[..1s]
 }
 
 /// An interface with no stream, for the port-bound test. Named to sort after
@@ -51,10 +53,19 @@ interface Twin {
 /// A document identifier.
 type Id : integer [0..100]
 
+/// Upload metadata.
+struct Info {
+  id : Id
+}
+
 /// Documents read as bytes or text.
 interface Docs {
   /// Fetches the document bytes.
   query fetch(id: Id): <bytes> @[..1s]
   /// Fetches the document text.
   query text(id: Id): <string> @[..1s]
+  /// Stores bytes.
+  command put(info: Info, data: <bytes>) @[..1s]
+  /// Stores text.
+  command note(data: <string>) @[..1s]
 }
