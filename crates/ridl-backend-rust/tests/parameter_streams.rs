@@ -663,3 +663,52 @@ cancelled_before_admission!(
     note,
     generated::DocsNoteParams {}
 );
+
+#[test]
+fn a_text_upload_refuses_invalid_utf8_from_the_port() {
+    let rt = docs();
+    let (s, mut p) = state();
+    let mut raw = rt.caller();
+    let ports = RecordingPorts::new(&rt);
+    let ops = ports.log();
+    let mut client = generated::docs::Client::new(ports);
+    let mut serve = generated::docs::serve(rt.handler(), &mut p);
+    let (mut call, mut sink) = client.note(generated::DocsNoteParams {});
+    pending(&mut serve);
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    assert_eq!(
+        raw.push(correlation(&ops), ridl_rt::contract::StreamNo(1), b"a\xff"),
+        Ok(2)
+    );
+    for _ in 0..6 {
+        pending(&mut serve);
+    }
+    let expected = CallError::Contract(ridl_rt::error::Contract::InvalidValue(
+        ridl_rt::payload::Violation {
+            type_name: Some("string"),
+            rule: ridl_rt::payload::Rule::Utf8,
+        },
+    ));
+    assert!(
+        s.borrow().bytes.is_empty(),
+        "the invalid chunk must not reach the consumer"
+    );
+    assert!(
+        s.borrow().lengths.is_empty(),
+        "even its valid prefix must not be offered"
+    );
+    assert_eq!(s.borrow().failed, vec![expected]);
+    assert_eq!(s.borrow().ends, 0);
+    assert_eq!(
+        cx_write(|cx| sink.poll_end(cx)),
+        Poll::Ready(Err(ClientError::Call(expected)))
+    );
+    for _ in 0..3 {
+        pending(&mut serve);
+    }
+    assert_eq!(
+        s.borrow().failed,
+        vec![expected],
+        "failure is terminal and notified once"
+    );
+}

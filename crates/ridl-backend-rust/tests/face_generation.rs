@@ -1619,6 +1619,24 @@ fn each_upload_sink_uses_its_members_limit_without_byte_staging() {
                 expected,
                 "{name}'s own limit"
             );
+            let member = if name == "PutSink" { "put" } else { "note" };
+            let consumer = if name == "PutSink" { "Put" } else { "Note" };
+            let generated = dense(&source);
+            assert!(
+                generated.contains(&format!(
+                    "{member}:Option<ByteInputSlot<P::{consumer},[u8;{expected}]>>,"
+                )),
+                "{member}'s provider slot uses its own limit"
+            );
+            let initializer = between(
+                &generated,
+                &format!("streams.{member}=Some(ByteInputSlot{{"),
+                "streams.__started=true;",
+            );
+            assert!(
+                initializer.contains(&format!("buffer:[0u8;{expected}],")),
+                "{member}'s provider buffer initializer uses its own limit"
+            );
         }
     }
 }
@@ -1641,4 +1659,37 @@ fn a_stream_before_a_plain_argument_keeps_the_plain_argument_name() {
         d.contains("pubfnput(&mutself,info:super::Info)"),
         "the plain parameter keeps its name"
     );
+}
+
+#[test]
+fn byte_and_text_uploads_reject_limits_below_four_and_accept_four() {
+    for member in ["put", "note"] {
+        for limit in 0..=4 {
+            let mut package = ir::compile_fixture("stream_face.ridl");
+            let docs = package
+                .interfaces
+                .iter_mut()
+                .find(|i| i.name == "Docs")
+                .unwrap();
+            docs.interactions
+                .iter_mut()
+                .find(|i| i.name == member)
+                .unwrap()
+                .limit = Some(limit);
+            let result = generate_face_with(&package, &[WireEncoding::FlatBuffers]);
+            if limit < 4 {
+                let error = result.expect_err("an upload chunk must hold at least four bytes");
+                assert!(
+                    error.message.contains(&format!("`{member}`")),
+                    "the error must name {member}: {}",
+                    error.message
+                );
+            } else {
+                assert!(
+                    result.is_ok(),
+                    "limit four is valid for {member}: {result:?}"
+                );
+            }
+        }
+    }
 }
