@@ -151,10 +151,11 @@ amendment differ, the amendment holds.
   `crates/ridlc/tests/corpus/rust-shapes/shapes.ridl`. Task 3 adds to `Station`
   `query dump(): <bytes> @[..1s]`, `command load(data: <bytes>) @[..1s]` and
   `command feed(samples: <Inner>) @[..1s]`, and Task 4 adds
-  `query merge(samples: <Inner>): <Inner> @[..1s]`, so that `just demo` lints a
-  face of each form under `-D warnings`, `dead_code` included. Run `just demo`
-  once at the end of Tasks 3 and 4 (it needs the cross targets `bootstrap`
-  installs); if it cannot run, say so in the report.
+  `query blend(samples: <Inner>): <Inner> @[..1s]` (not `merge`, which is
+  reserved: FORM-105), so that `just demo` lints a face of each form under
+  `-D warnings`, `dead_code` included. Run `just demo` once at the end of Tasks
+  3 and 4 (it needs the cross targets `bootstrap` installs); if it cannot run,
+  say so in the report.
 - **A-4 (Tasks 3, 4). Members with a stream parameter get `Command` and `Query`
   impls.** `dispatch` and `poll.rs` evaluate `require` and `ensure` through
   those traits. `put`, `note`, `upload` get `Command`; `summarize` gets `Query`
