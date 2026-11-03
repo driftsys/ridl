@@ -198,6 +198,12 @@ calls `select` with the catalog it names, and answers `unknown_catalog` when
 after that. `serve` may become `serve_selected` with a selector that compares
 the one backend's catalog; the builder decides.
 
+**(amended 2026-11-03, plan check)** The selector receives a borrowed
+`RequestedCatalog<'a> { name: &'a str, hash: CatalogHash }` instead of a
+`&CatalogRef`, because a `CatalogRef` name is `&'static str` and the client's
+name borrows the connection's buffer. The backend it returns keeps its own
+`'static` `CatalogRef`.
+
 `serve` chooses the highest frame version from the backend (`streams()`,
 `members()`) and runs the `ConfigRefused` limit check before the handshake, and
 with a selector the backend is not known then. **(call)** `serve_selected` takes
