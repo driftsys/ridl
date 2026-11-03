@@ -1243,6 +1243,52 @@ impl Connection for Held {
     }
 }
 
+/// A connection whose writes progress in small chunks with a delay, as
+/// they do for a slowly reading client, and can stall after a set count.
+struct Throttled {
+    stream: TcpStream,
+    chunk: usize,
+    delay: Duration,
+    stall_after: Option<usize>,
+    calls: usize,
+    write_timeout: std::cell::Cell<Option<Duration>>,
+}
+
+impl Read for Throttled {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.stream.read(buf)
+    }
+}
+
+impl Write for Throttled {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.stall_after.is_some_and(|n| self.calls >= n) {
+            thread::sleep(self.write_timeout.get().unwrap_or(2 * TEST_LIMIT));
+            return Err(std::io::ErrorKind::TimedOut.into());
+        }
+        let n = self.stream.write(&buf[..buf.len().min(self.chunk)])?;
+        self.calls += 1;
+        thread::sleep(self.delay);
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.stream.flush()
+    }
+}
+
+impl Connection for Throttled {
+    fn set_read_timeout(&self, t: Option<Duration>) -> std::io::Result<()> {
+        self.stream.set_read_timeout(t)
+    }
+    fn set_write_timeout(&self, t: Option<Duration>) -> std::io::Result<()> {
+        self.write_timeout.set(t);
+        self.stream.set_write_timeout(t)
+    }
+    fn shutdown_write(&self) -> std::io::Result<()> {
+        self.stream.shutdown(std::net::Shutdown::Write)
+    }
+}
+
 /// The bytes of a raw client's upgrade answer, read up to the empty line.
 fn read_upgrade_answer(client: &mut TcpStream) {
     let mut head = Vec::new();
@@ -1574,6 +1620,140 @@ fn a_fixed_of_65_280_bytes_crosses_as_16_block_messages() {
     assert_eq!(joined, value);
     ws.close(None).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+/// A client that reads one answer over several liveness timeouts stays
+/// connected while each write makes progress.
+///
+/// Mutation: remove the clock shift after the message flush.
+#[test]
+fn a_client_that_reads_a_long_answer_slowly_is_not_ended() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(300);
+    config.ping_interval = TEST_LIMIT;
+    let (server, client) = pair();
+    let server = Throttled {
+        stream: server,
+        chunk: 8192,
+        delay: Duration::from_millis(60),
+        stall_after: None,
+        calls: 0,
+        write_timeout: std::cell::Cell::new(None),
+    };
+    let rt = Loopback::new(CATALOG);
+    let value = pattern(65_280);
+    rt.attach()
+        .provision_fixed(IFACE, FIXED.ord, &value)
+        .unwrap();
+    let handle = spawn(server, Scanning(rt), config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Read(FIXED));
+    let mut joined = Vec::new();
+    for k in 0..16u32 {
+        let m = recv(&mut ws);
+        let Frame::Block {
+            target,
+            total,
+            index,
+            payload,
+            ..
+        } = decode(&m).unwrap()
+        else {
+            panic!("message {k} is not a block");
+        };
+        assert_eq!(target, FIXED);
+        assert_eq!(total, 65_280);
+        assert_eq!(index, k);
+        joined.extend_from_slice(payload);
+    }
+    assert_eq!(joined, value);
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+}
+
+/// A signal change written by a poll over several liveness timeouts does
+/// not end a client whose reads keep making progress.
+///
+/// Mutation: remove the clock shift after the tick flush.
+#[test]
+fn a_client_that_reads_a_long_signal_change_slowly_is_not_ended() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(500);
+    config.ping_interval = TEST_LIMIT;
+    let (server, client) = pair();
+    let server = Throttled {
+        stream: server,
+        chunk: 1024,
+        delay: Duration::from_millis(60),
+        stall_after: None,
+        calls: 0,
+        write_timeout: std::cell::Cell::new(None),
+    };
+    let rt = Loopback::new(CATALOG);
+    let mut provider = rt.attach();
+    let limit = |t: Target| (t == SIGNAL).then_some(CALL_CEILING as u32);
+    let backend = Described::new(Scanning(rt), table(limit)).unwrap();
+    provider.set_limit(IFACE, SIGNAL.ord, CALL_CEILING);
+    let handle = spawn(server, backend, config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Subscribe(SIGNAL));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Answer {
+            target: SIGNAL,
+            outcome: AnswerOutcome::Accepted,
+        }
+    );
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        publish(0, 0, PublishState::Init)
+    );
+    let value = pattern(16_128);
+    provider.set(IFACE, SIGNAL.ord, &value).unwrap();
+    provider.commit();
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        publish(0, 1, PublishState::Live(&value))
+    );
+    thread::sleep(Duration::from_millis(100));
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+}
+
+/// A reader that stops making progress during a slow answer is ended by
+/// the write timeout, even though time spent writing is not peer silence.
+///
+/// Mutation: `run` sets the write timeout to three liveness timeouts.
+#[test]
+fn a_client_that_stops_reading_during_a_slow_answer_ends_at_the_liveness_timeout() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(500);
+    let delay = Duration::from_millis(60);
+    let bound = 6 * delay + 2 * config.liveness_timeout + Duration::from_millis(300);
+    let (server, client) = pair();
+    let server = Throttled {
+        stream: server,
+        chunk: 8192,
+        delay,
+        stall_after: Some(6),
+        calls: 0,
+        write_timeout: std::cell::Cell::new(None),
+    };
+    let rt = Loopback::new(CATALOG);
+    rt.attach()
+        .provision_fixed(IFACE, FIXED.ord, &pattern(65_280))
+        .unwrap();
+    let handle = spawn(server, Scanning(rt), config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Read(FIXED));
+    let (ended, elapsed) = handle.join();
+    assert_eq!(ended, Ended::LivenessTimeout);
+    assert!(elapsed < bound, "ended after {elapsed:?}, over {bound:?}");
 }
 
 /// A client that sends reads of a large `fixed` and reads nothing more ends
