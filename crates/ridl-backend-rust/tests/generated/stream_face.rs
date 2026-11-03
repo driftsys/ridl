@@ -5994,7 +5994,7 @@ pub mod log {
             self.shared.forget(self.port);
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). An ended sink preserves the reply: the call is forgotten when the reply finishes or the last remaining value is dropped.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped.
     pub struct PipeSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller

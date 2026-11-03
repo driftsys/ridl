@@ -197,7 +197,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         call_items
     };
     let sink_doc = if call.duplex() {
-        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). An ended sink preserves the reply: the call is forgotten when the reply finishes or the last remaining value is dropped."
+        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped."
     } else if call.query_upload() {
         "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply."
     } else {

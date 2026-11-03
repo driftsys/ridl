@@ -1265,7 +1265,7 @@ rulings override the earlier design where it differs.
 - A-4: Supported upload commands get `Command` impls and upload queries get
   `Query` impls with the plain reply type or `()` for a streamed reply, so their
   clauses use the existing trait path and a generic call without its upload
-  stays open until forgotten.
+  stays open until its provider replies or the call is forgotten.
 - Client arguments are passed by value and provider arguments by reference,
   stream-only requests use the induced empty parameter struct, and selecting the
   ordinary argument name ignores stream positions.
@@ -1354,13 +1354,13 @@ rulings override the earlier design where it differs.
   call value retains until acknowledgment or reply or until the call itself is
   dropped.
 - Dropping a `PipeSink` that has not ended interrupts and forgets the whole call
-  at once, notifies the provider consumer with `failed(Interrupted)`, lets the
-  caller's reply stream yield elements it already received then `Interrupted`
-  once, and makes an unresolved reply future polled after that drop settle
-  `Interrupted`.
-- The rule "forgotten when the last of the two is dropped" applies only to an
-  ended sink, whose live reply ownership flag and common forgotten flag prevent
-  premature or duplicate cleanup.
+  at once (the provider consumer receives `failed(Interrupted)` when `serve`
+  next observes the aborted upload), lets the caller's reply stream yield
+  elements it already received then `Interrupted` once, and makes an unresolved
+  reply future polled after that drop settle `Interrupted`.
+- Dropping an ended sink does not forget the call; the reply side forgets it
+  when the reply finishes or the reply value is dropped, and the common
+  forgotten flag prevents duplicate cleanup.
 - Known duplex errors are cached so consuming or dropping a reply cannot replace
   an upload verdict with an unknown-correlation interruption, and a reply stream
   or future of an already forgotten call reports the recorded error or

@@ -508,9 +508,10 @@ Dropping an unfinished `PipeSink` immediately interrupts and forgets the whole
 call. Its reply stream yields elements it already received, then `Interrupted`
 once; a still-unresolved reply future settles `Interrupted`. A reply stream or
 future of a forgotten call reports its recorded error, or `Interrupted`, without
-pulling that correlation again. The last of the sink and reply owners forgets
-the call only when the sink has ended; shared state prevents duplicate cleanup
-and preserves a known error.
+pulling that correlation again. Dropping a sink that has ended does not forget
+the call: the reply side forgets it when its reply finishes or when its reply
+value is dropped. Shared state prevents duplicate cleanup and preserves a known
+error.
 
 The [docstore example](../../examples/docstore/docstore.ridl) stores 204,800
 bytes through an upload command, describes them with a named result union, and
