@@ -1,0 +1,10 @@
+[package]
+name = "docstore"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+
+[lints]
+# The generated face requires a named union for a functional error reply.
+named-result-union-in-query = "allow"
