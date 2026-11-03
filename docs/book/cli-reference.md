@@ -896,7 +896,7 @@ declarations gets no face module at all, and neither does an `internal`
 interface ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md)
 gives the rule). Beside the per-package files it
 writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
-encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
+encoding's feature, and with `ridl-rt/std` behind the crate's own `std` and `ridl-rt/debug` behind its `debug`, which enables nothing else.
 When the workspace declares a `system`, it also writes `__ridl_instances.rs`,
 which the crate root declares as the `instances` module: one constant for the
 number of each instance, from `instances.lock`. A package whose first segment

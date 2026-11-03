@@ -943,6 +943,38 @@ absences:
   claim that does not exist answers `UnknownClaim` and leaves the injection
   armed for the next real settlement.
 
+## The node and its attachments
+
+With the `node` feature, `Node` holds the catalog stores of one machine and
+`Attachment` is a handle on one of them. `Node::from_descriptor(bytes, machine)`
+verifies a `&'static` deployment descriptor and builds one `Loopback` store for
+each distinct catalog that an instance of the machine offers or maps. `attach`
+takes an `InstanceNo` and a `CatalogRef` and returns an `Attachment` or an
+`AttachError`. The rules of the grant, of the twin and of the exclusion between
+`N` and `-N` are those of
+[the deployment descriptor record](deployment-descriptor.md), section "Attaching
+to a node"; this section states how the crate carries them.
+
+- **One reservation table for the node.** A map from signed instance number to
+  the count of live attachments sits behind one mutex, shared by every
+  attachment of the node. The conflict check and the increment happen under one
+  lock, so two simultaneous attaches of `N` and `-N` have exactly one winner. A
+  reservation is released by the `Drop` of the attachment, after its ports, so a
+  replacement attach cannot overlap them. The stores and the table outlive the
+  `Node` while an attachment lives.
+- **An attachment has no raw handle.** It implements the port traits by
+  delegating to its store, and offers no way to extract or copy the store
+  handle, so the grant cannot be bypassed.
+- **The listener's permissions.** An attachment of the listener delegates every
+  read, subscription and call. `set`, `invalidate` and `touch` return
+  `WriteError::NotOwner`, `raise` returns `RaiseError::NotOwner`, `serve`
+  returns `ServeError::NotOwner`, `next_claim` returns no claim, and `commit`
+  does nothing.
+- **The descriptor dependency is optional.** Without `node`, the crate does not
+  link `ridl-descriptor`. The packaged crate leaves out `tests/node.rs`, which
+  reads the conformance fixture from outside the package; it runs in the
+  workspace.
+
 ## It runs the port contract suite
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
@@ -960,10 +992,11 @@ before they take a claim, so the deviation from `Handler::serve` recorded under
 allows but does not require: because a spurious wake is allowed, it asserts that
 a change leaves a waker unwoken only where the contract rules the wake out — a
 refresh, or a waker already woken or displaced and so cleared — and it never
-asserts that a registration whose key already holds is woken at once. It drops
-no handle, and it accepts either result for a forgotten call no handler has
-claimed. What the suite leaves out, and why, is listed once, in the crate
-documentation of `crates/ridl-rt-conformance/src/lib.rs`.
+asserts that a registration whose key already holds is woken at once. The base
+suite drops no handle (the `identity` group drops attachments, to check that an
+identity is released), and it accepts either result for a forgotten call no
+handler has claimed. What the suite leaves out, and why, is listed once, in the
+crate documentation of `crates/ridl-rt-conformance/src/lib.rs`.
 `crates/ridl-loopback/tests/ports.rs` keeps the tests of this runtime's own
 choices — its narrower wakes, its wakes at once, its `Drop`, its withdrawal, and
 its own numbers — some of which fall under that list and some of which are this
