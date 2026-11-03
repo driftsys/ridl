@@ -18,8 +18,9 @@
 //!   resolves on the outcome or at the member's bound, and forgets its call
 //!   when it leaves the waiting phase, on drop included; and `NextEvent`,
 //!   the event future;
-//! - for a query whose only stream is its reply, the same `<Name>Call`, which
-//!   resolves to `<Name>Stream` once the first chunk or the end arrived,
+//! - for a query whose only stream is a reply of named elements, bytes or
+//!   text, the same `<Name>Call`, which resolves to `<Name>Stream` once the
+//!   first chunk or the end arrived,
 //!   and `<Name>Stream`, the pull API over the `StreamCaller` port: `poll_next`
 //!   verifies and decodes one named element per chunk. A byte stream has
 //!   `poll_read` and `read`, serving short buffers from inline storage; a text

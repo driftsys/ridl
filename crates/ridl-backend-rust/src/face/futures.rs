@@ -517,12 +517,13 @@ fn stream_call_future(call: &Call, encoding: &TokenStream) -> TokenStream {
     }
 }
 
-/// A streamed query's stream value: the pull API over the `StreamCaller`
-/// port, one element per chunk, and `async fn next` over it.
-///
-/// The struct holds the element's `Payload::Buffer` inline, so it carries
-/// that one predicate itself, as `Serve` carries its claim buffer's; the
-/// `Drop` impl repeats it.
+/// A streamed query's consumer over `StreamCaller`: named elements use
+/// poll_next/next and an inline Payload::Buffer; bytes use poll_read/read,
+/// and text uses poll_next/next yielding borrowed UTF-8. Byte and text
+/// consumers keep an inline array sized by the member's limit. Their
+/// provider protocol is ByteSource::poll_read: Ok(0) ends it and
+/// Err(Interrupted) interrupts it, without element encoding. Named-element
+/// buffers carry a Payload predicate that their Drop implementation repeats.
 fn stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
     if call.raw_stream() {
         return byte_stream_value(call, encoding);
@@ -766,26 +767,30 @@ fn byte_stream_value(call: &Call, encoding: &TokenStream) -> TokenStream {
             fn poll_text_len(&mut self, cx: &mut ::core::task::Context<'_>)
                 -> ::core::task::Poll<Option<Result<usize, ::ridl_rt::error::ClientError>>>
             {
-                match self.poll_chunk(cx) {
-                    ::core::task::Poll::Pending => ::core::task::Poll::Pending,
-                    ::core::task::Poll::Ready(Ok(None)) => ::core::task::Poll::Ready(None),
-                    ::core::task::Poll::Ready(Err(error)) => ::core::task::Poll::Ready(Some(Err(error))),
-                    ::core::task::Poll::Ready(Ok(Some(len))) => {
-                        if ::core::str::from_utf8(&self.buffer[..len]).is_err() {
-                            let error = ::ridl_rt::error::CallError::Contract(
-                                ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
-                                    type_name: Some("string"), rule: ::ridl_rt::payload::Rule::Utf8,
-                                }),
-                            );
-                            return ::core::task::Poll::Ready(Some(Err(self.refuse(error))));
+                loop {
+                    match self.poll_chunk(cx) {
+                        ::core::task::Poll::Pending => return ::core::task::Poll::Pending,
+                        ::core::task::Poll::Ready(Ok(None)) => return ::core::task::Poll::Ready(None),
+                        ::core::task::Poll::Ready(Err(error)) => return ::core::task::Poll::Ready(Some(Err(error))),
+                        ::core::task::Poll::Ready(Ok(Some(0))) => continue,
+                        ::core::task::Poll::Ready(Ok(Some(len))) => {
+                            if ::core::str::from_utf8(&self.buffer[..len]).is_err() {
+                                let error = ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
+                                        type_name: Some("string"), rule: ::ridl_rt::payload::Rule::Utf8,
+                                    }),
+                                );
+                                return ::core::task::Poll::Ready(Some(Err(self.refuse(error))));
+                            }
+                            return ::core::task::Poll::Ready(Some(Ok(len)));
                         }
-                        ::core::task::Poll::Ready(Some(Ok(len)))
                     }
                 }
             }
 
             /// Pulls one complete UTF-8 chunk, borrowed until the next call.
-            /// Invalid UTF-8 aborts the stream and yields one error, then None.
+            /// Empty chunks are skipped. Invalid UTF-8 aborts the stream
+            /// and yields one error, then None.
             pub fn poll_next(&mut self, cx: &mut ::core::task::Context<'_>)
                 -> ::core::task::Poll<Option<Result<&str, ::ridl_rt::error::ClientError>>>
             {

@@ -168,7 +168,34 @@ pub(super) fn serve(
             "the comparison is made once, before `Handler::serve` is called",
         ),
     );
-    let serve_doc = if streams.is_empty() {
+    let serve_doc = if streams.iter().any(|call| call.raw_stream()) {
+        format!(
+            "{serve_doc}\n\n# Streamed replies\n\nEach query's Provider method returns \
+             its reply source after the arguments and require clauses pass. Each serve \
+             poll first drives running streams, then takes claims, sharing a budget of \
+             {SERVE_BUDGET}. A source is polled at most once for each running call and \
+             spends one budget unit. A chunk held while the port window is full is \
+             retried before another source poll.\n\nA named-element source uses \
+             Source::poll_next: each element is encoded and checked in an inline \
+             Payload buffer before transmission. Ready(None) ends it; \
+             Ready(Some(Err(Interrupted))) interrupts it. A byte or text source uses \
+             ByteSource::poll_read and fills an inline byte buffer without element \
+             encoding: Ready(Ok(0)) ends it and Ready(Err(Interrupted)) interrupts it. \
+             A partial buffer is pushed when the source is pending or ends. Text chunks \
+             preserve complete code points; invalid text or an incomplete code point at \
+             normal end is refused with Contract::InvalidValue and Rule::Utf8, after \
+             the valid prefix.\n\nAn end settles the reply claim successfully; an \
+             interruption stops it with Transport::Interrupted. PushError::TooLarge \
+             stops it with Transport::Interrupted, and PushError::Failed ends the claim \
+             with the caller's outcome. The source is dropped when its stream ends or \
+             stops. One stream runs per member; a concurrent call is settled \
+             Transport::Busy. A caller's forget is detected by the next push, so a \
+             pending source can keep its member busy until it yields again. Ready \
+             progress wakes serve for another poll; a pending source registers its own \
+             waker. Dropping serve interrupts every running stream and drops its \
+             source."
+        )
+    } else if streams.is_empty() {
         serve_doc
     } else {
         format!(
@@ -657,6 +684,7 @@ fn byte_stream_items() -> TokenStream {
                     if stream.terminal.is_some() { continue; }
                     if pending { return false; }
                 }
+                // polled limits each call to one source poll; the debit shares the budget across claims.
                 if polled || *budget == 0 { return true; }
                 *budget -= 1;
                 polled = true;

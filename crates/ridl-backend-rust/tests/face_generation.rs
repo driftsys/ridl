@@ -1393,13 +1393,11 @@ fn byte_and_text_reply_streams_get_their_consumer_and_provider_faces() {
 
 #[test]
 fn byte_stream_limit_literal_matches_the_runtime_default() {
-    let docs = dense(&module(&stream_face(), "docs"));
+    let source = stream_face();
     let limit = ridl_rt::contract::default_ceiling(ridl_rt::contract::Kind::Query);
-    assert_eq!(
-        docs.matches(&format!("pubconstLIMIT:usize={limit};"))
-            .count(),
-        2
-    );
+    for stream in ["FetchStream", "TextStream"] {
+        assert_eq!(stream_limit_and_capacity(&source, stream), (limit, limit));
+    }
 }
 
 #[test]
@@ -1422,9 +1420,111 @@ fn byte_and_text_streams_reject_limits_below_four_and_keep_explicit_limits() {
                 let error = result.expect_err("a byte or text stream needs at least four bytes");
                 assert!(error.message.contains(member));
             } else {
-                let docs = dense(&module(&result.unwrap().rust_source, "docs"));
-                assert!(docs.contains(&format!("pubconstLIMIT:usize={limit};")));
+                let source = result.unwrap().rust_source;
+                let stream = if member == "fetch" {
+                    "FetchStream"
+                } else {
+                    "TextStream"
+                };
+                assert_eq!(
+                    stream_limit_and_capacity(&source, stream),
+                    (limit as usize, limit as usize)
+                );
             }
         }
+    }
+}
+
+/// Reads the constant and array from the named stream's own items, so the
+/// other member's constant cannot satisfy a check for this stream.
+fn stream_limit_and_capacity(source: &str, stream: &str) -> (usize, usize) {
+    fn literal(expr: &syn::Expr) -> usize {
+        let syn::Expr::Lit(expr) = expr else {
+            panic!("expected a literal limit");
+        };
+        let syn::Lit::Int(value) = &expr.lit else {
+            panic!("expected an integer limit");
+        };
+        value.base10_parse().unwrap()
+    }
+    let syntax = syn::parse_file(source).unwrap();
+    let docs = syntax
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == "docs" => {
+                module.content.as_ref().map(|(_, items)| items)
+            }
+            _ => None,
+        })
+        .expect("Docs module");
+    let limit = docs
+        .iter()
+        .find_map(|item| {
+            let syn::Item::Impl(item) = item else {
+                return None;
+            };
+            let syn::Type::Path(path) = item.self_ty.as_ref() else {
+                return None;
+            };
+            if path.path.segments.last().unwrap().ident != stream {
+                return None;
+            }
+            item.items.iter().find_map(|item| match item {
+                syn::ImplItem::Const(value) if value.ident == "LIMIT" => Some(literal(&value.expr)),
+                _ => None,
+            })
+        })
+        .expect("the stream's own LIMIT");
+    let capacity = docs
+        .iter()
+        .find_map(|item| {
+            let syn::Item::Struct(item) = item else {
+                return None;
+            };
+            if item.ident != stream {
+                return None;
+            }
+            item.fields.iter().find_map(|field| {
+                if field.ident.as_ref().is_none_or(|name| name != "buffer") {
+                    return None;
+                }
+                let syn::Type::Array(array) = &field.ty else {
+                    panic!("inline byte array");
+                };
+                Some(literal(&array.len))
+            })
+        })
+        .expect("the stream's own buffer");
+    (limit, capacity)
+}
+
+#[test]
+fn distinct_byte_and_text_limits_belong_to_their_own_streams() {
+    for (fetch, text) in [(32, 64), (64, 32)] {
+        let mut package = ir::compile_fixture("stream_face.ridl");
+        let docs = package
+            .interfaces
+            .iter_mut()
+            .find(|i| i.name == "Docs")
+            .unwrap();
+        for interaction in &mut docs.interactions {
+            interaction.limit = Some(if interaction.name == "fetch" {
+                fetch
+            } else {
+                text
+            });
+        }
+        let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+            .unwrap()
+            .rust_source;
+        assert_eq!(
+            stream_limit_and_capacity(&source, "FetchStream"),
+            (fetch as usize, fetch as usize)
+        );
+        assert_eq!(
+            stream_limit_and_capacity(&source, "TextStream"),
+            (text as usize, text as usize)
+        );
     }
 }

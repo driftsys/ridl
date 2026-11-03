@@ -6296,28 +6296,36 @@ pub mod docs {
             &mut self,
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Option<Result<usize, ::ridl_rt::error::ClientError>>> {
-            match self.poll_chunk(cx) {
-                ::core::task::Poll::Pending => ::core::task::Poll::Pending,
-                ::core::task::Poll::Ready(Ok(None)) => ::core::task::Poll::Ready(None),
-                ::core::task::Poll::Ready(Err(error)) => {
-                    ::core::task::Poll::Ready(Some(Err(error)))
-                }
-                ::core::task::Poll::Ready(Ok(Some(len))) => {
-                    if ::core::str::from_utf8(&self.buffer[..len]).is_err() {
-                        let error = ::ridl_rt::error::CallError::Contract(
-                            ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
-                                type_name: Some("string"),
-                                rule: ::ridl_rt::payload::Rule::Utf8,
-                            }),
-                        );
-                        return ::core::task::Poll::Ready(Some(Err(self.refuse(error))));
+            loop {
+                match self.poll_chunk(cx) {
+                    ::core::task::Poll::Pending => return ::core::task::Poll::Pending,
+                    ::core::task::Poll::Ready(Ok(None)) => {
+                        return ::core::task::Poll::Ready(None);
                     }
-                    ::core::task::Poll::Ready(Some(Ok(len)))
+                    ::core::task::Poll::Ready(Err(error)) => {
+                        return ::core::task::Poll::Ready(Some(Err(error)));
+                    }
+                    ::core::task::Poll::Ready(Ok(Some(0))) => continue,
+                    ::core::task::Poll::Ready(Ok(Some(len))) => {
+                        if ::core::str::from_utf8(&self.buffer[..len]).is_err() {
+                            let error = ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
+                                    type_name: Some("string"),
+                                    rule: ::ridl_rt::payload::Rule::Utf8,
+                                }),
+                            );
+                            return ::core::task::Poll::Ready(
+                                Some(Err(self.refuse(error))),
+                            );
+                        }
+                        return ::core::task::Poll::Ready(Some(Ok(len)));
+                    }
                 }
             }
         }
         /// Pulls one complete UTF-8 chunk, borrowed until the next call.
-        /// Invalid UTF-8 aborts the stream and yields one error, then None.
+        /// Empty chunks are skipped. Invalid UTF-8 aborts the stream
+        /// and yields one error, then None.
         pub fn poll_next(
             &mut self,
             cx: &mut ::core::task::Context<'_>,
@@ -6876,7 +6884,11 @@ pub mod docs {
     ///
     /// # Streamed replies
     ///
-    /// A query whose reply is a stream is served from the source its `Provider` method returns, once the arguments and the `require` clauses pass. Each poll of the future first drives every stream it holds, then takes claims: a stream whose last element found the window full pushes that element again, after it registered its interest in the stream, and polls its source only once the element was taken; otherwise the source is polled once, which counts as one of the 32 claims of the poll. An element is encoded into a buffer inline in the future and checked against its type before it is pushed; one that fails stops the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` ends the stream, and the claim is settled `Ok`; `Ready(Some(Err(Interrupted)))` stops it with `Transport::Interrupted`; a push above the member's limit (`PushError::TooLarge`) stops it with `Transport::Interrupted`; a push the caller refused or stopped reading (`PushError::Failed`) ends the claim. The source is dropped once its stream ended or stopped. The future drives one stream per member at a time: a call of a member whose stream is still running is settled `Transport::Busy`. The handler port gives the future no signal when a caller forgets the call, by its bound passing or by dropping its stream: the future reads the forget from its next push. So while a member's source answers `Pending`, a caller that stopped keeps the member busy until the source yields its next element, whose push fails, and only then is the source dropped and the member free for a new call. Dropping the future stops every stream it still drives with `Transport::Interrupted` and drops its source.
+    /// Each query's Provider method returns its reply source after the arguments and require clauses pass. Each serve poll first drives running streams, then takes claims, sharing a budget of 32. A source is polled at most once for each running call and spends one budget unit. A chunk held while the port window is full is retried before another source poll.
+    ///
+    /// A named-element source uses Source::poll_next: each element is encoded and checked in an inline Payload buffer before transmission. Ready(None) ends it; Ready(Some(Err(Interrupted))) interrupts it. A byte or text source uses ByteSource::poll_read and fills an inline byte buffer without element encoding: Ready(Ok(0)) ends it and Ready(Err(Interrupted)) interrupts it. A partial buffer is pushed when the source is pending or ends. Text chunks preserve complete code points; invalid text or an incomplete code point at normal end is refused with Contract::InvalidValue and Rule::Utf8, after the valid prefix.
+    ///
+    /// An end settles the reply claim successfully; an interruption stops it with Transport::Interrupted. PushError::TooLarge stops it with Transport::Interrupted, and PushError::Failed ends the claim with the caller's outcome. The source is dropped when its stream ends or stops. One stream runs per member; a concurrent call is settled Transport::Busy. A caller's forget is detected by the next push, so a pending source can keep its member busy until it yields again. Ready progress wakes serve for another poll; a pending source registers its own waker. Dropping serve interrupts every running stream and drops its source.
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where

@@ -2696,3 +2696,418 @@ fn serve_polls_each_byte_source_once_without_starving_the_next_member() {
     assert!(poll_once(&mut serve).is_pending());
     assert_eq!((fetch.get(), text.get()), (1, 1));
 }
+
+// Controls for the byte/text paths, separate from named elements.
+fn document_claim(handler: &mut HandlerHandle) -> ClaimId {
+    handler.next_claim(&mut [0; 64]).unwrap().unwrap().id
+}
+
+/// Reuses the crowded handler's counters, but presents valid byte-query
+/// claims behind the two real calls. Those extra claims settle Busy.
+struct ByteClaims {
+    inner: Crowded,
+    args: Vec<u8>,
+}
+impl Attached for ByteClaims {
+    fn catalog(&self) -> &CatalogRef {
+        self.inner.catalog()
+    }
+}
+impl Encoded for ByteClaims {
+    type Encoding = FlatBuffers;
+}
+impl Handler for ByteClaims {
+    fn serve(
+        &mut self,
+        iface: InterfaceNo,
+        ords: &[Ordinal],
+    ) -> Result<(), ridl_rt::port::ServeError> {
+        self.inner.serve(iface, ords)
+    }
+    fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<ridl_rt::port::Claim>, ReadError> {
+        let Some(mut claim) = self.inner.next_claim(out)? else {
+            return Ok(None);
+        };
+        if claim.id.0 > CROWD {
+            out[..self.args.len()].copy_from_slice(&self.args);
+            claim.iface = DOCS;
+            claim.ord = FETCH;
+            claim.len = self.args.len();
+        }
+        Ok(Some(claim))
+    }
+    fn settle(
+        &mut self,
+        claim: ClaimId,
+        outcome: Result<&[u8], CallError>,
+    ) -> Result<(), ridl_rt::port::SettleError> {
+        if claim.0 > CROWD {
+            assert_eq!(outcome, Err(CallError::Transport(Transport::Busy)));
+        }
+        self.inner.settle(claim, outcome)
+    }
+}
+impl StreamHandler for ByteClaims {
+    fn pull_claim(
+        &mut self,
+        c: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+        out: &mut [u8],
+    ) -> Result<Pull, ReadError> {
+        self.inner.pull_claim(c, s, out)
+    }
+    fn push_claim(
+        &mut self,
+        c: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+        bytes: &[u8],
+    ) -> Result<usize, PushError> {
+        self.inner.push_claim(c, s, bytes)
+    }
+    fn end_claim(&mut self, c: ClaimId, s: ridl_rt::contract::StreamNo) -> Result<(), PushError> {
+        self.inner.end_claim(c, s)
+    }
+    fn abort_claim(
+        &mut self,
+        c: ClaimId,
+        s: ridl_rt::contract::StreamNo,
+        e: CallError,
+    ) -> Result<(), PushError> {
+        self.inner.abort_claim(c, s, e)
+    }
+}
+impl Wakeable for ByteClaims {
+    fn wake_on(&self, interest: Interest, waker: &Waker) {
+        self.inner.wake_on(interest, waker);
+    }
+}
+
+#[test]
+fn fix_byte_source_polls_debit_the_shared_budget_before_ready_byte_claims() {
+    let rt = loopback();
+    let fetch = Rc::new(Cell::new(0));
+    let text = Rc::new(Cell::new(0));
+    let mut provider = CountedDocuments {
+        fetch: fetch.clone(),
+        text: text.clone(),
+    };
+    let extra = Rc::new(Cell::new(0));
+    let taken = Rc::new(Cell::new(0));
+    let mut buf = <generated::Id as ridl_rt::payload::Payload<FlatBuffers>>::BUFFER;
+    let args =
+        Ref::<generated::Id, FlatBuffers>::encode(&generated::Id::new_unchecked(1), &mut buf)
+            .unwrap()
+            .bytes()
+            .to_vec();
+    let handler = ByteClaims {
+        inner: Crowded {
+            inner: rt.handler(),
+            extra: extra.clone(),
+            taken: taken.clone(),
+        },
+        args,
+    };
+    let mut serve = generated::docs::serve(handler, &mut provider);
+    let mut fetch_client = generated::docs::Client::new(rt.caller());
+    let mut text_client = generated::docs::Client::new(rt.caller());
+    let _fetch = fetch_client.fetch(generated::Id::new_unchecked(1));
+    let _text = text_client.text(generated::Id::new_unchecked(1));
+    assert!(poll_once(&mut serve).is_pending());
+    extra.set(36);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!((fetch.get(), text.get()), (1, 1));
+    assert_eq!(taken.get(), 30, "two source polls leave thirty claim units");
+    assert_eq!(extra.get(), 6);
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(taken.get(), 36);
+}
+
+#[test]
+fn fix_binary_bytes_round_trip_through_generated_serve_and_end() {
+    let rt = loopback();
+    let expected: Vec<u8> = (0..BYTE_LIMIT * 3 + 19)
+        .map(|n| [0xff, 0x80, 0xc3, 0, 0x7f][n % 5])
+        .collect();
+    let mut provider = Documents {
+        bytes: expected.clone(),
+        step: BYTE_LIMIT,
+        pending_at_end: false,
+    };
+    let mut serve = generated::docs::serve(rt.handler(), &mut provider);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let mut call = client.fetch(generated::Id::new_unchecked(1));
+    for _ in 0..3 {
+        assert!(poll_once(&mut serve).is_pending());
+    }
+    let mut stream = document_resolved(poll_once(&mut call), "the binary reply");
+    let mut got = Vec::new();
+    let mut ended = false;
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut buf = [0; 37];
+    for _ in 0..expected.len() + 8 {
+        assert!(poll_once(&mut serve).is_pending());
+        match stream.poll_read(&mut cx, &mut buf) {
+            Poll::Ready(Ok(0)) => {
+                ended = true;
+                break;
+            }
+            Poll::Ready(Ok(n)) => got.extend_from_slice(&buf[..n]),
+            Poll::Pending => {}
+            Poll::Ready(Err(error)) => panic!("binary data was refused: {error:?}"),
+        }
+    }
+    assert!(ended, "the byte source ends normally");
+    assert_eq!(got, expected);
+}
+
+#[test]
+fn fix_a_pending_byte_stream_registers_a_waker_for_the_next_push() {
+    let rt = loopback();
+    let mut handler = document_handler(&rt, FETCH);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::docs::Client::new(ports);
+    let mut call = client.fetch(generated::Id::new_unchecked(1));
+    let c = the_one_send(&log);
+    let claim = document_claim(&mut handler);
+    handler.push_claim(claim, REPLY_STREAM, b"x").unwrap();
+    let mut stream = document_resolved(poll_once(&mut call), "first byte chunk");
+    let wakes = CountWakes::new();
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    let mut buf = [0; 8];
+    assert_eq!(stream.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(1)));
+    doubles::take(&log);
+    assert!(stream.poll_read(&mut cx, &mut buf).is_pending());
+    assert_eq!(
+        doubles::take(&log),
+        vec![
+            Op::WakeOn(Interest::Stream(c, REPLY_STREAM)),
+            Op::Pull(c, REPLY_STREAM)
+        ]
+    );
+    assert_eq!(wakes.count(), 0);
+    handler.push_claim(claim, REPLY_STREAM, b"y").unwrap();
+    assert_eq!(wakes.count(), 1);
+    assert_eq!(stream.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(1)));
+    assert_eq!(buf[0], b'y');
+}
+
+#[test]
+fn fix_a_pending_text_stream_registers_a_waker_for_the_next_push() {
+    let rt = loopback();
+    let mut handler = document_handler(&rt, TEXT);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::docs::Client::new(ports);
+    let mut call = client.text(generated::Id::new_unchecked(1));
+    let c = the_one_send(&log);
+    let claim = document_claim(&mut handler);
+    handler.push_claim(claim, REPLY_STREAM, b"x").unwrap();
+    let mut stream = document_resolved(poll_once(&mut call), "first text chunk");
+    let wakes = CountWakes::new();
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert_eq!(stream.poll_next(&mut cx), Poll::Ready(Some(Ok("x"))));
+    doubles::take(&log);
+    assert!(stream.poll_next(&mut cx).is_pending());
+    assert_eq!(
+        doubles::take(&log),
+        vec![
+            Op::WakeOn(Interest::Stream(c, REPLY_STREAM)),
+            Op::Pull(c, REPLY_STREAM)
+        ]
+    );
+    assert_eq!(wakes.count(), 0);
+    handler.push_claim(claim, REPLY_STREAM, b"y").unwrap();
+    assert_eq!(wakes.count(), 1);
+    assert_eq!(stream.poll_next(&mut cx), Poll::Ready(Some(Ok("y"))));
+}
+
+macro_rules! check_raw_first {
+    (bytes, $stream:ident, $cx:expr) => {{
+        let mut buf = [0; 8];
+        assert_eq!($stream.poll_read($cx, &mut buf), Poll::Ready(Ok(1)));
+        assert_eq!(buf[0], b'x');
+    }};
+    (text, $stream:ident, $cx:expr) => {
+        assert_eq!($stream.poll_next($cx), Poll::Ready(Some(Ok("x"))));
+    };
+}
+macro_rules! check_raw_end {
+    (bytes, $stream:ident, $cx:expr) => {
+        assert_eq!($stream.poll_read($cx, &mut [0; 8]), Poll::Ready(Ok(0)));
+    };
+    (text, $stream:ident, $cx:expr) => {
+        assert_eq!($stream.poll_next($cx), Poll::Ready(None));
+    };
+}
+macro_rules! check_raw_failure {
+    (bytes, $stream:ident, $cx:expr, $error:expr) => {
+        assert_eq!(
+            $stream.poll_read($cx, &mut [0; 8]),
+            Poll::Ready(Err(ClientError::Call($error)))
+        );
+    };
+    (text, $stream:ident, $cx:expr, $error:expr) => {
+        assert_eq!(
+            $stream.poll_next($cx),
+            Poll::Ready(Some(Err(ClientError::Call($error))))
+        );
+    };
+}
+macro_rules! raw_release_tests {
+    ($module:ident, $method:ident, $ordinal:ident, $form:ident) => {
+        mod $module {
+            use super::*;
+            #[test]
+            fn end_forgets_once_before_drop() {
+                let rt = loopback();
+                let mut handler = document_handler(&rt, $ordinal);
+                let ports = RecordingPorts::new(&rt);
+                let log = ports.log();
+                let mut client = generated::docs::Client::new(ports);
+                let mut call = client.$method(generated::Id::new_unchecked(1));
+                let c = the_one_send(&log);
+                let claim = document_claim(&mut handler);
+                handler.push_claim(claim, REPLY_STREAM, b"x").unwrap();
+                let mut stream = document_resolved(poll_once(&mut call), "first chunk");
+                let mut cx = Context::from_waker(Waker::noop());
+                check_raw_first!($form, stream, &mut cx);
+                assert!(doubles::forgets(&log).is_empty());
+                handler.end_claim(claim, REPLY_STREAM).unwrap();
+                check_raw_end!($form, stream, &mut cx);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+                drop(stream);
+                drop(call);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+            }
+            #[test]
+            fn provider_failure_forgets_once_before_drop() {
+                let rt = loopback();
+                let mut handler = document_handler(&rt, $ordinal);
+                let ports = RecordingPorts::new(&rt);
+                let log = ports.log();
+                let mut client = generated::docs::Client::new(ports);
+                let mut call = client.$method(generated::Id::new_unchecked(1));
+                let c = the_one_send(&log);
+                let claim = document_claim(&mut handler);
+                handler.push_claim(claim, REPLY_STREAM, b"x").unwrap();
+                let mut stream = document_resolved(poll_once(&mut call), "first chunk");
+                let mut cx = Context::from_waker(Waker::noop());
+                check_raw_first!($form, stream, &mut cx);
+                let error = CallError::Transport(Transport::Interrupted);
+                handler.abort_claim(claim, REPLY_STREAM, error).unwrap();
+                check_raw_failure!($form, stream, &mut cx, error);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+                drop(stream);
+                drop(call);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+            }
+            #[test]
+            fn live_stream_drop_forgets_once_and_interrupts() {
+                let rt = loopback();
+                let mut handler = document_handler(&rt, $ordinal);
+                let ports = RecordingPorts::new(&rt);
+                let log = ports.log();
+                let mut client = generated::docs::Client::new(ports);
+                let mut call = client.$method(generated::Id::new_unchecked(1));
+                let c = the_one_send(&log);
+                let claim = document_claim(&mut handler);
+                handler.push_claim(claim, REPLY_STREAM, b"x").unwrap();
+                let stream = document_resolved(poll_once(&mut call), "live stream");
+                assert!(doubles::forgets(&log).is_empty());
+                drop(stream);
+                drop(call);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+                assert_eq!(
+                    handler.push_claim(claim, REPLY_STREAM, b"y"),
+                    Err(PushError::Failed(CallError::Transport(
+                        Transport::Interrupted
+                    )))
+                );
+            }
+            #[test]
+            fn failure_before_a_chunk_forgets_once() {
+                let rt = loopback();
+                let mut handler = document_handler(&rt, $ordinal);
+                let ports = RecordingPorts::new(&rt);
+                let log = ports.log();
+                let mut client = generated::docs::Client::new(ports);
+                let mut call = client.$method(generated::Id::new_unchecked(1));
+                let c = the_one_send(&log);
+                let claim = document_claim(&mut handler);
+                let error = CallError::Transport(Transport::Interrupted);
+                handler.abort_claim(claim, REPLY_STREAM, error).unwrap();
+                assert_eq!(
+                    poll_once(&mut call).map(|result| result.map(|_| ())),
+                    Poll::Ready(Err(ClientError::Call(error)))
+                );
+                assert_eq!(doubles::forgets(&log), vec![c]);
+                drop(call);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+            }
+            #[test]
+            fn end_before_a_chunk_forgets_once() {
+                let rt = loopback();
+                let mut handler = document_handler(&rt, $ordinal);
+                let ports = RecordingPorts::new(&rt);
+                let log = ports.log();
+                let mut client = generated::docs::Client::new(ports);
+                let mut call = client.$method(generated::Id::new_unchecked(1));
+                let c = the_one_send(&log);
+                let claim = document_claim(&mut handler);
+                handler.end_claim(claim, REPLY_STREAM).unwrap();
+                let mut stream = document_resolved(poll_once(&mut call), "empty stream");
+                assert_eq!(doubles::forgets(&log), vec![c]);
+                let mut cx = Context::from_waker(Waker::noop());
+                check_raw_end!($form, stream, &mut cx);
+                drop(stream);
+                drop(call);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+            }
+            #[test]
+            fn waiting_call_drop_forgets_once_and_interrupts() {
+                let rt = loopback();
+                let mut handler = document_handler(&rt, $ordinal);
+                let ports = RecordingPorts::new(&rt);
+                let log = ports.log();
+                let mut client = generated::docs::Client::new(ports);
+                let mut call = client.$method(generated::Id::new_unchecked(1));
+                let c = the_one_send(&log);
+                let claim = document_claim(&mut handler);
+                assert!(poll_once(&mut call).is_pending());
+                assert!(doubles::forgets(&log).is_empty());
+                drop(call);
+                assert_eq!(doubles::forgets(&log), vec![c]);
+                assert_eq!(
+                    handler.push_claim(claim, REPLY_STREAM, b"y"),
+                    Err(PushError::Failed(CallError::Transport(
+                        Transport::Interrupted
+                    )))
+                );
+            }
+        }
+    };
+}
+raw_release_tests!(fix_byte_release, fetch, FETCH, bytes);
+raw_release_tests!(fix_text_release, text, TEXT, text);
+
+#[test]
+fn fix_text_streams_skip_initial_and_later_empty_chunks() {
+    let rt = loopback();
+    let mut handler = document_handler(&rt, TEXT);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let mut call = client.text(generated::Id::new_unchecked(1));
+    let claim = document_claim(&mut handler);
+    handler.push_claim(claim, REPLY_STREAM, b"").unwrap();
+    handler.push_claim(claim, REPLY_STREAM, b"x").unwrap();
+    let mut stream = document_resolved(poll_once(&mut call), "empty first chunk");
+    let mut cx = Context::from_waker(Waker::noop());
+    assert_eq!(stream.poll_next(&mut cx), Poll::Ready(Some(Ok("x"))));
+    handler.push_claim(claim, REPLY_STREAM, b"").unwrap();
+    assert!(stream.poll_next(&mut cx).is_pending());
+    handler.push_claim(claim, REPLY_STREAM, b"").unwrap();
+    handler.end_claim(claim, REPLY_STREAM).unwrap();
+    assert_eq!(poll_once(&mut pin!(stream.next())), Poll::Ready(None));
+}
