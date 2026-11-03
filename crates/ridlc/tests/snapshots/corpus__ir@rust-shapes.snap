@@ -1774,6 +1774,49 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "family": "FAMILY_DISPATCH",
             "shape": "SHAPE_NONE"
           }
+        },
+        {
+          "name": "blend",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "Transforms uploaded inner values.",
+          "labels": [],
+          "ordinal": 18,
+          "links": [],
+          "see": [],
+          "since": [],
+          "queryDef": {
+            "params": [
+              {
+                "name": "samples",
+                "type": {
+                  "optional": false,
+                  "stream": {
+                    "named": "Inner"
+                  }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
+              }
+            ],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "stream": {
+                  "named": "Inner"
+                }
+              }
+            },
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "family": "FAMILY_DISPATCH"
+          }
         }
       ],
       "number": 3,

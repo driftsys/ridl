@@ -28,7 +28,9 @@
 //!   `StreamCaller` bound joins the `Client`'s bounds for a member with a
 //!   streamed reply or a parameter stream. Commands with one parameter stream
 //!   return a call/sink pair and a Consumer or ByteConsumer on the provider side;
-//!   other parameter-stream forms remain outside the face. The
+//!   queries with one parameter stream return a plain reply after upload end
+//!   or drive a named-element reply stream concurrently. Multiple parameter
+//!   streams remain outside the face. The
 //!   blocking client carries no streamed member;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
@@ -124,7 +126,7 @@
 
 use crate::descriptors::{
     declared_name, descriptor_ident, has_stream, interactions, query_param_type, query_reply_type,
-    single_param_type, supported_stream_command, supported_stream_reply,
+    single_param_type, supported_stream_command, supported_stream_query, supported_stream_reply,
 };
 use crate::docs::{self, DocLines, DocParts, Links};
 use crate::{
@@ -140,6 +142,7 @@ mod futures;
 mod poll;
 mod serve;
 mod upload;
+mod upload_query;
 
 use self::blocking::blocking;
 use self::dispatch::dispatch;
@@ -212,11 +215,20 @@ struct Call<'a> {
     limit: usize,
     /// A parameter stream's named element, or an empty string for bytes/text.
     input: Option<&'a str>,
+    reply_stream: bool,
 }
 
 impl Call<'_> {
     fn upload(&self) -> bool {
         self.input.is_some()
+    }
+
+    fn query_upload(&self) -> bool {
+        self.upload() && self.reply_type.is_some()
+    }
+
+    fn duplex(&self) -> bool {
+        self.upload() && self.reply_stream
     }
 
     fn raw_stream(&self) -> bool {
@@ -300,6 +312,7 @@ pub(crate) fn one_interface(
         if has_stream(interaction)
             && !supported_stream_reply(interaction)
             && !supported_stream_command(interaction)
+            && !supported_stream_query(interaction)
         {
             continue;
         }
@@ -339,6 +352,7 @@ pub(crate) fn one_interface(
                     arg: call_arg_name(&command.params, command.request.is_some()),
                     member,
                     reply_type: None,
+                    reply_stream: false,
                     stream_form: interaction
                         .streams
                         .first()
@@ -355,7 +369,8 @@ pub(crate) fn one_interface(
                 let stream_form = interaction
                     .streams
                     .iter()
-                    .find(|stream| stream.no == 0)
+                    .find(|stream| stream.no == 1)
+                    .or_else(|| interaction.streams.iter().find(|s| s.no == 0))
                     .and_then(|stream| v1::StreamForm::try_from(stream.form).ok());
                 let raw = matches!(
                     stream_form,
@@ -371,7 +386,12 @@ pub(crate) fn one_interface(
                     });
                 }
                 let call = Call {
-                    input: None,
+                    input: interaction
+                        .streams
+                        .iter()
+                        .find(|s| s.no == 1)
+                        .map(|s| s.element.as_ref().map_or("", |t| t.reference.as_str())),
+                    reply_stream: crate::descriptors::has_stream_reply(interaction),
                     stream_form,
                     limit,
                     arg_type: query_param_type(ctx, query, name)?,
@@ -379,14 +399,14 @@ pub(crate) fn one_interface(
                     member,
                     // For a streamed reply, the element type: what the stream
                     // value decodes, and what the face's bounds name.
-                    reply_type: if raw {
+                    reply_type: if raw && !supported_stream_query(interaction) {
                         None
                     } else {
                         Some(query_reply_type(ctx, query, name)?)
                     },
                     params: docs::parameter_lines(&query.params, &member_links),
                 };
-                if supported_stream_reply(interaction) {
+                if crate::descriptors::has_stream_reply(interaction) {
                     streams.push(call);
                 } else {
                     queries.push(call);
@@ -473,7 +493,7 @@ pub(crate) fn one_interface(
         blocking.is_some()
             && (!signals.is_empty()
                 || !events.is_empty()
-                || !queries.is_empty()
+                || queries.iter().any(|call| !call.upload())
                 || commands.iter().any(|call| !call.upload())),
     ));
     body.extend(blocking);
@@ -533,7 +553,7 @@ fn correlations(commands: &[Call], queries: &[Call], streams: &[Call]) -> Vec<To
 /// blocking client repeats them, because it is the async client and its
 /// timeout and nothing more. `StreamCaller` is the extension a runtime may
 /// lack, so it joins the bounds only when the interface declares a member
-/// with a streamed reply.
+/// with a streamed reply or a parameter stream.
 fn client_bounds(
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
@@ -552,7 +572,13 @@ fn client_bounds(
     if has_calls {
         bounds.push(quote! { ::ridl_rt::port::Caller });
     }
-    if !streams.is_empty() || commands.iter().any(Call::upload) {
+    if !streams.is_empty()
+        || commands
+            .iter()
+            .chain(queries)
+            .chain(streams)
+            .any(Call::upload)
+    {
         bounds.push(quote! { ::ridl_rt::port::StreamCaller });
     }
     if has_calls {
@@ -581,7 +607,11 @@ fn client(
     streams: &[Call],
 ) -> TokenStream {
     let number = interface_number(iface);
-    let shared = commands.iter().any(Call::upload);
+    let shared = commands
+        .iter()
+        .chain(queries)
+        .chain(streams)
+        .any(Call::upload);
     let loan = if shared {
         quote! { self.port.get_mut() }
     } else {
@@ -677,11 +707,19 @@ fn client(
     }
 
     for call in queries {
-        methods.push(call_method(call, "query", shared));
+        methods.push(if call.upload() {
+            upload::method(call)
+        } else {
+            call_method(call, "query", shared)
+        });
     }
 
     for call in streams {
-        methods.push(stream_call_method(call, shared));
+        methods.push(if call.upload() {
+            upload::method(call)
+        } else {
+            stream_call_method(call, shared)
+        });
     }
 
     // The member methods above are inherent; the fixed methods `new` and
@@ -990,7 +1028,8 @@ pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
         && interactions(interface).iter().any(|(_, interaction)| {
             (!has_stream(interaction)
                 || supported_stream_reply(interaction)
-                || supported_stream_command(interaction))
+                || supported_stream_command(interaction)
+                || supported_stream_query(interaction))
                 && matches!(
                     interaction.shape.as_ref(),
                     Some(
@@ -1354,6 +1393,9 @@ fn provider(
         }
     });
     let query_methods = queries.iter().map(|call| {
+        if call.upload() {
+            return upload_query::provider(call);
+        }
         let member = &call.member;
         let method = &member.method;
         let arg = &call.arg;
@@ -1376,6 +1418,7 @@ fn provider(
     // type the application names through the associated type of the
     // member's `camelCase` name.
     let stream_methods = streams.iter().map(|call| {
+        if call.upload() {return upload_query::provider(call);}
         let member = &call.member;
         let method = &member.method;
         let source = ident(member.camel);

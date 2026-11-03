@@ -1123,7 +1123,14 @@ fn stream_face() -> String {
 /// bound per payload type the interface uses, the stream's element included.
 fn log_where() -> String {
     let mut clause = "super::Log:::ridl_rt::contract::Sizes<P::Encoding>,".to_string();
-    for payload in ["Level", "LogUploadParams", "Reading"] {
+    for payload in [
+        "Level",
+        "LogUploadParams",
+        "Reading",
+        "LogSummarizeParams",
+        "Summary",
+        "LogPipeParams",
+    ] {
         clause.push_str(&format!(
             "super::{payload}:::ridl_rt::payload::Payload<P::Encoding>,"
         ));
@@ -1265,7 +1272,7 @@ fn a_streamed_reply_of_named_elements_gets_a_provider_source_and_a_serve_arm() {
     assert!(
         log.contains(
             "h.serve(<super::Logas::ridl_rt::contract::Interface>::NUMBER,\
-                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(3u32),::ridl_rt::contract::Ordinal(1u32),],)"
+                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(3u32),::ridl_rt::contract::Ordinal(4u32),::ridl_rt::contract::Ordinal(1u32),::ridl_rt::contract::Ordinal(5u32),],)"
         ),
         "serve registers the stream query beside the command:\n{log}"
     );
@@ -1691,5 +1698,47 @@ fn byte_and_text_uploads_reject_limits_below_four_and_accept_four() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn upload_queries_expose_plain_and_streamed_replies() {
+    let package = ir::compile_fixture("stream_face.ridl");
+    let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .unwrap()
+        .rust_source;
+    let log = dense(&module(&source, "log"));
+    assert!(
+        log.contains("->(SummarizeCall<'_,P>,SummarizeSink<'_,P>)"),
+        "summarize pair missing"
+    );
+    assert!(
+        log.contains("->(PipeCall<'_,P>,PipeSink<'_,P>)"),
+        "pipe pair missing"
+    );
+    assert!(log.contains("typeSummarize:::ridl_rt::face::Consumer<Item=super::Reading>;"));
+    assert!(log.contains("fnsummarize_reply(&mutself,upload:Self::Summarize)->super::Summary;"));
+    assert!(log.contains("typePipe:::ridl_rt::face::Consumer<Item=super::Reading>+::ridl_rt::face::Source<Item=super::Reading>;"));
+    assert!(log.contains("pubstructPipeStream<"));
+    let d = dense(&source);
+    assert!(d.contains("impl::ridl_rt::contract::QueryforLogSummarize{typeArgs=LogSummarizeParams;typeReply=Summary;"));
+    assert!(
+        d.contains("impl::ridl_rt::contract::QueryforLogPipe{typeArgs=LogPipeParams;typeReply=();")
+    );
+}
+
+#[test]
+fn an_upload_reply_provider_method_collision_is_refused() {
+    let source = "package face.collision\ntype Value : integer [0..100]\ninterface Api { query aggregate(samples: <Value>): Value @[..1s]\n command aggregateReply(value: Value) @[..1s] }\n";
+    let output = ridlc::compile("collision.ridl", source);
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == ridl_core::diag::Severity::Error)
+    );
+    match generate_face_with(&output.package, &[WireEncoding::FlatBuffers]) {
+        Err(e) => assert!(e.message.contains("aggregate_reply")),
+        Ok(_) => panic!("derived provider reply method must not collide with a declared member"),
     }
 }

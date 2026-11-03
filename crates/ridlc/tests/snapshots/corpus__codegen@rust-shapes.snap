@@ -3232,6 +3232,36 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
     },
     {
       "name": {
+        "rust": "StationBlendParams",
+        "wire": "StationBlendParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 34,
+      "interaction": {
+        "interface": 0,
+        "slot": 17,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
         "rust": "ArchiveBoundsParams",
         "wire": "ArchiveBoundsParams"
       },
@@ -3251,7 +3281,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 34,
+      "flatbuffersTable": 35,
       "interaction": {
         "interface": 1,
         "slot": 2,
@@ -3344,7 +3374,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 35,
+      "flatbuffersTable": 36,
       "interaction": {
         "interface": 1,
         "slot": 2,
@@ -3374,7 +3404,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 36,
+      "flatbuffersTable": 37,
       "interaction": {
         "interface": 1,
         "slot": 4,
@@ -3404,7 +3434,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 37,
+      "flatbuffersTable": 38,
       "interaction": {
         "interface": 2,
         "slot": 1,
@@ -5065,6 +5095,176 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               }
             }
           }
+        },
+        {
+          "ordinal": 18,
+          "interaction": {
+            "name": {
+              "declared": "blend",
+              "snake": "blend",
+              "camel": "Blend",
+              "screaming": "BLEND",
+              "pascal": "Blend"
+            },
+            "kind": "KIND_QUERY",
+            "row": 16,
+            "doc": "Transforms uploaded inner values.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "33"
+              },
+              "podbuf": {
+                "bytes": "8"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 137
+                  },
+                  "flatbuffers": {
+                    "bounded": 196
+                  },
+                  "podbuf": {
+                    "bounded": 153
+                  }
+                }
+              },
+              {
+                "no": 1,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 137
+                  },
+                  "flatbuffers": {
+                    "bounded": 196
+                  },
+                  "podbuf": {
+                    "bounded": 153
+                  }
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "samples",
+                    "snake": "samples",
+                    "camel": "Samples",
+                    "screaming": "SAMPLES",
+                    "pascal": "Samples"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": {
+                        "reference": "Inner",
+                        "resolved": true,
+                        "package": "lint.shapes",
+                        "foreign": false,
+                        "index": 17,
+                        "kind": "DECL_KIND_STRUCT"
+                      }
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
+                }
+              ],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "Inner",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 17,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "requestTuple": {
+                "index": 10
+              }
+            }
+          }
         }
       ],
       "tableBudget": {
@@ -5072,10 +5272,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           "bytes": "3672"
         },
         "flatbuffers": {
-          "bytes": "6325"
+          "bytes": "6358"
         },
         "podbuf": {
-          "bytes": "4016"
+          "bytes": "4024"
         }
       },
       "links": [],
@@ -5454,7 +5654,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 11
+                    "index": 12
                   }
                 }
               },
@@ -5492,10 +5692,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 10
+                "index": 11
               },
               "replyTuple": {
-                "index": 11
+                "index": 12
               }
             }
           }
@@ -5783,7 +5983,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               },
               "shape": "SHAPE_NONE",
               "requestTuple": {
-                "index": 12
+                "index": 13
               }
             }
           }
@@ -6048,7 +6248,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 13
+                "index": 14
               }
             }
           }
@@ -6081,7 +6281,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   "services": [],
   "catalog": {
     "package": "lint.shapes",
-    "hash": "OpFNrqO38BLJvSUgq2eqh3ssBWUs1BGVZDnw2A64sr0=",
+    "hash": "4pNulIezMScQ77wSQmfzfpIXNu3rUAebKpqnTzRUW8Q=",
     "retired": [],
     "compatible": []
   },
@@ -6256,18 +6456,24 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 11,
-        "maxSize": 53
-      },
-      {
-        "declaration": 0,
-        "root": "FB_ROOT_KIND_OWN",
-        "tuple": 12,
         "maxSize": 33
       },
       {
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
+        "tuple": 12,
+        "maxSize": 53
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
         "tuple": 13,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 14,
         "maxSize": 33
       }
     ],
@@ -7146,10 +7352,16 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "tuple": 9
       },
       {
-        "name": "ArchiveBoundsParams",
+        "name": "StationBlendParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 10
+      },
+      {
+        "name": "ArchiveBoundsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 11
       },
       {
         "name": "ArchiveBoundsReply",
@@ -7178,19 +7390,19 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         ],
         "vtableSlots": 2,
-        "tuple": 11
+        "tuple": 12
       },
       {
         "name": "ArchiveReplayParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 12
+        "tuple": 13
       },
       {
         "name": "ProbeSampleParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 13
+        "tuple": 14
       }
     ]
   },
@@ -7681,7 +7893,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "form": {
               "descriptor": {
                 "map": {
-                  "entryHead": 21,
+                  "entryHead": 22,
                   "elemSize": 16,
                   "min": "0",
                   "max": "3"
@@ -7882,15 +8094,15 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "arms": [
                     {
                       "ordinal": 1,
-                      "head": 22
-                    },
-                    {
-                      "ordinal": 2,
                       "head": 23
                     },
                     {
-                      "ordinal": 3,
+                      "ordinal": 2,
                       "head": 24
+                    },
+                    {
+                      "ordinal": 3,
+                      "head": 25
                     }
                   ]
                 }
@@ -7943,11 +8155,11 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "arms": [
                     {
                       "ordinal": 1,
-                      "head": 26
+                      "head": 27
                     },
                     {
                       "ordinal": 2,
-                      "head": 27
+                      "head": 28
                     }
                   ]
                 }
@@ -8207,6 +8419,13 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "tuple": 10
       },
       {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 11
+      },
+      {
         "size": 8,
         "align": 8,
         "fields": [
@@ -8247,13 +8466,6 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 6
           }
         ],
-        "tuple": 11
-      },
-      {
-        "size": 0,
-        "align": 8,
-        "fields": [],
-        "pads": [],
         "tuple": 12
       },
       {
@@ -8262,6 +8474,13 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "fields": [],
         "pads": [],
         "tuple": 13
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 14
       },
       {
         "size": 16,
@@ -8745,7 +8964,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "form": {
               "descriptor": {
                 "map": {
-                  "entryHead": 25,
+                  "entryHead": 26,
                   "elemSize": 16,
                   "min": "0",
                   "max": "3"

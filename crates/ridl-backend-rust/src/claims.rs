@@ -253,6 +253,7 @@ fn face_module(
 ) -> Result<(), GenerateError> {
     let mut types = Table::new(format!("the type namespace of face module `{module}`"));
     let mut variants = Table::new(format!("the variants of `{module}::Event`"));
+    let mut provider_methods = Table::new(format!("the methods of `{module}::Provider`"));
     for (_, interaction) in interactions(interface) {
         let member = declared(interaction.name.as_ref());
         let camel = camel_of(interaction.name.as_ref());
@@ -261,12 +262,17 @@ fn face_module(
                 // A query with a streamed reply adds its stream value; the
                 // table claims only what the face emits, so a plain call
                 // claims none.
-                let stream = if descriptors::supported_stream_command(interaction) {
+                let stream = if descriptors::supported_stream_command(interaction)
+                    || descriptors::supported_stream_query(interaction)
+                {
                     Some("Sink")
                 } else {
                     descriptors::supported_stream_reply(interaction).then_some(STREAM_SUFFIX)
                 };
-                for suffix in CALL_SUFFIXES.into_iter().chain(stream) {
+                let reply = (descriptors::supported_stream_query(interaction)
+                    && descriptors::has_stream_reply(interaction))
+                .then_some(STREAM_SUFFIX);
+                for suffix in CALL_SUFFIXES.into_iter().chain(stream).chain(reply) {
                     types.claim(
                         &face::call_type_ident(camel, suffix),
                         format!(
@@ -282,6 +288,32 @@ fn face_module(
                 )?;
             }
             _ => {}
+        }
+    }
+    for (_, interaction) in interactions(interface) {
+        if matches!(
+            interaction.shape,
+            Some(v1::interaction::Shape::Command(_) | v1::interaction::Shape::Query(_))
+        ) {
+            let member = declared(interaction.name.as_ref());
+            let supported = !descriptors::has_stream(interaction)
+                || descriptors::supported_stream_command(interaction)
+                || descriptors::supported_stream_query(interaction)
+                || descriptors::supported_stream_reply(interaction);
+            if supported {
+                provider_methods.claim(
+                    &ident(snake_of(interaction.name.as_ref())),
+                    format!("the provider method of `{member}`"),
+                )?;
+                if descriptors::supported_stream_query(interaction)
+                    && !descriptors::has_stream_reply(interaction)
+                {
+                    provider_methods.claim(
+                        &ident(&format!("{}_reply", snake_of(interaction.name.as_ref()))),
+                        format!("the reply provider method of `{member}`"),
+                    )?;
+                }
+            }
         }
     }
     Ok(())

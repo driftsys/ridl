@@ -21,6 +21,12 @@ struct Reading {
   flag  : boolean
 }
 
+/// A summary computed from uploaded readings.
+struct Summary {
+  count : integer
+  total : integer
+}
+
 /// A log of readings, read as a stream.
 interface Log {
   /// The readings up to `limit`, oldest first.
@@ -31,6 +37,10 @@ interface Log {
   command clear(level: Level) @[..50ms]
   /// Uploads readings.
   command upload(data: <Reading>) @[..1s]
+  /// Summarizes uploaded readings.
+  query summarize(data: <Reading>): Summary @[..100ms]
+  /// Returns readings while they are uploaded.
+  query pipe(data: <Reading>): <Reading> @[..1s]
 }
 
 /// An interface with no stream, for the port-bound test. Named to sort after

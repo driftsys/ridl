@@ -28,17 +28,18 @@ pub(super) fn serve(
     queries: &[Call],
     streams: &[Call],
 ) -> TokenStream {
+    let ordinals = commands
+        .iter()
+        .chain(queries)
+        .chain(streams)
+        .map(|call| &call.member.ordinal);
     let all_streams: Vec<&Call> = streams
         .iter()
         .chain(commands.iter().filter(|call| call.upload()))
+        .chain(queries.iter().filter(|call| call.upload()))
         .collect();
     let streams = all_streams.as_slice();
     let number = interface_number(iface);
-    let ordinals = commands
-        .iter()
-        .chain(queries.iter())
-        .chain(streams.iter().copied().filter(|call| !call.upload()))
-        .map(|call| &call.member.ordinal);
     let budget = Literal::usize_unsuffixed(SERVE_BUDGET);
     // The handler is bound on `StreamHandler` only when the interface
     // declares a stream member, so an interface without one is served over
@@ -58,7 +59,7 @@ pub(super) fn serve(
     // impls, which are what encodes and decodes. The element buffers of the
     // stream slots project through each element's `Payload`, so the struct
     // carries those predicates as well.
-    let elements: Vec<&str> = streams
+    let mut elements: Vec<&str> = streams
         .iter()
         .filter(|call| !call.raw_stream())
         .map(|call| {
@@ -66,6 +67,12 @@ pub(super) fn serve(
                 .unwrap_or_else(|| call.reply_type.unwrap_or(call.arg_type))
         })
         .collect();
+    for call in streams.iter().filter(|call| call.duplex()) {
+        let reply = call.reply_type.unwrap();
+        if !elements.contains(&reply) {
+            elements.push(reply);
+        }
+    }
     let buffer_bound = encoding_bounds(&port, iface, &elements);
     let stream_items = stream_items(streams);
     let streams_field = (!streams.is_empty()).then(|| quote! { streams: Streams<H, P>, });
@@ -90,6 +97,7 @@ pub(super) fn serve(
         let source = ident(call.member.camel);
         if call.upload() {
             let driver = quote::format_ident!("drive_input_{}", method);
+            if call.query_upload(){return quote! {again |= #driver::<H,P>(&mut this.handler,&mut *this.provider,&mut this.streams.#method,cx,&mut budget);};}
             return quote! { again |= #driver::<H,P>(&mut this.handler,&mut this.streams.#method,cx,&mut budget); };
         }
         if call.raw_stream() {
@@ -135,8 +143,11 @@ pub(super) fn serve(
             } else {
                 quote! { ::ridl_rt::port::REPLY_STREAM }
             };
-            let binding=if call.upload(){quote! {mut stream}}else{quote! {stream}};
-            let notify=call.upload().then(|| {let consumer=if call.raw_stream(){quote! {::ridl_rt::face::ByteConsumer}}else{quote! {::ridl_rt::face::Consumer}};quote! {#consumer::failed(&mut stream.consumer,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}});
+            let binding=if call.upload() && !call.duplex(){quote! {mut stream}}else{quote! {stream}};
+            let notify=if call.query_upload(){
+                if call.duplex(){quote! {let _=self.handler.abort_claim(stream.claim,::ridl_rt::port::REPLY_STREAM,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}}
+                else {let consumer=if call.raw_stream(){quote! {::ridl_rt::face::ByteConsumer}}else{quote! {::ridl_rt::face::Consumer}};quote! {#consumer::failed(&mut stream.consumer,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));let _=self.handler.settle(stream.claim,Err(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted)));}}
+            }else if call.upload(){let consumer=if call.raw_stream(){quote! {::ridl_rt::face::ByteConsumer}}else{quote! {::ridl_rt::face::Consumer}};quote! {#consumer::failed(&mut stream.consumer,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}}else{TokenStream::new()};
             quote! {
                 if let Some(#binding) = self.streams.#method.take() {
                     let _ = self.handler.abort_claim(
@@ -447,7 +458,7 @@ fn stream_items(streams: &[&Call]) -> TokenStream {
         return TokenStream::new();
     }
     let port = ident("H");
-    let elements: Vec<&str> = streams
+    let mut elements: Vec<&str> = streams
         .iter()
         .filter(|call| !call.raw_stream())
         .map(|call| {
@@ -455,6 +466,12 @@ fn stream_items(streams: &[&Call]) -> TokenStream {
                 .unwrap_or_else(|| call.reply_type.unwrap_or(call.arg_type))
         })
         .collect();
+    for call in streams.iter().filter(|call| call.duplex()) {
+        let reply = call.reply_type.unwrap();
+        if !elements.contains(&reply) {
+            elements.push(reply);
+        }
+    }
     let element_bounds = elements.iter().map(|name| {
         let path = ty(name);
         quote! { #path: ::ridl_rt::payload::Payload<#port::Encoding>, }
@@ -480,7 +497,7 @@ fn stream_items(streams: &[&Call]) -> TokenStream {
     let input_items = super::upload::slot_items(&input_calls);
     let has_reply_elements = streams
         .iter()
-        .any(|call| !call.upload() && !call.raw_stream());
+        .any(|call| (call.duplex() || !call.upload()) && (!call.raw_stream() || call.duplex()));
     let element_types = has_reply_elements.then(|| {
         quote! {
             type ElementBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
@@ -611,31 +628,34 @@ fn stream_items(streams: &[&Call]) -> TokenStream {
         .iter()
         .any(|call| !call.upload() && call.raw_stream())
         .then(byte_stream_items);
-    let stop = streams.iter().any(|call| !call.upload()).then(|| {
-        quote! {
-            fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
-                h: &mut H,
-                claim: ::ridl_rt::port::ClaimId,
-                error: ::ridl_rt::port::PushError,
-            ) {
-                match error {
-                    ::ridl_rt::port::PushError::Failed(_) => {
-                        let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+    let stop = streams
+        .iter()
+        .any(|call| !call.upload() || call.duplex())
+        .then(|| {
+            quote! {
+                fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
+                    h: &mut H,
+                    claim: ::ridl_rt::port::ClaimId,
+                    error: ::ridl_rt::port::PushError,
+                ) {
+                    match error {
+                        ::ridl_rt::port::PushError::Failed(_) => {
+                            let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+                        }
+                        ::ridl_rt::port::PushError::TooLarge { .. } => {
+                            let _ = h.abort_claim(
+                                claim,
+                                ::ridl_rt::port::REPLY_STREAM,
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Interrupted,
+                                ),
+                            );
+                        }
+                        _ => {}
                     }
-                    ::ridl_rt::port::PushError::TooLarge { .. } => {
-                        let _ = h.abort_claim(
-                            claim,
-                            ::ridl_rt::port::REPLY_STREAM,
-                            ::ridl_rt::error::CallError::Transport(
-                                ::ridl_rt::error::Transport::Interrupted,
-                            ),
-                        );
-                    }
-                    _ => {}
                 }
             }
-        }
-    });
+        });
     quote! {
         #input_items
         #element_types

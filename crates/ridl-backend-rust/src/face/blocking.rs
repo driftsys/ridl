@@ -84,7 +84,7 @@ pub(super) fn blocking(
     let mut items = vec![deadline_after()];
     let has_client = !signals.is_empty()
         || !events.is_empty()
-        || !queries.is_empty()
+        || queries.iter().any(|call| !call.upload())
         || commands.iter().any(|call| !call.upload());
     if has_client {
         items.push(client(
@@ -103,7 +103,12 @@ pub(super) fn blocking(
             iface,
             iface_name,
             &encoding_bounds(&ident("H"), iface, payloads),
-            !streams.is_empty() || commands.iter().any(Call::upload),
+            !streams.is_empty()
+                || commands
+                    .iter()
+                    .chain(queries)
+                    .chain(streams)
+                    .any(Call::upload),
         ));
     }
 
@@ -203,7 +208,7 @@ fn client(
         methods.push(call_method(call, "command", quote! { () }, "Undelivered"));
     }
 
-    for call in queries {
+    for call in queries.iter().filter(|call| !call.upload()) {
         methods.push(call_method(
             call,
             "query",

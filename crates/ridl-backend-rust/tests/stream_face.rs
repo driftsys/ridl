@@ -994,6 +994,17 @@ impl Feed {
 }
 
 impl generated::log::Provider for Feed {
+    type Summarize = IgnoreUpload;
+    type Pipe = IgnoreUpload;
+    fn summarize(&mut self, _: &generated::LogSummarizeParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn summarize_reply(&mut self, _: IgnoreUpload) -> generated::Summary {
+        generated::Summary { count: 0, total: 0 }
+    }
+    fn pipe(&mut self, _: &generated::LogPipeParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
     type History = Scripted;
     type Upload = IgnoreUpload;
     fn upload(&mut self, _: &generated::LogUploadParams) -> IgnoreUpload {
@@ -3186,4 +3197,14 @@ fn serve_delivers_a_zero_byte_proto3_reply_once() {
     );
     assert!(poll_once(&mut serve).is_pending());
     assert_eq!(stream.poll_next(&mut cx), Poll::Ready(None));
+}
+
+impl ridl_rt::face::Source for IgnoreUpload {
+    type Item = Reading;
+    fn poll_next(
+        &mut self,
+        _: &mut Context<'_>,
+    ) -> Poll<Option<Result<Reading, ridl_rt::face::Interrupted>>> {
+        Poll::Ready(None)
+    }
 }

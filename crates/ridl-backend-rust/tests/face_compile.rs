@@ -279,11 +279,11 @@ interface Wide {
     face_compiles("command_stream", source);
 }
 
-/// The same for a query that has a stream parameter: it has a descriptor and
-/// no method on the face. Queries whose only stream is their reply have a
+/// A query with a stream parameter has a descriptor and a call/sink pair.
+/// Queries whose only stream is their reply have a
 /// face for named elements, bytes and text beside the other members.
 #[test]
-fn a_query_with_a_stream_has_a_descriptor_and_each_reply_stream_has_a_face_method() {
+fn upload_queries_and_reply_streams_have_their_own_face_values() {
     let source = r#"
 package face.query_shape
 
@@ -307,7 +307,8 @@ interface Wide {
     assert!(text.contains("pub struct WideDump;"), "{text}");
     assert!(text.contains("pub struct WideNotes;"), "{text}");
     assert!(text.contains("pub mod wide"), "{text}");
-    assert!(!text.contains("pub struct ReadCall<"), "{text}");
+    assert!(text.contains("pub struct ReadCall<"), "{text}");
+    assert!(text.contains("pub struct ReadSink<"), "{text}");
     assert!(text.contains("fn history("), "{text}");
     assert!(text.contains("pub struct HistoryStream<"), "{text}");
     assert!(text.contains("fn dump("), "{text}");
@@ -318,9 +319,8 @@ interface Wide {
     face_compiles("query_shape", source);
 }
 
-/// A member with a stream is left out of the face, so it is never the call
-/// the skip note blames: beside a `fixed` that the face cannot carry, it leaves
-/// the note the `fixed` alone leaves.
+/// A streamed member beside an unsupported fixed payload does not change
+/// the interface's skip reason: the fixed payload is still the refusal.
 #[test]
 fn a_stream_member_does_not_change_the_skip_note_of_an_interface() {
     let note = |members: &str| {
@@ -1617,6 +1617,23 @@ pub mod consumer {
         clone::<super::blended::Event>();
         partial_eq::<super::blended::Event>();
     }
+}
+"#,
+    );
+}
+
+#[test]
+fn byte_and_text_upload_queries_compile_with_plain_and_distinct_streamed_replies() {
+    face_compiles(
+        "raw_upload_queries",
+        r#"
+package face.raw_upload_queries
+type Level : integer [0..100]
+interface Transform {
+ query sum(limit: Level, data: <bytes>): Level @[..100ms] [
+ ensure result <= 100
+]
+ query pipe(data: <string>): <Level> @[..1s]
 }
 "#,
     );

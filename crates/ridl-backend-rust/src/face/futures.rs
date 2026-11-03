@@ -28,7 +28,12 @@ pub(super) fn futures(
     // face's `where` clause.
     let encoding = encoding_bounds(&ident("P"), iface, payloads);
     let mut items = Vec::new();
-    if commands.iter().any(Call::upload) {
+    if commands
+        .iter()
+        .chain(queries)
+        .chain(streams)
+        .any(Call::upload)
+    {
         items.push(super::upload::state());
     }
     for call in commands {
@@ -39,12 +44,20 @@ pub(super) fn futures(
         });
     }
     for call in queries {
-        items.push(call_future(call, "query", &encoding));
+        items.push(if call.upload() {
+            super::upload::items(call, &encoding)
+        } else {
+            call_future(call, "query", &encoding)
+        });
     }
     if !streams.is_empty() {
         items.push(stream_state());
     }
     for call in streams {
+        if call.upload() {
+            items.push(super::upload::items(call, &encoding));
+            continue;
+        }
         items.push(stream_call_future(call, &encoding));
         items.push(stream_value(call, &encoding));
     }

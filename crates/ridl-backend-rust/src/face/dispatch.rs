@@ -70,6 +70,9 @@ pub(super) fn dispatch(
     });
 
     let query_arms = queries.iter().map(|call| {
+        if call.upload() {
+            return super::upload_query::dispatch(call);
+        }
         let member = &call.member;
         let ordinal = &member.ordinal;
         let method = &member.method;
@@ -141,6 +144,9 @@ pub(super) fn dispatch(
     // or dropped its stream keeps the member busy until the source yields
     // its next element.
     let stream_arms = streams.iter().map(|call| {
+        if call.upload() {
+            return super::upload_query::dispatch(call);
+        }
         let member = &call.member;
         let ordinal = &member.ordinal;
         let method = &member.method;
@@ -261,7 +267,7 @@ pub(super) fn dispatch(
     );
     // An interface with a stream member hands `dispatch` the slots its
     // sources are kept in; any other keeps the four parameters.
-    let has_streams = !streams.is_empty() || commands.iter().any(Call::upload);
+    let has_streams = !streams.is_empty() || commands.iter().chain(queries).any(Call::upload);
     let stream_bound = commands
         .iter()
         .any(Call::upload)

@@ -26,8 +26,9 @@
 //! `docs/technotes/ridl-rt-by-example.md` in this repository walks it against
 //! concrete generated code. The generated face calls [`StreamCaller`] and
 //! [`StreamHandler`] for queries whose only stream is a reply of named
-//! elements, bytes or text, and commands with one parameter stream. Other
-//! parameter-stream forms have no generated method yet (driftsys/ridl#1116).
+//! elements, bytes or text, commands with one parameter stream, and queries
+//! with one parameter stream and a plain or named-element streamed reply.
+//! Calls with multiple parameter streams have no generated method yet.
 
 use core::task::Waker;
 

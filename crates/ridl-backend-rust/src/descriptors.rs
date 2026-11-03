@@ -485,7 +485,10 @@ fn interaction_item(
             sizes.calls.push(arg_name.to_string());
             TokenStream::new()
         }
-        Some(v1::interaction::Shape::Query(query)) if has_stream(interaction) => {
+        Some(v1::interaction::Shape::Query(query))
+            if has_stream(interaction)
+                && (has_stream_reply(interaction) || !supported_stream_query(interaction)) =>
+        {
             let arg_name = query_param_type(ctx, query, member)?;
             row.push(arg_name.to_string());
             sizes.calls.push(arg_name.to_string());
@@ -494,7 +497,7 @@ fn interaction_item(
                 row.push(reply_name.to_string());
                 sizes.calls.push(reply_name.to_string());
             }
-            if supported_stream_reply(interaction) {
+            if supported_stream_reply(interaction) || supported_stream_query(interaction) {
                 let args = type_path(arg_name);
                 let require = clauses::translate(
                     ctx,
@@ -1064,6 +1067,26 @@ pub(crate) fn supported_stream_command(interaction: &v1::Interaction) -> bool {
             Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
             _ => false,
         }
+}
+
+/// A query with one supported upload and a plain or named-element reply.
+pub(crate) fn supported_stream_query(interaction: &v1::Interaction) -> bool {
+    if !matches!(interaction.shape, Some(v1::interaction::Shape::Query(_))) {
+        return false;
+    }
+    let inputs: Vec<_> = interaction.streams.iter().filter(|s| s.no != 0).collect();
+    if inputs.len() != 1 || inputs[0].no != 1 {
+        return false;
+    }
+    let input = inputs[0];
+    let supported = match v1::StreamForm::try_from(input.form) {
+        Ok(v1::StreamForm::Elements) => input.element.is_some(),
+        Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
+        _ => false,
+    };
+    supported
+        && reply_stream(interaction)
+            .is_none_or(|s| s.form == v1::StreamForm::Elements as i32 && s.element.is_some())
 }
 
 #[cfg(test)]

@@ -103,6 +103,17 @@ impl ridl_rt::face::Source for Readings {
     }
 }
 impl generated::log::Provider for Provider {
+    type Summarize = Receiver;
+    type Pipe = Receiver;
+    fn summarize(&mut self, _: &generated::LogSummarizeParams) -> Receiver {
+        self.0.clone()
+    }
+    fn summarize_reply(&mut self, _: Receiver) -> generated::Summary {
+        generated::Summary { count: 0, total: 0 }
+    }
+    fn pipe(&mut self, _: &generated::LogPipeParams) -> Receiver {
+        self.0.clone()
+    }
     type History = Readings;
     type Upload = Receiver;
     fn history(&mut self, _: &generated::Level) -> Readings {
@@ -711,4 +722,14 @@ fn a_text_upload_refuses_invalid_utf8_from_the_port() {
         vec![expected],
         "failure is terminal and notified once"
     );
+}
+
+impl ridl_rt::face::Source for Receiver {
+    type Item = generated::Reading;
+    fn poll_next(
+        &mut self,
+        _: &mut Context<'_>,
+    ) -> Poll<Option<Result<generated::Reading, ridl_rt::face::Interrupted>>> {
+        Poll::Ready(None)
+    }
 }

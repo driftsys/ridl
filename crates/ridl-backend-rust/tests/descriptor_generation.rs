@@ -1683,7 +1683,13 @@ fn a_member_row_lists_its_streams() {
             let has_impl =
                 source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{"));
             let expected = kind == "Query"
-                && matches!(streamed, "CabinStreamFilterHistory" | "CabinReadNotes")
+                && matches!(
+                    streamed,
+                    "CabinStreamFilterHistory"
+                        | "CabinReadNotes"
+                        | "CabinLookup"
+                        | "CabinRebalance"
+                )
                 || kind == "Command" && matches!(streamed, "CabinReplayTrace" | "CabinPutBlob");
             assert_eq!(
                 has_impl,

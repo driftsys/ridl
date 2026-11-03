@@ -1,4 +1,4 @@
-//! Command parameter streams: paired caller values and provider consumers.
+//! Parameter streams: paired caller values and provider consumers.
 use super::{Call, call_doc, future_type, ident, send_fn, ty};
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -15,24 +15,41 @@ pub(super) fn method(call: &Call) -> TokenStream {
         let buffer = buffer(call, "P");
         quote! { buffer: #buffer, held:None, }
     });
+    let timing = if call.query_upload() {
+        quote! {self.upload.reply_bound.set(<#descriptor as ::ridl_rt::contract::Interaction>::MEMBER.call_deadline());}
+    } else {
+        quote! {let deadline=<#descriptor as ::ridl_rt::contract::Interaction>::MEMBER.call_deadline().map(|max|::ridl_rt::sample::Timestamp(self.port.borrow().now().0.saturating_add(max.0)));}
+    };
+    let deadline_field = (!call.query_upload()).then(|| quote! {deadline,});
+    let reply_fields = call.duplex().then(|| {
+        let buffer = super::payload_buffer(call.reply_type.unwrap(), &ident("P"));
+        quote! {buffer:#buffer,}
+    });
+    let streamed = call
+        .duplex()
+        .then(|| quote! {self.upload.reply_stream.set(true);});
     let doc = call_doc(
         call,
-        "Sends the command and returns its acknowledgment future and parameter sink. The values share this client's port until both are dropped. The acknowledgment reports delivery, independently of later stream refusal. Dropping an unfinished sink interrupts the stream. An empty sink is locally ready; peer refusal is read from the next push or end.",
+        if call.query_upload() {
+            "Sends the query and returns its reply future and upload sink. The reply deadline starts when the sink successfully sends its end. Both values share this client; dropping an unfinished value cancels its call."
+        } else {
+            "Sends the command and returns its acknowledgment future and parameter sink. The values share this client's port until both are dropped. The acknowledgment reports delivery, independently of later stream refusal. Dropping an unfinished sink interrupts the stream. An empty sink is locally ready; peer refusal is read from the next push or end."
+        },
     );
     quote! {
         #doc
         pub fn #method(&mut self, #arg: #path) -> (#future<'_,P>, #sink<'_,P>) {
             let __arg = #arg;
             self.upload = UploadState::new();
-            let deadline = <#descriptor as ::ridl_rt::contract::Interaction>::MEMBER.call_deadline()
-                .map(|max| ::ridl_rt::sample::Timestamp(self.port.borrow().now().0.saturating_add(max.0)));
+            #timing
+            #streamed
             let mut pending = None;
             match #send(&mut *self.port.borrow_mut(), &__arg) {
                 Ok(c) => self.upload.correlation.set(Some(c.0)),
                 Err(::ridl_rt::port::SendError::Busy) => pending=Some(__arg),
                 Err(e) => {self.upload.error.set(Some(::ridl_rt::error::ClientError::Send(e))); self.upload.call_error.set(self.upload.error.get());},
             }
-            (#future {port: &self.port, state: &self.upload, pending, deadline, done:false},
+            (#future {port: &self.port, state: &self.upload, pending, #deadline_field #reply_fields done:false},
              #sink {port: &self.port, state: &self.upload, #storage})
         }
     }
@@ -65,6 +82,9 @@ pub(super) fn provider(call: &Call) -> TokenStream {
 pub(super) fn state() -> TokenStream {
     quote! {
         struct UploadState {
+            reply_bound: ::core::cell::Cell<Option<::ridl_rt::sample::Duration>>,
+            reply_deadline: ::core::cell::Cell<Option<::ridl_rt::sample::Timestamp>>,
+            reply_stream: ::core::cell::Cell<bool>,
             correlation: ::core::cell::Cell<Option<::ridl_rt::port::Correlation>>,
             ack: ::core::cell::Cell<bool>,
             call_error: ::core::cell::Cell<Option<::ridl_rt::error::ClientError>>,
@@ -73,7 +93,7 @@ pub(super) fn state() -> TokenStream {
             error: ::core::cell::Cell<Option<::ridl_rt::error::ClientError>>,
         }
         impl UploadState {
-            fn new()->Self { Self {call_error: ::core::cell::Cell::new(None), correlation: ::core::cell::Cell::new(None), ack: ::core::cell::Cell::new(false), ended: ::core::cell::Cell::new(false), forgotten: ::core::cell::Cell::new(false), error: ::core::cell::Cell::new(None)} }
+            fn new()->Self { Self {reply_bound: ::core::cell::Cell::new(None), reply_deadline: ::core::cell::Cell::new(None), reply_stream: ::core::cell::Cell::new(false), call_error: ::core::cell::Cell::new(None), correlation: ::core::cell::Cell::new(None), ack: ::core::cell::Cell::new(false), ended: ::core::cell::Cell::new(false), forgotten: ::core::cell::Cell::new(false), error: ::core::cell::Cell::new(None)} }
             fn forget<P: ::ridl_rt::port::Caller>(&self,port:&::core::cell::RefCell<P>) {
                 match self.correlation.get() {Some(c) if !self.forgotten.replace(true)=>port.borrow_mut().forget(c),_=>{}}
             }
@@ -122,7 +142,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         let n = proc_macro2::Literal::usize_unsuffixed(call.limit);
         quote! {#[doc="The maximum chunk length in bytes."] pub const LIMIT:usize=#n;}
     });
-    quote! {
+    let call_items = quote! {
         #[doc="The delivery acknowledgment of a command with a parameter stream. Dropping it before acknowledgment forgets the call. Completion leaves an open sink usable."]
         #[must_use]
         pub struct #future<'a,P:#bounds> {
@@ -170,7 +190,20 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<P:#bounds> ::core::ops::Drop for #future<'_,P> {
             fn drop(&mut self) {if !self.done {self.state.error.set(Some(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted))));self.state.forget(self.port);}}
         }
-        #[doc="The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload."]
+    };
+    let call_items = if call.query_upload() {
+        super::upload_query::call_items(call, encoding)
+    } else {
+        call_items
+    };
+    let sink_doc = if call.query_upload() {
+        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply."
+    } else {
+        "The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload."
+    };
+    quote! {
+        #call_items
+        #[doc=#sink_doc]
         pub struct #sink<'a,P:#bounds> where #element_bound {
             port:&'a ::core::cell::RefCell<P>, state:&'a UploadState, #storage
         }
@@ -190,7 +223,9 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
                 match self.poll_ready(cx) {::core::task::Poll::Ready(Ok(()))=>{},other=>return other}
                 let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());return ::core::task::Poll::Pending;};
                 let result=self.port.borrow_mut().end(c,::ridl_rt::contract::StreamNo(1)).map_err(upload_push_error);
-                if result.is_ok(){self.state.ended.set(true);if self.state.ack.get(){self.state.forget(self.port);}}
+                if result.is_ok(){self.state.ended.set(true);
+                    if let Some(bound)=self.state.reply_bound.get(){self.state.reply_deadline.set(Some(::ridl_rt::sample::Timestamp(self.port.borrow().now().0.saturating_add(bound.0))));}
+                    if self.state.ack.get() && !self.state.reply_stream.get(){self.state.forget(self.port);}}
                 else {self.state.error.set(result.err());}
                 ::core::task::Poll::Ready(result)
             }
@@ -295,6 +330,9 @@ fn write_methods(call: &Call) -> TokenStream {
 }
 
 pub(super) fn slot_type(call: &Call) -> TokenStream {
+    if call.query_upload() {
+        return super::upload_query::slot_type(call);
+    }
     let source = ident(call.member.camel);
     let storage = if call.raw_stream() {
         let n = proc_macro2::Literal::usize_unsuffixed(call.limit);
@@ -314,13 +352,26 @@ pub(super) fn slot_items(calls: &[&Call]) -> TokenStream {
     if calls.is_empty() {
         return TokenStream::new();
     }
-    let drivers = calls.iter().map(|call| driver(call));
-    let named = calls.iter().any(|call| !call.raw_stream()).then(
+    let drivers = calls
+        .iter()
+        .filter(|call| !call.query_upload())
+        .map(|call| driver(call));
+    let query_enum = calls
+        .iter()
+        .any(|call| call.query_upload())
+        .then(super::upload_query::step_enum);
+    let query_items = calls
+        .iter()
+        .filter(|call| call.query_upload())
+        .map(|call| super::upload_query::slot_items(call));
+    let named = calls.iter().any(|call| !call.query_upload() && !call.raw_stream()).then(
         || quote! {type InputBuffer<H,T> = <T as ::ridl_rt::payload::Payload<<H as ::ridl_rt::port::Encoded>::Encoding>>::Buffer;
         struct InputSlot<C,B> {claim: ::ridl_rt::port::ClaimId, consumer:C, buffer:B}},
     );
-    let bytes=calls.iter().any(|call| call.raw_stream()).then(||quote! {struct ByteInputSlot<C,B> {claim: ::ridl_rt::port::ClaimId, consumer:C, buffer:B, held:Option<(usize,usize)>}});
+    let bytes=calls.iter().any(|call| !call.query_upload() && call.raw_stream()).then(||quote! {struct ByteInputSlot<C,B> {claim: ::ridl_rt::port::ClaimId, consumer:C, buffer:B, held:Option<(usize,usize)>}});
     quote! {
+        #query_enum
+        #(#query_items)*
         #named
         #bytes
         #(#drivers)*
