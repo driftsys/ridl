@@ -723,6 +723,53 @@ fn an_appended_enum_value_flag_or_union_arm_that_widens_is_a_podbuf_break() {
     }
 }
 
+#[test]
+fn an_appended_enum_set_flag_that_widens_is_a_flatbuffers_break() {
+    fn enum_source(count: usize) -> String {
+        let values: String = (0..count)
+            .map(|value| format!("  V{value} = {value}\n"))
+            .collect();
+        format!("package veh.cluster\nopen enum Mode {{\n{values}}}\n")
+    }
+    let dir = TempDir::new("flatbuffers-width");
+    let source = |last, added: &str| {
+        format!("package veh.cluster\nopen enumset Flags {{\n  A = 0\n  B = {last}\n{added}}}\n")
+    };
+    for (name, old, new) in [
+        ("enumset-kept", source(6, ""), source(6, "  C = 7\n")),
+        ("enum-kept", enum_source(256), enum_source(257)),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), &old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), &new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "flatbuffers".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(code, 0, "{name}: {stderr}\n{stdout}");
+        assert!(
+            !stdout.contains("flatbuffers_width_change"),
+            "{name}: {stdout}"
+        );
+    }
+    let v1 = dir.write("v1.typl", &source(7, ""));
+    let v2 = dir.write("v2.typl", &source(7, "  C = 8\n"));
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "flatbuffers".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}\nstdout:\n{stdout}");
+    assert!(stdout.contains("breaking under flatbuffers:\n  [breaking] flatbuffers_width_change veh.cluster/Flags: u8 -> u16"), "{stdout}");
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("breaking under flatbuffers:\n  [compatible] flatbuffers_width_change veh.cluster/Flags: u8 -> u16"), "{stdout}");
+}
+
 /// An enum value or an enum-set flag appended to a strict declaration:
 /// `strict_enum_append`, exit 1 with no `--encoding` and under each one. The
 /// same append to an `open` declaration exits 0. Opening exits 0 and closing

@@ -2400,3 +2400,54 @@ fn an_enum_states_whether_it_is_strict_or_open() {
         compile_with_planus("veh.common.fbs", &generated.fbs_source);
     }
 }
+
+#[test]
+fn the_projection_enum_integers_are_what_the_schema_emits() {
+    fn scalar_for(width: v2::IntWidth) -> &'static str {
+        crate::fbs_scalar(&v2::TypeDef {
+            width: Some(v2::type_def::Width::IntWidth(width as i32)),
+            ..Default::default()
+        })
+    }
+    let def = v2::EnumDef {
+        values: enum_values(vec![("ZERO", 0), ("ONE", 1)]),
+        ..Default::default()
+    };
+    let mut pkg = package("veh.common");
+    pkg.decls.push(v2::Decl {
+        name: "Mode".to_string(),
+        kind: Some(v2::decl::Kind::EnumDef(def.clone())),
+        ..Default::default()
+    });
+    let generated = generate(&pkg).expect("generate enum");
+    let scalar = scalar_for(projection::enum_integer(&def));
+    assert!(
+        generated
+            .fbs_source
+            .contains(&format!("enum Mode : {scalar} {{")),
+        "{}",
+        generated.fbs_source
+    );
+
+    for width in [
+        v2::IntWidth::U8,
+        v2::IntWidth::U16,
+        v2::IntWidth::U32,
+        v2::IntWidth::U64,
+    ] {
+        let mut pkg = enum_set_and_field("Flags", vec![("LOW", 0)]);
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &mut pkg.decls[0].kind else {
+            panic!("an enum set")
+        };
+        def.width = width as i32;
+        let scalar = scalar_for(projection::enum_set_integer(def));
+        let generated = generate(&pkg).expect("generate enum set");
+        assert!(
+            generated
+                .fbs_source
+                .contains(&format!("  warnings: {scalar} (id: 0);")),
+            "{width:?}: {}",
+            generated.fbs_source
+        );
+    }
+}

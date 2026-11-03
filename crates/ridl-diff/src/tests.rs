@@ -5656,6 +5656,197 @@ mod podbuf_width {
     }
 }
 
+mod flatbuffers_width {
+    use ridl_ir::v2;
+
+    use crate::{Category, Change, DiffReport, Verdict, diff_refs_with, render_text};
+
+    fn package(name: &str, kind: v2::decl::Kind) -> v2::Package {
+        v2::Package {
+            name: "veh.cluster".to_string(),
+            decls: vec![v2::Decl {
+                name: name.to_string(),
+                kind: Some(kind),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn values(count: i64) -> Vec<v2::EnumValue> {
+        (0..count)
+            .map(|value| v2::EnumValue {
+                name: format!("V{value}"),
+                value,
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    fn enum_set_of(highest_bit: i64, open: bool) -> v2::Package {
+        let width = match highest_bit {
+            0..=7 => v2::IntWidth::U8,
+            8..=15 => v2::IntWidth::U16,
+            16..=31 => v2::IntWidth::U32,
+            _ => v2::IntWidth::U64,
+        };
+        package(
+            "Flags",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                bits: values(highest_bit + 1),
+                width: width as i32,
+                open,
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn enum_of(count: i64, open: bool) -> v2::Package {
+        package(
+            "Mode",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: values(count),
+                open,
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn of_category(report: &DiffReport, category: Category) -> Vec<&Change> {
+        report
+            .changes
+            .iter()
+            .filter(|change| change.category == category)
+            .collect()
+    }
+
+    #[test]
+    fn an_open_enum_set_flag_that_widens_the_scalar_is_a_flatbuffers_width_change() {
+        for (highest_bit, before, after) in
+            [(7, "u8", "u16"), (15, "u16", "u32"), (31, "u32", "u64")]
+        {
+            let (old, new) = (
+                enum_set_of(highest_bit, true),
+                enum_set_of(highest_bit + 1, true),
+            );
+            let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
+            let lines = of_category(&report, Category::FlatbuffersWidthChange);
+            assert_eq!(lines.len(), 1, "{}", render_text(&report));
+            assert_eq!(lines[0].path, "veh.cluster/Flags");
+            assert_eq!(lines[0].verdict, Verdict::Breaking);
+            assert_eq!(lines[0].before.as_deref(), Some(before));
+            assert_eq!(lines[0].after.as_deref(), Some(after));
+            assert_eq!(report.verdict, Verdict::Breaking);
+
+            let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+            let lines = of_category(&report, Category::FlatbuffersWidthChange);
+            assert_eq!(lines.len(), 1);
+            assert_eq!(lines[0].verdict, Verdict::Compatible);
+            assert_eq!(report.verdict, Verdict::Compatible);
+            if highest_bit == 7 {
+                assert!(render_text(&report).contains("breaking under flatbuffers:\n  [compatible] flatbuffers_width_change veh.cluster/Flags: u8 -> u16"), "{}", render_text(&report));
+            }
+            let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+            let lines = of_category(&report, Category::FlatbuffersWidthChange);
+            assert_eq!(lines.len(), 1);
+            assert_eq!(lines[0].verdict, Verdict::Compatible);
+        }
+    }
+
+    #[test]
+    fn an_open_enum_set_flag_that_keeps_the_scalar_draws_no_flatbuffers_line() {
+        for highest_bit in [6, 14, 30] {
+            let (old, new) = (
+                enum_set_of(highest_bit, true),
+                enum_set_of(highest_bit + 1, true),
+            );
+            let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
+            assert!(
+                of_category(&report, Category::FlatbuffersWidthChange).is_empty(),
+                "{}",
+                render_text(&report)
+            );
+            assert_eq!(report.verdict, Verdict::Compatible);
+        }
+    }
+
+    #[test]
+    fn an_open_enum_value_past_255_keeps_the_flatbuffers_long() {
+        let (old, new) = (enum_of(256, true), enum_of(257, true));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
+        assert!(
+            of_category(&report, Category::FlatbuffersWidthChange).is_empty(),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(report.verdict, Verdict::Compatible);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers", "podbuf"]);
+        assert_eq!(of_category(&report, Category::PodbufWidthChange).len(), 1);
+        assert!(of_category(&report, Category::FlatbuffersWidthChange).is_empty());
+    }
+
+    #[test]
+    fn a_strict_enum_set_append_that_widens_is_a_strict_enum_append_only() {
+        let (old, new) = (enum_set_of(7, false), enum_set_of(8, false));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
+        assert_eq!(of_category(&report, Category::StrictEnumAppend).len(), 1);
+        assert!(
+            of_category(&report, Category::FlatbuffersWidthChange).is_empty(),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(report.changes.len(), 1);
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn the_flatbuffers_width_rule_reads_only_compatible_appends() {
+        let (old, new) = (enum_set_of(7, false), enum_set_of(8, false));
+        let mut pair = vec![Change {
+            path: "veh.cluster/Flags/V8".to_string(),
+            category: Category::DeclAdded,
+            verdict: Verdict::Breaking,
+            before: None,
+            after: Some("8".to_string()),
+        }];
+        let changes = crate::walk::flatbuffers_width_changes(&pair, &old, &new);
+        assert!(changes.is_empty(), "{changes:?}");
+
+        pair[0].verdict = Verdict::Compatible;
+        let changes = crate::walk::flatbuffers_width_changes(&pair, &old, &new);
+        assert_eq!(changes.len(), 1, "{changes:?}");
+        assert_eq!(changes[0].category, Category::FlatbuffersWidthChange);
+    }
+
+    #[test]
+    fn both_width_rules_report_under_their_own_headings() {
+        let (old, new) = (enum_set_of(7, true), enum_set_of(8, true));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf", "flatbuffers"]);
+        for category in [
+            Category::PodbufWidthChange,
+            Category::FlatbuffersWidthChange,
+        ] {
+            let lines = of_category(&report, category);
+            assert_eq!(lines.len(), 1);
+            assert_eq!(lines[0].verdict, Verdict::Breaking);
+        }
+        assert_eq!(
+            crate::heading(Category::FlatbuffersWidthChange),
+            Some("breaking under flatbuffers")
+        );
+        let text = render_text(&report);
+        assert!(
+            text.find("breaking under podbuf:").unwrap()
+                < text.find("breaking under flatbuffers:").unwrap(),
+            "{text}"
+        );
+        assert_eq!(
+            crate::heading(Category::PodbufWidthChange),
+            Some("breaking under podbuf")
+        );
+    }
+}
+
 mod enum_open {
     use ridl_ir::v2;
 

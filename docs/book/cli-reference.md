@@ -1710,7 +1710,7 @@ Arguments:
 Options:
       --format <FORMAT>      Output format for the report [default: text] [possible values: text, json]
       --explain <CATEGORY>   Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
-      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. Only `podbuf` has a rule of its own: with it, a change under the heading "breaking under podbuf" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
+      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. `podbuf` and `flatbuffers` have rules of their own: with one of them, a change under the heading "breaking under <that name>" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
   -h, --help                 Print help
 ```
 
@@ -1752,6 +1752,15 @@ dependency changes for other encodings.
   artifact; the change values do not print it.
 - `podbuf_width_change`: an otherwise compatible enum value, enum-set flag or
   union arm append changes the podbuf integer of the enum, enum set or tag.
+
+A fourth category is breaking with `--encoding flatbuffers`, compatible without
+it, and listed under `breaking under flatbuffers` either way:
+
+- `flatbuffers_width_change`: an otherwise compatible enum value or enum-set
+  flag append changes the FlatBuffers integer, reported once per declaration
+  with the old and the new integer. An enum set uses the unsigned scalar of its
+  width; every enum uses `long`, so an enum value appended past 255 keeps its
+  integer and draws no such line.
 
 Each head is measured in its own side's local, standard and remote scope.
 Remote packages supply context without being compared as consumer declarations.
@@ -2124,6 +2133,7 @@ the categories `ridl diff` reports are:
   strict_enum_append
   enum_opened
   enum_closed
+  flatbuffers_width_change
 ```
 
 ### `ridl lock`

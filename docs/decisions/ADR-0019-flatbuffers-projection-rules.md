@@ -155,6 +155,11 @@ rulings above did not change: the `wire` dump is byte-identical.
   proto3 schema emits a message for the tuple element of such an array, and no
   codec encodes it.
 
+**Amended 2026-11-03 — decision 10, from driftsys/ridl#1120.** An append that
+changes the FlatBuffers integer of an enum or an enum set is breaking under
+FlatBuffers. The projection facts name that integer, and `ridl diff` reports the
+change as `flatbuffers_width_change`. Decisions 1 to 9 are unchanged.
+
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
 [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
@@ -474,6 +479,34 @@ refused.
    present 0 lost by every foreign round trip, with nothing a consumer could do
    about it.
 
+10. **An append that changes the FlatBuffers integer of an enum or an enum set
+    is breaking under FlatBuffers** — added 2026-11-03, from driftsys/ridl#1120.
+    An enum set is stored as the unsigned scalar of its declared width, the
+    narrowest that holds its highest bit: bits 0 to 7 use `u8` (`ubyte`), bits 8
+    to 15 use `u16` (`ushort`), bits 16 to 31 use `u32` (`uint`), and bits 32 to
+    63 use `u64` (`ulong`). Appending a flag at bit 8, 16 or 32 above a highest
+    bit of 7, 15 or 31 changes the scalar. A scalar field is read at its
+    declared width, and a vector element has that width as its stride: a reader
+    of the new schema rejects or misreads an old buffer, and a reader of the old
+    schema drops the new flag.
+
+    `ridl diff` reports `flatbuffers_width_change` once per declaration, at
+    `<package>/<decl>`, with the old and the new integer, under the heading
+    "breaking under flatbuffers". The rule reads only appends that are
+    compatible under the generic rule; a strict enum or enum-set append is
+    already `strict_enum_append`, breaking for every encoding. An append that
+    keeps the integer draws no width line. `ridl diff` judges the width line
+    breaking only with `--encoding flatbuffers`, compatible otherwise.
+    `ridl build` and `ridl baseline` judge it with the root manifest's encodings
+    when maintaining catalog history.
+
+    The integer is read through `ridl_ir::projection::flatbuffers::enum_integer`
+    for an enum and `enum_set_integer` for an enum set. Every enum is `long`
+    today, whatever its values, so an enum value appended past 255 draws no
+    FlatBuffers width line. Reading the projection fact means a narrower enum
+    (driftsys/ridl#1020) is covered by the same rule when that fact changes.
+    Unions are not read: a FlatBuffers union's type field is always `ubyte`.
+
 ## Alternatives considered
 
 | Candidate                                                             | Verdict    | Reason                                                                                                                                                                                                                     |
@@ -491,6 +524,7 @@ refused.
 | A raw scalar root, with no table at all                               | rejected   | FlatBuffers has no root that is not a table; `planus` could not read one and the conformance suite would have nothing to compare (decision 8)                                                                              |
 | `= null` on every scalar and enum field, optional or not              | rejected   | realises absence for fields that never declared `?` (ADR-0013 decision 7), makes every scalar of a foreign consumer's code optional, and still refuses a buffer from a writer that follows the earlier schema (decision 9) |
 | A plain scalar for an optional scalar field, with the loss documented | rejected   | a present 0 is lost by every round trip through another implementation, because the schema states no presence for the field (decision 9)                                                                                   |
+| Judge it under podbuf's category                                      | rejected   | a podbuf-only build would be told a FlatBuffers break, and the reverse (decision 10)                                                                                                                                       |
 
 ## Consequences
 

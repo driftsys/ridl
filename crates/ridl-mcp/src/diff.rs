@@ -12,7 +12,7 @@ pub struct DiffInput {
     pub new: String,
     /// Optional unsaved source files applied to the new source side only.
     pub overlays: Option<Vec<OverlayInput>>,
-    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). Only podbuf has rules of its own: with it, a podbuf_inline_append, podbuf_width_change or podbuf_remote_inline_growth change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.
+    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). podbuf and flatbuffers have rules of their own: with podbuf, a podbuf_inline_append, podbuf_width_change or podbuf_remote_inline_growth change is breaking; without it, compatible. With flatbuffers, a flatbuffers_width_change change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.
     pub encodings: Option<Vec<String>>,
 }
 pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {

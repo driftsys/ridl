@@ -177,7 +177,8 @@ common cases:
 - **Compatible, for an `open` declaration**: an enum value or an enum-set flag
   appended (no category of its own: the append is a compatible `decl_added`),
   under every encoding, podbuf included, when the podbuf integer of the
-  declaration stays the same (the next item gives the case where it changes),
+  declaration and the FlatBuffers scalar stay the same (the next items give
+  the cases where they change),
   and the `open` keyword gained (`enum_opened`). Opening is a source break for
   Rust callers: the generated enum gains an unknown variant and
   `#[non_exhaustive]`, so a `match` over it needs a wildcard arm.
@@ -197,6 +198,15 @@ common cases:
   A field removed from a struct, its slot held by a tombstone, is `decl_removed`,
   breaking under every encoding: the type is gone from the source, so its
   bytes cannot be kept.
+
+- **Breaking under flatbuffers**: an enum value or an enum-set flag appended
+  after which the FlatBuffers integer differs (`flatbuffers_width_change`,
+  once per declaration with the old and the new integer). An enum set uses the
+  unsigned scalar of its width; every enum uses `long`, so an appended enum
+  value keeps its integer. The verdict follows `ridl diff --encoding
+  flatbuffers`: breaking with it, compatible without it, under the heading
+  `breaking under flatbuffers` either way. The rule is stated in
+  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 10.
 
 An interface that joins the list of a service with a named interface list, or
 leaves it, is not part of the hash input, because the list is not hashed. Such
