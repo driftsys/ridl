@@ -635,7 +635,7 @@ To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out B
                 .any(|issue| issue.side == ridl_diff::ContextSide::New)
             {
                 eprintln!(
-                    "For missing candidate evidence, compare its source path or an enriched snapshot directory."
+                    "For missing or unusable candidate evidence, compare its source path or an enriched snapshot directory."
                 );
             }
             return ExitCode::from(2);

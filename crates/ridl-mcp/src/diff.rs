@@ -66,7 +66,7 @@ pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
 Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
 To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility. BASELINE is the affected snapshot input named by the old or new context issue.");
         if error.issues.iter().any(|issue| issue.side == ridl_diff::ContextSide::New) {
-            message.push_str("\nFor missing candidate evidence, compare its source path or an enriched snapshot directory.");
+            message.push_str("\nFor missing or unusable candidate evidence, compare its source path or an enriched snapshot directory.");
         }
         ToolError::Request(message)
     })?;
