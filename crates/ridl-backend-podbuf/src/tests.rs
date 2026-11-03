@@ -99,6 +99,100 @@ fn a_tuple_member_with_no_name_is_named_by_its_position() {
     assert!(h.contains("q_st_f2_at("), "{h}");
 }
 
+#[test]
+fn a_keyword_and_its_escaped_spelling_are_two_members() {
+    let h = generate_fixture(
+        "package p\n\
+         struct S {\n  int : integer [0..255]\n  int_ : integer [0..255]\n\
+         \x20 t : (int: integer [0..255], int_: integer [0..255])\n}\n",
+    )
+    .header_source;
+    for spelling in [
+        "uint8_t int_;",
+        "uint8_t int__;",
+        "p_s_int_at(",
+        "p_s_int__at(",
+        "p_s_int(",
+        "p_s_int_(",
+        "p_st_int_at(",
+        "p_st_int__at(",
+    ] {
+        assert!(h.contains(spelling), "{spelling}: {h}");
+    }
+    assert!(!h.contains("uint8_t f1;"), "{h}");
+}
+
+#[test]
+fn a_trailing_underscore_stays_in_the_accessor_names() {
+    let h = generate_fixture(
+        "package p\n\
+         struct S {\n  low : integer [0..255]\n  low_ : integer [0..255]\n\
+         \x20 top_ : integer [0..255]?\n}\n",
+    )
+    .header_source;
+    for spelling in [
+        "p_s_low_at(",
+        "p_s_low__at(",
+        "p_s_low(",
+        "p_s_low_(",
+        "p_s_has_top__at(",
+    ] {
+        assert!(h.contains(spelling), "{spelling}: {h}");
+    }
+}
+
+#[test]
+fn a_member_equal_to_a_presence_test_is_refused_in_a_struct_and_a_tuple() {
+    for (source, name) in [
+        (
+            "package p\nstruct S {\n  x : integer [0..255]?\n  hasX : integer [0..255]\n}\n",
+            "p_s_has_x_at",
+        ),
+        (
+            "package p\nstruct S {\n  t : (x: integer [0..255]?, hasX: integer [0..255])\n}\n",
+            "p_st_has_x_at",
+        ),
+        (
+            "package p\nstruct S {\n  t : (int: integer [0..255]?, hasInt: integer [0..255])\n}\n",
+            "p_st_has_int_at",
+        ),
+    ] {
+        let err = generate_fixture_err(source);
+        assert!(
+            err.message.contains(&format!("`{name}`")),
+            "{}",
+            err.message
+        );
+        assert!(
+            err.message.contains("the presence test of"),
+            "{}",
+            err.message
+        );
+        assert!(err.message.contains("the accessor of"), "{}", err.message);
+    }
+}
+
+#[test]
+fn a_tuple_member_equal_to_an_at_accessor_or_the_head_type_is_accepted() {
+    for (source, spellings) in [
+        (
+            "package p\nstruct S {\n  t : (x: integer [0..255], xAt: integer [0..255])\n}\n",
+            &["uint8_t x;", "uint8_t x_at;", "p_st_x_at(", "p_st_x_at_at("][..],
+        ),
+        (
+            "package p\nstruct S {\n  t : (head: integer [0..255])\n}\n",
+            &["uint8_t head;", "p_st_head_at("][..],
+        ),
+    ] {
+        let generated = generate(&compile(source));
+        assert!(generated.is_ok(), "{generated:?}");
+        let h = generated.expect("generate").header_source;
+        for spelling in spellings {
+            assert!(h.contains(spelling), "{spelling}: {h}");
+        }
+    }
+}
+
 /// A member whose pinned snake case is a C23 keyword (`staticAssert` is
 /// `static_assert`) is escaped with a trailing underscore, as every reserved
 /// word is, for a struct field and for a tuple member. The test pins the eight
