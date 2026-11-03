@@ -567,8 +567,8 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
     let features: BTreeMap<String, Vec<String>> = manifest.features;
     assert_eq!(
         features.keys().collect::<Vec<_>>(),
-        vec!["default", "std", "validate-pattern"],
-        "the feature table must hold exactly these three features, was: {features:?}"
+        vec!["debug", "default", "std", "validate-pattern"],
+        "the feature table must hold exactly these four features, was: {features:?}"
     );
     assert_eq!(
         features["default"],
@@ -2286,5 +2286,109 @@ fn a_table_for_another_backend_leaves_the_rust_emit_types_only() {
             "another backend's table reaches no Rust emit, so the package carries no \
              `{marker}`, got:\n{source}"
         );
+    }
+}
+
+#[test]
+fn generated_debug_forwards_only_runtime_debug() {
+    for options in ["", "\n[backend.rust]\nencodings = [\"flatbuffers\"]\n"] {
+        let fixture = tempfile::tempdir().unwrap();
+        let entry = write_interface_fixture(fixture.path(), options);
+        let out = tempfile::tempdir().unwrap();
+        build_rust(&entry, out.path());
+        let text = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
+        let manifest: toml::Table = text.parse().unwrap();
+        assert_eq!(
+            manifest["features"].get("debug"),
+            Some(&toml::Value::Array(vec![toml::Value::String(
+                "ridl-rt/debug".into()
+            )])),
+            "debug must forward only ridl-rt/debug"
+        );
+        assert_eq!(
+            manifest["features"]["default"].as_array().unwrap(),
+            &["validate-pattern", "std"].map(|name| toml::Value::String(name.into())),
+            "debug must remain opt-in"
+        );
+    }
+}
+
+#[test]
+fn generated_instances_remain_positive_i32() {
+    let out = tempfile::tempdir().unwrap();
+    build_rust(Path::new("../../examples/cabin"), out.path());
+    let source = std::fs::read_to_string(out.path().join("__ridl_instances.rs")).unwrap();
+    let constants: Vec<_> = source
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("pub const "))
+        .collect();
+    assert_eq!(
+        constants,
+        [
+            "pub const UNIT: i32 = 1;",
+            "pub const UNIT: i32 = 2;",
+            "pub const UNIT: i32 = 3;",
+        ],
+        "generated instance constants retain their public type and positive numbers"
+    );
+}
+
+#[test]
+fn generated_debug_consumer_feature_probe() {
+    let fixture = tempfile::tempdir().unwrap();
+    let entry = write_interface_fixture(fixture.path(), "");
+    let out = tempfile::tempdir().unwrap();
+    build_rust(&entry, out.path());
+    let manifest_path = out.path().join("Cargo.toml");
+    let mut manifest: toml::Table = std::fs::read_to_string(&manifest_path)
+        .unwrap()
+        .parse()
+        .unwrap();
+    let runtime = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-rt")
+        .canonicalize()
+        .unwrap();
+    let runtime_path = runtime.to_str().unwrap();
+    manifest.insert(
+        "patch".into(),
+        toml::Value::Table(toml::toml! {
+            [crates-io.ridl-rt]
+            path = runtime_path
+        }),
+    );
+    std::fs::write(&manifest_path, toml::to_string(&manifest).unwrap()).unwrap();
+    std::fs::create_dir(out.path().join("examples")).unwrap();
+    std::fs::write(
+        out.path().join("examples/debug_identity.rs"),
+        "use ridl_rt::contract::InstanceNo;\n\
+         fn main() {\n\
+         let _ = InstanceNo::LISTENER;\n\
+         let _ = InstanceNo::new(1).unwrap().twin();\n\
+         }\n",
+    )
+    .unwrap();
+
+    for (features, succeeds) in [
+        (&[][..], false),
+        (&["--features", "debug"][..], true),
+        (&["--no-default-features", "--features", "debug"][..], true),
+    ] {
+        let output = std::process::Command::new(env!("CARGO"))
+            .current_dir(out.path())
+            .args(["check", "--offline", "--example", "debug_identity"])
+            .args(features)
+            .env("RUSTC_WRAPPER", "")
+            .output()
+            .expect("cargo must be runnable for the generated consumer probe");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.success(), succeeds, "{features:?}:\n{stderr}");
+        if !succeeds {
+            assert!(
+                stderr.contains("no associated function or constant named `LISTENER`"),
+                "{stderr}"
+            );
+            assert!(stderr.contains("no method named `twin`"), "{stderr}");
+        }
     }
 }
