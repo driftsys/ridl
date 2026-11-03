@@ -7,7 +7,7 @@ use ridl_ir::{
     v2,
 };
 
-use crate::{Category, Change, ContextIssue, ContextSide, Verdict};
+use crate::{Category, Change, ContextIssue, ContextIssueReason, ContextSide, Verdict};
 
 pub(crate) fn compare(
     old_holders: &[&v2::Package],
@@ -19,11 +19,7 @@ pub(crate) fn compare(
     let mut pass = Pass {
         old,
         new,
-        locals: old_holders
-            .iter()
-            .chain(new_holders)
-            .map(|p| p.name.as_str())
-            .collect(),
+        locals: BTreeSet::new(),
         require_new: true,
         changes: BTreeMap::new(),
         issues: BTreeSet::new(),
@@ -44,6 +40,7 @@ pub(crate) fn compare(
         (ContextSide::Old, old_holders),
         (ContextSide::New, new_holders),
     ] {
+        pass.locals = holders.iter().map(|p| p.name.as_str()).collect();
         walk_holders(holders, |home, ty, path, fixed| {
             pass.require_new = new_uses.get(path).is_some_and(|types| types.contains(ty));
             pass.visit(home, ty, path, fixed, side, &mut BTreeSet::new());
@@ -180,6 +177,7 @@ impl Pass<'_> {
                             path: path.to_string(),
                             declaration: identity,
                             side,
+                            reason: ContextIssueReason::Missing,
                         });
                     }
                     return;
@@ -192,8 +190,14 @@ impl Pass<'_> {
                     return;
                 }
                 if fixed && side == ContextSide::Old {
-                    let old_size =
-                        self.head_size(self.old, declaring, decl, path, ContextSide::Old);
+                    let old_size = self.head_size(
+                        self.old,
+                        declaring,
+                        decl,
+                        path,
+                        ContextSide::Old,
+                        &identity,
+                    );
                     let new_decl = self
                         .new
                         .iter()
@@ -209,10 +213,13 @@ impl Pass<'_> {
                                 path: path.to_string(),
                                 declaration: identity.clone(),
                                 side: ContextSide::New,
+                                reason: ContextIssueReason::KindChanged,
                             });
                             None
                         }
-                        Some((p, d)) => self.head_size(self.new, p, d, path, ContextSide::New),
+                        Some((p, d)) => {
+                            self.head_size(self.new, p, d, path, ContextSide::New, &identity)
+                        }
                         None => {
                             // A changed consumer use needs only its own new type.
                             // Retained uses still need evidence for nested remote declarations.
@@ -221,6 +228,7 @@ impl Pass<'_> {
                                     path: path.to_string(),
                                     declaration: identity.clone(),
                                     side: ContextSide::New,
+                                    reason: ContextIssueReason::Missing,
                                 });
                             }
                             None
@@ -292,6 +300,7 @@ impl Pass<'_> {
         decl: &v2::Decl,
         path: &str,
         side: ContextSide,
+        identity: &str,
     ) -> Option<u32> {
         let others: Vec<_> = scope
             .iter()
@@ -313,8 +322,9 @@ impl Pass<'_> {
             Err(_) => {
                 self.issues.insert(ContextIssue {
                     path: path.to_string(),
-                    declaration: format!("{}.{}", home.name, decl.name),
+                    declaration: identity.to_string(),
                     side,
+                    reason: ContextIssueReason::Unlayable,
                 });
                 None
             }

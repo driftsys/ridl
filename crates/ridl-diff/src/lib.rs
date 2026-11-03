@@ -271,7 +271,7 @@ declare_categories! {
         /// `<package>/<struct>/<field>` and an interaction's request, reply
         /// or fixed payload as `<package>/<interface>/<interaction>`.
         PodbufInlineAppend,
-        /// A remote struct held inline by an old consumer has a larger head.
+        /// A remote declaration held inline by an old consumer has a larger podbuf size.
         PodbufRemoteInlineGrowth,
         /// An enum value, an enum-set flag or a union arm appended, compatible
         /// under the generic rule, after which the podbuf integer of the enum
@@ -514,7 +514,7 @@ pub fn diff_refs_with(
     diff_refs_scoped(old, new, context, context, encodings)
 }
 
-/// The side whose remote declarations are unavailable.
+/// The side whose remote evidence cannot establish inline compatibility.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ContextSide {
     Old,
@@ -530,25 +530,46 @@ impl std::fmt::Display for ContextSide {
     }
 }
 
-/// Missing evidence for a consumer-owned podbuf comparison.
+/// Why remote evidence cannot establish inline compatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ContextIssueReason {
+    Missing,
+    Unlayable,
+    KindChanged,
+}
+
+/// Unusable evidence for a consumer-owned podbuf comparison.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ContextIssue {
     pub path: String,
     pub declaration: String,
     pub side: ContextSide,
+    pub reason: ContextIssueReason,
 }
 
 impl std::fmt::Display for ContextIssue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}: {} context is missing {}",
-            self.path, self.side, self.declaration
-        )
+        match self.reason {
+            ContextIssueReason::Missing => write!(
+                f,
+                "{}: {} context is missing {}",
+                self.path, self.side, self.declaration
+            ),
+            ContextIssueReason::Unlayable => write!(
+                f,
+                "{}: {} context cannot lay out {}",
+                self.path, self.side, self.declaration
+            ),
+            ContextIssueReason::KindChanged => write!(
+                f,
+                "{}: {} context changes {} from a struct to another declaration kind",
+                self.path, self.side, self.declaration
+            ),
+        }
     }
 }
 
-/// An explicit podbuf comparison lacks its own side's remote evidence.
+/// An explicit podbuf comparison cannot use its own side's remote evidence.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContextError {
     pub issues: Vec<ContextIssue>,

@@ -49,7 +49,7 @@ pub(crate) fn compatible_catalogs(
         let unknown = judgment.unknown(unit, &published_scope, &scope);
         if unknown {
             eprintln!(
-                "warning: cannot establish podbuf compatibility for unit `{unit}`: historical inline context is missing; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
+                "warning: cannot establish podbuf compatibility for unit `{unit}`: historical inline context is missing or unusable; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
             );
         }
         let current_hash = catalog_hash(unit, &scope);
@@ -110,7 +110,7 @@ pub(crate) fn write_catalog_histories(
     for unit in &published_units {
         if judgment.unknown(unit, &published_scope, &scope) {
             eprintln!(
-                "error: cannot publish unit `{unit}`: historical inline context is missing; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
+                "error: cannot publish unit `{unit}`: historical inline context is missing or unusable; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
                 published.display(),
                 published.display()
             );

@@ -2528,6 +2528,51 @@ mod podbuf {
                 path: "app.api/Sample/reading".into(),
                 declaration: "dep.types.Reading".into(),
                 side: crate::ContextSide::New,
+                reason: crate::ContextIssueReason::Missing,
+            }]
+        );
+    }
+
+    #[test]
+    fn remote_moved_into_workspace_still_reports_old_inline_growth() {
+        let local = remote_holder(named("dep.types.Reading"));
+        let old_remote = remote_reading(false);
+        let new_local = remote_reading(true);
+        let report = crate::diff_refs_with_contexts(
+            &[&local],
+            &[&local, &new_local],
+            &[&old_remote],
+            &[],
+            &["podbuf"],
+        )
+        .unwrap();
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(changes[0].before.as_deref(), Some("dep.types.Reading: 8"));
+        assert_eq!(changes[0].after.as_deref(), Some("dep.types.Reading: 16"));
+        assert_eq!(changes[0].verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_moved_into_workspace_still_requires_old_evidence() {
+        let local = remote_holder(named("dep.types.Reading"));
+        let new_local = remote_reading(false);
+        let result =
+            crate::diff_refs_with_contexts(&[&local], &[&local, &new_local], &[], &[], &["podbuf"]);
+        assert!(result.is_err(), "{result:?}");
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "app.api/Sample/reading: old context is missing dep.types.Reading"
+        );
+        assert_eq!(
+            error.issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Reading".into(),
+                side: crate::ContextSide::Old,
+                reason: crate::ContextIssueReason::Missing,
             }]
         );
     }
@@ -2631,12 +2676,18 @@ mod podbuf {
         let result =
             crate::diff_refs_with_contexts(&[&local], &[&local], &[old], &[new], &["podbuf"]);
         assert!(result.is_err(), "{result:?}");
+        let error = result.unwrap_err();
         assert_eq!(
-            result.unwrap_err().issues,
+            error.to_string(),
+            format!("app.api/Sample/reading: {side} context cannot lay out dep.types.Reading")
+        );
+        assert_eq!(
+            error.issues,
             vec![crate::ContextIssue {
                 path: "app.api/Sample/reading".into(),
                 declaration: "dep.types.Reading".into(),
                 side,
+                reason: crate::ContextIssueReason::Unlayable,
             }]
         );
     }
@@ -2662,12 +2713,18 @@ mod podbuf {
         let result =
             crate::diff_refs_with_contexts(&[&local], &[&local], &[&old], &[&new], &["podbuf"]);
         assert!(result.is_err(), "{result:?}");
+        let error = result.unwrap_err();
         assert_eq!(
-            result.unwrap_err().issues,
+            error.to_string(),
+            "app.api/Sample/reading: new context changes dep.types.Reading from a struct to another declaration kind"
+        );
+        assert_eq!(
+            error.issues,
             vec![crate::ContextIssue {
                 path: "app.api/Sample/reading".into(),
                 declaration: "dep.types.Reading".into(),
                 side: crate::ContextSide::New,
+                reason: crate::ContextIssueReason::KindChanged,
             }]
         );
     }
@@ -2880,7 +2937,8 @@ mod podbuf {
                 vec![crate::ContextIssue {
                     path: "app.api/Sample/reading".into(),
                     declaration: "dep.types.Reading".into(),
-                    side
+                    side,
+                    reason: crate::ContextIssueReason::Missing,
                 }]
             );
             assert!(error.to_string().contains("dep.types.Reading"));
@@ -3153,7 +3211,8 @@ mod podbuf {
             vec![crate::ContextIssue {
                 path: "app.api/Sample/reading".into(),
                 declaration: "dep.types.Reading".into(),
-                side: crate::ContextSide::New
+                side: crate::ContextSide::New,
+                reason: crate::ContextIssueReason::Missing,
             }]
         );
     }
