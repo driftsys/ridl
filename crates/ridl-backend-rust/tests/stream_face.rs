@@ -2783,7 +2783,7 @@ impl Wakeable for ByteClaims {
 }
 
 #[test]
-fn fix_byte_source_polls_debit_the_shared_budget_before_ready_byte_claims() {
+fn byte_source_polls_debit_the_shared_budget_before_ready_byte_claims() {
     let rt = loopback();
     let fetch = Rc::new(Cell::new(0));
     let text = Rc::new(Cell::new(0));
@@ -2823,7 +2823,7 @@ fn fix_byte_source_polls_debit_the_shared_budget_before_ready_byte_claims() {
 }
 
 #[test]
-fn fix_binary_bytes_round_trip_through_generated_serve_and_end() {
+fn binary_bytes_round_trip_through_generated_serve_and_end() {
     let rt = loopback();
     let expected: Vec<u8> = (0..BYTE_LIMIT * 3 + 19)
         .map(|n| [0xff, 0x80, 0xc3, 0, 0x7f][n % 5])
@@ -2861,7 +2861,7 @@ fn fix_binary_bytes_round_trip_through_generated_serve_and_end() {
 }
 
 #[test]
-fn fix_a_pending_byte_stream_registers_a_waker_for_the_next_push() {
+fn a_pending_byte_stream_registers_a_waker_for_the_next_push() {
     let rt = loopback();
     let mut handler = document_handler(&rt, FETCH);
     let ports = RecordingPorts::new(&rt);
@@ -2894,7 +2894,7 @@ fn fix_a_pending_byte_stream_registers_a_waker_for_the_next_push() {
 }
 
 #[test]
-fn fix_a_pending_text_stream_registers_a_waker_for_the_next_push() {
+fn a_pending_text_stream_registers_a_waker_for_the_next_push() {
     let rt = loopback();
     let mut handler = document_handler(&rt, TEXT);
     let ports = RecordingPorts::new(&rt);
@@ -3094,7 +3094,7 @@ raw_release_tests!(fix_byte_release, fetch, FETCH, bytes);
 raw_release_tests!(fix_text_release, text, TEXT, text);
 
 #[test]
-fn fix_text_streams_skip_initial_and_later_empty_chunks() {
+fn text_streams_skip_initial_and_later_empty_chunks() {
     let rt = loopback();
     let mut handler = document_handler(&rt, TEXT);
     let mut client = generated::docs::Client::new(rt.caller());
