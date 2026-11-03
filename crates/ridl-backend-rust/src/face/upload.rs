@@ -243,7 +243,6 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
                         self.state.error.set(Some(error));
                     }
                     if let (true,Some(c))=(self.state.error.get().is_none() && !self.state.forgotten.get(), self.state.correlation.get()) {let _=self.port.borrow_mut().abort(c,::ridl_rt::contract::StreamNo(1),::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}
-                    if self.state.error.get().is_none() {self.state.error.set(Some(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted))));}
                     self.state.forget(self.port);
                 }
             }

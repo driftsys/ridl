@@ -101,6 +101,7 @@ pub(super) fn call_items(call: &Call, encoding: &TokenStream) -> TokenStream {
             fn poll(self: ::core::pin::Pin<&mut Self>,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Self::Output> {
                 let this=self.get_mut();assert!(!this.done,"query polled after completion");
                 if let Some(e)=this.state.call_error.get(){return this.fail(e);}
+                if this.state.forgotten.get(){return this.fail(this.state.error.get().unwrap_or(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted))));}
                 if let Some(arg)=this.pending.take(){
                     this.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());
                     let sent=#send(&mut *this.port.borrow_mut(),&arg);

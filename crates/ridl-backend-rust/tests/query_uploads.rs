@@ -685,6 +685,34 @@ fn dropping_an_unended_pipe_sink_immediately_interrupts_the_call() {
     assert_eq!(doubles::forgets(&ops).len(), 1);
 }
 
+#[test]
+fn an_unresolved_call_whose_unended_sink_is_dropped_settles_interrupted() {
+    let interrupted = ClientError::Call(CallError::Transport(Transport::Interrupted));
+    let (rt, _, mut provider) = setup();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let ops = ports.log();
+    let mut client = generated::log::Client::new(ports);
+    let (mut call, mut sink) = client.summarize(generated::LogSummarizeParams {});
+    pending(&mut call);
+    pending(&mut serve);
+    sink.send(&reading(1)).unwrap();
+    drop(sink);
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+    assert_eq!(poll(&mut call), Poll::Ready(Err(interrupted)));
+    drop(call);
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+
+    let (mut call, sink) = client.pipe(generated::LogPipeParams {});
+    pending(&mut call);
+    pending(&mut serve);
+    drop(sink);
+    assert_eq!(doubles::forgets(&ops).len(), 2);
+    assert!(matches!(poll(&mut call), Poll::Ready(Err(e)) if e == interrupted));
+    drop(call);
+    assert_eq!(doubles::forgets(&ops).len(), 2);
+}
+
 struct ObservedHandler<H> {
     inner: H,
     operations: Rc<RefCell<Vec<&'static str>>>,
