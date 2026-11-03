@@ -256,6 +256,27 @@ fn enriched_input_refuses_invalid_inventories_and_provenance() {
             x["remote_units"][0]["packages"][0]["name"] = "app".into();
             x
         }),
+        ("outside reached closure", {
+            let mut x = valid.clone();
+            let mut extra = x["remote_units"][1]["packages"][0].clone();
+            extra["name"] = "dep.unused".into();
+            x["remote_units"][1]["packages"]
+                .as_array_mut()
+                .unwrap()
+                .push(extra);
+            x
+        }),
+        ("empty packages", {
+            let mut x = valid.clone();
+            x["remote_units"][0]["packages"] = serde_json::json!([]);
+            x
+        }),
+        ("local in remote unit", {
+            let mut x = valid.clone();
+            x["remote_units"][0]["unit"] = "app".into();
+            x["remote_units"][0]["packages"][0]["unit"] = "app".into();
+            x
+        }),
         ("wrong owning unit", {
             let mut x = valid.clone();
             x["remote_units"][0]["packages"][0]["unit"] = "wrong".into();
@@ -317,7 +338,24 @@ fn enriched_input_refuses_invalid_inventories_and_provenance() {
     ];
     for (name, value) in cases {
         fs::write(dir.path().join("context.json"), value.to_string()).unwrap();
-        assert!(load(dir.path()).is_err(), "accepted {name}");
+        let result = load(dir.path());
+        assert!(result.is_err(), "accepted {name}");
+        let error = result.unwrap_err();
+        let expected = match name {
+            "local/remote collision" => Some("local/remote package collision `app`"),
+            "outside reached closure" => {
+                Some("remote context contains packages outside the reached closure")
+            }
+            "empty packages" => Some("missing or invalid pin provenance for `alpha`"),
+            "local in remote unit" => Some("local package `app.extra` belongs to a remote unit"),
+            _ => None,
+        };
+        if let Some(expected) = expected {
+            let ridlc::diff_side::DiffSideError::Context(error) = error else {
+                panic!("expected a context error for {name}: {error}");
+            };
+            assert_eq!(error.message, expected, "{name}");
+        }
     }
     let duplicate = text.replacen(
         "\"local_packages\": {",
