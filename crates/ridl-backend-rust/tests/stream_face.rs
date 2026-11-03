@@ -994,6 +994,13 @@ impl Feed {
 }
 
 impl generated::log::Provider for Feed {
+    type Checked = IgnoreUpload;
+    fn checked(&mut self, _: &generated::LogCheckedParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn checked_reply(&mut self, _: IgnoreUpload) -> Level {
+        Level::new_unchecked(0)
+    }
     type Summarize = IgnoreUpload;
     type Pipe = IgnoreUpload;
     fn summarize(&mut self, _: &generated::LogSummarizeParams) -> IgnoreUpload {

@@ -137,6 +137,7 @@ fn shared_stream(call: &Call, encoding: &TokenStream) -> TokenStream {
                     StreamState::Refused(e)=>{self.shared.error.set(Some(::ridl_rt::error::ClientError::Call(e)));self.state=StreamState::Stopped;return ::core::task::Poll::Ready(Some(Err(::ridl_rt::error::ClientError::Call(e))));},
                     StreamState::First(n)=>{self.state=StreamState::Open;n},
                     StreamState::Open=>{
+                        if self.shared.forgotten.get() {let e=self.shared.error.get().unwrap_or(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted)));self.state=StreamState::Stopped;return ::core::task::Poll::Ready(Some(Err(e)));}
                         self.port.borrow().wake_on(::ridl_rt::port::Interest::Stream(self.correlation,::ridl_rt::port::REPLY_STREAM),cx.waker());
                         let result=self.port.borrow_mut().pull(self.correlation,::ridl_rt::port::REPLY_STREAM,::core::convert::AsMut::as_mut(&mut self.buffer));
                         match result {

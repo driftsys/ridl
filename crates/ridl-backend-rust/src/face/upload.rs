@@ -31,7 +31,7 @@ pub(super) fn method(call: &Call) -> TokenStream {
     let doc = call_doc(
         call,
         if call.query_upload() {
-            "Sends the query and returns its reply future and upload sink. The reply deadline starts when the sink successfully sends its end. Both values share this client; dropping an unfinished value cancels its call."
+            "Sends the query and returns its reply future and upload sink. SendError::Busy waits for a free slot and sends on a later poll. This wait has no deadline until the sink's poll_end succeeds, when the reply deadline starts. Both values share this client; dropping an unfinished value cancels its call."
         } else {
             "Sends the command and returns its acknowledgment future and parameter sink. The values share this client's port until both are dropped. The acknowledgment reports delivery, independently of later stream refusal. Dropping an unfinished sink interrupts the stream. An empty sink is locally ready; peer refusal is read from the next push or end."
         },
@@ -196,7 +196,9 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
     } else {
         call_items
     };
-    let sink_doc = if call.query_upload() {
+    let sink_doc = if call.duplex() {
+        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). An ended sink preserves the reply: the call is forgotten when the reply finishes or the last remaining value is dropped."
+    } else if call.query_upload() {
         "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply."
     } else {
         "The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload."
@@ -241,6 +243,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
                         self.state.error.set(Some(error));
                     }
                     if let (true,Some(c))=(self.state.error.get().is_none() && !self.state.forgotten.get(), self.state.correlation.get()) {let _=self.port.borrow_mut().abort(c,::ridl_rt::contract::StreamNo(1),::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}
+                    if self.state.error.get().is_none() {self.state.error.set(Some(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted))));}
                     self.state.forget(self.port);
                 }
             }

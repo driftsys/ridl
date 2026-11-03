@@ -201,6 +201,14 @@ impl ::core::default::Default for LogPipeParams {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LogCheckedParams {}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for LogCheckedParams {
+    fn default() -> Self {
+        LogCheckedParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DocsNoteParams {}
 #[allow(clippy::derivable_impls)]
 impl ::core::default::Default for DocsNoteParams {
@@ -1174,6 +1182,97 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LogPipePa
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_LogPipeParams(__view.buf, __view.table)
+    }
+}
+/// A `LogCheckedParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct LogCheckedParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for LogCheckedParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> LogCheckedParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_LogCheckedParams(
+    _value: &LogCheckedParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_LogCheckedParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_LogCheckedParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> LogCheckedParams {
+    LogCheckedParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LogCheckedParams {
+    /// The largest FlatBuffers buffer any legal `LogCheckedParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = LogCheckedParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, LogCheckedParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_LogCheckedParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: LogCheckedParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        LogCheckedParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_LogCheckedParams(buf, table)?;
+        ::core::result::Result::Ok(LogCheckedParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_LogCheckedParams(__view.buf, __view.table)
     }
 }
 /// A `DocsNoteParams` value in FlatBuffers bytes, read in place without copying it.
@@ -2176,6 +2275,75 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for LogPipeParams 
     }
 }
 #[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_LogCheckedParams(
+    _value: &LogCheckedParams,
+) -> ::core::primitive::usize {
+    0usize
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_LogCheckedParams(
+    _value: &LogCheckedParams,
+    _writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_verify_LogCheckedParams(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_decode_LogCheckedParams(
+    _buf: &[::core::primitive::u8],
+) -> LogCheckedParams {
+    LogCheckedParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for LogCheckedParams {
+    /// The largest proto3 message any legal `LogCheckedParams` encodes to: 0 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 0usize;
+    type Buffer = [::core::primitive::u8; 0usize];
+    const BUFFER: Self::Buffer = [0u8; 0usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_LogCheckedParams(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_LogCheckedParams(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_LogCheckedParams(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    #[allow(clippy::collapsible_if)]
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_LogCheckedParams(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_pb_len_DocsNoteParams(
     _value: &DocsNoteParams,
 ) -> ::core::primitive::usize {
@@ -2254,8 +2422,8 @@ impl ::ridl_rt::contract::Interface for Log {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            47, 232, 225, 63, 171, 181, 106, 224, 140, 33, 201, 199, 148, 188, 255, 22,
-            106, 49, 247, 206, 162, 129, 12, 205, 80, 83, 106, 43, 127, 185, 3, 11,
+            27, 93, 244, 254, 161, 66, 34, 253, 213, 140, 206, 60, 243, 60, 198, 129,
+            111, 200, 48, 36, 225, 98, 181, 17, 60, 193, 215, 176, 22, 198, 42, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -2380,6 +2548,31 @@ impl ::ridl_rt::contract::Interface for Log {
                 },
             ],
         },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(6),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "checked",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(100000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "LogCheckedParams",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Level",
+                },
+            ],
+            streams: &[
+                ::ridl_rt::contract::StreamInfo {
+                    no: ::ridl_rt::contract::StreamNo(1),
+                    form: ::ridl_rt::contract::StreamForm::Elements,
+                    element: "face.stream.Reading",
+                },
+            ],
+        },
     ];
 }
 impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Log {
@@ -2402,6 +2595,12 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Log {
         <LogPipeParams as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE as ::core::primitive::u64,
+        <LogCheckedParams as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
@@ -2421,6 +2620,12 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Log {
                 ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE,
             <LogPipeParams as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <LogCheckedParams as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Level as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE,
         ];
@@ -2466,6 +2671,12 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3> for Log {
         <LogPipeParams as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::Proto3,
         >>::MAX_SIZE as ::core::primitive::u64,
+        <LogCheckedParams as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::Proto3,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Proto3,
+            >>::MAX_SIZE as ::core::primitive::u64,
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
@@ -2487,6 +2698,10 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3> for Log {
             <LogPipeParams as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::Proto3,
             >>::MAX_SIZE,
+            <LogCheckedParams as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Proto3,
+            >>::MAX_SIZE,
+            <Level as ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>>::MAX_SIZE,
         ];
         let mut max = 0usize;
         let mut index = 0usize;
@@ -2596,6 +2811,30 @@ impl ::ridl_rt::contract::Query for LogPipe {
         Ok(())
     }
 }
+#[doc(hidden)]
+pub struct LogChecked;
+impl ::ridl_rt::contract::Interaction for LogChecked {
+    type Iface = Log;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Log as ::ridl_rt::contract::Interface>::MEMBERS[5];
+    const ROW: ::core::primitive::usize = 5;
+}
+impl ::ridl_rt::contract::Query for LogChecked {
+    type Args = LogCheckedParams;
+    type Reply = Level;
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(
+        _args: &Self::Args,
+        reply: &Self::Reply,
+    ) -> ::core::result::Result<(), ()> {
+        if reply.0 <= 50 {
+            ::core::result::Result::Ok(())
+        } else {
+            ::core::result::Result::Err(())
+        }
+    }
+}
 /// Descriptor for interface `Plain`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 ///
 /// Its size table in FlatBuffers is `<Plain as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
@@ -2606,8 +2845,8 @@ impl ::ridl_rt::contract::Interface for Plain {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            47, 232, 225, 63, 171, 181, 106, 224, 140, 33, 201, 199, 148, 188, 255, 22,
-            106, 49, 247, 206, 162, 129, 12, 205, 80, 83, 106, 43, 127, 185, 3, 11,
+            27, 93, 244, 254, 161, 66, 34, 253, 213, 140, 206, 60, 243, 60, 198, 129,
+            111, 200, 48, 36, 225, 98, 181, 17, 60, 193, 215, 176, 22, 198, 42, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -2748,8 +2987,8 @@ impl ::ridl_rt::contract::Interface for Twin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            47, 232, 225, 63, 171, 181, 106, 224, 140, 33, 201, 199, 148, 188, 255, 22,
-            106, 49, 247, 206, 162, 129, 12, 205, 80, 83, 106, 43, 127, 185, 3, 11,
+            27, 93, 244, 254, 161, 66, 34, 253, 213, 140, 206, 60, 243, 60, 198, 129,
+            111, 200, 48, 36, 225, 98, 181, 17, 60, 193, 215, 176, 22, 198, 42, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -2932,8 +3171,8 @@ impl ::ridl_rt::contract::Interface for Docs {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.stream",
         hash: ::ridl_rt::contract::CatalogHash([
-            47, 232, 225, 63, 171, 181, 106, 224, 140, 33, 201, 199, 148, 188, 255, 22,
-            106, 49, 247, 206, 162, 129, 12, 205, 80, 83, 106, 43, 127, 185, 3, 11,
+            27, 93, 244, 254, 161, 66, 34, 253, 213, 140, 206, 60, 243, 60, 198, 129,
+            111, 200, 48, 36, 225, 98, 181, 17, 60, 193, 215, 176, 22, 198, 42, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -3204,6 +3443,8 @@ pub mod log {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SummarizeCorrelation(pub ::ridl_rt::port::Correlation);
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct CheckedCorrelation(pub ::ridl_rt::port::Correlation);
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct HistoryCorrelation(pub ::ridl_rt::port::Correlation);
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct PipeCorrelation(pub ::ridl_rt::port::Correlation);
@@ -3238,6 +3479,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         /// Clears the log.
@@ -3323,7 +3565,7 @@ pub mod log {
         }
         /// Summarizes uploaded readings.
         ///
-        ///Sends the query and returns its reply future and upload sink. The reply deadline starts when the sink successfully sends its end. Both values share this client; dropping an unfinished value cancels its call.
+        ///Sends the query and returns its reply future and upload sink. SendError::Busy waits for a free slot and sends on a later poll. This wait has no deadline until the sink's poll_end succeeds, when the reply deadline starts. Both values share this client; dropping an unfinished value cancels its call.
         ///
         /// # Rules
         ///
@@ -3370,6 +3612,56 @@ pub mod log {
                 },
             )
         }
+        /// Returns a level computed from uploaded readings.
+        ///
+        ///Sends the query and returns its reply future and upload sink. SendError::Busy waits for a free slot and sends on a later poll. This wait has no deadline until the sink's poll_end succeeds, when the reply deadline starts. Both values share this client; dropping an unfinished value cancels its call.
+        ///
+        /// # Rules
+        ///
+        /// - response within 100000 us
+        /// - ensure `result <= 50`
+        ///
+        /// # Parameters
+        ///
+        /// - `data`
+        pub fn checked(
+            &mut self,
+            args: super::LogCheckedParams,
+        ) -> (CheckedCall<'_, P>, CheckedSink<'_, P>) {
+            let __arg = args;
+            self.upload = UploadState::new();
+            self.upload
+                .reply_bound
+                .set(
+                    <super::LogChecked as ::ridl_rt::contract::Interaction>::MEMBER
+                        .call_deadline(),
+                );
+            let mut pending = None;
+            match send_checked(&mut *self.port.borrow_mut(), &__arg) {
+                Ok(c) => self.upload.correlation.set(Some(c.0)),
+                Err(::ridl_rt::port::SendError::Busy) => pending = Some(__arg),
+                Err(e) => {
+                    self.upload.error.set(Some(::ridl_rt::error::ClientError::Send(e)));
+                    self.upload.call_error.set(self.upload.error.get());
+                }
+            }
+            (
+                CheckedCall {
+                    port: &self.port,
+                    state: &self.upload,
+                    pending,
+                    done: false,
+                },
+                CheckedSink {
+                    port: &self.port,
+                    state: &self.upload,
+                    buffer: <super::Reading as ::ridl_rt::payload::Payload<
+                        P::Encoding,
+                    >>::BUFFER,
+                    held: None,
+                },
+            )
+        }
         /// The readings up to `limit`, oldest first.
         ///
         /// Sends query `history` and returns its future, which resolves to the reply stream, `HistoryStream`, once the first element or the end of the stream arrived, and to `Transport::Timeout` when the bound passes before either. The call is sent when this method runs, not when the future is first polled. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
@@ -3405,7 +3697,7 @@ pub mod log {
         }
         /// Returns readings while they are uploaded.
         ///
-        ///Sends the query and returns its reply future and upload sink. The reply deadline starts when the sink successfully sends its end. Both values share this client; dropping an unfinished value cancels its call.
+        ///Sends the query and returns its reply future and upload sink. SendError::Busy waits for a free slot and sends on a later poll. This wait has no deadline until the sink's poll_end succeeds, when the reply deadline starts. Both values share this client; dropping an unfinished value cancels its call.
         ///
         /// # Rules
         ///
@@ -3469,6 +3761,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
@@ -3560,6 +3853,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         fn expired(&self) -> bool {
@@ -3581,6 +3875,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = ::core::result::Result<(), ::ridl_rt::error::ClientError>;
@@ -3695,6 +3990,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = Result<(), ::ridl_rt::error::ClientError>;
@@ -3828,6 +4124,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         ///Encodes and verifies one element. Holds at most one element while the window is full; another send then reports Busy. A zero-byte encoding is an accepted element, sent exactly once.
@@ -4067,6 +4364,19 @@ pub mod log {
                             ),
                         );
                 }
+                if self.state.error.get().is_none() {
+                    self.state
+                        .error
+                        .set(
+                            Some(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            ),
+                        );
+                }
                 self.state.forget(self.port);
             }
         }
@@ -4099,6 +4409,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         fn fail(
@@ -4125,6 +4436,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = Result<super::Summary, ::ridl_rt::error::ClientError>;
@@ -4235,6 +4547,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         ///Encodes and verifies one element. Holds at most one element while the window is full; another send then reports Busy. A zero-byte encoding is an accepted element, sent exactly once.
@@ -4474,6 +4787,442 @@ pub mod log {
                             ),
                         );
                 }
+                if self.state.error.get().is_none() {
+                    self.state
+                        .error
+                        .set(
+                            Some(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            ),
+                        );
+                }
+                self.state.forget(self.port);
+            }
+        }
+    }
+    ///The reply future of a query with an upload. The response deadline begins only when the sink successfully sends its end. Dropping an uncompleted future cancels the call.
+    #[must_use]
+    pub struct CheckedCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a ::core::cell::RefCell<P>,
+        state: &'a UploadState,
+        pending: Option<super::LogCheckedParams>,
+        done: bool,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::marker::Unpin for CheckedCall<'_, P> {}
+    impl<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > CheckedCall<'a, P>
+    where
+        super::Log: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogUploadParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn fail(
+            &mut self,
+            error: ::ridl_rt::error::ClientError,
+        ) -> ::core::task::Poll<Result<super::Level, ::ridl_rt::error::ClientError>> {
+            self.pending = None;
+            self.done = true;
+            self.state.error.set(Some(error));
+            self.state.reply_stream.set(false);
+            self.state.forget(self.port);
+            ::core::task::Poll::Ready(Err(error))
+        }
+    }
+    impl<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for CheckedCall<'a, P>
+    where
+        super::Log: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogUploadParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = Result<super::Level, ::ridl_rt::error::ClientError>;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            assert!(! this.done, "query polled after completion");
+            if let Some(e) = this.state.call_error.get() {
+                return this.fail(e);
+            }
+            if let Some(arg) = this.pending.take() {
+                this.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                let sent = send_checked(&mut *this.port.borrow_mut(), &arg);
+                match sent {
+                    Ok(c) => this.state.correlation.set(Some(c.0)),
+                    Err(::ridl_rt::port::SendError::Busy) => this.pending = Some(arg),
+                    Err(e) => return this.fail(::ridl_rt::error::ClientError::Send(e)),
+                }
+            }
+            if let Some(correlation) = this.state.correlation.get() {
+                this.port
+                    .borrow()
+                    .wake_on(
+                        ::ridl_rt::port::Interest::Outcome(correlation),
+                        cx.waker(),
+                    );
+                let response = poll_checked_reply(
+                    &mut *this.port.borrow_mut(),
+                    CheckedCorrelation(correlation),
+                );
+                match response {
+                    Ok(Some(Ok(value))) => {
+                        this.done = true;
+                        this.state.ack.set(true);
+                        this.state.forget(this.port);
+                        return ::core::task::Poll::Ready(Ok(value));
+                    }
+                    Ok(Some(Err(e))) => {
+                        return this.fail(::ridl_rt::error::ClientError::Call(e));
+                    }
+                    Err(e) => return this.fail(::ridl_rt::error::ClientError::Read(e)),
+                    Ok(None) => {}
+                }
+            }
+            if this
+                .state
+                .reply_deadline
+                .get()
+                .is_some_and(|deadline| this.port.borrow().now() > deadline)
+            {
+                return this
+                    .fail(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Timeout,
+                            ),
+                        ),
+                    );
+            }
+            ::core::task::Poll::Pending
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for CheckedCall<'_, P> {
+        fn drop(&mut self) {
+            if !self.done {
+                self.state
+                    .error
+                    .set(
+                        Some(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Interrupted,
+                                ),
+                            ),
+                        ),
+                    );
+                self.state.forget(self.port);
+            }
+        }
+    }
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply.
+    pub struct CheckedSink<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    >
+    where
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        port: &'a ::core::cell::RefCell<P>,
+        state: &'a UploadState,
+        buffer: <super::Reading as ::ridl_rt::payload::Payload<P::Encoding>>::Buffer,
+        held: Option<(usize, usize)>,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > CheckedSink<'_, P>
+    where
+        super::Log: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogUploadParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        ///Encodes and verifies one element. Holds at most one element while the window is full; another send then reports Busy. A zero-byte encoding is an accepted element, sent exactly once.
+        pub fn send(
+            &mut self,
+            item: &super::Reading,
+        ) -> Result<(), ::ridl_rt::error::ClientError> {
+            if let Some(e) = self.state.error.get() {
+                return Err(e);
+            }
+            if self.held.is_some() {
+                return Err(
+                    ::ridl_rt::error::ClientError::Call(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Busy,
+                        ),
+                    ),
+                );
+            }
+            if self.state.ended.get() {
+                return Err(upload_push_error(::ridl_rt::port::PushError::Ended));
+            }
+            let buf = ::core::convert::AsMut::<[u8]>::as_mut(&mut self.buffer);
+            let base = buf.as_ptr() as usize;
+            let checked = (|| {
+                let bytes = match ::ridl_rt::payload::Ref::<
+                    super::Reading,
+                    P::Encoding,
+                >::encode(item, buf) {
+                    Ok(encoded) => encoded.bytes(),
+                    Err(::ridl_rt::payload::EncodeError::Contract(v)) => {
+                        return Err(
+                            ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(v),
+                            ),
+                        );
+                    }
+                    Err(
+                        ::ridl_rt::payload::EncodeError::Capacity { needed, available },
+                    ) => {
+                        unreachable!(
+                            "encoding a parameter element needs {} bytes and its buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                            needed, available
+                        )
+                    }
+                    Err(_) => unreachable!("encoding a parameter element failed"),
+                };
+                match ::ridl_rt::payload::Ref::<
+                    super::Reading,
+                    P::Encoding,
+                >::verify(bytes) {
+                    Ok(_) => Ok((bytes.as_ptr() as usize - base, bytes.len())),
+                    Err(::ridl_rt::payload::VerifyError::Contract(v)) => {
+                        Err(
+                            ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(v),
+                            ),
+                        )
+                    }
+                    _ => {
+                        Err(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Corrupt,
+                            ),
+                        )
+                    }
+                }
+            })();
+            let (start, len) = match checked {
+                Ok(range) => range,
+                Err(e) => {
+                    if let Some(c) = self.state.correlation.get() {
+                        let _ = self
+                            .port
+                            .borrow_mut()
+                            .abort(c, ::ridl_rt::contract::StreamNo(1), e);
+                    }
+                    let error = ::ridl_rt::error::ClientError::Call(e);
+                    self.state.error.set(Some(error));
+                    return Err(error);
+                }
+            };
+            self.held = Some((start, start + len));
+            if let Some(c) = self.state.correlation.get() {
+                let bytes = &::core::convert::AsRef::<
+                    [u8],
+                >::as_ref(&self.buffer)[start..start + len];
+                match self
+                    .port
+                    .borrow_mut()
+                    .push(c, ::ridl_rt::contract::StreamNo(1), bytes)
+                {
+                    Ok(n) if n == len => self.held = None,
+                    Ok(_) => {}
+                    Err(e) => {
+                        let error = upload_push_error(e);
+                        self.state.error.set(Some(error));
+                        return Err(error);
+                    }
+                }
+            }
+            Ok(())
+        }
+        ///Waits for readiness, then sends one checked element.
+        pub async fn feed(
+            &mut self,
+            item: &super::Reading,
+        ) -> Result<(), ::ridl_rt::error::ClientError> {
+            self.ready().await?;
+            self.send(item)
+        }
+        ///Flushes a held element. With no held element readiness describes local capacity and does not probe the peer.
+        pub fn poll_ready(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Result<(), ::ridl_rt::error::ClientError>> {
+            if let Some(e) = self.state.error.get() {
+                return ::core::task::Poll::Ready(Err(e));
+            }
+            let Some((start, end)) = self.held else {
+                return ::core::task::Poll::Ready(Ok(()));
+            };
+            let Some(c) = self.state.correlation.get() else {
+                self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                return ::core::task::Poll::Pending;
+            };
+            self.port
+                .borrow()
+                .wake_on(
+                    ::ridl_rt::port::Interest::Stream(
+                        c,
+                        ::ridl_rt::contract::StreamNo(1),
+                    ),
+                    cx.waker(),
+                );
+            let bytes = &::core::convert::AsRef::<
+                [u8],
+            >::as_ref(&self.buffer)[start..end];
+            let pushed = self
+                .port
+                .borrow_mut()
+                .push(c, ::ridl_rt::contract::StreamNo(1), bytes);
+            match pushed {
+                Ok(n) if n == bytes.len() => {
+                    self.held = None;
+                    ::core::task::Poll::Ready(Ok(()))
+                }
+                Ok(_) => ::core::task::Poll::Pending,
+                Err(e) => {
+                    let error = upload_push_error(e);
+                    self.state.error.set(Some(error));
+                    ::core::task::Poll::Ready(Err(error))
+                }
+            }
+        }
+        ///Waits until the sink has no held element.
+        pub async fn ready(&mut self) -> Result<(), ::ridl_rt::error::ClientError> {
+            ::core::future::poll_fn(|cx| self.poll_ready(cx)).await
+        }
+        ///Flushes the held element and ends the parameter stream. The call retains ownership until acknowledgment.
+        pub fn poll_end(
+            &mut self,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Result<(), ::ridl_rt::error::ClientError>> {
+            if self.state.ended.get() {
+                return ::core::task::Poll::Ready(Ok(()));
+            }
+            match self.poll_ready(cx) {
+                ::core::task::Poll::Ready(Ok(())) => {}
+                other => return other,
+            }
+            let Some(c) = self.state.correlation.get() else {
+                self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                return ::core::task::Poll::Pending;
+            };
+            let result = self
+                .port
+                .borrow_mut()
+                .end(c, ::ridl_rt::contract::StreamNo(1))
+                .map_err(upload_push_error);
+            if result.is_ok() {
+                self.state.ended.set(true);
+                if let Some(bound) = self.state.reply_bound.get() {
+                    self.state
+                        .reply_deadline
+                        .set(
+                            Some(
+                                ::ridl_rt::sample::Timestamp(
+                                    self.port.borrow().now().0.saturating_add(bound.0),
+                                ),
+                            ),
+                        );
+                }
+                if self.state.ack.get() && !self.state.reply_stream.get() {
+                    self.state.forget(self.port);
+                }
+            } else {
+                self.state.error.set(result.err());
+            }
+            ::core::task::Poll::Ready(result)
+        }
+        ///Ends the stream after flushing any held element.
+        pub async fn end(&mut self) -> Result<(), ::ridl_rt::error::ClientError> {
+            ::core::future::poll_fn(|cx| self.poll_end(cx)).await
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for CheckedSink<'_, P>
+    where
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn drop(&mut self) {
+            if !self.state.ended.get() {
+                if self.state.correlation.get().is_none() {
+                    let error = ::ridl_rt::error::ClientError::Call(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                    self.state.call_error.set(Some(error));
+                    self.state.error.set(Some(error));
+                }
+                if let (true, Some(c)) = (
+                    self.state.error.get().is_none() && !self.state.forgotten.get(),
+                    self.state.correlation.get(),
+                ) {
+                    let _ = self
+                        .port
+                        .borrow_mut()
+                        .abort(
+                            c,
+                            ::ridl_rt::contract::StreamNo(1),
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        );
+                }
+                if self.state.error.get().is_none() {
+                    self.state
+                        .error
+                        .set(
+                            Some(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            ),
+                        );
+                }
                 self.state.forget(self.port);
             }
         }
@@ -4516,6 +5265,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         fn expired(&self) -> bool {
@@ -4544,6 +5294,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = ::core::result::Result<
@@ -4712,6 +5463,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         /// Pulls the next element: `Ready(Some(Ok(element)))` with the
@@ -4901,6 +5653,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         fn fail(
@@ -4929,6 +5682,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = Result<PipeStream<'a, P>, ::ridl_rt::error::ClientError>;
@@ -5071,6 +5825,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         ///Pulls one checked reply element, or its terminal outcome. The upload can remain open while replies arrive.
@@ -5098,6 +5853,21 @@ pub mod log {
                     n
                 }
                 StreamState::Open => {
+                    if self.shared.forgotten.get() {
+                        let e = self
+                            .shared
+                            .error
+                            .get()
+                            .unwrap_or(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            );
+                        self.state = StreamState::Stopped;
+                        return ::core::task::Poll::Ready(Some(Err(e)));
+                    }
                     self.port
                         .borrow()
                         .wake_on(
@@ -5215,7 +5985,7 @@ pub mod log {
             self.shared.forget(self.port);
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). An ended sink preserves the reply: the call is forgotten when the reply finishes or the last remaining value is dropped.
     pub struct PipeSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -5240,6 +6010,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         ///Encodes and verifies one element. Holds at most one element while the window is full; another send then reports Busy. A zero-byte encoding is an accepted element, sent exactly once.
@@ -5479,6 +6250,19 @@ pub mod log {
                             ),
                         );
                 }
+                if self.state.error.get().is_none() {
+                    self.state
+                        .error
+                        .set(
+                            Some(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            ),
+                        );
+                }
                 self.state.forget(self.port);
             }
         }
@@ -5494,6 +6278,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = level;
@@ -5549,6 +6334,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         port.ack(correlation.0)
@@ -5564,6 +6350,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = args;
@@ -5619,6 +6406,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         port.ack(correlation.0)
@@ -5634,6 +6422,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = args;
@@ -5696,6 +6485,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let mut __buf = <super::Summary as ::ridl_rt::payload::Payload<
@@ -5735,6 +6525,120 @@ pub mod log {
             }
         }
     }
+    pub(crate) fn send_checked<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        args: &super::LogCheckedParams,
+    ) -> ::core::result::Result<CheckedCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Log: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogUploadParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = args;
+        <super::LogChecked as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::LogCheckedParams as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::LogCheckedParams,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `LogCheckedParams` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `LogCheckedParams` failed"),
+        };
+        __port
+            .query(
+                <super::Log as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(6u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(CheckedCorrelation)
+    }
+    pub(crate) fn poll_checked_reply<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
+        port: &mut P,
+        correlation: CheckedCorrelation,
+    ) -> ::core::result::Result<
+        ::core::option::Option<
+            ::core::result::Result<super::Level, ::ridl_rt::error::CallError>,
+        >,
+        ::ridl_rt::port::ReadError,
+    >
+    where
+        super::Log: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogUploadParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let mut __buf = <super::Level as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        match port.reply(correlation.0, buf)? {
+            None => Ok(None),
+            Some(Err(error)) => Ok(Some(Err(error))),
+            Some(Ok(len)) => {
+                Ok(
+                    Some(
+                        match ::ridl_rt::payload::Ref::<
+                            super::Level,
+                            P::Encoding,
+                        >::verify(&buf[..len]) {
+                            Ok(checked) => Ok(checked.decode()),
+                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                                    ),
+                                )
+                            }
+                            Err(_) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                )
+            }
+        }
+    }
     pub(crate) fn send_history<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
         __port: &mut P,
         limit: &super::Level,
@@ -5746,6 +6650,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = limit;
@@ -5801,6 +6706,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = args;
@@ -5882,6 +6788,12 @@ pub mod log {
         fn summarize(&mut self, args: &super::LogSummarizeParams) -> Self::Summarize;
         ///Computes the reply after the consumer has received its end. The query's ensure clauses are checked before settlement.
         fn summarize_reply(&mut self, upload: Self::Summarize) -> super::Summary;
+        ///The consumer of the query's upload.
+        type Checked: ::ridl_rt::face::Consumer<Item = super::Reading>;
+        ///Starts consuming the upload after argument validation.
+        fn checked(&mut self, args: &super::LogCheckedParams) -> Self::Checked;
+        ///Computes the reply after the consumer has received its end. The query's ensure clauses are checked before settlement.
+        fn checked_reply(&mut self, upload: Self::Checked) -> super::Level;
         ///The source of query `history`'s reply stream, which `serve` polls for each `Reading` it sends.
         type History: ::ridl_rt::face::Source<Item = super::Reading>;
         /// The readings up to `limit`, oldest first.
@@ -5921,6 +6833,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         if buf.len()
@@ -6153,6 +7066,79 @@ pub mod log {
                                                             H::Encoding,
                                                         >>::BUFFER,
                                                         consumer: p.summarize(&__arg),
+                                                        args: __arg,
+                                                        __port: ::core::marker::PhantomData,
+                                                    });
+                                                    streams.__started = true;
+                                                    Ok(())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            ::ridl_rt::contract::Ordinal(6u32) => {
+                                match match ::ridl_rt::payload::Ref::<
+                                    super::LogCheckedParams,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                } {
+                                    Err(e) => h.settle(claim.id, Err(e)),
+                                    Ok(__arg) => {
+                                        match <super::LogChecked as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                if streams.checked.is_some() {
+                                                    h.settle(
+                                                        claim.id,
+                                                        Err(
+                                                            ::ridl_rt::error::CallError::Transport(
+                                                                ::ridl_rt::error::Transport::Busy,
+                                                            ),
+                                                        ),
+                                                    )
+                                                } else {
+                                                    streams.checked = Some(__RidlCheckedUpload {
+                                                        claim: claim.id,
+                                                        buffer: <super::Reading as ::ridl_rt::payload::Payload<
+                                                            H::Encoding,
+                                                        >>::BUFFER,
+                                                        consumer: p.checked(&__arg),
                                                         args: __arg,
                                                         __port: ::core::marker::PhantomData,
                                                     });
@@ -6717,6 +7703,185 @@ pub mod log {
             }
         }
     }
+    struct __RidlCheckedUpload<H: ::ridl_rt::port::Encoded, P: Provider>
+    where
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        claim: ::ridl_rt::port::ClaimId,
+        buffer: <super::Reading as ::ridl_rt::payload::Payload<H::Encoding>>::Buffer,
+        consumer: P::Checked,
+        args: super::LogCheckedParams,
+        __port: ::core::marker::PhantomData<H>,
+    }
+    fn step_upload_checked<H, P>(
+        h: &mut H,
+        stream: &mut __RidlCheckedUpload<H, P>,
+        cx: &mut ::core::task::Context<'_>,
+        budget: &mut usize,
+    ) -> __RidlUploadStep
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamHandler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        if *budget == 0 {
+            return __RidlUploadStep::Budget;
+        }
+        *budget -= 1;
+        if ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer, cx).is_pending() {
+            return __RidlUploadStep::Pending;
+        }
+        h.wake_on(
+            ::ridl_rt::port::Interest::ClaimStream(
+                stream.claim,
+                ::ridl_rt::contract::StreamNo(1),
+            ),
+            cx.waker(),
+        );
+        match h
+            .pull_claim(
+                stream.claim,
+                ::ridl_rt::contract::StreamNo(1),
+                ::core::convert::AsMut::as_mut(&mut stream.buffer),
+            )
+        {
+            Ok(::ridl_rt::port::Pull::Pending) => __RidlUploadStep::Pending,
+            Ok(::ridl_rt::port::Pull::End) => __RidlUploadStep::End,
+            Ok(::ridl_rt::port::Pull::Failed(e)) => __RidlUploadStep::Failed(e),
+            Ok(::ridl_rt::port::Pull::Chunk(n)) => {
+                let bytes = &::core::convert::AsRef::<[u8]>::as_ref(&stream.buffer)[..n];
+                match ::ridl_rt::payload::Ref::<
+                    super::Reading,
+                    H::Encoding,
+                >::verify(bytes) {
+                    Ok(value) => {
+                        ::ridl_rt::face::Consumer::accept(
+                            &mut stream.consumer,
+                            value.decode(),
+                        );
+                        __RidlUploadStep::Progress
+                    }
+                    Err(::ridl_rt::payload::VerifyError::Contract(v)) => {
+                        __RidlUploadStep::Failed(
+                            ::ridl_rt::error::CallError::Contract(
+                                ::ridl_rt::error::Contract::InvalidValue(v),
+                            ),
+                        )
+                    }
+                    _ => {
+                        __RidlUploadStep::Failed(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Corrupt,
+                            ),
+                        )
+                    }
+                }
+            }
+            Err(_) => {
+                __RidlUploadStep::Failed(
+                    ::ridl_rt::error::CallError::Transport(
+                        ::ridl_rt::error::Transport::Corrupt,
+                    ),
+                )
+            }
+        }
+    }
+    fn drive_input_checked<H, P>(
+        h: &mut H,
+        p: &mut P,
+        slot: &mut Option<__RidlCheckedUpload<H, P>>,
+        cx: &mut ::core::task::Context<'_>,
+        budget: &mut usize,
+    ) -> bool
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamHandler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        let Some(mut stream) = slot.take() else {
+            return false;
+        };
+        match step_upload_checked(h, &mut stream, cx, budget) {
+            __RidlUploadStep::Pending => {
+                *slot = Some(stream);
+                false
+            }
+            __RidlUploadStep::Progress | __RidlUploadStep::Budget => {
+                *slot = Some(stream);
+                true
+            }
+            __RidlUploadStep::Failed(e) => {
+                let _ = h.abort_claim(stream.claim, ::ridl_rt::contract::StreamNo(1), e);
+                ::ridl_rt::face::Consumer::failed(&mut stream.consumer, e);
+                let _ = h.settle(stream.claim, Err(e));
+                false
+            }
+            __RidlUploadStep::End => {
+                ::ridl_rt::face::Consumer::end(&mut stream.consumer);
+                let reply = p.checked_reply(stream.consumer);
+                let mut __buf = <super::Level as ::ridl_rt::payload::Payload<
+                    H::Encoding,
+                >>::BUFFER;
+                let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                    &mut __buf,
+                );
+                let _ = match <super::LogChecked as ::ridl_rt::contract::Query>::ensure(
+                    &stream.args,
+                    &reply,
+                ) {
+                    Ok(()) => {
+                        match ::ridl_rt::payload::Ref::<
+                            super::Level,
+                            H::Encoding,
+                        >::encode(&reply, buf) {
+                            Ok(encoded) => {
+                                let bytes = encoded.bytes();
+                                h.settle(stream.claim, Ok(bytes))
+                            }
+                            Err(
+                                ::ridl_rt::payload::EncodeError::Contract(__violation),
+                            ) => {
+                                h.settle(
+                                    stream.claim,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                                        ),
+                                    ),
+                                )
+                            }
+                            Err(
+                                ::ridl_rt::payload::EncodeError::Capacity {
+                                    needed,
+                                    available,
+                                },
+                            ) => {
+                                unreachable!(
+                                    "encoding `Level` needs {} bytes and the reply buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                                    needed, available
+                                )
+                            }
+                            Err(_) => unreachable!("encoding `Level` failed"),
+                        }
+                    }
+                    Err(()) => {
+                        h.settle(
+                            stream.claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::ContractBroken,
+                                ),
+                            ),
+                        )
+                    }
+                };
+                false
+            }
+        }
+    }
     type InputBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
         <H as ::ridl_rt::port::Encoded>::Encoding,
     >>::Buffer;
@@ -6845,6 +8010,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         __started: bool,
         __port: ::core::marker::PhantomData<H>,
@@ -6854,6 +8020,7 @@ pub mod log {
         pipe: Option<__RidlPipeUpload<H, P>>,
         upload: Option<InputSlot<P::Upload, InputBuffer<H, super::Reading>>>,
         summarize: Option<__RidlSummarizeUpload<H, P>>,
+        checked: Option<__RidlCheckedUpload<H, P>>,
     }
     fn drive_stream<H, T, S>(
         h: &mut H,
@@ -7025,6 +8192,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         check_catalog(::ridl_rt::port::Attached::catalog(&h));
@@ -7035,6 +8203,7 @@ pub mod log {
                     ::ridl_rt::contract::Ordinal(2u32),
                     ::ridl_rt::contract::Ordinal(3u32),
                     ::ridl_rt::contract::Ordinal(4u32),
+                    ::ridl_rt::contract::Ordinal(6u32),
                     ::ridl_rt::contract::Ordinal(1u32),
                     ::ridl_rt::contract::Ordinal(5u32),
                 ],
@@ -7055,6 +8224,7 @@ pub mod log {
                 pipe: None,
                 upload: None,
                 summarize: None,
+                checked: None,
             },
         }
     }
@@ -7068,6 +8238,7 @@ pub mod log {
     >
     where
         super::Log: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
@@ -7100,6 +8271,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<H::Encoding>,
     {}
     impl<
@@ -7114,6 +8286,7 @@ pub mod log {
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogSummarizeParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Summary: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::LogCheckedParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::LogPipeParams: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         type Output = ::core::result::Result<
@@ -7176,6 +8349,17 @@ pub mod log {
                             cx,
                             &mut budget,
                         );
+                    again
+                        |= drive_input_checked::<
+                            H,
+                            P,
+                        >(
+                            &mut this.handler,
+                            &mut *this.provider,
+                            &mut this.streams.checked,
+                            cx,
+                            &mut budget,
+                        );
                     match dispatch(
                         &mut this.handler,
                         &mut *this.provider,
@@ -7209,6 +8393,7 @@ pub mod log {
     > ::core::ops::Drop for Serve<'_, H, P>
     where
         super::Log: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
@@ -7290,6 +8475,33 @@ pub mod log {
                         ),
                     );
             }
+            if let Some(mut stream) = self.streams.checked.take() {
+                let _ = self
+                    .handler
+                    .abort_claim(
+                        stream.claim,
+                        ::ridl_rt::contract::StreamNo(1),
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                ::ridl_rt::face::Consumer::failed(
+                    &mut stream.consumer,
+                    ::ridl_rt::error::CallError::Transport(
+                        ::ridl_rt::error::Transport::Interrupted,
+                    ),
+                );
+                let _ = self
+                    .handler
+                    .settle(
+                        stream.claim,
+                        Err(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
+            }
         }
     }
     ///The traits a consumer of interface `Log`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
@@ -7327,6 +8539,7 @@ pub mod log {
             super::super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             /// Clears the log.
@@ -7380,6 +8593,7 @@ pub mod log {
             super::super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             type Port = P;
@@ -7408,6 +8622,7 @@ pub mod log {
             super::super::Reading: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::LogSummarizeParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Summary: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::LogCheckedParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::LogPipeParams: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             /// Sets the timeout every waiting method of this client is
@@ -7449,6 +8664,7 @@ pub mod log {
             super::super::Reading: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::LogSummarizeParams: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::Summary: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::LogCheckedParams: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::LogPipeParams: ::ridl_rt::payload::Payload<H::Encoding>,
         {
             let __deadline = __deadline_after(timeout);
@@ -10416,6 +11632,19 @@ pub mod docs {
                             ),
                         );
                 }
+                if self.state.error.get().is_none() {
+                    self.state
+                        .error
+                        .set(
+                            Some(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            ),
+                        );
+                }
                 self.state.forget(self.port);
             }
         }
@@ -10715,6 +11944,19 @@ pub mod docs {
                             ::ridl_rt::contract::StreamNo(1),
                             ::ridl_rt::error::CallError::Transport(
                                 ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        );
+                }
+                if self.state.error.get().is_none() {
+                    self.state
+                        .error
+                        .set(
+                            Some(
+                                ::ridl_rt::error::ClientError::Call(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
                             ),
                         );
                 }

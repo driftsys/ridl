@@ -1129,6 +1129,7 @@ fn log_where() -> String {
         "Reading",
         "LogSummarizeParams",
         "Summary",
+        "LogCheckedParams",
         "LogPipeParams",
     ] {
         clause.push_str(&format!(
@@ -1272,7 +1273,7 @@ fn a_streamed_reply_of_named_elements_gets_a_provider_source_and_a_serve_arm() {
     assert!(
         log.contains(
             "h.serve(<super::Logas::ridl_rt::contract::Interface>::NUMBER,\
-                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(3u32),::ridl_rt::contract::Ordinal(4u32),::ridl_rt::contract::Ordinal(1u32),::ridl_rt::contract::Ordinal(5u32),],)"
+                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(3u32),::ridl_rt::contract::Ordinal(4u32),::ridl_rt::contract::Ordinal(6u32),::ridl_rt::contract::Ordinal(1u32),::ridl_rt::contract::Ordinal(5u32),],)"
         ),
         "serve registers the stream query beside the command:\n{log}"
     );

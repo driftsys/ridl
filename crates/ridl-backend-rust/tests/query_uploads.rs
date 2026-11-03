@@ -92,6 +92,15 @@ impl generated::log::Provider for Provider {
     type Upload = Upload;
     type Summarize = Upload;
     type Pipe = Upload;
+    type Checked = Upload;
+    fn checked(&mut self, _: &generated::LogCheckedParams) -> Upload {
+        self.0.clone()
+    }
+    fn checked_reply(&mut self, upload: Upload) -> generated::Level {
+        let mut s = upload.0.borrow_mut();
+        s.replies += 1;
+        generated::Level::new_unchecked(60)
+    }
     fn history(&mut self, _: &generated::Level) -> Empty {
         Empty
     }
@@ -112,6 +121,7 @@ impl generated::log::Provider for Provider {
         }
     }
     fn pipe(&mut self, _: &generated::LogPipeParams) -> Upload {
+        self.0.0.borrow_mut().starts += 1;
         self.0.clone()
     }
 }
@@ -452,6 +462,227 @@ fn dropping_serve_settles_an_upload_query_as_interrupted() {
         vec![CallError::Transport(Transport::Interrupted)]
     );
     assert_eq!(*operations.borrow(), vec!["abort_upload", "settle_error"]);
+}
+
+#[test]
+fn a_broken_ensure_on_an_upload_query_settles_contract_broken() {
+    let (rt, s, mut provider) = setup();
+    let operations = Rc::new(RefCell::new(Vec::new()));
+    let handler = ObservedHandler {
+        inner: rt.handler(),
+        operations: operations.clone(),
+    };
+    let mut serve = generated::log::serve(handler, &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.checked(generated::LogCheckedParams {});
+    pending(&mut serve);
+    sink.send(&reading(7)).unwrap();
+    pending(&mut serve);
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    pending(&mut serve);
+    assert_eq!(
+        poll(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Contract(
+            Contract::ContractBroken
+        ))))
+    );
+    assert_eq!(s.borrow().accepted, vec![reading(7)]);
+    assert_eq!(s.borrow().ends, 1);
+    assert_eq!(s.borrow().replies, 1);
+    assert_eq!(*operations.borrow(), vec!["settle_error"]);
+}
+
+#[test]
+fn a_pipe_is_busy_until_its_consumer_ends() {
+    let (rt, s, mut provider) = setup();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut first = generated::log::Client::new(rt.caller());
+    let (mut first_call, mut first_sink) = first.pipe(generated::LogPipeParams {});
+    pending(&mut serve);
+    let mut second = generated::log::Client::new(rt.caller());
+    let (mut second_call, second_sink) = second.pipe(generated::LogPipeParams {});
+    pending(&mut serve);
+    // Busy is a terminal reply-stream error, available before any element.
+    let mut refused = {
+        let reply = poll(&mut second_call);
+        assert!(matches!(reply, Poll::Ready(Ok(_))));
+        match reply {
+            Poll::Ready(Ok(stream)) => stream,
+            _ => unreachable!(),
+        }
+    };
+    assert_eq!(
+        with_cx(|cx| refused.poll_next(cx)),
+        Poll::Ready(Some(Err(ClientError::Call(CallError::Transport(
+            Transport::Busy
+        )))))
+    );
+    assert_eq!(s.borrow().starts, 1);
+    drop(refused);
+    drop(second_sink);
+    drop(second_call);
+    assert_eq!(with_cx(|cx| first_sink.poll_end(cx)), Poll::Ready(Ok(())));
+    pending(&mut serve);
+    let mut stream = match poll(&mut first_call) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("the first pipe must end"),
+    };
+    assert_eq!(with_cx(|cx| stream.poll_next(cx)), Poll::Ready(None));
+    drop(stream);
+    drop(first_sink);
+    drop(first_call);
+    let (mut next, mut sink) = second.pipe(generated::LogPipeParams {});
+    pending(&mut serve);
+    assert_eq!(s.borrow().starts, 2);
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    pending(&mut serve);
+    let mut stream = match poll(&mut next) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("the next pipe must end"),
+    };
+    assert_eq!(with_cx(|cx| stream.poll_next(cx)), Poll::Ready(None));
+}
+
+#[test]
+fn dropping_serve_aborts_both_streams_of_a_running_pipe() {
+    let (rt, s, mut provider) = setup();
+    let mut handler = rt.handler();
+    let operations = Rc::new(RefCell::new(Vec::new()));
+    let observed = ObservedHandler {
+        inner: &mut handler,
+        operations: operations.clone(),
+    };
+    let mut serve = generated::log::serve(observed, &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.pipe(generated::LogPipeParams {});
+    pending(&mut serve);
+    sink.send(&reading(8)).unwrap();
+    pending(&mut serve);
+    let mut stream = match poll(&mut call) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("reply stream"),
+    };
+    assert_eq!(
+        with_cx(|cx| stream.poll_next(cx)),
+        Poll::Ready(Some(Ok(reading(8))))
+    );
+    drop(serve);
+    assert_eq!(
+        s.borrow().failures,
+        vec![CallError::Transport(Transport::Interrupted)]
+    );
+    assert_eq!(*operations.borrow(), vec!["abort_upload", "abort_reply"]);
+    assert_eq!(
+        with_cx(|cx| stream.poll_next(cx)),
+        Poll::Ready(Some(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        )))))
+    );
+    assert_eq!(with_cx(|cx| stream.poll_next(cx)), Poll::Ready(None));
+}
+
+#[test]
+fn dropping_an_ended_pipe_sink_preserves_its_live_reply_stream() {
+    let (rt, _, mut provider) = setup();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let ops = ports.log();
+    let mut client = generated::log::Client::new(ports);
+    let (mut call, mut sink) = client.pipe(generated::LogPipeParams {});
+    pending(&mut serve);
+    sink.send(&reading(9)).unwrap();
+    pending(&mut serve);
+    let mut stream = match poll(&mut call) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("reply stream"),
+    };
+    drop(call);
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    drop(sink);
+    assert!(doubles::forgets(&ops).is_empty());
+    assert_eq!(
+        with_cx(|cx| stream.poll_next(cx)),
+        Poll::Ready(Some(Ok(reading(9))))
+    );
+    pending(&mut serve);
+    assert_eq!(with_cx(|cx| stream.poll_next(cx)), Poll::Ready(None));
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+    drop(stream);
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+}
+
+macro_rules! ended_sink_call_drop {
+    ($test:ident, $method:ident, $args:expr) => {
+        #[test]
+        fn $test() {
+            let (rt, s, mut provider) = setup();
+            let ports = RecordingPorts::new(&rt);
+            let ops = ports.log();
+            let mut client = generated::log::Client::new(ports);
+            let (mut call, mut sink) = client.$method($args);
+            pending(&mut call);
+            assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+            drop(sink);
+            assert!(doubles::forgets(&ops).is_empty());
+            drop(call);
+            assert_eq!(doubles::forgets(&ops).len(), 1);
+            // Forgetting before the claim withdraws the call from the provider.
+            let mut serve = generated::log::serve(rt.handler(), &mut provider);
+            pending(&mut serve);
+            assert_eq!(s.borrow().starts, 0);
+            assert_eq!(doubles::forgets(&ops).len(), 1);
+        }
+    };
+}
+ended_sink_call_drop!(
+    dropping_an_unresolved_summary_after_its_ended_sink_forgets_once,
+    summarize,
+    generated::LogSummarizeParams {}
+);
+ended_sink_call_drop!(
+    dropping_an_unresolved_pipe_after_its_ended_sink_forgets_once,
+    pipe,
+    generated::LogPipeParams {}
+);
+
+#[test]
+fn dropping_an_unended_pipe_sink_immediately_interrupts_the_call() {
+    let (rt, s, mut provider) = setup();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let ops = ports.log();
+    let mut client = generated::log::Client::new(ports);
+    let (mut call, mut sink) = client.pipe(generated::LogPipeParams {});
+    pending(&mut serve);
+    sink.send(&reading(10)).unwrap();
+    pending(&mut serve);
+    let mut stream = match poll(&mut call) {
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("reply stream"),
+    };
+    drop(call);
+    assert!(doubles::forgets(&ops).is_empty());
+    drop(sink);
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+    // The first reply element is already buffered in the stream value.
+    assert_eq!(
+        with_cx(|cx| stream.poll_next(cx)),
+        Poll::Ready(Some(Ok(reading(10))))
+    );
+    assert_eq!(
+        with_cx(|cx| stream.poll_next(cx)),
+        Poll::Ready(Some(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        )))))
+    );
+    assert_eq!(with_cx(|cx| stream.poll_next(cx)), Poll::Ready(None));
+    pending(&mut serve);
+    assert_eq!(
+        s.borrow().failures,
+        vec![CallError::Transport(Transport::Interrupted)]
+    );
+    drop(stream);
+    assert_eq!(doubles::forgets(&ops).len(), 1);
 }
 
 struct ObservedHandler<H> {

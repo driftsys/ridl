@@ -103,6 +103,13 @@ impl ridl_rt::face::Source for Readings {
     }
 }
 impl generated::log::Provider for Provider {
+    type Checked = Receiver;
+    fn checked(&mut self, _: &generated::LogCheckedParams) -> Receiver {
+        self.0.clone()
+    }
+    fn checked_reply(&mut self, _: Receiver) -> generated::Level {
+        generated::Level::new_unchecked(0)
+    }
     type Summarize = Receiver;
     type Pipe = Receiver;
     fn summarize(&mut self, _: &generated::LogSummarizeParams) -> Receiver {

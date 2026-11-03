@@ -41,6 +41,10 @@ interface Log {
   query summarize(data: <Reading>): Summary @[..100ms]
   /// Returns readings while they are uploaded.
   query pipe(data: <Reading>): <Reading> @[..1s]
+  /// Returns a level computed from uploaded readings.
+  query checked(data: <Reading>): Level @[..100ms] [
+    ensure result <= 50
+  ]
 }
 
 /// An interface with no stream, for the port-bound test. Named to sort after
