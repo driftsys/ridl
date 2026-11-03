@@ -601,7 +601,7 @@ pub fn diff_refs_with_contexts_partial(
 ) -> (DiffReport, Vec<ContextIssue>) {
     let old_scope: Vec<_> = old.iter().chain(old_context).copied().collect();
     let new_scope: Vec<_> = new.iter().chain(new_context).copied().collect();
-    let (mut remote, issues) = remote_inline::compare(old, &old_scope, &new_scope, encodings);
+    let (mut remote, issues) = remote_inline::compare(old, new, &old_scope, &new_scope, encodings);
     let mut result = diff_refs_scoped(old, new, old_context, new_context, encodings);
     result.changes.append(&mut remote);
     (report(result.changes), issues)

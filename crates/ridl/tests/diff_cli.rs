@@ -1455,6 +1455,42 @@ fn remote_pin_only_inline_growth_exits_one_for_sources_and_enriched_baselines() 
 }
 
 #[test]
+fn remote_dropped_or_retyped_holder_exits_one_without_new_context() {
+    let dir = TempDir::new("remote-holder-changed");
+    let old = remote_inline_source(&dir, "old", false, true);
+    for (side, reading, change) in [
+        ("dropped", "", "decl_removed app/Sample/reading"),
+        (
+            "retyped",
+            " reading: integer\n",
+            "constraint_changed app/Sample",
+        ),
+    ] {
+        let new = dir.path().join(side);
+        dir.write(
+            &format!("{side}/ridl.toml"),
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write(&format!("{side}/app.typl"), &format!(
+            "package app\nstruct Sample {{\n{reading} sequence: integer [0..9223372036854775807]\n}}\n"
+        ));
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            old.as_os_str(),
+            new.as_os_str(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+        ]);
+        assert_eq!(
+            code, 1,
+            "the consumer change is breaking: {stdout}\n{stderr}"
+        );
+        assert!(stdout.contains(change), "{stdout}");
+        assert!(!stderr.contains("new context is missing"), "{stderr}");
+    }
+}
+
+#[test]
 fn remote_legacy_inline_baseline_requires_historical_evidence() {
     let dir = TempDir::new("remote-legacy");
     let source = remote_inline_source(&dir, "source", false, true);

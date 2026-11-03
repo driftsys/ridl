@@ -10,7 +10,8 @@ use ridl_ir::{
 use crate::{Category, Change, ContextIssue, ContextSide, Verdict};
 
 pub(crate) fn compare(
-    holders: &[&v2::Package],
+    old_holders: &[&v2::Package],
+    new_holders: &[&v2::Package],
     old: &[&v2::Package],
     new: &[&v2::Package],
     encodings: &[&str],
@@ -18,7 +19,12 @@ pub(crate) fn compare(
     let mut pass = Pass {
         old,
         new,
-        locals: holders.iter().map(|p| p.name.as_str()).collect(),
+        locals: old_holders
+            .iter()
+            .chain(new_holders)
+            .map(|p| p.name.as_str())
+            .collect(),
+        require_new: true,
         changes: BTreeMap::new(),
         issues: BTreeSet::new(),
         verdict: if encodings.contains(&"podbuf") {
@@ -27,78 +33,21 @@ pub(crate) fn compare(
             Verdict::Compatible
         },
     };
-    for side in [ContextSide::Old, ContextSide::New] {
-        for home in holders {
-            for decl in &home.decls {
-                if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
-                    for slot in &def.members {
-                        if let Some(v2::struct_member::Member::Field(field)) = &slot.member
-                            && let Some(ty) = &field.r#type
-                        {
-                            pass.visit(
-                                home,
-                                ty,
-                                &format!("{}/{}/{}", home.name, decl.name, field.name),
-                                true,
-                                side,
-                                &mut BTreeSet::new(),
-                            );
-                        }
-                    }
-                }
-                if let Some(v2::decl::Kind::UnionDef(def)) = &decl.kind {
-                    for arm in &def.arms {
-                        let ty = v2::FieldType {
-                            optional: false,
-                            kind: Some(v2::field_type::Kind::Named(arm.type_ref.clone())),
-                        };
-                        pass.visit(
-                            home,
-                            &ty,
-                            &format!("{}/{}/{}", home.name, decl.name, arm.name),
-                            false,
-                            side,
-                            &mut BTreeSet::new(),
-                        );
-                    }
-                }
-            }
-            for shape in home.shapes() {
-                for interaction in &shape.interface.interactions {
-                    let mut roots = crate::walk::interaction_payloads(interaction);
-                    let payload = match &interaction.kind {
-                        Some(v2::decl::Kind::SignalDef(def)) => Some(&def.payload),
-                        Some(v2::decl::Kind::EventDef(def)) => Some(&def.payload),
-                        _ => None,
-                    };
-                    if let Some(reference) = payload {
-                        roots.push(v2::FieldType {
-                            optional: false,
-                            kind: Some(v2::field_type::Kind::Named(reference.clone())),
-                        });
-                    }
-                    for ty in roots {
-                        // Exact arrays at the root have no head. Inside a
-                        // head or descriptor element, they fix element offsets.
-                        let mut root = &ty;
-                        while let Some(v2::field_type::Kind::Array(array)) = &root.kind
-                            && array.min == array.max
-                            && let Some(element) = &array.element
-                        {
-                            root = element;
-                        }
-                        pass.visit(
-                            home,
-                            root,
-                            &format!("{}/{}/{}", home.name, shape.name, interaction.name),
-                            false,
-                            side,
-                            &mut BTreeSet::new(),
-                        );
-                    }
-                }
-            }
-        }
+    let mut new_uses: BTreeMap<String, Vec<v2::FieldType>> = BTreeMap::new();
+    walk_holders(new_holders, |_, ty, path, _| {
+        new_uses
+            .entry(path.to_string())
+            .or_default()
+            .push(ty.clone());
+    });
+    for (side, holders) in [
+        (ContextSide::Old, old_holders),
+        (ContextSide::New, new_holders),
+    ] {
+        walk_holders(holders, |home, ty, path, fixed| {
+            pass.require_new = new_uses.get(path).is_some_and(|types| types.contains(ty));
+            pass.visit(home, ty, path, fixed, side, &mut BTreeSet::new());
+        });
     }
     (
         pass.changes.into_values().collect(),
@@ -106,10 +55,82 @@ pub(crate) fn compare(
     )
 }
 
+fn walk_holders(
+    holders: &[&v2::Package],
+    mut visit: impl FnMut(&v2::Package, &v2::FieldType, &str, bool),
+) {
+    for home in holders {
+        for decl in &home.decls {
+            if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
+                for slot in &def.members {
+                    if let Some(v2::struct_member::Member::Field(field)) = &slot.member
+                        && let Some(ty) = &field.r#type
+                    {
+                        visit(
+                            home,
+                            ty,
+                            &format!("{}/{}/{}", home.name, decl.name, field.name),
+                            true,
+                        );
+                    }
+                }
+            }
+            if let Some(v2::decl::Kind::UnionDef(def)) = &decl.kind {
+                for arm in &def.arms {
+                    let ty = v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Named(arm.type_ref.clone())),
+                    };
+                    visit(
+                        home,
+                        &ty,
+                        &format!("{}/{}/{}", home.name, decl.name, arm.name),
+                        false,
+                    );
+                }
+            }
+        }
+        for shape in home.shapes() {
+            for interaction in &shape.interface.interactions {
+                let mut roots = crate::walk::interaction_payloads(interaction);
+                let payload = match &interaction.kind {
+                    Some(v2::decl::Kind::SignalDef(def)) => Some(&def.payload),
+                    Some(v2::decl::Kind::EventDef(def)) => Some(&def.payload),
+                    _ => None,
+                };
+                if let Some(reference) = payload {
+                    roots.push(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Named(reference.clone())),
+                    });
+                }
+                for ty in roots {
+                    // Exact arrays at the root have no head. Inside a
+                    // head or descriptor element, they fix element offsets.
+                    let mut root = &ty;
+                    while let Some(v2::field_type::Kind::Array(array)) = &root.kind
+                        && array.min == array.max
+                        && let Some(element) = &array.element
+                    {
+                        root = element;
+                    }
+                    visit(
+                        home,
+                        root,
+                        &format!("{}/{}/{}", home.name, shape.name, interaction.name),
+                        false,
+                    );
+                }
+            }
+        }
+    }
+}
+
 struct Pass<'a> {
     old: &'a [&'a v2::Package],
     new: &'a [&'a v2::Package],
     locals: BTreeSet<&'a str>,
+    require_new: bool,
     changes: BTreeMap<(String, String), Change>,
     issues: BTreeSet<ContextIssue>,
     verdict: Verdict,
@@ -170,46 +191,58 @@ impl Pass<'_> {
                 if !active.insert(identity.clone()) {
                     return;
                 }
-                match &decl.kind {
-                    Some(v2::decl::Kind::StructDef(def)) => {
-                        if fixed && side == ContextSide::Old {
-                            let old_size = head_size(self.old, declaring, &decl.name, def);
-                            let new_decl = self
-                                .new
-                                .iter()
-                                .copied()
-                                .find(|p| p.name == declaring.name)
-                                .and_then(|p| {
-                                    p.decls.iter().find(|d| d.name == decl.name).map(|d| (p, d))
-                                });
-                            if new_decl.is_none() {
+                if fixed && side == ContextSide::Old {
+                    let old_size =
+                        self.head_size(self.old, declaring, decl, path, ContextSide::Old);
+                    let new_decl = self
+                        .new
+                        .iter()
+                        .copied()
+                        .find(|p| p.name == declaring.name)
+                        .and_then(|p| p.decls.iter().find(|d| d.name == decl.name).map(|d| (p, d)));
+                    let new_size = match new_decl {
+                        Some((_, d))
+                            if matches!(decl.kind, Some(v2::decl::Kind::StructDef(_)))
+                                && !matches!(d.kind, Some(v2::decl::Kind::StructDef(_))) =>
+                        {
+                            self.issues.insert(ContextIssue {
+                                path: path.to_string(),
+                                declaration: identity.clone(),
+                                side: ContextSide::New,
+                            });
+                            None
+                        }
+                        Some((p, d)) => self.head_size(self.new, p, d, path, ContextSide::New),
+                        None => {
+                            // A changed consumer use needs only its own new type.
+                            // Retained uses still need evidence for nested remote declarations.
+                            if self.require_new {
                                 self.issues.insert(ContextIssue {
                                     path: path.to_string(),
                                     declaration: identity.clone(),
                                     side: ContextSide::New,
                                 });
                             }
-                            let new_size = new_decl.and_then(|(p, d)| match &d.kind {
-                                Some(v2::decl::Kind::StructDef(def)) => {
-                                    head_size(self.new, p, &d.name, def)
-                                }
-                                _ => None,
-                            });
-                            if let (Some(before), Some(after)) = (old_size, new_size)
-                                && after > before
-                            {
-                                self.changes.insert(
-                                    (path.to_string(), identity.clone()),
-                                    Change {
-                                        path: path.to_string(),
-                                        category: Category::PodbufRemoteInlineGrowth,
-                                        verdict: self.verdict,
-                                        before: Some(format!("{identity}: {before}")),
-                                        after: Some(format!("{identity}: {after}")),
-                                    },
-                                );
-                            }
+                            None
                         }
+                    };
+                    if let (Some(before), Some(after)) = (old_size, new_size)
+                        && after > before
+                    {
+                        self.changes.insert(
+                            (path.to_string(), identity.clone()),
+                            Change {
+                                path: path.to_string(),
+                                category: Category::PodbufRemoteInlineGrowth,
+                                verdict: self.verdict,
+                                before: Some(format!("{identity}: {before}")),
+                                after: Some(format!("{identity}: {after}")),
+                            },
+                        );
+                    }
+                }
+                match &decl.kind {
+                    Some(v2::decl::Kind::StructDef(def)) => {
                         for member in &def.members {
                             if let Some(v2::struct_member::Member::Field(field)) = &member.member
                                 && let Some(ty) = &field.r#type
@@ -251,27 +284,40 @@ impl Pass<'_> {
             _ => {}
         }
     }
-}
 
-fn head_size(
-    scope: &[&v2::Package],
-    home: &v2::Package,
-    name: &str,
-    def: &v2::StructDef,
-) -> Option<u32> {
-    let others: Vec<_> = scope
-        .iter()
-        .copied()
-        .filter(|p| p.name != home.name)
-        .collect();
-    podbuf::struct_head(
-        Packages {
-            package: home,
-            others: &others,
-        },
-        name,
-        def,
-    )
-    .ok()
-    .map(|head| head.size)
+    fn head_size(
+        &mut self,
+        scope: &[&v2::Package],
+        home: &v2::Package,
+        decl: &v2::Decl,
+        path: &str,
+        side: ContextSide,
+    ) -> Option<u32> {
+        let others: Vec<_> = scope
+            .iter()
+            .copied()
+            .filter(|p| p.name != home.name)
+            .collect();
+        let ty = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named(decl.name.clone())),
+        };
+        match podbuf::field_form(
+            Packages {
+                package: home,
+                others: &others,
+            },
+            &ty,
+        ) {
+            Ok(form) => Some(podbuf::elem_size(&form)),
+            Err(_) => {
+                self.issues.insert(ContextIssue {
+                    path: path.to_string(),
+                    declaration: format!("{}.{}", home.name, decl.name),
+                    side,
+                });
+                None
+            }
+        }
+    }
 }

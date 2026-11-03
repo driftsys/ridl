@@ -2478,6 +2478,232 @@ mod podbuf {
     }
 
     #[test]
+    fn remote_dropped_or_retyped_holder_does_not_require_new_context() {
+        let old = remote_holder(named("dep.types.Reading"));
+        let remote = remote_reading(false);
+        for (new, path, category) in [
+            (
+                package(
+                    "app.api",
+                    vec![struct_decl("Sample", vec![field("sequence", 2, wide())])],
+                ),
+                "app.api/Sample/reading",
+                Category::DeclRemoved,
+            ),
+            (
+                remote_holder(wide()),
+                "app.api/Sample",
+                Category::ConstraintChanged,
+            ),
+        ] {
+            let (report, issues) = crate::diff_refs_with_contexts_partial(
+                &[&old],
+                &[&new],
+                &[&remote],
+                &[],
+                &["podbuf"],
+            );
+            assert!(issues.is_empty(), "{issues:?}");
+            assert_eq!(report.verdict, Verdict::Breaking);
+            assert!(remote_changes(&report).is_empty(), "{report:?}");
+            assert!(
+                report
+                    .changes
+                    .iter()
+                    .any(|c| c.path == path && c.category == category),
+                "{report:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn remote_new_holder_requires_its_own_new_context() {
+        let old = package("app.api", vec![]);
+        let new = remote_holder(named("dep.types.Reading"));
+        let result = crate::diff_refs_with_contexts(&[&old], &[&new], &[], &[], &["podbuf"]);
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(
+            result.unwrap_err().issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Reading".into(),
+                side: crate::ContextSide::New,
+            }]
+        );
+    }
+
+    #[test]
+    fn remote_enum_width_growth_is_reported() {
+        let local = remote_holder(named("dep.types.Mode"));
+        let enumeration = |count| {
+            package(
+                "dep.types",
+                vec![typl_decl(
+                    "Mode",
+                    v2::decl::Kind::EnumDef(v2::EnumDef {
+                        values: (0..count)
+                            .map(|value| v2::EnumValue {
+                                name: format!("V{value}"),
+                                value,
+                                ..Default::default()
+                            })
+                            .collect(),
+                        open: true,
+                        ..Default::default()
+                    }),
+                )],
+            )
+        };
+        let report = checked_remote(&local, &enumeration(256), &enumeration(257), &["podbuf"]);
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(changes[0].before.as_deref(), Some("dep.types.Mode: 1"));
+        assert_eq!(changes[0].after.as_deref(), Some("dep.types.Mode: 2"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_scalar_width_growth_is_reported() {
+        let local = remote_holder(named("dep.types.Level"));
+        let old = package("dep.types", vec![int_type("Level", "0", "255")]);
+        let mut new = package("dep.types", vec![int_type("Level", "0", "65535")]);
+        if let Some(v2::decl::Kind::TypeDef(def)) = &mut new.decls[0].kind {
+            def.width = Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32));
+        }
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(changes[0].before.as_deref(), Some("dep.types.Level: 1"));
+        assert_eq!(changes[0].after.as_deref(), Some("dep.types.Level: 2"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_union_tag_growth_that_fits_padding_is_not_head_growth() {
+        let union = |count| {
+            package(
+                "dep.types",
+                vec![
+                    int_type("Level", "0", "255"),
+                    typl_decl(
+                        "Choice",
+                        v2::decl::Kind::UnionDef(v2::UnionDef {
+                            arms: (1..=count)
+                                .map(|ordinal| v2::UnionArm {
+                                    name: format!("arm{ordinal}"),
+                                    ordinal,
+                                    type_ref: "Level".into(),
+                                    ..Default::default()
+                                })
+                                .collect(),
+                            ..Default::default()
+                        }),
+                    ),
+                ],
+            )
+        };
+        let report = checked_remote(
+            &remote_holder(named("dep.types.Choice")),
+            &union(255),
+            &union(256),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Identical, "{report:?}");
+        assert!(remote_changes(&report).is_empty(), "{report:?}");
+    }
+
+    fn assert_remote_layout_error(side: crate::ContextSide) {
+        let local = remote_holder(named("dep.types.Reading"));
+        let valid = remote_reading(false);
+        let invalid = package(
+            "dep.types",
+            vec![struct_decl(
+                "Reading",
+                vec![field("recursive", 1, named("Reading"))],
+            )],
+        );
+        let (old, new) = match side {
+            crate::ContextSide::Old => (&invalid, &valid),
+            crate::ContextSide::New => (&valid, &invalid),
+        };
+        let result =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[old], &[new], &["podbuf"]);
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(
+            result.unwrap_err().issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Reading".into(),
+                side,
+            }]
+        );
+    }
+
+    #[test]
+    fn remote_old_layout_error_requires_old_context() {
+        assert_remote_layout_error(crate::ContextSide::Old);
+    }
+
+    #[test]
+    fn remote_new_layout_error_requires_new_context() {
+        assert_remote_layout_error(crate::ContextSide::New);
+    }
+
+    #[test]
+    fn remote_struct_replaced_by_an_enum_requires_new_context() {
+        let local = remote_holder(named("dep.types.Reading"));
+        let old = remote_reading(false);
+        let new = package(
+            "dep.types",
+            vec![typl_decl("Reading", super::enum_def(&[("OFF", 0)]))],
+        );
+        let result =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&old], &[&new], &["podbuf"]);
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(
+            result.unwrap_err().issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Reading".into(),
+                side: crate::ContextSide::New,
+            }]
+        );
+    }
+
+    #[test]
+    fn remote_shrinkage_is_not_growth() {
+        let local = remote_holder(named("dep.types.Reading"));
+        let report = checked_remote(
+            &local,
+            &remote_reading(true),
+            &remote_reading(false),
+            &["podbuf"],
+        );
+        assert!(remote_changes(&report).is_empty(), "{report:?}");
+        assert_eq!(report.verdict, Verdict::Identical);
+    }
+
+    #[test]
+    fn remote_growth_stops_at_the_nearest_local_holder() {
+        let mut local = remote_holder(named("dep.types.Reading"));
+        local.decls.push(struct_decl(
+            "Outer",
+            vec![field("sample", 1, named("Sample"))],
+        ));
+        let report = checked_remote(
+            &local,
+            &remote_reading(false),
+            &remote_reading(true),
+            &["podbuf"],
+        );
+        let changes = remote_changes(&report);
+        let paths: Vec<_> = changes.iter().map(|c| c.path.as_str()).collect();
+        assert_eq!(paths, ["app.api/Sample/reading"]);
+    }
+
+    #[test]
     fn remote_growth_respects_producer_size_boundaries_and_inline_heads() {
         let old = remote_reading(false);
         let new = remote_reading(true);
@@ -2503,7 +2729,13 @@ mod podbuf {
             ),
         ] {
             let report = checked_remote(&remote_holder(ty), &old, &new, &["podbuf"]);
-            assert_eq!(remote_changes(&report).len(), expected, "{report:?}");
+            let changes = remote_changes(&report);
+            assert_eq!(changes.len(), expected, "{report:?}");
+            for change in changes {
+                assert_eq!(change.path, "app.api/Sample/reading");
+                assert_eq!(change.before.as_deref(), Some("dep.types.Reading: 8"));
+                assert_eq!(change.after.as_deref(), Some("dep.types.Reading: 16"));
+            }
         }
     }
 
