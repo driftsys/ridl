@@ -147,10 +147,14 @@ type is `Node`:
   the builder's choice; the plan states it, because it is the `Runtime` type of
   the conformance hook.
 - **Several instances that offer the same interface** (a redundant provider set)
-  share the catalog's `Loopback`, so they write the same slots. **(call)** −N is
-  also refused while another instance that offers one of N's interface keys is
-  attached, and that instance is refused while −N is attached, so that the twin
-  is the only writer of what it injects. See Q3.
+  are all attached at once; only one of them is active, and the rule that
+  chooses it belongs to the runtime (E19.12, not built). So the twin −N replaces
+  N only: the other instances of the set stay attached, and −N is excluded with
+  N alone, as the roadmap states. **(owner, 2026-11-03)** Until the active rule
+  exists, the loopback node does not arbitrate: every attached instance of the
+  set can write. The end-to-end tests use a component with one instance; the
+  book page says that injecting on a redundant set before E19.12 needs the other
+  instances stopped.
 - Without the `debug` feature, a negative `InstanceNo` cannot be built, so no
   path accepts one.
 
@@ -371,23 +375,21 @@ These crates are in the `runtime-crates` freeze surface, checked with
 `cargo semver-checks`. A step that the builder cannot make additive stops and
 reports it; it is not done as a breaking change without the owner's word.
 
-## 9. Owner questions, taken as recommended
-
-On 2026-11-03 the three questions below were taken as this note recommends, so
-that the plan can be written; the owner reviews them with the plan and may still
-change them.
+## 9. Owner answers (2026-11-03)
 
 - **Q1 — how the injection gateway knows N and the catalog** (§6.5): the request
   path `/<component>/<instance>/<catalog>`, read by the gateway only.
   Alternative kept on record: one injection port per (instance, catalog), chosen
   when the gateway starts.
-- **Q2 — the listener may call.** The listener sends commands and queries and
-  refuses every write (signals, events, serving). The injection end-to-end test
-  "serves a call" (the client answers a call sent to N).
-- **Q3 — a redundant provider set.** The twin of one instance is refused while
-  another instance that offers one of the same interfaces is attached (§4.2), so
-  that injection never has two writers. Alternative kept on record: one store
-  per provider instance, which overlaps the active-instance rule of E19.12.
+- **Q2 — one debug client listens and injects.** A test-harness client opens a
+  listening connection, which observes and also sends commands and queries, and
+  an injection connection, which publishes, raises and answers the calls sent to
+  N. The listener refuses every write (signals, events, serving). The injection
+  end-to-end test "serves a call" (the client answers a call sent to N); the
+  listening end-to-end test also sends a command.
+- **Q3 — a redundant provider set:** the instances of a set are all attached and
+  one is active (§4.2). −N is excluded with N only; the node does not arbitrate
+  between the instances of a set until the active rule (E19.12) exists.
 
 ## 10. Alternatives considered
 
