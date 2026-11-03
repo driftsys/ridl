@@ -251,6 +251,20 @@ amendment differ, the amendment holds.
   test fails at the current code (stage 3's `serve`), fix the reply push in the
   same task and say so in the report.
 
+- **A-16 (Task 3, closing a Task 1 gap). `Rule::Utf8` is not in the wasm and
+  TypeScript payload rule tables.** Those tables (`RULES` in
+  `crates/ridl-backend-rust/src/wasm.rs`, the same list in
+  `crates/ridl-backend-ts/src/codec.rs`) number the rules a payload check can
+  break, with the code 2 plus the index in sorted order
+  (`docs/book/cli-reference.md`). A payload check never produces `Utf8`: invalid
+  UTF-8 inside a payload is `Malformed` (code 1), and only a text stream's chunk
+  check produces `Utf8` (design section 12). Adding it in sorted order would
+  renumber `variant` from 7 to 8, a break of every wasm and TypeScript consumer.
+  So the tables keep their six entries and their codes, and the completeness
+  test of `WASM_RULES` (in the compiler suite) lists every `Rule` variant except
+  `Utf8`, with a comment that states this reason. The frame's code 7 for `Utf8`
+  is stage 5b's and is a different table.
+
 ## Global Constraints
 
 - `ridl-rt` stays sans-IO and `no_std`; the new `face` traits use `core::task`
@@ -496,7 +510,7 @@ then `None`.
 
 ### Task 3: Parameter streams on a command
 
-Read "Amendments after the code check" first; A-1 to A-15 override this task's
+Read "Amendments after the code check" first; A-1 to A-16 override this task's
 text.
 
 **Files:**
@@ -571,7 +585,7 @@ again (R-33 step 1). `Pull::End` calls `end()`; `Pull::Failed(e)` calls
 
 ### Task 4: Queries with a parameter stream
 
-Read "Amendments after the code check" first; A-1 to A-15 override this task's
+Read "Amendments after the code check" first; A-1 to A-16 override this task's
 text.
 
 **Files:**
@@ -622,7 +636,7 @@ text.
 
 ### Task 5: The `docstore` example and the records
 
-Read "Amendments after the code check" first; A-1 to A-15 override this task's
+Read "Amendments after the code check" first; A-1 to A-16 override this task's
 text.
 
 **Files:**
