@@ -645,3 +645,95 @@ fn repair_compares_remote_packages_canonically_independent_of_artifact_order() {
     );
     assert_eq!(context(&baseline), expected);
 }
+
+fn local_workspace(dir: &TempDir) {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("app.typl", "package app\ntype Value: integer [0..10]\n");
+}
+
+fn system_baseline(replace: bool) {
+    let dir = TempDir::new("system-baseline");
+    let home = TempDir::new("system-baseline-home");
+    for (name, contents) in [
+        (
+            "ridl.toml",
+            include_str!("../../../examples/cabin/ridl.toml"),
+        ),
+        (
+            "cabin.ridl",
+            include_str!("../../../examples/cabin/cabin.ridl"),
+        ),
+        (
+            "system.rsdl",
+            include_str!("../../../examples/cabin/system.rsdl"),
+        ),
+    ] {
+        dir.write(name, contents);
+    }
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    if replace {
+        command(dir.path(), home.path(), &["baseline"], 0);
+    }
+    let files: Vec<_> = inventory(&dir.path().join(".ridl")).into_keys().collect();
+    assert!(
+        files
+            .iter()
+            .all(|path| !path.to_string_lossy().ends_with(".system.json")),
+        "baseline publication must exclude system dumps: {files:?}"
+    );
+    assert!(
+        std::fs::read_dir(dir.path().join(".ridl"))
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".baseline.staging")),
+        "successful publication must remove staging directories"
+    );
+}
+
+#[test]
+fn first_system_baseline_excludes_system_dump_and_staging() {
+    system_baseline(false);
+}
+
+#[test]
+fn replacement_system_baseline_excludes_system_dump_and_staging() {
+    system_baseline(true);
+}
+
+#[test]
+fn interrupted_publication_refuses_before_staging_and_names_recovery() {
+    let dir = TempDir::new("interrupted-publication");
+    let home = TempDir::new("interrupted-publication-home");
+    local_workspace(&dir);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    let backup = dir.path().join(".ridl/baseline.previous.1");
+    std::fs::create_dir(&backup).unwrap();
+    dir.write(".ridl/.baseline.transaction", backup.to_str().unwrap());
+    let prior = inventory(&dir.path().join(".ridl"));
+    for flags in [
+        vec!["baseline"],
+        vec!["baseline", "--reset-history"],
+        vec!["baseline", "--repair-context"],
+    ] {
+        let stderr = command(dir.path(), home.path(), &flags, 2);
+        assert!(stderr.contains(backup.to_str().unwrap()), "{stderr}");
+        assert!(
+            stderr.contains("restore") && stderr.contains("remove") && stderr.contains("inspect"),
+            "{stderr}"
+        );
+        assert_eq!(inventory(&dir.path().join(".ridl")), prior);
+    }
+    std::fs::remove_file(dir.path().join(".ridl/.baseline.transaction")).unwrap();
+    command(dir.path(), home.path(), &["baseline"], 0);
+    assert!(
+        backup.exists(),
+        "a backup without a marker permits publication"
+    );
+}

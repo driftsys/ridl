@@ -131,8 +131,8 @@ pub(crate) fn reserve_staging(out: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Replace only managed entries, retaining the prior artifacts in an unused
-/// sibling directory. Completed renames are undone on a commit failure. The
-/// context is installed last; there is no crash-atomicity guarantee.
+/// sibling directory. Old entries remain readable until their replacements
+/// are installed atomically. The context is installed last, before removals.
 pub(crate) fn replace_preserving(staging: &Path, out: &Path) -> std::io::Result<PathBuf> {
     replace_with(staging, out, |from, to| std::fs::rename(from, to))
 }
@@ -188,6 +188,31 @@ fn reserve_backup(out: &Path) -> std::io::Result<PathBuf> {
     Err(std::io::Error::other("no unused baseline backup name"))
 }
 
+fn transaction_marker(out: &Path) -> std::io::Result<PathBuf> {
+    let mut name = std::ffi::OsString::from(".");
+    name.push(
+        out.file_name()
+            .ok_or_else(|| std::io::Error::other("baseline path has no final name"))?,
+    );
+    name.push(".transaction");
+    Ok(out.with_file_name(name))
+}
+
+pub(crate) fn refuse_interrupted(out: &Path) -> std::io::Result<()> {
+    let marker = transaction_marker(out)?;
+    match std::fs::read_to_string(&marker) {
+        Ok(backup) => Err(std::io::Error::other(format!(
+            "interrupted baseline publication; backup directory: {backup}; restore the prior files from the backup, or remove the marker {} after inspecting it",
+            marker.display()
+        ))),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(std::io::Error::other(format!(
+            "cannot read baseline transaction marker {}: {err}",
+            marker.display()
+        ))),
+    }
+}
+
 fn replace_with(
     staging: &Path,
     out: &Path,
@@ -206,17 +231,31 @@ fn replace_with(
     }
     fresh.sort_by_key(|name| (name == ridlc::baseline_context::CONTEXT_FILE, name.clone()));
     let backup = reserve_backup(out)?;
+    let marker = transaction_marker(out)?;
+    {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&marker)?;
+        file.write_all(backup.to_string_lossy().as_bytes())?;
+    }
     let mut moved_old = Vec::new();
     let mut installed = Vec::new();
     let commit = (|| -> std::io::Result<()> {
-        for name in &old {
-            rename(&out.join(name), &backup.join(name))?;
-            moved_old.push(name);
-        }
         for name in &fresh {
+            if old.contains(name) {
+                std::fs::hard_link(out.join(name), backup.join(name))?;
+                moved_old.push(name);
+            }
             rename(&staging.join(name), &out.join(name))?;
             installed.push(name);
         }
+        for name in old.iter().filter(|name| !fresh.contains(name)) {
+            rename(&out.join(name), &backup.join(name))?;
+            moved_old.push(name);
+        }
+        std::fs::remove_file(&marker)?;
         Ok(())
     })();
     if let Err(commit_error) = commit {
@@ -225,7 +264,13 @@ fn replace_with(
         for name in installed.into_iter().rev() {
             let from = out.join(name);
             let to = staging.join(name);
-            if let Err(err) = rename(&from, &to) {
+            // Keep the installed name present until the atomic old-file restore.
+            let retract = if old.contains(name) {
+                std::fs::hard_link(&from, &to)
+            } else {
+                rename(&from, &to)
+            };
+            if let Err(err) = retract {
                 retained_new.insert(name);
                 recovery_errors.push(format!("{} -> {}: {err}", from.display(), to.display()));
             }
@@ -247,7 +292,17 @@ fn replace_with(
             }
             if let Err(err) = rename(&from, &to) {
                 recovery_errors.push(format!("{} -> {}: {err}", from.display(), to.display()));
+            } else if let Err(err) = std::fs::remove_file(&from)
+                && err.kind() != std::io::ErrorKind::NotFound
+            {
+                // Renaming two hard links to the same inode can leave both names.
+                recovery_errors.push(format!("{}: {err}", from.display()));
             }
+        }
+        if recovery_errors.is_empty()
+            && let Err(err) = std::fs::remove_file(&marker)
+        {
+            recovery_errors.push(format!("{}: {err}", marker.display()));
         }
         if recovery_errors.is_empty() {
             if let Err(err) = std::fs::remove_dir(&backup) {
@@ -268,7 +323,7 @@ fn replace_with(
             backup.display()
         )));
     }
-    // The final installation rename commits publication. Cleanup cannot turn
+    // Removing the marker commits publication. Cleanup cannot turn
     // a committed success into a reported failure that promises restoration.
     if let Err(err) = std::fs::remove_dir(staging) {
         eprintln!(
@@ -373,10 +428,69 @@ mod tests {
     }
 
     #[test]
+    fn every_old_snapshot_survives_each_install_and_injected_failure() {
+        for fail_at in 0..4 {
+            let fixture = Fixture::new();
+            std::fs::write(fixture.stage.join("stale.ir.json"), "new stale").unwrap();
+            let prior = inventory(&fixture.out);
+            let mut calls = 0;
+            let result = replace_with(&fixture.stage, &fixture.out, |from, to| {
+                let call = calls;
+                calls += 1;
+                let result = if call == fail_at {
+                    Err(std::io::Error::other("injected rename failure"))
+                } else {
+                    std::fs::rename(from, to)
+                };
+                for (name, old, new) in [
+                    ("a.ir.json", "old a", "new a"),
+                    ("stale.ir.json", "old stale", "new stale"),
+                ] {
+                    assert!(
+                        fixture.out.join(name).is_file(),
+                        "snapshot {name} missing after rename {call}"
+                    );
+                    let bytes = std::fs::read(fixture.out.join(name)).unwrap();
+                    assert!(bytes == old.as_bytes() || bytes == new.as_bytes());
+                }
+                result
+            });
+            assert!(result.is_err(), "forward rename {fail_at}");
+            assert_eq!(inventory(&fixture.out), prior);
+        }
+    }
+
+    #[test]
+    fn transaction_marker_names_backup_until_publication_succeeds() {
+        let fixture = Fixture::new();
+        let marker = fixture.root.join(".baseline.transaction");
+        let backup = fixture.root.join("baseline.previous.1");
+        let result = replace_with(&fixture.stage, &fixture.out, |from, to| {
+            assert!(
+                marker.is_file(),
+                "transaction marker must precede every rename"
+            );
+            assert_eq!(
+                std::fs::read_to_string(&marker).unwrap(),
+                backup.to_str().unwrap()
+            );
+            if from == fixture.out.join("stale.ir.json") {
+                assert!(
+                    !fixture.stage.join("context.json").exists(),
+                    "removals follow every installation"
+                );
+            }
+            std::fs::rename(from, to)
+        });
+        assert!(result.is_ok(), "{result:?}");
+        assert!(!marker.exists(), "successful publication clears its marker");
+    }
+
+    #[test]
     fn managed_publication_fault_matrix() {
-        // Three old entries and three installations, including a new unit and
-        // removal of a stale old snapshot. Each forward rename fails once.
-        for fail_at in 0..6 {
+        // Three installations and removal of a stale old snapshot. Each
+        // forward rename fails once.
+        for fail_at in 0..4 {
             let fixture = Fixture::new();
             let prior = inventory(&fixture.out);
             let mut calls = 0;
@@ -508,10 +622,8 @@ mod tests {
         let mut attempted_same_name_restore = false;
         let error = replace_with(&fixture.stage, &fixture.out, |from, to| {
             if from == fixture.stage.join("new.ir.json") {
+                std::fs::write(fixture.stage.join("a.ir.json"), "retraction blocker")?;
                 return Err(std::io::Error::other("commit failure"));
-            }
-            if from == fixture.out.join("a.ir.json") && to == fixture.stage.join("a.ir.json") {
-                return Err(std::io::Error::other("retraction failure"));
             }
             if from == backup.join("a.ir.json") && to == fixture.out.join("a.ir.json") {
                 attempted_same_name_restore = true;
@@ -535,7 +647,7 @@ mod tests {
         );
         let message = error.to_string();
         assert!(
-            message.contains("retraction failure") && message.contains("pending restore"),
+            message.contains("commit failure") && message.contains("pending restore"),
             "{message}"
         );
         for path in [

@@ -891,6 +891,10 @@ fn run_baseline(
             return ExitCode::from(2);
         }
     };
+    if let Err(err) = baseline::refuse_interrupted(&out_dir) {
+        eprintln!("error: {err}");
+        return ExitCode::from(2);
+    }
     let staging = match baseline::reserve_staging(&out_dir) {
         Ok(staging) => staging,
         Err(err) => {
@@ -1488,6 +1492,17 @@ fn dropped_number_message(
 /// Publishes only the managed files, retaining unrelated output entries and
 /// rolling completed renames back on a publication failure.
 fn publish_baseline(staging: &Path, out_dir: &Path, preserve: bool) -> std::io::Result<()> {
+    // The shared IR emit also writes the system, which a baseline does not hold.
+    for entry in std::fs::read_dir(staging)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.ends_with(".system.json"))
+        {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
     match std::fs::symlink_metadata(out_dir) {
         Ok(_) => {
             let backup = baseline::replace_preserving(staging, out_dir)?;
