@@ -18,12 +18,10 @@
 //! because the face proof in `face_compile.rs` compiles the emitted `blocking`
 //! module, which names `ridl_rt::task::block_on`.
 
-// Three integration test targets pull this module in with `#[path]`, and
-// each uses the helpers it needs: `flatbuffers_roundtrip.rs` and
-// `flatbuffers_bool_vector.rs` run programs, `flatbuffers_conformance.rs`
-// captures their output and checks for wasm32. A helper unused by one of
-// them is not dead code, it is used by another, and a `#[path]` module is
-// compiled once per target that names it.
+// Many integration test targets pull this module in with `#[path]`, and each
+// uses only the helpers it needs. A helper unused by one of them is not dead
+// code, it is used by another, and a `#[path]` module is compiled once per
+// target that names it.
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};

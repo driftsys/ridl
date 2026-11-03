@@ -61,12 +61,7 @@ fn round_trip(values: Vec<bool>, engaged: Vec<Engaged>) {
 fn main() {
     round_trip(
         vec![true, false, true, false],
-        vec![
-            Engaged::new(true),
-            Engaged::new(false),
-            Engaged::new(true),
-            Engaged::new(false),
-        ],
+        vec![Engaged::new(false), Engaged::new(true), Engaged::new(true)],
     );
     round_trip(Vec::new(), Vec::new());
 }
