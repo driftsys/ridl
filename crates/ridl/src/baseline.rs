@@ -131,8 +131,9 @@ pub(crate) fn reserve_staging(out: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Replace only managed entries, retaining the prior artifacts in an unused
-/// sibling directory. Old entries remain readable until their replacements
-/// are installed atomically. The context is installed last, before removals.
+/// sibling directory. Old entries with replacements remain readable until the
+/// replacements are installed atomically. The context is installed last, then
+/// old entries without replacements are moved to the backup.
 pub(crate) fn replace_preserving(staging: &Path, out: &Path) -> std::io::Result<PathBuf> {
     replace_with(staging, out, |from, to| std::fs::rename(from, to))
 }
@@ -201,22 +202,70 @@ fn transaction_marker(out: &Path) -> std::io::Result<PathBuf> {
 pub(crate) fn refuse_interrupted(out: &Path) -> std::io::Result<()> {
     let marker = transaction_marker(out)?;
     match std::fs::read_to_string(&marker) {
-        Ok(backup) => Err(std::io::Error::other(format!(
+        Ok(backup) if !backup.trim().is_empty() => Err(std::io::Error::other(format!(
             "interrupted baseline publication; backup directory: {backup}; restore the prior files from the backup, or remove the marker {} after inspecting it",
             marker.display()
         ))),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(std::io::Error::other(format!(
-            "cannot read baseline transaction marker {}: {err}",
-            marker.display()
-        ))),
+        Err(err)
+            if err.kind() == std::io::ErrorKind::NotFound
+                && matches!(std::fs::symlink_metadata(&marker), Err(error) if error.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            Ok(())
+        }
+        result => {
+            let reason = match result {
+                Ok(_) => "empty".to_owned(),
+                Err(err) => format!("unreadable: {err}"),
+            };
+            Err(std::io::Error::other(format!(
+                "interrupted baseline publication; marker {} is {reason}; backup path is unknown; inspect the baseline.previous.N directories beside {} before removing the marker",
+                marker.display(),
+                out.display()
+            )))
+        }
     }
+}
+
+fn link_or_copy(
+    from: &Path,
+    to: &Path,
+    link: &mut impl FnMut(&Path, &Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    link(from, to).or_else(|err| {
+        if std::fs::symlink_metadata(from)?.is_file()
+            && matches!(std::fs::symlink_metadata(to), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+        {
+            std::fs::copy(from, to).map(|_| ())
+        } else {
+            Err(err)
+        }
+    })
 }
 
 fn replace_with(
     staging: &Path,
     out: &Path,
+    rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
+) -> std::io::Result<PathBuf> {
+    replace_with_io(
+        staging,
+        out,
+        rename,
+        |from, to| std::fs::hard_link(from, to),
+        std::io::Write::write_all,
+        |path| std::fs::remove_file(path),
+        |message| eprintln!("{message}"),
+    )
+}
+
+fn replace_with_io(
+    staging: &Path,
+    out: &Path,
     mut rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
+    mut link: impl FnMut(&Path, &Path) -> std::io::Result<()>,
+    write_marker: impl FnOnce(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+    mut remove_marker: impl FnMut(&Path) -> std::io::Result<()>,
+    mut warn: impl FnMut(&str),
 ) -> std::io::Result<PathBuf> {
     let old = managed_entries(out)?;
     let mut fresh = managed_entries(staging)?;
@@ -233,19 +282,34 @@ fn replace_with(
     let backup = reserve_backup(out)?;
     let marker = transaction_marker(out)?;
     {
-        use std::io::Write as _;
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&marker)?;
-        file.write_all(backup.to_string_lossy().as_bytes())?;
+            .open(&marker)
+            .map_err(|err| {
+                let _ = std::fs::remove_dir(&backup);
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
+                    std::io::Error::other(format!(
+                        "baseline transaction marker {} exists; another ridl baseline is running or an earlier one was interrupted",
+                        marker.display()
+                    ))
+                } else {
+                    err
+                }
+            })?;
+        if let Err(err) = write_marker(&mut file, backup.to_string_lossy().as_bytes()) {
+            drop(file);
+            let _ = remove_marker(&marker);
+            let _ = std::fs::remove_dir(&backup);
+            return Err(err);
+        }
     }
     let mut moved_old = Vec::new();
     let mut installed = Vec::new();
     let commit = (|| -> std::io::Result<()> {
         for name in &fresh {
             if old.contains(name) {
-                std::fs::hard_link(out.join(name), backup.join(name))?;
+                link_or_copy(&out.join(name), &backup.join(name), &mut link)?;
                 moved_old.push(name);
             }
             rename(&staging.join(name), &out.join(name))?;
@@ -255,7 +319,6 @@ fn replace_with(
             rename(&out.join(name), &backup.join(name))?;
             moved_old.push(name);
         }
-        std::fs::remove_file(&marker)?;
         Ok(())
     })();
     if let Err(commit_error) = commit {
@@ -266,7 +329,7 @@ fn replace_with(
             let to = staging.join(name);
             // Keep the installed name present until the atomic old-file restore.
             let retract = if old.contains(name) {
-                std::fs::hard_link(&from, &to)
+                link_or_copy(&from, &to, &mut link)
             } else {
                 rename(&from, &to)
             };
@@ -300,7 +363,7 @@ fn replace_with(
             }
         }
         if recovery_errors.is_empty()
-            && let Err(err) = std::fs::remove_file(&marker)
+            && let Err(err) = remove_marker(&marker)
         {
             recovery_errors.push(format!("{}: {err}", marker.display()));
         }
@@ -323,8 +386,13 @@ fn replace_with(
             backup.display()
         )));
     }
-    // Removing the marker commits publication. Cleanup cannot turn
-    // a committed success into a reported failure that promises restoration.
+    // All installations and removals succeeded. Cleanup cannot roll them back.
+    if let Err(err) = remove_marker(&marker) {
+        warn(&format!(
+            "warning: baseline published, but cannot remove transaction marker {}: {err}; the next ridl baseline will refuse until it is removed",
+            marker.display()
+        ));
+    }
     if let Err(err) = std::fs::remove_dir(staging) {
         eprintln!(
             "warning: baseline published, but cannot remove staging directory {}: {err}",
@@ -510,7 +578,261 @@ mod tests {
                 "exact restoration after rename {fail_at}"
             );
             assert!(!fixture.root.join("baseline.previous.1").exists());
+            assert!(
+                !fixture.root.join(".baseline.transaction").exists(),
+                "rollback after rename {fail_at} must clear its marker"
+            );
         }
+    }
+
+    #[test]
+    fn incomplete_marker_refusal_names_unknown_backup_and_recovery_directories() {
+        for unreadable in [false, true] {
+            let fixture = Fixture::new();
+            let marker = fixture.root.join(".baseline.transaction");
+            if unreadable {
+                std::fs::create_dir(&marker).unwrap();
+            } else {
+                std::fs::write(&marker, "").unwrap();
+            }
+            let message = refuse_interrupted(&fixture.out).unwrap_err().to_string();
+            assert!(message.contains(marker.to_str().unwrap()), "{message}");
+            assert!(message.contains("backup path is unknown"), "{message}");
+            assert!(
+                message.contains("inspect") && message.contains("baseline.previous.N"),
+                "{message}"
+            );
+            assert!(message.contains(fixture.out.to_str().unwrap()), "{message}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_symlink_marker_refuses_with_unknown_backup() {
+        let fixture = Fixture::new();
+        let marker = fixture.root.join(".baseline.transaction");
+        std::os::unix::fs::symlink("missing-marker-target", &marker).unwrap();
+        let result = refuse_interrupted(&fixture.out);
+        assert!(
+            result.is_err(),
+            "an unreadable marker must refuse publication"
+        );
+        let message = result.unwrap_err().to_string();
+        for expected in [
+            marker.to_str().unwrap(),
+            "backup path is unknown",
+            "inspect",
+            "baseline.previous.N",
+            fixture.out.to_str().unwrap(),
+        ] {
+            assert!(message.contains(expected), "{message}");
+        }
+    }
+
+    #[test]
+    fn failed_marker_write_removes_marker_and_empty_backup() {
+        for partial in [false, true] {
+            let fixture = Fixture::new();
+            let prior = inventory(&fixture.out);
+            let staged = inventory(&fixture.stage);
+            let error = replace_with_io(
+                &fixture.stage,
+                &fixture.out,
+                |_, _| panic!("marker failure precedes renames"),
+                |from, to| std::fs::hard_link(from, to),
+                |file, _| {
+                    if partial {
+                        std::io::Write::write_all(file, b"partial")?;
+                    }
+                    Err(std::io::Error::other("injected marker write failure"))
+                },
+                |path| std::fs::remove_file(path),
+                |_| panic!("no committed publication"),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("injected marker write failure"));
+            assert!(
+                !fixture.root.join(".baseline.transaction").exists(),
+                "failed write must remove its marker"
+            );
+            assert!(
+                !fixture.root.join("baseline.previous.1").exists(),
+                "failed write must remove its empty backup"
+            );
+            assert_eq!(inventory(&fixture.out), prior);
+            assert_eq!(inventory(&fixture.stage), staged);
+        }
+    }
+
+    #[test]
+    fn marker_cleanup_failure_keeps_committed_publication_and_warns() {
+        let fixture = Fixture::new();
+        let marker = fixture.root.join(".baseline.transaction");
+        let mut warnings = Vec::new();
+        let mut stale_removed = false;
+        let result = replace_with_io(
+            &fixture.stage,
+            &fixture.out,
+            |from, to| {
+                assert!(!stale_removed, "no rollback after the last removal");
+                std::fs::rename(from, to)?;
+                if from == fixture.out.join("stale.ir.json") {
+                    stale_removed = true;
+                }
+                Ok(())
+            },
+            |from, to| std::fs::hard_link(from, to),
+            std::io::Write::write_all,
+            |_| Err(std::io::Error::other("injected marker removal failure")),
+            |message| warnings.push(message.to_owned()),
+        );
+        assert!(result.is_ok(), "publication is committed: {result:?}");
+        let backup = result.unwrap();
+        for (name, expected) in [
+            ("a.ir.json", b"new a".as_slice()),
+            ("context.json", b"new context"),
+            ("new.ir.json", b"new unit"),
+        ] {
+            assert_eq!(std::fs::read(fixture.out.join(name)).unwrap(), expected);
+        }
+        assert!(!fixture.out.join("stale.ir.json").exists());
+        assert!(!fixture.stage.exists());
+        assert_eq!(
+            std::fs::read(backup.join("stale.ir.json")).unwrap(),
+            b"old stale"
+        );
+        assert!(marker.is_file());
+        assert!(refuse_interrupted(&fixture.out).is_err());
+        assert_eq!(warnings.len(), 1);
+        let warning = &warnings[0];
+        for expected in [
+            "warning:",
+            marker.to_str().unwrap(),
+            "next ridl baseline will refuse until",
+            "removed",
+            "injected marker removal failure",
+        ] {
+            assert!(warning.contains(expected), "{warning}");
+        }
+    }
+
+    #[test]
+    fn existing_marker_refuses_and_removes_only_new_empty_backup() {
+        let fixture = Fixture::new();
+        let marker = fixture.root.join(".baseline.transaction");
+        let occupied = fixture.root.join("baseline.previous.1");
+        std::fs::create_dir(&occupied).unwrap();
+        std::fs::write(occupied.join("keep"), "prior recovery").unwrap();
+        std::fs::write(&marker, occupied.to_str().unwrap()).unwrap();
+        let prior = inventory(&fixture.root);
+        let message = replace_with(&fixture.stage, &fixture.out, |_, _| {
+            panic!("existing marker precedes renames")
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(message.contains(marker.to_str().unwrap()), "{message}");
+        assert!(
+            message.contains("another ridl baseline is running or an earlier one was interrupted"),
+            "{message}"
+        );
+        assert!(!fixture.root.join("baseline.previous.2").exists());
+        assert_eq!(inventory(&fixture.root), prior);
+    }
+
+    #[test]
+    fn unsupported_hard_links_copy_regular_files_into_backup() {
+        let fixture = Fixture::new();
+        let result = replace_with_io(
+            &fixture.stage,
+            &fixture.out,
+            |from, to| std::fs::rename(from, to),
+            |_, _| Err(std::io::Error::other("hard links unsupported")),
+            std::io::Write::write_all,
+            |path| std::fs::remove_file(path),
+            |_| panic!("publication should not warn"),
+        );
+        assert!(
+            result.is_ok(),
+            "regular-file backups must support copying: {result:?}"
+        );
+        let backup = result.unwrap();
+        for (name, expected) in [
+            ("a.ir.json", b"old a".as_slice()),
+            ("context.json", b"old context"),
+            ("stale.ir.json", b"old stale"),
+        ] {
+            assert_eq!(std::fs::read(backup.join(name)).unwrap(), expected);
+        }
+        assert_eq!(
+            std::fs::read(fixture.out.join("a.ir.json")).unwrap(),
+            b"new a"
+        );
+        assert_eq!(
+            std::fs::read(fixture.out.join("context.json")).unwrap(),
+            b"new context"
+        );
+        assert!(!fixture.stage.exists());
+        assert!(!fixture.root.join(".baseline.transaction").exists());
+    }
+
+    #[test]
+    fn unsupported_hard_links_copy_regular_files_during_rollback() {
+        let fixture = Fixture::new();
+        let prior = inventory(&fixture.out);
+        let staged = inventory(&fixture.stage);
+        let error = replace_with_io(
+            &fixture.stage,
+            &fixture.out,
+            |from, to| {
+                if from == fixture.stage.join("context.json") {
+                    return Err(std::io::Error::other("injected context install failure"));
+                }
+                std::fs::rename(from, to)
+            },
+            |from, to| {
+                if to.starts_with(&fixture.stage) {
+                    Err(std::io::Error::other("rollback hard links unsupported"))
+                } else {
+                    std::fs::hard_link(from, to)
+                }
+            },
+            std::io::Write::write_all,
+            |path| std::fs::remove_file(path),
+            |_| panic!("rollback should not warn"),
+        )
+        .unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("restored the prior managed baseline"),
+            "{message}"
+        );
+        assert_eq!(inventory(&fixture.out), prior);
+        assert_eq!(inventory(&fixture.stage), staged);
+        assert!(!fixture.root.join(".baseline.transaction").exists());
+        assert!(!fixture.root.join("baseline.previous.1").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unsupported_hard_link_of_symlink_refuses_before_rename() {
+        let fixture = Fixture::new();
+        std::fs::remove_file(fixture.out.join("a.ir.json")).unwrap();
+        std::os::unix::fs::symlink("notes/keep", fixture.out.join("a.ir.json")).unwrap();
+        let prior = inventory(&fixture.out);
+        let error = replace_with_io(
+            &fixture.stage,
+            &fixture.out,
+            |_, _| panic!("failed symlink backup must precede its rename"),
+            |_, _| Err(std::io::Error::other("symlink hard links unsupported")),
+            std::io::Write::write_all,
+            |path| std::fs::remove_file(path),
+            |_| panic!("rollback should not warn"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("symlink hard links unsupported"));
+        assert_eq!(inventory(&fixture.out), prior);
+        assert!(!fixture.root.join(".baseline.transaction").exists());
+        assert!(!fixture.root.join("baseline.previous.1").exists());
     }
 
     #[test]
