@@ -1491,6 +1491,31 @@ fn remote_dropped_or_retyped_holder_exits_one_without_new_context() {
 }
 
 #[test]
+fn remote_dropped_holder_with_grown_new_remote_exits_one_without_growth() {
+    // Mutation: measure new remote heads for a dropped old consumer use.
+    let dir = TempDir::new("remote-dropped-grown");
+    let old = remote_inline_source(&dir, "old", false, true);
+    let new = remote_inline_source(&dir, "new", true, true);
+    let retained = "\nstruct Retained { readings: [Reading; 0..4] }\n";
+    let old_source = std::fs::read_to_string(old.join("app.typl")).unwrap();
+    dir.write("old/app.typl", &(old_source + retained));
+    dir.write("new/app.typl", &format!("package app\nimport dep.Reading\nstruct Sample {{ sequence: integer [0..9223372036854775807] }}\n{retained}"));
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        old.as_os_str(),
+        new.as_os_str(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+    ]);
+    assert_eq!(code, 1, "{stdout}\n{stderr}");
+    assert!(
+        stdout.contains("decl_removed app/Sample/reading"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("podbuf_remote_inline_growth"), "{stdout}");
+}
+
+#[test]
 fn remote_legacy_inline_baseline_requires_historical_evidence() {
     let dir = TempDir::new("remote-legacy");
     let source = remote_inline_source(&dir, "source", false, true);

@@ -2516,6 +2516,153 @@ mod podbuf {
         }
     }
 
+    fn assert_changed_holder_ignores_new_remote(new: v2::Package, remote: v2::Package) {
+        let old = remote_holder(named("dep.types.Reading"));
+        let old_remote = remote_reading(false);
+        let (report, issues) = crate::diff_refs_with_contexts_partial(
+            &[&old],
+            &[&new],
+            &[&old_remote],
+            &[&remote],
+            &["podbuf"],
+        );
+        assert!(issues.is_empty(), "{issues:?}");
+        assert!(remote_changes(&report).is_empty(), "{report:?}");
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    fn dropped_remote_holder() -> v2::Package {
+        package(
+            "app.api",
+            vec![struct_decl("Sample", vec![field("sequence", 2, wide())])],
+        )
+    }
+
+    #[test]
+    fn remote_dropped_holder_ignores_grown_new_remote() {
+        // Mutation: measure new heads even when require_new is false.
+        assert_changed_holder_ignores_new_remote(dropped_remote_holder(), remote_reading(true));
+    }
+
+    #[test]
+    fn remote_dropped_holder_ignores_new_remote_kind_change() {
+        // Mutation: check new declaration kinds even when require_new is false.
+        let remote = package(
+            "dep.types",
+            vec![typl_decl("Reading", super::enum_def(&[("OFF", 0)]))],
+        );
+        assert_changed_holder_ignores_new_remote(dropped_remote_holder(), remote);
+    }
+
+    #[test]
+    fn remote_dropped_holder_ignores_unlayable_new_remote() {
+        // Mutation: lay out new declarations even when require_new is false.
+        let remote = package(
+            "dep.types",
+            vec![struct_decl(
+                "Reading",
+                vec![field("recursive", 1, named("Reading"))],
+            )],
+        );
+        assert_changed_holder_ignores_new_remote(dropped_remote_holder(), remote);
+    }
+
+    #[test]
+    fn remote_retyped_holder_ignores_grown_new_remote() {
+        // Mutation: measure new heads even when require_new is false.
+        assert_changed_holder_ignores_new_remote(remote_holder(wide()), remote_reading(true));
+    }
+
+    #[test]
+    fn remote_moved_out_of_workspace_requires_new_evidence() {
+        // Mutation: both passes use old_holders to populate locals.
+        let local = remote_holder(named("dep.types.Reading"));
+        let remote = remote_reading(false);
+        let (_, issues) = crate::diff_refs_with_contexts_partial(
+            &[&local, &remote],
+            &[&local],
+            &[],
+            &[],
+            &["podbuf"],
+        );
+        assert_eq!(
+            issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Reading".into(),
+                side: crate::ContextSide::New,
+                reason: crate::ContextIssueReason::Missing,
+            }]
+        );
+    }
+
+    #[test]
+    fn remote_unresolved_payload_root_records_each_sides_issue() {
+        // Mutation: record unresolved names only when fixed is true.
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![fixed("reading", 1, named("dep.types.Reading"))],
+        )];
+        let remote = remote_reading(false);
+        for side in [crate::ContextSide::Old, crate::ContextSide::New] {
+            let context = [&remote];
+            let (old, new) = match side {
+                crate::ContextSide::Old => (&[][..], &context[..]),
+                crate::ContextSide::New => (&context[..], &[][..]),
+            };
+            let (_, issues) =
+                crate::diff_refs_with_contexts_partial(&[&local], &[&local], old, new, &["podbuf"]);
+            assert_eq!(
+                issues,
+                vec![crate::ContextIssue {
+                    path: "app.api/Api/reading".into(),
+                    declaration: "dep.types.Reading".into(),
+                    side,
+                    reason: crate::ContextIssueReason::Missing,
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn remote_enum_set_width_growth_is_reported() {
+        // Mutation: skip remote enum sets when measuring inline heads.
+        let local = remote_holder(named("dep.types.Flags"));
+        let flags = |count, width| {
+            package(
+                "dep.types",
+                vec![typl_decl(
+                    "Flags",
+                    v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                        bits: (0..count)
+                            .map(|value| v2::EnumValue {
+                                name: format!("F{value}"),
+                                value,
+                                ..Default::default()
+                            })
+                            .collect(),
+                        width: width as i32,
+                        open: true,
+                        ..Default::default()
+                    }),
+                )],
+            )
+        };
+        let report = checked_remote(
+            &local,
+            &flags(8, v2::IntWidth::U8),
+            &flags(9, v2::IntWidth::U16),
+            &["podbuf"],
+        );
+        let changes = remote_changes(&report);
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(changes[0].before.as_deref(), Some("dep.types.Flags: 1"));
+        assert_eq!(changes[0].after.as_deref(), Some("dep.types.Flags: 2"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
     #[test]
     fn remote_new_holder_requires_its_own_new_context() {
         let old = package("app.api", vec![]);

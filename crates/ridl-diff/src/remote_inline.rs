@@ -205,6 +205,8 @@ impl Pass<'_> {
                         .find(|p| p.name == declaring.name)
                         .and_then(|p| p.decls.iter().find(|d| d.name == decl.name).map(|d| (p, d)));
                     let new_size = match new_decl {
+                        // A changed consumer use needs only its own new type.
+                        _ if !self.require_new => None,
                         Some((_, d))
                             if matches!(decl.kind, Some(v2::decl::Kind::StructDef(_)))
                                 && !matches!(d.kind, Some(v2::decl::Kind::StructDef(_))) =>
@@ -221,16 +223,12 @@ impl Pass<'_> {
                             self.head_size(self.new, p, d, path, ContextSide::New, &identity)
                         }
                         None => {
-                            // A changed consumer use needs only its own new type.
-                            // Retained uses still need evidence for nested remote declarations.
-                            if self.require_new {
-                                self.issues.insert(ContextIssue {
-                                    path: path.to_string(),
-                                    declaration: identity.clone(),
-                                    side: ContextSide::New,
-                                    reason: ContextIssueReason::Missing,
-                                });
-                            }
+                            self.issues.insert(ContextIssue {
+                                path: path.to_string(),
+                                declaration: identity.clone(),
+                                side: ContextSide::New,
+                                reason: ContextIssueReason::Missing,
+                            });
                             None
                         }
                     };
