@@ -120,6 +120,9 @@ test:
         # of `wasm-check` show that they need no `std`.
         cargo test --locked -p ridl-descriptor --no-default-features
         cargo test --locked -p ridl-descriptor --no-default-features --features dedup
+        # Run without debug in a separate process: workspace feature unification
+        # can otherwise omit the compile-fail tests of the debug identity API.
+        cargo test -p ridl-rt --no-default-features --locked
         # The workspace build resolves `ridl-rt` with default features, so the
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds

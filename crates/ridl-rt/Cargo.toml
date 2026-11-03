@@ -29,6 +29,8 @@ flatbuffers = []
 proto3 = []
 podbuf = []
 std = []
+# Debug instance identities; no allocation, standard library or encoding required.
+debug = []
 
 # docs.rs builds with every feature on, so the crate docs' links to the
 # `flatbuffers`, `proto3`, `podbuf` and `task` modules resolve.

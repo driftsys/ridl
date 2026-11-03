@@ -26,6 +26,92 @@ pub struct Ordinal(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InterfaceNo(pub u32);
 
+/// An instance number: positive in production, with debug identities available
+/// only under the `debug` feature.
+///
+/// The field is private so construction always checks the production range.
+///
+/// ```compile_fail,E0423
+/// use ridl_rt::contract::InstanceNo;
+/// let _ = InstanceNo(-1);
+/// ```
+#[cfg_attr(
+    not(feature = "debug"),
+    doc = r#"
+## listener_is_absent_without_debug
+
+```compile_fail,E0599
+use ridl_rt::contract::InstanceNo;
+let _ = InstanceNo::LISTENER;
+```
+
+## twin_is_absent_without_debug
+
+```compile_fail,E0599
+use ridl_rt::contract::InstanceNo;
+let _ = InstanceNo::new(1).unwrap().twin();
+```
+
+## is_twin_is_absent_without_debug
+
+```compile_fail,E0599
+use ridl_rt::contract::InstanceNo;
+let _ = InstanceNo::new(1).unwrap().is_twin();
+```
+
+## is_listener_is_absent_without_debug
+
+```compile_fail,E0599
+use ridl_rt::contract::InstanceNo;
+let _ = InstanceNo::new(1).unwrap().is_listener();
+```
+"#
+)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct InstanceNo(i32);
+
+impl InstanceNo {
+    /// The debug listener, which observes every catalog of its machine.
+    #[cfg(feature = "debug")]
+    pub const LISTENER: Self = Self(i32::MIN);
+
+    /// The debug twin of a positive instance, or `None` for a twin or listener.
+    #[cfg(feature = "debug")]
+    pub const fn twin(self) -> Option<Self> {
+        if self.0 > 0 {
+            Some(Self(-self.0))
+        } else {
+            None
+        }
+    }
+
+    /// Whether this number is a debug twin, excluding the listener.
+    #[cfg(feature = "debug")]
+    pub const fn is_twin(self) -> bool {
+        self.0 < 0 && self.0 != i32::MIN
+    }
+
+    /// Whether this number is the debug listener.
+    #[cfg(feature = "debug")]
+    pub const fn is_listener(self) -> bool {
+        self.0 == i32::MIN
+    }
+
+    /// A positive instance number, or `None` for zero and negative numbers.
+    pub const fn new(n: i32) -> Option<Self> {
+        if n > 0 {
+            Some(Self(n))
+        } else {
+            None
+        }
+    }
+
+    /// The signed instance number.
+    pub const fn get(self) -> i32 {
+        self.0
+    }
+}
+
 /// The catalog hash: SHA-256 over the catalog's interfaces, their numbers, and
 /// the types they reach.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

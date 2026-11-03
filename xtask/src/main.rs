@@ -71,7 +71,7 @@ mod tests {
     use std::path::Path;
 
     /// The `ridl-rt` features that are not payload encodings.
-    const NON_ENCODING_FEATURES: [&str; 1] = ["std"];
+    const NON_ENCODING_FEATURES: [&str; 2] = ["std", "debug"];
 
     /// `render_cargo_toml` writes each manifest encoding name as a feature of
     /// `ridl-rt`, so the encoding names and the encoding features of
