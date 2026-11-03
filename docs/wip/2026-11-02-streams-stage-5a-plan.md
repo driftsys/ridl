@@ -129,6 +129,99 @@ document's rulings; S5-n are this plan's.
   3 built for a streamed reply extends to every member with a stream: a second
   concurrent call of the member settles `Transport::Busy`.
 
+## Amendments after the code check (2026-11-03)
+
+A read of Tasks 3 to 5 against the code at `5bbc36bf` found the statements below
+wrong. Each amendment overrides the task text it names; where a task and an
+amendment differ, the amendment holds.
+
+- **A-1 (Tasks 3, 4). Client methods take their arguments by value.** As every
+  client method does today (`call_method_with` in
+  `crates/ridl-backend-rust/src/face.rs`): `Client::put(&mut self, info: Info)`,
+  not `&Info`. `Provider` methods keep `&T`.
+- **A-2 (Tasks 3, 4). A call whose only parameter is a stream takes the induced
+  empty argument struct.** `note`, `upload`, `summarize` and `pipe` take
+  `args: <Iface><Name>Params`, by value on the client and by `&` on the
+  provider, as `status(&mut self, args: ValveStatusParams)` does today (R-10,
+  built in stage 1).
+- **A-3 (Review Focus, Task 3). The corpus line of the Review Focus is
+  replaced.** `command replay` is in `Archive`, which gets no face because of
+  its fallible `tryRead` reply, and `face_compile.rs` compiles inline sources,
+  not the corpus. The one corpus interface with a face is `Station` in
+  `crates/ridlc/tests/corpus/rust-shapes/shapes.ridl`. Task 3 adds to `Station`
+  `query dump(): <bytes> @[..1s]`, `command load(data: <bytes>) @[..1s]` and
+  `command feed(samples: <Inner>) @[..1s]`, and Task 4 adds
+  `query merge(samples: <Inner>): <Inner> @[..1s]`, so that `just demo` lints a
+  face of each form under `-D warnings`, `dead_code` included. Run `just demo`
+  once at the end of Tasks 3 and 4 (it needs the cross targets `bootstrap`
+  installs); if it cannot run, say so in the report.
+- **A-4 (Tasks 3, 4). Members with a stream parameter get `Command` and `Query`
+  impls.** `dispatch` and `poll.rs` evaluate `require` and `ensure` through
+  those traits. `put`, `note`, `upload` get `Command`; `summarize` gets `Query`
+  with `type Reply = Summary`; `pipe` gets `Query` with `type Reply = ()`, as a
+  streamed reply does today. This reverses the design's "As built" line "No
+  `Command` or `Query` impl is generated for a member that has a stream
+  parameter": Task 5 amends that line. A generic caller that sends such a call
+  without its stream leaves the stream open until it forgets the call, which
+  interrupts it.
+- **A-5 (Task 3). The order in `serve` is the existing one:** decode the
+  arguments, evaluate `require`, settle `Ok(&[])`, then call the provider
+  method. `dispatch` already settles before it calls the provider, by design.
+- **A-6 (Task 3). The R-33 test pushes the out-of-range element through the
+  port, not through the sink.** `send` checks the value first (S5-6), so the
+  provider's refusal cannot be reached through `UploadSink::send`. The test
+  sends two valid elements through the sink, then pushes the encoded bytes of a
+  `Reading` with `level` 200 (as `reading(200, ..)` in `stream_face.rs` builds
+  one) with `StreamCaller::push` on the call's correlation and `StreamNo(1)`,
+  then polls `serve`, then calls the sink's `send` with a fourth valid element,
+  which answers the error.
+- **A-7 (Task 4). A refusal of the upload of a query settles the claim `Err(e)`
+  after `abort_claim(claim, StreamNo(1), e)`.** For `summarize` and for `pipe`
+  alike, because the reply is still open. Only a command does not settle again.
+- **A-8 (Tasks 3, 4). The `serve` slots.** Each member with a parameter stream
+  gets a slot in the `Streams` state of `serve`, freed at the end or a failure
+  of its stream. `Serve`'s `Drop` aborts a running parameter stream with
+  `abort_claim(.., StreamNo(1), Transport::Interrupted)`, as it does a reply
+  stream today. The `Busy` check of S5-11, which today lives in the stream arm
+  of `dispatch.rs` for queries only, covers every member with a stream.
+- **A-9 (Task 4). The reply bound of a call with an upload starts at
+  `poll_end`.** Today `call_method_with` fixes the deadline at the send. For
+  `summarize` and `pipe`, the deadline is not set at the send; `poll_end` sets
+  it through the handle the call and the sink share, and before that the call
+  cannot time out. `pipe`'s call future resolves on the first element or the end
+  as stage 3's does, with the same deadline rule.
+- **A-10 (Tasks 3, 4). Dropping a sink after its end but before the claim was
+  taken must not withdraw the call.** The port withdraws a call forgotten before
+  any provider took the claim, with its streams (the rustdoc of `forget` in
+  `crates/ridl-rt/src/port.rs`). So a sink that has ended does not forget the
+  call when dropped; the call value forgets it once the acknowledgment (command)
+  or the reply (query) has arrived, or when it is dropped itself.
+- **A-11 (Task 5). `docstore` details.**
+  `crates/ridlc/tests/docstore_example.rs` follows `cabin_example.rs` but cannot
+  copy it: that test calls `ridlc::run_build` and hard-codes the crate name
+  `veh_cabin` and its file names; derive the docstore names from the manifest
+  the same way. `docstore.ridl` documents every item with `///` (otherwise
+  `ridl check` reports missing docs), gives bounded strings a default (as
+  `type DocId: string [1..64] = "-"`), declares the error arm's type as
+  `error enum DocError`, and writes union arms one per line, as `shapes.ridl`
+  does. `examples/docstore/ridl.toml` follows `examples/cabin/ridl.toml`.
+- **A-12 (Tasks 2, 3, 5). Shipped prose that says these stream forms are not
+  built.** Task 3 (and the Task 2 fix pass for the reply forms) updates the
+  module doc of `crates/ridl-backend-rust/src/face.rs` (about line 28) and
+  `crates/ridl-rt/src/port.rs` (about line 30). Task 5 adds to its records:
+  `docs/book/getting-started.md` (about lines 880 to 885),
+  `docs/book/cli-reference.md` (about lines 857 to 859),
+  `docs/design/ridl-rt.md` (about lines 141 and 1221),
+  `docs/design/catalog-descriptor.md` (about line 650),
+  `docs/specification/ridl-language-reference.md` (about line 1331) and the
+  matching row of `docs/specification/ridl-family-overview.md`. Each states what
+  is built after 5a: the WebSocket upload direction and the TypeScript side are
+  not built yet.
+- **A-13. Conversions.** `ClientError` has no `From<PushError>`; write the
+  conversion to `ClientError::Call(e)` in the emitter. `RecordingPorts` records
+  `Op::Push(Correlation, StreamNo)` without the chunk length, so a chunk-length
+  assertion reads the handler side.
+
 ## Global Constraints
 
 - `ridl-rt` stays sans-IO and `no_std`; the new `face` traits use `core::task`
@@ -374,6 +467,9 @@ then `None`.
 
 ### Task 3: Parameter streams on a command
 
+Read "Amendments after the code check" first; A-1 to A-13 override this task's
+text.
+
 **Files:**
 
 - Modify: `crates/ridl-backend-rust/src/descriptors.rs` (accept a command with
@@ -446,6 +542,9 @@ again (R-33 step 1). `Pull::End` calls `end()`; `Pull::Failed(e)` calls
 
 ### Task 4: Queries with a parameter stream
 
+Read "Amendments after the code check" first; A-1 to A-13 override this task's
+text.
+
 **Files:**
 
 - Modify: `descriptors.rs` (accept a query with one stream parameter and either
@@ -493,6 +592,9 @@ again (R-33 step 1). `Pull::End` calls `end()`; `Pull::Failed(e)` calls
       `feat(ridl-backend-rust): emit the face for a query with a parameter stream`.
 
 ### Task 5: The `docstore` example and the records
+
+Read "Amendments after the code check" first; A-1 to A-13 override this task's
+text.
 
 **Files:**
 
