@@ -220,16 +220,16 @@ pub fn load_diff_side(
                 remote_context,
             });
         }
-        if let Some(context) = read_context(entry, &[]).map_err(DiffSideError::Context)? {
-            let remote_context = context.remote_context();
-            return Ok(DiffSide {
-                packages: Vec::new(),
-                system: None,
-                remotes: remote_context.packages.clone(),
-                remote_context: Some(remote_context),
-            });
-        }
         if !is_source_dir(entry) {
+            if let Some(context) = read_context(entry, &[]).map_err(DiffSideError::Context)? {
+                let remote_context = context.remote_context();
+                return Ok(DiffSide {
+                    packages: Vec::new(),
+                    system: None,
+                    remotes: remote_context.packages.clone(),
+                    remote_context: Some(remote_context),
+                });
+            }
             if let Some(witness) = first_non_json_ir_in(entry) {
                 return Err(DiffSideError::ArtifactDirectory {
                     path: entry.to_path_buf(),
@@ -666,6 +666,14 @@ mod tests {
         let result = load(&snapshot(dir.path()), &[]).unwrap();
         assert_eq!(result.packages.len(), 1);
         assert_eq!(result.packages[0].name, "p");
+    }
+    #[test]
+    fn a_source_workspace_ignores_an_unrelated_context_file() {
+        let (dir, _) = source();
+        fs::write(dir.path().join("context.json"), r#"{"theme":"dark"}"#).unwrap();
+        let side = load(dir.path(), &[]);
+        assert!(side.is_ok(), "source workspace must compile: {side:?}");
+        assert_eq!(side.unwrap().packages[0].name, "p");
     }
     #[test]
     fn a_source_side_with_an_error_is_compile() {
