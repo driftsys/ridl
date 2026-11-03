@@ -1,11 +1,11 @@
 # Remote units and `ridl vendor`
 
 A package does not have to live in your repository. This chapter shows how to
-import a package from a URL, where the compiler reads it from, what
-`ridl.lock` pins, how `ridl vendor` copies it into your repository, and how to
-build with no network. The [CLI reference](cli-reference.md#ridl-check) lists
-what each command writes, and [ADR-0002][adr-0002] records the rules; this
-chapter is the guide.
+import a package from a URL, where the compiler reads it from, what `ridl.lock`
+pins, how `ridl vendor` copies it into your repository, and how to build with no
+network. The [CLI reference](cli-reference.md#ridl-check) lists what each
+command writes, and [ADR-0002][adr-0002] records the rules; this chapter is the
+guide.
 
 The examples use TOML manifests and shell sessions. A remote import needs a
 network, so no block here is compiled, and the URLs are placeholders.
@@ -44,10 +44,10 @@ A remote package, called a remote unit in the diagnostics, follows these rules:
   `[package]` table, not a `[workspace]` table, whose `name` equals the
   `[imports]` key. Anything else is `MANI-105`.
 - Your `[imports]` lists every remote package the build needs, including the
-  ones that your remote packages import. The compiler does not fetch the
-  imports of a remote unit. It reads them only to check that you list each key,
-  and a key you do not list is `MANI-106`, with a message that names the URL
-  the remote unit gave. When the two URLs differ, yours is used.
+  ones that your remote packages import. The compiler does not fetch the imports
+  of a remote unit. It reads them only to check that you list each key, and a
+  key you do not list is `MANI-106`, with a message that names the URL the
+  remote unit gave. When the two URLs differ, yours is used.
 - A remote unit is a read-only dependency. Its errors fail the command, its
   warnings and infos are not shown, and your `[lints]` table does not apply to
   it. `ridl build` generates code for it beside your own packages, and
@@ -176,11 +176,11 @@ message of `MANI-104` names `ridl check` and `ridl vendor` as the fix.
 ## Fresh clones
 
 `ridl test`, `ridl lock`, `ridl diff`, `ridl lsp` and `ridl mcp` never fetch and
-never write `ridl.lock`. In a fresh clone of a project that imports remote
-units and does not commit `vendor/`, the cache is empty, so run `ridl check`
-once first. It fetches the units into the cache and writes `ridl.lock`.
-Otherwise these commands report `MANI-103` or `MANI-104`. A project that
-commits `vendor/` and `ridl.lock` needs no such step.
+never write `ridl.lock`. In a fresh clone of a project that imports remote units
+and does not commit `vendor/`, the cache is empty, so run `ridl check` once
+first. It fetches the units into the cache and writes `ridl.lock`. Otherwise
+these commands report `MANI-103` or `MANI-104`. A project that commits `vendor/`
+and `ridl.lock` needs no such step.
 
 ## The `vendor/` directory is reserved
 
@@ -191,25 +191,25 @@ read source files there as packages of your project:
   `MANI-017`, an error, and the entry is not loaded.
 - In a standalone package, a `.typl`, `.ridl` or `.rsdl` file under `vendor/`
   that is not inside a directory named by an `[imports]` key is `MANI-018`, a
-  warning with the lint name `vendor-source-not-loaded`, and is not loaded.
-  One warning is reported per file.
+  warning with the lint name `vendor-source-not-loaded`, and is not loaded. One
+  warning is reported per file.
 - The name is reserved at the manifest root only. A directory named `vendor`
   deeper in a package is an ordinary source package. A remote unit's own
   `vendor/` directory is part of its tree and its hash, and the compiler skips
   it when it reads the unit.
 
-This is a breaking change for a project that kept source packages in a
-`vendor/` directory at its root. Those packages stop loading. Move them to
-another directory, and update the `members` list of the workspace or the
-imports that name them.
+This is a breaking change for a project that kept source packages in a `vendor/`
+directory at its root. Those packages stop loading. Move them to another
+directory, and update the `members` list of the workspace or the imports that
+name them.
 
 `ridl fmt` also skips `vendor/` at every manifest root, so it does not rewrite
 the units that belong to other owners.
 
 ## Where to go next
 
-- [Getting started](getting-started.md#a-workspace) shows the
-  workspace that a remote import joins.
+- [Getting started](getting-started.md#a-workspace) shows the workspace that a
+  remote import joins.
 - The [`ridl check`](cli-reference.md#ridl-check) and
   [`ridl vendor`](cli-reference.md#ridl-vendor) sections of the CLI reference
   list the exit codes.

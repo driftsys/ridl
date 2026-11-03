@@ -6,46 +6,46 @@ standard input, reads one response from its standard output, and writes the
 files the response carries. A plugin can be written in any language that reads
 and writes JSON.
 
-This chapter is a guide. Each fact it summarizes is owned by another record,
-and the chapter links to that record:
+This chapter is a guide. Each fact it summarizes is owned by another record, and
+the chapter links to that record:
 
 - [`docs/design/codegen-plugins.md`][design] — the plugin system as built: the
   contract, the process host, the reference plugins and the deployment section.
 - [IR — encodings and stability](reference/ir.md) — the IR specification: the
   canonical encoding, the nesting bound, the compatibility rule and versioning.
-- [ADR-0020][adr-0020] decisions 8 to 12 — the binding choices behind the
-  plugin system.
+- [ADR-0020][adr-0020] decisions 8 to 12 — the binding choices behind the plugin
+  system.
 - [CLI reference](cli-reference.md#ridl-build) — every flag of `ridl build`.
 
 ## Reading order
 
 Read these in order before you write a plugin:
 
-1. [The IR specification](reference/ir.md) §7 and §8: read `schema` first,
-   parse leniently, and use a file `ridlc` wrote as a fixture.
+1. [The IR specification](reference/ir.md) §7 and §8: read `schema` first, parse
+   leniently, and use a file `ridlc` wrote as a fixture.
 2. [`plugin.proto`][plugin-proto]: the request and the response.
 3. [`model.proto`][model-proto]: what the model carries, message by message.
 4. [`deployment.proto`][deployment-proto]: the deployment section, if your
    plugin lays out memory for a deployment.
 5. [`crates/ridlc-gen-model/src/main.rs`][gen-model]: a complete plugin.
-6. The [`ridl build`](cli-reference.md#ridl-build) section of the CLI
-   reference: how the plugin is found and what `ridl` does with the response.
+6. The [`ridl build`](cli-reference.md#ridl-build) section of the CLI reference:
+   how the plugin is found and what `ridl` does with the response.
 
 ## Running a plugin
 
 A plugin for the language `kotlin` is an executable named `ridlc-gen-kotlin`.
 `ridl build` runs it when you pass `--plugin`:
 
-- `--plugin kotlin` looks for `ridlc-gen-kotlin` on `PATH`, in `PATH` order.
-  On Windows, `ridlc-gen-kotlin.exe` is also tried.
+- `--plugin kotlin` looks for `ridlc-gen-kotlin` on `PATH`, in `PATH` order. On
+  Windows, `ridlc-gen-kotlin.exe` is also tried.
 - `--plugin kotlin=/opt/gen/bin/kt-gen` runs the executable at that path and
   skips the lookup. Messages still name the plugin `ridlc-gen-kotlin`.
 
 The flag repeats, once per plugin, and is the same on `ridlc build`. A plugin
 runs beside the `--emit` targets, and `--emit` defaults to `rust`, so a build
-with `--plugin` and no `--emit` also writes the Rust files. The plugin runs
-once per package that the code emits are written for, `ridl.std` included when
-a package uses it. `--plugin-timeout <SECONDS>` sets how long one run may take
+with `--plugin` and no `--emit` also writes the Rust files. The plugin runs once
+per package that the code emits are written for, `ridl.std` included when a
+package uses it. `--plugin-timeout <SECONDS>` sets how long one run may take
 before `ridl` kills it; the default is 60 seconds.
 
 The plugin's standard error is passed through to the terminal. The error cases
@@ -67,12 +67,12 @@ case are listed in [the design record, §4][design-host].
 
 ## The protocol
 
-There is no framing and no binary form. The request is one JSON document on
-the plugin's standard input; the plugin reads until the end of input. The
-response is one JSON document on its standard output. Both are canonical
-protobuf JSON, pretty-printed: keys are the proto3 JSON names, so the field
-`artifact_base` is the key `artifactBase`; enum values are written by name;
-64-bit integers are decimal strings; and `bytes` fields are base64.
+There is no framing and no binary form. The request is one JSON document on the
+plugin's standard input; the plugin reads until the end of input. The response
+is one JSON document on its standard output. Both are canonical protobuf JSON,
+pretty-printed: keys are the proto3 JSON names, so the field `artifact_base` is
+the key `artifactBase`; enum values are written by name; 64-bit integers are
+decimal strings; and `bytes` fields are base64.
 
 **A plugin never writes files.** It returns each file in the response as a
 `path`, relative to `--out-dir`, and a `text` or `binary` content, and `ridl`
@@ -85,8 +85,8 @@ default, `serde_json` at 128 for example, and need one configuration step.
 
 **The response is read strictly.** This toolchain's reader rejects a key the
 schema does not have, so a plugin must not add fields of its own to the
-response. A diagnostic is a `severity` and a `message`; there is no source
-span. An unset severity counts as an error.
+response. A diagnostic is a `severity` and a `message`; there is no source span.
+An unset severity counts as an error.
 
 ## The schemas
 
@@ -99,14 +99,14 @@ The schema of the request and the response is the protobuf package
 - `model.proto` — the lowered model;
 - `deployment.proto` — the deployment section.
 
-`plugin.proto` imports the other two. The repository publishes no schema
-package of its own. Today an author copies the files from the release tag the
-plugin is tested against, as [driftsys/ridlc-gen-kotlin][kotlin] does: it keeps
-the files unchanged and runs a check that fails when they differ from the
-pinned tag. Copy every file that the tag's `plugin.proto` imports: where the
-tag holds `deployment.proto`, that is all three files, and a `plugin.proto`
-that imports `deployment.proto` does not compile without it. An older tag holds
-only `plugin.proto` and `model.proto`.
+`plugin.proto` imports the other two. The repository publishes no schema package
+of its own. Today an author copies the files from the release tag the plugin is
+tested against, as [driftsys/ridlc-gen-kotlin][kotlin] does: it keeps the files
+unchanged and runs a check that fails when they differ from the pinned tag. Copy
+every file that the tag's `plugin.proto` imports: where the tag holds
+`deployment.proto`, that is all three files, and a `plugin.proto` that imports
+`deployment.proto` does not compile without it. An older tag holds only
+`plugin.proto` and `model.proto`.
 
 ## Compatibility
 
@@ -115,18 +115,18 @@ The rules are the IR specification's §6 to §8. In short:
 - **Additive changes are made in place.** A new field, a new enum value or a new
   `oneof` member can appear in `ridl.codegen.v1` at any release. A plugin whose
   request reader is built on an older `ridl-ir` still rejects a request that
-  carries a new enum value, so that plugin must be rebuilt against the
-  `ridl-ir` that adds the value. Any other
-  change — a removal, a rename, a renumbering, a change of type or of meaning —
-  is a new package, `ridl.codegen.v2`, compiled beside the old one.
-- **A plugin reads the request leniently.** It ignores keys it does not know,
-  so a request from a newer `ridl` still reads. `ridl_ir::codegen::request_from_json`
-  does this at every nesting level of the request, from `ridl-ir` 0.6.0
-  on. It still rejects an unknown enum name, because that
-  changes the meaning of a known field, so a new enum value is a change an older
-  plugin reports as an error. A Rust plugin built against an earlier `ridl-ir`
-  rejects a request that carries a key that release does not know, and must be
-  rebuilt once.
+  carries a new enum value, so that plugin must be rebuilt against the `ridl-ir`
+  that adds the value. Any other change — a removal, a rename, a renumbering, a
+  change of type or of meaning — is a new package, `ridl.codegen.v2`, compiled
+  beside the old one.
+- **A plugin reads the request leniently.** It ignores keys it does not know, so
+  a request from a newer `ridl` still reads.
+  `ridl_ir::codegen::request_from_json` does this at every nesting level of the
+  request, from `ridl-ir` 0.6.0 on. It still rejects an unknown enum name,
+  because that changes the meaning of a known field, so a new enum value is a
+  change an older plugin reports as an error. A Rust plugin built against an
+  earlier `ridl-ir` rejects a request that carries a key that release does not
+  know, and must be rebuilt once.
 - **A plugin refuses an unknown `schema`.** `schema` is the first field of the
   request. A plugin that does not know its value answers with an error
   diagnostic naming both values. A plugin never refuses on `toolchain`, which
@@ -135,8 +135,8 @@ The rules are the IR specification's §6 to §8. In short:
 
 ## What the request carries
 
-`ridl build --emit codegen-request` writes the whole request for each package
-to `<base>.codegen-request.json`, so a plugin author can read what their plugin
+`ridl build --emit codegen-request` writes the whole request for each package to
+`<base>.codegen-request.json`, so a plugin author can read what their plugin
 would receive without running it. The emit takes its options from a
 `[backend.codegen-request]` table, which is how a request carrying an option is
 written. Every excerpt in this chapter was read from that artifact, built from
@@ -165,39 +165,38 @@ jq '{schema, toolchain, options, artifactBase, generatedMarker, header}' request
 - **`model`** is the lowered model of one package: its declarations, with type
   references resolved and names in every case the name transform defines
   ([ADR-0016][adr-0016]), its interfaces and their members, its services, and
-  its catalog. It is the same JSON value that
-  `ridl build --emit codegen-model` writes to `<base>.codegen.json`, one
-  indentation level deeper, so that file is a fixture for a plugin's tests.
+  its catalog. It is the same JSON value that `ridl build --emit codegen-model`
+  writes to `<base>.codegen.json`, one indentation level deeper, so that file is
+  a fixture for a plugin's tests.
 - **`options`** is a list of `{key, value}` pairs sorted by key. It holds one
   `encodings` option, the names joined by `,` in manifest order, when the root
   manifest's `[backend.<language>]` table names an encoding (the
   [CLI reference](cli-reference.md#ridl-build) describes the table), and is
   empty otherwise. No flag sets an option.
-- **`artifactBase`** is the name `ridl` gives this package's files: the
-  package name, or the file stem in single-file mode. A plugin that lays its
-  output out another way can ignore it.
+- **`artifactBase`** is the name `ridl` gives this package's files: the package
+  name, or the file stem in single-file mode. A plugin that lays its output out
+  another way can ignore it.
 - **`generatedMarker`** is the line that marks a generated file as generated,
   without a comment token. The host composes it. See
   [the marker](#the-marker-and-the-header) below.
 - **`header`** is the project's file header from `[codegen] header-file`,
   without a comment token, or an empty string when the project sets none. Both
   keys are always present in the JSON, so an empty header is `"header": ""`.
-- **`deployment`** is the deployment section, described below. It is absent
-  when the build selects no deployment.
+- **`deployment`** is the deployment section, described below. It is absent when
+  the build selects no deployment.
 
 ### The marker and the header
 
 A plugin is recommended, not required, to write `generatedMarker` as the first
-line of each file it writes that can hold a comment, as a comment in that
-file's syntax, and then `header`, one comment line per header line, then one
-blank line. The marker comes first because `rustfmt` looks for `@generated`
-only in the first 5 lines of a file. A plugin that writes in Rust can call
+line of each file it writes that can hold a comment, as a comment in that file's
+syntax, and then `header`, one comment line per header line, then one blank
+line. The marker comes first because `rustfmt` looks for `@generated` only in
+the first 5 lines of a file. A plugin that writes in Rust can call
 `ridl_ir::codegen::comment_preamble(marker, header, "//")`, which returns that
-block; a plugin in another language writes the same layout, with an empty
-header line as the bare comment token and no trailing space. A file that cannot
-hold a comment, such as JSON, carries neither. Where the key comes from, and
-how a project sets the header, is in the
-[CLI reference](cli-reference.md#ridl-build).
+block; a plugin in another language writes the same layout, with an empty header
+line as the bare comment token and no trailing space. A file that cannot hold a
+comment, such as JSON, carries neither. Where the key comes from, and how a
+project sets the header, is in the [CLI reference](cli-reference.md#ridl-build).
 
 ### The documentation fields
 
@@ -216,32 +215,32 @@ it: `Declaration`, `Field`, `EnumValue`, `Arm`, `Interface`, `Interaction`,
 - **`rules`** — the rules of the item. A `Rule` has a `text`, the line the
   editor's hover shows for it, and a `kind`, a `oneof` of the structured fields:
   `range`, `step`, `unit`, `length`, `pattern`, `collection_bound`, `timing`,
-  `response_bound`, `errors` or `contract` (a `require` or an `ensure`
-  clause). `rules` is filled on a `Declaration`, an `Interaction`, a `Field` and
-  a `Param`, and is empty on the other carriers.
+  `response_bound`, `errors` or `contract` (a `require` or an `ensure` clause).
+  `rules` is filled on a `Declaration`, an `Interaction`, a `Field` and a
+  `Param`, and is empty on the other carriers.
 
-`DocLink.target` is a qualified name, `pkg.Name` with an optional `.member`,
-not a spelling in any target language. A plugin maps it to its own path with
-its own name transform ([ADR-0016][adr-0016]). The in-tree backends write a
-target that has no item in their output as a code span of the qualified name,
-so that the output holds no link that does not resolve.
+`DocLink.target` is a qualified name, `pkg.Name` with an optional `.member`, not
+a spelling in any target language. A plugin maps it to its own path with its own
+name transform ([ADR-0016][adr-0016]). The in-tree backends write a target that
+has no item in their output as a code span of the qualified name, so that the
+output holds no link that does not resolve.
 
 A new kind of rule is a new `oneof` member, which is an additive change. A
 plugin renders `Rule.text` for a `kind` it does not know, so its docs stay
-complete: `ridl_ir::codegen::request_from_json` drops a member it does not
-know and keeps `text`. `Param` carries the parameter's own `doc` as well. How
-the in-tree backends render these fields is in
+complete: `ridl_ir::codegen::request_from_json` drops a member it does not know
+and keeps `text`. `Param` carries the parameter's own `doc` as well. How the
+in-tree backends render these fields is in
 [Documentation in the generated code](generated-code.md#documentation-in-the-generated-code).
 
 ### The deployment section
 
 The deployment section holds the facts of one deployment of the workspace's
-system that a plugin needs to lay out memory: the regions, one per catalog,
-with each catalog's hash and interfaces; the instances; one channel per member
-and producer instance, with its consumer links; and the transport bindings.
-Every request of one build carries the same section. [The design record,
-§7][design-deployment], states what each part holds, its order, and the rules
-behind each value.
+system that a plugin needs to lay out memory: the regions, one per catalog, with
+each catalog's hash and interfaces; the instances; one channel per member and
+producer instance, with its consumer links; and the transport bindings. Every
+request of one build carries the same section.
+[The design record, §7][design-deployment], states what each part holds, its
+order, and the rules behind each value.
 
 `--deployment NAME` selects the deployment. Without the flag, the request
 carries the deployment when the system declares exactly one, and none when it
@@ -285,27 +284,26 @@ query's `slots` and `budget`, each come with a source, written in the JSON as
 
 A source of `UNSPECIFIED` comes with an absent value: a field the member's kind
 does not use, such as `slots` on an event link, or a `budget` that nothing
-declares. [The design record,
-§7][design-deployment], lists every case in which a depth is underivable. The
-[rsdl reference](reference/rsdl.md) §5 states the sizing keys, and [Describing a system](rsdl.md)
-shows them in use.
+declares. [The design record, §7][design-deployment], lists every case in which
+a depth is underivable. The [rsdl reference](reference/rsdl.md) §5 states the
+sizing keys, and [Describing a system](rsdl.md) shows them in use.
 
 ### Sizes
 
-The model states the maximum encoded size of every payload, of every command
-and query request, and of every query reply, once per wire encoding: proto3,
-FlatBuffers and podbuf. Each is bounded with a byte count, unbounded with a cause (for
-FlatBuffers only), or absent with a cause. The model also sums them:
+The model states the maximum encoded size of every payload, of every command and
+query request, and of every query reply, once per wire encoding: proto3,
+FlatBuffers and podbuf. Each is bounded with a byte count, unbounded with a
+cause (for FlatBuffers only), or absent with a cause. The model also sums them:
 `Interaction.reservation` is the memory a call table reserves for one member,
-and `Interface.table_budget` (the key `tableBudget`) is the memory for the whole interface, each as a
-byte count or as `unsized`, naming the first payload or member that has no
-bounded size. Each `Declaration` carries two more sizes. `proto3` is the proto3
-size state of the declaration's root message — its own message for a struct or
-a union, its `<Name>Box` message for a named scalar, an enum and an enum set.
-`podbuf` is the podbuf size state of the declaration as a payload root, the
-bound `ridl_ir::projection::podbuf::max_size` computes. A constant has neither.
-A codec reads them as the declaration's largest encoded size, as the Rust
-backend does.
+and `Interface.table_budget` (the key `tableBudget`) is the memory for the whole
+interface, each as a byte count or as `unsized`, naming the first payload or
+member that has no bounded size. Each `Declaration` carries two more sizes.
+`proto3` is the proto3 size state of the declaration's root message — its own
+message for a struct or a union, its `<Name>Box` message for a named scalar, an
+enum and an enum set. `podbuf` is the podbuf size state of the declaration as a
+payload root, the bound `ridl_ir::projection::podbuf::max_size` computes. A
+constant has neither. A codec reads them as the declaration's largest encoded
+size, as the Rust backend does.
 
 Each `Interaction` also carries `limit`: the payload limit in bytes that a
 `[limits]` entry of the manifest gives the member (its `[limits.interaction]`
@@ -322,14 +320,14 @@ non-stream parameters only, and a plugin must not emit it as a plain call. The
 Rust backend carries a query whose reply is a stream of named elements on the
 interaction face and leaves every other such member out of it, and the
 TypeScript backend leaves every such member out of the codec module's interface
-table. This is
-a change for a plugin written against an earlier model: a member with a stream
-parameter then had neither `request` nor `request_tuple`, so a plugin that does
-not read `Interaction.streams` emitted no call for it, and now sees what looks
-like a plain call; a query whose reply alone is a stream had its `request` then
-as now. Such a plugin skips every member whose `Interaction.streams` is not
-empty. A streamed reply adds nothing to the member's reservation, so a query
-that replies with a stream reserves its request alone.
+table. This is a change for a plugin written against an earlier model: a member
+with a stream parameter then had neither `request` nor `request_tuple`, so a
+plugin that does not read `Interaction.streams` emitted no call for it, and now
+sees what looks like a plain call; a query whose reply alone is a stream had its
+`request` then as now. Such a plugin skips every member whose
+`Interaction.streams` is not empty. A streamed reply adds nothing to the
+member's reservation, so a query that replies with a stream reserves its request
+alone.
 
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:
@@ -391,17 +389,18 @@ bytes are: an integer, a float, an enum, an inline head (an index into
 element type, the stride and the bounds. A union head lists the head of each
 arm. A struct, union or tuple that cannot be laid out is listed in
 `podbuf.refused` with its cause, and no head is written for it.
-[The codegen plugin record, "The podbuf projection"][podbuf-projection] gives the order of the heads and the meaning of each field.
+[The codegen plugin record, "The podbuf projection"][podbuf-projection] gives
+the order of the heads and the meaning of each field.
 
 ## The catalog hash
 
 The model's `catalog` holds the unit name, in the field `package`, and the
 catalog hash, a 32-byte SHA-256 over the interfaces of every source package of
 the unit and every declaration they reach ([ADR-0014][adr-0014] decision 15).
-The field keeps its name `package` for the generated accessors of every
-plugin; its value is the unit's name, which is `CatalogRef.name`. In the JSON,
-the hash is base64. Each region of the deployment section carries the same
-hash for its catalog.
+The field keeps its name `package` for the generated accessors of every plugin;
+its value is the unit's name, which is `CatalogRef.name`. In the JSON, the hash
+is base64. Each region of the deployment section carries the same hash for its
+catalog.
 
 Embed the name and the hash in the generated code, and check them when the
 generated code binds to a port. The Rust face does this: each generated
@@ -411,10 +410,10 @@ catalog differs panics with a message that names both catalogs
 generated from one contract then refuses a port of another contract when it
 binds, instead of exchanging bytes that one side reads wrongly.
 
-**A provisional interface number.** An interface that has no entry in its
-unit's `interfaces.lock` has a provisional number, and the model marks it
-`provisional`. A provisional number can change: adding an interface before it
-in the source can move it, and recording it with
+**A provisional interface number.** An interface that has no entry in its unit's
+`interfaces.lock` has a provisional number, and the model marks it
+`provisional`. A provisional number can change: adding an interface before it in
+the source can move it, and recording it with
 [`ridl lock`](cli-reference.md#ridl-lock) changes the catalog hash, because the
 hash covers each interface's number and its `provisional` flag. A provisional
 number is fine during development. Never rely on it across parties that are
@@ -425,20 +424,19 @@ freezes as `interface_frozen`, and a provisional number that moves as
 
 ## The catalog descriptor
 
-`ridl build --emit catalog` writes `<unit>.catalog.binfb`, a FlatBuffers file
-of a unit's interfaces, their members, their payload size bounds and the
-catalog hash. The unit is the set of source packages that one `ridl.toml`
-declares, and the hash is computed over that unit. One file is written per unit
-that declares an interface or a service with an inline body; a unit that
-declares only types writes none. It is for a run-time engine that is not
-compiled against the unit and reads the file when a party attaches; no such
-engine is in this repository.
+`ridl build --emit catalog` writes `<unit>.catalog.binfb`, a FlatBuffers file of
+a unit's interfaces, their members, their payload size bounds and the catalog
+hash. The unit is the set of source packages that one `ridl.toml` declares, and
+the hash is computed over that unit. One file is written per unit that declares
+an interface or a service with an inline body; a unit that declares only types
+writes none. It is for a run-time engine that is not compiled against the unit
+and reads the file when a party attaches; no such engine is in this repository.
 [`ridl describe`](cli-reference.md#ridl-describe) prints it as JSON.
 
-A plugin does not read the catalog descriptor: the model carries the same
-facts. The chapter [The catalog descriptor](catalog-descriptor.md) describes
-the file for its readers, and the [catalog descriptor record][catalog] gives
-its byte-level details.
+A plugin does not read the catalog descriptor: the model carries the same facts.
+The chapter [The catalog descriptor](catalog-descriptor.md) describes the file
+for its readers, and the [catalog descriptor record][catalog] gives its
+byte-level details.
 
 The deployment descriptor, a file per deployment, carries the deployment's facts
 to a runtime ([deployment descriptor record][deployment]). The request's
@@ -455,17 +453,19 @@ time; the descriptor leaves out the sizing values that the section holds.
   with RSDL-806 when a consumer link consumes such an event with no declared
   `depth` (see [Lints](lints.md)); it does not warn when no link consumes the
   event ([driftsys/ridl#735][i735]). A stream has no size of its own, and a
-  streamed reply adds nothing to its member's reservation. A request of zero or of
-  several parameters, and an inline `T | E` reply have no size in any encoding,
-  so the reservation of such a member is `unsized`. No single issue tracks
-  these cases; each is recorded in [the design record, §7][design-deployment],
-  and in [the catalog descriptor record][size-states].
+  streamed reply adds nothing to its member's reservation. A request of zero or
+  of several parameters, and an inline `T | E` reply have no size in any
+  encoding, so the reservation of such a member is `unsized`. No single issue
+  tracks these cases; each is recorded in
+  [the design record, §7][design-deployment], and in
+  [the catalog descriptor record][size-states].
+
 ## Examples
 
-- [`crates/ridlc-gen-model/src/main.rs`][gen-model] is a complete plugin in
-  one file of under 80 lines, its module comment included. It reads the
-  request, refuses an unknown `schema`, writes the model back as one file, and
-  writes the response.
+- [`crates/ridlc-gen-model/src/main.rs`][gen-model] is a complete plugin in one
+  file of under 80 lines, its module comment included. It reads the request,
+  refuses an unknown `schema`, writes the model back as one file, and writes the
+  response.
 - [`crates/ridlc/tests/layout.rs`][layout] holds a test plugin that reads the
   deployment section. It computes the byte layout of each region of the
   `examples/cabin` deployment and the maximum size of each message that crosses

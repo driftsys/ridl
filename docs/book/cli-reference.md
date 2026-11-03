@@ -2,8 +2,8 @@
 
 Two command-line binaries ship from this repository: **`ridl`**, the porcelain
 facade, and **`ridlc`**, the plumbing compiler underneath it. `ridl` hosts the
-language server as the [`ridl lsp`](#ridl-lsp) subcommand and the Model
-Context Protocol server as [`ridl mcp`](#ridl-mcp), both over stdio (see
+language server as the [`ridl lsp`](#ridl-lsp) subcommand and the Model Context
+Protocol server as [`ridl mcp`](#ridl-mcp), both over stdio (see
 [What is built](introduction.md#what-is-built)). The VS Code extension spawns
 `ridl lsp`. Build both with:
 
@@ -17,20 +17,19 @@ This page assumes `target/release/ridl` and `target/release/ridlc` are on your
 
 Only typl and ridl have a toolchain — see
 [What is built](introduction.md#what-is-built). Every command and transcript
-below runs against a workspace built from those two layers; rxdl, rmdl, and
-rsdl accept no command here.
+below runs against a workspace built from those two layers; rxdl, rmdl, and rsdl
+accept no command here.
 
-Every synopsis and transcript on this page is the literal output of the
-binaries built from this repository, run against constructed fixtures. The
-fixtures themselves are not reproduced here — this page documents command
-behavior, not how to write a `.ridl` file, and a fixture built for one
-transcript is often a one-line edit of the fixture built for the transcript
-before it. [Getting started](getting-started.md) is the tutorial that shows
-complete, worked files; treat a transcript below as a faithful record of what
-the tool printed against *some* input shaped as described, not as a listing you
-can paste in whole. Every exit code stated below was observed by running the
-command and reading its exit status, not read out of a help string or a
-specification.
+Every synopsis and transcript on this page is the literal output of the binaries
+built from this repository, run against constructed fixtures. The fixtures
+themselves are not reproduced here — this page documents command behavior, not
+how to write a `.ridl` file, and a fixture built for one transcript is often a
+one-line edit of the fixture built for the transcript before it.
+[Getting started](getting-started.md) is the tutorial that shows complete,
+worked files; treat a transcript below as a faithful record of what the tool
+printed against _some_ input shaped as described, not as a listing you can paste
+in whole. Every exit code stated below was observed by running the command and
+reading its exit status, not read out of a help string or a specification.
 
 `ridl --version` and its short form `ridl -V` (and `ridlc --version`) print the
 binary's own name and version and exit 0:
@@ -43,11 +42,11 @@ ridl --version
 ridl X.Y.Z
 ```
 
-`X.Y.Z` stands for the build's version: the crate version for a local build,
-or the release tag when the release workflow sets `RIDL_BUILD_VERSION`. The
-version does not name a commit, so it cannot answer "which commit is this" —
-recorded as a known gap in [ADR-0010][adr-0010] decision 8, which also records
-a deferred fix.
+`X.Y.Z` stands for the build's version: the crate version for a local build, or
+the release tag when the release workflow sets `RIDL_BUILD_VERSION`. The version
+does not name a commit, so it cannot answer "which commit is this" — recorded as
+a known gap in [ADR-0010][adr-0010] decision 8, which also records a deferred
+fix.
 
 ## `ridl`
 
@@ -81,18 +80,18 @@ Options:
   -V, --version  Print version
 ```
 
-Running `ridl` with no subcommand at all prints this same text to **stderr**
-and exits 2; `ridl --help` prints it to **stdout** and exits 0 — the two
-routes carry identical text but are not interchangeable in a script that
-checks the exit code or reads the right stream.
+Running `ridl` with no subcommand at all prints this same text to **stderr** and
+exits 2; `ridl --help` prints it to **stdout** and exits 0 — the two routes
+carry identical text but are not interchangeable in a script that checks the
+exit code or reads the right stream.
 
 `ridl lsp` and `ridl mcp` are the two stdio servers this binary hosts — the
-language server an editor drives, and the Model Context Protocol server an
-agent drives. `ridl mcp` takes no argument or flag; `ridl lsp` takes only the
-two flags editor clients pass, which change nothing. Each is documented in its
-own section below, [`ridl lsp`](#ridl-lsp) and [`ridl mcp`](#ridl-mcp), and
-each exits 0 when the client shuts it down and 2 when the transport ends
-before the handshake or otherwise fails.
+language server an editor drives, and the Model Context Protocol server an agent
+drives. `ridl mcp` takes no argument or flag; `ridl lsp` takes only the two
+flags editor clients pass, which change nothing. Each is documented in its own
+section below, [`ridl lsp`](#ridl-lsp) and [`ridl mcp`](#ridl-mcp), and each
+exits 0 when the client shuts it down and 2 when the transport ends before the
+handshake or otherwise fails.
 
 ### `ridl check`
 
@@ -116,25 +115,25 @@ Options:
 ```
 
 `PATH` is a `.typl`, `.ridl` or `.rsdl` file, a package directory, or a
-workspace root, and defaults to the current directory. A `.rxdl` or `.rmdl`
-file is refused as `PATH` when no `ridl.toml` is at or above it, as the next
+workspace root, and defaults to the current directory. A `.rxdl` or `.rmdl` file
+is refused as `PATH` when no `ridl.toml` is at or above it, as the next
 paragraph says. A `PATH` inside a workspace member loads the whole workspace
-whose `members` lists the member (ADR-0002 §4): the root's
-`[lints]`, the `[defaults]` keys and `[imports]` apply, imports of sibling members
-resolve, and the report holds only the diagnostics of files under the member.
-`ridl build` on a member also writes the whole workspace. An error in another
-member makes it exit 1 with one error that says so; it then writes nothing, or,
-for an RSDL-7xx error, leaves that deployment out of the system. The workspace
-root's `.ridl/baseline/` and `ridl.lock` serve a member entry too. `--frozen` is the same flag
-[`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
-commands share one implementation and render byte-identical diagnostics on the
-same input. It now carries this description word for word under `ridl` too —
-before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
-where the description belongs.
+whose `members` lists the member (ADR-0002 §4): the root's `[lints]`, the
+`[defaults]` keys and `[imports]` apply, imports of sibling members resolve, and
+the report holds only the diagnostics of files under the member. `ridl build` on
+a member also writes the whole workspace. An error in another member makes it
+exit 1 with one error that says so; it then writes nothing, or, for an RSDL-7xx
+error, leaves that deployment out of the system. The workspace root's
+`.ridl/baseline/` and `ridl.lock` serve a member entry too. `--frozen` is the
+same flag [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged;
+the two commands share one implementation and render byte-identical diagnostics
+on the same input. It now carries this description word for word under `ridl`
+too — before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank
+line where the description belongs.
 
 The loader compiles the `.typl`, `.ridl` and `.rsdl` files of a package
-directory. A `.rxdl` or `.rmdl` file there is not compiled, because the rxdl
-and rmdl profiles have no implementation (driftsys/ridl#68): each one draws the
+directory. A `.rxdl` or `.rmdl` file there is not compiled, because the rxdl and
+rmdl profiles have no implementation (driftsys/ridl#68): each one draws the
 warning RIDL-417 (`unsupported-source-file`) on the file itself, and its
 declarations are not in the build. A bare `.rxdl` or `.rmdl` file given as the
 entry with no `ridl.toml` at or above it is refused: every command that loads
@@ -142,25 +141,24 @@ source through the loader, such as `ridl check`, `ridl build` and `ridl diff`,
 exits 2 with an error that names the extension as unsupported, and compiles
 nothing.
 
-**It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
-declares `[imports]`.** `ridl check` loads, resolves, and checks the
-workspace. When the checked-out manifest (or a package in it) has an
-`[imports]` table, it also materializes each remote unit. It reads the unit from
-`vendor/<key>/` at the manifest root when that directory exists and `ridl.lock`
-pins a `tree` for the unit's URL (see [`ridl vendor`](#ridl-vendor)); otherwise
-from `~/.ridl/cache` (ADR-0002 §7, indexed by URL and by the fetched artifact's
-SHA-256) or, on a cache miss outside `--frozen`, fetches it. Where `ridl.lock`
-pins no `tree` for the unit, the cache or the fetch pins it first, and a
-vendored directory, if present, is then verified against that pin and read in
-place of the cache entry. It verifies the
-`tree` hash of the tree it read, which for a vendored tree that no longer
-matches is `MANI-107`, with a message that names `ridl vendor`; loads the unit
-as a read-only dependency; and on a clean run regenerates `ridl.lock` at the
-workspace root with both hashes. A remote unit's errors fail the check, and its
-warnings are not shown. Every other fixture on this page has no `[imports]`, so
-none of them reach either write. The transcript below is an illustration, not a
-recorded run: the URL names a local HTTP stub, and the two hashes are
-placeholders that stand for the values a run computes.
+**It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest declares
+`[imports]`.** `ridl check` loads, resolves, and checks the workspace. When the
+checked-out manifest (or a package in it) has an `[imports]` table, it also
+materializes each remote unit. It reads the unit from `vendor/<key>/` at the
+manifest root when that directory exists and `ridl.lock` pins a `tree` for the
+unit's URL (see [`ridl vendor`](#ridl-vendor)); otherwise from `~/.ridl/cache`
+(ADR-0002 §7, indexed by URL and by the fetched artifact's SHA-256) or, on a
+cache miss outside `--frozen`, fetches it. Where `ridl.lock` pins no `tree` for
+the unit, the cache or the fetch pins it first, and a vendored directory, if
+present, is then verified against that pin and read in place of the cache entry.
+It verifies the `tree` hash of the tree it read, which for a vendored tree that
+no longer matches is `MANI-107`, with a message that names `ridl vendor`; loads
+the unit as a read-only dependency; and on a clean run regenerates `ridl.lock`
+at the workspace root with both hashes. A remote unit's errors fail the check,
+and its warnings are not shown. Every other fixture on this page has no
+`[imports]`, so none of them reach either write. The transcript below is an
+illustration, not a recorded run: the URL names a local HTTP stub, and the two
+hashes are placeholders that stand for the values a run computes.
 
 ```sh
 ridl check && cat ridl.lock
@@ -192,12 +190,12 @@ existed has no `tree`; under `--frozen` that is `MANI-108`, and a run without
 `vendor/<key>/` and then the cache the way `--frozen` does: they never fetch and
 never write `ridl.lock`. In a fresh clone, run `ridl check` once first, or run
 `ridl vendor`; otherwise these commands report `MANI-103` (no `ridl.lock` entry)
-or `MANI-104` (the pin is neither in `vendor/` nor in the cache).
-A `ridl.lock` written before the `tree` hash existed gives them `MANI-108`
-too, and the same `ridl check` adds the hash.
+or `MANI-104` (the pin is neither in `vendor/` nor in the cache). A `ridl.lock`
+written before the `tree` hash existed gives them `MANI-108` too, and the same
+`ridl check` adds the hash.
 
-**Exit codes.** 0 when nothing is wrong — a clean run prints nothing at all,
-to either stream. 1 when a diagnostic is an error, for example a range whose
+**Exit codes.** 0 when nothing is wrong — a clean run prints nothing at all, to
+either stream. 1 when a diagnostic is an error, for example a range whose
 minimum exceeds its maximum:
 
 ```sh
@@ -210,7 +208,6 @@ error[TYPL-104]: range minimum 250 is greater than maximum 0
   │
 3 │ type Speed : km/h [250.0..0.0 step 0.5]
   │                   ^^^^^^^^^^^^^^^^^^^^^
-
 ```
 
 The same run with `--format json` prints the JSON diagnostic contract, also
@@ -245,37 +242,37 @@ ridl check --format json
 
 A diagnostic whose code is a [lint](lints.md) carries one more field, `lint`,
 which holds the lint name, for example `"lint": "unbounded-float"` next to
-`"code": "TYPL-102"`. The field is absent for a code that is not a lint and
-for a diagnostic with no code. `severity` is always the effective severity,
-after the levels in the `[lints]` table of `ridl.toml` are applied, so a lint
-set to `deny` reports `"severity": "error"` and a lint set to `allow` is not in
-the array. The text report names the lint in a note after the snippet
+`"code": "TYPL-102"`. The field is absent for a code that is not a lint and for
+a diagnostic with no code. `severity` is always the effective severity, after
+the levels in the `[lints]` table of `ridl.toml` are applied, so a lint set to
+`deny` reports `"severity": "error"` and a lint set to `allow` is not in the
+array. The text report names the lint in a note after the snippet
 (`= lint: ...`), as the examples below show.
 
-`--format sarif` writes one [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+`--format sarif` writes one
+[SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
 log to stdout, for code-scanning viewers such as GitHub code scanning. The log
 holds one run. Its `tool.driver.rules` lists every catalogue code, errors
 included, with the lint name as the rule `name` when the code is a lint and the
 default level as `defaultConfiguration.level`. Each result has the code as its
 `ruleId`, the effective level (`error`, `warning`, or `note` for an info), the
-message, and one location; each label becomes a related location. Columns
-count Unicode code points (`columnKind` is `unicodeCodePoints`). The log
-carries no fix-its, which the JSON output carries, and no `helpUri`. A
-diagnostic with no source file, such as a lockfile or remote-fetch diagnostic
-(MANI-1xx), has no location. An uncoded diagnostic has no `ruleId` and no
-`ruleIndex`. An artifact URI is relative to the current working directory,
-with `/` separators and every segment percent-encoded; it carries `uriBaseId`
-`%SRCROOT%`, which the run's `originalUriBaseIds` resolves to the working
-directory as a `file://` URI. A file outside the working directory is an
-absolute `file://` URI with no `uriBaseId`. The comparison is lexical, not
-through the filesystem: a relative path is joined onto the working directory,
-and an absolute path is compared with the working directory as the operating
-system spells it, so an absolute path that reaches the working directory
-through a symbolic link (`/tmp` on macOS, for example) counts as outside it.
-Run `ridl check --format sarif` from the repository root, with the path to
-check given relative to it, so that every URI is relative to the root, which
-is what a code-scanning upload expects. The exit code is the same as for the
-other formats.
+message, and one location; each label becomes a related location. Columns count
+Unicode code points (`columnKind` is `unicodeCodePoints`). The log carries no
+fix-its, which the JSON output carries, and no `helpUri`. A diagnostic with no
+source file, such as a lockfile or remote-fetch diagnostic (MANI-1xx), has no
+location. An uncoded diagnostic has no `ruleId` and no `ruleIndex`. An artifact
+URI is relative to the current working directory, with `/` separators and every
+segment percent-encoded; it carries `uriBaseId` `%SRCROOT%`, which the run's
+`originalUriBaseIds` resolves to the working directory as a `file://` URI. A
+file outside the working directory is an absolute `file://` URI with no
+`uriBaseId`. The comparison is lexical, not through the filesystem: a relative
+path is joined onto the working directory, and an absolute path is compared with
+the working directory as the operating system spells it, so an absolute path
+that reaches the working directory through a symbolic link (`/tmp` on macOS, for
+example) counts as outside it. Run `ridl check --format sarif` from the
+repository root, with the path to check given relative to it, so that every URI
+is relative to the root, which is what a code-scanning upload expects. The exit
+code is the same as for the other formats.
 
 2 when the workspace itself cannot be found:
 
@@ -287,9 +284,9 @@ ridl check
 error: no `ridl.toml` found at or above `.`
 ```
 
-An explicit `--baseline` naming a path that does not exist is the same exit
-2, for the same reason — asking for a baseline that is not there is a mistake
-worth reporting, while a missing *default* baseline is silently skipped:
+An explicit `--baseline` naming a path that does not exist is the same exit 2,
+for the same reason — asking for a baseline that is not there is a mistake worth
+reporting, while a missing _default_ baseline is silently skipped:
 
 ```sh
 ridl check --baseline ./nope
@@ -299,58 +296,56 @@ ridl check --baseline ./nope
 error: the baseline `./nope` does not exist
 ```
 
-A baseline directory that holds IR artifacts but no `.ir.json` snapshot —
-named with `--baseline` or auto-discovered at `.ridl/baseline/` — is also
-exit 2, with a message naming an artifact it found: a baseline stays
-`.ir.json` ([ADR-0014][adr-0014] decision 5), so such a directory is a
-baseline in a refused encoding, not the silently skipped "no baseline
-published yet" state. An *empty* directory is still that silent state when
-auto-discovered; named explicitly with `--baseline`, it is a different
-refusal (below). A snapshot-named entry inside the directory that cannot be
-stat'ed — a symlink to a file that is gone — is exit 2 under either, naming
-the entry, because skipping it would read the directory as one snapshot
-short.
+A baseline directory that holds IR artifacts but no `.ir.json` snapshot — named
+with `--baseline` or auto-discovered at `.ridl/baseline/` — is also exit 2, with
+a message naming an artifact it found: a baseline stays `.ir.json`
+([ADR-0014][adr-0014] decision 5), so such a directory is a baseline in a
+refused encoding, not the silently skipped "no baseline published yet" state. An
+_empty_ directory is still that silent state when auto-discovered; named
+explicitly with `--baseline`, it is a different refusal (below). A
+snapshot-named entry inside the directory that cannot be stat'ed — a symlink to
+a file that is gone — is exit 2 under either, naming the entry, because skipping
+it would read the directory as one snapshot short.
 
-So is a directory whose `.ir.json` snapshots sit one level *below* it rather
+So is a directory whose `.ir.json` snapshots sit one level _below_ it rather
 than inside it — `--baseline .ridl` where `.ridl/baseline` was meant. The
 message names the subdirectory it found and gives the path to pass instead.
-Snapshots are read from one directory and never from the directories below
-it, so a directory of this shape is a path aimed one level too high, not a
-layout to descend into.
+Snapshots are read from one directory and never from the directories below it,
+so a directory of this shape is a path aimed one level too high, not a layout to
+descend into.
 
-An explicit `--baseline` that yields no snapshot at all — an empty directory,
-or one whose snapshots sit two or more levels down rather than one — is the
-same exit 2: the message names the directory, says to point `--baseline` at
-the directory that holds the snapshots (`ridl baseline` publishes them to
+An explicit `--baseline` that yields no snapshot at all — an empty directory, or
+one whose snapshots sit two or more levels down rather than one — is the same
+exit 2: the message names the directory, says to point `--baseline` at the
+directory that holds the snapshots (`ridl baseline` publishes them to
 `.ridl/baseline/` at the workspace root), and only then offers
 `ridl baseline --out <directory>` for publishing a first baseline into that
-directory. The offer is left out when the directory is a source tree — it
-holds a `ridl.toml`, or a `.typl`, `.ridl` or `.rsdl` file, directly inside
-it — since publishing a baseline there would write snapshots next to the
-sources. Auto-discovery asserts nothing about a baseline being present, so a
-`.ridl/baseline/` directory found this way, empty or absent, keeps the
-silent skip the two paragraphs above do not touch.
+directory. The offer is left out when the directory is a source tree — it holds
+a `ridl.toml`, or a `.typl`, `.ridl` or `.rsdl` file, directly inside it — since
+publishing a baseline there would write snapshots next to the sources.
+Auto-discovery asserts nothing about a baseline being present, so a
+`.ridl/baseline/` directory found this way, empty or absent, keeps the silent
+skip the two paragraphs above do not touch.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
-root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
-the workspace against it and warns (RIDL-407) on every interaction whose
-declaration order moved, and every struct field or union arm change `ridl
-diff` gates on that concerns an ordinal. At its default level the warning does
-not change the exit code; RIDL-407 is the lint `ordinal-changed`, so
-`ordinal-changed = "deny"` in [`[lints]`](lints.md) reports it as an error,
-which makes the run exit 1, and `ordinal-changed = "allow"` removes it. The
-warning for a field or arm
-follows the verdict the gate reads, so the two agree: a member inserted, one
-removed, one moved in an edit that added or removed no member, and one
-appended beside such a change each draw one warning, and an append alone
-draws none — not even one the gate reports breaking because the field's type
-excludes 0 (driftsys/ridl#598) — except an arm added to a result union, whose arms are its
-transport identity (ADR-0008 decision 4). A removal draws one whether or not
-a `reserved` tombstone keeps the slot, because the diff does not yet read a
+root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares the
+workspace against it and warns (RIDL-407) on every interaction whose declaration
+order moved, and every struct field or union arm change `ridl
+diff` gates on
+that concerns an ordinal. At its default level the warning does not change the
+exit code; RIDL-407 is the lint `ordinal-changed`, so `ordinal-changed = "deny"`
+in [`[lints]`](lints.md) reports it as an error, which makes the run exit 1, and
+`ordinal-changed = "allow"` removes it. The warning for a field or arm follows
+the verdict the gate reads, so the two agree: a member inserted, one removed,
+one moved in an edit that added or removed no member, and one appended beside
+such a change each draw one warning, and an append alone draws none — not even
+one the gate reports breaking because the field's type excludes 0
+(driftsys/ridl#598) — except an arm added to a result union, whose arms are its
+transport identity (ADR-0008 decision 4). A removal draws one whether or not a
+`reserved` tombstone keeps the slot, because the diff does not yet read a
 composite body's `reserved` entries. The diff reports no reorder beside an
-addition or a removal, so the warning for the added or removed member names
-the siblings whose ordinal changed. Reordering two events in a published
-interface:
+addition or a removal, so the warning for the added or removed member names the
+siblings whose ordinal changed. Reordering two events in a published interface:
 
 ```sh
 ridl check
@@ -372,27 +367,26 @@ warning[RIDL-407]: `doorClosed` has moved in `VehicleStatus` since the published
   │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   │
   = lint: `ordinal-changed` (set its level in `[lints]` in ridl.toml)
-
 ```
 
 That run exits 0: two RIDL-407 warnings and an otherwise clean compile stay
 clean. The desk check runs only after a compile with no error diagnostic other
-than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
-leaves nothing out of the IR the desk check compares — and other than a lint
-raised to `deny`. A workspace with any other error draws no RIDL-407 warning in
-addition to that error: it exits 1, exactly as it would with no baseline
-present. Entered at a workspace member, the run reports only the diagnostics of
-files under the member (ADR-0026 decision 10), and the desk check compares the
-whole workspace: an error in another member is not reported, the desk check
-does not run, and the run exits 0, exactly as it would with no baseline
-present. Run `ridl check` at the workspace root to see that error and, once it
-is fixed, the member's RIDL-407 warnings. A workspace whose only errors
-are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
-declaration without an entry has the published shape of the orphan entry's
-interface, the desk check adds a label to that RIDL-409 naming the
-[`ridl lock --rename`](#ridl-lock) command to run. A lint raised to `deny` in
-`[lints]` is an error for the exit code but does not stop the desk check: the
-run reports the denied lint and the RIDL-407 warnings together, and exits 1.
+than RIDL-409 — a live `interfaces.lock` entry with no declaration, which leaves
+nothing out of the IR the desk check compares — and other than a lint raised to
+`deny`. A workspace with any other error draws no RIDL-407 warning in addition
+to that error: it exits 1, exactly as it would with no baseline present. Entered
+at a workspace member, the run reports only the diagnostics of files under the
+member (ADR-0026 decision 10), and the desk check compares the whole workspace:
+an error in another member is not reported, the desk check does not run, and the
+run exits 0, exactly as it would with no baseline present. Run `ridl check` at
+the workspace root to see that error and, once it is fixed, the member's
+RIDL-407 warnings. A workspace whose only errors are RIDL-409 still exits 1, and
+the desk check runs over it: when exactly one declaration without an entry has
+the published shape of the orphan entry's interface, the desk check adds a label
+to that RIDL-409 naming the [`ridl lock --rename`](#ridl-lock) command to run. A
+lint raised to `deny` in `[lints]` is an error for the exit code but does not
+stop the desk check: the run reports the denied lint and the RIDL-407 warnings
+together, and exits 1.
 
 ### `ridl baseline`
 
@@ -416,20 +410,20 @@ Options:
 ```
 
 **It writes** one `<package-name>.ir.json` file per package in the workspace,
-under `.ridl/baseline/` at the workspace root or under `--out` when given —
-and, exactly like [`ridl check`](#ridl-check), `ridl.lock` at the workspace
-root when the manifest declares `[imports]` (`ridl baseline` builds through
-`ridlc build`, non-frozen, so the same materialization step runs). Publishing
-replaces the managed local snapshots, `*.catalogs` files and `context.json` as
+under `.ridl/baseline/` at the workspace root or under `--out` when given — and,
+exactly like [`ridl check`](#ridl-check), `ridl.lock` at the workspace root when
+the manifest declares `[imports]` (`ridl baseline` builds through `ridlc build`,
+non-frozen, so the same materialization step runs). Publishing replaces the
+managed local snapshots, `*.catalogs` files and `context.json` as
 [described below](#baseline-publication-and-recovery). Unrelated output entries
 are preserved. The target ends up holding exactly the local snapshots the
-workspace declares now. The snapshots stay one
-per source package; `ridl diff` groups them by
-unit when it compares them. The workspace's interface numbers must be recorded first: a
-provisional number is refused (RIDL-411, under the publication gate below), so
-a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
-first publication. A two-member workspace with no `[imports]`, its locks
-written, publishes two snapshots, context evidence and no `ridl.lock`:
+workspace declares now. The snapshots stay one per source package; `ridl diff`
+groups them by unit when it compares them. The workspace's interface numbers
+must be recorded first: a provisional number is refused (RIDL-411, under the
+publication gate below), so a package with interfaces runs plain
+[`ridl lock`](#ridl-lock) before its first publication. A two-member workspace
+with no `[imports]`, its locks written, publishes two snapshots, context
+evidence and no `ridl.lock`:
 
 ```sh
 ridl baseline && find .ridl/baseline -type f | sort
@@ -448,32 +442,31 @@ a first line that starts with `#`, then one catalog hash per line as 64
 lowercase hexadecimal characters, newest first. An empty line and a line that
 starts with `#` are skipped, and a hash is listed once. A line may end with
 CRLF, as a checkout with `core.autocrlf` writes it; a line with any other
-padding, such as a space, is refused. The first hash is the
-catalog hash of the baseline being published, computed as
-[`ridl build --emit catalog`](#ridl-build) computes it. The hashes that follow
-are the ones of the file being replaced, copied as they are and never
-recomputed from a snapshot. They are carried over when `ridl diff`'s
-classifier, scoped to the unit, judges the change compatible or identical. The
-scope includes the unit's local packages and declarations its interfaces reach.
-A break to an unreached declaration normally retains history when the current
-hash equals the old head hash. A proved podbuf break overrides that shortcut,
-even when the hash is unchanged; it restarts only affected units at the current
-canonical hash. Old and new hashes use their respective complete package
-contexts, with the same hash inputs as the emitted descriptor.
+padding, such as a space, is refused. The first hash is the catalog hash of the
+baseline being published, computed as [`ridl build --emit catalog`](#ridl-build)
+computes it. The hashes that follow are the ones of the file being replaced,
+copied as they are and never recomputed from a snapshot. They are carried over
+when `ridl diff`'s classifier, scoped to the unit, judges the change compatible
+or identical. The scope includes the unit's local packages and declarations its
+interfaces reach. A break to an unreached declaration normally retains history
+when the current hash equals the old head hash. A proved podbuf break overrides
+that shortcut, even when the hash is unchanged; it restarts only affected units
+at the current canonical hash. Old and new hashes use their respective complete
+package contexts, with the same hash inputs as the emitted descriptor.
 
-The change is judged for the root manifest's encodings
-([ADR-0031][adr-0031] decision 13), including the step from a baseline
-published before `podbuf` was listed. This checks the latest step, without
-certifying earlier carried hashes. Missing historical remote evidence in an
-affected podbuf unit is uncertainty, not a proved break: normal publication
-returns 2, preserves the prior baseline, and requires explicit recovery. This
-also applies to type-only units, which have no catalog history. Unaffected
-units keep valid chains when another unit has a proved break.
+The change is judged for the root manifest's encodings ([ADR-0031][adr-0031]
+decision 13), including the step from a baseline published before `podbuf` was
+listed. This checks the latest step, without certifying earlier carried hashes.
+Missing historical remote evidence in an affected podbuf unit is uncertainty,
+not a proved break: normal publication returns 2, preserves the prior baseline,
+and requires explicit recovery. This also applies to type-only units, which have
+no catalog history. Unaffected units keep valid chains when another unit has a
+proved break.
 
 A replaced history is carried only when its first hash matches the hash
-recomputed from its own snapshots and context; otherwise it starts again. A
-unit with no published snapshot or no history starts with one new hash. An
-orphan history with no local snapshot is not read or carried. An unreadable or
+recomputed from its own snapshots and context; otherwise it starts again. A unit
+with no published snapshot or no history starts with one new hash. An orphan
+history with no local snapshot is not read or carried. An unreadable or
 malformed history for a published unit, including duplicate hashes, stops normal
 publication with exit 2. Explicit recovery can discard that metadata after
 preserving it.
@@ -484,24 +477,24 @@ preserving it.
 snapshots. It is evidence for resolving references, never a compared consumer
 package. Its complete version-1 shape is:
 
-| Object | Field | Value |
-| --- | --- | --- |
-| Envelope | `version` | integer `1` |
-| Envelope | `local_packages` | object mapping every local canonical package name to its 64-character lowercase hexadecimal SHA-256 fingerprint |
-| Envelope | `remote_units` | array of remote-unit objects |
-| Remote unit | `unit` | canonical owning unit name |
-| Remote unit | `url` | nonempty original import URL |
-| Remote unit | `tree` | verified unpacked-tree SHA-256, 64 lowercase hexadecimal characters |
-| Remote unit | `packages` | nonempty array of complete canonical `ridl.ir.v2` package objects belonging to that unit |
+| Object      | Field            | Value                                                                                                           |
+| ----------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Envelope    | `version`        | integer `1`                                                                                                     |
+| Envelope    | `local_packages` | object mapping every local canonical package name to its 64-character lowercase hexadecimal SHA-256 fingerprint |
+| Envelope    | `remote_units`   | array of remote-unit objects                                                                                    |
+| Remote unit | `unit`           | canonical owning unit name                                                                                      |
+| Remote unit | `url`            | nonempty original import URL                                                                                    |
+| Remote unit | `tree`           | verified unpacked-tree SHA-256, 64 lowercase hexadecimal characters                                             |
+| Remote unit | `packages`       | nonempty array of complete canonical `ridl.ir.v2` package objects belonging to that unit                        |
 
 A local fingerprint is SHA-256 over that package's canonical pretty protobuf
 JSON from the IR writer, independent of the snapshot file's JSON formatting.
-Remote packages are the exact transitive closure reached from all local
-package declarations and interactions, including types not exposed by an
-interface. Complete packages are retained, including their unrelated
-declarations. Unreached packages and `ridl.std` are not stored; the tool supplies
-its standard package. The artifact stores no cache path, system snapshot or
-new IR schema. It can be larger than the local snapshot set.
+Remote packages are the exact transitive closure reached from all local package
+declarations and interactions, including types not exposed by an interface.
+Complete packages are retained, including their unrelated declarations.
+Unreached packages and `ridl.std` are not stored; the tool supplies its standard
+package. The artifact stores no cache path, system snapshot or new IR schema. It
+can be larger than the local snapshot set.
 
 The reader rejects unknown envelope or remote-unit fields, unsupported versions,
 duplicate local names, remote units or remote packages, invalid identities or
@@ -512,8 +505,9 @@ referenced remote package must resolve, and no remote package may sit outside
 the reached closure. These checks validate retained structure and snapshot
 pairing; the reader does not reconstruct a source-tree hash from IR or
 authenticate historical provenance independently. Malformed, unreadable, stale
-or unsupported evidence is an input error, not a legacy fallback. Only absent `context.json` denotes a legacy
-baseline; a dangling artifact symlink is an error.
+or unsupported evidence is an input error, not a legacy fallback. Only absent
+`context.json` denotes a legacy baseline; a dangling artifact symlink is an
+error.
 
 Use a directory input to retain this evidence. A standalone `.ir.json` input
 compares only that local snapshot and reads no sibling context. Both source
@@ -532,44 +526,44 @@ For an existing destination, it reserves an unused sibling
 `.<baseline-name>.transaction` marker recording its path. For each fresh file,
 it first hard-links any old file into the backup (falling back to copying a
 regular file if linking fails), then atomically renames the fresh file over the
-destination. It installs
-non-context files in filename order, then `context.json`, then moves stale
-managed entries to the backup. The marker is removed after those operations
-succeed. Occupied staging and backup names, including files and symlinks, are
-skipped. Unrelated output entries are not moved or backed up.
-Managed directory blockers are refused before replacement. First publication
-to an absent destination uses a sibling-directory rename.
+destination. It installs non-context files in filename order, then
+`context.json`, then moves stale managed entries to the backup. The marker is
+removed after those operations succeed. Occupied staging and backup names,
+including files and symlinks, are skipped. Unrelated output entries are not
+moved or backed up. Managed directory blockers are refused before replacement.
+First publication to an absent destination uses a sibling-directory rename.
 
 At the default destination, these directories and the marker sit directly under
-`.ridl/`, beside `baseline/`: `.baseline.staging`, then
-`.baseline.staging.N` when names are occupied, holds this invocation's fresh
-artifacts; `baseline.previous.N` holds prior managed artifacts; and
-`.baseline.transaction` identifies an unfinished replacement. Normal success
-removes the staging directory; compile, validation or publication-gate refusal
-also attempts to remove it. A publication failure retains staged files for
-recovery, and cleanup failure can leave a stage behind. Earlier stages are not
-reused or removed automatically. Staged system dumps are discarded before
-publication because the baseline holds no system artifact.
+`.ridl/`, beside `baseline/`: `.baseline.staging`, then `.baseline.staging.N`
+when names are occupied, holds this invocation's fresh artifacts;
+`baseline.previous.N` holds prior managed artifacts; and `.baseline.transaction`
+identifies an unfinished replacement. Normal success removes the staging
+directory; compile, validation or publication-gate refusal also attempts to
+remove it. A publication failure retains staged files for recovery, and cleanup
+failure can leave a stage behind. Earlier stages are not reused or removed
+automatically. Staged system dumps are discarded before publication because the
+baseline holds no system artifact.
 
-A proved break in any unit, including a type-only unit, retains the transaction's
-backup. Repair and reset always retain it. Ordinary compatible or identical
-publication removes only its own new backup after commit; earlier backups and
-recovery stages are never cleaned automatically. A cleanup failure warns and
-still exits successfully because publication has committed. Backup cleanup may
-have removed some files before failing; inspect the reported remaining files
-rather than treating that warning as a complete backup guarantee.
+A proved break in any unit, including a type-only unit, retains the
+transaction's backup. Repair and reset always retain it. Ordinary compatible or
+identical publication removes only its own new backup after commit; earlier
+backups and recovery stages are never cleaned automatically. A cleanup failure
+warns and still exits successfully because publication has committed. Backup
+cleanup may have removed some files before failing; inspect the reported
+remaining files rather than treating that warning as a complete backup
+guarantee.
 
-A publication failure attempts reverse rollback and reports its stage and
-backup paths. Successful rollback restores the prior managed inventory and
-bytes. If rollback also fails, the error identifies the pending recovery moves
-and retains recoverable old and new artifacts; restoration is not guaranteed.
-A marker left by an interruption or incomplete rollback makes the next
-`ridl baseline` refuse publication. Restore the prior files from the backup, or
-inspect the baseline and backup before removing the marker. Failure to remove
-the marker after a committed publication warns and also causes that refusal.
-Later runs reserve new stage/backup names and do not remove earlier recovery
-artifacts. There is no crash-atomic or cross-platform atomic replacement
-guarantee, automatic retry, or command that replays a failed journal.
+A publication failure attempts reverse rollback and reports its stage and backup
+paths. Successful rollback restores the prior managed inventory and bytes. If
+rollback also fails, the error identifies the pending recovery moves and retains
+recoverable old and new artifacts; restoration is not guaranteed. A marker left
+by an interruption or incomplete rollback makes the next `ridl baseline` refuse
+publication. Restore the prior files from the backup, or inspect the baseline
+and backup before removing the marker. Failure to remove the marker after a
+committed publication warns and also causes that refusal. Later runs reserve new
+stage/backup names and do not remove earlier recovery artifacts. There is no
+crash-atomic or cross-platform atomic replacement guarantee, automatic retry, or
+command that replays a failed journal.
 
 For a legacy baseline, recover historical evidence only from the original
 consumer checkout and exact historical lockfile, with its pinned trees already
@@ -607,47 +601,46 @@ exclusive; the positional source defaults to `.` and output discovery is the
 same as ordinary publication.
 
 Both modes start each shaped unit with exactly one recomputed current canonical
-hash. Type-only units receive context without a catalog file. Repair reconstructs
-only this head; reset claims no compatibility with earlier peers. Neither
-certifies earlier history. Success is exit 0, compilation or publication
-refusal is 1, and invalid evidence, unavailable inputs or I/O failure is 2.
-Diff and MCP remain read-only and perform neither recovery operation.
+hash. Type-only units receive context without a catalog file. Repair
+reconstructs only this head; reset claims no compatibility with earlier peers.
+Neither certifies earlier history. Success is exit 0, compilation or publication
+refusal is 1, and invalid evidence, unavailable inputs or I/O failure is 2. Diff
+and MCP remain read-only and perform neither recovery operation.
 
 **The publication gate.** Before replacing the published snapshots,
 `ridl baseline` compares the snapshot it is about to publish against the one
 already there, and refuses to replace it when, in an interface body both
-declare, the replacement breaks the tombstone rule of ridl §11 — RIDL-408,
-exit 1, the published snapshots left as they were (the compile has already
-run, so `ridl.lock` is written as on any other run). The refusal covers four
-shapes: an interaction is gone from the source with no `reserved` line at
-all; the source retires it with a `reserved` line, but at an ordinal other
-than the one the interaction held; the baseline already retired the
-interaction with a `reserved` line and the source has dropped that line; or
-the source declares a live interaction under a name the baseline retires.
-The interface level of the gate is the lock's: an interface whose number is
-provisional — a declaration with no entry in the unit's `interfaces.lock`
-— is refused (RIDL-411, exit 1, nothing published), on a first publication as
-on a replacement, until plain `ridl lock` records the number; and a number the
-published baseline holds that the fresh snapshot neither carries nor retires
-is refused too (RIDL-412). That covers a lock line deleted by hand, since a
-live entry with no declaration already fails the build with RIDL-409. It also
-covers a package deleted, without retiring its numbers, from a unit that still
-has other packages, and a whole unit deleted from the workspace. For a package
-the message names the line to restore in the unit's `interfaces.lock`. For a
-whole unit the lock left with it, so the message names the deliberate override
-instead: delete the snapshots of that unit from `.ridl/baseline/`, so that the
-next publication holds no number to lose. A published snapshot written before
-the IR recorded the unit carries no `unit`; the gate compares it in the unit of the fresh package
-of the same name, so the migration to one `interfaces.lock` per unit — delete
-the per-package lock files, run `ridl lock`, run `ridl baseline` — passes
-RIDL-412 when the unit's new numbering reaches every published number. When
-it does not, because a legacy lock held retired entries, remove
-`.ridl/baseline/` and run `ridl baseline` again: a first publication is not
-compared against a published number, and no flag overrides the gate. A whole
-service removed from the source is reported by `ridl diff` as breaking but is
-not refused here (ridl §17.14), and a named-form service's list is a set the
-gate does not read. Deleting `doorClosed` outright, with `doorOpened` and
-`doorLocked` still declared:
+declare, the replacement breaks the tombstone rule of ridl §11 — RIDL-408, exit
+1, the published snapshots left as they were (the compile has already run, so
+`ridl.lock` is written as on any other run). The refusal covers four shapes: an
+interaction is gone from the source with no `reserved` line at all; the source
+retires it with a `reserved` line, but at an ordinal other than the one the
+interaction held; the baseline already retired the interaction with a `reserved`
+line and the source has dropped that line; or the source declares a live
+interaction under a name the baseline retires. The interface level of the gate
+is the lock's: an interface whose number is provisional — a declaration with no
+entry in the unit's `interfaces.lock` — is refused (RIDL-411, exit 1, nothing
+published), on a first publication as on a replacement, until plain `ridl lock`
+records the number; and a number the published baseline holds that the fresh
+snapshot neither carries nor retires is refused too (RIDL-412). That covers a
+lock line deleted by hand, since a live entry with no declaration already fails
+the build with RIDL-409. It also covers a package deleted, without retiring its
+numbers, from a unit that still has other packages, and a whole unit deleted
+from the workspace. For a package the message names the line to restore in the
+unit's `interfaces.lock`. For a whole unit the lock left with it, so the message
+names the deliberate override instead: delete the snapshots of that unit from
+`.ridl/baseline/`, so that the next publication holds no number to lose. A
+published snapshot written before the IR recorded the unit carries no `unit`;
+the gate compares it in the unit of the fresh package of the same name, so the
+migration to one `interfaces.lock` per unit — delete the per-package lock files,
+run `ridl lock`, run `ridl baseline` — passes RIDL-412 when the unit's new
+numbering reaches every published number. When it does not, because a legacy
+lock held retired entries, remove `.ridl/baseline/` and run `ridl baseline`
+again: a first publication is not compared against a published number, and no
+flag overrides the gate. A whole service removed from the source is reported by
+`ridl diff` as breaking but is not refused here (ridl §17.14), and a named-form
+service's list is a set the gate does not read. Deleting `doorClosed` outright,
+with `doorOpened` and `doorLocked` still declared:
 
 ```sh
 ridl baseline
@@ -659,7 +652,6 @@ error[RIDL-408]: `doorClosed` is gone from the source but the baseline being rep
   │
 3 │ interface VehicleStatus {
   │           ^^^^^^^^^^^^^
-
 ```
 
 A first publication — the output directory absent, or present and holding no
@@ -668,14 +660,14 @@ RIDL-408 and RIDL-412 never refuse it. This is the same empty-directory shape
 [`ridl check --baseline` refuses](#ridl-check) when it is named explicitly:
 `ridl check --baseline` refuses it because the user named the directory as a
 baseline to compare against, while `ridl baseline --out` treats it as a first
-publication because it is the directory being written. RIDL-411 still refuses
-a first publication that holds a provisional interface number, because
-RIDL-411 reads the fresh snapshot alone.
+publication because it is the directory being written. RIDL-411 still refuses a
+first publication that holds a provisional interface number, because RIDL-411
+reads the fresh snapshot alone.
 
 **Exit codes.** 0 on a clean publish. 1 when a diagnostic is an error, or when
-the publication gate above refuses the replacement — in both cases the
-existing baseline is left exactly as it was, because a re-publish must never
-destroy a good baseline with a broken one:
+the publication gate above refuses the replacement — in both cases the existing
+baseline is left exactly as it was, because a re-publish must never destroy a
+good baseline with a broken one:
 
 ```sh
 ridl baseline
@@ -687,14 +679,12 @@ error[TYPL-011]: unknown type name `Nope`
   │
 4 │   event doorClosed : Nope @[100ms..1s]
   │                      ^^^^
-
 ```
 
-2 when the workspace itself cannot be found, the same as `ridl check`, when
-the output directory cannot be read or written, when a published `.ir.json`
-snapshot fails to parse, when two published snapshots declare one package, or
-when an entry of the output directory named like a snapshot cannot be
-stat'ed:
+2 when the workspace itself cannot be found, the same as `ridl check`, when the
+output directory cannot be read or written, when a published `.ir.json` snapshot
+fails to parse, when two published snapshots declare one package, or when an
+entry of the output directory named like a snapshot cannot be stat'ed:
 
 ```sh
 ridl baseline /nonexistent/ridl/workspace
@@ -705,12 +695,12 @@ error: `/nonexistent/ridl/workspace` does not exist
 ```
 
 A published snapshot that cannot be parsed is left untouched rather than
-silently overwritten: replacing it would destroy whatever ordinal record it
-held without any report. `ridl` cannot tell a damaged file from a snapshot
-that a toolchain with a different IR schema wrote — the reader rejects an
-unknown field ([ADR-0014][adr-0014] decision 14) and a snapshot carries no
-schema marker — so the message names a remedy for each cause, and neither
-remedy discards the record unread:
+silently overwritten: replacing it would destroy whatever ordinal record it held
+without any report. `ridl` cannot tell a damaged file from a snapshot that a
+toolchain with a different IR schema wrote — the reader rejects an unknown field
+([ADR-0014][adr-0014] decision 14) and a snapshot carries no schema marker — so
+the message names a remedy for each cause, and neither remedy discards the
+record unread:
 
 ```sh
 ridl baseline
@@ -727,9 +717,9 @@ remedy protects.
 
 Two published snapshots that declare one package are two records of the same
 ordinals, and the gate has no rule for choosing between them, so it refuses
-rather than compare against either. Both files are left as they are; the
-message names the package and both files. Here `zz-copy.ir.json` is a copy of
-the published snapshot left beside it:
+rather than compare against either. Both files are left as they are; the message
+names the package and both files. Here `zz-copy.ir.json` is a copy of the
+published snapshot left beside it:
 
 ```sh
 ridl baseline
@@ -739,16 +729,15 @@ ridl baseline
 error: two published snapshots declare the package `veh.cluster`: `./.ridl/baseline/veh.cluster.ir.json` and `./.ridl/baseline/zz-copy.ir.json`; both files are left as they are, because the gate cannot tell which one is the published record. Remove the copy that is not the published record (restore the directory from version control if unsure), then run `ridl baseline` again
 ```
 
-This refusal is `ridl baseline`'s alone: `ridl check --baseline` and
-`ridl diff` read such a directory as a snapshot set, matching packages by
-name.
+This refusal is `ridl baseline`'s alone: `ridl check --baseline` and `ridl diff`
+read such a directory as a snapshot set, matching packages by name.
 
-An entry of the output directory named like a snapshot whose metadata cannot
-be read — a symlink to a file that is gone — is also exit 2, naming the entry.
+An entry of the output directory named like a snapshot whose metadata cannot be
+read — a symlink to a file that is gone — is also exit 2, naming the entry.
 Skipping it would read the directory as one snapshot short, which is a first
-publication to the gate, and the publication would then replace the entry
-with a snapshot that had dropped the ordinal record. The entry is left as it
-is. `ridl check` reports the same entry the same way when it finds it under
+publication to the gate, and the publication would then replace the entry with a
+snapshot that had dropped the ordinal record. The entry is left as it is.
+`ridl check` reports the same entry the same way when it finds it under
 `.ridl/baseline/` by auto-discovery, and so does `ridl diff` over a directory
 side:
 
@@ -820,29 +809,29 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 [ADR-0010][adr-0010].
 
 `--deployment NAME` picks the deployment of the workspace's system that every
-codegen request carries. Without it, the request carries the deployment when
-the system declares exactly one, and none when it declares several or the
-workspace has no system. A single declared deployment that an `RSDL-7xx` error
-removed from the system is not carried either: the build reports that error and
-exits 1. A `NAME` that the system does not declare exits 2 and
-names the deployments it does declare, unless the build already has an error of
-its own: that error takes precedence, and the build reports it and exits 1.
-When no name can be right, the message says which reason it is — the workspace
-declares no system, or the system declares no deployment. A deployment that an
-`RSDL-7xx` error removed from the system is not unknown either: the build
-reports that error and exits 1.
+codegen request carries. Without it, the request carries the deployment when the
+system declares exactly one, and none when it declares several or the workspace
+has no system. A single declared deployment that an `RSDL-7xx` error removed
+from the system is not carried either: the build reports that error and exits 1.
+A `NAME` that the system does not declare exits 2 and names the deployments it
+does declare, unless the build already has an error of its own: that error takes
+precedence, and the build reports it and exits 1. When no name can be right, the
+message says which reason it is — the workspace declares no system, or the
+system declares no deployment. A deployment that an `RSDL-7xx` error removed
+from the system is not unknown either: the build reports that error and exits 1.
 
 **The deployment descriptor.** `--emit deployment` writes one file per
 deployment of the lowered system, named
-`<deployment package>.<DeploymentName>.deployment.binfb`, whatever `--deployment`
-selects. Each file holds the deployment's instances, links, routes and machines,
-and embeds the catalog descriptor of every region of the system byte for byte,
-including the catalog of a remote unit, for which the build writes no
-`<unit>.catalog.binfb` file. An embedded descriptor is the same bytes the build
-writes for `--emit catalog`, so the two emits state one fact. A deployment that
-an `RSDL-7xx` error removed from the system gets no file, the build exits 1 for
-that error, and the other deployments are written. A single-file build, and a
-workspace with no `system`, write no deployment descriptor. [`ridl
+`<deployment package>.<DeploymentName>.deployment.binfb`, whatever
+`--deployment` selects. Each file holds the deployment's instances, links,
+routes and machines, and embeds the catalog descriptor of every region of the
+system byte for byte, including the catalog of a remote unit, for which the
+build writes no `<unit>.catalog.binfb` file. An embedded descriptor is the same
+bytes the build writes for `--emit catalog`, so the two emits state one fact. A
+deployment that an `RSDL-7xx` error removed from the system gets no file, the
+build exits 1 for that error, and the other deployments are written. A
+single-file build, and a workspace with no `system`, write no deployment
+descriptor. [`ridl
 describe`](#ridl-describe) prints the file.
 
 **The compatible catalogs.** When the build writes a catalog descriptor or
@@ -854,56 +843,54 @@ from the unit's `<unit>.catalogs` file (see [`ridl baseline`](#ridl-baseline)),
 in the file's order, newest first, and it never holds the current catalog's own
 hash. It is empty when the workspace has no baseline directory or the directory
 holds no `.ir.json` snapshot, when the baseline holds no package of the unit,
-when the unit has no `<unit>.catalogs` file (or the baseline has none at all), and when `ridl diff`'s classifier judges the unit breaking and the current hash
+when the unit has no `<unit>.catalogs` file (or the baseline has none at all),
+and when `ridl diff`'s classifier judges the unit breaking and the current hash
 is not the file's first hash. A proved podbuf break overrides unchanged-hash
-carry. Missing historical remote evidence warns and omits compatibility only
-for affected units; known-compatible units retain their valid lists. Both sides
-use their own complete context. The current canonical hash and the recomputed
+carry. Missing historical remote evidence warns and omits compatibility only for
+affected units; known-compatible units retain their valid lists. Both sides use
+their own complete context. The current canonical hash and the recomputed
 baseline hash use the same scope as the emitted descriptor.
 
 The change is judged for the root manifest's encodings, as
 [`ridl baseline`](#ridl-baseline) judges it. This checks only the latest step;
 it does not certify older hashes. A history is usable only when its head equals
-the hash recomputed from its own snapshots and evidence. The build never
-changes that file. An IR-only dump reads no baseline. An unreadable or malformed
+the hash recomputed from its own snapshots and evidence. The build never changes
+that file. An IR-only dump reads no baseline. An unreadable or malformed
 baseline or history that a catalog/code build loads is exit 2; a baseline with
 no catalog history is not loaded for this list. A compile with an error gets no
 list. Remote packages resolve consumer contracts without becoming owned local
 contracts or a general dependency compatibility certificate.
 
-**`rust` is a language backend**, and it writes the whole generated surface of
-a package in one file: the domain types (a struct, an enum, an enum set, a
-union and a named scalar, each with its typl constraints enforced at
-construction) always, and, when `[backend.rust] encodings` in the manifest names
-`flatbuffers` or `proto3`, the codec of each encoding named — `encode`,
-`verify`, `decode` and a `MAX_SIZE` bound — the interaction descriptors, with
-one size table per encoding, and the interaction face. With no `encodings` list
-the file holds the types only. Each
-interface gets the parts its own interactions need: a
-`Client` for the consumer side when it carries any interaction at all; a
-`Publisher` for the producer side when it carries a signal or an event; and a
-`Provider` trait the application implements plus a `serve` function whose
-future settles the claims waiting on a port, when it carries a command or a
-query; and, when it carries an event, a command or a query, a `blocking`
-module under the crate's `std` feature, on by default, holding the same
-`Client`, and the same `serve` when there is one, as blocking calls with a
-timeout, each waiting call `ridl_rt::task::block_on` over the async form. So a
-signal-only interface gets
-a `Client` and a `Publisher` and nothing to settle with and nothing to block
-on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
-`blocking` module and no `Publisher`, and an interface carrying only `fixed`
-declarations gets no face module at all, and neither does an `internal`
-interface ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md)
-gives the rule). Beside the per-package files it
-writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
-encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
-When the workspace declares a `system`, it also writes `__ridl_instances.rs`,
-which the crate root declares as the `instances` module: one constant for the
-number of each instance, from `instances.lock`. A package whose first segment
-is `instances` then makes the build fail with exit 1, because the module name
-is taken.
-[Using the generated Rust code](generated-code.md) shows how a program uses
-the crate, and lists its Cargo features.
+**`rust` is a language backend**, and it writes the whole generated surface of a
+package in one file: the domain types (a struct, an enum, an enum set, a union
+and a named scalar, each with its typl constraints enforced at construction)
+always, and, when `[backend.rust] encodings` in the manifest names `flatbuffers`
+or `proto3`, the codec of each encoding named — `encode`, `verify`, `decode` and
+a `MAX_SIZE` bound — the interaction descriptors, with one size table per
+encoding, and the interaction face. With no `encodings` list the file holds the
+types only. Each interface gets the parts its own interactions need: a `Client`
+for the consumer side when it carries any interaction at all; a `Publisher` for
+the producer side when it carries a signal or an event; and a `Provider` trait
+the application implements plus a `serve` function whose future settles the
+claims waiting on a port, when it carries a command or a query; and, when it
+carries an event, a command or a query, a `blocking` module under the crate's
+`std` feature, on by default, holding the same `Client`, and the same `serve`
+when there is one, as blocking calls with a timeout, each waiting call
+`ridl_rt::task::block_on` over the async form. So a signal-only interface gets a
+`Client` and a `Publisher` and nothing to settle with and nothing to block on, a
+command-only interface gets a `Client`, a `Provider`, a `serve` and a `blocking`
+module and no `Publisher`, and an interface carrying only `fixed` declarations
+gets no face module at all, and neither does an `internal` interface
+([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md)
+gives the rule). Beside the per-package files it writes a `lib.rs` crate root
+and a `Cargo.toml` naming `ridl-rt` with the encoding's feature, and with
+`ridl-rt/std` behind the crate's own `std`. When the workspace declares a
+`system`, it also writes `__ridl_instances.rs`, which the crate root declares as
+the `instances` module: one constant for the number of each instance, from
+`instances.lock`. A package whose first segment is `instances` then makes the
+build fail with exit 1, because the module name is taken.
+[Using the generated Rust code](generated-code.md) shows how a program uses the
+crate, and lists its Cargo features.
 
 **Generated files are marked.** The `.rs`, `.ts`, `.proto` and `.fbs` files, and
 the `lib.rs` and `Cargo.toml` of the crate root, begin with a line comment that
@@ -921,9 +908,9 @@ Those of a workspace build belong to no one package, so their line reads
 The marker is the first line because `rustfmt` looks for `@generated` only in
 the first 5 lines of a file. It carries no version and no timestamp, so a
 regeneration with the same inputs gives the same bytes. The TypeScript file has
-`/* eslint-disable */` after the comment block. The IR dumps (JSON,
-prototext and binary), the `<base>.codegen.json` file and the
-`<unit>.catalog.binfb` file carry no marker.
+`/* eslint-disable */` after the comment block. The IR dumps (JSON, prototext
+and binary), the `<base>.codegen.json` file and the `<unit>.catalog.binfb` file
+carry no marker.
 
 **A licence header goes after the marker.** `[codegen] header-file` in the
 workspace root's `ridl.toml` (or in the `ridl.toml` of a standalone package)
@@ -935,8 +922,8 @@ file that carries one, then one blank line:
 header-file = "LICENSE-HEADER.txt"
 ```
 
-The path is relative to the manifest that declares it. The file holds plain
-text without comment tokens, and each target gets its own comment syntax. `ridl`
+The path is relative to the manifest that declares it. The file holds plain text
+without comment tokens, and each target gets its own comment syntax. `ridl`
 accepts CRLF line ends and a lone CR as a line break, removes trailing
 whitespace from each line and drops leading and trailing blank lines, so a file
 with no text left means no header. A blank line inside the text becomes a bare
@@ -951,8 +938,9 @@ the same source package.
 
 A build overwrites a `lib.rs` or `Cargo.toml` in the output directory only when
 the file begins with this marker, or with the marker an earlier release wrote
-(`// Generated by ridlc. Do not edit.` and `# Generated by ridlc. Do not edit.`).
-Any other file is taken to be hand-written and is not touched.
+(`// Generated by ridlc. Do not edit.` and
+`# Generated by ridlc. Do not edit.`). Any other file is taken to be
+hand-written and is not touched.
 
 **Mark the output in version control.** `ridl build` does not write a
 `.gitattributes` file. To collapse the generated files in review, add a line
@@ -962,22 +950,21 @@ such as this one, adapted to your output directory:
 generated/** linguist-generated=true
 ```
 
-**The crate root switches no lint off.** Each allow the emitter needs is on the generated item that needs it:
-`clippy::derivable_impls` on a `Default` it writes out rather than derives,
-`clippy::module_inception` on the face module of an interface named after its
-package (`veh.cabin` and `Cabin`), `clippy::collapsible_if`, which only
-edition 2024 reports, on the functions that decode or verify a proto3 message,
-and `clippy::large_enum_variant` on the enum of a union, whose arms hold their
-payloads by value. The
-repository's `just demo` runs clippy with `-D warnings` on the generated crates
-for `examples/cabin`, the veh-cluster corpus and a fixture that holds every
+**The crate root switches no lint off.** Each allow the emitter needs is on the
+generated item that needs it: `clippy::derivable_impls` on a `Default` it writes
+out rather than derives, `clippy::module_inception` on the face module of an
+interface named after its package (`veh.cabin` and `Cabin`),
+`clippy::collapsible_if`, which only edition 2024 reports, on the functions that
+decode or verify a proto3 message, and `clippy::large_enum_variant` on the enum
+of a union, whose arms hold their payloads by value. The repository's
+`just demo` runs clippy with `-D warnings` on the generated crates for
+`examples/cabin`, the veh-cluster corpus and a fixture that holds every
 declaration and interaction shape the Rust backend emits, with every encoding,
 `transcode = true` and `wasm = true`, as edition 2021 and as edition 2024.
-Because
-the allows are on the items, a file included with `include!` carries them too,
-and single-file mode, which writes no `lib.rs`, needs none of its own. Explicit crate-root links in the
-generated docs can be unresolved when the file is included inside another
-module
+Because the allows are on the items, a file included with `include!` carries
+them too, and single-file mode, which writes no `lib.rs`, needs none of its own.
+Explicit crate-root links in the generated docs can be unresolved when the file
+is included inside another module
 ([Documentation in the generated code](generated-code.md#documentation-in-the-generated-code)).
 
 **`rustfmt` skips the generated files.** The generated Rust is formatted with
@@ -989,20 +976,20 @@ leaves those files as they are. The `lib.rs` itself is formatted as `rustfmt`
 formats it. `rustfmt` does not read a file reached through `include!`, so a
 consumer that includes a generated file that way needs no attribute.
 
-**Two things it may leave out, each with a note in the source it writes, and
-one it leaves out without a note.** A type whose size the compiler cannot
-bound — one that reaches itself, or a stream — carries no codec, and gets a
+**Two things it may leave out, each with a note in the source it writes, and one
+it leaves out without a note.** A type whose size the compiler cannot bound —
+one that reaches itself, or a stream — carries no codec, and gets a
 `__RIDL_FB_NO_CODEC_<NAME>` constant whose documentation names the member and
 the reason. An interface the face cannot carry — a parameter with no declared
 type, a query whose reply is a fallible `T | E`, or a contract clause outside
 the form the translator accepts — is skipped along with its descriptors, and
 gets a `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason,
-and, when an issue tracks the limit, that issue. A query whose reply is a
-stream of named elements is on the face. A member with a stream in any other
-form, a stream of bytes or of text or a stream parameter, is left out of an
-otherwise emitted face, with no note: its descriptor row is written all the
-same, and the face carries no method for it yet (driftsys/ridl#1116). An
-`internal` interface gets no face in any case
+and, when an issue tracks the limit, that issue. A query whose reply is a stream
+of named elements is on the face. A member with a stream in any other form, a
+stream of bytes or of text or a stream parameter, is left out of an otherwise
+emitted face, with no note: its descriptor row is written all the same, and the
+face carries no method for it yet (driftsys/ridl#1116). An `internal` interface
+gets no face in any case
 ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face)
 gives the rule). When its descriptors are refused, its note says that the
 descriptors are absent and gives the reason. Neither is an error: the rest of
@@ -1011,10 +998,10 @@ the package is emitted, and the build succeeds.
 The face names the `ridl-rt` port traits and nothing else: the crate carries no
 runtime and opens no socket, so an application supplies the ports. The one
 runtime in this workspace is `ridl-loopback`, which runs in process.
-`examples/cabin/` is a worked example — a schema, and a consumer program
-against the crate built from it — and `just demo` generates that crate and runs
-the program, which prints one round trip per interaction kind through the
-async client and the command and the query again through the blocking one.
+`examples/cabin/` is a worked example — a schema, and a consumer program against
+the crate built from it — and `just demo` generates that crate and runs the
+program, which prints one round trip per interaction kind through the async
+client and the command and the query again through the blocking one.
 
 **The manifest says which encodings a backend emits.** There is no flag for the
 payload encoding. A `[backend.<name>]` table in the manifest holds an
@@ -1031,20 +1018,18 @@ encodings = ["flatbuffers"]
 ```
 
 The names are `flatbuffers`, `proto3` and `podbuf`. An absent table, an absent
-key and an empty list all mean types only. The Rust backend builds
-each of the three, alone or together. A `podbuf` codec buffer starts on an
-8-byte boundary, and the generated size tables hold `Aligned` buffers for it.
-The generated `Cargo.toml` enables one `ridl-rt`
-feature per named encoding, and none for types only. A single-file build has no
-manifest, so it is types only. Each emitted codec names its encoding, as
-`::ridl_rt::encoding::FlatBuffers` or `::ridl_rt::encoding::Proto3`; the face
-takes its encoding from its port
-type instead, so a consumer that binds a generated face to a runtime it did not
-write names an encoding only where it builds that runtime — over
-`ridl-loopback`, `Loopback::new` for FlatBuffers and
-`Loopback::<E>::with_encoding` for another. A program that writes its own port
-names the encoding in that port's `Encoded` implementation instead
-([Writing a port](writing-a-port.md)).
+key and an empty list all mean types only. The Rust backend builds each of the
+three, alone or together. A `podbuf` codec buffer starts on an 8-byte boundary,
+and the generated size tables hold `Aligned` buffers for it. The generated
+`Cargo.toml` enables one `ridl-rt` feature per named encoding, and none for
+types only. A single-file build has no manifest, so it is types only. Each
+emitted codec names its encoding, as `::ridl_rt::encoding::FlatBuffers` or
+`::ridl_rt::encoding::Proto3`; the face takes its encoding from its port type
+instead, so a consumer that binds a generated face to a runtime it did not write
+names an encoding only where it builds that runtime — over `ridl-loopback`,
+`Loopback::new` for FlatBuffers and `Loopback::<E>::with_encoding` for another.
+A program that writes its own port names the encoding in that port's `Encoded`
+implementation instead ([Writing a port](writing-a-port.md)).
 
 `[backend.rust] wasm = true` adds a module `wasm` to the generated crate,
 written to `__ridl_wasm.rs`. The module lists the payload types that have a
@@ -1055,31 +1040,32 @@ build. When the target is `wasm32` and the generated crate's feature
 `wasm-exports` is on, the module exports `ridl_alloc`, `ridl_free`,
 `ridl_catalog_hash`, `ridl_verify` and `ridl_type_id`, and no other function.
 `ridl_type_id` returns the type id of a payload type named by its qualified
-name, or -1 for a name the list does not hold.
-`ridl_verify(type_id, ptr, len)` returns 0 when the bytes verify as the type at
-index `type_id`, 1 for a malformed buffer, 2 plus the index of the broken rule
-in `WASM_RULES`, and -1 for an unknown `type_id`. A null `ptr` with a length,
-and a range past the end of memory, return 1. `ridl_alloc` returns 0 when the
-length is 0 or the allocation fails. The generated `Cargo.toml` declares the
-feature `wasm-exports = ["std"]` and no crate type, so a Rust consumer of the
-crate links no export. [The `wasm-exports` feature](generated-code.md#the-wasm-exports-feature) gives the
-command that builds the module. The module writes the catalog hash of one unit: the root
-package's unit, or the one unit of the workspace's own packages when the
-manifest is a `[workspace]`. A build with no root package and other than one
-unit is refused. The option needs `encodings` to name `flatbuffers`, and the
-Rust backend refuses it otherwise. A package whose first segment is `wasm`
-refuses it too. A build with the option off removes a `__ridl_wasm.rs` that an
-earlier build wrote, and a build with it on refuses to overwrite a
-`__ridl_wasm.rs` that does not start with the generated marker. Single-file
-mode has no manifest, so it has no `wasm` module.
+name, or -1 for a name the list does not hold. `ridl_verify(type_id, ptr, len)`
+returns 0 when the bytes verify as the type at index `type_id`, 1 for a
+malformed buffer, 2 plus the index of the broken rule in `WASM_RULES`, and -1
+for an unknown `type_id`. A null `ptr` with a length, and a range past the end
+of memory, return 1. `ridl_alloc` returns 0 when the length is 0 or the
+allocation fails. The generated `Cargo.toml` declares the feature
+`wasm-exports = ["std"]` and no crate type, so a Rust consumer of the crate
+links no export.
+[The `wasm-exports` feature](generated-code.md#the-wasm-exports-feature) gives
+the command that builds the module. The module writes the catalog hash of one
+unit: the root package's unit, or the one unit of the workspace's own packages
+when the manifest is a `[workspace]`. A build with no root package and other
+than one unit is refused. The option needs `encodings` to name `flatbuffers`,
+and the Rust backend refuses it otherwise. A package whose first segment is
+`wasm` refuses it too. A build with the option off removes a `__ridl_wasm.rs`
+that an earlier build wrote, and a build with it on refuses to overwrite a
+`__ridl_wasm.rs` that does not start with the generated marker. Single-file mode
+has no manifest, so it has no `wasm` module.
 
 `[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
 TypeScript module of every package that has a payload root with a codec (its
 own, or one of another package that its interfaces name), and turns the `wasm`
-module on when `[backend.rust]` writes
-no `wasm` key. A written `wasm = false`, and a manifest with no
-`[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
-`flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.
+module on when `[backend.rust]` writes no `wasm` key. A written `wasm = false`,
+and a manifest with no `[backend.rust]` table, are MANI-019.
+`[backend.rust] encodings` must still name `flatbuffers`, and the Rust backend
+refuses an implied `wasm` module otherwise.
 
 `[backend.rust] transcode = true` asks the Rust backend for the transcoding
 functions between the encodings of the same table. The table must write at least
@@ -1093,32 +1079,32 @@ table, and no `transcode` option otherwise.
 MANI-015 is an error when the `encodings` value is not an array of the known
 names or repeats a name, when `wasm`, `codec` or `transcode` is not a boolean,
 when a `[limits]` value is not an integer of 0 or more, or when `[limits]`,
-`[limits.kind]` or `[limits.interaction]` is not a table, and MANI-016 is an error when the manifest of a workspace member holds
-a `backend` key or `[backend.<name>]` table: only the workspace root, or a
-standalone package, sets it. Any other key under `[backend.<name>]` is
-MANI-005. The table is not the `backend.` attribute namespace of an rsdl
-declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
-the selected deployment carries an encoding that the emitted backend's list
-does not name. It is compared once per emitted backend that can carry a codec:
-the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
-and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`), the
-`podbuf` emit, the `typescript` emit and `codegen-model` are not compared, because their
-backends take no `encodings` option, and `codegen-request` is not compared
-either, because it writes its options into the request rather than emitting a
-codec from them. A `[backend.<name>]` table whose
-`encodings` list is empty declares that the backend emits no codec, and it is
-not compared either; a table written with no `encodings` key at all is the same
-declaration, as the manifest records the two forms alike. A backend with no
-table at all is compared, so a build that declared no encodings is still
-reported. An empty list is how a
-schema-only plugin silences the lint for its own backend, where the `[lints]`
-level silences it for every backend at once.
+`[limits.kind]` or `[limits.interaction]` is not a table, and MANI-016 is an
+error when the manifest of a workspace member holds a `backend` key or
+`[backend.<name>]` table: only the workspace root, or a standalone package, sets
+it. Any other key under `[backend.<name>]` is MANI-005. The table is not the
+`backend.` attribute namespace of an rsdl declaration. The lint RSDL-807
+`link-encoding-not-emitted` warns when a link of the selected deployment carries
+an encoding that the emitted backend's list does not name. It is compared once
+per emitted backend that can carry a codec: the `rust` emit and each `--plugin`,
+and a backend named by both an `--emit` and a `--plugin` is compared once. A
+schema emit (`proto`, `flatbuffers`), the `podbuf` emit, the `typescript` emit
+and `codegen-model` are not compared, because their backends take no `encodings`
+option, and `codegen-request` is not compared either, because it writes its
+options into the request rather than emitting a codec from them. A
+`[backend.<name>]` table whose `encodings` list is empty declares that the
+backend emits no codec, and it is not compared either; a table written with no
+`encodings` key at all is the same declaration, as the manifest records the two
+forms alike. A backend with no table at all is compared, so a build that
+declared no encodings is still reported. An empty list is how a schema-only
+plugin silences the lint for its own backend, where the `[lints]` level silences
+it for every backend at once.
 
 `[limits]` gives the interactions of a unit their payload limits, in bytes of
 encoded payload ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md)
 decision 12). A unit sets it in its own `ridl.toml`; the table of a workspace
-root does not apply to its members, and a package of a unit's subdirectory
-takes the unit's table.
+root does not apply to its members, and a package of a unit's subdirectory takes
+the unit's table.
 
 ```toml
 [limits]
@@ -1137,20 +1123,20 @@ interactions record the owner's limits and the consumer computes the owner's
 catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
 
 The limit of an interaction is the first that is found of: its entry in
-`[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
-and the default ceiling of its kind. The default ceiling is 3,840 bytes for a
+`[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`, and
+the default ceiling of its kind. The default ceiling is 3,840 bytes for a
 `signal` and an `event`, 16,128 for a `command` and a `query`, and 65,280 for a
 `fixed`. A `[limits.kind]` entry may lower the limit of its kind and may not
 raise it above the default ceiling. `default` applies to each kind up to the
 default ceiling of that kind, so `default = 4096` gives a `signal` the limit
 3,840. A `[limits.interaction]` entry may raise one member above the default
 ceiling of its kind, up to 16,128 bytes; a `fixed` is not raised, because its
-default ceiling is already the largest. No value is above 65,280. A key
-of `[limits.interaction]` is the short name of the interface, or of the inline
+default ceiling is already the largest. No value is above 65,280. A key of
+`[limits.interaction]` is the short name of the interface, or of the inline
 `service` (the last segment of its dotted name), then `.`, then the member;
-neither the package nor a dotted service name is part of it. When two
-interfaces or inline services of one unit share a short name, a key that uses
-the name is ambiguous.
+neither the package nor a dotted service name is part of it. When two interfaces
+or inline services of one unit share a short name, a key that uses the name is
+ambiguous.
 
 An unknown kind in `[limits.kind]` is MANI-021. MANI-022 is a `[limits.kind]`
 value above the default ceiling of its kind, a `default` or a
@@ -1163,13 +1149,13 @@ interaction whose payload has a largest encoded size, in an encoding that a
 `[backend.<name>]` table enables (FlatBuffers when no table names one), above
 the limit that an entry of `[limits]` gives it, or no finite bound. Where no
 entry gives a limit, the same check against the default ceiling of the kind is
-RIDL-157, so an interaction draws at most one of the two. A `command` or
-`query` checks its request and its reply against its one limit, a fallible
-reply is checked through both of its types, and a `fixed` is sized too. All
-three are errors, so they have no name and no level in `[lints]`. A package
-with an error that stops `ridl build` writing artifacts, or that depends on
-one, is not checked, and a unit with such a package reports no RIDL-152. An
-error in a manifest stops the pass only in the packages beneath that manifest.
+RIDL-157, so an interaction draws at most one of the two. A `command` or `query`
+checks its request and its reply against its one limit, a fallible reply is
+checked through both of its types, and a `fixed` is sized too. All three are
+errors, so they have no name and no level in `[lints]`. A package with an error
+that stops `ridl build` writing artifacts, or that depends on one, is not
+checked, and a unit with such a package reports no RIDL-152. An error in a
+manifest stops the pass only in the packages beneath that manifest.
 
 A `[limits]` entry that applies to an interaction is recorded in the IR, with
 `default` clamped to the default ceiling of the kind, so adding, removing or
@@ -1177,56 +1163,57 @@ editing one changes the catalog hash of the interaction's unit. An interaction
 that no entry reaches records no limit, which means the default ceiling of its
 kind, and a unit with no `[limits]` table keeps its hash.
 
-**`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
-surface — structs, enums, enum sets and unions, projected to proto3 messages
-and enums, with named-scalar constraints carried as comments — plus the
-interaction identity table, one enum per interface giving each signal, event,
-command, query and fixed its ordinal. It emits no `service` block, no call
-face, and no value store; store and dispatcher generation is not part of this emit
-(ADR-0018 decision 16).
+**`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl surface —
+structs, enums, enum sets and unions, projected to proto3 messages and enums,
+with named-scalar constraints carried as comments — plus the interaction
+identity table, one enum per interface giving each signal, event, command, query
+and fixed its ordinal. It emits no `service` block, no call face, and no value
+store; store and dispatcher generation is not part of this emit (ADR-0018
+decision 16).
 
 **`flatbuffers` is the second wire backend**, with the same two tiers and the
-same ceiling. Its projection rules differ from proto3's where the targets
-differ — a union is isolated in a wrapper table, every struct is a `table`, a
-map is a vector of generated entry tables with no `(key)`, and enum values are
-not prefixed because FlatBuffers scopes them inside their enum — and are
-recorded in ADR-0019.
+same ceiling. Its projection rules differ from proto3's where the targets differ
+— a union is isolated in a wrapper table, every struct is a `table`, a map is a
+vector of generated entry tables with no `(key)`, and enum values are not
+prefixed because FlatBuffers scopes them inside their enum — and are recorded in
+ADR-0019.
 
 **`podbuf` is the third wire backend**: it writes the C header, `<base>.h`,
 through which a C consumer reads a podbuf buffer that the gate has verified,
 with no library. The header holds the preamble and descriptor structs, one head
 `struct` per type with its pad members written out and `_Static_assert` checks
-on every `sizeof` and `offsetof`, the constants of the enums and the union
-tags, and inline accessor functions that read through the preamble's head size
-and answer 0 for a field past it. It refuses a big-endian target with `#error`.
-It takes no option. A package that lays out a struct, tuple or union of another
+on every `sizeof` and `offsetof`, the constants of the enums and the union tags,
+and inline accessor functions that read through the preamble's head size and
+answer 0 for a field past it. It refuses a big-endian target with `#error`. It
+takes no option. A package that lays out a struct, tuple or union of another
 package inline defines that head again behind a guard macro, so the headers of
 two packages can be included in one translation unit. `ridl build` refuses the
-headers of a build that derive one C name for different entities (`veh_common_speed_head`
-from `veh.CommonSpeed` and from `veh.common.Speed`), and writes no header for
-that build. It also refuses a package that derives a C17 name defined by the
-included `<stdint.h>` or `<stddef.h>`; the
-[podbuf codec record](https://github.com/driftsys/ridl/blob/main/docs/design/podbuf-codec.md) lists the claims.
+headers of a build that derive one C name for different entities
+(`veh_common_speed_head` from `veh.CommonSpeed` and from `veh.common.Speed`),
+and writes no header for that build. It also refuses a package that derives a
+C17 name defined by the included `<stdint.h>` or `<stddef.h>`; the
+[podbuf codec record](https://github.com/driftsys/ridl/blob/main/docs/design/podbuf-codec.md)
+lists the claims.
 
-**`codegen-model` is not a backend at all**: it writes the lowered codegen
-model — one package, resolved over the scope the build read, with the scalar
-classes, the pinned name transforms, the resolved type references, the typl
-init and closure rules, the tombstones in their slots, the FlatBuffers
-projection and the interaction facts computed once — as canonical protobuf
-JSON, in the schema `ridl.codegen.v1`. It is the payload a codegen request
-carries (ADR-0020 decisions 8 and 9), the same JSON value as the request's
-`model`, so a plugin's fixture is a file `ridlc` wrote. The `rust`
-backend reads the model and nothing else. The other three backends above still
-read the IR, and a drift test in each of them asserts that what the backend
-derives and what the model states are the same fact.
+**`codegen-model` is not a backend at all**: it writes the lowered codegen model
+— one package, resolved over the scope the build read, with the scalar classes,
+the pinned name transforms, the resolved type references, the typl init and
+closure rules, the tombstones in their slots, the FlatBuffers projection and the
+interaction facts computed once — as canonical protobuf JSON, in the schema
+`ridl.codegen.v1`. It is the payload a codegen request carries (ADR-0020
+decisions 8 and 9), the same JSON value as the request's `model`, so a plugin's
+fixture is a file `ridlc` wrote. The `rust` backend reads the model and nothing
+else. The other three backends above still read the IR, and a drift test in each
+of them asserts that what the backend derives and what the model states are the
+same fact.
 
 **`codegen-request` writes the whole request**, to
 `<base>.codegen-request.json`: the same canonical protobuf JSON a plugin reads
 on its standard input, with `schema`, `toolchain`, `model`, `options`,
 `artifactBase`, `generatedMarker`, `header` and the deployment section. It is
 the artifact a plugin author debugs against — the request their plugin would
-receive for this package, written without running the plugin. Its `model` is
-the value `codegen-model` writes, so the two emits state one fact. Unlike
+receive for this package, written without running the plugin. Its `model` is the
+value `codegen-model` writes, so the two emits state one fact. Unlike
 `codegen-model`, it accepts the options of its own `[backend.codegen-request]`
 table and writes them into the request's `options`, because those options are
 part of what a plugin receives and an emit that refused them could never show a
@@ -1245,8 +1232,8 @@ The value is a language, or a language and a path:
   naming `ridlc-gen-kotlin`, and — like a compile error — a build that writes
   nothing.
 - `--plugin kotlin=/opt/gen/bin/kt-gen` runs the executable at that path and
-  skips the lookup. `ridl` still reports it as `ridlc-gen-kotlin`, with the
-  path beside the name.
+  skips the lookup. `ridl` still reports it as `ridlc-gen-kotlin`, with the path
+  beside the name.
 
 The flag repeats, once per plugin. Each plugin runs once per package the code
 emits are written for — `ridl.std` included, under the same rule as above — and
@@ -1256,62 +1243,60 @@ version) first, then `model` (the same JSON value as the package's
 `codegen-model` artifact, one indentation level deeper), `options` (one
 `encodings` option when the root manifest's `[backend.<language>]` table names
 an encoding, as described above; empty otherwise; no flag sets one),
-`artifactBase`, the `<base>` of the
-emit list above, `generatedMarker` (the marker line) and `header` (the header
-text, an empty string when there is none), both always present, and
-`deployment`, the deployment section — the one `--deployment`
-names, or, with no flag, the one the source declares when it declares exactly
-one — absent when no deployment is carried. It answers on its standard output with one
-`CodegenResponse`: `files`,
-each a `path` relative to `--out-dir` with a `text` or `binary` content, and
-`diagnostics`, each a `severity` and a `message`. `ridl` writes the files; the
-plugin never touches the filesystem, so `--out-dir` means for a plugin exactly
-what it means for `rust`. A path that is absolute, has a `..` or `.` or empty
-component, or contains `\` is refused, and no file of that response is written.
-A diagnostic is reported prefixed with the plugin's name, at its severity; an
-error-severity one is a build that exits 1 with none of that response's files
-written, as an in-tree backend's failure is. A non-zero exit, a response that
-does not parse, a plugin that cannot be started, and a plugin still running
-after `--plugin-timeout` seconds (60 by default; the plugin is killed) are each
-one error naming the plugin, and the build exits 1. The plugin's standard error
-is passed through.
+`artifactBase`, the `<base>` of the emit list above, `generatedMarker` (the
+marker line) and `header` (the header text, an empty string when there is none),
+both always present, and `deployment`, the deployment section — the one
+`--deployment` names, or, with no flag, the one the source declares when it
+declares exactly one — absent when no deployment is carried. It answers on its
+standard output with one `CodegenResponse`: `files`, each a `path` relative to
+`--out-dir` with a `text` or `binary` content, and `diagnostics`, each a
+`severity` and a `message`. `ridl` writes the files; the plugin never touches
+the filesystem, so `--out-dir` means for a plugin exactly what it means for
+`rust`. A path that is absolute, has a `..` or `.` or empty component, or
+contains `\` is refused, and no file of that response is written. A diagnostic
+is reported prefixed with the plugin's name, at its severity; an error-severity
+one is a build that exits 1 with none of that response's files written, as an
+in-tree backend's failure is. A non-zero exit, a response that does not parse, a
+plugin that cannot be started, and a plugin still running after
+`--plugin-timeout` seconds (60 by default; the plugin is killed) are each one
+error naming the plugin, and the build exits 1. The plugin's standard error is
+passed through.
 
-This repository builds two plugins for its test suite, and no release
-installs either: `ridlc-gen-model` is `--emit codegen-model` as a process, and
+This repository builds two plugins for its test suite, and no release installs
+either: `ridlc-gen-model` is `--emit codegen-model` as a process, and
 `ridlc-gen-rust` is `--emit rust` as a process. A parity test runs each one
 through this path and compares its output with the in-process backend's, byte
 for byte. The TypeScript, proto3 and FlatBuffers backends run in process only.
-[Writing a codegen plugin](codegen-plugins.md) is the guide for a plugin
-author.
+[Writing a codegen plugin](codegen-plugins.md) is the guide for a plugin author.
 
-**It writes** one file per package per `--emit` target, under `--out-dir`
-(`out` by default), and — exactly like [`ridl check`](#ridl-check) —
-`ridl.lock` at the workspace root when the manifest declares `[imports]`,
-non-frozen. The exception is `catalog`, which writes one file per unit, named
-`<unit>.catalog.binfb` after the unit's manifest `name`, when any source
-package of the unit declares an interface or a service with an inline body,
-and no file for a unit that declares neither. `<base>` in the `--emit` list
-above is the package name when `PATH` is a package directory or a workspace
-root, and the input file's stem in single-file mode; the catalog of a single
-file is named after the file's package, which is its own unit.
+**It writes** one file per package per `--emit` target, under `--out-dir` (`out`
+by default), and — exactly like [`ridl check`](#ridl-check) — `ridl.lock` at the
+workspace root when the manifest declares `[imports]`, non-frozen. The exception
+is `catalog`, which writes one file per unit, named `<unit>.catalog.binfb` after
+the unit's manifest `name`, when any source package of the unit declares an
+interface or a service with an inline body, and no file for a unit that declares
+neither. `<base>` in the `--emit` list above is the package name when `PATH` is
+a package directory or a workspace root, and the input file's stem in
+single-file mode; the catalog of a single file is named after the file's
+package, which is its own unit.
 
 When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
 `ridl.std.ts`, `ridl.std.codegen.json` — because generated code refers to
-standard types by package path and does not compile without it, and the model
-is lowered over the same scope. `ridl.std.codec.ts` joins them under
+standard types by package path and does not compile without it, and the model is
+lowered over the same scope. `ridl.std.codec.ts` joins them under
 `[backend.typescript] codec = true` only when a package's codec module imports
 it, for a payload type that is a `ridl.std` scalar. The three IR targets —
-`ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
-records the packages the workspace declares, and `ridl.std` ships with the
-compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
-`catalog` gets no such file either: `ridl.std` declares no interface, so no
+`ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump records
+the packages the workspace declares, and `ridl.std` ships with the compiler
+rather than with the workspace ([ADR-0007][adr-0007] decision 15). `catalog`
+gets no such file either: `ridl.std` declares no interface, so no
 `ridl.std.catalog.binfb` is written.
 
 When the workspace declares a `system` (rsdl reference §3.1), each of the three
 IR targets also writes the lowered system — the closure, and every deployment
-with its placements, links, routes and surface set (rsdl reference §13) — as
-one more file named after the system's qualified name:
+with its placements, links, routes and surface set (rsdl reference §13) — as one
+more file named after the system's qualified name:
 `veh.topology.Vehicle.system.json` for `system Vehicle` in package
 `veh.topology` under `--emit ir-json`, `.system.txtpb` and `.system.binpb` for
 the other two.
@@ -1330,10 +1315,10 @@ out/veh.cluster.rs
 out/veh.common.rs
 ```
 
-The `Cargo.toml` and the `lib.rs` are the crate root: the per-package files
-are flat, and the crate root is what gives them the module paths the generated
-code refers to each other by. Single-file mode writes neither, because one
-file is not a crate.
+The `Cargo.toml` and the `lib.rs` are the crate root: the per-package files are
+flat, and the crate root is what gives them the module paths the generated code
+refers to each other by. Single-file mode writes neither, because one file is
+not a crate.
 
 and a single `.typl` file with `--emit rust,ir-json`:
 
@@ -1346,11 +1331,11 @@ out/speed.ir.json
 out/speed.rs
 ```
 
-**Exit codes.** 0 when the build compiles clean and every requested artifact
-is written. 1 when a diagnostic is an error — nothing is written for a
-package that fails to compile. An RSDL-7xx error is the one exception: it
-blocks only its own deployment (rsdl reference §13), so the build writes every
-artifact, leaves that deployment out of the lowered system, and still exits 1:
+**Exit codes.** 0 when the build compiles clean and every requested artifact is
+written. 1 when a diagnostic is an error — nothing is written for a package that
+fails to compile. An RSDL-7xx error is the one exception: it blocks only its own
+deployment (rsdl reference §13), so the build writes every artifact, leaves that
+deployment out of the lowered system, and still exits 1:
 
 ```sh
 ridl build --out-dir out
@@ -1362,7 +1347,6 @@ error[TYPL-011]: unknown type name `Bogus`
   │
 4 │   signal currentSpeed : Bogus @10ms
   │                         ^^^^^
-
 ```
 
 2 when the workspace itself cannot be found:
@@ -1395,14 +1379,14 @@ Options:
   -h, --help               Print help
 ```
 
-`ridl test` runs two checks per package: every constrained named type's
-boundary and violation corpus against the constraint validator (a
-self-consistency check of the toolchain, not of the model), and every
-`require` clause's satisfiability, sampled over each parameter's boundary
-values plus `--samples` random draws. `ensure` clauses are listed as observer
-stubs and never evaluated — there is no runtime to produce the `result` they
-need. The report goes to **stdout**; a compile error's diagnostics go to
-stderr instead, and no report prints at all.
+`ridl test` runs two checks per package: every constrained named type's boundary
+and violation corpus against the constraint validator (a self-consistency check
+of the toolchain, not of the model), and every `require` clause's
+satisfiability, sampled over each parameter's boundary values plus `--samples`
+random draws. `ensure` clauses are listed as observer stubs and never evaluated
+— there is no runtime to produce the `result` they need. The report goes to
+**stdout**; a compile error's diagnostics go to stderr instead, and no report
+prints at all.
 
 **It writes nothing, ever.** The report is printed, never saved. `ridl test`
 runs the plain compile only — never the materialization step that makes
@@ -1439,8 +1423,8 @@ ridl test --samples 8 --format json
 ```
 
 **Exit codes.** 0 above. 1 when a range self-corpus fails, or — the case a
-`require` clause reaches in practice — evaluating one raises an error, such as
-a division by zero every sampled input hits:
+`require` clause reaches in practice — evaluating one raises an error, such as a
+division by zero every sampled input hits:
 
 ```sh
 ridl test
@@ -1460,8 +1444,8 @@ package cli.demo
 
 2 when the workspace fails to compile, when the workspace cannot be found, or
 when `--samples 0` is given — sampling zero values is refused rather than
-silently clamped, because it would report every clause as unsatisfiable and
-call that a finding:
+silently clamped, because it would report every clause as unsatisfiable and call
+that a finding:
 
 ```sh
 ridl test
@@ -1481,7 +1465,6 @@ warning[TYPL-102]: `float` without both a range and a `step`
   │               ^^^^
   │
   = lint: `unbounded-float` (set its level in `[lints]` in ridl.toml)
-
 ```
 
 ```sh
@@ -1493,11 +1476,12 @@ error: `--samples` must be at least 1
 ```
 
 Note the overloaded meaning: exit 1 here is a **test failure** (the toolchain
-found a problem worth failing the run over), not the *breaking* verdict
-`ridl diff` uses the same code for, and not the *diagnostic error* `ridl
-check` uses it for. A `suspect` finding — no sampled input satisfies a
-precondition — is reported in the same output but does **not** fail the run;
-only a self-corpus failure or an evaluation error does.
+found a problem worth failing the run over), not the _breaking_ verdict
+`ridl diff` uses the same code for, and not the _diagnostic error_ `ridl
+check`
+uses it for. A `suspect` finding — no sampled input satisfies a precondition —
+is reported in the same output but does **not** fail the run; only a self-corpus
+failure or an evaluation error does.
 
 ### `ridl fmt`
 
@@ -1523,28 +1507,29 @@ canonical form, unless `--check` is given or the file fails to parse. The walk
 skips `vendor/` at every manifest root it meets, including one below a `PATH`
 that has no `ridl.toml`; [`ridl vendor`](#ridl-vendor) fills that directory with
 copies of remote units that belong to their own owners. A `PATH` that is such a
-directory or lies under it is refused with exit 2. An `.rsdl`
-file takes the file layout (the header, one blank line between declarations).
-Systems, components, distributions, deployments and machines use canonical
-brace bodies, references and attributes. Deployments keep `for` before header
-attributes and nest machine blocks; source blank lines between machines remain.
-Interfaces and inline services use the canonical brace layout
-and member spacing. Named services keep commas between shapes, remove the
-optional trailing comma, and break overlong shape lists after the colon. Interaction timing precedes attribute blocks. Predicate attributes use block
-form; flag and assignment attributes stay inline when their code line fits.
+directory or lies under it is refused with exit 2. An `.rsdl` file takes the
+file layout (the header, one blank line between declarations). Systems,
+components, distributions, deployments and machines use canonical brace bodies,
+references and attributes. Deployments keep `for` before header attributes and
+nest machine blocks; source blank lines between machines remain. Interfaces and
+inline services use the canonical brace layout and member spacing. Named
+services keep commas between shapes, remove the optional trailing comma, and
+break overlong shape lists after the colon. Interaction timing precedes
+attribute blocks. Predicate attributes use block form; flag and assignment
+attributes stay inline when their code line fits.
 
 **Layout and line width.** Formatted blocks use two spaces per indentation
 level. Parameter lists, tuple types and attribute value lists break into one
 item per line with commas between items when their code line exceeds the
 configured width. Overlong attribute blocks use one attribute per line; named
-service shape lists break after the colon. The default width is 100 characters. Width counts Unicode
-scalar values, including indentation.
-Trailing comments do not count towards the
-limit, and unbreakable code can exceed it. A comment embedded inside a
-single-line construct keeps that construct's source layout. Comments between
-interaction annotations stay with the preceding source annotation when timing
-moves first. If a moved annotation line comment would consume another trailing
-member comment, the whole member keeps its source layout.
+service shape lists break after the colon. The default width is 100 characters.
+Width counts Unicode scalar values, including indentation. Trailing comments do
+not count towards the limit, and unbreakable code can exceed it. A comment
+embedded inside a single-line construct keeps that construct's source layout.
+Comments between interaction annotations stay with the preceding source
+annotation when timing moves first. If a moved annotation line comment would
+consume another trailing member comment, the whole member keeps its source
+layout.
 
 **A leading comment block is kept.** A block of line comments before the
 `package` line, such as a copyright and licence notice, stays where it is, with
@@ -1574,10 +1559,10 @@ The formatter never changes which declaration a lint directive names (see
 When it breaks a declaration over several lines, a directive at the end of the
 declaration's first line stays on the first line, after the opening delimiter,
 also when it followed a member or an attribute on that line. A directive on a
-line where no declaration starts stays on that line: after a declaration, on
-the last line of that declaration, which keeps its source layout; after a
-block comment that leads the next member, on that comment's line. A plain `//`
-comment follows the member or the closing delimiter it trailed, as before.
+line where no declaration starts stays on that line: after a declaration, on the
+last line of that declaration, which keeps its source layout; after a block
+comment that leads the next member, on that comment's line. A plain `//` comment
+follows the member or the closing delimiter it trailed, as before.
 
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without
@@ -1606,8 +1591,8 @@ type Speed: km/h [0.0..250.0 step 0.5]
 ```
 
 `ridl fmt` inserted the blank line and tightened the colon; the shown text is
-`cat`'s, since `ridl fmt` itself printed nothing. A second `--check` pass is
-now a fixed point:
+`cat`'s, since `ridl fmt` itself printed nothing. A second `--check` pass is now
+a fixed point:
 
 ```sh
 ridl fmt --check speed.typl; echo "exit: $?"
@@ -1617,8 +1602,8 @@ ridl fmt --check speed.typl; echo "exit: $?"
 exit: 0
 ```
 
-and 1 — with or without `--check` — when a file has a parse error; the file
-is never rewritten, and the parse diagnostics render to stderr:
+and 1 — with or without `--check` — when a file has a parse error; the file is
+never rewritten, and the parse diagnostics render to stderr:
 
 ```sh
 ridl fmt broken.typl
@@ -1636,7 +1621,6 @@ error[TYPL-302]: duration literal in typl context
   │
 2 │ type X : integer [0..10ms]
   │                      ^^^^
-
 ```
 
 2 when an existing file cannot be read or written — a permissions error, for
@@ -1653,10 +1637,10 @@ error: cannot read unreadable.typl: Permission denied (os error 13)
 **A missing `PATH`, or a directory the walk cannot read, is the same exit 2 —
 naming the cause.** This is a fix, recorded as [ADR-0010][adr-0010] decision 6
 and decision 1: before it, `ridl fmt /nonexistent` walked the missing path,
-found nothing, and reported success, and an unreadable directory reached
-partway through a larger walk was silently treated the same way — the one
-subcommand on this page that did not fail closed on a bad path. Both now
-report the directory `read_dir` failed on and the OS error:
+found nothing, and reported success, and an unreadable directory reached partway
+through a larger walk was silently treated the same way — the one subcommand on
+this page that did not fail closed on a bad path. Both now report the directory
+`read_dir` failed on and the OS error:
 
 ```sh
 ridl fmt /nonexistent/ridl/workspace
@@ -1666,8 +1650,8 @@ ridl fmt /nonexistent/ridl/workspace
 error: cannot read /nonexistent/ridl/workspace: No such file or directory (os error 2)
 ```
 
-and, for a tree holding one ordinary file next to a subdirectory the walk
-cannot read into:
+and, for a tree holding one ordinary file next to a subdirectory the walk cannot
+read into:
 
 ```sh
 ridl fmt --check .
@@ -1682,15 +1666,17 @@ it found `ridl fmt` is the only one that reliably names the actual unreadable
 path this way in every case it was tested against. `ridl describe`, added later,
 names the path in every exit-2 message about a path it was given. `ridl check`,
 `ridl build`, `ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on
-the same inputs, but with the wrong cause or none: an unreadable *workspace
-root* reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
+the same inputs, but with the wrong cause or none: an unreadable _workspace
+root_ reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
 directly against this build — and an unreadable subdirectory nested inside an
-otherwise-readable workspace reports a bare `error: Permission denied (os
-error 13)`, naming no path at all — also confirmed directly. The other two
-subcommands decision 6 examined name a path only in part: `ridl diff` names the
-unreadable directory only when it is the argument given, and `ridl test` names
-the workspace root, not the subdirectory that failed. Tracked as
-[issue driftsys/ridl#196][issue-196], not fixed as of this page.
+otherwise-readable workspace reports a bare
+`error: Permission denied (os
+error 13)`, naming no path at all — also confirmed
+directly. The other two subcommands decision 6 examined name a path only in
+part: `ridl diff` names the unreadable directory only when it is the argument
+given, and `ridl test` names the workspace root, not the subdirectory that
+failed. Tracked as [issue driftsys/ridl#196][issue-196], not fixed as of this
+page.
 
 ### `ridl diff`
 
@@ -1716,40 +1702,41 @@ Options:
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
 directory of them (the shape `.ridl/baseline/` takes), or source — a file, a
-package directory, or a workspace root — compiled in process. Only IR
-artifacts are recognised by name, and three inputs are refused rather than
-compiled (exit 2): an `.ir.txtpb` or `.ir.binpb` file, because diffs and
-baselines read `.ir.json` only ([ADR-0014][adr-0014] decision 5); a directory
-that holds IR artifacts but no `.ir.json` snapshot and no source — no
-`ridl.toml` and no `.typl`/`.ridl` file — which is a snapshot directory in a
-refused encoding, not a source tree; and a directory with no source whose
-`.ir.json` snapshots sit one level below it, which is a path aimed one level
-too high. A directory is also exit 2, naming the entry, when an entry inside
-it named like a snapshot cannot be stat'ed — a symlink to a file that is gone
-— because skipping the entry would compare against a set one snapshot short;
-this is checked before the directory is read as a source tree, so a source
-directory holding such an entry is refused too. Every other input reaches
-the source compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
-category's classification rule without comparing anything.
+package directory, or a workspace root — compiled in process. Only IR artifacts
+are recognised by name, and three inputs are refused rather than compiled (exit
+2): an `.ir.txtpb` or `.ir.binpb` file, because diffs and baselines read
+`.ir.json` only ([ADR-0014][adr-0014] decision 5); a directory that holds IR
+artifacts but no `.ir.json` snapshot and no source — no `ridl.toml` and no
+`.typl`/`.ridl` file — which is a snapshot directory in a refused encoding, not
+a source tree; and a directory with no source whose `.ir.json` snapshots sit one
+level below it, which is a path aimed one level too high. A directory is also
+exit 2, naming the entry, when an entry inside it named like a snapshot cannot
+be stat'ed — a symlink to a file that is gone — because skipping the entry would
+compare against a set one snapshot short; this is checked before the directory
+is read as a source tree, so a source directory holding such an entry is refused
+too. Every other input reaches the source compiler. Omit both and pass
+`--explain <CATEGORY>` instead to print that category's classification rule
+without comparing anything.
 
 `--encoding <ENCODING>` names an encoding the change is judged for, with the
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
-`proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
-the encodings a workspace builds, so the command does not read them from a
-manifest. Three categories are judged by encoding: they are breaking with
-`--encoding podbuf`, compatible without it, and listed under `breaking under
-podbuf` either way. A compatible verdict without podbuf does not certify all
-dependency changes for other encodings.
+`proto3`, `podbuf`); repeat the flag for several. A snapshot does not record the
+encodings a workspace builds, so the command does not read them from a manifest.
+Three categories are judged by encoding: they are breaking with
+`--encoding podbuf`, compatible without it, and listed under
+`breaking under
+podbuf` either way. A compatible verdict without podbuf does not
+certify all dependency changes for other encodings.
 
 - `podbuf_inline_append`: a local field append grows a struct held inline by an
   old head; the line names the inline uses.
-- `podbuf_remote_inline_growth`: a remote struct, enum, enum set or scalar typedef
-  held inline by a surviving old consumer use grows in podbuf size, even when only
-  the import pin changes and no consumer field is added. A union head has a fixed
-  size of 16 bytes and does not grow.
-  The path belongs to the consumer, and the values identify the remote
-  declaration and old/new inline sizes. Pin provenance remains in the context
-  artifact; the change values do not print it.
+- `podbuf_remote_inline_growth`: a remote struct, enum, enum set or scalar
+  typedef held inline by a surviving old consumer use grows in podbuf size, even
+  when only the import pin changes and no consumer field is added. A union head
+  has a fixed size of 16 bytes and does not grow. The path belongs to the
+  consumer, and the values identify the remote declaration and old/new inline
+  sizes. Pin provenance remains in the context artifact; the change values do
+  not print it.
 - `podbuf_width_change`: an otherwise compatible enum value, enum-set flag or
   union arm append changes the podbuf integer of the enum, enum set or tag.
 
@@ -1762,24 +1749,25 @@ it, and listed under `breaking under flatbuffers` either way:
   width; every enum uses `long`, so an enum value appended past 255 keeps its
   integer and draws no such line.
 
-Each head is measured in its own side's local, standard and remote scope.
-Remote packages supply context without being compared as consumer declarations.
-Old inline holders include struct fields, tuple members, exact-length arrays
-inside heads and induced interaction tuples. A direct payload root, variable
-array element, map entry or union arm has a producer size or stride, so its own
-growth is not an inline break; its nested inline members can still be affected.
-New holders do not establish a published inline copy. Equal-size pad-fit appends
+Each head is measured in its own side's local, standard and remote scope. Remote
+packages supply context without being compared as consumer declarations. Old
+inline holders include struct fields, tuple members, exact-length arrays inside
+heads and induced interaction tuples. A direct payload root, variable array
+element, map entry or union arm has a producer size or stride, so its own growth
+is not an inline break; its nested inline members can still be affected. New
+holders do not establish a published inline copy. Equal-size pad-fit appends
 draw no remote-growth line. Equal-size remote layout changes, shrinkage and
 general dependency semantic changes remain outside this rule.
 
-These rules are owned by [ADR-0031][adr-0031] decisions 10 and 13.
-Missing or unresolvable evidence is never replaced by the other side's
-definitions. With explicit `--encoding podbuf`, inability to judge remote inline
-compatibility exits 2 with consumer paths and repair/reset guidance; it is not
-exit 1, which means a proved break. Without podbuf, the command returns its ordinary report without an affirmative
-remote inline compatibility judgment. Malformed enriched context is exit 2 with or
-without that flag. See [baseline context](#baseline-context) for snapshot
-pairing and [recovery](#baseline-publication-and-recovery) for migration.
+These rules are owned by [ADR-0031][adr-0031] decisions 10 and 13. Missing or
+unresolvable evidence is never replaced by the other side's definitions. With
+explicit `--encoding podbuf`, inability to judge remote inline compatibility
+exits 2 with consumer paths and repair/reset guidance; it is not exit 1, which
+means a proved break. Without podbuf, the command returns its ordinary report
+without an affirmative remote inline compatibility judgment. Malformed enriched
+context is exit 2 with or without that flag. See
+[baseline context](#baseline-context) for snapshot pairing and
+[recovery](#baseline-publication-and-recovery) for migration.
 
 ```sh
 ridl diff --explain podbuf_remote_inline_growth
@@ -1801,13 +1789,13 @@ changes are deferred; this category judges only remote inline growth.
   compatible  otherwise; listed under the heading "breaking under podbuf"
 ```
 
-An enum value or an enum-set flag appended to a declaration that is not `open` is
-`strict_enum_append`, reported once per declaration with the appended names and
-breaking under every encoding, with or without `--encoding`; the same append to
-an `open` declaration is compatible, and `enum_opened` and `enum_closed` report
-the keyword gained or lost. A name outside the three is a usage error, exit 2. With
-`Reading` held inline by `Bounds` and an eight-byte field appended to it,
-which grows its head:
+An enum value or an enum-set flag appended to a declaration that is not `open`
+is `strict_enum_append`, reported once per declaration with the appended names
+and breaking under every encoding, with or without `--encoding`; the same append
+to an `open` declaration is compatible, and `enum_opened` and `enum_closed`
+report the keyword gained or lost. A name outside the three is a usage error,
+exit 2. With `Reading` held inline by `Bounds` and an eight-byte field appended
+to it, which grows its head:
 
 ```sh
 ridl diff --encoding podbuf v1.typl v2.typl
@@ -1820,8 +1808,8 @@ breaking under podbuf:
   [breaking] podbuf_inline_append veh.cluster/Reading/quality: (absent) -> nested inline in veh.cluster/Bounds/range
 ```
 
-**It writes nothing.** The report goes to stdout; a compile error's
-diagnostics go to stderr instead and no report prints.
+**It writes nothing.** The report goes to stdout; a compile error's diagnostics
+go to stderr instead and no report prints.
 
 Two identical sources:
 
@@ -1856,16 +1844,16 @@ breaking
   [breaking] payload_changed veh.cluster/VehicleStatus/currentSpeed: Speed -> Speed2
 ```
 
-A named-form service's list is a set of interfaces: an interface joining it
-is `service_interface_added`, one leaving it `service_interface_removed`, a
-reorder no change, and both are compatible, because an interface's number
-comes from its unit's `interfaces.lock` and the routing key does not
-contain the service. A removal is still visible in source — the
-`service.member` addresses of that interface stop resolving under the service
-— so the text report lists it under a heading, shared with `interface_renamed`, printed once as a
-line ending in a colon, after every change that has no heading. The JSON
-report carries the category word and no heading field. With `interface K`
-added and `J` dropped from `service veh.cluster.dash : I, J`:
+A named-form service's list is a set of interfaces: an interface joining it is
+`service_interface_added`, one leaving it `service_interface_removed`, a reorder
+no change, and both are compatible, because an interface's number comes from its
+unit's `interfaces.lock` and the routing key does not contain the service. A
+removal is still visible in source — the `service.member` addresses of that
+interface stop resolving under the service — so the text report lists it under a
+heading, shared with `interface_renamed`, printed once as a line ending in a
+colon, after every change that has no heading. The JSON report carries the
+category word and no heading field. With `interface K` added and `J` dropped
+from `service veh.cluster.dash : I, J`:
 
 ```sh
 ridl diff dash-old.ridl dash-new.ridl
@@ -1878,28 +1866,27 @@ compatible on the wire, visible in source:
   [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
 ```
 
-An interface is matched by its number from the unit's `interfaces.lock`,
-within the unit, not by its name — a declared `interface` and a service's
-inline shape alike. A
-rename that keeps its number, recorded with `ridl lock <unit dir> --rename Old=New`,
-is `interface_renamed`: compatible on the wire, because the number is the
-routing identity, and visible in source, because the generated identity-table
-names change, so it shares the heading above; the path carries the new name,
-and a change inside the renamed interface is reported under the new name too.
-A number gone from the new side is `interface_retired` when that side's lock
-retires it, and `decl_removed`, breaking, otherwise. Against an old side whose
-numbers are frozen, a declaration with no lock entry carries a provisional
-number, which is no identity: it is `decl_added`, and it is never matched to an
-old interface, so a rename the lock does not record is `decl_removed` plus
-`decl_added`. Against a provisional old side, interfaces are matched by name,
-as described below. Two sides with no lock
+An interface is matched by its number from the unit's `interfaces.lock`, within
+the unit, not by its name — a declared `interface` and a service's inline shape
+alike. A rename that keeps its number, recorded with
+`ridl lock <unit dir> --rename Old=New`, is `interface_renamed`: compatible on
+the wire, because the number is the routing identity, and visible in source,
+because the generated identity-table names change, so it shares the heading
+above; the path carries the new name, and a change inside the renamed interface
+is reported under the new name too. A number gone from the new side is
+`interface_retired` when that side's lock retires it, and `decl_removed`,
+breaking, otherwise. Against an old side whose numbers are frozen, a declaration
+with no lock entry carries a provisional number, which is no identity: it is
+`decl_added`, and it is never matched to an old interface, so a rename the lock
+does not record is `decl_removed` plus `decl_added`. Against a provisional old
+side, interfaces are matched by name, as described below. Two sides with no lock
 file — two bare source trees, or a snapshot published before the lock existed —
 are matched by name. Interfaces are matched within the unit, and the names on
 both sides of a change are catalog names, so an interface moved between two
 sibling packages of one unit keeps its number and is reported as
-`interface_renamed`, from the old catalog name to the new one. With `J` renamed to `Jay` on its number, the lock beside
-each file recording it, and `Jay` no longer listed in
-`service veh.cluster.dash : I, J`:
+`interface_renamed`, from the old catalog name to the new one. With `J` renamed
+to `Jay` on its number, the lock beside each file recording it, and `Jay` no
+longer listed in `service veh.cluster.dash : I, J`:
 
 ```sh
 ridl diff old/dash.ridl new/dash.ridl
@@ -1916,8 +1903,8 @@ An interface matched by name across a provisional old side has its number and
 its provisional flag compared, because the catalog hash covers both. When the
 number is the same on both sides and only the new side is frozen — the number
 `ridl lock` froze in place — the change is `interface_frozen`: compatible,
-because the routing key did not move, and listed under the heading
-"compatible on the wire, may change the catalog hash", which it shares with
+because the routing key did not move, and listed under the heading "compatible
+on the wire, may change the catalog hash", which it shares with
 `enum_reordered`, because the catalog hash changes and a generated face refuses
 a port whose catalog hash is another one. With `old` a unit before `ridl lock`
 and `new` the same unit after it:
@@ -1947,20 +1934,20 @@ breaking
   [compatible] decl_added veh.cluster/Aux: (absent) -> interface
 ```
 
-A number 0 on either side, from a snapshot written before the lock existed,
-is not compared. A published baseline never holds a provisional number,
-because `ridl baseline` refuses one (RIDL-411), so both categories are seen
-between two builds, or in a reversed comparison whose old side is a build.
+A number 0 on either side, from a snapshot written before the lock existed, is
+not compared. A published baseline never holds a provisional number, because
+`ridl baseline` refuses one (RIDL-411), so both categories are seen between two
+builds, or in a reversed comparison whose old side is a build.
 
-An enum value or an enum-set bit takes its identity from the explicit number
-it declares, so a body whose difference is only order — its values or bits
+An enum value or an enum-set bit takes its identity from the explicit number it
+declares, so a body whose difference is only order — its values or bits
 reordered with no number changed, an enum's `reserved` list reordered with no
 entry changed, or both — moves nothing on the wire. The change is
 `enum_reordered`, compatible, on the container's path and under the same
 heading. The catalog hash covers only the declarations an interface reaches:
-when an interface reaches the enum or enum set, the order of its values or
-bits, and of an enum's `reserved` list, is part of the hash, so the hash
-changes then. With the values of `enum GearPosition` reordered:
+when an interface reaches the enum or enum set, the order of its values or bits,
+and of an enum's `reserved` list, is part of the hash, so the hash changes then.
+With the values of `enum GearPosition` reordered:
 
 ```sh
 ridl diff old.ridl new.ridl
@@ -2005,17 +1992,16 @@ ridl diff old.ridl breaking.ridl --format json
 
 **At the system.** When both sides are source whose workspace declares a
 `system`, `ridl diff` also lists the changes to the lowered system that are not
-contract changes, under three headings (rsdl reference §14):
-**placement changed** for a deployment or a machine added or removed, a machine
-made `external`, or an instance moved to another machine; **composition
-changed** for a component added to or removed from the system, an `offers` or
-`requires` line added or removed, `instances` changed, a component made
-`external`, a distribution added or removed, or a member line added to or
-removed from a distribution; these two carry no verdict. **instance number
-changed (breaking)** for a locked instance number that differs between the two
-sides, or that moved to another instance; it sets the verdict to `breaking` and
-the exit code to 1. The verdict and the exit code otherwise are the contracts'
-alone.
+contract changes, under three headings (rsdl reference §14): **placement
+changed** for a deployment or a machine added or removed, a machine made
+`external`, or an instance moved to another machine; **composition changed** for
+a component added to or removed from the system, an `offers` or `requires` line
+added or removed, `instances` changed, a component made `external`, a
+distribution added or removed, or a member line added to or removed from a
+distribution; these two carry no verdict. **instance number changed (breaking)**
+for a locked instance number that differs between the two sides, or that moved
+to another instance; it sets the verdict to `breaking` and the exit code to 1.
+The verdict and the exit code otherwise are the contracts' alone.
 
 Moving `Panel` from machine `Front` to machine `Rear` in deployment `Desk`:
 
@@ -2032,10 +2018,11 @@ placement changed
 ```
 
 With `--format json` the headings are the keys `placement_changed`,
-`composition_changed` and `instance_number_changed`, each a list of `{"path", "before", "after"}`, present
-only when they hold a change. An `.ir.json` snapshot, or a directory of them,
-carries no system — `ridl baseline` publishes package snapshots only — so a
-diff against `.ridl/baseline/` lists no system change.
+`composition_changed` and `instance_number_changed`, each a list of
+`{"path", "before", "after"}`, present only when they hold a change. An
+`.ir.json` snapshot, or a directory of them, carries no system — `ridl baseline`
+publishes package snapshots only — so a diff against `.ridl/baseline/` lists no
+system change.
 
 `--explain` for one category:
 
@@ -2049,8 +2036,8 @@ A signal, event, or fixed payload type changed.
   breaking    any direction, a stream added or removed included
 ```
 
-**Exit codes.** 0 for `identical` and `compatible` above. 1 for `breaking`
-above — the verdict, not a tool failure. 2 when a side fails to compile:
+**Exit codes.** 0 for `identical` and `compatible` above. 1 for `breaking` above
+— the verdict, not a tool failure. 2 when a side fails to compile:
 
 ```sh
 ridl diff old.ridl broken.ridl
@@ -2062,7 +2049,6 @@ error[TYPL-011]: unknown type name `NoSuchType`
   │
 4 │   signal currentSpeed : NoSuchType @10ms
   │                         ^^^^^^^^^^
-
 ```
 
 2 when an input path does not exist:
@@ -2163,18 +2149,18 @@ Options:
 
 **It writes** one `interfaces.lock` per unit, in the directory of the unit's
 `ridl.toml` — the line table that gives every interface of the unit its number
-(ridl §11): a `#` header, `next N`, then one entry per interface, `Name N`,
-with the word `retired` after the number when the interface is gone. An
-interface of a subpackage is keyed by its name relative to the unit, such as
-`cluster.Speed`. A service's inline shape is an interface too and is keyed
-`service:` followed by the service's full dotted name. Only `ridl lock` writes the file: the
-compiler reads it beside the sources, and `ridl fmt` never touches it.
+(ridl §11): a `#` header, `next N`, then one entry per interface, `Name N`, with
+the word `retired` after the number when the interface is gone. An interface of
+a subpackage is keyed by its name relative to the unit, such as `cluster.Speed`.
+A service's inline shape is an interface too and is keyed `service:` followed by
+the service's full dotted name. Only `ridl lock` writes the file: the compiler
+reads it beside the sources, and `ridl fmt` never touches it.
 
 Plain `ridl lock` is the only form that allocates. Every declared interface
 whose name has no live entry gets the next free number, in byte order of the
-name, and the file is written; a declaration that already has its entry is
-left as it is. Over a unit holding `interface Zone` and `interface Cabin`
-and no lock file yet:
+name, and the file is written; a declaration that already has its entry is left
+as it is. Over a unit holding `interface Zone` and `interface Cabin` and no lock
+file yet:
 
 ```sh
 ridl lock . ; echo "exit: $?"
@@ -2194,15 +2180,15 @@ Zone 2
 ```
 
 Run again with nothing to allocate, it prints nothing, writes nothing and
-exits 0. Over a workspace it writes each unit's own file, and each output
-line is prefixed with the unit directory relative to `PATH` and a colon:
-`hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
-whole workspace and allocates in, edits and reports on that member only.
-Until `ridl lock` has run, a declaration with no entry compiles with a
-provisional number, which carries no identity. The catalog hash covers each
-number and its provisional flag, so `ridl lock` changes it: `ridl diff`
-reports a number frozen in place as `interface_frozen`, compatible, and a
-number frozen as another one as `interface_number_changed`, breaking.
+exits 0. Over a workspace it writes each unit's own file, and each output line
+is prefixed with the unit directory relative to `PATH` and a colon:
+`hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the whole
+workspace and allocates in, edits and reports on that member only. Until
+`ridl lock` has run, a declaration with no entry compiles with a provisional
+number, which carries no identity. The catalog hash covers each number and its
+provisional flag, so `ridl lock` changes it: `ridl diff` reports a number frozen
+in place as `interface_frozen`, compatible, and a number frozen as another one
+as `interface_number_changed`, breaking.
 
 The reverse case — a live entry whose interface is gone from the source — is
 RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:
@@ -2212,18 +2198,18 @@ run with RIDL-409 present:
 - `--rename OLD=NEW` rewrites the entry `OLD` to hold the key `NEW` in place,
   keeping its number, when `NEW` is a declaration without an entry — the same
   interface under a new name. Printed as `renamed Old New N`.
-- `--retire NAME` marks the entry retired, keeping its line and its number,
-  when nothing declares `NAME` any more. Printed as `retired Name N`.
+- `--retire NAME` marks the entry retired, keeping its line and its number, when
+  nothing declares `NAME` any more. Printed as `retired Name N`.
 
 Both are repeatable, neither allocates, and `PATH` must resolve to exactly one
 unit. `OLD`, `NEW` and `NAME` are dotted names relative to the unit, such as
 `cluster.Old`, so a rename across sibling packages is
 `ridl lock <unit dir> --rename cluster.Old=cluster.New`. An `interfaces.lock` in
 a subdirectory of a unit is not read and draws the warning RIDL-416
-(`lock-in-subdirectory`). A rename keeps the number because the number, not the name, is the
-interface's wire identity; the old name is then free for a later, unrelated
-interface. Starting from the file above with `interface Zone` renamed to
-`interface Lane` in the source:
+(`lock-in-subdirectory`). A rename keeps the number because the number, not the
+name, is the interface's wire identity; the old name is then free for a later,
+unrelated interface. Starting from the file above with `interface Zone` renamed
+to `interface Lane` in the source:
 
 ```sh
 ridl check . ; echo "exit: $?"
@@ -2249,18 +2235,18 @@ exit: 0
 ```
 
 **The instance lock.** Over a workspace whose `system` has instances, plain
-`ridl lock` also gives every instance without an entry its number and writes
-one `instances.lock`, beside the root `ridl.toml`: a `#` header, `next N`, then
-one entry per instance, `component/instance N`, with the word `retired` after
-the number when the instance is gone. The key is the component's dotted name, a
-`/`, and the instance name; a lone service and a component without an
-`instances` attribute have the one instance `Unit`. Numbers are given in
-ascending order of the provisional numbers `ridl check` showed, which is the
-byte order of the key text, so the number written is the number checked. The
-file is written only when a number is allocated, and only when `PATH` resolves
-to the workspace root: a `PATH` inside a member allocates no instance. Over
-a system with `Cruise [ instances = (primary, backup) ]` and a lone service
-`veh.status`, in package `veh`:
+`ridl lock` also gives every instance without an entry its number and writes one
+`instances.lock`, beside the root `ridl.toml`: a `#` header, `next N`, then one
+entry per instance, `component/instance N`, with the word `retired` after the
+number when the instance is gone. The key is the component's dotted name, a `/`,
+and the instance name; a lone service and a component without an `instances`
+attribute have the one instance `Unit`. Numbers are given in ascending order of
+the provisional numbers `ridl check` showed, which is the byte order of the key
+text, so the number written is the number checked. The file is written only when
+a number is allocated, and only when `PATH` resolves to the workspace root: a
+`PATH` inside a member allocates no instance. Over a system with
+`Cruise [ instances = (primary, backup) ]` and a lone service `veh.status`, in
+package `veh`:
 
 ```text
 allocated veh.Cruise/backup 1
@@ -2278,31 +2264,34 @@ veh.status/Unit 3
 
 A live entry whose instance is gone from the system is RSDL-314, and plain
 `ridl lock` refuses it as it refuses RIDL-409. The two flags are its fix, and
-they accept the same two diagnostics. A key with a `/` names an instance. A
-key without one names a component when `instances.lock` has an entry under it,
-else an interface; when the interface lock of the unit and `instances.lock`
-both hold the key, the command exits 2 and names both files.
+they accept the same two diagnostics. A key with a `/` names an instance. A key
+without one names a component when `instances.lock` has an entry under it, else
+an interface; when the interface lock of the unit and `instances.lock` both hold
+the key, the command exits 2 and names both files.
 
 - `--rename veh.Cruise/backup=veh.Cruise/spare` moves one entry, keeping its
-  number, when `veh.Cruise/spare` is an instance of the system without an
-  entry. `--rename veh.Cruise=veh.Speed` moves every entry under the component,
-  retired ones included, when each live one has an instance of the new
-  component without an entry. A `/` on one side only exits 2. Printed as
-  `renamed Old New N`, one line per entry.
-- `--retire veh.Cruise/backup` marks one entry retired, and `--retire
-  veh.Cruise` marks every live entry under the component retired, when the
-  system has no such instance any more. Printed as `retired Key N`, one line per
-  entry.
+  number, when `veh.Cruise/spare` is an instance of the system without an entry.
+  `--rename veh.Cruise=veh.Speed` moves every entry under the component, retired
+  ones included, when each live one has an instance of the new component without
+  an entry. A `/` on one side only exits 2. Printed as `renamed Old New N`, one
+  line per entry.
+- `--retire veh.Cruise/backup` marks one entry retired, and
+  `--retire
+  veh.Cruise` marks every live entry under the component retired,
+  when the system has no such instance any more. Printed as `retired Key N`, one
+  line per entry.
 
 An instance or component edit does not need `PATH` to resolve to one unit, and
-it exits 2 with `` `instances.lock` belongs to the workspace root: run `ridl
-lock <root>` `` when `PATH` is inside a member.
+it exits 2 with
+`` `instances.lock` belongs to the workspace root: run `ridl
+lock <root>` ``
+when `PATH` is inside a member.
 
 **The merge driver.** Two branches that each edited `interfaces.lock` or
-`instances.lock` merge through `ridl lock merge`, a three-way merge over entries matched by number
-rather than over lines. git runs it when the repository registers it: one
-versioned line in `.gitattributes`, and one `git config` line per clone,
-which git does not version.
+`instances.lock` merge through `ridl lock merge`, a three-way merge over entries
+matched by number rather than over lines. git runs it when the repository
+registers it: one versioned line in `.gitattributes`, and one `git config` line
+per clone, which git does not version.
 
 ```text
 interfaces.lock merge=ridl-lock
@@ -2332,17 +2321,17 @@ Options:
   -h, --help  Print help
 ```
 
-At each number the driver applies git's own three-way rule: a change on one
-side is taken, the same change on both sides is kept once, and two different
-changes to one entry — a retire against a rename, or two renames — are left
-between conflict markers, with every other entry written plain. One rule is
-the driver's own: when both sides allocated one number to two different
-interfaces, ours keeps the number and theirs is renumbered to the next free
-one, which is safe because a branch never allocates. A live name on two
-numbers — each side allocated the same interface on its own number — is a
-conflict too. `next` is the maximum of the three sides plus one per
-renumbered entry, so it is never lowered. With `A 1, B 2` as the base, ours
-retiring `B` and theirs renaming it to `Bee`:
+At each number the driver applies git's own three-way rule: a change on one side
+is taken, the same change on both sides is kept once, and two different changes
+to one entry — a retire against a rename, or two renames — are left between
+conflict markers, with every other entry written plain. One rule is the driver's
+own: when both sides allocated one number to two different interfaces, ours
+keeps the number and theirs is renumbered to the next free one, which is safe
+because a branch never allocates. A live name on two numbers — each side
+allocated the same interface on its own number — is a conflict too. `next` is
+the maximum of the three sides plus one per renumbered entry, so it is never
+lowered. With `A 1, B 2` as the base, ours retiring `B` and theirs renaming it
+to `Bee`:
 
 ```text
 # interfaces.lock — written by ridl lock; do not edit by hand.
@@ -2355,37 +2344,36 @@ Bee 2
 >>>>>>> theirs
 ```
 
-The file is malformed (RIDL-410) until an author keeps one side and deletes
-the markers, and `ridl check` refuses it until then. The driver reads the file
-as an instance lock when the OURS text, else the THEIRS text, holds the
+The file is malformed (RIDL-410) until an author keeps one side and deletes the
+markers, and `ridl check` refuses it until then. The driver reads the file as an
+instance lock when the OURS text, else the THEIRS text, holds the
 `instances.lock` header line, and as an interface lock otherwise; a conflicted
-instance lock is RSDL-315 until resolved. git's `union` driver is
-not a substitute: it discards the base, and resurrects a renamed or retired
-entry silently. An empty BASE — what git passes when both branches created
-the file — reads as `next 1` with no entries. A package directory named
-`merge` is spelled `./merge`: the bare word is the subcommand.
+instance lock is RSDL-315 until resolved. git's `union` driver is not a
+substitute: it discards the base, and resurrects a renamed or retired entry
+silently. An empty BASE — what git passes when both branches created the file —
+reads as `next 1` with no entries. A package directory named `merge` is spelled
+`./merge`: the bare word is the subcommand.
 
-**Exit codes.** 0 when the file is written or there is nothing to change. 1
-on a diagnostic error over the source, with nothing written: a live entry with
-no declaration when plain `ridl lock` is asked to allocate (RIDL-409), a
-malformed lock file — a git conflict left in it included — (RIDL-410, or
-RSDL-315 for `instances.lock`), a live instance entry with no instance
-(RSDL-314), or any other compile error, in any package of the workspace. 2 when the path is
-missing or unreadable, on a bad flag — `--rename` naming no live entry or a
-`NEW` that is not a declaration without an entry, `--retire` naming an
-interface that is still declared, an interface edit over more than one package,
-an instance edit from inside a member, `--rename` with a `/` on one side only,
-`--rename` to an instance that has an entry, `--retire` of an instance the
-system still has, or a key that both locks hold — or on an I/O failure writing
-the file. Every cell is confirmed against the built
-binary by `crates/ridl/tests/lock_cli.rs`. `ridl lock merge` exits 0 when the
-three sides merge clean and OURS is written; 1 when entries disagree — OURS is
-written with the conflict markers and is malformed until resolved; 2 when an
-input cannot be read or does not parse (OURS is left as it was), when
-`MARKER_SIZE` is not a number from 1 up, or on an I/O failure writing OURS.
-Every cell is confirmed by `crates/ridl/tests/lock_merge.rs`, which also
-registers the driver in a temporary repository and merges two branches
-through git.
+**Exit codes.** 0 when the file is written or there is nothing to change. 1 on a
+diagnostic error over the source, with nothing written: a live entry with no
+declaration when plain `ridl lock` is asked to allocate (RIDL-409), a malformed
+lock file — a git conflict left in it included — (RIDL-410, or RSDL-315 for
+`instances.lock`), a live instance entry with no instance (RSDL-314), or any
+other compile error, in any package of the workspace. 2 when the path is missing
+or unreadable, on a bad flag — `--rename` naming no live entry or a `NEW` that
+is not a declaration without an entry, `--retire` naming an interface that is
+still declared, an interface edit over more than one package, an instance edit
+from inside a member, `--rename` with a `/` on one side only, `--rename` to an
+instance that has an entry, `--retire` of an instance the system still has, or a
+key that both locks hold — or on an I/O failure writing the file. Every cell is
+confirmed against the built binary by `crates/ridl/tests/lock_cli.rs`.
+`ridl lock merge` exits 0 when the three sides merge clean and OURS is written;
+1 when entries disagree — OURS is written with the conflict markers and is
+malformed until resolved; 2 when an input cannot be read or does not parse (OURS
+is left as it was), when `MARKER_SIZE` is not a number from 1 up, or on an I/O
+failure writing OURS. Every cell is confirmed by
+`crates/ridl/tests/lock_merge.rs`, which also registers the driver in a
+temporary repository and merges two branches through git.
 
 ### `ridl lsp`
 
@@ -2410,26 +2398,26 @@ the Language Server Protocol over its stdin and stdout.
 
 The server never fetches. It reads the remote units of `[imports]` from
 `vendor/` at the manifest root and then from the cache, as `ridl check --frozen`
-does, so run `ridl check` or `ridl vendor` once in a fresh clone.
-It loads the remote units once, when it loads the workspace, and does not
-reload them when `ridl.lock` changes: after a `ridl check` that fetches a unit
-or rewrites `ridl.lock`, restart the server. It publishes no diagnostics for a
-file of a remote unit; it shows the errors of a remote unit once per load, in
-one window message.
+does, so run `ridl check` or `ridl vendor` once in a fresh clone. It loads the
+remote units once, when it loads the workspace, and does not reload them when
+`ridl.lock` changes: after a `ridl check` that fetches a unit or rewrites
+`ridl.lock`, restart the server. It publishes no diagnostics for a file of a
+remote unit; it shows the errors of a remote unit once per load, in one window
+message.
 
 **Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change
 nothing. The LSP specification (3.17, "Implementation Considerations")
-recommends that a server accept both, and editor clients pass them: the VS
-Code client runs the server as `ridl lsp --stdio`. Stdio is the only
-transport, so `--pipe` and `--socket` are refused with exit 2. The client's
-process id also arrives in the `initialize` request.
+recommends that a server accept both, and editor clients pass them: the VS Code
+client runs the server as `ridl lsp --stdio`. Stdio is the only transport, so
+`--pipe` and `--socket` are refused with exit 2. The client's process id also
+arrives in the `initialize` request.
 
-**Exit codes.** They follow the LSP specification (3.17, "Exit
-Notification"). 0 on a clean shutdown — the client sends `shutdown` then
-`exit`. 1 when the client sends `exit` with no `shutdown` before it, or closes
-stdin after the handshake with no `shutdown`. 2 when the transport ends before
-the `initialize` handshake, or fails for any other reason. All four outcomes are
-confirmed directly against the built binary by `crates/ridl/tests/servers.rs`.
+**Exit codes.** They follow the LSP specification (3.17, "Exit Notification"). 0
+on a clean shutdown — the client sends `shutdown` then `exit`. 1 when the client
+sends `exit` with no `shutdown` before it, or closes stdin after the handshake
+with no `shutdown`. 2 when the transport ends before the `initialize` handshake,
+or fails for any other reason. All four outcomes are confirmed directly against
+the built binary by `crates/ridl/tests/servers.rs`.
 
 ### `ridl mcp`
 
@@ -2460,21 +2448,22 @@ Options:
 
 Behavior lives in `crates/ridl-mcp`; this subcommand builds the Tokio runtime
 and wires the stdio transport. An agent host spawns it and speaks MCP over stdin
-and stdout. The [crate README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md) documents input
-and output schemas, tool errors and the read-only workspace contract. The command
-takes no flag of its own.
+and stdout. The
+[crate README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md)
+documents input and output schemas, tool errors and the read-only workspace
+contract. The command takes no flag of its own.
 
-**Exit codes.** 0 on a clean shutdown: the host closes the server's stdin,
-which is how a stdio host ends an MCP session. 2 when the Tokio runtime fails
-to build, when the transport ends before the `initialize` handshake, or when a
-task the SDK runs for the session fails after it. A read failure on stdin
-after the handshake is not distinguishable from the host closing stdin — the
-SDK logs it and ends the session the same way — so it exits 0. There is no
-exit 1: `ridl mcp` answers no question that can come back negative. The clean
-shutdown and the transport ending before the handshake are confirmed directly
-against the built binary by `crates/ridl/tests/servers.rs`; a session-task
-failure cannot be provoked through the server, so its mapping is tested on its
-own in `crates/ridl-mcp`.
+**Exit codes.** 0 on a clean shutdown: the host closes the server's stdin, which
+is how a stdio host ends an MCP session. 2 when the Tokio runtime fails to
+build, when the transport ends before the `initialize` handshake, or when a task
+the SDK runs for the session fails after it. A read failure on stdin after the
+handshake is not distinguishable from the host closing stdin — the SDK logs it
+and ends the session the same way — so it exits 0. There is no exit 1:
+`ridl mcp` answers no question that can come back negative. The clean shutdown
+and the transport ending before the handshake are confirmed directly against the
+built binary by `crates/ridl/tests/servers.rs`; a session-task failure cannot be
+provoked through the server, so its mapping is tested on its own in
+`crates/ridl-mcp`.
 
 ### `ridl init`
 
@@ -2496,8 +2485,8 @@ Options:
   -h, --help         Print help
 ```
 
-Writes the files of a new unit into a directory that already exists, and
-nothing else. The default is one standalone package: a `ridl.toml` that holds a
+Writes the files of a new unit into a directory that already exists, and nothing
+else. The default is one standalone package: a `ridl.toml` that holds a
 `[package]` table with the version `0.1.0`, and `<name>.ridl` in the same
 directory, which declares `package <name>`, one unit-carrying type and one
 interface with one signal. `ridl check` and `ridl fmt --check` draw nothing on
@@ -2509,29 +2498,29 @@ prints `Created workspace <name>`, and `ridl check` passes from the root and
 from inside the member.
 
 The name is the directory's basename when that is already a legal package name
-(lowercase dot-separated segments, each a letter followed by letters or
-digits). The basename is taken from the path as written, so a symbolic link is
-not followed to find it. The command never rewrites a name: a basename that is
-not legal exits 2 with an error that asks for `--name`, and so does a `--name`
-value that is not legal. A name with a reserved word as a segment, such as
-`type` or `veh.signal`, is also refused, because a source file that declares it
-does not parse. With `--workspace`, `--name` names the member and the root
-directory keeps its own name.
+(lowercase dot-separated segments, each a letter followed by letters or digits).
+The basename is taken from the path as written, so a symbolic link is not
+followed to find it. The command never rewrites a name: a basename that is not
+legal exits 2 with an error that asks for `--name`, and so does a `--name` value
+that is not legal. A name with a reserved word as a segment, such as `type` or
+`veh.signal`, is also refused, because a source file that declares it does not
+parse. With `--workspace`, `--name` names the member and the root directory
+keeps its own name.
 
-**Exit codes.** 0 when the files are written. 2, with an `error:` line on
-stderr and nothing written, when a target file already exists, the path is not a
+**Exit codes.** 0 when the files are written. 2, with an `error:` line on stderr
+and nothing written, when a target file already exists, the path is not a
 directory, the name is not legal or holds a reserved word, or a `ridl.toml`
 above or below the package directory would make a manifest inside a unit
 (MANI-013): the directory sits inside another unit or inside a workspace, or it
 already holds a `ridl.toml` in a subdirectory that `ridl check` would also
 reject. The search below is the loader's own: it skips directories whose name
-starts with a dot and does not follow symbolic links. This command does not add a member
-to an existing workspace. The search upward does not stop at a `.git` directory,
-because MANI-013 does not, and it follows symbolic links. Every target is
-checked before any file is written, the member files are written before the
-workspace root manifest, and a write that fails removes the paths this command
-created. There is no exit 1. The cases are confirmed against the built binary by
-`crates/ridl/tests/scaffold_cli.rs`.
+starts with a dot and does not follow symbolic links. This command does not add
+a member to an existing workspace. The search upward does not stop at a `.git`
+directory, because MANI-013 does not, and it follows symbolic links. Every
+target is checked before any file is written, the member files are written
+before the workspace root manifest, and a write that fails removes the paths
+this command created. There is no exit 1. The cases are confirmed against the
+built binary by `crates/ridl/tests/scaffold_cli.rs`.
 
 ### `ridl new`
 
@@ -2597,11 +2586,10 @@ The transcript below is abridged: it is the output for the test corpus in
 `crates/ridl/tests/baseline-corpus`, with each `...` line standing for lines
 that were removed. The keys print in alphabetical order. First comes
 `compatible`, the earlier catalog hashes the descriptor lists as compatible with
-this one, each as its 32 bytes; it is empty here, because the corpus's
-published baseline holds no `corpus.baseline.catalogs` file. Then come the 32
-bytes of the catalog hash, one entry per interface, the unit name, the retired
-numbers, the toolchain version that wrote the file, and the descriptor's schema
-version.
+this one, each as its 32 bytes; it is empty here, because the corpus's published
+baseline holds no `corpus.baseline.catalogs` file. Then come the 32 bytes of the
+catalog hash, one entry per interface, the unit name, the retired numbers, the
+toolchain version that wrote the file, and the descriptor's schema version.
 
 ```sh
 ridl build crates/ridl/tests/baseline-corpus --emit catalog
@@ -2662,15 +2650,15 @@ ridl describe out/corpus.baseline.catalog.binfb
 }
 ```
 
-**Exit codes.** 0 when the descriptor was printed. 2 for a missing or
-unreadable path, a file that is neither a catalog descriptor nor a deployment
-descriptor, a version this
-toolchain does not read, a malformed buffer, a deployment descriptor with a
-damaged embedded catalog, or an I/O failure writing to stdout (a pipe whose
-reader has gone); the message names the path and the cause. There is no exit 1: `ridl describe` answers no question that can come
-back negative. The exit-0 outcome, the missing path, the foreign file, a
-malformed buffer (three fixtures), a version the toolchain does not read, and the write
-failure on stdout are confirmed against the built binary by
+**Exit codes.** 0 when the descriptor was printed. 2 for a missing or unreadable
+path, a file that is neither a catalog descriptor nor a deployment descriptor, a
+version this toolchain does not read, a malformed buffer, a deployment
+descriptor with a damaged embedded catalog, or an I/O failure writing to stdout
+(a pipe whose reader has gone); the message names the path and the cause. There
+is no exit 1: `ridl describe` answers no question that can come back negative.
+The exit-0 outcome, the missing path, the foreign file, a malformed buffer
+(three fixtures), a version the toolchain does not read, and the write failure
+on stdout are confirmed against the built binary by
 `crates/ridl/tests/describe_cli.rs`.
 
 ### `ridl vendor`
@@ -2693,8 +2681,8 @@ Options:
 ```
 
 `ridl vendor` makes a project build with no network and no cache; the
-[Remote units and `ridl vendor`](remote-units.md) chapter is the guide. `PATH` is a
-unit directory, a workspace root or a file, and defaults to the current
+[Remote units and `ridl vendor`](remote-units.md) chapter is the guide. `PATH`
+is a unit directory, a workspace root or a file, and defaults to the current
 directory; the command acts on the manifest root above it, found as `ridl check`
 finds it, so `vendor/` is at the workspace root whichever member the command
 runs from. It then does three things:
@@ -2710,8 +2698,8 @@ runs from. It then does three things:
    name is no `[imports]` key is removed, whether or not `ridl vendor` wrote it,
    so that, after a run, no directory other than a remote unit's remains among
    the non-hidden entries of `vendor/`; a file, a symbolic link and a hidden
-   entry (a name that starts with `.`) are left alone. Nothing in
-   `vendor/` changes when the run has an error.
+   entry (a name that starts with `.`) are left alone. Nothing in `vendor/`
+   changes when the run has an error.
 
 Each changed unit prints one line, `vendored <key>` or `removed <key>`; a run
 that changes nothing prints `vendor/ is up to date; nothing to change`. A unit's
@@ -2735,11 +2723,11 @@ that no longer matches its `tree` hash is `MANI-107` and names `ridl vendor`.
 
 **`ridl vendor` exit codes.**
 
-| Exit | Meaning |
-| ---- | ------- |
-| 0 | `vendor/` was written, or there was nothing to change |
-| 1 | a diagnostic error, including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit; `vendor/` is left untouched, while `ridl.lock` may be updated, as it is by every command that reads remote units without `--frozen`: it is rewritten when every remote unit was fetched and verified, even if a source error follows |
-| 2 | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure, or a fetch failure (MANI-101) |
+| Exit | Meaning                                                                                                                                                                                                                                                                                                                                        |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `vendor/` was written, or there was nothing to change                                                                                                                                                                                                                                                                                          |
+| 1    | a diagnostic error, including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit; `vendor/` is left untouched, while `ridl.lock` may be updated, as it is by every command that reads remote units without `--frozen`: it is rewritten when every remote unit was fetched and verified, even if a source error follows |
+| 2    | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure, or a fetch failure (MANI-101)                                                                                                                                                                                                                         |
 
 `ridl vendor` applies no `[lints]` levels, and a lint that is `allow` by default
 is left out of its output, as for `ridl lock`.
@@ -2759,11 +2747,11 @@ clean `vendor/`.
 
 **`ridl vendor --check` exit codes.**
 
-| Exit | Meaning |
-| ---- | ------- |
-| 0 | `vendor/` matches |
-| 1 | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error |
-| 2 | a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag |
+| Exit | Meaning                                                                                                                             |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `vendor/` matches                                                                                                                   |
+| 1    | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error |
+| 2    | a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag                                                          |
 
 ## `ridlc`
 
@@ -2787,8 +2775,8 @@ Options:
 ```
 
 `ridlc` has no humane defaults: `PATH` is required on both subcommands, and
-`build`'s `--out-dir` is required rather than defaulted to `out`. Both are
-usage errors — exit 2 — courtesy of `clap`, not application code:
+`build`'s `--out-dir` is required rather than defaulted to `out`. Both are usage
+errors — exit 2 — courtesy of `clap`, not application code:
 
 ```sh
 ridlc check
@@ -2823,15 +2811,14 @@ Options:
 ```
 
 **It writes `ridl.lock` under the same condition `ridl check` does** — the
-manifest declares `[imports]`, the run is non-frozen, and materialization
-found no error — because `ridl check` calls this very function
-(`ridlc::run_check`) directly, forwarding its own `PATH` and `--frozen`.
-Otherwise it reads the workspace, renders diagnostics to stderr, and touches
-no file.
+manifest declares `[imports]`, the run is non-frozen, and materialization found
+no error — because `ridl check` calls this very function (`ridlc::run_check`)
+directly, forwarding its own `PATH` and `--frozen`. Otherwise it reads the
+workspace, renders diagnostics to stderr, and touches no file.
 
-**Exit codes.** 0 clean, 1 a diagnostic is an error, 2 an input/output or
-usage error — identical in shape to `ridl check`, and, on the same input,
-identical in rendered text:
+**Exit codes.** 0 clean, 1 a diagnostic is an error, 2 an input/output or usage
+error — identical in shape to `ridl check`, and, on the same input, identical in
+rendered text:
 
 ```sh
 ridlc check .
@@ -2843,7 +2830,6 @@ error[TYPL-104]: range minimum 250 is greater than maximum 0
   │
 3 │ type Speed : km/h [250.0..0.0 step 0.5]
   │                   ^^^^^^^^^^^^^^^^^^^^^
-
 ```
 
 run over the same directory as the `type Speed : km/h [250.0..0.0 step 0.5]`
@@ -2916,11 +2902,11 @@ Options:
 ```
 
 **It writes** the same artifacts as `ridl build` — and `ridl.lock` under the
-same `[imports]` condition — under the `--out-dir` you must now name
-explicitly. `--plugin`, `--plugin-timeout` and `--deployment` are the same three
-flags as on [`ridl build`](#ridl-build), spelled and documented identically.
-`ridlc` reads no baseline, so its descriptors and codegen requests carry an
-empty `compatible` list; `ridl build` is the command that fills it:
+same `[imports]` condition — under the `--out-dir` you must now name explicitly.
+`--plugin`, `--plugin-timeout` and `--deployment` are the same three flags as on
+[`ridl build`](#ridl-build), spelled and documented identically. `ridlc` reads
+no baseline, so its descriptors and codegen requests carry an empty `compatible`
+list; `ridl build` is the command that fills it:
 
 ```sh
 ridlc build . --out-dir out && find out -type f | sort
@@ -2932,69 +2918,68 @@ out/cli.demo.rs
 out/lib.rs
 ```
 
-**Exit codes.** 0/1/2 in the same shape as `ridl build` — clean, a diagnostic
-is an error, or an input/output error such as a missing `--out-dir` (usage,
-exit 2) or a workspace that cannot be found (exit 2).
+**Exit codes.** 0/1/2 in the same shape as `ridl build` — clean, a diagnostic is
+an error, or an input/output error such as a missing `--out-dir` (usage, exit 2)
+or a workspace that cannot be found (exit 2).
 
 ## How `ridl` and `ridlc` relate
 
 `ridlc` is the plumbing: two subcommands, `check` and `build`, both with a
-required `PATH` and no defaults — stable flags meant for CI and build
-scripts. `ridl check` and `ridl build` call straight into `ridlc`'s own
-library functions and add nothing to the compile itself; what they add is
-humane defaults (`PATH` defaults to `.`, `ridl build`'s `--out-dir` defaults
-to `out`) and, on `check` only, the baseline desk check described
-[above](#ridl-check), which has no `ridlc` equivalent. On identical input the
-two render byte-identical diagnostics, confirmed earlier on this page.
+required `PATH` and no defaults — stable flags meant for CI and build scripts.
+`ridl check` and `ridl build` call straight into `ridlc`'s own library functions
+and add nothing to the compile itself; what they add is humane defaults (`PATH`
+defaults to `.`, `ridl build`'s `--out-dir` defaults to `out`) and, on `check`
+only, the baseline desk check described [above](#ridl-check), which has no
+`ridlc` equivalent. On identical input the two render byte-identical
+diagnostics, confirmed earlier on this page.
 
 `ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`,
-`ridl describe`, and `ridl vendor` have no `ridlc` counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
-its own `--help` shows. Reach for `ridl` unless you are scripting the
-compiler directly and want its stable, default-free flags.
+`ridl describe`, and `ridl vendor` have no `ridlc` counterpart at all —
+`ridlc`'s surface is `check` and `build`, full stop, as its own `--help` shows.
+Reach for `ridl` unless you are scripting the compiler directly and want its
+stable, default-free flags.
 
 ## Exit codes across the toolchain
 
-| Command | 0 | 1 | 2 |
-| --- | --- | --- | --- |
-| `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, a snapshot-named entry inside it that cannot be stat'ed, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
-| `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, a snapshot-named entry in the output directory cannot be stat'ed, context/history evidence is invalid, historical inline evidence is missing or unusable without explicit recovery, current remote inline evidence is missing or unusable, or a transaction marker records an active or interrupted baseline publication |
-| `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
-| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, is `vendor/` at the manifest root or lies under it, or a directory the walk reaches is unreadable — named in the message, unlike `ridl check`, `ridl build`, `ridl baseline`, `ridl lock`, `ridlc check` and `ridlc build`, which name no path at all |
-| `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing or has invalid context, explicit podbuf comparison has missing or unusable remote inline evidence, or neither `--explain` nor both inputs were given |
-| `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one package, an instance edit from inside a member; an I/O failure writing |
-| `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
-| `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written |
-| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
-| `ridl vendor` | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108) | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/`, or a fetch failure (MANI-101) |
+| Command                      | 0                                                                                                                   | 1                                                                                                                                                                                                                                                                                               | 2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl check` / `ridlc check` | clean (warnings included)                                                                                           | a diagnostic is an error                                                                                                                                                                                                                                                                        | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, a snapshot-named entry inside it that cannot be stat'ed, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse                                                                                                                                                                                           |
+| `ridl build` / `ridlc build` | clean, every requested artifact written                                                                             | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system                                                                                                                                                            | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir`                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `ridl baseline`              | clean, snapshot(s) published                                                                                        | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched             | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, a snapshot-named entry in the output directory cannot be stat'ed, context/history evidence is invalid, historical inline evidence is missing or unusable without explicit recovery, current remote inline evidence is missing or unusable, or a transaction marker records an active or interrupted baseline publication |
+| `ridl test`                  | every range self-corpus and sampled `require` passed                                                                | a self-corpus failure, or a clause raised an evaluation error                                                                                                                                                                                                                                   | the workspace fails to compile, cannot be found, or `--samples 0`                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `ridl fmt`                   | nothing under `--check` would change, or the rewrite succeeded                                                      | a file under `--check` would change, or has a parse error                                                                                                                                                                                                                                       | the path does not exist, is `vendor/` at the manifest root or lies under it, or a directory the walk reaches is unreadable — named in the message, unlike `ridl check`, `ridl build`, `ridl baseline`, `ridl lock`, `ridlc check` and `ridlc build`, which name no path at all                                                                                                                                                                                                                       |
+| `ridl diff`                  | the change is compatible, or the two sides are identical                                                            | the change is breaking                                                                                                                                                                                                                                                                          | a side fails to compile, an input is missing or has invalid context, explicit podbuf comparison has missing or unusable remote inline evidence, or neither `--explain` nor both inputs were given                                                                                                                                                                                                                                                                                                    |
+| `ridl lock`                  | the file is written, or there is nothing to change                                                                  | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error                                                                       | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one package, an instance edit from inside a member; an I/O failure writing                                                                                                                                                                         |
+| `ridl lock merge`            | the three sides merge clean, and the result is written to OURS                                                      | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved                                                                                                                                                         | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS                                                                                                                                                                                                                                                                                                                                                          |
+| `ridl init` / `ridl new`     | the files are written                                                                                               |                                                                                                                                                                                                                                                                                                 | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written                                                                                                                                                                                                                         |
+| `ridl describe`              | the descriptor was printed                                                                                          |                                                                                                                                                                                                                                                                                                 | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                                                                                                                                                                                                                                                    |
+| `ridl vendor`                | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108) | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/`, or a fetch failure (MANI-101)                                                                                                                                                                                                                                                                                                                                                             |
 
-This table is this repository's own taxonomy, recorded in
-[ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a
-real answer that happens to be negative; **2** the tool could not answer at
-all. [clig.dev][clig], which the ADR quotes rather than paraphrases, says
-nothing about a multi-valued exit code — it treats exit status as a binary
-success/failure signal. `ridl diff`'s breaking-change exit 1,
-`ridl fmt --check`'s would-reformat exit 1, and `ridl test`'s evaluation-fault
-exit 1 rest on the external `diff(1)`/`grep(1)` convention of a specific
-non-zero code being part of the answer, not on any clig endorsement of it —
-clig is silent here, not permissive.
+This table is this repository's own taxonomy, recorded in [ADR-0010][adr-0010]:
+**0** succeeded, or the verdict is affirmative; **1** a real answer that happens
+to be negative; **2** the tool could not answer at all. [clig.dev][clig], which
+the ADR quotes rather than paraphrases, says nothing about a multi-valued exit
+code — it treats exit status as a binary success/failure signal. `ridl diff`'s
+breaking-change exit 1, `ridl fmt --check`'s would-reformat exit 1, and
+`ridl test`'s evaluation-fault exit 1 rest on the external `diff(1)`/`grep(1)`
+convention of a specific non-zero code being part of the answer, not on any clig
+endorsement of it — clig is silent here, not permissive.
 
-Exit code 1 means something different in almost every row: for `ridl diff` it
-is the *breaking* verdict, a statement about the change, not a failure of the
-tool; for `ridl test` it is a *test failure* — a self-corpus problem or an
-evaluation error, where a `suspect` finding is not enough to fail the run; for
-`ridl check`, `ridl build`, and `ridl baseline` it is an ordinary *diagnostic
-error*; for `ridl fmt` it is *would change* or *unparsable*. Reading a bare
-`$?` of 1 without knowing which subcommand produced it says nothing on its
-own.
+Exit code 1 means something different in almost every row: for `ridl diff` it is
+the _breaking_ verdict, a statement about the change, not a failure of the tool;
+for `ridl test` it is a _test failure_ — a self-corpus problem or an evaluation
+error, where a `suspect` finding is not enough to fail the run; for
+`ridl check`, `ridl build`, and `ridl baseline` it is an ordinary _diagnostic
+error_; for `ridl fmt` it is _would change_ or _unparsable_. Reading a bare `$?`
+of 1 without knowing which subcommand produced it says nothing on its own.
 
-Exit code 2 is the one genuinely shared meaning — an input the command could
-not use at all, including `ridl fmt`'s missing or unreadable path since
-[ADR-0010][adr-0010] closed the gap documented under
-[`ridl fmt`](#ridl-fmt) above. A `clap`-level usage error — a missing
-required argument, an unrecognized flag, or no subcommand at all — is also
-exit 2 on both binaries, which happens to agree with the applications' own
-convention rather than being one of their exit paths:
+Exit code 2 is the one genuinely shared meaning — an input the command could not
+use at all, including `ridl fmt`'s missing or unreadable path since
+[ADR-0010][adr-0010] closed the gap documented under [`ridl fmt`](#ridl-fmt)
+above. A `clap`-level usage error — a missing required argument, an unrecognized
+flag, or no subcommand at all — is also exit 2 on both binaries, which happens
+to agree with the applications' own convention rather than being one of their
+exit paths:
 
 ```sh
 ridl check --bogus-flag
@@ -3014,23 +2999,21 @@ For more information, try '--help'.
 does `--version`/`-V`, covered [above](#ridl).
 
 Seven of the subcommands that take a path also share a lesser-known gap:
-[issue driftsys/ridl#196][issue-196] records that when the *workspace root
-itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
-`ridl lock`, `ridlc check`, and `ridlc build` all report
+[issue driftsys/ridl#196][issue-196] records that when the _workspace root
+itself_ is unreadable, `ridl check`, `ridl build`, `ridl baseline`, `ridl lock`,
+`ridlc check`, and `ridlc build` all report
 `` error: no `ridl.toml` found at or above `<path>` `` — exit 2 is right, the
-cause is wrong, confirmed directly against this build — and when a
-*subdirectory nested inside* an otherwise-readable workspace is unreadable,
-the same six report a bare `error: Permission denied (os error 13)`, naming
-no path at all, also confirmed directly. `ridl test` reaches the same code
-path and wraps it with the top-level path it was given
-(`error: <path>: no ridl.toml found…` in the first case,
-`error: <path>: Permission denied…` in the second — also confirmed directly),
-so it names *a* path but the wrong one in the second case: the workspace
-root, not the subdirectory that actually failed. `ridl fmt` is the one
-subcommand that names the actual cause in both cases (see
-[above](#ridl-fmt)); `ridl diff` names it only when the unreadable directory
-is the argument passed to it directly, not one nested inside a readable
-argument.
+cause is wrong, confirmed directly against this build — and when a _subdirectory
+nested inside_ an otherwise-readable workspace is unreadable, the same six
+report a bare `error: Permission denied (os error 13)`, naming no path at all,
+also confirmed directly. `ridl test` reaches the same code path and wraps it
+with the top-level path it was given (`error: <path>: no ridl.toml found…` in
+the first case, `error: <path>: Permission denied…` in the second — also
+confirmed directly), so it names _a_ path but the wrong one in the second case:
+the workspace root, not the subdirectory that actually failed. `ridl fmt` is the
+one subcommand that names the actual cause in both cases (see
+[above](#ridl-fmt)); `ridl diff` names it only when the unreadable directory is
+the argument passed to it directly, not one nested inside a readable argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md

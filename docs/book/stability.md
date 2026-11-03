@@ -32,20 +32,20 @@ promise covers them from the first release that contains them.
   the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names,
   and the offset and size of every field of the podbuf head of every struct and
   union of the frozen corpus.
-- **The minimum Rust version.** Rust 1.88 for `ridl-rt`,
-  `ridl-rt-conformance`, `ridl-loopback`, `ridl-transport-ws` (with every cargo
-  feature) and `ridl-descriptor`, with edition 2021 for the first four and
-  edition 2024 for `ridl-descriptor`. The generated crate compiles as edition
-  2021 with Rust 1.88 with every cargo feature on and with default features
-  off, and `ridl build` writes `edition = "2021"` and `rust-version = "1.88"`
-  in its manifest. A 0.10.x release does not raise a minimum. Releases before
-  the one that raised it to 1.88 had a minimum of Rust 1.83.
+- **The minimum Rust version.** Rust 1.88 for `ridl-rt`, `ridl-rt-conformance`,
+  `ridl-loopback`, `ridl-transport-ws` (with every cargo feature) and
+  `ridl-descriptor`, with edition 2021 for the first four and edition 2024 for
+  `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.88
+  with every cargo feature on and with default features off, and `ridl build`
+  writes `edition = "2021"` and `rust-version = "1.88"` in its manifest. A
+  0.10.x release does not raise a minimum. Releases before the one that raised
+  it to 1.88 had a minimum of Rust 1.83.
 
 The minimum covers the crates RIDL publishes and emits, not later releases of
 their dependencies. A dependency, such as `regex`, can publish a release that
-requires a later Rust. Edition 2021 selects resolver 2, which by default
-selects the newest release without reading its `rust-version`. To build with
-Rust 1.88, resolve dependencies with a resolver that reads `rust-version`: set
+requires a later Rust. Edition 2021 selects resolver 2, which by default selects
+the newest release without reading its `rust-version`. To build with Rust 1.88,
+resolve dependencies with a resolver that reads `rust-version`: set
 `rust-version = "1.88"` in your own package (the emitted manifest of the
 generated crate sets it), and resolve with
 `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set or with resolver 3, or
@@ -61,9 +61,9 @@ that crate with Rust 1.88.
   existing subcommand or tool is optional: a 0.10.x release does not add a
   required one to an existing subcommand or tool, and does not make an optional
   one required. A new subcommand or tool may have required ones.
-- **New lints.** A new lint starts at the `allow` or `info` level, so it does not
-  fail a build that passed before. TYPL-116 (`bound-above-transfer`) is the one
-  exception: it starts at `warn`, which does not fail `ridl check` either,
+- **New lints.** A new lint starts at the `allow` or `info` level, so it does
+  not fail a build that passed before. TYPL-116 (`bound-above-transfer`) is the
+  one exception: it starts at `warn`, which does not fail `ridl check` either,
   because a bound that no interaction kind can carry is a defect.
 - **Message text.** The text of a diagnostic message, of a doc comment and of
   generated docs.
@@ -83,11 +83,12 @@ The releases of 0.9.x and earlier are not covered by this promise.
 
 On 2026-11-02 the owner approved the baseline evidence and diff-contract changes
 for remote inline podbuf growth (driftsys/ridl#1163), under
-[ADR-0029](../decisions/ADR-0029-stability-policy.md). They must ship together in
-a declared pre-1.0 minor release: source comparisons, enriched baseline evidence,
-and explicit repair/reset. The minimum supporting tool is the first release
-that writes the baseline context. Repository version pins and publication
-remain separate release work. These changes must not ship in a 0.14.x patch.
+[ADR-0029](../decisions/ADR-0029-stability-policy.md). They must ship together
+in a declared pre-1.0 minor release: source comparisons, enriched baseline
+evidence, and explicit repair/reset. The minimum supporting tool is the first
+release that writes the baseline context. Repository version pins and
+publication remain separate release work. These changes must not ship in a
+0.14.x patch.
 
 The assessed surfaces are `.ridl/baseline`'s new version-1 `context.json`, the
 `podbuf_remote_inline_growth` category, exit 2 when explicit podbuf comparison
@@ -99,8 +100,8 @@ wire layout, canonical catalog-hash input or IR package protocol changes.
 
 Use the first release that writes the baseline context or later for enriched
 compatibility decisions. An older tool may ignore the context file and continue
-running, but cannot establish the new historical comparison. Legacy absence never licenses using today's remote pin
-as historical evidence. Follow the
+running, but cannot establish the new historical comparison. Legacy absence
+never licenses using today's remote pin as historical evidence. Follow the
 [CLI migration and recovery procedure](cli-reference.md#baseline-publication-and-recovery);
 it defines what repair can verify, when reset is needed and which prior files
 are preserved. Neither mode certifies older carried hashes. Release notes must
@@ -120,10 +121,10 @@ and `occurrence` frames, which no test vector of the frame specification §11.1
 shows, the payload-presence rule of §11.1 for a `publish` under `Init` or
 `Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
 and the codes of §4 and §9.6 that no vector carries, among them the `kind`
-values 2 and 5 and the `attach` encodings 2 and 3, and the `ridl-ir` types
-that appear in `ridl-descriptor` signatures
-([#1010](https://github.com/driftsys/ridl/issues/1010)). A contributor who
-must change a frozen surface follows the steps in `CONTRIBUTING.md`, "Changing a
+values 2 and 5 and the `attach` encodings 2 and 3, and the `ridl-ir` types that
+appear in `ridl-descriptor` signatures
+([#1010](https://github.com/driftsys/ridl/issues/1010)). A contributor who must
+change a frozen surface follows the steps in `CONTRIBUTING.md`, "Changing a
 frozen surface". The full policy, with the gate that checks each surface and the
 rules for approving a break, is
 [ADR-0029](../decisions/ADR-0029-stability-policy.md).

@@ -1,18 +1,18 @@
 # RIDL
 
-**One platform, four languages, one grammar.** RIDL is a family of languages
-for modeling component-based reactive systems: a shared vocabulary layer and
-three description languages over it, sharing one grammar, one toolchain, and one
+**One platform, four languages, one grammar.** RIDL is a family of languages for
+modeling component-based reactive systems: a shared vocabulary layer and three
+description languages over it, sharing one grammar, one toolchain, and one
 intermediate representation (IR).
 
 ## The family
 
-| Language | Expands to | Describes | Audience |
-| --- | --- | --- | --- |
-| **typl** | type language | data — types, ranges, units, constants | data architects |
+| Language | Expands to                              | Describes                                                                                                   | Audience                                |
+| -------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| **typl** | type language                           | data — types, ranges, units, constants                                                                      | data architects                         |
 | **ridl** | reactive interface description language | interactions at every boundary — system, person, world (`signal` / `event` / `command` / `query` / `fixed`) | service, HMI, and sensor/actuator teams |
-| **rmdl** | reactive model description language | behaviour — synchronous / functional compute | control / algorithm engineers |
-| **rsdl** | reactive system description language | architecture — components, wiring, deployment | integrators |
+| **rmdl** | reactive model description language     | behaviour — synchronous / functional compute                                                                | control / algorithm engineers           |
+| **rsdl** | reactive system description language    | architecture — components, wiring, deployment                                                               | integrators                             |
 
 The dependency lattice is `typl ← {ridl, rmdl} ← rsdl`: typl is the only
 standalone member, and rsdl is the apex that composes the others. rxdl is not a
@@ -23,30 +23,30 @@ interaction families (ADR-0012).
 
 Three layers of the family have a working toolchain in this repository:
 
-- **typl** — the vocabulary layer: compiler, `ridl fmt`, an LSP
-  server, and a VS Code extension.
-- **ridl** — the interface layer over it: the five interaction kinds,
-  timing annotations, contracts, interfaces and services, a TypeScript code
-  generator beside the Rust one, and `ridl diff`.
-- **rsdl** — the architecture layer: components, the system,
-  distributions and deployments, checked against the rsdl reference and lowered
-  to the IR beside the package IR, and `ridl diff` at the system. See
+- **typl** — the vocabulary layer: compiler, `ridl fmt`, an LSP server, and a VS
+  Code extension.
+- **ridl** — the interface layer over it: the five interaction kinds, timing
+  annotations, contracts, interfaces and services, a TypeScript code generator
+  beside the Rust one, and `ridl diff`.
+- **rsdl** — the architecture layer: components, the system, distributions and
+  deployments, checked against the rsdl reference and lowered to the IR beside
+  the package IR, and `ridl diff` at the system. See
   [Describing a system](rsdl.md).
 
-**`ridl-rt`** is the `no_std` runtime library that a
-generated ridl package links and a runtime implements: identity, time
-and the envelope, samples, the payload traits, the interaction descriptors,
-the ports, and the contract and transport errors. It has no dependency in any
-feature combination. `ridl-loopback` implements its ports in
-process, and the Rust crate `ridl-transport-ws` serves the WebSocket binding:
-it carries the observe and call ports to a second process, as the providing
-side of a frame session on a connection the program that embeds it accepted.
-The TypeScript package `@driftsys/ridl-transport-ws`
-(`packages/ridl-transport-ws/`) is the consuming side of that binding, for Deno
-and the browser. No other transport is built. The three payload codecs,
-FlatBuffers, proto3 and `podbuf`, are built: the Rust backend emits a codec for
-the payload types of a package for each one the manifest names, and
-`ridl build --emit podbuf` writes the C header of the podbuf layout.
+**`ridl-rt`** is the `no_std` runtime library that a generated ridl package
+links and a runtime implements: identity, time and the envelope, samples, the
+payload traits, the interaction descriptors, the ports, and the contract and
+transport errors. It has no dependency in any feature combination.
+`ridl-loopback` implements its ports in process, and the Rust crate
+`ridl-transport-ws` serves the WebSocket binding: it carries the observe and
+call ports to a second process, as the providing side of a frame session on a
+connection the program that embeds it accepted. The TypeScript package
+`@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`) is the consuming
+side of that binding, for Deno and the browser. No other transport is built. The
+three payload codecs, FlatBuffers, proto3 and `podbuf`, are built: the Rust
+backend emits a codec for the payload types of a package for each one the
+manifest names, and `ridl build --emit podbuf` writes the C header of the podbuf
+layout.
 
 `ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a
 FlatBuffers schema, or the IR as JSON, with the lowered rsdl system beside it.
@@ -57,19 +57,19 @@ this book describes them as usable. rmdl is parked, with no implementation
 scheduled; rxdl keeps only its unrestricted profile, narrowed to types,
 interfaces and wiring, scheduled in step 2.
 
-**There is no runtime you can run a contract over from a command in this
-book.** Of the transport bindings, the WebSocket one is implemented, by
+**There is no runtime you can run a contract over from a command in this book.**
+Of the transport bindings, the WebSocket one is implemented, by
 `ridl-transport-ws`, which a program embeds; the delivery semantics of the
-others are specified and not implemented. Provider-side contract
-enforcement is: the generated `serve` evaluates a `require` and an `ensure`
-clause and settles the contract error, and the Rust backend's tests run that
-over the in-process runtime below. Nothing the compiler emits links a runtime,
-so none of it is reachable from a command in this book. `ridl-rt` (above) is the
-library a runtime implements, not a runtime itself — it performs no I/O and links no codec. The
-repository does hold one runtime, `ridl-loopback`: an in-process reference that
-carries values between a provider and a consumer in one program, with no
-transport, no wire format and a clock a test advances by hand. Nothing the
-compiler emits links it yet, so it is reached only from a program written
+others are specified and not implemented. Provider-side contract enforcement is:
+the generated `serve` evaluates a `require` and an `ensure` clause and settles
+the contract error, and the Rust backend's tests run that over the in-process
+runtime below. Nothing the compiler emits links a runtime, so none of it is
+reachable from a command in this book. `ridl-rt` (above) is the library a
+runtime implements, not a runtime itself — it performs no I/O and links no
+codec. The repository does hold one runtime, `ridl-loopback`: an in-process
+reference that carries values between a provider and a consumer in one program,
+with no transport, no wire format and a clock a test advances by hand. Nothing
+the compiler emits links it yet, so it is reached only from a program written
 against it by hand.
 
 [Getting started](getting-started.md) walks through what you can run today.
@@ -93,9 +93,9 @@ repository:
   authoring-skill outline.
 - **Decisions** — `docs/decisions/`: the architecture decision records —
   ADR-0002 (module system), ADR-0004 (implementation sequencing and stack),
-  ADR-0005 (agent enablement), ADR-0006 (walking-skeleton execution),
-  ADR-0007 (E1 execution), ADR-0008 (E2 execution), and ADR-0009 (toolchain and
-  gate parity).
+  ADR-0005 (agent enablement), ADR-0006 (walking-skeleton execution), ADR-0007
+  (E1 execution), ADR-0008 (E2 execution), and ADR-0009 (toolchain and gate
+  parity).
 - **Technotes** — `docs/technotes/`: informative architecture notes, which bind
   nothing.
 - **Roadmap** — `docs/ROADMAP.md`: the forward plan — the two steps the
@@ -105,15 +105,14 @@ repository:
 - **Archive** — `docs/archive/`: superseded documents, and the plans of the
   epics that have landed.
 
-Browse them on GitHub:
-<https://github.com/driftsys/ridl/tree/main/docs>.
+Browse them on GitHub: <https://github.com/driftsys/ridl/tree/main/docs>.
 
 ## Status
 
 The typl and ridl references are no longer drafts; the version and status of
 every specification are in the [family overview][overview]. The toolchain is
-released as binaries on GitHub and as crates on crates.io. This book describes the
-`main` branch, which can be ahead of the newest release;
+released as binaries on GitHub and as crates on crates.io. This book describes
+the `main` branch, which can be ahead of the newest release;
 [Getting started](getting-started.md) says how to build it from a clone.
 
 [overview]: https://github.com/driftsys/ridl/blob/main/docs/specification/ridl-family-overview.md

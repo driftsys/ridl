@@ -26,8 +26,8 @@ documentation site.
 
 ## A documented package
 
-A doc comment is written on the lines directly above the item it documents.
-Here is a small package with every item documented:
+A doc comment is written on the lines directly above the item it documents. Here
+is a small package with every item documented:
 
 ```ridl
 package docs.cruise
@@ -89,10 +89,10 @@ The rest of this chapter takes the parts of this example one at a time.
   `doc-comment-style` lint (see [The doc lints](#the-doc-lints)).
 - Start with one sentence that says what the item is. Add a blank `///` line and
   more paragraphs when the reader needs them.
-- Say what the declaration itself cannot say: what a value means, where it comes from, and what
-  happens when it changes. Do not repeat the range, the unit or the timing. The
-  editor shows those from the declaration itself, in the **Contract** part of
-  the hover (see [In the editor](#in-the-editor)).
+- Say what the declaration itself cannot say: what a value means, where it comes
+  from, and what happens when it changes. Do not repeat the range, the unit or
+  the timing. The editor shows those from the declaration itself, in the
+  **Contract** part of the hover (see [In the editor](#in-the-editor)).
 - Document an interface by its responsibility, and document each interaction on
   its own line. The interface doc does not list its members.
 
@@ -101,16 +101,16 @@ The rest of this chapter takes the parts of this example one at a time.
 A doc comment documents the next named declaration or member. These are the
 positions that take a doc comment, called carriers:
 
-| Carrier                                                                    | Must have a doc                  |
-| -------------------------------------------------------------------------- | -------------------------------- |
-| `type`, `const`, `struct`, `enum`, `enumset`, `union`                      | yes, unless `internal`           |
-| `interface`, `service`                                                     | yes, unless `internal`           |
-| struct field, enum value, enumset bit, union arm                           | yes, unless its parent is `internal` |
-| `signal`, `event`, `command`, `query`, `fixed`                             | yes, unless its parent is `internal` |
-| a parameter of a `command` or a `query`                                    | no                               |
-| a `reserved` entry                                                         | no                               |
-| rsdl `system`, `component`, `distribution`, `deployment`, `machine`        | yes                              |
-| an rsdl body line (`offers`, `requires`, or a bare reference)              | no                               |
+| Carrier                                                             | Must have a doc                      |
+| ------------------------------------------------------------------- | ------------------------------------ |
+| `type`, `const`, `struct`, `enum`, `enumset`, `union`               | yes, unless `internal`               |
+| `interface`, `service`                                              | yes, unless `internal`               |
+| struct field, enum value, enumset bit, union arm                    | yes, unless its parent is `internal` |
+| `signal`, `event`, `command`, `query`, `fixed`                      | yes, unless its parent is `internal` |
+| a parameter of a `command` or a `query`                             | no                                   |
+| a `reserved` entry                                                  | no                                   |
+| rsdl `system`, `component`, `distribution`, `deployment`, `machine` | yes                                  |
+| an rsdl body line (`offers`, `requires`, or a bare reference)       | no                                   |
 
 "Must have a doc" is what the `missing-docs` lint checks. A package needs no
 doc.
@@ -149,19 +149,19 @@ but the system IR has no field for it.
 
 ## What a doc comment holds
 
-A doc is [CommonMark](https://commonmark.org): paragraphs, lists, emphasis,
-code spans and fenced code blocks.
+A doc is [CommonMark](https://commonmark.org): paragraphs, lists, emphasis, code
+spans and fenced code blocks.
 
 ### Links
 
 A name in square brackets is a link to a declaration or a member. Three forms
 are links:
 
-| Form            | Example                        | Text shown          |
-| --------------- | ------------------------------ | ------------------- |
-| `[Name]`        | `[Speed]`, `[docs.cruise.Speed]` | the name          |
-| ``[`Name`]``    | ``[`Speed`]``                  | the name, as code   |
-| `[text][Name]`  | `[the set speed][CruiseState.setSpeed]` | the text   |
+| Form           | Example                                 | Text shown        |
+| -------------- | --------------------------------------- | ----------------- |
+| `[Name]`       | `[Speed]`, `[docs.cruise.Speed]`        | the name          |
+| ``[`Name`]``   | ``[`Speed`]``                           | the name, as code |
+| `[text][Name]` | `[the set speed][CruiseState.setSpeed]` | the text          |
 
 The bracket content is a link only when it is a name: one or more dotted
 segments. `[0..250]` and `[see below]` are prose. A name inside a code span or a
@@ -196,12 +196,12 @@ it.
 A tag is a word that starts with `@`, at the start of a line of the doc. Four
 tags exist:
 
-| Tag           | Value                                              | Checked                                        |
-| ------------- | -------------------------------------------------- | ---------------------------------------------- |
-| `@see`        | one name, with an optional member, as a link takes | resolved like a link                           |
-| `@since`      | a version: `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`    | its form only                                  |
+| Tag           | Value                                              | Checked                                            |
+| ------------- | -------------------------------------------------- | -------------------------------------------------- |
+| `@see`        | one name, with an optional member, as a link takes | resolved like a link                               |
+| `@since`      | a version: `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`    | its form only                                      |
 | `@deprecated` | a reason in double quotes                          | a missing reason draws `deprecated-without-reason` |
-| `@labels`     | comma-separated `SCREAMING_SNAKE` labels           | passed through unchecked (typl §14.3)          |
+| `@labels`     | comma-separated `SCREAMING_SNAKE` labels           | passed through unchecked (typl §14.3)              |
 
 A tag may appear more than once; every value is kept. An `@` that is not at the
 start of a line is prose. A tag line is not part of the doc text: a doc made
@@ -243,8 +243,8 @@ interface GearBox {
 ### Examples
 
 Write a usage example under a `# Examples` heading, with a fenced code block.
-This is a convention, not a tag: the compiler does not read it, and a name inside
-the code block is not a link.
+This is a convention, not a tag: the compiler does not read it, and a name
+inside the code block is not a link.
 
 ````ridl
 package docs.examples
@@ -262,20 +262,21 @@ type Gap: m [0.0..250.0 step 0.1]
 ## The doc lints
 
 Each doc lint is a `TYPL-` code, because doc comments are part of typl and every
-language of the family shares them. All of them are warnings; `doc-comment-style`
-is `allow` by default, so it is reported only when a project sets its level. The
-[lints page](lints.md) explains levels and the `[lints]` table.
+language of the family shares them. All of them are warnings;
+`doc-comment-style` is `allow` by default, so it is reported only when a project
+sets its level. The [lints page](lints.md) explains levels and the `[lints]`
+table.
 
-| Lint                        | Code     | Default | Raised when                                                                      |
-| --------------------------- | -------- | ------- | -------------------------------------------------------------------------------- |
-| `broken-doc-link`           | TYPL-401 | warn    | a link or `@see` target does not resolve, or is `internal` in another package    |
-| `detached-doc-comment`      | TYPL-404 | warn    | a blank line separates a doc comment from its carrier                            |
-| `deprecated-without-reason` | TYPL-405 | warn    | `@deprecated` has no reason                                                      |
-| `missing-docs`              | TYPL-406 | warn    | a carrier that must have a doc has none                                          |
-| `misplaced-doc-comment`     | TYPL-407 | warn    | a doc comment is in a position that is not a carrier                             |
-| `unknown-doc-tag`           | TYPL-408 | warn    | a tag other than `@see`, `@since`, `@deprecated` and `@labels`                   |
-| `malformed-doc-tag`         | TYPL-409 | warn    | `@see` or `@since` has a missing or malformed value                              |
-| `doc-comment-style`         | TYPL-410 | allow   | a doc comment is written as `/** */`                                             |
+| Lint                        | Code     | Default | Raised when                                                                   |
+| --------------------------- | -------- | ------- | ----------------------------------------------------------------------------- |
+| `broken-doc-link`           | TYPL-401 | warn    | a link or `@see` target does not resolve, or is `internal` in another package |
+| `detached-doc-comment`      | TYPL-404 | warn    | a blank line separates a doc comment from its carrier                         |
+| `deprecated-without-reason` | TYPL-405 | warn    | `@deprecated` has no reason                                                   |
+| `missing-docs`              | TYPL-406 | warn    | a carrier that must have a doc has none                                       |
+| `misplaced-doc-comment`     | TYPL-407 | warn    | a doc comment is in a position that is not a carrier                          |
+| `unknown-doc-tag`           | TYPL-408 | warn    | a tag other than `@see`, `@since`, `@deprecated` and `@labels`                |
+| `malformed-doc-tag`         | TYPL-409 | warn    | `@see` or `@since` has a missing or malformed value                           |
+| `doc-comment-style`         | TYPL-410 | allow   | a doc comment is written as `/** */`                                          |
 
 The examples below each draw one documentation lint on purpose. Some also draw
 the design lints explained beside their source blocks.
@@ -408,15 +409,13 @@ it shows what `ridl check` reads:
   `query`, and each `require` and `ensure` clause. A link in the doc is shown as
   a link to the target's file and line. Hover on a member used in a contract
   clause shows that member.
-- **Completion** items carry the doc of the item they insert, except the
-  member items offered after `.` in a doc link. Inside a doc comment, `[` and
-  `.` complete link targets, and `@` at the start of a line completes the four
-  tags.
+- **Completion** items carry the doc of the item they insert, except the member
+  items offered after `.` in a doc link. Inside a doc comment, `[` and `.`
+  complete link targets, and `@` at the start of a line completes the four tags.
 - **Go to definition**, **find references** and **rename** work on doc links and
   `@see` targets in `.typl`, `.ridl` and `.rsdl` files. Renaming a type updates
   every link and `@see` that names it, in every member of the workspace.
 - **Quick fixes**: `missing-docs` inserts a `///` line, and `doc-comment-style`
   rewrites a `/** */` comment as `///` lines.
 
-There is no signature help: the language has no call expression for it to
-serve.
+There is no signature help: the language has no call expression for it to serve.

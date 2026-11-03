@@ -59,8 +59,8 @@ The first line names the package. A package name must equal the directory path
 below the workspace root, and every file in the directory declares the same
 name. `Speed` is a scalar type with a unit and a range, and `Hello` is an
 interface with one signal whose contract requires the provider to publish it
-every 10 ms. The [typl reference](reference/typl.md) and the [ridl reference](reference/ridl.md)
-define every form.
+every 10 ms. The [typl reference](reference/typl.md) and the
+[ridl reference](reference/ridl.md) define every form.
 
 ## 3. Check it
 
@@ -71,10 +71,10 @@ ridl check demo
 `ridl check` reads the package and prints the diagnostics it draws. It exits 0
 when none is an error and 1 when one is. To see an error, change `Speed` to
 `Sped` in the signal and run the command again: it prints `TYPL-011` (unknown
-type name) with the file, the line and the column. The [`ridl check`
-reference](cli-reference.md#ridl-check) lists the flags and the exit codes, and
-the [lints chapter](lints.md) describes the warnings that you can raise or
-lower.
+type name) with the file, the line and the column. The
+[`ridl check` reference](cli-reference.md#ridl-check) lists the flags and the
+exit codes, and the [lints chapter](lints.md) describes the warnings that you
+can raise or lower.
 
 ## 4. Format it
 
