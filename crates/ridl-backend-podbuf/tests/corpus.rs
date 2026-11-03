@@ -75,10 +75,11 @@ fn a_foreign_nested_tuple_member_is_spelled_as_a_c_member() {
     assert!(parts.contains("pod_parts_gauge_span_int_at("), "{parts}");
 }
 
-/// A tuple whose spelled member names would clash — two members equal under
-/// snake case, or a member equal to the presence test of an optional member —
-/// falls back to positional names in both headers, and the build succeeds. A
-/// tuple next to it whose names do not clash keeps them.
+/// A tuple whose spelled member names would clash — two members whose C names
+/// are equal once a trailing underscore is removed, or a member equal to the
+/// presence test of an optional member — falls back to positional names in both
+/// headers, and the build succeeds. A tuple next to it whose names do not clash
+/// keeps them.
 #[test]
 fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
@@ -100,7 +101,7 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
         let pair = head_body(&header, "pod_parts_clash_pair_head");
         assert!(pair.contains("uint8_t f1;"), "{name}: {pair}");
         assert!(pair.contains("uint8_t f2;"), "{name}: {pair}");
-        assert!(!pair.contains("min_speed"), "{name}: {pair}");
+        assert!(!pair.contains("uint8_t low"), "{name}: {pair}");
         let presence = head_body(&header, "pod_parts_clash_presence_head");
         assert!(presence.contains("uint8_t f1;"), "{name}: {presence}");
         assert!(presence.contains("uint8_t f2;"), "{name}: {presence}");

@@ -4,8 +4,9 @@
 //! that names the generated name and both sources.
 //!
 //! Each case in the first part is an experiment of that design's appendix.
-//! The source checks clean with `ridlc::check_source`, which runs no backend
-//! — so the refusal is the backend's, not the language's — and
+//! The sources check clean with `ridlc::check_source`, which runs no backend,
+//! except X-6a and the nested tuple case, which also draw RIDL-149. Those two
+//! pin the backend refusal for IR that skipped the semantic pass.
 //! `generate_pipeline`, the entry point `ridl build --emit rust` calls,
 //! returns a `GenerateError` whose message holds the generated name and each
 //! source. Without the claim tables every one of these sources
@@ -58,6 +59,28 @@ fn refusal(name: &str, source: &str) -> String {
     }
 }
 
+/// Requires exactly one semantic error, RIDL-149, and returns the pipeline's
+/// refusal for the IR that the semantic pass still lowers.
+fn backend_refusal(name: &str, source: &str) -> String {
+    let path = format!("{name}.ridl");
+    let checked = ridlc::check_source(&path, source);
+    let errors: Vec<_> = checked
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .map(|diagnostic| diagnostic.code)
+        .collect();
+    assert_eq!(errors, vec![ridl_core::diag::DiagCode::RIDL_149]);
+    let output = ridlc::compile(&path, source);
+    match generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[]) {
+        Ok(generated) => panic!(
+            "{name}.ridl must be refused by the claim table, but the pipeline emitted:\n{}",
+            generated.rust_source
+        ),
+        Err(err) => err.message,
+    }
+}
+
 /// Asserts that `message` holds every one of `parts`.
 fn names_all(message: &str, parts: &[&str]) {
     for part in parts {
@@ -100,10 +123,11 @@ interface Cabin {
 }
 
 /// X-6a: `minSpeed` and `min_speed` are both the Rust field `min_speed` of
-/// the induced tuple `ReadingBounds` (driftsys/ridl#449).
+/// the induced tuple `ReadingBounds`. RIDL-149 refuses the checked source;
+/// the backend also refuses IR handed to it without the semantic pass.
 #[test]
 fn two_tuple_fields_equal_under_snake_case_are_refused() {
-    let message = refusal(
+    let message = backend_refusal(
         "x06a",
         "package probe.x06
 
@@ -755,9 +779,11 @@ struct ReadingBoundsFbView {
 }
 
 /// A nested tuple's field path has every segment: `S.t.u`, not `S.u`.
+/// RIDL-149 refuses the checked source; the backend refusal still names the
+/// whole path for IR handed to it without the semantic pass.
 #[test]
 fn a_nested_tuple_is_named_by_its_whole_field_path() {
-    let message = refusal(
+    let message = backend_refusal(
         "nested_tuple",
         "package probe.nested
 

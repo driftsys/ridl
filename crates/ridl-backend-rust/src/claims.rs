@@ -6,12 +6,13 @@
 //! namespace although the ridl names differ: a descriptor `<Interface><Member>`
 //! and a declaration (`type CabinTemperature` beside member `temperature` of
 //! interface `Cabin`), two members whose `camel_case` agrees (`XY`, `x_y`),
-//! two tuple fields whose `snake_case` agrees (`minSpeed`, `min_speed`). rustc
-//! rejects the emitted crate (E0124, E0428). The language does not refuse
-//! these pairs, because of the in-tree backends only this one applies those
-//! transforms in those scopes (ADR-0016, 2026-09-29 amendment), so this
-//! backend refuses the package at `ridl build`, with one message that names the
-//! generated name and both sources.
+//! or two tuple fields whose `snake_case` agrees (`minSpeed`, `min_speed`).
+//! rustc rejects the emitted crate (E0124, E0428). RIDL-149 refuses the tuple
+//! field pair in a checked package (ADR-0016, 2026-11-03 amendment); the
+//! per-tuple table refuses the same pair for IR handed to the backend directly.
+//! The other pairs belong to this backend (ADR-0016, 2026-09-29 amendment).
+//! It refuses them at `ridl build`, with one message that names the generated
+//! name and both sources.
 //!
 //! A name the backend chose is not claimed here. Such a name is changed so
 //! that no ridl name reaches it (rule step 1): the internal `__ridl_fb_*`

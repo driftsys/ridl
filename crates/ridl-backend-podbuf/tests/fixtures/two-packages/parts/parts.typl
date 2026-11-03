@@ -98,11 +98,12 @@ struct Gauge {
   span : (lowMark: integer [0..255], int: integer [0..255])
 }
 
-// Two tuples whose spelled C names clash — two members equal under
-// snake_case, and a member equal to the presence test of an optional member —
+// Two tuples whose spelled C names clash — two members whose C names are equal
+// once a trailing underscore is removed, and a member equal to the presence
+// test of an optional member —
 // next to one that does not.
 struct Clash {
-  pair     : (minSpeed: integer [0..255], min_speed: integer [0..255])
+  pair     : (low: integer [0..255], low_: integer [0..255])
   presence : (x: integer [0..255]?, hasX: integer [0..255])
   trim     : (int: integer [0..255]?, hasInt: integer [0..255])
   plain    : (x: integer [0..255], hasX: integer [0..255])

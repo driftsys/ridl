@@ -216,13 +216,15 @@ a declaration also has `<owner>_<member>`, which reads a whole buffer through
 the preamble's `head_size`. `<member>` is the C member name: the typl name of a
 struct field or a tuple member under the pinned `snake_case`, without the
 trailing underscore a reserved word takes, so the accessor names follow the
-member names. A tuple whose spelled member names would clash falls back to
-positional members (`f1`, `f2`) and accessors, in every header that defines its
-head (ADR-0016, amendment of 2026-10-28). A foreign struct, tuple or union that
-a field lays out inline is defined again behind a `<PKG>_<TYPE>_HEAD_DEFINED`
-guard. Each tuple has one head, which every position that lays the tuple out
-inline names, in the declaring header and in an importing header alike; when two
-positions share one tuple, and so one head, is stated in
+member names. A tuple whose spelled member names would clash (two members equal
+once a trailing underscore is removed, or a member equal to the presence test of
+an optional member) falls back to positional members (`f1`, `f2`) and accessors,
+in every header that defines its head (ADR-0016, amendment of 2026-10-28). A
+foreign struct, tuple or union that a field lays out inline is defined again
+behind a `<PKG>_<TYPE>_HEAD_DEFINED` guard. Each tuple has one head, which every
+position that lays the tuple out inline names, in the declaring header and in an
+importing header alike; when two positions share one tuple, and so one head, is
+stated in
 [ADR-0031 decision 7](../decisions/ADR-0031-podbuf-projection-rules.md)
 (amendment of 2026-10-31). The importing header names a foreign tuple's head by
 the declaring package's induced name, so the two headers define the head under
