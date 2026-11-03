@@ -4,8 +4,8 @@
 use std::time::Duration;
 
 use ridl_descriptor::{
-    finish, Catalog, EarlierCatalog, Interface, Member, RetiredInterface, Timing, TimingMode,
-    VerifyError, SCHEMA_VERSION,
+    finish, Catalog, EarlierCatalog, Interface, Member, RetiredInterface, StreamForm,
+    StreamPayload, Timing, TimingMode, VerifyError, SCHEMA_VERSION,
 };
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 use ridl_transport_ws::{DescriptorError, MemberTable};
@@ -224,4 +224,32 @@ fn each_error_displays_its_cause() {
         }),
         "member 1.3 has the max_us \"1s\", which is not a decimal u64"
     );
+}
+
+#[test]
+fn the_table_reads_a_reply_stream() {
+    let bytes = descriptor_with(|c| {
+        let members = &mut c.interfaces[0].members;
+        members[3].streams = Some(vec![StreamPayload {
+            no: 0,
+            form: StreamForm::Elements,
+            element: Some("E".to_owned()),
+            max_sizes: vec![],
+        }]);
+        // A stream numbered 1 is a request stream, not the reply stream.
+        members[2].streams = Some(vec![StreamPayload {
+            no: 1,
+            form: StreamForm::Bytes,
+            element: None,
+            max_sizes: vec![],
+        }]);
+    });
+    let t = MemberTable::from_descriptor(&bytes).unwrap();
+    assert!(t.reply_stream(InterfaceNo(1), Ordinal(4)));
+    for ord in [1, 2, 3, 5, 6] {
+        assert!(
+            !t.reply_stream(InterfaceNo(1), Ordinal(ord)),
+            "ordinal {ord}"
+        );
+    }
 }

@@ -1,0 +1,287 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.rust
+input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
+---
+// ===== package veh.adas =====
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Engaged(::core::primitive::bool);
+impl Engaged {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: ::core::primitive::bool) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> ::core::primitive::bool {
+        self.0
+    }
+}
+impl ::core::convert::From<::core::primitive::bool> for Engaged {
+    fn from(value: ::core::primitive::bool) -> Self {
+        Self(value)
+    }
+}
+impl ::core::convert::From<Engaged> for ::core::primitive::bool {
+    fn from(value: Engaged) -> Self {
+        value.0
+    }
+}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for Engaged {
+    fn default() -> Self {
+        Engaged::new(false)
+    }
+}
+/// A `Engaged` value in FlatBuffers bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct EngagedFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for EngagedFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> EngagedFbView<'a> {
+    /// The value the bytes hold. `Engaged` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Engaged {
+        __ridl_fb_decode_Engaged(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Engaged(
+    value: &Engaged,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+                },
+            },
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Engaged(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_bool(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Engaged(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Engaged {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Engaged::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+        }
+        _ => Engaged::new(false),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
+    /// The largest FlatBuffers buffer any legal `Engaged` encodes to: 43 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
+    type View<'a> = EngagedFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, EngagedFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Engaged(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: EngagedFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<EngagedFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Engaged(buf, table)?;
+        ::core::result::Result::Ok(EngagedFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Engaged(__view.buf, __view.table)
+    }
+}
+
+
+// ===== package veh.ego =====
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Moving(::core::primitive::bool);
+impl Moving {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub const fn new(value: ::core::primitive::bool) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> ::core::primitive::bool {
+        self.0
+    }
+}
+impl ::core::convert::From<::core::primitive::bool> for Moving {
+    fn from(value: ::core::primitive::bool) -> Self {
+        Self(value)
+    }
+}
+impl ::core::convert::From<Moving> for ::core::primitive::bool {
+    fn from(value: Moving) -> Self {
+        value.0
+    }
+}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for Moving {
+    fn default() -> Self {
+        Moving::new(false)
+    }
+}
+/// A `Moving` value in FlatBuffers bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct MovingFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for MovingFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> MovingFbView<'a> {
+    /// The value the bytes hold. `Moving` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Moving {
+        __ridl_fb_decode_Moving(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Moving(
+    value: &Moving,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+                },
+            },
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Moving(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_bool(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Moving(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Moving {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Moving::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+        }
+        _ => Moving::new(false),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Moving {
+    /// The largest FlatBuffers buffer any legal `Moving` encodes to: 43 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
+    type View<'a> = MovingFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, MovingFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Moving(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: MovingFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<MovingFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Moving(buf, table)?;
+        ::core::result::Result::Ok(MovingFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Moving(__view.buf, __view.table)
+    }
+}

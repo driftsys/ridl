@@ -348,11 +348,14 @@ other entry below is Accepted.
   stated once for the closure; a `reserved` tombstone has no route; the catalog
   hash is embedded by the driver, never computed by the lowering, since story
   E6.17), that `ridl build` writes every artifact when the only errors are
-  RSDL-7xx and still exits 1, and that `ridl diff` lists system changes under
-  two headings with no verdict and only when both sides are source trees. A
-  region is the catalog of a unit, not of a source package (amended 2026-10-09).
-  Binds the IR every later consumer reads, the `ridl build` contract, and
-  `ridl diff`.
+  RSDL-7xx and still exits 1, and that `ridl diff` lists system changes only
+  when both sides are source trees: placement and composition changes with no
+  verdict, and a changed locked instance number as breaking (amended
+  2026-11-02). A region is the catalog of a unit, not of a source package
+  (amended 2026-10-09). The codegen request's deployment section and the
+  deployment descriptor file are the two emitters over `System` (decisions 11
+  and 12, amended 2026-11-02). Binds the IR every later consumer reads, the
+  `ridl build` contract, and `ridl diff`.
 
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
   and call signatures.** Six decisions: four taken while implementing story
@@ -640,8 +643,11 @@ other entry below is Accepted.
   an entry can only lower the chunk size. Amended 2026-10-31: decision 10's
   example declares a named result union instead of the inline `<A | B>`, which
   the grammar does not admit. The stream port of `ridl-rt` (decisions 9 and 11)
-  is built; the frame version and the generated face are not
-  (driftsys/ridl#1116).
+  is built, and so are frame version 3, which carries a query's streamed reply
+  over WebSocket
+  ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
+  and the Rust face for a streamed reply of named elements; parameter, byte and
+  text streams are not carried yet (driftsys/ridl#1116).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

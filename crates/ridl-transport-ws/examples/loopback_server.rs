@@ -4,8 +4,9 @@
 //! It binds `127.0.0.1:0`, prints one line `port <n>` on standard output, and
 //! serves every connection on its own thread with its own backend, which is a
 //! new attachment to one shared provider. The provider is the test catalog of
-//! `tests/support/provider.rs`, stepped every 5 ms. The process exits with
-//! status 0 when its standard input reaches the end.
+//! `tests/support/provider.rs`, stepped every 5 ms. The backend carries
+//! streams, so a client that offers `ridl-ws-v3` is served frame version 3.
+//! The process exits with status 0 when its standard input reaches the end.
 
 // The provider module is shared with the tests, and this example uses only
 // part of it.
@@ -19,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use ridl_transport_ws::{serve, Config, Described, Scanning};
+use ridl_transport_ws::{serve, Config, Described, Scanning, Streaming};
 
 fn main() {
     let rt = Arc::new(Mutex::new(provider::provider()));
@@ -36,8 +37,12 @@ fn main() {
     });
 
     let stepping = Arc::clone(&rt);
+    let mut streams = provider::Streams::default();
     thread::spawn(move || loop {
-        provider::provider_step(&mut stepping.lock().expect("an unpoisoned provider"));
+        provider::provider_step(
+            &mut stepping.lock().expect("an unpoisoned provider"),
+            &mut streams,
+        );
         thread::sleep(Duration::from_millis(5));
     });
 
@@ -45,7 +50,9 @@ fn main() {
     for conn in listener.incoming() {
         let Ok(conn) = conn else { continue };
         let backend = Described::new(
-            Scanning(rt.lock().expect("an unpoisoned provider").attach()),
+            Streaming(Scanning(
+                rt.lock().expect("an unpoisoned provider").attach(),
+            )),
             Arc::clone(&table),
         )
         .expect("the table matches the provider's catalog");

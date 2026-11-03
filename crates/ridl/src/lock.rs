@@ -1,16 +1,26 @@
 //! `ridl lock` — the one command that writes a unit's `interfaces.lock`
-//! (lock design §5).
+//! (lock design §5) and the workspace's `instances.lock` (rsdl reference §7).
 //!
 //! Plain `ridl lock` allocates a number to every interface that has none —
 //! every declared interface and every service's inline shape whose key has
 //! no live entry — and writes each unit's own file, in its manifest
-//! directory. It is the only form that allocates: a branch never allocates,
+//! directory. It also allocates a number to every instance of the system
+//! that has none, in the order of the provisional numbers the checker showed,
+//! and writes `instances.lock` beside the root manifest, only when `PATH`
+//! resolves to the root and only when it allocates. It is the only form that
+//! allocates: a branch never allocates,
 //! and the release recipe or the merge queue runs this on `main` (lock
 //! design §4). `--rename OLD=NEW` and
-//! `--retire NAME` rewrite one entry each, in place, and never allocate. They
-//! are the fix RIDL-409 names, so they run with RIDL-409 present, and `PATH`
-//! must then resolve to exactly one unit. Any other compile error exits 1
-//! and writes nothing, whichever unit it is in (plan decision PD-6).
+//! `--retire NAME` rewrite entries in place and never allocate: one entry for
+//! an interface or an instance, and every entry under the component for a
+//! component. They are the fix RIDL-409 and RSDL-314 name, so they run with
+//! either present.
+//! A key with a `/` is an instance (`component/instance`); a key without one
+//! is a component when `instances.lock` has an entry under it, else an
+//! interface. An interface edit needs `PATH` to resolve to exactly one unit;
+//! an instance or component edit needs it to resolve to the root. Any other
+//! compile error exits 1 and writes nothing, whichever unit it is in (plan
+//! decision PD-6).
 //!
 //! The command compiles first, through [`ridlc::compile_workspace`] — no
 //! network and no `ridl.lock` round trip; a remote unit is read from the
@@ -29,22 +39,27 @@
 //! path or I/O failure.
 //!
 //! `ridl lock merge BASE OURS THEIRS MARKER_SIZE` is the git merge driver for
-//! the file (lock design §6): it reads the three sides, runs
+//! both files (lock design §6): it reads the three sides, runs
 //! [`interface_lock::merge`] — a three-way merge over entries matched by
 //! number, with no file access — and writes the result to OURS. Exit 0 when
 //! the merge is clean, 1 when entries disagree (OURS then holds git conflict
-//! markers around only the disagreeing entries and is RIDL-410 until an
-//! author resolves it), 2 when an input cannot be read or does not parse
-//! (OURS is then left as it was).
+//! markers around only the disagreeing entries and is RIDL-410 for
+//! `interfaces.lock`, or RSDL-315 for `instances.lock`, until an author
+//! resolves it), 2 when an input cannot be read or does not parse (OURS is
+//! then left as it was).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use ridl_core::diag::{DiagCode, Diagnostic, Severity, render};
-use ridl_core::interface_lock::{self, InterfaceLock, InvalidLockKey, LockKey, MergeOutcome};
+use ridl_core::instance_lock::{self, InstanceKey, InstanceLock};
+use ridl_core::interface_lock::{
+    self, InterfaceLock, InvalidLockKey, LockKey, LockTable, MergeOutcome, TableKey,
+};
 use ridl_core::lint::drop_allowed_by_default;
 use ridl_core::{RidlDatabase, load_workspace};
 use ridl_ir::v2;
+use ridl_sem::rsdl::InstanceNumbering;
 use rowan::TextRange;
 
 /// One unit of the run: its manifest directory, its lock as loaded — the
@@ -57,28 +72,42 @@ struct LockedUnit {
     packages: Vec<v2::Package>,
 }
 
-/// Whether no error among `diagnostics` is anything but RIDL-409 — the one
-/// error `--rename` and `--retire` run with, and the condition under which
-/// `ridl check` still runs its desk check (lock design §4). True when there
-/// is no error at all.
+/// Whether no error among `diagnostics` is anything but RIDL-409 or RSDL-314
+/// — the errors `--rename` and `--retire` run with, and the condition under
+/// which `ridl check` still runs its desk check (lock design §4). True when
+/// there is no error at all.
 pub(crate) fn only_lock_orphans<'a>(diagnostics: impl IntoIterator<Item = &'a Diagnostic>) -> bool {
     diagnostics.into_iter().all(|diagnostic| {
-        diagnostic.severity != Severity::Error || diagnostic.code == DiagCode::RIDL_409
+        diagnostic.severity != Severity::Error
+            || diagnostic.code == DiagCode::RIDL_409
+            || diagnostic.code == DiagCode::RSDL_314
     })
+}
+
+/// One key of a `--rename` or `--retire` flag: an instance (it holds a `/`),
+/// or a name that is a component or an interface, decided against the locks.
+enum FlagKey {
+    Instance(InstanceKey),
+    Name(LockKey),
+}
+
+/// The `--rename` flag, both sides of one kind.
+enum RenameFlag {
+    Instances(InstanceKey, InstanceKey),
+    Names(LockKey, LockKey),
 }
 
 /// Runs `ridl lock`: plain allocation over every unit under `path`, or
 /// the `--rename` and `--retire` edits over the one unit there.
 pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode {
     // A flag that does not parse is refused before anything is compiled.
-    let renames: Vec<(LockKey, LockKey)> =
-        match renames.iter().map(|flag| parse_rename(flag)).collect() {
-            Ok(renames) => renames,
-            Err(message) => return usage_error(&message),
-        };
-    let retires: Vec<LockKey> = match retires
+    let renames: Vec<RenameFlag> = match renames.iter().map(|flag| parse_rename(flag)).collect() {
+        Ok(renames) => renames,
+        Err(message) => return usage_error(&message),
+    };
+    let retires: Vec<FlagKey> = match retires
         .iter()
-        .map(|flag| parse_key("--retire", flag))
+        .map(|flag| parse_flag_key("--retire", flag))
         .collect()
     {
         Ok(retires) => retires,
@@ -135,23 +164,32 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         }
     };
 
+    let instances = InstanceSide {
+        numbering: &output.instances,
+        dir: &output.instance_lock_dir,
+        // Only a path that resolves to the root reads and writes the file.
+        at_root: output.report_scope.is_none(),
+    };
+    let prefixed = units.len() > 1;
     let outcome = if editing {
-        edit(path, &mut units, &renames, &retires)
+        edit(path, &mut units, &instances, &renames, &retires)
     } else {
-        allocate(path, &mut units)
+        allocate(path, &mut units).and_then(|()| allocate_instances(path, prefixed, &instances))
     };
     if let Err(code) = outcome {
         return code;
     }
 
-    // The edits are the fix RIDL-409 names, so an edit run does not render
-    // the diagnostic it was asked to resolve; everything else — a warning, a
-    // lint — renders as `ridl check` renders it.
+    // The edits are the fix RIDL-409 and RSDL-314 name, so an edit run does
+    // not render the diagnostic it was asked to resolve; everything else — a
+    // warning, a lint — renders as `ridl check` renders it.
     let shown: Vec<Diagnostic> = if editing {
         output
             .diagnostics
             .into_iter()
-            .filter(|diagnostic| diagnostic.code != DiagCode::RIDL_409)
+            .filter(|diagnostic| {
+                diagnostic.code != DiagCode::RIDL_409 && diagnostic.code != DiagCode::RSDL_314
+            })
             .collect()
     } else {
         output.diagnostics
@@ -160,19 +198,36 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     ExitCode::SUCCESS
 }
 
-/// `OLD=NEW`, both lock keys.
-fn parse_rename(flag: &str) -> Result<(LockKey, LockKey), String> {
+/// `OLD=NEW`, both instance keys or both interface-or-component names.
+fn parse_rename(flag: &str) -> Result<RenameFlag, String> {
     let Some((old, new)) = flag.split_once('=') else {
         return Err(format!("--rename takes OLD=NEW, got `{flag}`"));
     };
-    Ok((parse_key("--rename", old)?, parse_key("--rename", new)?))
+    match (
+        parse_flag_key("--rename", old)?,
+        parse_flag_key("--rename", new)?,
+    ) {
+        (FlagKey::Instance(old), FlagKey::Instance(new)) => Ok(RenameFlag::Instances(old, new)),
+        (FlagKey::Name(old), FlagKey::Name(new)) => Ok(RenameFlag::Names(old, new)),
+        _ => Err(format!(
+            "--rename {flag}: a `/` on one side only; name two instances \
+             (`component/instance`) or two names"
+        )),
+    }
 }
 
-/// One lock key as a flag spells it: an interface name, or `service:` and a
-/// dotted name.
-fn parse_key(flag: &str, text: &str) -> Result<LockKey, String> {
-    text.parse()
-        .map_err(|InvalidLockKey(reason)| format!("{flag}: {reason}"))
+/// One key as a flag spells it: an instance when it holds a `/`, else an
+/// interface name, or `service:` and a dotted name, which may be a component.
+fn parse_flag_key(flag: &str, text: &str) -> Result<FlagKey, String> {
+    if text.contains('/') {
+        text.parse()
+            .map(FlagKey::Instance)
+            .map_err(|InvalidLockKey(reason)| format!("{flag}: {reason}"))
+    } else {
+        text.parse()
+            .map(FlagKey::Name)
+            .map_err(|InvalidLockKey(reason)| format!("{flag}: {reason}"))
+    }
 }
 
 /// A bad flag: exit 2 with the reason.
@@ -278,56 +333,318 @@ fn allocate(entry: &Path, units: &mut [LockedUnit]) -> Result<(), ExitCode> {
     Ok(())
 }
 
-/// `--rename` and `--retire` over the one unit `entry` resolves to. Every
-/// edit is validated and applied in memory first, so a refused flag writes
-/// nothing; the file is written once, then each change is reported.
+/// What the instance lock edits and allocation read: the numbering the
+/// checker computed, the directory of the root's `instances.lock`, and
+/// whether `PATH` resolved to the root.
+struct InstanceSide<'a> {
+    numbering: &'a InstanceNumbering,
+    dir: &'a Path,
+    at_root: bool,
+}
+
+impl InstanceSide<'_> {
+    fn file(&self) -> PathBuf {
+        self.dir.join(instance_lock::FILE_NAME)
+    }
+
+    /// The lock as it is on disk: the empty table when there is no file.
+    fn load(&self) -> Result<InstanceLock, ExitCode> {
+        let fail = |message: String| {
+            eprintln!("error: {message}");
+            ExitCode::from(2)
+        };
+        let text = instance_lock::read(self.dir)
+            .map_err(|err| fail(format!("cannot read {}: {err}", self.file().display())))?;
+        match text {
+            None => Ok(InstanceLock::default()),
+            Some(text) => instance_lock::parse(&text)
+                .map_err(|err| fail(format!("{}: {}", self.file().display(), err.message))),
+        }
+    }
+
+    /// Writes the lock; an I/O failure is exit 2.
+    fn write(&self, lock: &InstanceLock) -> Result<(), ExitCode> {
+        instance_lock::write(self.dir, lock).map_err(|err| {
+            eprintln!("error: cannot write {}: {err}", self.file().display());
+            ExitCode::from(2)
+        })
+    }
+
+    /// Whether the system has an instance of `component`.
+    fn has_component(&self, component: &str) -> bool {
+        self.numbering
+            .numbers
+            .keys()
+            .any(|key| key.component == component)
+    }
+
+    /// Whether the system has `key` with no live entry.
+    fn is_provisional(&self, key: &InstanceKey) -> bool {
+        matches!(self.numbering.numbers.get(key), Some((_, true)))
+    }
+}
+
+/// Plain `ridl lock`, instance half: gives every provisional instance its
+/// number, in ascending order of the provisional number the checker showed, so
+/// the number written is the number checked, and writes the root
+/// `instances.lock` only when it allocates. Output lines are prefixed when the
+/// interface lines are (`prefixed`). A path inside a member allocates nothing.
+fn allocate_instances(
+    entry: &Path,
+    prefixed: bool,
+    instances: &InstanceSide<'_>,
+) -> Result<(), ExitCode> {
+    if !instances.at_root {
+        return Ok(());
+    }
+    let mut provisional: Vec<(i32, &InstanceKey)> = instances
+        .numbering
+        .numbers
+        .iter()
+        .filter(|(_, (_, provisional))| *provisional)
+        .map(|(key, (number, _))| (*number, key))
+        .collect();
+    if provisional.is_empty() {
+        return Ok(());
+    }
+    provisional.sort();
+    let mut lock = instances.load()?;
+    let prefix = if prefixed {
+        format!("{}: ", relative_dir(entry, instances.dir))
+    } else {
+        String::new()
+    };
+    let mut lines = Vec::with_capacity(provisional.len());
+    for (_, key) in provisional {
+        let number = lock
+            .allocate(key.clone())
+            .map_err(|err| usage_error(&format!("{key}: {err}")))?;
+        lines.push(format!("{prefix}allocated {key} {number}"));
+    }
+    instances.write(&lock)?;
+    for line in lines {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// One edit, resolved against the locks.
+enum Edit {
+    RenameInstance(InstanceKey, InstanceKey),
+    RenameComponent(String, String),
+    RetireInstance(InstanceKey),
+    RetireComponent(String),
+    RenameInterface(LockKey, LockKey),
+    RetireInterface(LockKey),
+}
+
+/// Resolves a name without a `/`: a component when `instance_lock` has an
+/// entry under it (`include_retired` counts a retired one), else an interface;
+/// both is exit 2 naming both files.
+fn resolve_name(
+    flag: &str,
+    name: &LockKey,
+    include_retired: bool,
+    units: &[LockedUnit],
+    instances: &InstanceSide<'_>,
+    instance_lock: &InstanceLock,
+) -> Result<Option<String>, ExitCode> {
+    let LockKey::Interface(component) = name else {
+        return Ok(None);
+    };
+    if !instance_lock.has_component(component, include_retired) {
+        return Ok(None);
+    }
+    if let [unit] = units
+        && unit.lock.live(name).is_some()
+    {
+        return Err(usage_error(&format!(
+            "{flag} {name}: `{name}` is both a component in `{}` and an interface in `{}`; \
+             edit its instances one by one as `{name}/INSTANCE`",
+            instances.file().display(),
+            unit.dir.join(interface_lock::FILE_NAME).display()
+        )));
+    }
+    Ok(Some(component.clone()))
+}
+
+/// `--rename` and `--retire`. Interface edits need `entry` to resolve to the
+/// one unit; instance and component edits need it to resolve to the root.
+/// Every edit is validated and applied in memory first, so a refused flag
+/// writes nothing; each file is written once, then each change is reported.
 fn edit(
     entry: &Path,
     units: &mut [LockedUnit],
-    renames: &[(LockKey, LockKey)],
-    retires: &[LockKey],
+    instances: &InstanceSide<'_>,
+    renames: &[RenameFlag],
+    retires: &[FlagKey],
 ) -> Result<(), ExitCode> {
-    let [unit] = units else {
+    let mut instance_lock = instances.load()?;
+    let mut edits = Vec::new();
+    for rename in renames {
+        edits.push(match rename {
+            RenameFlag::Instances(old, new) => Edit::RenameInstance(old.clone(), new.clone()),
+            RenameFlag::Names(old, new) => {
+                match resolve_name("--rename", old, true, units, instances, &instance_lock)? {
+                    Some(old) => match new {
+                        LockKey::Interface(new) => Edit::RenameComponent(old, new.clone()),
+                        LockKey::Service(_) => {
+                            return Err(usage_error(&format!(
+                                "--rename {old}={new}: `{new}` is not a component name"
+                            )));
+                        }
+                    },
+                    None => Edit::RenameInterface(old.clone(), new.clone()),
+                }
+            }
+        });
+    }
+    for retire in retires {
+        edits.push(match retire {
+            FlagKey::Instance(key) => Edit::RetireInstance(key.clone()),
+            FlagKey::Name(name) => {
+                match resolve_name("--retire", name, false, units, instances, &instance_lock)? {
+                    Some(component) => Edit::RetireComponent(component),
+                    None => Edit::RetireInterface(name.clone()),
+                }
+            }
+        });
+    }
+    let touches_instances = edits.iter().any(|edit| {
+        matches!(
+            edit,
+            Edit::RenameInstance(..)
+                | Edit::RenameComponent(..)
+                | Edit::RetireInstance(_)
+                | Edit::RetireComponent(_)
+        )
+    });
+    let touches_interfaces = edits
+        .iter()
+        .any(|edit| matches!(edit, Edit::RenameInterface(..) | Edit::RetireInterface(_)));
+    if touches_instances && !instances.at_root {
         return Err(usage_error(&format!(
-            "`--rename` and `--retire` edit one unit's `{}`, but `{}` holds {} units; name the \
-             unit directory",
+            "`{}` belongs to the workspace root: run `ridl lock <root>`",
+            instance_lock::FILE_NAME
+        )));
+    }
+    if touches_interfaces && units.len() != 1 {
+        return Err(usage_error(&format!(
+            "an interface edit changes one unit's `{}`, but `{}` holds {} units; name the unit \
+             directory",
             interface_lock::FILE_NAME,
             entry.display(),
             units.len()
         )));
-    };
+    }
+
     let mut lines = Vec::new();
-    for (old, new) in renames {
-        // The new key must be a declaration without an entry — the shape the
-        // checker numbered provisionally. A declaration with an entry, or a
-        // name nothing declares, is not a rename target.
-        if !is_provisional(&unit.packages, new) {
-            return Err(usage_error(&format!(
-                "--rename {old}={new}: `{new}` is not a declaration without an entry in unit `{}`",
-                unit.name
-            )));
+    for edit in &edits {
+        match edit {
+            Edit::RenameInstance(old, new) => {
+                if !instances.is_provisional(new) {
+                    return Err(usage_error(&format!(
+                        "--rename {old}={new}: `{new}` is not an instance without an entry in \
+                         the system"
+                    )));
+                }
+                let number = instance_lock
+                    .rename(old, new.clone())
+                    .map_err(|err| usage_error(&format!("--rename {old}={new}: {err}")))?;
+                lines.push(format!("renamed {old} {new} {number}"));
+            }
+            Edit::RenameComponent(old, new) => {
+                for entry in instance_lock
+                    .entries
+                    .iter()
+                    .filter(|entry| !entry.retired && entry.key.component == *old)
+                {
+                    let target = InstanceKey {
+                        component: new.clone(),
+                        instance: entry.key.instance.clone(),
+                    };
+                    if !instances.is_provisional(&target) {
+                        return Err(usage_error(&format!(
+                            "--rename {old}={new}: `{target}` is not an instance without an \
+                             entry in the system"
+                        )));
+                    }
+                }
+                let moved = instance_lock
+                    .rename_component(old, new)
+                    .map_err(|err| usage_error(&format!("--rename {old}={new}: {err}")))?;
+                for (before, after, number) in moved {
+                    lines.push(format!("renamed {before} {after} {number}"));
+                }
+            }
+            Edit::RetireInstance(key) => {
+                if instances.numbering.numbers.contains_key(key) {
+                    return Err(usage_error(&format!(
+                        "--retire {key}: `{key}` is still an instance of the system; remove it \
+                         first, or keep the entry live"
+                    )));
+                }
+                let number = instance_lock
+                    .retire(key)
+                    .map_err(|err| usage_error(&format!("--retire {key}: {err}")))?;
+                lines.push(format!("retired {key} {number}"));
+            }
+            Edit::RetireComponent(component) => {
+                if instances.has_component(component) {
+                    return Err(usage_error(&format!(
+                        "--retire {component}: `{component}` still has instances in the system; \
+                         remove it first, or keep the entries live"
+                    )));
+                }
+                let retired = instance_lock
+                    .retire_component(component)
+                    .map_err(|err| usage_error(&format!("--retire {component}: {err}")))?;
+                for (key, number) in retired {
+                    lines.push(format!("retired {key} {number}"));
+                }
+            }
+            Edit::RenameInterface(old, new) => {
+                let unit = &mut units[0];
+                // The new key must be a declaration without an entry — the
+                // shape the checker numbered provisionally. A declaration
+                // with an entry, or a name nothing declares, is not a rename
+                // target.
+                if !is_provisional(&unit.packages, new) {
+                    return Err(usage_error(&format!(
+                        "--rename {old}={new}: `{new}` is not a declaration without an entry in \
+                         unit `{}`",
+                        unit.name
+                    )));
+                }
+                let number = unit
+                    .lock
+                    .rename(old, new.clone())
+                    .map_err(|err| usage_error(&format!("--rename {old}={new}: {err}")))?;
+                lines.push(format!("renamed {old} {new} {number}"));
+            }
+            Edit::RetireInterface(key) => {
+                let unit = &mut units[0];
+                if is_declared(&unit.packages, key) {
+                    return Err(usage_error(&format!(
+                        "--retire {key}: `{key}` is still declared in unit `{}`; remove the \
+                         declaration first, or keep the entry live",
+                        unit.name
+                    )));
+                }
+                let number = unit
+                    .lock
+                    .retire(key)
+                    .map_err(|err| usage_error(&format!("--retire {key}: {err}")))?;
+                lines.push(format!("retired {key} {number}"));
+            }
         }
-        let number = unit
-            .lock
-            .rename(old, new.clone())
-            .map_err(|err| usage_error(&format!("--rename {old}={new}: {err}")))?;
-        lines.push(format!("renamed {old} {new} {number}"));
     }
-    for key in retires {
-        if is_declared(&unit.packages, key) {
-            return Err(usage_error(&format!(
-                "--retire {key}: `{key}` is still declared in unit `{}`; remove the declaration \
-                 first, or keep the entry live",
-                unit.name
-            )));
-        }
-        let number = unit
-            .lock
-            .retire(key)
-            .map_err(|err| usage_error(&format!("--retire {key}: {err}")))?;
-        lines.push(format!("retired {key} {number}"));
+    if touches_interfaces {
+        write(&units[0])?;
     }
-    write(unit)?;
+    if touches_instances {
+        instances.write(&instance_lock)?;
+    }
     for line in lines {
         println!("{line}");
     }
@@ -391,52 +708,98 @@ fn relative_dir(entry: &Path, dir: &Path) -> String {
 /// Runs `ridl lock merge`: the git merge driver over `base`, `ours` and
 /// `theirs`, writing the result to `ours`. An empty BASE — what git passes as
 /// `%O` when both sides created the file — reads as `next 1` with no entries;
-/// an empty OURS or THEIRS is a file that does not parse.
+/// an empty OURS or THEIRS is a file that does not parse. The file is an
+/// instance lock when the OURS text, else the THEIRS text, holds a line equal
+/// to the instance lock header, and an interface lock otherwise.
 pub fn run_lock_merge(base: &Path, ours: &Path, theirs: &Path, marker_size: usize) -> ExitCode {
-    let sides = (
-        read_side(base, true),
-        read_side(ours, false),
-        read_side(theirs, false),
-    );
-    let (base, ours_lock, theirs_lock) = match sides {
+    let texts = (read_text(base), read_text(ours), read_text(theirs));
+    let (base_text, ours_text, theirs_text) = match texts {
         (Ok(base), Ok(ours), Ok(theirs)) => (base, ours, theirs),
         (Err(code), _, _) | (_, Err(code), _) | (_, _, Err(code)) => return code,
     };
-    let (text, code) = match interface_lock::merge(&base, &ours_lock, &theirs_lock, marker_size) {
-        MergeOutcome::Clean(merged) => (merged.render(), ExitCode::SUCCESS),
-        MergeOutcome::Conflict { text } => {
-            eprintln!(
-                "error: {}: the two sides disagree; the disagreeing entries are between git \
-                 conflict markers, and the file is malformed (RIDL-410) until they are resolved \
-                 by hand",
-                ours.display()
-            );
-            (text, ExitCode::FAILURE)
-        }
-    };
-    if let Err(err) = std::fs::write(ours, text) {
-        eprintln!("error: cannot write {}: {err}", ours.display());
-        return ExitCode::from(2);
+    let has_header = |text: &str| text.lines().any(|line| line == instance_lock::HEADER);
+    if has_header(&ours_text) || has_header(&theirs_text) {
+        merge_texts::<InstanceKey>(
+            (base, &base_text),
+            (ours, &ours_text),
+            (theirs, &theirs_text),
+            marker_size,
+            "RSDL-315",
+        )
+    } else {
+        merge_texts::<LockKey>(
+            (base, &base_text),
+            (ours, &ours_text),
+            (theirs, &theirs_text),
+            marker_size,
+            "RIDL-410",
+        )
     }
-    code
 }
 
-/// One side of the merge, parsed. A side that cannot be read, or that does
-/// not parse, is exit 2 with the reason: the driver merges tables, and a side
-/// that is not one is an input it cannot answer over.
-fn read_side(path: &Path, empty_is_default: bool) -> Result<InterfaceLock, ExitCode> {
-    let text = std::fs::read_to_string(path).map_err(|err| {
+/// The three-way merge of the three sides as tables of key type `K`, written
+/// to OURS. `code` names the diagnostic a file with conflict markers draws.
+fn merge_texts<K: TableKey>(
+    base: (&Path, &str),
+    ours: (&Path, &str),
+    theirs: (&Path, &str),
+    marker_size: usize,
+    code: &str,
+) -> ExitCode {
+    let sides = (
+        parse_side::<K>(base, true),
+        parse_side::<K>(ours, false),
+        parse_side::<K>(theirs, false),
+    );
+    let (base_lock, ours_lock, theirs_lock) = match sides {
+        (Ok(base), Ok(ours), Ok(theirs)) => (base, ours, theirs),
+        (Err(code), _, _) | (_, Err(code), _) | (_, _, Err(code)) => return code,
+    };
+    let ours_path = ours.0;
+    let (text, exit) =
+        match interface_lock::merge(&base_lock, &ours_lock, &theirs_lock, marker_size) {
+            MergeOutcome::Clean(merged) => (merged.render(), ExitCode::SUCCESS),
+            MergeOutcome::Conflict { text } => {
+                eprintln!(
+                    "error: {}: the two sides disagree; the disagreeing entries are between git \
+                 conflict markers, and the file is malformed ({code}) until they are resolved \
+                 by hand",
+                    ours_path.display()
+                );
+                (text, ExitCode::FAILURE)
+            }
+        };
+    if let Err(err) = std::fs::write(ours_path, text) {
+        eprintln!("error: cannot write {}: {err}", ours_path.display());
+        return ExitCode::from(2);
+    }
+    exit
+}
+
+/// The text of one side. A side that cannot be read is exit 2 with the
+/// reason.
+fn read_text(path: &Path) -> Result<String, ExitCode> {
+    std::fs::read_to_string(path).map_err(|err| {
         eprintln!("error: cannot read {}: {err}", path.display());
         ExitCode::from(2)
-    })?;
+    })
+}
+
+/// One side of the merge, parsed. A side that does not parse is exit 2 with
+/// the reason: the driver merges tables, and a side that is not one is an
+/// input it cannot answer over.
+fn parse_side<K: TableKey>(
+    (path, text): (&Path, &str),
+    empty_is_default: bool,
+) -> Result<LockTable<K>, ExitCode> {
     if empty_is_default && text.trim().is_empty() {
-        return Ok(InterfaceLock::default());
+        return Ok(LockTable::default());
     }
-    interface_lock::parse(&text).map_err(|err| {
+    interface_lock::parse_table(text).map_err(|err| {
         eprintln!(
             "error: {}:{}: {}",
             path.display(),
-            line_of(&text, err.range),
+            line_of(text, err.range),
             err.message
         );
         ExitCode::from(2)

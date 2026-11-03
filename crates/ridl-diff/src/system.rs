@@ -6,7 +6,8 @@
 //! their lines, and where each instance runs — and a change to it changes the
 //! derived links and never the contract. Such a change is listed under one of
 //! two headings and carries no verdict: neither compatible nor breaking. Which
-//! of them are breaking, and for whom, is the stability policy's.
+//! of them are breaking, and for whom, is the stability policy's. A third
+//! heading, instance number changed, is the exception and is breaking.
 //!
 //! - **Placement changed** — a change in a deployment: a deployment added or
 //!   removed, a machine added, removed or made `external`, an instance moved to
@@ -20,7 +21,11 @@
 //!   backend key of the system, of a component, of a distribution or of one
 //!   of their lines changed.
 //!
-//! Both read the lowered `System` of each side and nothing else.
+//! - **Instance number changed** — a locked instance number differs between
+//!   the two sides, or a number moved to another instance whose old holder is
+//!   still present. A provisional old number and a rename are not listed.
+//!
+//! All read the lowered `System` of each side and nothing else.
 
 use ridl_ir::v2::{self, Component, Deployment, InterfaceRef, System};
 
@@ -31,9 +36,13 @@ pub enum SystemHeading {
     PlacementChanged,
     /// A change to the closure or to a component's lines.
     CompositionChanged,
+    /// A locked instance number changed. The only system heading that carries
+    /// a verdict: breaking.
+    InstanceNumberChanged,
 }
 
-/// One change to the system, listed under its heading with no verdict.
+/// One change to the system, listed under its heading. Only a change under
+/// [`SystemHeading::InstanceNumberChanged`] carries a verdict: breaking.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemChange {
     pub heading: SystemHeading,
@@ -51,15 +60,17 @@ pub fn heading_text(heading: SystemHeading) -> &'static str {
     match heading {
         SystemHeading::PlacementChanged => "placement changed",
         SystemHeading::CompositionChanged => "composition changed",
+        SystemHeading::InstanceNumberChanged => "instance number changed",
     }
 }
 
 /// Compares two lowered systems: the composition changes first, in the new
-/// closure's order and then the removed components, and then the placement
+/// closure's order and then the removed components, then the placement
 /// changes, deployment by deployment in the new system's order and then the
-/// removed deployments. The doc fields (`doc`, the doc links, `see`,
-/// `since`) are never read: a doc edit is neither a placement nor a
-/// composition change, and a system change has no verdict (ADR-0026). The
+/// removed deployments, and then the instance number changes. The doc fields
+/// (`doc`, the doc links, `see`, `since`) are never read: a doc edit is
+/// neither a placement nor a composition change, and a placement or
+/// composition change has no verdict (ADR-0026). The
 /// sizing fields (`Deployment.sizing`, `Placement.sizing`) are never read: the
 /// registry records them as not reported, reason sizing
 /// (`ridl_core::attributes`).
@@ -166,7 +177,68 @@ pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
             );
         }
     }
+    instance_numbers(old, new, &mut changes);
     changes
+}
+
+/// The `component/instance` key and the number of every instance of a system,
+/// in closure order, with whether the number is provisional.
+fn numbered_instances(system: &System) -> Vec<(String, i32, bool)> {
+    let mut numbered = Vec::new();
+    for component in &system.components {
+        let name = component.qualified_name();
+        for entry in &component.numbers {
+            numbered.push((
+                format!("{name}/{}", entry.instance),
+                entry.number,
+                entry.provisional,
+            ));
+        }
+    }
+    numbered
+}
+
+/// The instance numbers that changed. A key whose old number is locked and
+/// whose new number differs is listed. So is a new key that holds a locked
+/// number of the old side that another key held, while that other key is
+/// still present on the new side. When the old holder is absent, the change is
+/// a rename, which `ridl lock --rename` carries with the number, and it is not
+/// listed. A provisional old number is never listed, and a key on one side
+/// only is not listed for its own number.
+fn instance_numbers(old: &System, new: &System, changes: &mut Vec<SystemChange>) {
+    let old = numbered_instances(old);
+    let new = numbered_instances(new);
+    for (key, number, _) in &new {
+        if let Some((_, before, provisional)) = old.iter().find(|(old_key, ..)| old_key == key)
+            && !provisional
+            && before != number
+        {
+            changes.push(SystemChange {
+                heading: SystemHeading::InstanceNumberChanged,
+                path: key.clone(),
+                before: Some(before.to_string()),
+                after: Some(number.to_string()),
+            });
+        }
+    }
+    for (key, number, _) in &new {
+        if old.iter().any(|(old_key, ..)| old_key == key) {
+            continue;
+        }
+        let holder = old
+            .iter()
+            .find(|(old_key, held, provisional)| held == number && !provisional && old_key != key);
+        if let Some((holder, ..)) = holder
+            && new.iter().any(|(new_key, ..)| new_key == holder)
+        {
+            changes.push(SystemChange {
+                heading: SystemHeading::InstanceNumberChanged,
+                path: key.clone(),
+                before: Some(format!("{number} ({holder})")),
+                after: Some(number.to_string()),
+            });
+        }
+    }
 }
 
 /// A component in both closures: its `offers` and `requires` lines, its
@@ -594,6 +666,7 @@ mod tests {
                 .iter()
                 .map(|instance| instance.to_string())
                 .collect(),
+            numbers: Vec::new(),
             offers: offers
                 .iter()
                 .map(|service| v2::Offer {
@@ -1036,6 +1109,107 @@ mod tests {
                 "composition changed: veh.topology.Adas/veh.topology.Gauge: member -> (removed)",
             ]
         );
+    }
+
+    /// A system whose components hold the given `(component, instance,
+    /// number, provisional)` numbers; the component is a qualified name.
+    fn numbered(entries: &[(&str, &str, i32, bool)]) -> System {
+        let mut system = base();
+        system.components.clear();
+        for (qualified, instance, number, provisional) in entries {
+            let (package, name) = qualified.rsplit_once('.').expect("a qualified name");
+            let at = system
+                .components
+                .iter()
+                .position(|c| c.qualified_name() == *qualified);
+            let at = at.unwrap_or_else(|| {
+                let mut made = component(name, &[], &[], &[]);
+                made.package = package.to_string();
+                system.components.push(made);
+                system.components.len() - 1
+            });
+            system.components[at].numbers.push(v2::InstanceNumber {
+                instance: instance.to_string(),
+                number: *number,
+                provisional: *provisional,
+            });
+        }
+        system
+    }
+
+    fn listed(changes: &[SystemChange]) -> Vec<&SystemChange> {
+        changes
+            .iter()
+            .filter(|c| c.heading == SystemHeading::InstanceNumberChanged)
+            .collect()
+    }
+
+    #[test]
+    fn a_changed_locked_number_is_listed() {
+        let changes = diff_systems(
+            &numbered(&[("veh.C", "a", 1, false)]),
+            &numbered(&[("veh.C", "a", 2, false)]),
+        );
+        let listed = listed(&changes);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].path, "veh.C/a");
+        assert_eq!(
+            (listed[0].before.as_deref(), listed[0].after.as_deref()),
+            (Some("1"), Some("2"))
+        );
+    }
+
+    #[test]
+    fn a_number_given_to_another_instance_is_listed() {
+        let changes = diff_systems(
+            &numbered(&[("veh.C", "a", 1, false)]),
+            &numbered(&[("veh.C", "a", 2, false), ("veh.C", "b", 1, false)]),
+        );
+        let listed = listed(&changes);
+        assert_eq!(listed.len(), 2);
+        assert!(
+            listed
+                .iter()
+                .any(|c| c.path == "veh.C/b" && c.before.as_deref() == Some("1 (veh.C/a)"))
+        );
+    }
+
+    #[test]
+    fn a_renamed_instance_that_keeps_its_number_is_not_listed() {
+        let changes = diff_systems(
+            &numbered(&[("veh.C", "a", 1, false)]),
+            &numbered(&[("veh.C", "b", 1, false)]),
+        );
+        assert!(listed(&changes).is_empty());
+    }
+
+    #[test]
+    fn a_provisional_old_number_is_not_listed() {
+        let changes = diff_systems(
+            &numbered(&[("veh.C", "a", 1, true)]),
+            &numbered(&[("veh.C", "a", 2, false)]),
+        );
+        assert!(listed(&changes).is_empty());
+    }
+
+    /// A locked number that both sides hold for the same key is not a
+    /// change: a lock-bearing diff with no renumbering lists nothing.
+    #[test]
+    fn an_unchanged_locked_number_is_not_listed() {
+        let both = numbered(&[("veh.C", "a", 1, false), ("veh.C", "b", 2, false)]);
+        assert!(listed(&diff_systems(&both, &both)).is_empty());
+    }
+
+    /// A new key that takes a number its old holder held only provisionally
+    /// is not listed, though the old holder is still present: the old number
+    /// was never part of the lock.
+    #[test]
+    fn a_new_key_on_a_provisional_old_number_is_not_listed() {
+        let changes = diff_systems(
+            &numbered(&[("veh.C", "a", 1, true)]),
+            &numbered(&[("veh.C", "a", 2, false), ("veh.C", "b", 1, false)]),
+        );
+        assert!(listed(&changes).is_empty());
     }
 
     #[test]

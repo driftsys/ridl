@@ -1,16 +1,18 @@
 # @driftsys/ridl-transport-ws
 
 The client side of the WebSocket binding of the ridl frame. The package opens a
-WebSocket that offers the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that
-order, sends and receives frames, and carries each payload as bytes without
-reading them. The caller encodes and decodes payloads.
+WebSocket that offers the subprotocols `ridl-ws-v3`, `ridl-ws-v2` and
+`ridl-ws-v1`, in that order, sends and receives frames, and carries each payload
+as bytes without reading them. The caller encodes and decodes payloads.
 
-The session speaks the frame version of the subprotocol the server selects: 2 on
-`ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also attaches to a server
-that serves frame version 1 only. Frame version 2 is frame version 1 plus the
-`block` form, which carries a `fixed` payload that does not fit one message in
-parts (frame specification §11.1, binding version 2). On a session of frame
-version 1, a `block` is a protocol violation.
+The session speaks the frame version of the subprotocol the server selects: 3 on
+`ridl-ws-v3`, 2 on `ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also
+attaches to a server that serves frame version 1 only. Frame version 2 is frame
+version 1 plus the `block` form, which carries a `fixed` payload that does not
+fit one message in parts (frame specification §11.1, binding version 2). Frame
+version 3 is frame version 2 plus the forms `chunk`, `stream_end` and
+`stream_credit`, which carry the reply stream of a query (binding version 3). On
+a session of frame version 1, a `block` is a protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
 `WebSocket`, so it needs no other runtime. The npm release workflow
@@ -92,6 +94,19 @@ Against a provider that serves frame version 1 only (`ridl-ws-v1` selected), a
 read with `contract(UnknownInteraction)`, so the read rejects with
 `SessionError` `contract` `unknown-interaction`, the same error an unknown
 member gives.
+
+## A streamed reply
+
+On a session of frame version 3,
+`session.queryStream(iface, ord, args, {
+bound })` sends a query whose reply is
+a stream and returns a `ReadableStream<Uint8Array>` of the payloads of the
+`chunk` frames, in order. The reader's pace sets the server's: the session
+grants credit as the reader reads, and cancelling the stream stops the call. The
+stream errors with a `SessionError` whose category is `contract`, `corrupt`,
+`busy`, `interrupted`, `timeout`, `down` or, on a session of frame version 1 or
+2, `unsupported`, in which case nothing is sent. The rules are in
+[the package's design record](../../docs/design/ridl-transport-ws-ts.md), D-20.
 
 ## Limits
 

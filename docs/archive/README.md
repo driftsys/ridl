@@ -812,6 +812,17 @@ provenance. Nothing here is normative — the current references live in
   is [`../design/interaction-face.md`](../design/interaction-face.md). Stages 4
   to 6 continue from `docs/wip/2026-10-31-streams-design.md`.
 
+- **2026-11-01-streams-stage-4-plan.md** — the plan for stage 4 of the streams
+  work: a query's streamed reply over the WebSocket binding (frame version 3
+  under `ridl-ws-v3`, the `chunk`, `stream_end` and `stream_credit` forms), in
+  the Rust provider and in both clients. Archived verbatim, on 2026-11-02, once
+  the work landed in driftsys/ridl#1182 (squash `fe60eeee`). The durable records
+  are [the frame specification](../specification/frame-specification.md),
+  [the WebSocket binding design](../design/ridl-transport-ws.md),
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md) and
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+  Stages 5 and 6 continue from `docs/wip/2026-10-31-streams-design.md`.
+
 - **2026-11-02-podbuf-remote-inline-design.md** and
   **2026-11-02-podbuf-remote-inline-plan.md** — remote struct growth held inline
   across import pins (driftsys/ridl#1163). Archived verbatim after the

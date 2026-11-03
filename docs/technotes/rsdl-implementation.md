@@ -69,8 +69,8 @@ carried into the IR either way — the warning never blocks (rsdl §13).
 
 ## The lowering is a plain function over the checked model
 
-`ridl_sem::lower_system(system: &CheckedSystem, packages: &[&v2::Package]) ->
-Option<v2::System>`
+`ridl_sem::lower_system(system: &CheckedSystem, packages: &[&v2::Package],
+numbering: &InstanceNumbering) -> Option<v2::System>`
 is a plain function, not a salsa query. Only `ridlc` and `ridl diff` lower, once
 per command run and after every query has returned; the language server never
 lowers, so nothing would reuse a memoized result.
@@ -78,14 +78,17 @@ lowers, so nothing would reuse a memoized result.
 It reads the lowered package IR as its second argument, because rsdl §13's
 inputs from outside rsdl live there: each interface's number and provisional
 flag (`Interface.number`, `Interface.provisional`, from the unit's lock) and
-each member's ordinal (`Decl.ordinal`, ridl §11). An interface is found by
-identity through `Package::shapes()`, the walk that sees an inline shape;
+each member's ordinal (`Decl.ordinal`, ridl §11). Its third argument is the
+instance numbering of `number_instances`, which gives each instance its number
+and provisional flag (`Component.numbers`). An interface is found by identity
+through `Package::shapes()`, the walk that sees an inline shape;
 `Package.interfaces` alone misses one.
 
 **Gating** is the function's own, and it is rsdl §13's:
 
 - an error in the closure blocks every deployment, so the function returns
-  `None` when `CheckedSystem::closure_has_errors` is set;
+  `None` when `CheckedSystem::closure_has_errors` is set, or when
+  `InstanceNumbering::overflow` is not empty (RSDL-315);
 - an RSDL-7xx error blocks its own deployment only, which
   `DeploymentPlacement::has_errors` records, as does a deployment whose closure
   was never placed with no RSDL-7xx error raised for it: that deployment is left
@@ -148,17 +151,19 @@ one unit, `veh`, so its system has one region, named `veh`, whose interfaces are
 ## `ridl diff` at the system
 
 `ridl_diff::system` compares two lowered systems and returns `SystemChange`
-values under one of two headings, `PlacementChanged` and `CompositionChanged`.
-They are their own vocabulary rather than `Category` variants because a
-`Category` carries a verdict and these carry none, which is also why `--explain`
-does not list them.
+values under one of three headings, `PlacementChanged`, `CompositionChanged` and
+`InstanceNumberChanged`. They are their own vocabulary rather than `Category`
+variants because a `Category` carries a verdict and the first two carry none,
+which is also why `--explain` does not list them.
 
-The contract comparison is unchanged and still decides the verdict and the exit
-code. The system changes are rendered after the contract lines — in text, the
-heading on its own line and one indented `path: before -> after` line per change
-with no `[verdict]`; in JSON, the optional keys `placement_changed` and
-`composition_changed`, left out when empty — so a report with no system change
-renders byte for byte as it did before.
+The contract comparison is unchanged and decides the verdict and the exit code,
+except that a change under `InstanceNumberChanged` (a changed locked instance
+number) makes the verdict breaking. The system changes are rendered after the
+contract lines — in text, the heading on its own line, followed by `(breaking)`
+for the instance number heading, and one indented `path: before -> after` line
+per change with no `[verdict]`; in JSON, the optional keys `placement_changed`,
+`composition_changed` and `instance_number_changed`, left out when empty — so a
+report with no system change renders byte for byte as it did before.
 
 The region map is not compared, so a changed region hash lists no system change.
 A change to an interface or a type the hash covers is reported by the contract
@@ -191,15 +196,14 @@ there is no runtime, and every fact it states about the lowered system and about
 
 ## What is not built yet
 
-- **A runtime's system descriptor.** rsdl §13 says a runtime's descriptor is an
-  emitter over these facts, specified with the runtime. The runtime descriptors
-  design defines two artifacts and the roadmap plans only the catalog half; the
-  per-deployment system descriptor takes its own rows now that rsdl has landed,
-  and has none yet. No runtime reads the lowered system: the one in this
-  workspace, `ridl-loopback`, is given its catalog by its caller and reads no
-  descriptor at all. A codegen request does read the lowered system: its
-  deployment section is an emitter over it
-  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
-  section"). The only plugin that reads that section is the test plugin of
-  `crates/ridlc/tests/layout.rs`; no backend of this workspace reads it.
+- **A runtime that reads the deployment descriptor.** The per-deployment
+  descriptor is built
+  ([the deployment descriptor record](../design/deployment-descriptor.md);
+  ADR-0022 decision 12). No runtime in this workspace reads it: `ridl-loopback`
+  is given its catalog by its caller and reads no descriptor at all. A codegen
+  request also reads the lowered system: its deployment section is an emitter
+  over it ([the codegen plugin design](../design/codegen-plugins.md), "The
+  deployment section"). The only plugin that reads that section is the test
+  plugin of `crates/ridlc/tests/layout.rs`; no backend of this workspace reads
+  it.
 - **Backend namespace claims.** See RSDL-804 above.

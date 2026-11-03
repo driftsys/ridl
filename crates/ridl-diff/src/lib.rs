@@ -348,8 +348,10 @@ impl Change {
 pub struct DiffReport {
     pub changes: Vec<Change>,
     pub verdict: Verdict,
-    /// The changes to the lowered system, each under its heading and with no
-    /// verdict (rsdl reference §14). They never enter `verdict`. Empty unless
+    /// The changes to the lowered system, each under its heading (rsdl
+    /// reference §14). Only a change under
+    /// [`SystemHeading::InstanceNumberChanged`] enters `verdict`, as breaking;
+    /// the other headings carry no verdict. Empty unless
     /// both sides carry a system ([`diff_workspaces`]).
     pub system: Vec<SystemChange>,
 }
@@ -731,7 +733,8 @@ fn diff_refs_scoped(
 /// Compares two workspaces at the system (rsdl reference §14): the packages by
 /// the ridl categories, exactly as [`diff_sets`] does, and — when both sides
 /// carry a lowered system — the system's placement and composition changes,
-/// which carry no verdict. A system on one side only is not compared: there is
+/// which carry no verdict, and its instance number changes, which make the
+/// report breaking. A system on one side only is not compared: there is
 /// nothing to compare it against.
 ///
 /// `context` is passed to [`diff_sets_in`]. The comparison is judged for no
@@ -761,6 +764,13 @@ pub fn diff_workspaces_with(
     let mut report = diff_refs_with(&old, &new, &context, encodings);
     if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
         report.system = diff_systems(old_system, new_system);
+        if report
+            .system
+            .iter()
+            .any(|change| change.heading == SystemHeading::InstanceNumberChanged)
+        {
+            report.verdict = Verdict::Breaking;
+        }
     }
     report
 }
@@ -955,7 +965,8 @@ impl serde::Serialize for Change {
 ///
 /// After the contract changes come the system headings (rsdl reference §14):
 /// each heading that has a change on its own line, then one indented line per
-/// change under it, in the `path: before -> after` form and with no verdict.
+/// change under it, in the `path: before -> after` form. Only the instance
+/// number heading carries a verdict, printed after it as `(breaking)`.
 pub fn render_text(report: &DiffReport) -> String {
     let mut out = String::new();
     out.push_str(verdict_word(report.verdict));
@@ -991,6 +1002,7 @@ pub fn render_text(report: &DiffReport) -> String {
     for heading in [
         SystemHeading::PlacementChanged,
         SystemHeading::CompositionChanged,
+        SystemHeading::InstanceNumberChanged,
     ] {
         let mut listed = report
             .system
@@ -1001,6 +1013,9 @@ pub fn render_text(report: &DiffReport) -> String {
             continue;
         }
         out.push_str(system::heading_text(heading));
+        if heading == SystemHeading::InstanceNumberChanged {
+            out.push_str(" (breaking)");
+        }
         out.push('\n');
         for change in listed {
             out.push_str("  ");
@@ -1067,6 +1082,8 @@ pub fn render_json(report: &DiffReport) -> String {
         placement_changed: Vec<JsonSystemChange<'a>>,
         #[serde(skip_serializing_if = "Vec::is_empty")]
         composition_changed: Vec<JsonSystemChange<'a>>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        instance_number_changed: Vec<JsonSystemChange<'a>>,
     }
 
     let under = |heading: SystemHeading| -> Vec<JsonSystemChange<'_>> {
@@ -1086,6 +1103,7 @@ pub fn render_json(report: &DiffReport) -> String {
         changes: &report.changes,
         placement_changed: under(SystemHeading::PlacementChanged),
         composition_changed: under(SystemHeading::CompositionChanged),
+        instance_number_changed: under(SystemHeading::InstanceNumberChanged),
     })
     .expect("a diff report holds only string-representable values, so serialization cannot fail")
 }

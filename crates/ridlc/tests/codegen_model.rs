@@ -834,7 +834,10 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
             "inline": false
           }
         ],
-        "maps": []
+        "maps": [],
+        "attributes": [],
+        "number": 1,
+        "provisional": true
       },
       {
         "component": "veh.cabin.Panel",
@@ -844,7 +847,10 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
         "offers": [],
         "maps": [
           "veh.cabin"
-        ]
+        ],
+        "attributes": [],
+        "number": 2,
+        "provisional": true
       },
       {
         "component": "veh.cabin.Telemetry",
@@ -854,7 +860,10 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
         "offers": [],
         "maps": [
           "veh.cabin"
-        ]
+        ],
+        "attributes": [],
+        "number": 3,
+        "provisional": true
       }
     ],
     "channels": [
@@ -1039,7 +1048,7 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
     "bindings": [
       {
         "name": "websocket",
-        "version": "2",
+        "version": "3",
         "frameHeaderMaxBytes": 20,
         "envelopeBytes": 16
       }

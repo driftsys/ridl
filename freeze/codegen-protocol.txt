@@ -24,6 +24,12 @@ ridl.codegen.v1.ArmHead.foreign = 3 optional uint32
 ridl.codegen.v1.ArrayType.element = 1 singular ridl.codegen.v1.Type
 ridl.codegen.v1.ArrayType.max = 3 singular uint64
 ridl.codegen.v1.ArrayType.min = 2 singular uint64
+ridl.codegen.v1.Attribute.key = 2 singular string
+ridl.codegen.v1.Attribute.namespace = 1 singular string
+ridl.codegen.v1.Attribute.value = 3 singular ridl.codegen.v1.AttributeValue
+ridl.codegen.v1.AttributeList.items = 1 repeated ridl.codegen.v1.AttributeValue
+ridl.codegen.v1.AttributeValue.list = 11 singular ridl.codegen.v1.AttributeList oneof=kind
+ridl.codegen.v1.AttributeValue.scalar = 10 singular string oneof=kind
 ridl.codegen.v1.BackendOption.key = 1 singular string
 ridl.codegen.v1.BackendOption.value = 2 singular string
 ridl.codegen.v1.Binding.envelope_bytes = 4 optional uint32
@@ -317,12 +323,15 @@ ridl.codegen.v1.InitSource.INIT_SOURCE_DECLARED = 1
 ridl.codegen.v1.InitSource.INIT_SOURCE_DERIVED = 2
 ridl.codegen.v1.InitSource.INIT_SOURCE_NONE = 3
 ridl.codegen.v1.InitSource.INIT_SOURCE_UNSPECIFIED = 0
+ridl.codegen.v1.Instance.attributes = 7 repeated ridl.codegen.v1.Attribute
 ridl.codegen.v1.Instance.component = 1 singular string
 ridl.codegen.v1.Instance.external = 4 singular bool
 ridl.codegen.v1.Instance.instance = 2 singular string
 ridl.codegen.v1.Instance.machine = 3 singular string
 ridl.codegen.v1.Instance.maps = 6 repeated string
+ridl.codegen.v1.Instance.number = 8 singular int32
 ridl.codegen.v1.Instance.offers = 5 repeated ridl.codegen.v1.InterfaceKey
+ridl.codegen.v1.Instance.provisional = 9 singular bool
 ridl.codegen.v1.IntWidth values INT_WIDTH_I16 INT_WIDTH_I32 INT_WIDTH_I64 INT_WIDTH_I8 INT_WIDTH_U16 INT_WIDTH_U32 INT_WIDTH_U64 INT_WIDTH_U8 INT_WIDTH_UNSPECIFIED
 ridl.codegen.v1.IntWidth.INT_WIDTH_I16 = 4
 ridl.codegen.v1.IntWidth.INT_WIDTH_I32 = 6
@@ -680,6 +689,7 @@ ridl.ir.v2.Component.instances = 5 repeated string
 ridl.ir.v2.Component.labels = 8 repeated string
 ridl.ir.v2.Component.links = 11 repeated ridl.ir.v2.DocLink
 ridl.ir.v2.Component.name = 1 singular string
+ridl.ir.v2.Component.numbers = 15 repeated ridl.ir.v2.InstanceNumber
 ridl.ir.v2.Component.offers = 6 repeated ridl.ir.v2.Offer
 ridl.ir.v2.Component.package = 2 singular string
 ridl.ir.v2.Component.requires = 7 repeated ridl.ir.v2.Require
@@ -823,6 +833,9 @@ ridl.ir.v2.InitValue.derivable = 1 singular bool
 ridl.ir.v2.InitValue.value = 2 optional string
 ridl.ir.v2.Installation.distribution = 1 singular string
 ridl.ir.v2.Installation.machines = 2 repeated string
+ridl.ir.v2.InstanceNumber.instance = 1 singular string
+ridl.ir.v2.InstanceNumber.number = 2 singular int32
+ridl.ir.v2.InstanceNumber.provisional = 3 singular bool
 ridl.ir.v2.IntWidth values INT_WIDTH_I16 INT_WIDTH_I32 INT_WIDTH_I64 INT_WIDTH_I8 INT_WIDTH_U16 INT_WIDTH_U32 INT_WIDTH_U64 INT_WIDTH_U8 INT_WIDTH_UNSPECIFIED
 ridl.ir.v2.IntWidth.INT_WIDTH_I16 = 4
 ridl.ir.v2.IntWidth.INT_WIDTH_I32 = 6

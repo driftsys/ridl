@@ -4679,6 +4679,66 @@ fn a_lock_diagnostic_is_published_under_the_lock_files_uri() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A one-package workspace whose system has the two instances
+/// `veh.Cruise/primary` and `veh.Cruise/backup`, with the given root
+/// `instances.lock`, whose URI is returned.
+fn write_instance_workspace(dir: &TempDir, lock: &str) -> lt::Uri {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "system.rsdl",
+        "package veh\ncomponent Cruise [ instances = (primary, backup) ] {}\nsystem Vehicle { Cruise }\n",
+    );
+    uri_of(&dir.write("instances.lock", lock))
+}
+
+/// RSDL-314 — a live `instances.lock` entry with no instance — is published
+/// under the lock file's own URI, on the entry's line, as `ridl check`
+/// reports it.
+#[test]
+fn an_instance_lock_entry_with_no_instance_is_published_under_the_lock_files_uri() {
+    let dir = TempDir::new("instance-lock-orphan");
+    let lock_uri = write_instance_workspace(
+        &dir,
+        "# instances.lock — written by ridl lock; do not edit by hand.\nnext 4\nveh.Cruise/spare 3\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &lock_uri);
+    assert_eq!(codes(&published.diagnostics), ["RSDL-314"]);
+    assert_eq!(
+        published.diagnostics[0].range.start.line, 2,
+        "the entry `veh.Cruise/spare 3` on the third line"
+    );
+    assert!(
+        published.diagnostics[0]
+            .message
+            .contains("--retire veh.Cruise/spare"),
+        "{}",
+        published.diagnostics[0].message
+    );
+
+    shut_down(&client, 10);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// RSDL-315 — a malformed `instances.lock` — is published under the lock
+/// file's own URI.
+#[test]
+fn a_malformed_instance_lock_is_published_under_the_lock_files_uri() {
+    let dir = TempDir::new("instance-lock-malformed");
+    let lock_uri = write_instance_workspace(&dir, "next x\n");
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &lock_uri);
+    assert_eq!(codes(&published.diagnostics), ["RSDL-315"]);
+
+    shut_down(&client, 10);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 // --- the service catalog (issue #386) --------------------------------------
 
 /// The first member of the catalog fixture: it declares the service `x.s`.

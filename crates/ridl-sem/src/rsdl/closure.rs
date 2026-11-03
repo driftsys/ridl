@@ -120,6 +120,18 @@ pub struct ClosureComponent {
     pub site: Site,
 }
 
+impl ClosureComponent {
+    /// The qualified name: `pkg.Name` for a declared component, the service's
+    /// dotted name for an implicit one. It equals `v2::Component::qualified_name`
+    /// of the lowered component.
+    pub fn qualified_name(&self) -> String {
+        match &self.id {
+            ComponentId::Declared { package, name } => format!("{package}.{name}"),
+            ComponentId::Implicit { service } => service.clone(),
+        }
+    }
+}
+
 /// One service of the closure (rsdl §8).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClosureService {

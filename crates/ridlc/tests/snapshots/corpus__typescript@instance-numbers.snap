@@ -1,0 +1,19 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.typescript
+input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
+---
+// ===== package veh.adas =====
+export type Engaged = boolean & { readonly __ridl: 'veh.adas.Engaged' };
+
+export function initEngaged(): Engaged {
+  return false as Engaged;
+}
+
+
+// ===== package veh.ego =====
+export type Moving = boolean & { readonly __ridl: 'veh.ego.Moving' };
+
+export function initMoving(): Moving {
+  return false as Moving;
+}

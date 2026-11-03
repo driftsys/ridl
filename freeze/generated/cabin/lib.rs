@@ -11,3 +11,7 @@ pub mod veh {
     #[path = "veh.cabin.rs"]
     pub mod cabin;
 }
+/// The number of every instance of the system, from `instances.lock`.
+#[rustfmt::skip]
+#[path = "__ridl_instances.rs"]
+pub mod instances;

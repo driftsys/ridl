@@ -1,5 +1,8 @@
 //! The catalog descriptor: the FlatBuffers file per unit that an engine
-//! reads without decoding (`docs/design/catalog-descriptor.md`).
+//! reads without decoding (`docs/design/catalog-descriptor.md`). The
+//! [`deployment`] module holds the deployment descriptor, the FlatBuffers
+//! file per deployment that embeds those catalogs
+//! (`docs/design/deployment-descriptor.md`).
 //!
 //! `schema/catalog.fbs` is the schema; `generated.rs` holds the accessors
 //! planus generates from it (`cargo xtask descriptor-codegen`). [`finish`]
@@ -24,6 +27,7 @@
 
 extern crate alloc;
 
+pub mod deployment;
 #[cfg(feature = "std")]
 pub mod describe;
 pub mod generated;
@@ -75,11 +79,21 @@ pub const FILE_SUFFIX: &str = ".catalog.binfb";
 /// in `tests/round_trip.rs` fails when a planus release changes that
 /// behaviour, which is when this function can call planus directly.
 pub fn finish(catalog: &Catalog) -> Vec<u8> {
+    finish_with_identifier(catalog, FILE_IDENTIFIER)
+}
+
+/// Builds a buffer for `root` with the header layout [`finish`] describes.
+/// The catalog descriptor and the deployment descriptor share it, so the
+/// header swap exists once.
+pub(crate) fn finish_with_identifier<T>(
+    root: impl planus::WriteAsOffset<T>,
+    identifier: [u8; 4],
+) -> Vec<u8> {
     let mut builder = planus::Builder::new();
-    let mut bytes = builder.finish(catalog, Some(FILE_IDENTIFIER)).to_vec();
+    let mut bytes = builder.finish(root, Some(identifier)).to_vec();
     let from_byte_4 = u32::from_le_bytes(bytes[4..8].try_into().expect("four bytes"));
     bytes[0..4].copy_from_slice(&(from_byte_4 + 4).to_le_bytes());
-    bytes[4..8].copy_from_slice(&FILE_IDENTIFIER);
+    bytes[4..8].copy_from_slice(&identifier);
     bytes
 }
 

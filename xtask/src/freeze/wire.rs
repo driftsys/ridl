@@ -372,8 +372,9 @@ fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
 /// `frame-vector <id> <hex>` for each row of the test-vector tables of the
 /// frame specification §11.1: the first table under `### 11.1 WebSocket`
 /// whose columns are `Id`, `Vector` and `Hex` (binding version 1), then the
-/// first such table under `#### Binding version 2`, which the section must
-/// have. The tables are the vectors' source; no encoder exists. A
+/// first such table under `#### Binding version 2` and the first such table
+/// under `#### Binding version 3`, which the section must have. The tables
+/// are the vectors' source; no encoder exists. A
 /// row whose bytes [`check_vector`] rejects, a malformed row, a separator
 /// row that is not one, an `Id` used twice (in one table or in both), a
 /// blank line inside a table and a missing or empty table are errors. The
@@ -387,13 +388,17 @@ fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
     let section = section
         .split_once("\n### ")
         .map_or(section, |(head, _)| head);
-    let (version_1, version_2) = section
+    let (version_1, rest) = section
         .split_once("\n#### Binding version 2\n")
         .ok_or("§11.1 has no `#### Binding version 2` heading")?;
+    let (version_2, version_3) = rest
+        .split_once("\n#### Binding version 3\n")
+        .ok_or("§11.1 has no `#### Binding version 3` heading")?;
     let mut ids = std::collections::BTreeSet::new();
     let mut out = Vec::new();
     table_vectors(version_1, 1, "§11.1", &mut ids, &mut out)?;
     table_vectors(version_2, 2, "the binding version 2", &mut ids, &mut out)?;
+    table_vectors(version_3, 3, "the binding version 3", &mut ids, &mut out)?;
     Ok(out)
 }
 
@@ -543,7 +548,8 @@ fn check_attach(bytes: &[u8], version: u32) -> Result<(), String> {
 /// `response`'s outcome — and the bytes after the header must be the
 /// `payload` the vector's `Vector` cell names, or none when it names none.
 /// `version` is the binding version of the vector's table: the `block` form
-/// (11) exists from version 2 on.
+/// (11) exists from version 2 on, and the stream forms (12 to 14) from
+/// version 3 on.
 fn check_vector(bytes: &[u8], payload: &[u8], version: u32) -> Result<(), String> {
     let form = *bytes.first().ok_or("the vector is empty")?;
     let (header, may_carry) = match form {
@@ -557,7 +563,15 @@ fn check_vector(bytes: &[u8], payload: &[u8], version: u32) -> Result<(), String
         10 => (36, true),
         11 if version >= 2 => (34, true),
         11 => return Err("form 11 (`block`) in the table of binding version 1".to_string()),
-        other => return Err(format!("form {other} is outside 1..=11")),
+        12 if version >= 3 => (35, true),
+        13 if version >= 3 => (37, false),
+        14 if version >= 3 => (23, false),
+        12..=14 => {
+            return Err(format!(
+                "form {form} (a stream form) in the table of binding version {version}"
+            ));
+        }
+        other => return Err(format!("form {other} is outside 1..=14")),
     };
     if bytes.len() < header {
         return Err(format!(
@@ -607,6 +621,32 @@ fn check_codes(form: u8, bytes: &[u8]) -> Result<(), String> {
         7 => check_in(bytes[26], 1..=3, "provenance"),
         10 => check_outcome(bytes[34], bytes[35]),
         11 => check_block(bytes),
+        12..=14 => check_stream(form, bytes),
+        _ => Ok(()),
+    }
+}
+
+/// A stream form's header by itself (frame specification §4, §11.1 binding
+/// version 3): `kind` is `Command` (3) or `Query` (4); a `stream_end` has
+/// one of the outcomes 3 to 8, 10 and 11, with the `Rule` detail under
+/// outcome 3 and 0 otherwise; a `stream_credit` grants at least 1 chunk.
+fn check_stream(form: u8, bytes: &[u8]) -> Result<(), String> {
+    check_in(bytes[1], 3..=4, "kind of a stream form")?;
+    match form {
+        13 => {
+            let (outcome, detail) = (bytes[35], bytes[36]);
+            match outcome {
+                3..=8 => check_outcome(outcome, detail),
+                10 | 11 if detail == 0 => Ok(()),
+                10 | 11 => Err(format!(
+                    "detail {detail} with outcome {outcome}, which takes 0"
+                )),
+                _ => Err(format!(
+                    "outcome {outcome} is not allowed on a `stream_end`"
+                )),
+            }
+        }
+        14 if u32_le(bytes, 19) == 0 => Err("credit 0".to_string()),
         _ => Ok(()),
     }
 }
@@ -828,11 +868,12 @@ mod tests {
     }
 
     /// A frame specification that holds only a §11.1 vector table with
-    /// `rows`, a binding version 2 table whose one row is `filler` and a
-    /// §11.2 table whose row would be valid if it were read.
+    /// `rows`, a binding version 2 table whose one row is `filler`, a binding
+    /// version 3 table whose one row is `filler-3` and a §11.2 table whose row
+    /// would be valid if it were read.
     fn spec_with_2(rows: &[&str], filler: &str) -> String {
         format!(
-            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{filler}\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `02 01 00` |\n",
+            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{filler}\n\n#### Binding version 3\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-3` | x | `02 01 00` |\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `02 01 00` |\n",
             rows.join("\n")
         )
     }
@@ -866,10 +907,10 @@ mod tests {
     const ATTACH_HEAD: &str =
         "01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
-    /// The twelve vectors the frame specification §11.1 held when the `wire`
-    /// dump froze them: nine of binding version 1 and three of binding
-    /// version 2. A vector is never edited, so each is still in its table; a
-    /// vector added later needs no change here.
+    /// The sixteen vectors the frame specification §11.1 held when the `wire`
+    /// dump froze them: nine of binding version 1, three of binding version 2
+    /// and four of binding version 3. A vector is never edited, so each is
+    /// still in its table; a vector added later needs no change here.
     #[test]
     fn the_frame_specification_holds_the_frozen_vectors() {
         let text = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
@@ -887,6 +928,10 @@ mod tests {
             "frame-vector attach-2 010200000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f097665682e636162696e",
             "frame-vector block-last 0b050100000005000000ab8967452301000000000000000000000210000001000000abcd",
             "frame-vector block-one 0b050100000005000000ab8967452301000000000000000000000100000000000000ab",
+            "frame-vector attach-3 010300000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f097665682e636162696e",
+            "frame-vector chunk-reply 0c040100000004000000ac896745230100000100000000000000020000000000000000ff01",
+            "frame-vector stream-end-end 0d040100000004000000ac8967452301000002000000000000000200000000000000000a00",
+            "frame-vector stream-credit 0e04010000000400000002000000000000000004000000",
         ] {
             assert!(
                 vectors.iter().any(|v| v == frozen),
@@ -904,7 +949,7 @@ mod tests {
     /// `ridl-ir`, so the row is checked there and the checker here.
     #[test]
     fn the_header_table_of_the_frame_specification_is_the_checker_s() {
-        const FORMS: [&str; 11] = [
+        const FORMS: [&str; 14] = [
             "attach",
             "attached",
             "subscribe",
@@ -916,16 +961,22 @@ mod tests {
             "request",
             "response",
             "block",
+            "chunk",
+            "stream_end",
+            "stream_credit",
         ];
         let text = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
         let (_, section) = text.split_once("### 11.1 WebSocket\n").unwrap();
-        // The version 1 table, then the row that binding version 2 adds.
-        let (version_1, version_2) = section
+        // The version 1 table, then the rows that binding versions 2 and 3 add.
+        let (version_1, rest) = section
             .split_once("\n#### Binding version 2\n")
             .expect("the binding version 2 section");
+        let (version_2, version_3) = rest
+            .split_once("\n#### Binding version 3\n")
+            .expect("the binding version 3 section");
         let mut seen = Vec::new();
         let mut rows = Vec::new();
-        for part in [version_1, version_2] {
+        for part in [version_1, version_2, version_3] {
             let mut lines = part.lines();
             lines
                 .by_ref()
@@ -946,7 +997,11 @@ mod tests {
                 seen.push(form);
                 // A `block` header alone is never valid: `total` 1 needs 1 byte.
                 let payload: &[u8] = if form == 11 { &[0xab] } else { &[] };
-                let binding_version = if form == 11 { 2 } else { 1 };
+                let binding_version = match form {
+                    11 => 2,
+                    12..=14 => 3,
+                    _ => 1,
+                };
                 let valid = if form == 1 {
                     // `39 + name`: the header and a one-byte name.
                     let mut bytes = vec![1, 1, 0, 0, 0, 1];
@@ -962,8 +1017,16 @@ mod tests {
                         bytes[2] = 1;
                         bytes[6] = 1;
                     }
+                    if form >= 12 {
+                        // A stream form takes a `Command` or a `Query`.
+                        bytes[1] = 4;
+                    }
                     match form {
                         4 => bytes[10] = 1,
+                        // `end`.
+                        13 => bytes[35] = 10,
+                        // A credit of 1.
+                        14 => bytes[19] = 1,
                         7 => bytes[26] = 1,
                         10 => bytes[34] = 1,
                         11 => {
@@ -998,7 +1061,7 @@ mod tests {
             }
         }
         seen.sort_unstable();
-        assert_eq!(seen, (1..=11).collect::<Vec<u8>>());
+        assert_eq!(seen, (1..=14).collect::<Vec<u8>>());
     }
 
     #[test]
@@ -1006,7 +1069,11 @@ mod tests {
         let text = spec_with(&["| `ok` | `attached` accepted | `02 01 00` |"]);
         assert_eq!(
             frame_vectors(&text).unwrap(),
-            vec!["frame-vector ok 020100", "frame-vector filler 020100"]
+            vec![
+                "frame-vector ok 020100",
+                "frame-vector filler 020100",
+                "frame-vector filler-3 020100"
+            ]
         );
     }
 
@@ -1282,6 +1349,92 @@ mod tests {
         assert!(ok(&block("05", "02100000", "00000000", &long), &long).is_err());
     }
 
+    /// The result of reading a one-row table of binding version 3, after a
+    /// valid version 1 and a valid version 2 table, whose row is
+    /// `| `<id>` | <vector> | `<hex>` |`.
+    fn one_row_3(id: &str, vector: &str, hex: &str) -> Result<Vec<String>, String> {
+        let spec = spec_with(&["| `one` | x | `02 01 00` |"]).replacen(
+            "| `filler-3` | x | `02 01 00` |",
+            &format!("| `{id}` | {vector} | `{hex}` |"),
+            1,
+        );
+        frame_vectors(&spec)
+    }
+
+    #[test]
+    fn a_stream_form_is_read_in_a_version_3_table_only() {
+        let chunk = "0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00";
+        let stream_end = format!("{chunk} 0a 00").replacen("0c", "0d", 1);
+        let credit = "0e 04 01000000 04000000 0200000000000000 00 04000000";
+        for (name, hex) in [
+            ("chunk", format!("{chunk} ff01")),
+            ("stream_end", stream_end),
+            ("credit", credit.to_string()),
+        ] {
+            let payload = if name == "chunk" {
+                "payload `ff01`"
+            } else {
+                "x"
+            };
+            assert!(one_row_3("s", payload, &hex).is_ok(), "{name} in table 3");
+            let err = one_row("s", payload, &hex).expect_err(name);
+            assert!(err.contains("version 1"), "{name}: {err}");
+            let err = one_row_2("s", payload, &hex).expect_err(name);
+            assert!(err.contains("version 2"), "{name}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_stream_form_is_checked_by_itself() {
+        let chunk = |kind: &str| {
+            format!(
+                "0c {kind} 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00"
+            )
+        };
+        assert!(one_row_3("s", "x", &chunk("03")).is_ok(), "a command");
+        assert!(one_row_3("s", "x", &chunk("04")).is_ok(), "a query");
+        for kind in ["01", "02", "05"] {
+            let err = one_row_3("s", "x", &chunk(kind)).expect_err(kind);
+            assert!(err.contains("kind of a stream form"), "{kind}: {err}");
+        }
+        let end = |outcome: &str, detail: &str| {
+            format!(
+                "0d 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 {outcome} {detail}"
+            )
+        };
+        for (outcome, detail, ok) in [
+            ("0a", "00", true),
+            ("0b", "00", true),
+            ("03", "06", true),
+            ("04", "00", true),
+            ("07", "00", true),
+            ("08", "00", true),
+            ("01", "00", false),
+            ("02", "00", false),
+            ("09", "01", false),
+            ("0c", "00", false),
+            ("00", "00", false),
+            ("0a", "01", false),
+            ("0b", "01", false),
+            ("03", "07", false),
+            ("07", "01", false),
+        ] {
+            assert_eq!(
+                one_row_3("s", "x", &end(outcome, detail)).is_ok(),
+                ok,
+                "stream_end outcome {outcome} detail {detail}"
+            );
+        }
+        let credit = |value: &str| format!("0e 04 01000000 04000000 0200000000000000 00 {value}");
+        assert!(one_row_3("s", "x", &credit("01000000")).is_ok());
+        assert!(one_row_3("s", "x", &credit("ffffffff")).is_ok());
+        let err = one_row_3("s", "x", &credit("00000000")).expect_err("credit 0");
+        assert!(err.contains("credit 0"), "{err}");
+        // A `stream_end` and a `stream_credit` carry no payload.
+        assert!(one_row_3("s", "payload `ab`", &format!("{} ab", end("0a", "00"))).is_err());
+        assert!(one_row_3("s", "payload `ab`", &format!("{} ab", credit("01000000"))).is_err());
+    }
+
     #[test]
     fn a_vector_is_checked_against_the_table_it_is_in() {
         let block =
@@ -1304,7 +1457,11 @@ mod tests {
         let two = |rows: &str| spec_with_2(&["| `one` | x | `02 01 00` |"], rows);
         assert_eq!(
             frame_vectors(&two("| `two` | x | `02 09 02` |")).unwrap(),
-            vec!["frame-vector one 020100", "frame-vector two 020902"]
+            vec![
+                "frame-vector one 020100",
+                "frame-vector two 020902",
+                "frame-vector filler-3 020100"
+            ]
         );
         let err = frame_vectors(&two("| `one` | x | `02 09 02` |")).expect_err("a repeated Id");
         assert!(err.contains("one"), "{err}");
@@ -1412,7 +1569,11 @@ mod tests {
         );
         assert_eq!(
             frame_vectors(&later).unwrap(),
-            vec!["frame-vector ok 020100", "frame-vector filler 020100"]
+            vec![
+                "frame-vector ok 020100",
+                "frame-vector filler 020100",
+                "frame-vector filler-3 020100"
+            ]
         );
         // A blank line inside the table does not drop the rows after it.
         let split = spec_with(&[
@@ -1433,7 +1594,7 @@ mod tests {
     fn the_separator_row_is_three_non_empty_cells_of_dashes_and_colons() {
         let with = |separator: &str| {
             format!(
-                "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n{separator}\n| `ok` | x | `02 01 00` |\n\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler` | x | `02 01 00` |\n"
+                "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n{separator}\n| `ok` | x | `02 01 00` |\n\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler` | x | `02 01 00` |\n\n#### Binding version 3\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-3` | x | `02 01 00` |\n"
             )
         };
         assert!(

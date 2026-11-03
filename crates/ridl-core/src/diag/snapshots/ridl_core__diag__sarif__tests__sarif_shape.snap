@@ -1237,6 +1237,24 @@ expression: log
               }
             },
             {
+              "id": "RSDL-314",
+              "shortDescription": {
+                "text": "live `instances.lock` entry with no instance"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-315",
+              "shortDescription": {
+                "text": "`instances.lock` is malformed"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "RSDL-403",
               "shortDescription": {
                 "text": "a closure component requires an interface that no closure service lists"
@@ -1860,7 +1878,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 182,
+          "ruleIndex": 184,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

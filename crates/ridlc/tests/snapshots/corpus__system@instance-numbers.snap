@@ -1,0 +1,251 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: system
+input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
+---
+{
+  "name": "Car",
+  "package": "veh.adas",
+  "labels": [],
+  "attributes": [],
+  "members": [
+    {
+      "component": "veh.adas.Cruise",
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
+    },
+    {
+      "component": "veh.ego.status",
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
+    }
+  ],
+  "components": [
+    {
+      "name": "Cruise",
+      "package": "veh.adas",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "primary",
+        "backup"
+      ],
+      "offers": [
+        {
+          "service": "veh.adas.cruise",
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
+        }
+      ],
+      "requires": [],
+      "labels": [],
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": [],
+      "numbers": [
+        {
+          "instance": "primary",
+          "number": 2,
+          "provisional": true
+        },
+        {
+          "instance": "backup",
+          "number": 1,
+          "provisional": true
+        }
+      ]
+    },
+    {
+      "name": "veh.ego.status",
+      "package": "",
+      "implicit": true,
+      "external": false,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [
+        {
+          "service": "veh.ego.status",
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
+        }
+      ],
+      "requires": [],
+      "labels": [],
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": [],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 3,
+          "provisional": true
+        }
+      ]
+    }
+  ],
+  "producers": [
+    {
+      "service": "veh.adas.cruise",
+      "component": "veh.adas.Cruise",
+      "instances": [
+        "primary",
+        "backup"
+      ],
+      "notYetRealizable": true
+    },
+    {
+      "service": "veh.ego.status",
+      "component": "veh.ego.status",
+      "instances": [
+        "Unit"
+      ],
+      "notYetRealizable": false
+    }
+  ],
+  "grants": [
+    {
+      "component": "veh.adas.Cruise",
+      "external": false,
+      "regions": []
+    },
+    {
+      "component": "veh.ego.status",
+      "external": false,
+      "regions": []
+    }
+  ],
+  "regions": [
+    {
+      "catalog": "veh.adas",
+      "interfaces": [
+        {
+          "name": "veh.adas.cruise",
+          "inline": true,
+          "number": 1,
+          "provisional": true,
+          "service": "veh.adas.cruise"
+        }
+      ],
+      "hash": "jrEDJYpcqYAicg1izSh9HlgbR0+nBc4WjRsSSmrg61I="
+    },
+    {
+      "catalog": "veh.ego",
+      "interfaces": [
+        {
+          "name": "veh.ego.status",
+          "inline": true,
+          "number": 1,
+          "provisional": true,
+          "service": "veh.ego.status"
+        }
+      ],
+      "hash": "YP5bC/ShuCE/A4as6VufGJLPmSEyI39kosGyv3/e5vE="
+    }
+  ],
+  "distributions": [],
+  "deployments": [
+    {
+      "name": "Bench",
+      "package": "veh.adas",
+      "labels": [],
+      "attributes": [],
+      "machines": [
+        {
+          "name": "Box",
+          "external": false,
+          "labels": [],
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
+        }
+      ],
+      "placements": [
+        {
+          "component": "veh.adas.Cruise",
+          "instance": "primary",
+          "machine": "Box",
+          "attributes": []
+        },
+        {
+          "component": "veh.adas.Cruise",
+          "instance": "backup",
+          "machine": "Box",
+          "attributes": []
+        },
+        {
+          "component": "veh.ego.status",
+          "instance": "Unit",
+          "machine": "Box",
+          "attributes": []
+        }
+      ],
+      "links": [],
+      "routes": [
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "veh.adas.cruise",
+          "member": "engaged",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.adas.Cruise",
+              "instance": "primary",
+              "machine": "Box"
+            },
+            {
+              "component": "veh.adas.Cruise",
+              "instance": "backup",
+              "machine": "Box"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.ego",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "veh.ego.status",
+          "member": "moving",
+          "service": "veh.ego.status",
+          "producers": [
+            {
+              "component": "veh.ego.status",
+              "instance": "Unit",
+              "machine": "Box"
+            }
+          ]
+        }
+      ],
+      "surface": [],
+      "installations": [],
+      "doc": "",
+      "docLinks": [],
+      "see": [],
+      "since": []
+    }
+  ],
+  "doc": "",
+  "links": [],
+  "see": [],
+  "since": []
+}

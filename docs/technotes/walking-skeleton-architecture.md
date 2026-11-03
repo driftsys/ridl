@@ -390,15 +390,15 @@ crate the workspace holds — see `AGENTS.md` for that.
 - **`packages/ridl-transport-ws`** — the TypeScript client of the WebSocket
   binding, `@driftsys/ridl-transport-ws`, for Deno and the browser. It is the
   consuming side of a frame session: it opens one WebSocket offering the
-  subprotocols `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`, `subscribe`,
-  `unsubscribe`, `read` and `request`, and applies the consumer's rules that
-  need no catalog. It has no dependency, and `.github/workflows/npm-release.yml`
-  publishes it to npm on a `v*` tag. It carries a payload as bytes and does not
-  decode it. `packages/` is not a Cargo workspace member and holds TypeScript
-  only; Deno builds and tests it (`just ts-check`, `just ts-e2e`, and
-  `just ts-browser-e2e` in CI), at the version `.deno-version` pins. The version
-  in its `deno.json` follows the workspace version. See
-  [its design record](../design/ridl-transport-ws-ts.md).
+  subprotocols `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`,
+  `subscribe`, `unsubscribe`, `read`, `request` and the stream forms of a
+  streamed reply, and applies the consumer's rules that need no catalog. It has
+  no dependency, and `.github/workflows/npm-release.yml` publishes it to npm on
+  a `v*` tag. It carries a payload as bytes and does not decode it. `packages/`
+  is not a Cargo workspace member and holds TypeScript only; Deno builds and
+  tests it (`just ts-check`, `just ts-e2e`, and `just ts-browser-e2e` in CI), at
+  the version `.deno-version` pins. The version in its `deno.json` follows the
+  workspace version. See [its design record](../design/ridl-transport-ws-ts.md).
 
 - **`packages/ridl-runtime`** — the loader of the wasm codec module,
   `@driftsys/ridl-runtime`, for Deno, Bun, Node and the browser. `loadCodec`
@@ -422,8 +422,11 @@ crate the workspace holds — see `AGENTS.md` for that.
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
-  `ridl-descriptor`'s accessors (`crates/ridl-descriptor/src/generated.rs`) from
-  `crates/ridl-descriptor/schema/catalog.fbs` with planus.
+  `ridl-descriptor`'s accessors with planus:
+  `crates/ridl-descriptor/src/generated.rs` from
+  `crates/ridl-descriptor/schema/catalog.fbs`, and
+  `crates/ridl-descriptor/src/deployment/generated.rs` from
+  `crates/ridl-descriptor/schema/deployment.fbs`.
 
   `cargo xtask calibrate` dumps the design lints' findings over `evals/` and
   derives the calibration summary ([`xtask/README.md`](../../xtask/README.md)).

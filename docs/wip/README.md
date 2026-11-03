@@ -129,6 +129,13 @@ L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
 #328 stays open.
 
+The deployment descriptor design and plan
+(`2026-11-01-deployment-descriptor-{design,plan}.md`) were archived on
+2026-11-02, once the work landed (driftsys/ridl#1176);
+[`../design/deployment-descriptor.md`](../design/deployment-descriptor.md) and
+decision 12 of [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) are
+their durable records.
+
 The release 0.11 plan (`2026-10-15-release-0.11-plan.md`) was archived on
 2026-10-19, once 0.11.0 was released and every issue it names was closed (#880,
 #884, #925, #919, #863, #874, #864, #877). Its durable records are the pull
@@ -392,6 +399,14 @@ The streams stage 3 plan (`2026-11-01-streams-stage-3-plan.md`) was archived on
 2026-11-01, with the pull request that builds it (driftsys/ridl#1171);
 [`../design/interaction-face.md`](../design/interaction-face.md) is its durable
 record. The streams design stays here, because stages 4 to 6 build on it.
+
+The streams stage 4 plan (`2026-11-01-streams-stage-4-plan.md`) was archived on
+2026-11-02, once the work landed (driftsys/ridl#1182);
+[the frame specification](../specification/frame-specification.md),
+[`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md) and
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md) are its
+durable records. The streams design stays here, because stages 5 and 6 build on
+it.
 
 ## Files that stay after the 0.10.0 gardening pass (2026-10-13)
 

@@ -62,11 +62,12 @@ Four general-form keys with no consumer — `default`, `init`, `persist` and
 `invariant` — are not rows, so each draws FORM-106 where one of them drew
 FORM-107. `labels` and `deprecated` keep a row whose sites are the rsdl
 declarations, so on an interface member they draw FORM-107, as they did. For the
-rsdl system diff, which gives no verdict, decision 9's fail-closed rule reads
-"reported": `tier`, `labels`, `deprecated` and every backend key are reported
-changes, and `depth`, `slots` and `budget` are recorded as not reported, with
-the reason that a sizing value changes no link and no contract. Recorded under
-decisions 8 and 9. Issues driftsys/ridl#268 and driftsys/ridl#269.
+rsdl system diff, which gives a verdict only for a changed locked instance
+number, decision 9's fail-closed rule reads "reported": `tier`, `labels`,
+`deprecated` and every backend key are reported changes, and `depth`, `slots`
+and `budget` are recorded as not reported, with the reason that a sizing value
+changes no link and no contract. Recorded under decisions 8 and 9. Issues
+driftsys/ridl#268 and driftsys/ridl#269.
 
 **Amendment, 2026-10-11 — the two enums as built (decision 6).** `Family` and
 `Shape` are enums of `ir.proto`, mirrored in the codegen model. `family` is a
@@ -386,9 +387,9 @@ review and retracted for exactly this reason (decision 10).
    and tightening a tolerance bound is breaking. The four obligations therefore
    need diff categories of their own before any of them can be authored.
 
-   _Amended 2026-10-11:_ for the system diff, which gives no verdict,
-   fail-closed means reported. The three sizing keys are the recorded exception,
-   reason sizing.
+   _Amended 2026-10-11:_ for the system diff, which gives a verdict only for a
+   changed locked instance number, fail-closed means reported. The three sizing
+   keys are the recorded exception, reason sizing.
 
 10. **The environment boundary needs no language of its own.** Proposed during
     the review and retracted. Every candidate decomposes: no-acknowledgment-of-

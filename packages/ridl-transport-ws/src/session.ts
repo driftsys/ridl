@@ -7,8 +7,9 @@
  * applies the consumer's rules that need no payload decoding: the held sample
  * of each subscribed signal, the order of a signal's publications, the
  * sequence of an event's occurrences, the reassembly of the `block` frames of
- * a `fixed`, the size of each received payload against its member's limit,
- * and the end of the session.
+ * a `fixed`, the order and the credit of the chunks of a streamed reply, the
+ * size of each received payload against its member's limit, and the end of
+ * the session.
  *
  * @module
  */
@@ -19,12 +20,24 @@ import {
   defaultCeiling,
   encode,
   encodingTag,
+  FORM_CHUNK,
+  FORM_STREAM_CREDIT,
+  FORM_STREAM_END,
   FRAME_VERSION,
+  FRAME_VERSION_3,
   Kind,
   SUBPROTOCOL,
   SUBPROTOCOL_V1,
+  SUBPROTOCOL_V3,
 } from "./frame.ts";
-import type { EncodingName, Envelope, Frame, Reason, Target } from "./frame.ts";
+import type {
+  EncodingName,
+  Envelope,
+  Frame,
+  Reason,
+  StreamOutcome,
+  Target,
+} from "./frame.ts";
 import {
   AttachRefused,
   ProtocolError,
@@ -32,7 +45,7 @@ import {
   type SessionViolation,
 } from "./errors.ts";
 import { FORM_BLOCK } from "./blocks.ts";
-import { Calls } from "./calls.ts";
+import { Calls, type Unused } from "./calls.ts";
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
 /** The state of a signal or a `fixed`, as one `publish` carried it. */
@@ -185,12 +198,14 @@ export interface Ended {
 
 /**
  * Opens a session: validates the catalog name and hash, opens the connection
- * offering the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that order,
- * sends the `attach` and resolves once the provider answers
+ * offering the subprotocols `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, in
+ * that order, sends the `attach` and resolves once the provider answers
  * `attached(accepted)`. The `attach` carries the frame version of the
- * subprotocol the server selected: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`. On a
- * session of frame version 1, a message of the `block` form is a violation
- * `unknown-code`, as an unknown form.
+ * subprotocol the server selected: 3 on `ridl-ws-v3`, 2 on `ridl-ws-v2`, 1 on
+ * `ridl-ws-v1`. On a session of frame version 1, a message of the `block`
+ * form is a violation `unknown-code`, as an unknown form; on a session of
+ * frame version 1 or 2, so is a message of the `chunk`, `stream_end` or
+ * `stream_credit` form.
  *
  * The promise rejects with:
  * - an `AttachError` or a `RangeError` from `attach`, before any socket is
@@ -228,7 +243,7 @@ export function connect(
     ((u: string, p: string[]) => new WebSocket(u, p));
   let socket: WebSocket;
   try {
-    socket = create(url, [SUBPROTOCOL, SUBPROTOCOL_V1]);
+    socket = create(url, [SUBPROTOCOL_V3, SUBPROTOCOL, SUBPROTOCOL_V1]);
   } catch (e) {
     // For example a `SyntaxError` for an invalid URL.
     return Promise.reject(e);
@@ -330,7 +345,8 @@ export class Session {
   #opening: Opening | null;
   #attachFrame: ReturnType<typeof attach>;
   /**
-   * The frame version of the session: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`.
+   * The frame version of the session: 3 on `ridl-ws-v3`, 2 on `ridl-ws-v2`, 1
+   * on `ridl-ws-v1`.
    * It starts as the version of this binding and is set from the selected
    * subprotocol when the connection opens.
    */
@@ -520,6 +536,68 @@ export class Session {
   }
 
   /**
+   * Sends a query whose reply is a stream, and returns the reply as a stream
+   * of chunks, each the bytes of one `chunk` frame in order. The `request` is
+   * sent as {@link Session.query} sends it. The stream holds up to 4 chunks
+   * the reader has not read, the initial credit; as the reader reads, the
+   * session grants the server credit for as many more (`stream_credit`).
+   * Cancelling the stream sends `stream_end interrupted` and forgets the
+   * call.
+   *
+   * The stream closes when the server ends the reply (`stream_end end`), and
+   * errors with a {@link SessionError}: `contract`, `corrupt`, `busy` or
+   * `interrupted` as the server's `stream_end` reports; `interrupted` also
+   * when a `seq` is missing, and `corrupt` when a chunk is longer than the
+   * member's limit, the client then sending `stream_end` with that outcome;
+   * `timeout` when neither a `chunk` nor a `stream_end` arrives within
+   * `opts.bound` milliseconds of the `request` (the timer stops at the first
+   * frame of the stream), the client then sending `stream_end interrupted`; `down`
+   * when the session has ended or ends first; `unsupported`, with nothing
+   * sent, on a session of frame version 1 or 2, which has no stream forms;
+   * `corrupt`, with nothing sent, when `args` is longer than the member's
+   * limit. It errors with a `RangeError`, and sends nothing, for a bound or
+   * numbers {@link Session.command} refuses. A refusing `response` to the
+   * call (`contract`, `corrupt` or `busy`) before its first chunk, which a
+   * server that does not serve the member sends, errors the stream with that
+   * category and leaves the session open. A `response` after a chunk, a
+   * `response` with `reply` or `accepted`, a `stream_credit`
+   * for the call, a chunk beyond the granted credit, a stream frame
+   * on a stream other than 0, or a stream frame for a call that is not a
+   * streamed reply, ends the session with the violation `unexpected-form`.
+   */
+  queryStream(
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: { bound: number },
+  ): ReadableStream<Uint8Array> {
+    const target: Target = { kind: Kind.Query, iface, ord };
+    try {
+      checkNumbers(iface, ord);
+      if (!this.#ended && this.#frameVersion < FRAME_VERSION_3) {
+        throw new SessionError({ category: "unsupported" });
+      }
+      this.#checkArgs(target, args);
+    } catch (e) {
+      return new ReadableStream({
+        start: (controller) => controller.error(e),
+      });
+    }
+    return this.#calls.stream(opts.bound, this.#limitOf(target), {
+      request: (seq) => this.#request(Kind.Query, iface, ord, seq, args),
+      credit: (seq, credit) =>
+        this.#send({
+          form: "stream_credit",
+          target,
+          correlation: seq,
+          stream: 0,
+          credit,
+        }),
+      stop: (seq, outcome) => this.#stop(target, seq, outcome),
+    });
+  }
+
+  /**
    * Ends the session: sends a close with code 1000 and at once rejects every
    * waiting operation with `down`, as every later operation is. {@link
    * Session.closed} resolves later, when the closing handshake completes.
@@ -553,6 +631,23 @@ export class Session {
       target: { kind, iface, ord },
       envelope: { stamp: clock(), seq },
       payload: args,
+    });
+  }
+
+  /**
+   * Sends the `stream_end` with which the client stops the reply stream of
+   * call `seq`. The client sends no chunk on that stream, so the frame takes
+   * the first `seq` of its direction, 1.
+   */
+  #stop(target: Target, seq: bigint, outcome: StreamOutcome): void {
+    const clock = this.#options.clock ?? (() => BigInt(Date.now()) * 1000n);
+    this.#send({
+      form: "stream_end",
+      target,
+      envelope: { stamp: clock(), seq: 1n },
+      correlation: seq,
+      stream: 0,
+      outcome,
     });
   }
 
@@ -608,6 +703,9 @@ export class Session {
   #onOpen(): void {
     if (this.#ended) return;
     switch (this.#socket.protocol) {
+      case SUBPROTOCOL_V3:
+        this.#frameVersion = FRAME_VERSION_3;
+        break;
       case SUBPROTOCOL:
         this.#frameVersion = FRAME_VERSION;
         break;
@@ -631,6 +729,15 @@ export class Session {
     // Frame version 1 has no `block` form: the form code is unknown there,
     // whatever follows it and whether or not the session is attached yet.
     if (this.#frameVersion === 1 && message[0] === FORM_BLOCK) {
+      this.#violate("unknown-code");
+      return;
+    }
+    // Frame versions 1 and 2 have no stream forms, in the same way.
+    if (
+      this.#frameVersion < FRAME_VERSION_3 &&
+      (message[0] === FORM_CHUNK || message[0] === FORM_STREAM_END ||
+        message[0] === FORM_STREAM_CREDIT)
+    ) {
       this.#violate("unknown-code");
       return;
     }
@@ -670,15 +777,24 @@ export class Session {
       case "occurrence":
         this.#onOccurrence(frame);
         return;
-      case "response": {
-        const reason = this.#calls.settle(frame);
-        if (reason) this.#note({ note: "discarded", reason, frame });
+      case "response":
+        this.#unused(this.#calls.settle(frame), frame);
         return;
-      }
+      case "chunk":
+      case "stream_end":
+      case "stream_credit":
+        this.#unused(this.#calls.onStream(frame), frame);
+        return;
       default:
         // A second `attached`, or a form only a consumer sends.
         this.#violate("unexpected-form");
     }
+  }
+
+  /** Records why the calls did not use a frame: a discard, or a violation. */
+  #unused(reason: Unused | null, frame: Frame): void {
+    if (reason === "unexpected-form") this.#violate(reason);
+    else if (reason) this.#note({ note: "discarded", reason, frame });
   }
 
   #onFirst(frame: Frame): void {

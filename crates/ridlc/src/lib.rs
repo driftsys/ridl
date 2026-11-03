@@ -99,15 +99,16 @@ use ridl_core::diag::{
 use ridl_core::lint::{
     LintScopes, apply_lint_levels, drop_allowed_by_default, report_lint_directives,
 };
-use ridl_core::package::{Package, PackageOrigin, Workspace};
+use ridl_core::package::{InstanceLockFile, Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, MaterializedUnit, RemoteAccess, RidlDatabase,
     load_workspace_with_remotes, parse_file, std_package,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
-    CheckedPackage, CheckedSystem, CheckedWorkspace, Resolution, check_package, check_workspace,
-    lower_system, resolve_package, unclaimed_backend_keys,
+    CheckedPackage, CheckedSystem, CheckedWorkspace, InstanceNumbering, Resolution, check_package,
+    check_workspace, instance_lock_diagnostics, lower_system, number_instances, resolve_package,
+    unclaimed_backend_keys,
 };
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
@@ -191,6 +192,9 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no `[imports]` and no remote unit.
             imports: BTreeMap::new(),
             remote_units: BTreeMap::new(),
+            // A source text has no directory, so no `instances.lock`.
+            instance_lock: None,
+            instance_lock_dir: PathBuf::new(),
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -410,6 +414,12 @@ pub struct WorkspaceOutput {
     /// publishes, locks, tests or diffs the workspace's own packages tells
     /// them apart with [`is_remote`].
     pub remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The number of every instance of the system (rsdl §7), from the root
+    /// `instances.lock`. Empty when the workspace declares no `system`.
+    pub instances: InstanceNumbering,
+    /// The directory the `instances.lock` is read from and `ridl lock` is
+    /// given ([`LoadedWorkspace::instance_lock_dir`]).
+    pub instance_lock_dir: PathBuf,
 }
 
 /// The lowered IR of the built-in `ridl.std` package (typl Appendix A), checked
@@ -488,13 +498,15 @@ pub fn compile_workspace_with_access(
         lints,
         report_scope,
         remote_units,
+        instances,
+        instance_lock_dir,
         ..
     } = load_and_check(db, entry, overlays, access)?;
     // System lowering resolves references into the standard package.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
     let declared_deployments = declared_deployments(&system);
-    let system = lower_workspace_system(&system, &packages, &std_ir);
+    let system = lower_workspace_system(&system, &packages, &std_ir, &instances);
     Ok(WorkspaceOutput {
         checked,
         resolutions,
@@ -507,13 +519,16 @@ pub fn compile_workspace_with_access(
         lints,
         report_scope,
         remote_units,
+        instances,
+        instance_lock_dir,
     })
 }
 
 /// Keeps the diagnostics a command reports for an entry inside a workspace
 /// member: those whose primary span is in a file under `scope`, the member
 /// directory ([`LoadedWorkspace::report_scope`]), and those on the workspace
-/// root's `ridl.toml` — the `ridl.toml` of a directory above `scope` — because
+/// root's `ridl.toml` and `instances.lock` — those of a directory above
+/// `scope` — because
 /// the root's `[imports]`, `[lints]` and `members` govern the member, so a
 /// problem there (MANI-007, for one) is the member's to see. A diagnostic
 /// with no file path is kept, and so is one in a file under any of
@@ -580,11 +595,14 @@ pub fn is_remote(
     remote_units.contains_key(ridl_ir::v2::unit_of(package))
 }
 
-/// Whether `path` is the `ridl.toml` of a directory at or above `scope`: the
-/// workspace root's manifest, for a member scope. A sibling member's manifest
+/// Whether `path` is the `ridl.toml` or the `instances.lock` of a directory at
+/// or above `scope`: the workspace root's manifest or instance lock, for a
+/// member scope. The instance lock numbers the whole workspace's system, so a
+/// finding on it (RSDL-314, RSDL-315) is every member's to see. A sibling member's manifest
 /// is not, because its directory is beside `scope`, not above it.
 fn is_manifest_above(path: &Path, scope: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == "ridl.toml")
+    path.file_name()
+        .is_some_and(|name| name == "ridl.toml" || name == ridl_core::instance_lock::FILE_NAME)
         && path.parent().is_some_and(|dir| scope.starts_with(dir))
 }
 
@@ -692,6 +710,16 @@ pub enum Emit {
     /// service with an inline body: a FlatBuffers file of the unit's
     /// interfaces, their members and their catalog hash.
     Catalog,
+    /// The deployment descriptor an engine reads, written to
+    /// `<deployment package>.<DeploymentName>.deployment.binfb` for every
+    /// deployment the lowered system holds: a FlatBuffers file of the
+    /// deployment's instances, links, routes and machines, with the catalog
+    /// descriptor of every region embedded byte for byte.
+    ///
+    /// Single-file mode, a workspace with no `system` and a deployment an
+    /// RSDL-7xx error blocked write no file. It is classified with the code
+    /// emits for the reason [`Emit::Catalog`] is.
+    Deployment,
 }
 
 impl Emit {
@@ -753,8 +781,10 @@ impl Emit {
             // backend: a code emit keeps `ridl.std` in the `others` that
             // `run_build` passes, so the descriptor's catalog hash covers a
             // `ridl.std` type a payload names, as the hash the Rust face
-            // carries does.
-            | Emit::Catalog => None,
+            // carries does. `Deployment` is classed the same way, for the
+            // catalogs it embeds.
+            | Emit::Catalog
+            | Emit::Deployment => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -783,7 +813,8 @@ impl Emit {
             | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
-            | Emit::Catalog => None,
+            | Emit::Catalog
+            | Emit::Deployment => None,
             Emit::IrJson => Some(".system.json"),
             Emit::IrText => Some(".system.txtpb"),
             Emit::IrBinary => Some(".system.binpb"),
@@ -823,7 +854,7 @@ impl Emit {
             Emit::Podbuf => Some("podbuf"),
             Emit::CodegenModel => Some("codegen-model"),
             Emit::CodegenRequest => Some("codegen-request"),
-            Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
+            Emit::Catalog | Emit::Deployment | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
         }
     }
 
@@ -852,6 +883,7 @@ impl Emit {
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog
+            | Emit::Deployment
             | Emit::IrJson
             | Emit::IrText
             | Emit::IrBinary => false,
@@ -1270,6 +1302,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         report_scope,
         root_package,
         remote_units,
+        instances,
         ..
     } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
         .map_err(|err| E::from(load_io_error(err)))?;
@@ -1607,7 +1640,7 @@ fn run_build_inner<E: From<std::io::Error>>(
             None => None,
         };
         let lowered_system = if wants_system {
-            lower_system(&system, &packages).map(|mut lowered| {
+            lower_system(&system, &packages, &instances).map(|mut lowered| {
                 embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
                 lowered
             })
@@ -1707,7 +1740,11 @@ fn run_build_inner<E: From<std::io::Error>>(
         // names, so this is the check that keeps a build from truncating
         // sources a person wrote.
         if writes_crate_files {
-            let refusals = crate_file_refusals(out_dir, wasm_backends.contains("rust"))?;
+            let refusals = crate_file_refusals(
+                out_dir,
+                wasm_backends.contains("rust"),
+                lowered_system.is_some(),
+            )?;
             if !refusals.is_empty() {
                 diagnostics.extend(refusals);
                 return Ok(CliRun {
@@ -1760,8 +1797,24 @@ fn run_build_inner<E: From<std::io::Error>>(
             )?;
         }
 
-        if emits.contains(&Emit::Catalog) {
-            write_catalogs(out_dir, &own, &others, compatible)?;
+        let writes_deployments = emits.contains(&Emit::Deployment) && !single_file;
+        if emits.contains(&Emit::Catalog) || writes_deployments {
+            // The catalog bytes of each unit are lowered once and shared by
+            // the catalog files and the catalogs a deployment embeds. A
+            // deployment's regions can name a unit the build does not own (a
+            // dependency), so those units are lowered here too.
+            let own_units = catalog_units(&own);
+            let mut units: BTreeSet<&str> = own_units.clone();
+            if writes_deployments && let Some(lowered) = &lowered_system {
+                units.extend(lowered.regions.iter().map(|region| region.catalog.as_str()));
+            }
+            let catalogs = lower_catalogs(&units, &others, compatible)?;
+            if emits.contains(&Emit::Catalog) {
+                write_catalogs(out_dir, &own_units, &catalogs)?;
+            }
+            if writes_deployments && let Some(lowered) = &lowered_system {
+                write_deployments(out_dir, lowered, &others, &catalogs)?;
+            }
         }
 
         if let Some(std_ir) = &std_ir {
@@ -1836,6 +1889,11 @@ fn run_build_inner<E: From<std::io::Error>>(
             } else {
                 None
             };
+            // The `instances` module is one per crate, over the system of the
+            // root workspace.
+            let instances_source = lowered_system.as_ref().and_then(|lowered| {
+                instances_module_source(lowered, &package_names, &mut diagnostics)
+            });
             write_crate_files(
                 out_dir,
                 &crate_name_for(root_package.as_deref()),
@@ -1844,6 +1902,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 codegen_header.as_deref(),
                 rust_encodings,
                 wasm_source.as_deref(),
+                instances_source.as_deref(),
                 &diagnostics,
             )?;
         }
@@ -1932,6 +1991,7 @@ fn write_crate_files(
     header: Option<&str>,
     encodings: &[String],
     wasm: Option<&str>,
+    instances: Option<&str>,
     diagnostics: &[Diagnostic],
 ) -> std::io::Result<()> {
     if diagnostics
@@ -1949,6 +2009,7 @@ fn write_crate_files(
             package_names,
             &codegen::comment_preamble(&marker, header, "//"),
             wasm.is_some(),
+            instances.is_some(),
         ),
     )?;
     std::fs::write(
@@ -1980,11 +2041,30 @@ fn write_crate_files(
             ),
         )?;
     }
+    // The same rule for the `instances` module: a build without a system
+    // removes the file an earlier build with one wrote.
+    let instances_path = out_dir.join(INSTANCES_FILE);
+    if instances.is_none() && instances_path.is_file() {
+        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&instances_path)?.starts_with(&marker) {
+            std::fs::remove_file(&instances_path)?;
+        }
+    }
+    if let Some(source) = instances {
+        std::fs::write(
+            instances_path,
+            format!(
+                "{}{source}",
+                codegen::comment_preamble(&marker, header, "//")
+            ),
+        )?;
+    }
     Ok(())
 }
 
 /// The overwrite gate for the crate files: `lib.rs`, `Cargo.toml`, and
-/// [`WASM_FILE`] when `wasm` is on. One error diagnostic per destination that
+/// [`WASM_FILE`] when `wasm` is on, and [`INSTANCES_FILE`] when `instances` is
+/// on. One error diagnostic per destination that
 /// exists and was not written by a previous build, and an empty vector when
 /// every one is safe to write.
 ///
@@ -1999,7 +2079,11 @@ fn write_crate_files(
 /// Every destination is checked even once the first has refused, so a build
 /// into a hand-written crate reports every file it declined rather than one at
 /// a time.
-fn crate_file_refusals(out_dir: &Path, wasm: bool) -> std::io::Result<Vec<Diagnostic>> {
+fn crate_file_refusals(
+    out_dir: &Path,
+    wasm: bool,
+    instances: bool,
+) -> std::io::Result<Vec<Diagnostic>> {
     let mut refusals = Vec::new();
     let mut files = vec![
         (out_dir.join("lib.rs"), "//", Some(OLD_LIB_RS_MARKER)),
@@ -2009,6 +2093,10 @@ fn crate_file_refusals(out_dir: &Path, wasm: bool) -> std::io::Result<Vec<Diagno
     // wrote it under another marker, so it has no old marker.
     if wasm {
         files.push((out_dir.join(WASM_FILE), "//", None));
+    }
+    // The `instances` module's file, when the workspace declares a system.
+    if instances {
+        files.push((out_dir.join(INSTANCES_FILE), "//", None));
     }
     for (path, comment, old_marker) in files {
         if let Some(diagnostic) = refuse_overwrite(&path, comment, old_marker)? {
@@ -2182,7 +2270,7 @@ const NO_STD: &str = r#"not(any(feature = "std", feature = "validate-pattern"))"
 /// reference: a package segment that is a Rust keyword (`veh.mod` is a legal
 /// typl package name) must be escaped identically on both surfaces, or the
 /// crate either does not parse or does not resolve.
-fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String {
+fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool, instances: bool) -> String {
     #[derive(Default)]
     struct Node {
         children: std::collections::BTreeMap<String, Node>,
@@ -2300,7 +2388,54 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
             "#[rustfmt::skip]\n#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"
         ));
     }
+    if instances {
+        // The numbers of the instances of the system (`instances_module_source`).
+        // A package whose first segment is `instances` would claim the same
+        // module name, and `instances_module_source` refuses that build.
+        out.push_str(&format!(
+            "/// The number of every instance of the system, from `instances.lock`.\n\
+             #[rustfmt::skip]\n#[path = \"{INSTANCES_FILE}\"]\npub mod instances;\n"
+        ));
+    }
     out
+}
+
+/// The file the `instances` module of the generated crate is written to. No
+/// package writes it: a package file is `<package name>.rs`, and a package
+/// name starts with a letter.
+const INSTANCES_FILE: &str = "__ridl_instances.rs";
+
+/// The source of the `instances` module for the lowered `system`, or `None`
+/// with an error diagnostic pushed when the build cannot have one: a package
+/// whose first segment is `instances` already uses the module name, and two
+/// instances can map to one constant.
+fn instances_module_source(
+    system: &ridl_ir::v2::System,
+    package_names: &[String],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    let mut refuse = |message: String| {
+        diagnostics.push(error_diagnostic(
+            "",
+            message,
+            FileId::DETACHED,
+            TextRange::default(),
+        ));
+        None
+    };
+    if let Some(name) = package_names
+        .iter()
+        .find(|name| name.split('.').next() == Some("instances"))
+    {
+        return refuse(format!(
+            "a workspace that declares a system adds a module `instances` to the generated \
+             crate, and package `{name}` already uses that module name"
+        ));
+    }
+    match ridl_backend_rust::generate_instances_module(system) {
+        Ok(generated) => Some(generated.rust_source),
+        Err(err) => refuse(err.message),
+    }
 }
 
 /// The file the `wasm` module of the generated crate is written to. No package
@@ -2407,13 +2542,15 @@ fn wasm_unit<'a>(root_unit: Option<&'a str>, units: &BTreeSet<&'a str>) -> Resul
 /// hash the catalog's descriptor carries (driftsys/ridl#367).
 ///
 /// `packages` is every checked package of the workspace and `std_ir` the
-/// lowered `ridl.std`. `None` when [`lower_system`] is.
+/// lowered `ridl.std`. `numbering` is the instance numbering of the workspace
+/// ([`WorkspaceOutput::instances`]). `None` when [`lower_system`] is.
 pub fn lower_workspace_system(
     system: &CheckedSystem,
     packages: &[&ridl_ir::v2::Package],
     std_ir: &ridl_ir::v2::Package,
+    numbering: &InstanceNumbering,
 ) -> Option<ridl_ir::v2::System> {
-    let mut lowered = lower_system(system, packages)?;
+    let mut lowered = lower_system(system, packages, numbering)?;
     let others = catalog_scope(packages, Some(std_ir));
     embed_catalog_hashes(&mut lowered, packages, &others);
     Some(lowered)
@@ -2537,6 +2674,13 @@ struct Compiled {
     /// The remote units the load took
     /// ([`LoadedWorkspace::remote_units`]); their packages are in `checked`.
     remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The number of every instance of the system
+    /// ([`number_workspace_instances`]); its diagnostics are already in
+    /// `diagnostics`.
+    instances: InstanceNumbering,
+    /// The directory the root `instances.lock` is read from
+    /// ([`LoadedWorkspace::instance_lock_dir`]).
+    instance_lock_dir: PathBuf,
 }
 
 /// Loads the workspace at `entry`, with the remote units of its `[imports]`
@@ -2573,6 +2717,8 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         root_package,
         imports: _,
         remote_units,
+        instance_lock,
+        instance_lock_dir,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -2642,6 +2788,9 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
             &workspace_render_ids,
         ));
     }
+    let (instances, instance_diagnostics) =
+        number_workspace_instances(&system, instance_lock.as_ref(), &mut sources);
+    diagnostics.extend(instance_diagnostics);
     // RSDL-804 is raised here, not in the query, because only a driver knows
     // which backends are configured. No backend declares the namespaces it
     // consumes until the codegen plugin contract exists (ADR-0020), so the
@@ -2716,11 +2865,36 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         report_scope,
         root_package,
         remote_units,
+        instances,
+        instance_lock_dir,
     };
     // After the checks, which read the IR without a limit, the limit is
     // recorded on the interactions for every consumer of the checked IR.
     design_lints::annotate_payload_limits(db, &packages, &mut compiled.checked, &compiled.limits);
     compiled
+}
+
+/// Numbers every instance of `system`'s closure against `lock`, the root
+/// `instances.lock` (rsdl §7), and returns the numbering with the RSDL-314 and
+/// RSDL-315 diagnostics of the lock. The lock file is interned into `sources`,
+/// so the diagnostics point into it. `check_loaded` and the language server
+/// both call it, so `ridl check` and the editor report the same findings.
+pub fn number_workspace_instances(
+    system: &CheckedSystem,
+    lock: Option<&InstanceLockFile>,
+    sources: &mut SourceMap,
+) -> (InstanceNumbering, Vec<Diagnostic>) {
+    let numbering = number_instances(system, lock.map(|file| &file.lock));
+    let Some(file) = lock else {
+        return (numbering, Vec::new());
+    };
+    let lock_file = sources.file_id(&file.path, &file.text);
+    let lock_dir = match Path::new(&file.path).parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
+        _ => ".".to_string(),
+    };
+    let diagnostics = instance_lock_diagnostics(&numbering, &file.lock, lock_file, &lock_dir);
+    (numbering, diagnostics)
 }
 
 /// The encoding names that every `[backend.<name>]` table enables, as one
@@ -3137,33 +3311,74 @@ fn write_response(
     Ok(())
 }
 
-/// Writes the catalog descriptor of every unit of the build that has at least
-/// one interface shape, to `<unit>.catalog.binfb` in `out_dir`, in unit name
-/// order; a unit with no interface shape gets no file. `packages` are the
-/// build's checked packages, which name the units through
-/// `ridl_ir::v2::unit_of`; `others` is the scope the catalogs are lowered
-/// over ([`catalog_scope`]); `compatible` holds, per unit name, the earlier
-/// catalog hashes the descriptor lists, a unit absent from it listing none.
-/// A lowering failure is an internal error, not a
-/// diagnostic: it is returned as an I/O error, which stops the build and
-/// which the command reports with exit code 2 (ADR-0010 decision 1).
+/// Writes the catalog descriptor of each of `own_units` (the units of the
+/// build with at least one interface shape, [`catalog_units`]) to
+/// `<unit>.catalog.binfb` in `out_dir`, in unit name order. `catalogs` holds
+/// the bytes [`lower_catalogs`] produced for them.
 fn write_catalogs(
     out_dir: &Path,
-    packages: &[&ridl_ir::v2::Package],
-    others: &[&ridl_ir::v2::Package],
-    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
+    own_units: &BTreeSet<&str>,
+    catalogs: &BTreeMap<String, Vec<u8>>,
 ) -> std::io::Result<()> {
-    let units: BTreeSet<&str> = packages
+    for unit in own_units {
+        std::fs::write(
+            out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),
+            &catalogs[*unit],
+        )?;
+    }
+    Ok(())
+}
+
+/// The units of `packages` that get a catalog descriptor: those that declare
+/// an interface or a service with an inline body.
+fn catalog_units<'a>(packages: &[&'a ridl_ir::v2::Package]) -> BTreeSet<&'a str> {
+    packages
         .iter()
         .filter(|package| package.shapes().next().is_some())
         .map(|package| ridl_ir::v2::unit_of(package))
-        .collect();
+        .collect()
+}
+
+/// The catalog descriptor bytes of each of `units`, lowered over `others`
+/// with the earlier catalog hashes `compatible` lists for the unit (none for
+/// a unit absent from it). A lowering failure is an I/O error, as for
+/// [`write_catalogs`].
+fn lower_catalogs(
+    units: &BTreeSet<&str>,
+    others: &[&ridl_ir::v2::Package],
+    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
+) -> std::io::Result<BTreeMap<String, Vec<u8>>> {
+    let mut catalogs = BTreeMap::new();
     for unit in units {
-        let earlier = compatible.get(unit).map_or(&[][..], Vec::as_slice);
+        let earlier = compatible.get(*unit).map_or(&[][..], Vec::as_slice);
         let bytes = ridl_descriptor::lower(unit, others, earlier)
             .map_err(|err| std::io::Error::other(err.to_string()))?;
+        catalogs.insert((*unit).to_owned(), bytes);
+    }
+    Ok(catalogs)
+}
+
+/// Writes `<deployment package>.<DeploymentName>.deployment.binfb` for each
+/// deployment of the lowered `system`, with the catalog descriptors in
+/// `catalogs` embedded. A lowering failure is an I/O error, which the command
+/// reports with exit code 2.
+fn write_deployments(
+    out_dir: &Path,
+    system: &ridl_ir::v2::System,
+    packages: &[&ridl_ir::v2::Package],
+    catalogs: &BTreeMap<String, Vec<u8>>,
+) -> std::io::Result<()> {
+    for deployment in &system.deployments {
+        let bytes =
+            ridl_descriptor::deployment::lower(system, &deployment.name, packages, catalogs)
+                .map_err(|err| std::io::Error::other(err.to_string()))?;
         std::fs::write(
-            out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),
+            out_dir.join(format!(
+                "{}.{}{}",
+                deployment.package,
+                deployment.name,
+                ridl_descriptor::deployment::FILE_SUFFIX
+            )),
             bytes,
         )?;
     }
@@ -3296,7 +3511,7 @@ fn write_emits(
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
             Emit::CodegenRequest => Box::new(codegen::RequestBackend),
             // Written once per build by `write_catalogs`, not per package.
-            Emit::Catalog => continue,
+            Emit::Catalog | Emit::Deployment => continue,
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;
@@ -3471,7 +3686,8 @@ fn write_system_emits(
             | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
-            | Emit::Catalog => continue,
+            | Emit::Catalog
+            | Emit::Deployment => continue,
             Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
             Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
             Emit::IrBinary => Ok(ridl_ir::v2::system_to_binary(system)),
@@ -3533,7 +3749,7 @@ mod render_lib_rs_tests {
             "veh.common".to_string(),
             "ridl.std".to_string(),
         ];
-        let lib = render_lib_rs(&names, "", true);
+        let lib = render_lib_rs(&names, "", true, false);
         let lines: Vec<&str> = lib.lines().map(str::trim).collect();
 
         let mut files = 0;
@@ -3568,7 +3784,7 @@ mod render_lib_rs_tests {
     #[test]
     fn a_package_name_that_is_a_prefix_of_another_keeps_both_files_reachable() {
         let names = ["veh".to_string(), "veh.common".to_string()];
-        let lib = render_lib_rs(&names, "", false);
+        let lib = render_lib_rs(&names, "", false, false);
 
         assert!(
             lib.contains("#[path = \"veh.rs\"]"),
@@ -3682,7 +3898,7 @@ mod render_lib_rs_tests {
     /// The lines themselves, and their order, are pinned as literals.
     #[test]
     fn the_crate_root_is_no_std_exactly_without_std_and_validate_pattern() {
-        let lib = render_lib_rs(&["veh".to_string()], "", false);
+        let lib = render_lib_rs(&["veh".to_string()], "", false, false);
         assert!(
             compiles_with(&lib, &[], Some("thumbv7em-none-eabihf")),
             "no feature on, for a target with no standard library: lib.rs was:\n{lib}"
@@ -3726,7 +3942,13 @@ mod emit_table_tests {
             Emit::CodegenRequest.backend_table(),
             Some("codegen-request")
         );
-        for emit in [Emit::Catalog, Emit::IrJson, Emit::IrText, Emit::IrBinary] {
+        for emit in [
+            Emit::Catalog,
+            Emit::Deployment,
+            Emit::IrJson,
+            Emit::IrText,
+            Emit::IrBinary,
+        ] {
             assert_eq!(emit.backend_table(), None, "{emit:?}");
         }
     }
@@ -3744,6 +3966,7 @@ mod emit_table_tests {
             Emit::CodegenModel,
             Emit::CodegenRequest,
             Emit::Catalog,
+            Emit::Deployment,
             Emit::IrJson,
             Emit::IrText,
             Emit::IrBinary,
