@@ -190,13 +190,12 @@ const LINGER: Duration = Duration::from_millis(100);
 /// that reads nothing for that long, so that a write call makes no progress,
 /// ends the session with [`Ended::LivenessTimeout`].
 ///
-/// The liveness clock is set when a message arrives, before its answer is
-/// written, and checked after the write. A client that takes longer than the
-/// liveness timeout to read the answer of one message therefore ends the
-/// session with [`Ended::LivenessTimeout`] too, although each write made
-/// progress: the blocks of one `read` of a 65,280-byte `fixed` are 65,824
-/// bytes, so at the default timeout of 15 s that is a client that reads below
-/// about 4.4 KB/s.
+/// The liveness clock measures time since the client's last message. Time
+/// spent writing the frames of one message's answer or of one poll is not
+/// counted, because the server cannot read while it writes. A client that
+/// stops reading is ended by the write timeout described above. The time a
+/// client takes to read bytes the kernel has already accepted is still
+/// counted.
 ///
 /// Each `read` of a `fixed` sends the whole value again, in blocks when it
 /// does not fit one message. The frames the session writes after a message
@@ -382,6 +381,9 @@ fn run<C: Connection, B: Backend>(
     let mut out = Vec::new();
     let mut writer = FrameWriter::default();
     let opened = Instant::now();
+    // The clock measures time since the client's last message, excluding
+    // time spent in `flush`, because the server cannot read while it writes.
+    // The write timeout ends a stalled reader.
     let mut heard = opened;
     let mut pinged = opened;
     let mut ticked = opened;
@@ -412,7 +414,10 @@ fn run<C: Connection, B: Backend>(
                 }
                 Err(code) => Step::Close(code.0),
             };
-            if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
+            let wrote = Instant::now();
+            let ended = flush(conn, &mut writer, &mut out, step);
+            heard += wrote.elapsed();
+            if let Some(ended) = ended {
                 return ended;
             }
         }
@@ -423,7 +428,10 @@ fn run<C: Connection, B: Backend>(
         if now.duration_since(ticked) >= config.poll_interval {
             ticked = now;
             let step = session.tick(now, &mut out);
-            if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
+            let wrote = Instant::now();
+            let ended = flush(conn, &mut writer, &mut out, step);
+            heard += wrote.elapsed();
+            if let Some(ended) = ended {
                 return ended;
             }
         }
