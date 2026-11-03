@@ -5,11 +5,12 @@ fourteen port traits of `ridl-rt`'s `port` module over one in-memory store, so a
 generated interaction face can be built over a runtime rather than over a test
 double.
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6 names the crate and fixes `ridl-rt` as its only dependency;
-[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 11
-and 12 fix the forwarding impls it relies on and the handle model it presents;
-[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
-fixes that a face holds its port by value, which is what a handle is passed to.
+decision 6 names the crate and fixes `ridl-rt` as its only dependency without
+`node`; [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
+decisions 11 and 12 fix the forwarding impls it relies on and the handle model
+it presents; [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
+decision 5 fixes that a face holds its port by value, which is what a handle is
+passed to.
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. Read it
@@ -35,12 +36,12 @@ product ships.
 
 ## The crate and its dependencies
 
-**`crates/ridl-loopback/` is a `std` crate depending on `ridl-rt` alone, and it
-declares no cargo feature.** It is a runtime: it owns a store, hands out
-handles, and runs on a host, so `no_std` buys it nothing that a consumer of it
-could use. A feature would have nothing to gate — the crate implements the port
-traits and nothing else, and every port trait is implemented, so there is no
-subset for a consumer to turn off.
+**`crates/ridl-loopback/` is a `std` crate depending on `ridl-rt` alone without
+`node`.** The optional `node` feature adds `ridl-descriptor` to read verified
+deployment descriptors. The `debug` feature enables `node` and `ridl-rt/debug`
+for twins and listeners. Both features are off by default. It is a runtime: it
+owns a store, hands out handles, and runs on a host, so `no_std` buys it nothing
+that a consumer of it could use.
 
 The alternative rejected is a `no_std`, single-threaded loopback, over `Cell`
 and `RefCell` rather than a mutex. ADR-0021 decision 12 keeps that shape
