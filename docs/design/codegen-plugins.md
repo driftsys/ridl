@@ -457,8 +457,11 @@ In this order:
 3. **Instances**, in the placement order of the system IR. Each has the
    component, the instance name, the machine and the `external` flag, the
    interfaces the instance offers (the regions whose slots it writes), and the
-   catalogs it maps (the catalogs its `requires` lines reach). An instance that
-   offers or maps nothing is listed with empty lists.
+   catalogs it maps (the catalogs its `requires` lines reach), the backend keys
+   of the placement line that placed the instance, as declared, and the
+   instance's `number` from `instances.lock` with its `provisional` flag, true
+   when the lock holds no entry for the instance yet. An instance that offers,
+   maps or declares nothing is listed with empty lists.
 4. **Channels**, in the order (catalog, interface number, member ordinal,
    producer component, producer instance). A channel is one member of an
    interface from one producer instance, with that member's kind, the producer

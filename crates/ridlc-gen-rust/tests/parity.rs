@@ -137,11 +137,16 @@ fn sources_under(dir: &Path) -> BTreeMap<String, Vec<u8>> {
                 .expect("under the root")
                 .to_string_lossy()
                 .replace('\\', "/");
-            // `lib.rs` is the crate root `ridlc` writes for itself, and
+            // `lib.rs` is the crate root `ridlc` writes for itself,
             // `__ridl_wasm.rs` the `wasm` module it writes for a package
-            // with `wasm = true`; no backend produces either, and a
-            // plugin-only build writes neither.
-            if relative == "lib.rs" || relative == "__ridl_wasm.rs" {
+            // with `wasm = true`, and `__ridl_instances.rs` the `instances`
+            // module it writes for a workspace that declares a system. No
+            // per-package response carries any of them, and a plugin-only
+            // build writes no crate files, so it writes none of them.
+            if relative == "lib.rs"
+                || relative == "__ridl_wasm.rs"
+                || relative == "__ridl_instances.rs"
+            {
                 continue;
             }
             out.insert(

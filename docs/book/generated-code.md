@@ -27,6 +27,17 @@ manifest, with each `.` replaced by `_`: `examples/cabin` declares the package
 `veh.cabin`, so its crate is `veh_cabin`. A `[workspace]` manifest names no
 package, and a build from one names the crate `ridl_generated`.
 
+A workspace that declares a `system` adds an `instances` module to the crate,
+written to `__ridl_instances.rs`. It holds one `pub const <NAME>: i32` for the
+number of each instance of the system, from `instances.lock`. A component is a
+module, named by its qualified name in snake case, and an instance is a
+constant, named by its instance name in screaming snake case: instance
+`primary` of component `veh.adas.Cruise` is `instances::veh::adas::cruise::PRIMARY`.
+The documentation of a constant names its key in `instances.lock`, and says so
+when the number is provisional, which means that the lock holds no entry for it
+yet and `ridl lock` writes it. A package whose first name segment is `instances`
+makes the build fail, because the module name is taken.
+
 The cabin program imports the package module as `api`, the face of the
 interface `Cabin` as `cabin`, and the face's `prelude`:
 

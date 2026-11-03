@@ -7,9 +7,8 @@ the rsdl language reference does not settle — where the lowered system lives,
 what artifact carries it, which facts of rsdl §13 the IR states and which it
 does not, how `ridl build` gates on an error that blocks one deployment only,
 and how `ridl diff` reports a change that carries no verdict. It binds the IR
-every later consumer reads — including the system descriptor of the runtime
-descriptors design, which is not yet planned — the `ridl build` contract, and
-`ridl diff`.
+every later consumer reads — including the deployment descriptor of the runtime
+descriptors design — the `ridl build` contract, and `ridl diff`.
 
 Written from lane B of the 2026-09-13 step-1 coordination (driftsys/ridl#328),
 which built rsdl's parser, checks, lowering and `ridl diff` support (stories
@@ -33,8 +32,9 @@ names (`cluster.SpeedDisplay`), so a unit with several source packages has one
 region.
 
 It does not restate the rsdl language reference: §13 lists the facts the
-lowering produces and §14 states the two headings and that they carry no
-verdict. This record fixes the engineering choices those sections leave open.
+lowering produces and §14 states the headings: placement changed and composition
+changed carry no verdict, and instance number changed is breaking. This record
+fixes the engineering choices those sections leave open.
 [ADR-0014](ADR-0014-ir-encodings.md) decision 4 carries the artifact naming in
 its 2026-09-18 amendment; decision 2 below states why it is written by the IR
 dump emits and nothing more.
@@ -48,6 +48,17 @@ Amended 2026-10-06 by the records of story E17.5 (driftsys/ridl#736): the note
 under decision 3 is rewritten, because rsdl §13 now lists the declared sizing
 values (driftsys/ridl#719). The note no longer states the two `sizing` fields as
 a fact that §13 does not list.
+
+Amended 2026-11-02 (driftsys/ridl#1176): decision 11 no longer leaves the system
+descriptor unbuilt. Decision 12 records the deployment descriptor as the second
+emitter over `System`; the record is
+[`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
+
+Amended again 2026-11-02 (instance numbers): decision 12 takes the instance
+number from `instances.lock`; the lowered `System` gains `Component.numbers`,
+and the codegen deployment section and the deployment descriptor carry `number`
+and `provisional` for each instance. Decision 9 gains the heading "instance
+number changed", the one system heading that carries a verdict: breaking.
 
 ## Context
 
@@ -176,20 +187,23 @@ nothing.
    RSDL-7xx error never publishes a baseline.
 
 9. **`ridl diff` compares every package's contracts, then the system, and the
-   system changes carry no verdict** (plan decisions P-B5 and P-B9). The
-   contract comparison is unchanged: every package of each side, by the ridl
+   system changes carry no verdict, except one** (plan decisions P-B5 and P-B9).
+   The contract comparison is unchanged: every package of each side, by the ridl
    categories, and they alone decide the verdict and the exit code. Restricting
    it to the closure's reachable contracts would hide a breaking change to a
    published package this workspace does not use. The rsdl changes are listed
    after them under the two rsdl §14 headings — "placement changed" and
    "composition changed" — as a `SystemHeading` in `ridl_diff::system`, beside
    `Category` and never inside it, because a `Category` carries a verdict and
-   these do not; `--explain` does not list them. The rsdl reference §14 owns the
-   compared system facts, including the registry's reported attributes and added
-   or removed distributions. **Both sides must be source trees:** only a
-   compiled workspace carries a lowered system, an `.ir.json` snapshot carries
-   none, so `ridl diff .ridl/baseline .` lists no system change rather than
-   reporting the whole system as added.
+   these do not; `--explain` does not list them. The one exception is the
+   heading "instance number changed" (rsdl §14): a changed locked instance
+   number carries the verdict `breaking`, which enters the report verdict and
+   the exit code. The rsdl reference §14 owns the compared system facts,
+   including the registry's reported attributes and added or removed
+   distributions. **Both sides must be source trees:** only a compiled workspace
+   carries a lowered system, an `.ir.json` snapshot carries none, so
+   `ridl diff .ridl/baseline .` lists no system change rather than reporting the
+   whole system as added.
 
 10. **The book holds exactly one `system` fence** (plan decision P-B3). The
     book-example harness stages the whole book as one workspace and now compiles
@@ -218,10 +232,25 @@ nothing.
     decision 3 (see its note). **The boundary with the engine moves.** The
     store, the seqlock, the ring and the scheduler stay parked as `ridl-engine`;
     the values they are sized from are tabulated here. The system descriptor
-    file of the runtime descriptors design stays unbuilt: it would be a second
-    emitter over the same message, built when a runtime that reads one exists
-    (`docs/design/catalog-descriptor.md`, "Not built"). The design note is
+    file of the runtime descriptors design stayed unbuilt when this decision was
+    taken; decision 12 builds it. The design note is
     `docs/archive/2026-10-05-layout-inputs-design.md`.
+
+12. **The deployment descriptor is the second emitter over `System`**
+    (2026-11-02, driftsys/ridl#1176). `--emit deployment` writes one FlatBuffers
+    file per lowered deployment, `<package>.<Name>.deployment.binfb`, file
+    identifier `RDLD`, with the catalog descriptor of every region embedded
+    unchanged. It is a direct projection of `System`; the only rules it adds are
+    the `offers` and `maps` lists of an instance, which it takes from the
+    codegen deployment section so that the two emitters agree. The instance
+    number comes from `instances.lock`, which replaces the hand-typed placement
+    key an earlier wording of this decision left to a runtime: `Instance`
+    carries `number` and `provisional` in the codegen deployment section and in
+    the descriptor, and `System` gains `Component.numbers`, one
+    `InstanceNumber { instance, number, provisional }` per instance. A
+    deployment that an RSDL-7xx error blocked has no file (decision 8). The
+    record is
+    [`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
 
 ## Consequences
 
@@ -231,9 +260,9 @@ nothing.
 - A build whose only errors are RSDL-7xx now leaves artifacts on disk with a
   non-zero exit. Anything that treats exit 1 as "nothing was written" must be
   read again; `ridl baseline` already refuses on any error and is unaffected.
-- `ridl diff`'s JSON output gains two optional keys, `placement_changed` and
-  `composition_changed`, each left out when empty, so a report without a system
-  change renders byte for byte as before.
+- `ridl diff`'s JSON output gains three optional keys, `placement_changed`,
+  `composition_changed` and `instance_number_changed`, each left out when empty,
+  so a report without a system change renders byte for byte as before.
 - Since story E6.17 landed (2026-10-04), the system artifact carries the catalog
   hash of each region, so a consumer can check it against the hash in the
   catalog's descriptor.
@@ -244,8 +273,9 @@ nothing.
    `Region` carries the hash, and `ridlc` embeds it (see the second note under
    decision 7).
 2. **Which system changes are breaking, and for whom** — the stability policy's
-   question (roadmap E4.5a), which is why decision 9 reports them with no
-   verdict.
+   question (roadmap E4.5a), which is why decision 9 reports the placement and
+   composition changes with no verdict. A changed locked instance number is the
+   one system change decision 9 already reports as breaking.
 3. **Which backend claims which namespace** — RSDL-804 warns on every backend
    key until a backend can declare the keys it consumes, which waits for the
    plugin contract of
@@ -274,7 +304,8 @@ nothing.
 - [the rsdl implementation technote](../technotes/rsdl-implementation.md) — the
   checks, the lowering and the diff as built
 - [rsdl language reference](../specification/rsdl-language-reference.md) — §13
-  the facts, §14 the two headings, §11 grants and regions, §16 the diagnostics
+  the facts, §14 the system headings, §11 grants and regions, §16 the
+  diagnostics
 - [ADR-0014](ADR-0014-ir-encodings.md) — the three encodings and the artifact
   names
 - `crates/ridl-ir/proto/ridl/ir/v2/system.proto`,

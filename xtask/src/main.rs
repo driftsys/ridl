@@ -33,8 +33,9 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("descriptor-codegen") => {
-            let path = descriptor::write_generated();
-            println!("wrote {}", path.display());
+            for path in descriptor::write_generated() {
+                println!("wrote {}", path.display());
+            }
             ExitCode::SUCCESS
         }
         Some("calibrate") => match calibrate::run(&std::env::args().skip(2).collect::<Vec<_>>()) {

@@ -1028,6 +1028,75 @@ fn a_moved_instance_is_listed_under_placement_changed() {
     assert!(value.get("composition_changed").is_none());
 }
 
+/// The header line of an `instances.lock`.
+const INSTANCE_LOCK_HEADER: &str =
+    "# instances.lock — written by ridl lock; do not edit by hand.\n";
+
+/// A placed workspace with an `instances.lock` giving `Panel`'s unit instance
+/// `number`, or no lock.
+fn numbered_workspace(dir: &TempDir, root: &str, number: Option<u32>) -> PathBuf {
+    let path = placed_workspace(dir, root, "Front");
+    if let Some(number) = number {
+        dir.write(
+            &format!("{root}/instances.lock"),
+            &format!(
+                "{INSTANCE_LOCK_HEADER}next {}\nveh.demo.Panel/Unit {number}\n",
+                number + 1
+            ),
+        );
+    }
+    path
+}
+
+/// rsdl reference §14: a locked instance number that differs between the two
+/// sides is breaking, so the exit code is 1 and the change is listed under
+/// "instance number changed (breaking)".
+#[test]
+fn a_changed_instance_number_is_breaking_and_exits_one() {
+    let dir = TempDir::new("instance-number");
+    let old = numbered_workspace(&dir, "old", Some(1));
+    let new = numbered_workspace(&dir, "new", Some(2));
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert_eq!(
+        stdout,
+        "breaking\ninstance number changed (breaking)\n  veh.demo.Panel/Unit: 1 -> 2\n"
+    );
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        old.as_os_str(),
+        new.as_os_str(),
+        "--format".as_ref(),
+        "json".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    assert_eq!(value["verdict"], "breaking");
+    assert_eq!(
+        value["instance_number_changed"][0],
+        serde_json::json!({
+            "path": "veh.demo.Panel/Unit",
+            "before": "1",
+            "after": "2"
+        })
+    );
+}
+
+/// Locking the number that a provisional instance already had changes
+/// nothing for a client: the diff exits 0 and lists no instance number.
+#[test]
+fn locking_a_provisional_number_unchanged_exits_zero() {
+    let dir = TempDir::new("instance-number-lock");
+    let old = numbered_workspace(&dir, "old", None);
+    let new = numbered_workspace(&dir, "new", Some(1));
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!stdout.contains("instance number changed"), "{stdout}");
+}
+
 /// A package whose two distributions hold `first` and `second`, the member
 /// line in `D` carrying a backend key.
 fn distributed_workspace(dir: &TempDir, root: &str, first: &str, second: &str) -> PathBuf {

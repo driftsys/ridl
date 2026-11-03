@@ -36,9 +36,10 @@
 //! `ridl init` and `ridl new` scaffold a package or a workspace; the work is in
 //! the `scaffold` module.
 //!
-//! `ridl lock` writes a unit's `interfaces.lock` (lock design §5): plain, it
-//! allocates a number to every interface that has none; with `--rename` or
-//! `--retire`, it rewrites one unit's entries in place. It lives here
+//! `ridl lock` writes a unit's `interfaces.lock` (lock design §5) and the
+//! workspace's `instances.lock`: plain, it allocates a number to every
+//! interface and every instance that has none; with `--rename` or
+//! `--retire`, it rewrites entries in place. It lives here
 //! beside `ridl baseline` because it reads and writes a file in the workspace
 //! that is not a source (`ridlc` gains no `lock` subcommand); the compile it
 //! runs first is `ridlc`'s own.
@@ -195,10 +196,12 @@ enum Command {
         encoding: Vec<DiffEncoding>,
     },
     /// Allocate a number to every interface that has none and write each
-    /// unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
-    /// unit's entries in place instead. Exit 0 when the file is written or
-    /// nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or
-    /// I/O failure. `ridl lock merge` is the git merge driver for the file.
+    /// unit's `interfaces.lock`, and to every instance of the system that has
+    /// none and write the root `instances.lock`; with `--rename` or
+    /// `--retire`, rewrite entries in place instead. Exit 0 when the files
+    /// are written or nothing changes, 1 on a diagnostic error, 2 on a bad
+    /// flag or a path or I/O failure. `ridl lock merge` is the git merge
+    /// driver for both files.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
         /// A unit directory, a workspace root, or a file. A directory
@@ -207,11 +210,15 @@ enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
         /// Rewrite the live entry OLD to hold the key NEW, keeping its number
-        /// (repeatable). NEW must be a declaration without an entry.
+        /// (repeatable). NEW must be a declaration without an entry, or an
+        /// instance (`component/instance`) without one. A component name
+        /// renames every entry of `instances.lock` under it.
         #[arg(long, value_name = "OLD=NEW")]
         rename: Vec<String>,
         /// Mark the live entry NAME retired, keeping its line and its number
-        /// (repeatable). NAME must no longer be declared.
+        /// (repeatable). NAME must no longer be declared; an instance is
+        /// `component/instance`, and a component name retires every instance
+        /// of it.
         #[arg(long, value_name = "NAME")]
         retire: Vec<String>,
         #[command(subcommand)]
@@ -266,9 +273,12 @@ enum Command {
         #[arg(long, value_name = "NAME")]
         name: Option<String>,
     },
-    /// Print a catalog descriptor as strict JSON, after verifying it.
+    /// Print a catalog or deployment descriptor as strict JSON, after
+    /// verifying it.
     Describe {
-        /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
+        /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote,
+        /// or a `<package>.<Name>.deployment.binfb` file `ridl build --emit
+        /// deployment` wrote.
         path: PathBuf,
     },
     /// Copy every remote unit of the workspace's `[imports]` into `vendor/`
@@ -297,11 +307,12 @@ enum Command {
 /// The subcommands of `ridl lock`.
 #[derive(Subcommand)]
 enum LockCommand {
-    /// The git merge driver for `interfaces.lock`: a three-way merge over
-    /// entries matched by number, written to OURS. Exit 0 when the merge is
-    /// clean, 1 when entries disagree (they are left between conflict markers
-    /// of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an
-    /// input cannot be read or does not parse (OURS is left as it was).
+    /// The git merge driver for `interfaces.lock` and `instances.lock`: a
+    /// three-way merge over entries matched by number, written to OURS. Exit
+    /// 0 when the merge is clean, 1 when entries disagree (they are left
+    /// between conflict markers of MARKER_SIZE, and the file is RIDL-410, or
+    /// RSDL-315 for `instances.lock`, until resolved), 2 when an input cannot
+    /// be read or does not parse (OURS is left as it was).
     /// Register it with `.gitattributes` and `git config` as the CLI
     /// reference documents.
     Merge {
@@ -467,14 +478,37 @@ fn run_describe(path: &Path) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let catalog = match ridl_descriptor::verify(&bytes) {
-        Ok(catalog) => catalog,
-        Err(err) => {
-            eprintln!("error: {}: {err}", path.display());
-            return ExitCode::from(2);
-        }
+    // The file identifier decides which kind of descriptor this is. The
+    // deployment verifier also verifies every catalog the file embeds, so
+    // a damaged embedded catalog is refused here and never printed as
+    // `null`.
+    let is_deployment = bytes.get(4..8) == Some(&ridl_descriptor::deployment::FILE_IDENTIFIER[..]);
+    let (json, kind) = if is_deployment {
+        let deployment = match ridl_descriptor::deployment::verify(&bytes) {
+            Ok(deployment) => deployment,
+            Err(err) => {
+                eprintln!("error: {}: {err}", path.display());
+                return ExitCode::from(2);
+            }
+        };
+        (
+            ridl_descriptor::deployment::to_json(deployment),
+            "deployment descriptor",
+        )
+    } else {
+        let catalog = match ridl_descriptor::verify(&bytes) {
+            Ok(catalog) => catalog,
+            Err(err) => {
+                eprintln!("error: {}: {err}", path.display());
+                return ExitCode::from(2);
+            }
+        };
+        (
+            ridl_descriptor::describe::to_json(catalog),
+            "catalog descriptor",
+        )
     };
-    match ridl_descriptor::describe::to_json(catalog) {
+    match json {
         Ok(json) => {
             use std::io::Write as _;
             let text = serde_json::to_string_pretty(&json).expect("a JSON value serializes");
@@ -493,10 +527,7 @@ fn run_describe(path: &Path) -> ExitCode {
             }
         }
         Err(err) => {
-            eprintln!(
-                "error: {}: catalog descriptor is malformed: {err}",
-                path.display()
-            );
+            eprintln!("error: {}: {kind} is malformed: {err}", path.display());
             ExitCode::from(2)
         }
     }
@@ -594,9 +625,9 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
         Err(error) => return report_diff_side_error(error),
     };
 
-    // The verdict is the contracts' alone: the system's placement and
-    // composition changes are listed under their headings with no verdict
-    // (rsdl reference §14).
+    // The verdict is the contracts', and breaking when an instance number
+    // changed: the system's placement and composition changes are listed
+    // under their headings with no verdict (rsdl reference §14).
     // No snapshot carries `ridl.std`, so it is passed as context: a struct
     // field appended with a `ridl.std` type is then judged by that type's
     // declaration rather than reported breaking as unresolved

@@ -13,8 +13,7 @@ reference, and lowers the checked system to the IR beside the package IR.
 
 **What is not built.** No runtime reads the lowered system. The links, the
 routing table and the grants this chapter shows are facts the compiler writes
-down; nothing delivers a message along them. No descriptor is emitted from the
-lowered system, and there is no transport.
+down; nothing delivers a message along them. `ridl build --emit deployment` writes a deployment descriptor from the lowered system, but no runtime in this workspace reads it, and there is no transport.
 
 ## Contracts first
 
@@ -268,10 +267,13 @@ and still exits 1.
 
 ## Comparing two systems
 
-`ridl diff` compares the contracts by the ridl categories, and those alone give
-the verdict and the exit code. The changes that are not contract changes are
-listed after them, under two headings and with no verdict. Moving `Dashboard`
-from `Head` to `ZoneRear` in `Car`:
+`ridl diff` compares the contracts by the ridl categories, and those give the
+verdict and the exit code. The changes that are not contract changes are listed
+after them, under the headings `placement changed` and `composition changed`,
+with no verdict. A changed locked instance number is the exception: it is
+listed under `instance number changed (breaking)`, and it makes the verdict
+`breaking` and the exit code 1. Moving `Dashboard` from `Head` to `ZoneRear` in
+`Car`:
 
 ```text
 identical
@@ -287,13 +289,15 @@ A changed `labels`, `deprecated`, `tier` or backend key is listed under the
 heading of the declaration it is on, as a before-and-after line; a changed
 sizing key (`depth`, `slots`, `budget`) is not listed, because it changes no
 link and no contract.
-Which of these changes break an already deployed system, and for whom, is not
-something the compiler decides.
+The compiler does not decide which placement or composition changes break an
+already deployed system, and for whom; the one exception is a changed locked
+instance number, which it reports as breaking.
 
 ## What is not here yet
 
-- **No runtime reads the lowered system,** and no descriptor is emitted from it.
-  The facts are written down and go no further.
+- **No runtime reads the lowered system.** `ridl build --emit deployment`
+  writes one deployment descriptor per deployment from it (see
+  `docs/design/deployment-descriptor.md`).
 - **rsdl declares no transport, no network and no process.** A same-machine
   crossing says two instances share a machine, not how they talk. If a backend
   needs such a fact, it arrives as that backend's namespaced key.

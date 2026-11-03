@@ -93,7 +93,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "Adaptive cruise, two copies: one per compute node.",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "numbers": [
+        {
+          "instance": "primary",
+          "number": 4,
+          "provisional": true
+        },
+        {
+          "instance": "backup",
+          "number": 3,
+          "provisional": true
+        }
+      ]
     },
     {
       "name": "Lane",
@@ -119,7 +131,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 5,
+          "provisional": true
+        }
+      ]
     },
     {
       "name": "Panel",
@@ -165,7 +184,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 6,
+          "provisional": true
+        }
+      ]
     },
     {
       "name": "Backend",
@@ -211,7 +237,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "The fleet backend. No implementation in this workspace.",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 2,
+          "provisional": true
+        }
+      ]
     },
     {
       "name": "veh.diag.access",
@@ -237,7 +270,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "numbers": [
+        {
+          "instance": "Unit",
+          "number": 1,
+          "provisional": true
+        }
+      ]
     }
   ],
   "producers": [

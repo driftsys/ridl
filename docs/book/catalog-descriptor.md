@@ -243,9 +243,10 @@ valid file.
 
 ## Not built yet
 
-The design also defines a system descriptor, one per deployment. It is not
-built; the
-[design record][not-built] lists it with the other parts that are not built.
+The design also defines a system descriptor, one per deployment. It is built as
+the deployment descriptor, which `ridl build --emit deployment` writes; the
+[deployment descriptor record][deployment] describes it. The
+[design record][not-built] lists the parts that are not built.
 
 ## Further reading
 
@@ -256,3 +257,4 @@ built; the
 [attach]: reference/frame.md#61-attach-and-attached
 [hash]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#the-catalog-hash
 [not-built]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#not-built
+[deployment]: https://github.com/driftsys/ridl/blob/main/docs/design/deployment-descriptor.md

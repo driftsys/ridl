@@ -20,6 +20,7 @@ mod collect;
 mod distribution;
 mod doc_links;
 mod lower;
+mod numbering;
 mod placement;
 mod resolve;
 mod target;
@@ -29,6 +30,7 @@ pub use closure::{
 };
 pub use distribution::{DistributionDependency, DistributionFacts};
 pub use lower::{link_crossing, lower_system};
+pub use numbering::{InstanceNumbering, instance_lock_diagnostics, number_instances};
 pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
 pub use target::{ReferenceTarget, Target, reference_at, references, same_declaration};
@@ -1165,9 +1167,19 @@ service veh.diag.access {
 }
 "#;
 
+    /// A closure on one machine: `Panel` consumes an event channel, `Backend`
+    /// a query channel, `Lane` nothing, and `Pair` has two instances.
+    pub(super) const SIZED_CLOSURE: &str = "package veh.topology\n\
+                                 import veh.adas.LaneAssist\n\
+                                 component Lane { offers veh.adas.lane }\n\
+                                 component Panel { requires LaneAssist }\n\
+                                 component Backend [ external ] { requires veh.diag.access }\n\
+                                 component Pair [ instances = (primary, backup) ] {}\n\
+                                 system Vehicle { Lane, Panel, Backend, Pair, veh.diag.access }\n";
+
     /// Checks Appendix A's three contract packages beside `topology`, the files
     /// of the package `veh.topology`.
-    fn check_topology(topology: &[(&str, &str)]) -> CheckedSystem {
+    pub(super) fn check_topology(topology: &[(&str, &str)]) -> CheckedSystem {
         let common: &[(&str, &str)] = &[("veh/common/common.typl", COMMON)];
         let adas: &[(&str, &str)] = &[("veh/adas/adas.ridl", ADAS)];
         let diag: &[(&str, &str)] = &[("veh/diag/diag.ridl", DIAG)];

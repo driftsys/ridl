@@ -5,24 +5,28 @@
 //! reads the checked model and the lowered IR of the workspace's packages,
 //! which carries the inputs rsdl does not own (rsdl §13): each interface's
 //! number and provisional flag (`Interface.number`, `Interface.provisional`,
-//! from the unit's lock) and each member's ordinal (`Decl.ordinal`, ridl
-//! §11).
+//! from the unit's lock), each member's ordinal (`Decl.ordinal`, ridl §11),
+//! and each instance's number and provisional flag (the `InstanceNumbering`,
+//! from the root `instances.lock`).
 //!
 //! **Gating (rsdl §13).** An error in the closure blocks lowering for every
 //! deployment, so [`lower_system`] returns `None` when
-//! `CheckedSystem::closure_has_errors` is set. An RSDL-7xx error blocks its own
+//! `CheckedSystem::closure_has_errors` is set, or when the numbering has an
+//! instance that would take a number above 2147483647. An RSDL-7xx error blocks its own
 //! deployment only, which `DeploymentPlacement::has_errors` records: that
 //! deployment is left out. A warning never blocks: the facts are produced and
 //! carry the warned condition.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use ridl_core::instance_lock::InstanceKey;
 use ridl_ir::v2;
 
 use super::closure::{Closure, ComponentId, InterfaceId};
 use super::placement::{DeploymentPlacement, Placement};
 use super::{
-    BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, Sizing, Tier, WrittenValue,
+    BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, InstanceNumbering, Sizing, Tier,
+    WrittenValue,
 };
 
 /// Lowers `system` to the IR's `System` message, or returns `None` when the
@@ -31,8 +35,12 @@ use super::{
 ///
 /// `packages` is the lowered IR of the workspace's packages: every package that
 /// declares an interface a closure service lists must be among them.
-pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option<v2::System> {
-    if system.closure_has_errors {
+pub fn lower_system(
+    system: &CheckedSystem,
+    packages: &[&v2::Package],
+    numbering: &InstanceNumbering,
+) -> Option<v2::System> {
+    if system.closure_has_errors || !numbering.overflow.is_empty() {
         return None;
     }
     let closure = system.closure.as_ref()?;
@@ -41,6 +49,7 @@ pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option
         system,
         closure,
         packages,
+        numbering,
     };
     Some(v2::System {
         name: decl.name.name.clone(),
@@ -67,6 +76,7 @@ struct Lowering<'a> {
     system: &'a CheckedSystem,
     closure: &'a Closure,
     packages: &'a [&'a v2::Package],
+    numbering: &'a InstanceNumbering,
 }
 
 impl<'a> Lowering<'a> {
@@ -74,10 +84,7 @@ impl<'a> Lowering<'a> {
     /// or the service's dotted name for an implicit component. It equals
     /// `v2::Component::qualified_name` of the lowered component.
     fn component_name(&self, index: usize) -> String {
-        match &self.closure.components[index].id {
-            ComponentId::Declared { package, name } => format!("{package}.{name}"),
-            ComponentId::Implicit { service } => service.clone(),
-        }
+        self.closure.components[index].qualified_name()
     }
 
     /// An interface by identity (rsdl §11): the catalog is the unit of the
@@ -222,6 +229,26 @@ impl<'a> Lowering<'a> {
                     implicit,
                     external: component.external,
                     instances: component.instances.clone(),
+                    numbers: component
+                        .instances
+                        .iter()
+                        .map(|instance| {
+                            let key = InstanceKey {
+                                component: component.qualified_name(),
+                                instance: instance.clone(),
+                            };
+                            let (number, provisional) = *self
+                                .numbering
+                                .numbers
+                                .get(&key)
+                                .expect("every closure instance has a number");
+                            v2::InstanceNumber {
+                                instance: instance.clone(),
+                                number,
+                                provisional,
+                            }
+                        })
+                        .collect(),
                     offers,
                     requires,
                     labels: decl.map_or_else(Vec::new, |decl| decl.attrs.labels.clone()),
@@ -650,7 +677,10 @@ mod tests {
     use super::*;
     use crate::check_package;
     use crate::rsdl::check_system;
-    use crate::rsdl::tests::{ADAS, BENCH, COMMON, DIAG, PRODUCTION, SYSTEM, package};
+    use crate::rsdl::number_instances;
+    use crate::rsdl::tests::{
+        ADAS, BENCH, COMMON, DIAG, PRODUCTION, SIZED_CLOSURE, SYSTEM, package,
+    };
 
     /// Checks and lowers Appendix A's three contract packages beside
     /// `topology`, the files of the package `veh.topology`. Returns the
@@ -663,6 +693,16 @@ mod tests {
     /// its own unit when `unit` is `None`.
     fn lower_topology_in(
         unit: Option<&str>,
+        topology: &[(&str, &str)],
+    ) -> (CheckedSystem, Option<v2::System>) {
+        lower_topology_locked(unit, None, topology)
+    }
+
+    /// [`lower_topology_in`] with the instances numbered over the text of an
+    /// `instances.lock`, or over no lock when `instance_lock` is `None`.
+    fn lower_topology_locked(
+        unit: Option<&str>,
+        instance_lock: Option<&str>,
         topology: &[(&str, &str)],
     ) -> (CheckedSystem, Option<v2::System>) {
         let mut db = RidlDatabase::default();
@@ -707,7 +747,10 @@ mod tests {
             })
             .collect();
         let irs: Vec<&v2::Package> = irs.iter().collect();
-        let lowered = lower_system(&checked, &irs);
+        let lock = instance_lock
+            .map(|text| ridl_core::instance_lock::parse(text).expect("the fixture lock parses"));
+        let numbering = number_instances(&checked, lock.as_ref());
+        let lowered = lower_system(&checked, &irs, &numbering);
         (checked, lowered)
     }
 
@@ -1736,7 +1779,8 @@ mod tests {
             .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
         assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
         let ir = check_package(&db, ws, locked, std).ir;
-        let system = lower_system(&checked, &[&ir]).expect("the closure lowers");
+        let numbering = number_instances(&checked, None);
+        let system = lower_system(&checked, &[&ir], &numbering).expect("the closure lowers");
 
         // The lock, not the name order, decides the numbers.
         let numbers: Vec<(&str, u32)> = system.regions[0]
@@ -1991,15 +2035,70 @@ mod tests {
         assert!(lowered.is_some());
     }
 
-    /// A closure on one machine: `Panel` consumes an event channel, `Backend`
-    /// a query channel, `Lane` nothing, and `Pair` has two instances.
-    const SIZED_CLOSURE: &str = "package veh.topology\n\
-                                 import veh.adas.LaneAssist\n\
-                                 component Lane { offers veh.adas.lane }\n\
-                                 component Panel { requires LaneAssist }\n\
-                                 component Backend [ external ] { requires veh.diag.access }\n\
-                                 component Pair [ instances = (primary, backup) ] {}\n\
-                                 system Vehicle { Lane, Panel, Backend, Pair, veh.diag.access }\n";
+    /// `SIZED_CLOSURE` with a one-machine deployment, lowered over the
+    /// instance lock `instance_lock`, or over none.
+    fn lower_sized_with_lock(instance_lock: Option<&str>) -> Option<v2::System> {
+        let text = format!(
+            "{SIZED_CLOSURE}deployment Prod for Vehicle {{\n  \
+             machine A {{ Lane, Panel, Backend, Pair, veh.diag.access }}\n}}\n"
+        );
+        let (checked, lowered) = lower_topology_locked(
+            None,
+            instance_lock,
+            &[("veh/topology/x.rsdl", text.as_str())],
+        );
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        lowered
+    }
+
+    /// rsdl §7, §13: every component lists the number of each instance, in the
+    /// order of `instances`. Without a lock every number is provisional and
+    /// counted in the byte order of the instance key.
+    #[test]
+    fn every_component_carries_its_instance_numbers_in_instance_order() {
+        let system = lower_sized_with_lock(None).expect("the closure lowers");
+        let pair = system
+            .components
+            .iter()
+            .find(|component| component.name == "Pair")
+            .expect("the closure has Pair");
+        assert_eq!(pair.instances, ["primary", "backup"]);
+        let numbers: Vec<(&str, i32, bool)> = pair
+            .numbers
+            .iter()
+            .map(|n| (n.instance.as_str(), n.number, n.provisional))
+            .collect();
+        assert_eq!(numbers, [("primary", 5, true), ("backup", 4, true)]);
+    }
+
+    /// rsdl §7, §13: a live lock entry gives its number and clears the
+    /// provisional flag; the other instances count from `next` in the byte
+    /// order of their keys. Three unlocked keys sort before
+    /// `veh.topology.Pair/primary` (`veh.diag.access`, `veh.topology.Backend`
+    /// and `veh.topology.Lane`), so `primary` takes 10 + 3 = 13.
+    #[test]
+    fn a_locked_instance_keeps_its_number() {
+        let system = lower_sized_with_lock(Some("next 10\nveh.topology.Pair/backup 9\n"))
+            .expect("the closure lowers");
+        let pair = system
+            .components
+            .iter()
+            .find(|component| component.name == "Pair")
+            .expect("the closure has Pair");
+        let numbers: Vec<(&str, i32, bool)> = pair
+            .numbers
+            .iter()
+            .map(|n| (n.instance.as_str(), n.number, n.provisional))
+            .collect();
+        assert_eq!(numbers, [("primary", 13, true), ("backup", 9, false)]);
+    }
+
+    /// rsdl §7, §13: an instance that would take a number above 2147483647
+    /// blocks the lowering.
+    #[test]
+    fn an_overflow_blocks_the_lowering() {
+        assert!(lower_sized_with_lock(Some("next 2147483647\n")).is_none());
+    }
 
     /// Lowers `SIZED_CLOSURE` with the given deployment block and returns the
     /// lowered deployment.

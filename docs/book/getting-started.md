@@ -969,8 +969,9 @@ ridl build --emit rust --out-dir out
 
 `ridl build` compiles a workspace and writes one artifact per package for each
 emit target, except that `catalog` writes one per unit and none for a unit that
-declares no interface and no service with an inline body.
-Eleven emit targets exist today:
+declares no interface and no service with an inline body, and `deployment`
+writes one per deployment of the system.
+Twelve emit targets exist today:
 
 | `--emit`          | Output                           | Contents                                                                      |
 | ----------------- | -------------------------------- | ----------------------------------------------------------------------------- |
@@ -985,6 +986,7 @@ Eleven emit targets exist today:
 | `codegen-model`   | `<package>.codegen.json`         | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON      |
 | `codegen-request` | `<package>.codegen-request.json` | the whole codegen request a build hands a backend, as canonical protobuf JSON |
 | `catalog`         | `<unit>.catalog.binfb`           | the catalog descriptor an engine reads — interfaces, numbers, members, sizes  |
+| `deployment`      | `<package>.<Name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by

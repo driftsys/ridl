@@ -68,7 +68,7 @@ use ridl_core::diag::{
     line_col, remap_diagnostics,
 };
 use ridl_core::lint::{LintScopes, apply_lint_levels, report_lint_directives};
-use ridl_core::package::{Package, PackageOrigin, Workspace};
+use ridl_core::package::{InstanceLockFile, Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, RemoteAccess, find_root, load_workspace_with_remotes,
     profile_of_path, std_package,
@@ -352,6 +352,9 @@ struct ServerState {
     /// every edit, because `ridl check` fails on the same Errors and the
     /// editor must not look clean beside a failing check.
     remote_notice: Option<Vec<String>>,
+    /// The root `instances.lock` the load read (rsdl §7), or `None` when the
+    /// file is absent or malformed; the loader reports a malformed one.
+    instance_lock: Option<InstanceLockFile>,
     /// Paths whose buffer text diverged from the loaded text.
     edited: HashSet<String>,
     /// Paths the last publish sent a non-empty list for — the set that gets
@@ -397,6 +400,7 @@ impl ServerState {
             loader_error_detached: false,
             remote_dirs: Vec::new(),
             remote_notice: None,
+            instance_lock: None,
             edited: HashSet::new(),
             published: HashSet::new(),
             fixes: HashMap::new(),
@@ -438,6 +442,8 @@ impl ServerState {
             unit_limits,
             imports: _,
             remote_units,
+            instance_lock,
+            instance_lock_dir: _,
         } = load_workspace_with_remotes(
             &mut self.db,
             dir,
@@ -530,6 +536,7 @@ impl ServerState {
             convert_loader_diagnostics(&self.db, &self.files, diagnostics, &sources);
         self.workspace = workspace;
         self.lints = lints;
+        self.instance_lock = instance_lock;
         self.loaded = true;
 
         let joined: Vec<String> = self
@@ -931,6 +938,18 @@ impl ServerState {
             &BTreeSet::new(),
             &mut sources,
         ));
+        // The instance numbers (rsdl §7), as `ridl check` reports them. The
+        // lock file's text joins the table so a diagnostic on it is published
+        // under the lock file's URI.
+        if let Some(lock) = &self.instance_lock {
+            let id = sources.file_id(&lock.path, &lock.text);
+            table
+                .entry(id)
+                .or_insert_with(|| (lock.path.clone(), lock.text.clone()));
+        }
+        let (_, instance_diagnostics) =
+            ridlc::number_workspace_instances(&system, self.instance_lock.as_ref(), &mut sources);
+        all.extend(instance_diagnostics);
         all.extend(ridlc::check_design_lints(
             db,
             &packages[..workspace_packages],

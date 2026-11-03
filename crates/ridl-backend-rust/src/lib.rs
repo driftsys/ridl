@@ -41,6 +41,7 @@ mod derives;
 mod descriptors;
 mod docs;
 mod face;
+mod instances;
 mod scalar_step;
 mod transcode;
 mod wasm;
@@ -48,6 +49,7 @@ mod wasm;
 pub use codec_podbuf::HeadLayout as PodbufHeadLayout;
 pub use codec_proto3::{Label as Proto3Label, MessageLayout as Proto3MessageLayout};
 pub use contract::{Backend, ENCODINGS_OPTION, TRANSCODE_OPTION, WASM_OPTION};
+pub use instances::generate_instances_module;
 pub use wasm::{PAYLOAD_TYPES_CONST, RULES_CONST, generate_wasm_module};
 
 /// The generated artifact for one package: Rust source.

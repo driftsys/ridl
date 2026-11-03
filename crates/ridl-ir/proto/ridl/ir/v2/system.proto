@@ -151,6 +151,21 @@ message Component {
   repeated string since = 13;
   // `deprecated = "reason"`: the text between the quotes (rsdl §5).
   optional string deprecated = 14;
+  // The number of each instance (rsdl §7), one entry per name of
+  // `instances`, in the same order.
+  repeated InstanceNumber numbers = 15;
+}
+
+// The number of one instance of a component (rsdl §7), from the root
+// `instances.lock`.
+message InstanceNumber {
+  // The instance name, as in `Component.instances`.
+  string instance = 1;
+  // Between 1 and 2147483647.
+  int32 number = 2;
+  // True when the lock has no live entry for the instance, so the number is
+  // counted from the lock's `next` and not yet stable.
+  bool provisional = 3;
 }
 
 // An `offers` line (rsdl §3.2).
