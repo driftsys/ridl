@@ -8,6 +8,7 @@
 //! needs no standard library.
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString as _};
 use alloc::vec::Vec;
 use core::fmt;
@@ -82,6 +83,16 @@ pub enum VerifyError {
         instance: String,
         number: i32,
     },
+    /// Two instances have the same number. `first_component` and
+    /// `first_instance` name the earlier one in placement order,
+    /// `second_component` and `second_instance` the later one.
+    DuplicateInstanceNumber {
+        number: i32,
+        first_component: String,
+        first_instance: String,
+        second_component: String,
+        second_instance: String,
+    },
     /// A surface entry's `link` is not an index into `Deployment.links`.
     /// `index` is the entry's position in `Deployment.surface`.
     SurfaceLink {
@@ -138,6 +149,18 @@ impl fmt::Display for VerifyError {
                 f,
                 "instance `{component}/{instance}` has the number {number}; \
                  an instance number is 1 to 2147483647"
+            ),
+            Self::DuplicateInstanceNumber {
+                number,
+                first_component,
+                first_instance,
+                second_component,
+                second_instance,
+            } => write!(
+                f,
+                "instances `{first_component}/{first_instance}` and \
+                 `{second_component}/{second_instance}` have the same number {number}; \
+                 an instance number is unique within a deployment"
             ),
             Self::TooManyAttributeValues => {
                 write!(f, "the attribute values outnumber the size of the buffer")
@@ -251,7 +274,8 @@ fn walk_fields(deployment: DeploymentRef<'_>, budget: &mut Budget) -> Result<(),
         walk_strings(component.labels()?)?;
         walk_attributes(component.attributes()?, budget)?;
     }
-    for instance in deployment.instances()? {
+    let mut numbers: BTreeMap<i32, usize> = BTreeMap::new();
+    for (at, instance) in deployment.instances()?.into_iter().enumerate() {
         let instance = instance?;
         instance.component()?;
         instance.instance()?;
@@ -273,6 +297,24 @@ fn walk_fields(deployment: DeploymentRef<'_>, budget: &mut Budget) -> Result<(),
                 number,
             });
         }
+        if let Some(&first_at) = numbers.get(&number) {
+            let first = deployment.instances()?.get(first_at).transpose()?;
+            let (first_component, first_instance) = match first {
+                Some(first) => (
+                    first.component()?.to_string(),
+                    first.instance()?.to_string(),
+                ),
+                None => (String::new(), String::new()),
+            };
+            return Err(VerifyError::DuplicateInstanceNumber {
+                number,
+                first_component,
+                first_instance,
+                second_component: instance.component()?.to_string(),
+                second_instance: instance.instance()?.to_string(),
+            });
+        }
+        numbers.insert(number, at);
     }
     for link in deployment.links()? {
         let link = link?;

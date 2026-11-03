@@ -153,11 +153,14 @@ constant holds one. A client sends its instance number when it attaches only; no
 data frame carries it, so instances stay indistinguishable on the wire (rsdl
 reference section 7).
 
-The verifier refuses an instance whose number is 0 or negative
-(`VerifyError::InstanceNumber`), and the lowering reports a system that holds
-such a number as `DeploymentLowerError::Internal`. A backend key on the
-placement line stays what it was: the toolchain carries it as declared in
-`attributes` and does not interpret it (rsdl section 5).
+Instance numbers are unique within a deployment. The verifier refuses an
+instance whose number is 0 or negative (`VerifyError::InstanceNumber`), and a
+descriptor in which two instances have the same number
+(`VerifyError::DuplicateInstanceNumber`, which names the number and both
+instances). The lowering reports a system that holds a number that is not
+positive as `DeploymentLowerError::Internal`. A backend key on the placement
+line stays what it was: the toolchain carries it as declared in `attributes` and
+does not interpret it (rsdl section 5).
 
 ## Verification before access
 
@@ -174,7 +177,8 @@ table at all. It refuses a surface entry whose `link` is not an index into
 `ridl_descriptor::deployment::VerifyError` (`TooShort`, `WrongIdentifier`,
 `WrongVersion`, `Invalid`, `EmbeddedCatalog`, `CatalogHashMismatch`, `TooDeep`,
 `TooManyAttributeValues`, `MalformedAttributeValue`, `InstanceNumber`,
-`SurfaceLink`); the catalog `VerifyError` is unchanged.
+`DuplicateInstanceNumber`, `SurfaceLink`); the catalog `VerifyError` is
+unchanged.
 
 `ridl describe <file>` reads either descriptor and chooses by the file
 identifier. For a deployment descriptor it verifies the file and every embedded
