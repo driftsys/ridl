@@ -48,6 +48,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod baseline;
 mod catalogs;
 mod lock;
 mod podbuf_padding;
@@ -62,8 +63,7 @@ use ridl_core::lint::{apply_lint_levels, lint_of};
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::diff_side::{
-    first_nested_snapshot_dir, first_non_json_ir_in, ir_json_files, is_non_json_ir, is_source_dir,
-    snapshot_files,
+    first_nested_snapshot_dir, first_non_json_ir_in, is_non_json_ir, is_source_dir, snapshot_files,
 };
 use ridlc::plugin::PluginSpec;
 use ridlc::{ApplyLints, CliRun, Emit};
@@ -120,6 +120,14 @@ enum Command {
         /// `.ridl/baseline/`.
         #[arg(long, value_name = "DIR")]
         out: Option<PathBuf>,
+        /// Restore missing context from the original historical source checkout
+        /// and lockfile, read frozen. Local snapshots must match exactly.
+        #[arg(long, conflicts_with = "reset_history")]
+        repair_context: bool,
+        /// Preserve the prior baseline and start fresh catalog histories from
+        /// current source, retaining the normal publication refusal checks.
+        #[arg(long, conflicts_with = "repair_context")]
+        reset_history: bool,
     },
     /// Compile to the selected artifacts (defaults to the current directory).
     Build {
@@ -374,7 +382,12 @@ fn main() -> ExitCode {
             baseline,
             format,
         } => run_check(&path, frozen, baseline.as_deref(), format),
-        Command::Baseline { path, out } => run_baseline(&path, out.as_deref()),
+        Command::Baseline {
+            path,
+            out,
+            repair_context,
+            reset_history,
+        } => run_baseline(&path, out.as_deref(), repair_context, reset_history),
         Command::Build {
             path,
             out_dir,
@@ -628,21 +641,40 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
     // The verdict is the contracts', and breaking when an instance number
     // changed: the system's placement and composition changes are listed
     // under their headings with no verdict (rsdl reference §14).
-    // No snapshot carries `ridl.std`, so it is passed as context: a struct
-    // field appended with a `ridl.std` type is then judged by that type's
-    // declaration rather than reported breaking as unresolved
-    // (driftsys/ridl#598). The remote packages a source side compiled are
-    // context too, so a type a compared package reaches in one resolves, and
-    // a struct whose head reaches one is laid out for the podbuf rule.
+    // Each side is resolved against `ridl.std` and its own remote context,
+    // including retained historical evidence from enriched snapshot
+    // directories. No snapshot carries `ridl.std`, so a struct field appended
+    // with a `ridl.std` type is judged by that type's declaration rather than
+    // reported breaking as unresolved (driftsys/ridl#598).
     let encodings: Vec<&str> = encodings.iter().map(|encoding| encoding.name()).collect();
-    let report = ridl_diff::diff_workspaces_with(
+    let report = match ridl_diff::diff_workspaces_with_contexts(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
-        &ridlc::diff_context(&old_side, &new_side),
+        &ridlc::diff_side_context(&old_side),
+        &ridlc::diff_side_context(&new_side),
         &encodings,
-    );
+    ) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!(
+                "error: cannot establish podbuf compatibility: {error}\n\
+Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
+To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility. BASELINE is the affected snapshot input named by the old or new context issue."
+            );
+            if error
+                .issues
+                .iter()
+                .any(|issue| issue.side == ridl_diff::ContextSide::New)
+            {
+                eprintln!(
+                    "For missing or unusable candidate evidence, compare its source path or an enriched snapshot directory."
+                );
+            }
+            return ExitCode::from(2);
+        }
+    };
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
     match format {
@@ -875,12 +907,37 @@ impl From<std::io::Error> for BuildFailure {
 /// through a staging directory to get that without risking the opposite
 /// failure — clearing the directory up front would destroy a good baseline
 /// whenever the workspace happens not to compile.
-fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
+fn run_baseline(
+    path: &Path,
+    out: Option<&Path>,
+    repair_context: bool,
+    reset_history: bool,
+) -> ExitCode {
     let out_dir = out
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_baseline_dir(path));
-    let staging = staging_dir(&out_dir);
-    let _ = std::fs::remove_dir_all(&staging);
+    // An explicit `--out .` still needs a concrete sibling staging name.
+    let out_dir = match std::path::absolute(out_dir) {
+        Ok(out_dir) => out_dir,
+        Err(err) => {
+            eprintln!("error: cannot resolve baseline output: {err}");
+            return ExitCode::from(2);
+        }
+    };
+    if let Err(err) = baseline::refuse_interrupted(&out_dir) {
+        eprintln!("error: {err}");
+        return ExitCode::from(2);
+    }
+    let staging = match baseline::reserve_staging(&out_dir) {
+        Ok(staging) => staging,
+        Err(err) => {
+            eprintln!(
+                "error: cannot reserve baseline staging beside {}: {err}",
+                out_dir.display()
+            );
+            return ExitCode::from(2);
+        }
+    };
 
     // The snapshot is published with the severities the emit sites chose: a
     // baseline is not a report to a person, so no `[lints]` level applies, and
@@ -892,24 +949,26 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     // a snapshot carries none — the chain is written beside it below. A
     // second compile would read the workspace frozen and could fail where
     // this one succeeded.
-    let mut remotes: Vec<ridl_ir::v2::Package> = Vec::new();
-    let mut keep_remotes = |_: &[&ridl_ir::v2::Package],
-                            _: &ridl_ir::v2::Package,
-                            _: bool,
-                            found: &[&ridl_ir::v2::Package]| {
-        remotes = found.iter().map(|package| (*package).clone()).collect();
-        Ok(BTreeMap::new())
-    };
-    let mut run = match ridlc::run_build_computing::<std::io::Error>(
+    let mut context = None;
+    let mut keep_context =
+        |_: &[&ridl_ir::v2::Package],
+         _: &ridl_ir::v2::Package,
+         _: bool,
+         _: &ridlc::baseline_context::RemoteContext,
+         captured: &ridlc::baseline_context::BaselineContext| {
+            context = Some(captured.clone());
+            Ok(BTreeMap::new())
+        };
+    let mut run = match ridlc::run_build_computing_with_context::<std::io::Error>(
         path,
         &staging,
         &[Emit::IrJson],
         &[],
         std::time::Duration::from_secs(ridlc::plugin::DEFAULT_TIMEOUT_SECONDS),
-        false.into(),
+        repair_context.into(),
         ApplyLints::No,
         None,
-        Some(&mut keep_remotes),
+        Some(&mut keep_context),
     ) {
         Ok(run) => run,
         Err(err) => {
@@ -945,6 +1004,23 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
             return code;
         }
     };
+    let context = context.expect("a successful compile captured its baseline context");
+    if repair_context {
+        if let Err(err) =
+            baseline::prepare_repair(&out_dir, &staging, &sets.published, &sets.fresh, &context)
+        {
+            let _ = std::fs::remove_dir_all(&staging);
+            eprintln!("error: cannot repair historical baseline: {err}");
+            return ExitCode::from(2);
+        }
+        eprintln!(
+            "note: repair relies on the operator supplying the original historical source checkout and lockfile; frozen verification confirms the declared pins, but legacy snapshots cannot prove their historical provenance"
+        );
+    }
+    if let Err(code) = baseline::stage_context(&staging, &sets.fresh, &context) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return code;
+    }
     let mut refused = false;
     for gate in [untombstoned_removals, interface_refusals] {
         match gate(path, &sets, &mut run) {
@@ -962,23 +1038,31 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 
     // The histories are written into the staging directory only once both
     // gates passed, so a refused run leaves every published history as it was.
-    if let Err(code) = catalogs::write_catalog_histories(
-        &staging,
-        &out_dir,
-        &sets.published,
-        &sets.fresh,
-        &remotes,
-        path,
-    ) {
-        let _ = std::fs::remove_dir_all(&staging);
-        return code;
-    }
-
-    if let Err(err) = publish_baseline(&staging, &out_dir) {
-        let _ = std::fs::remove_dir_all(&staging);
+    let histories = if repair_context || reset_history {
+        catalogs::write_fresh_histories(&staging, &sets.fresh, &context.remote_context())
+            .map(|()| true)
+    } else {
+        catalogs::write_catalog_histories(
+            &staging,
+            &out_dir,
+            &sets.published,
+            &sets.fresh,
+            &context.remote_context(),
+            path,
+        )
+    };
+    let preserve = match histories {
+        Ok(preserve) => preserve,
+        Err(code) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return code;
+        }
+    };
+    if let Err(err) = publish_baseline(&staging, &out_dir, preserve) {
         eprintln!(
-            "error: cannot publish the baseline to {}: {err}",
-            out_dir.display()
+            "error: cannot publish the baseline to {}: {err}; staged files remain at {}",
+            out_dir.display(),
+            staging.display()
         );
         return ExitCode::from(2);
     }
@@ -1438,92 +1522,39 @@ fn dropped_number_message(
     )
 }
 
-/// The directory the snapshots are built into before they are published: a
-/// hidden sibling of `out_dir`, so the move into place is a rename within one
-/// filesystem.
-fn staging_dir(out_dir: &Path) -> PathBuf {
-    let name = out_dir
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("baseline");
-    out_dir
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(format!(".{name}.staging"))
-}
-
-/// Replaces the `.ir.json` set in `out_dir` with the freshly built one in
-/// `staging`, dropping any snapshot whose package the workspace no longer
-/// declares, and replaces the `.catalogs` set with the staged one. Only
-/// `.ir.json` and `.catalogs` files are touched: `out_dir` may be a directory
-/// a user pointed `--out` at, and nothing else in it is this command's to
-/// delete.
-///
-/// The steps run in this order:
-///
-/// 1. Every published `.catalogs` file is removed.
-/// 2. The fresh snapshots move in, each rename replacing the stale file of the
-///    same name.
-/// 3. The fresh `.catalogs` files move in.
-/// 4. The stale snapshots no fresh one replaced are removed.
-///
-/// A failure part-way — a rename refused, a disk that fills — leaves
-/// `out_dir` holding one snapshot per package, some fresh and some stale,
-/// which the next run compares against package by package. The other order
-/// for snapshots, delete then move, left `out_dir` empty after the same
-/// failure, and an empty directory is a first publication to
-/// [`untombstoned_removals`]: the next run would have skipped the gate.
-///
-/// The histories are removed first, and the fresh ones move in only after
-/// every fresh snapshot, so that a failure never leaves a history of the
-/// replaced baseline beside a fresh snapshot, nor a fresh history beside a
-/// replaced snapshot of the same package. A history of the replaced baseline
-/// beside a fresh snapshot lets the next run carry hashes past a breaking
-/// change; a fresh history beside a replaced snapshot lists a catalog that is
-/// not published. After a failure in the first three steps, a unit has its
-/// fresh history or none, and a unit with none starts its chain again. A
-/// failure in step 4 leaves every fresh history beside every fresh snapshot,
-/// plus the stale snapshot of a package the workspace no longer declares;
-/// that snapshot is compared as a removed package by the next run and
-/// removed by its publication, and no history describes it.
-fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(out_dir)?;
-    for history in catalogs_files(out_dir)? {
-        std::fs::remove_file(history)?;
-    }
-    let mut published = BTreeSet::new();
-    for fresh in ir_json_files(staging)? {
-        let name = fresh
+/// Publishes only the managed files, retaining unrelated output entries and
+/// rolling completed renames back on a publication failure.
+fn publish_baseline(staging: &Path, out_dir: &Path, preserve: bool) -> std::io::Result<()> {
+    // The shared IR emit also writes the system, which a baseline does not hold.
+    for entry in std::fs::read_dir(staging)? {
+        let entry = entry?;
+        if entry
             .file_name()
-            .expect("a listed snapshot path has a file name")
-            .to_os_string();
-        std::fs::rename(&fresh, out_dir.join(&name))?;
-        published.insert(name);
-    }
-    for fresh in catalogs_files(staging)? {
-        let name = fresh
-            .file_name()
-            .expect("a listed history path has a file name")
-            .to_os_string();
-        std::fs::rename(&fresh, out_dir.join(&name))?;
-    }
-    for stale in ir_json_files(out_dir)? {
-        if stale
-            .file_name()
-            .is_some_and(|name| !published.contains(name))
+            .to_str()
+            .is_some_and(|name| name.ends_with(".system.json"))
         {
-            std::fs::remove_file(stale)?;
+            std::fs::remove_file(entry.path())?;
         }
     }
-    std::fs::remove_dir_all(staging)
+    match std::fs::symlink_metadata(out_dir) {
+        Ok(_) => {
+            let backup = baseline::replace_preserving(staging, out_dir)?;
+            baseline::finish_backup(&backup, preserve);
+            Ok(())
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => std::fs::rename(staging, out_dir),
+        Err(err) => Err(err),
+    }
 }
 
 /// Every `*.catalogs` file directly in `dir`, in file-name order.
+#[cfg(test)]
 fn catalogs_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     ridlc::diff_side::files_matching_strict(dir, is_catalogs_file)
 }
 
 /// Whether `path` is a `*.catalogs` file.
+#[cfg(test)]
 fn is_catalogs_file(path: &Path) -> bool {
     path.is_file()
         && path
@@ -1626,10 +1657,9 @@ fn desk_check(
         .map(|checked| checked.ir.clone())
         .collect();
 
-    // `ridl.std` and the remote packages this compile resolved are context,
-    // as in `run_diff`, so the desk reads the verdict the gate gives and
-    // judges an appended field's type as the gate does (driftsys/ridl#598,
-    // driftsys/ridl#1141). This desk check reads ordinal and member
+    // `ridl.std` and the remote packages this compile resolved form one shared
+    // context for the desk check (driftsys/ridl#598, driftsys/ridl#1141).
+    // This desk check reads ordinal and member
     // categories, judged for no encoding, so no podbuf rule runs here and no
     // head is laid out; a workspace that builds podbuf judges those breaks
     // with `ridl diff --encoding podbuf`, `ridl build` and `ridl baseline`.
@@ -3350,10 +3380,10 @@ mod tests {
         }
     }
 
-    /// A history rename that fails after the snapshots moved in leaves no
-    /// history of the replaced baseline beside the fresh snapshots.
+    /// A directory at a managed path refuses preflight without changing
+    /// the prior snapshots or histories.
     #[test]
-    fn an_interrupted_publication_leaves_no_replaced_history() {
+    fn a_failed_publication_preserves_the_prior_history() {
         let root =
             std::env::temp_dir().join(format!("ridl-publish-interrupted-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -3370,14 +3400,17 @@ mod tests {
         std::fs::write(out_dir.join("b.ir.json"), "{}").unwrap();
         std::fs::write(out_dir.join("b.catalogs"), "marker\n").unwrap();
 
-        let result = publish_baseline(&staging, &out_dir);
+        let result = publish_baseline(&staging, &out_dir, true);
 
         let left = std::fs::read_to_string(out_dir.join("b.catalogs")).unwrap_or_default();
         let _ = std::fs::remove_dir_all(&root);
-        assert!(result.is_err(), "the history rename onto a directory fails");
         assert!(
-            !left.contains("marker"),
-            "the replaced history is gone: {left:?}"
+            result.is_err(),
+            "a file cannot replace an unmanaged directory"
+        );
+        assert!(
+            left.contains("marker"),
+            "the prior history is unchanged: {left:?}"
         );
     }
 
@@ -3401,7 +3434,7 @@ mod tests {
             std::fs::write(staging.join(name), "fresh\n").unwrap();
         }
 
-        let result = publish_baseline(&staging, &out_dir);
+        let result = publish_baseline(&staging, &out_dir, true);
 
         let histories = catalogs_files(&out_dir).unwrap();
         let _ = std::fs::remove_dir_all(&root);

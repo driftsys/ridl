@@ -218,8 +218,13 @@ crate the workspace holds — see `AGENTS.md` for that.
   the whole test suite. `unit_verdict` restricts a report's verdict to one unit:
   the changes in the unit's packages and in the declarations its interfaces
   reach; `ridl baseline` and `ridl build` read it for the compatible catalogs.
-  It re-exports the snapshot loader `load_ir_json` and its `LoadError` from
-  `ridl-ir` (ADR-0008 decision 9).
+  `diff_refs_with_contexts` and `diff_workspaces_with_contexts` check
+  independent historical scopes. `remote_inline.rs` attributes remote growth to
+  old consumer paths, with missing-evidence issues kept separate from proved
+  changes. The partial-report API preserves known per-unit judgments without
+  affirming issue-affected units. Legacy shared-context entry points remain
+  available. It re-exports the snapshot loader `load_ir_json` and its
+  `LoadError` from `ridl-ir` (ADR-0008 decision 9).
 
 - **`crates/ridlc`** — the pipeline as a library plus the plumbing binary.
   `compile` runs a single file end to end; `compile_workspace` runs the loaded
@@ -231,12 +236,18 @@ crate the workspace holds — see `AGENTS.md` for that.
   checked against its `tree` hash, loaded as a read-only dependency, and pinned
   in `ridl.lock` (`--frozen` never fetches). The packages of a remote unit reach
   the code backends and are generated, but no snapshot, catalog or lock entry
-  includes them. `run_build` also writes the selected artifacts: `<base>.rs`,
-  `<base>.h`, `<base>.ir.json`, `<base>.ir.txtpb`, `<base>.ir.binpb`, and
-  `<base>.ts`. The binary exposes `ridlc check` and `ridlc build`. E2 widened
-  `WorkspaceOutput` with the checker's `resolutions` and the lowered `std_ir`,
-  so a workflow crate does not have to restate the compiler's load-and-resolve
-  loop (ADR-0008 decision 15). Both backends are ordinary dependencies here:
+  owns them. `baseline_context.rs` captures the complete reached remote closure
+  and verified pins, binds the local inventory by canonical fingerprints, and
+  validates the versioned evidence. `diff_side.rs` loads source or snapshot
+  sides without fetching or writing and supplies their separate contexts.
+  `run_build_computing_with_context` captures evidence once from the successful
+  compile for baseline/history callbacks; existing callback APIs remain.
+  `run_build` also writes the selected artifacts: `<base>.rs`, `<base>.h`,
+  `<base>.ir.json`, `<base>.ir.txtpb`, `<base>.ir.binpb`, and `<base>.ts`. The
+  binary exposes `ridlc check` and `ridlc build`. E2 widened `WorkspaceOutput`
+  with the checker's `resolutions` and the lowered `std_ir`, so a workflow crate
+  does not have to restate the compiler's load-and-resolve loop (ADR-0008
+  decision 15). Both backends are ordinary dependencies here:
   `ridlc build --emit` offers `rust`, the three IR encodings of ADR-0014
   decision 4 (`ir-json`, `ir-text`, `ir-binary`), `typescript` and `proto`, so
   the second backend over one IR is reachable from the command line and not only
@@ -266,11 +277,15 @@ crate the workspace holds — see `AGENTS.md` for that.
   pure source→IR function — the minimal ISO 26262 tool-qualification boundary
   (ADR-0008 decision 9). `ridl baseline` publishes one `<pkg-name>.ir.json` per
   package and one `<unit>.catalogs` file per unit with an interface into
-  `.ridl/baseline/`; `ridl build` reads those files to write each unit's list of
-  compatible catalogs into its descriptor and codegen model (`catalogs.rs`);
-  `ridl check --baseline` is the desk-time ordinal-drift check over the
-  snapshots; `property.rs` is the `ridl test` runner, which spends the range
-  strategies on the contract plane.
+  `.ridl/baseline/`, plus separate `context.json` evidence. `baseline.rs`
+  validates historical repair and manages staged publication, backups and
+  rollback; `--reset-history` explicitly starts fresh history. The
+  [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery)
+  owns retention and failure limits. `ridl build` reads those files to write
+  each unit's list of compatible catalogs into its descriptor and codegen model
+  (`catalogs.rs`); `ridl check --baseline` is the desk-time ordinal-drift check
+  over the snapshots; `property.rs` is the `ridl test` runner, which spends the
+  range strategies on the contract plane.
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is
@@ -362,11 +377,13 @@ crate the workspace holds — see `AGENTS.md` for that.
   interactions, references, dependencies, design metrics and compatibility
   comparisons. `ridlc::compile_workspace_with` applies unsaved overlays through
   the shared loader; source-mode `ridl_check` retains `ridlc::check_source`.
-  Diff-side loading is shared with the CLI through `ridlc::load_diff_side`.
-  Results use canonical IR JSON and the compiler's JSON diagnostics, without
-  writes or remote fetching. It uses `tokio` for the stdio transport and
-  blocking compiler work; see [below](#the-lsp-overlay-design) for the LSP's
-  separate overlay design. The tools as built are in
+  Diff-side loading is shared with the CLI through `ridlc::load_diff_side`. The
+  `ridl_diff` tool uses the same checked side-specific comparison as the CLI;
+  missing historical evidence is an error for explicit podbuf judgments. Results
+  use canonical IR JSON and the compiler's JSON diagnostics, without writes or
+  remote fetching. It uses `tokio` for the stdio transport and blocking compiler
+  work; see [below](#the-lsp-overlay-design) for the LSP's separate overlay
+  design. The tools as built are in
   [the design record](../design/mcp-workspace-tools.md) and the decisions in
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
 

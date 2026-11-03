@@ -40,6 +40,7 @@ the view in place
 | RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`      |
 | RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
 | `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
+| `podbuf_remote_inline_growth`, the remote-growth rule                    | `crates/ridl-diff/src/remote_inline.rs`        |
 | `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |
 | `strict_enum_append`, the strict-enum rule of `ridl diff`                | `crates/ridl-diff/src/walk.rs`                 |
 | The `encodings` list (`WireEncoding`) the entry points take              | `crates/ridl-backend-rust/src/lib.rs`          |
@@ -50,14 +51,16 @@ the view in place
 A type's head, its placements, its flags fields, its pads, the form of each
 field and the size bound are computed in `ridl_ir::projection::podbuf` and read
 by every consumer: the Rust codec, the C header, the sizer, the
-`podbuf_inline_append` and `podbuf_width_change` rules of `ridl diff`, the
-padding lint and the build-time errors. They read it from the codegen `Model`
-(`Model.podbuf`, `PodbufProjection`), not from the IR, so that an out-of-tree
-plugin reads the same numbers (ADR-0020 decisions 8 and 9; the model's layout is
-described in [`codegen-plugins.md`](codegen-plugins.md), "The podbuf
-projection"). Nothing in the projection spells a Rust or C name. The
-`strict_enum_append` rule of `ridl diff` reads no layout, only the kind of the
-declaration and whether it is `open`.
+`podbuf_inline_append`, `podbuf_remote_inline_growth` and `podbuf_width_change`
+rules of `ridl diff`, the padding lint and the build-time errors. Emitters and
+plugins read the layout from the codegen `Model` (`Model.podbuf`,
+`PodbufProjection`), so an out-of-tree plugin reads the same numbers (ADR-0020
+decisions 8 and 9; the model's layout is described in
+[`codegen-plugins.md`](codegen-plugins.md), "The podbuf projection"). Analysis
+consumers call the shared projection over their IR package scopes; diff uses the
+respective old and new resolution scopes. Nothing in the projection spells a
+Rust or C name. The `strict_enum_append` rule of `ridl diff` reads no layout,
+only the kind of the declaration and whether it is `open`.
 
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.
@@ -342,15 +345,46 @@ The encoding has no second implementation, so the oracle is the law itself.
 - `ridl-rt-conformance` holds the port contract tests, which do not depend on an
   encoding, so it has no podbuf case.
 
+## Remote inline evolution
+
+The comparison uses a separate old/new package scope. A remote struct, enum,
+enum set or scalar typedef whose podbuf size grows while held inline by a
+surviving old consumer use draws `podbuf_remote_inline_growth`, even when only
+its pin changes. A union head has a fixed size of 16 bytes and does not grow.
+The consumer owns that change; imported declarations remain resolution context.
+[ADR-0031 decision 10](../decisions/ADR-0031-podbuf-projection-rules.md) owns
+the holder boundaries, pad-fit rule and deferred cases. Its decision 13 owns
+history handling and uncertainty. The
+[CLI reference](../book/cli-reference.md#baseline-context) owns retained
+evidence, validation and explicit recovery; enriched baselines retain complete
+reached remote packages so comparison does not depend on the old cache
+surviving. Any unresolved remote name encountered on the old side records a
+context issue, including at a payload root or a producer-sized boundary. This is
+deliberately conservative: it is broader than unresolved relevant inline uses
+alone. An unresolved remote name on the new side also records an issue when its
+consumer use survives. An issue's reason is missing evidence, a declaration that
+cannot be laid out, or a changed declaration kind. An explicit podbuf comparison
+refuses missing or unusable evidence rather than inferring compatibility.
+
+This coverage replaces the shared-current-context limitation recorded on
+2026-10-31. Local append layouts also use their respective historical scopes. It
+does not certify earlier catalog history or compare unrelated remote contracts.
+The
+[archived remote-inline design](../archive/2026-11-02-podbuf-remote-inline-design.md)
+and [implementation plan](../archive/2026-11-02-podbuf-remote-inline-plan.md)
+retain the approved direction and implementation sequence; their proposed
+wording is historical. The operational contract is the CLI reference linked
+above.
+
 ## Known gaps
 
-| Gap                                                                                                                                                                                                                                                                                                        | Issue                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| A string that holds U+0000 cannot be encoded                                                                                                                                                                                                                                                               | a limit of the encoding                                                |
-| The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                                                                                                                                 | the check is per build                                                 |
-| The claimed names of `<stdint.h>` and `<stddef.h>` are the C17 ones; the C23 additions (the `*_WIDTH` macros, `nullptr_t`) are not claimed, so a header built with `-std=c23` can still meet one of them                                                                                                   | the list is C17                                                        |
-| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                                                                                                                                | ADR-0020 decision 2                                                    |
-| When the pin of a remote `[imports]` unit moves and a remote struct held inline changes layout in the same step as a consumer append, `ridl diff` lays the old head out with the new pin's struct, so the inline-append verdict can be wrong in either direction; the remote's change is the remote's diff | ADR-0031 decision 13, the 2026-10-31 amendment from driftsys/ridl#1141 |
+| Gap                                                                                                                                                                                                      | Issue                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| A string that holds U+0000 cannot be encoded                                                                                                                                                             | a limit of the encoding      |
+| The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                               | the check is per build       |
+| The claimed names of `<stdint.h>` and `<stddef.h>` are the C17 ones; the C23 additions (the `*_WIDTH` macros, `nullptr_t`) are not claimed, so a header built with `-std=c23` can still meet one of them | the list is C17              |
+| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                              | ADR-0020 decision 2          |
+| Equal-size remote layout changes, shrinkage and general dependency semantic changes are not classified by the remote-growth rule                                                                         | ADR-0031 decisions 10 and 13 |
 
 ## Trace
 

@@ -105,16 +105,19 @@ The behaviour that is not in the README:
   are independent of lint levels and return the common workspace status.
 - **`ridl_diff`** accepts what `ridl diff <old> <new>` accepts, through
   `ridlc::load_diff_side`, and returns what `ridl_diff::render_json` writes,
-  with the standard IR and the remote packages either source side compiled
-  passed as context, as `ridl diff` passes them (driftsys/ridl#598,
-  driftsys/ridl#1141). A comparison against the published baseline is
-  `old: "<root>/.ridl/baseline"`. The optional `encodings` list is
-  `ridl diff --encoding`, one name per element: the names a manifest's
-  `[backend.<name>] encodings` list takes
+  with separate per-side contexts, as `ridl diff` passes them: the standard IR
+  plus each source side's own compiled remote packages, or each snapshot
+  directory's retained evidence. Neither side borrows the other's remotes. A
+  comparison against the published baseline is `old: "<root>/.ridl/baseline"`.
+  The optional `encodings` list is `ridl diff --encoding`, one name per element:
+  the names a manifest's `[backend.<name>] encodings` list takes
   (`ridl_core::manifest::ENCODING_NAMES`). With `podbuf` among them a
-  `podbuf_inline_append` or a `podbuf_width_change` change is breaking; without
-  it, compatible. A `strict_enum_append` change is breaking for every list. A
-  name outside the list is a request error (§5.2) naming the three.
+  `podbuf_inline_append`, `podbuf_remote_inline_growth` or `podbuf_width_change`
+  change is breaking; without it, compatible. Missing or unusable inline
+  evidence for an explicit podbuf comparison is a request error (§5.2), with
+  repair/reset guidance, rather than a diff report. A `strict_enum_append`
+  change is breaking for every list. A name outside the encoding list is a
+  request error naming the three encodings.
 - **`ridl_explain`** reports, for a diagnostic code, `lint` and `default_level`
   when the code is a lint (ADR-0024 decision 15 and its Consequences). It never
   carries a link to a document.

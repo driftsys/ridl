@@ -177,7 +177,9 @@ tree = "<the hash of the unpacked tree>"
 
 `ridl build` and `ridl baseline` materialize remote units the same way, and
 `ridl build` generates their packages beside the workspace's own. No IR dump,
-catalog, baseline snapshot or `ridl lock` entry includes a remote unit.
+catalog, local baseline snapshot or `ridl lock` entry owns a remote unit.
+Baseline publication retains reached remote packages separately as
+[context evidence](#baseline-context), without comparing them as local packages.
 
 `--frozen` verifies against the existing `ridl.lock` instead of fetching or
 regenerating it, exactly as its description says: with no `ridl.lock` on disk
@@ -407,8 +409,10 @@ Arguments:
   [PATH]  [default: .]
 
 Options:
-      --out <DIR>  Write the snapshots and the catalog files here instead of `.ridl/baseline/`
-  -h, --help       Print help
+      --out <DIR>       Write the snapshots and the catalog files here instead of `.ridl/baseline/`
+      --repair-context  Restore missing context from the original historical source checkout and lockfile, read frozen. Local snapshots must match exactly
+      --reset-history   Preserve the prior baseline and start fresh catalog histories from current source, retaining the normal publication refusal checks
+  -h, --help            Print help
 ```
 
 **It writes** one `<package-name>.ir.json` file per package in the workspace,
@@ -416,22 +420,23 @@ under `.ridl/baseline/` at the workspace root or under `--out` when given —
 and, exactly like [`ridl check`](#ridl-check), `ridl.lock` at the workspace
 root when the manifest declares `[imports]` (`ridl baseline` builds through
 `ridlc build`, non-frozen, so the same materialization step runs). Publishing
-the snapshots is wholesale: the target directory ends up holding exactly the
-snapshots the workspace declares now. Nothing else in that directory is touched
-except the `*.catalogs` files, which publication replaces as
-[the catalog files](#ridl-baseline) below describes. The snapshots stay one
+replaces the managed local snapshots, `*.catalogs` files and `context.json` as
+[described below](#baseline-publication-and-recovery). Unrelated output entries
+are preserved. The target ends up holding exactly the local snapshots the
+workspace declares now. The snapshots stay one
 per source package; `ridl diff` groups them by
 unit when it compares them. The workspace's interface numbers must be recorded first: a
 provisional number is refused (RIDL-411, under the publication gate below), so
 a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
 first publication. A two-member workspace with no `[imports]`, its locks
-written, publishes two files and no `ridl.lock`:
+written, publishes two snapshots, context evidence and no `ridl.lock`:
 
 ```sh
 ridl baseline && find .ridl/baseline -type f | sort
 ```
 
 ```text
+.ridl/baseline/context.json
 .ridl/baseline/veh.cluster.ir.json
 .ridl/baseline/veh.common.ir.json
 ```
@@ -448,40 +453,165 @@ catalog hash of the baseline being published, computed as
 [`ridl build --emit catalog`](#ridl-build) computes it. The hashes that follow
 are the ones of the file being replaced, copied as they are and never
 recomputed from a snapshot. They are carried over when `ridl diff`'s
-classifier, scoped to the unit, judges the change from the replaced snapshots to
-the fresh ones compatible or identical, and when the new hash is the first hash
-of the replaced file: the catalog did not change, so every hash the file lists
-still applies, whatever the verdict. The scope is the unit's own source
-packages and every declaration its interfaces reach, in the unit or in another
-one, so a breaking change in a package that the unit does not reach leaves the
-unit's chain as it was. A breaking change that changes the catalog restarts the
-chain: the file then holds the one new hash. The change is judged for the
-root manifest's encodings ([ADR-0031][adr-0031] decision 13), so when a
-`[backend.<name>]` table lists `podbuf`, a podbuf break restarts the chain. That
-holds for the step from a baseline published before `podbuf` was listed; the
-hashes carried before then stay in the file. The remote packages the command's
-own compile resolved are the diff's context, so a struct held inline whose head
-reaches a type from a remote package is laid out on both sides. The file being replaced is carried
-only when its first hash is the hash recomputed from the snapshots published
-beside it; a file that does not describe those snapshots, as a partially
-hand-edited baseline leaves behind, restarts the chain instead of carrying a
-hash that may reach past a breaking change. A unit with no published snapshot,
-or with no `<unit>.catalogs` file in the replaced baseline, also starts a chain
-with the one new hash, and a file left under the name of a unit that had no
-published snapshot is not carried, nor read. The file of a unit with a published
-snapshot that cannot be read, or has a line that is neither a comment nor a
-hash, or lists the same hash twice, stops the publication with exit 2: the
-message names the file and the line, and says to repair the file or remove it
-to start the unit's chain again.
+classifier, scoped to the unit, judges the change compatible or identical. The
+scope includes the unit's local packages and declarations its interfaces reach.
+A break to an unreached declaration normally retains history when the current
+hash equals the old head hash. A proved podbuf break overrides that shortcut,
+even when the hash is unchanged; it restarts only affected units at the current
+canonical hash. Old and new hashes use their respective complete package
+contexts, with the same hash inputs as the emitted descriptor.
 
-Publication replaces the files in this order, so that an interrupted run never
-leaves a history beside a snapshot it does not describe: every published
-`*.catalogs` file is removed, then the fresh snapshots move in, then the fresh
-`*.catalogs` files move in, and last the snapshots of packages the workspace no
-longer declares are removed. A file left by a unit that no longer has an
-interface shape is removed by the first step and not written again. The
-histories are written only after the publication gate below has passed, so a
-refused run leaves every published file as it was.
+The change is judged for the root manifest's encodings
+([ADR-0031][adr-0031] decision 13), including the step from a baseline
+published before `podbuf` was listed. This checks the latest step, without
+certifying earlier carried hashes. Missing historical remote evidence in an
+affected podbuf unit is uncertainty, not a proved break: normal publication
+returns 2, preserves the prior baseline, and requires explicit recovery. This
+also applies to type-only units, which have no catalog history. Unaffected
+units keep valid chains when another unit has a proved break.
+
+A replaced history is carried only when its first hash matches the hash
+recomputed from its own snapshots and context; otherwise it starts again. A
+unit with no published snapshot or no history starts with one new hash. An
+orphan history with no local snapshot is not read or carried. An unreadable or
+malformed history for a published unit, including duplicate hashes, stops normal
+publication with exit 2. Explicit recovery can discard that metadata after
+preserving it.
+
+#### Baseline context
+
+`context.json` is a separate JSON envelope beside the flat local `.ir.json`
+snapshots. It is evidence for resolving references, never a compared consumer
+package. Its complete version-1 shape is:
+
+| Object | Field | Value |
+| --- | --- | --- |
+| Envelope | `version` | integer `1` |
+| Envelope | `local_packages` | object mapping every local canonical package name to its 64-character lowercase hexadecimal SHA-256 fingerprint |
+| Envelope | `remote_units` | array of remote-unit objects |
+| Remote unit | `unit` | canonical owning unit name |
+| Remote unit | `url` | nonempty original import URL |
+| Remote unit | `tree` | verified unpacked-tree SHA-256, 64 lowercase hexadecimal characters |
+| Remote unit | `packages` | nonempty array of complete canonical `ridl.ir.v2` package objects belonging to that unit |
+
+A local fingerprint is SHA-256 over that package's canonical pretty protobuf
+JSON from the IR writer, independent of the snapshot file's JSON formatting.
+Remote packages are the exact transitive closure reached from all local
+package declarations and interactions, including types not exposed by an
+interface. Complete packages are retained, including their unrelated
+declarations. Unreached packages and `ridl.std` are not stored; the tool supplies
+its standard package. The artifact stores no cache path, system snapshot or
+new IR schema. It can be larger than the local snapshot set.
+
+The reader rejects unknown envelope or remote-unit fields, unsupported versions,
+duplicate local names, remote units or remote packages, invalid identities or
+hashes, missing provenance, local/remote ownership collisions, and packages
+assigned to the wrong unit. Every nested package passes the ordinary guarded IR
+reader. The fingerprint map must match the complete local inventory. Every
+referenced remote package must resolve, and no remote package may sit outside
+the reached closure. These checks validate retained structure and snapshot
+pairing; the reader does not reconstruct a source-tree hash from IR or
+authenticate historical provenance independently. Malformed, unreadable, stale
+or unsupported evidence is an input error, not a legacy fallback. Only absent `context.json` denotes a legacy
+baseline; a dangling artifact symlink is an error.
+
+Use a directory input to retain this evidence. A standalone `.ir.json` input
+compares only that local snapshot and reads no sibling context. Both source
+sides supply their own verified pins and remote packages; directory snapshot
+sides supply their own retained evidence. Neither side borrows the other's
+remote definitions or infers a historical pin from the current lockfile.
+[Stability](stability.md#remote-inline-compatibility-adoption) records the
+minimum tool release and migration requirement.
+
+#### Baseline publication and recovery
+
+Publication stages and validates complete artifacts beside the destination.
+Managed entries are local `.ir.json` snapshots, `*.catalogs` and `context.json`.
+For an existing destination, it reserves an unused sibling
+`<baseline-name>.previous.N` directory and creates a sibling
+`.<baseline-name>.transaction` marker recording its path. For each fresh file,
+it first hard-links any old file into the backup (falling back to copying a
+regular file if linking fails), then atomically renames the fresh file over the
+destination. It installs
+non-context files in filename order, then `context.json`, then moves stale
+managed entries to the backup. The marker is removed after those operations
+succeed. Occupied staging and backup names, including files and symlinks, are
+skipped. Unrelated output entries are not moved or backed up.
+Managed directory blockers are refused before replacement. First publication
+to an absent destination uses a sibling-directory rename.
+
+At the default destination, these directories and the marker sit directly under
+`.ridl/`, beside `baseline/`: `.baseline.staging`, then
+`.baseline.staging.N` when names are occupied, holds this invocation's fresh
+artifacts; `baseline.previous.N` holds prior managed artifacts; and
+`.baseline.transaction` identifies an unfinished replacement. Normal success
+removes the staging directory; compile, validation or publication-gate refusal
+also attempts to remove it. A publication failure retains staged files for
+recovery, and cleanup failure can leave a stage behind. Earlier stages are not
+reused or removed automatically. Staged system dumps are discarded before
+publication because the baseline holds no system artifact.
+
+A proved break in any unit, including a type-only unit, retains the transaction's
+backup. Repair and reset always retain it. Ordinary compatible or identical
+publication removes only its own new backup after commit; earlier backups and
+recovery stages are never cleaned automatically. A cleanup failure warns and
+still exits successfully because publication has committed. Backup cleanup may
+have removed some files before failing; inspect the reported remaining files
+rather than treating that warning as a complete backup guarantee.
+
+A publication failure attempts reverse rollback and reports its stage and
+backup paths. Successful rollback restores the prior managed inventory and
+bytes. If rollback also fails, the error identifies the pending recovery moves
+and retains recoverable old and new artifacts; restoration is not guaranteed.
+A marker left by an interruption or incomplete rollback makes the next
+`ridl baseline` refuse publication. Restore the prior files from the backup, or
+inspect the baseline and backup before removing the marker. Failure to remove
+the marker after a committed publication warns and also causes that refusal.
+Later runs reserve new stage/backup names and do not remove earlier recovery
+artifacts. There is no crash-atomic or cross-platform atomic replacement
+guarantee, automatic retry, or command that replays a failed journal.
+
+For a legacy baseline, recover historical evidence only from the original
+consumer checkout and exact historical lockfile, with its pinned trees already
+available in verified `vendor/` or cache entries:
+
+```sh
+ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE
+```
+
+Replace `HISTORICAL_SOURCE` and `BASELINE` with paths. Repair reads the source
+frozen: it never fetches, repins, or changes source, lockfiles, cache or vendor
+contents. The complete canonical local package set must equal the published
+snapshots; missing, added or changed local packages are refused. Original local
+snapshot filenames and bytes are preserved, even if their JSON formatting is
+different. For legacy absence, the operator supplies historical provenance:
+verified frozen pins establish the supplied tree's identity, but the old local
+snapshots cannot prove which remote pin was used originally. Do not substitute
+current pins. If valid context already exists, its pins and canonical remote
+packages must also agree with the supplied evidence. Conflicting or malformed
+context is refused; repair does not overwrite it.
+
+If historical inputs cannot be recovered, explicitly start from current source:
+
+```sh
+ridl baseline CURRENT_SOURCE --reset-history --out BASELINE
+```
+
+Reset preserves the prior managed baseline and publishes complete current
+evidence. It may discard absent or invalid context and catalog histories. Both
+modes parse all prior local snapshots and retain compilation and publication
+refusals, including provisional interface numbers, missing published interface
+numbers and untombstoned interaction removals. Restore corrupt local snapshots
+before either operation. There is no force option. The flags are mutually
+exclusive; the positional source defaults to `.` and output discovery is the
+same as ordinary publication.
+
+Both modes start each shaped unit with exactly one recomputed current canonical
+hash. Type-only units receive context without a catalog file. Repair reconstructs
+only this head; reset claims no compatibility with earlier peers. Neither
+certifies earlier history. Success is exit 0, compilation or publication
+refusal is 1, and invalid evidence, unavailable inputs or I/O failure is 2.
+Diff and MCP remain read-only and perform neither recovery operation.
 
 **The publication gate.** Before replacing the published snapshots,
 `ridl baseline` compares the snapshot it is about to publish against the one
@@ -724,26 +854,22 @@ from the unit's `<unit>.catalogs` file (see [`ridl baseline`](#ridl-baseline)),
 in the file's order, newest first, and it never holds the current catalog's own
 hash. It is empty when the workspace has no baseline directory or the directory
 holds no `.ir.json` snapshot, when the baseline holds no package of the unit,
-when the unit has no `<unit>.catalogs` file (or the baseline has none at all), and when `ridl diff`'s classifier,
-scoped to the unit, judges the change from the baseline to the tree breaking
-and the current catalog hash is not the file's first hash. The change is judged
-for the root manifest's encodings, as `ridl baseline` judges it
-([ADR-0031][adr-0031] decision 13), so when a `[backend.<name>]` table lists
-`podbuf`, a podbuf break empties the list; a break in the step from a
-baseline published before `podbuf` was listed empties it too, and the hashes carried before then stay listed. The
-remote packages the build's own compile resolved are the diff's context, as for
-`ridl baseline`. When the
-two hashes are equal the catalog did not change, and the list holds the file's other
-hashes whatever the verdict. The file is used at all only when its first hash
-is the hash recomputed from the baseline's own snapshots of the unit; a file
-that does not describe those snapshots gives an empty list. The recorded file
-is not changed by the build. An
-IR dump reads no baseline. A baseline with at least one `<unit>.catalogs` file that cannot be loaded, or
-a `<unit>.catalogs` file that cannot be read, is exit 2; a baseline with no
-`<unit>.catalogs` file is not loaded. A compile with an error diagnostic gets no
-list, and its baseline is not read. When the workspace names `[imports]` and a
-list is computed, the build prints a note on stderr that a unit's list covers
-the workspace's own packages only.
+when the unit has no `<unit>.catalogs` file (or the baseline has none at all), and when `ridl diff`'s classifier judges the unit breaking and the current hash
+is not the file's first hash. A proved podbuf break overrides unchanged-hash
+carry. Missing historical remote evidence warns and omits compatibility only
+for affected units; known-compatible units retain their valid lists. Both sides
+use their own complete context. The current canonical hash and the recomputed
+baseline hash use the same scope as the emitted descriptor.
+
+The change is judged for the root manifest's encodings, as
+[`ridl baseline`](#ridl-baseline) judges it. This checks only the latest step;
+it does not certify older hashes. A history is usable only when its head equals
+the hash recomputed from its own snapshots and evidence. The build never
+changes that file. An IR-only dump reads no baseline. An unreadable or malformed
+baseline or history that a catalog/code build loads is exit 2; a baseline with
+no catalog history is not loaded for this list. A compile with an error gets no
+list. Remote packages resolve consumer contracts without becoming owned local
+contracts or a general dependency compatibility certificate.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
@@ -1610,22 +1736,63 @@ category's classification rule without comparing anything.
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 `proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
 the encodings a workspace builds, so the command does not read them from a
-manifest. Only `podbuf` has rules of its own, two of them, each breaking
-with `--encoding podbuf` and compatible without it, and each listed under the
-heading `breaking under podbuf` either way, so that a workspace that does not
-build podbuf still sees it. A struct field appended that grows the podbuf head
-of a struct another head of the old side holds inline is
-`podbuf_inline_append`, whose line names each inline use. The heads are laid out
-with `ridl.std` and the remote `[imports]` packages a source side compiled, so
-a struct whose head reaches a remote type is measured on both sides; a head
-that reaches a type neither side resolves, as when both sides are snapshots, is
-read as grown, and every append to that struct draws the line. An enum value, an
-enum-set flag or a union arm appended after which the podbuf integer of the
-enum, the enum set or the union's tag is a different integer is
-`podbuf_width_change`, reported once per declaration with the old and the new
-integer. The two rules are stated in [ADR-0031][adr-0031] decision 10, and
-`ridl diff --explain <category>` states each in full. An enum value or an
-enum-set flag appended to a declaration that is not `open` is
+manifest. Three categories are judged by encoding: they are breaking with
+`--encoding podbuf`, compatible without it, and listed under `breaking under
+podbuf` either way. A compatible verdict without podbuf does not certify all
+dependency changes for other encodings.
+
+- `podbuf_inline_append`: a local field append grows a struct held inline by an
+  old head; the line names the inline uses.
+- `podbuf_remote_inline_growth`: a remote struct, enum, enum set or scalar typedef
+  held inline by a surviving old consumer use grows in podbuf size, even when only
+  the import pin changes and no consumer field is added. A union head has a fixed
+  size of 16 bytes and does not grow.
+  The path belongs to the consumer, and the values identify the remote
+  declaration and old/new inline sizes. Pin provenance remains in the context
+  artifact; the change values do not print it.
+- `podbuf_width_change`: an otherwise compatible enum value, enum-set flag or
+  union arm append changes the podbuf integer of the enum, enum set or tag.
+
+Each head is measured in its own side's local, standard and remote scope.
+Remote packages supply context without being compared as consumer declarations.
+Old inline holders include struct fields, tuple members, exact-length arrays
+inside heads and induced interaction tuples. A direct payload root, variable
+array element, map entry or union arm has a producer size or stride, so its own
+growth is not an inline break; its nested inline members can still be affected.
+New holders do not establish a published inline copy. Equal-size pad-fit appends
+draw no remote-growth line. Equal-size remote layout changes, shrinkage and
+general dependency semantic changes remain outside this rule.
+
+These rules are owned by [ADR-0031][adr-0031] decisions 10 and 13.
+Missing or unresolvable evidence is never replaced by the other side's
+definitions. With explicit `--encoding podbuf`, inability to judge remote inline
+compatibility exits 2 with consumer paths and repair/reset guidance; it is not
+exit 1, which means a proved break. Without podbuf, the command returns its ordinary report without an affirmative
+remote inline compatibility judgment. Malformed enriched context is exit 2 with or
+without that flag. See [baseline context](#baseline-context) for snapshot
+pairing and [recovery](#baseline-publication-and-recovery) for migration.
+
+```sh
+ridl diff --explain podbuf_remote_inline_growth
+```
+
+```text
+podbuf_remote_inline_growth
+A remote declaration held inline by an old consumer has a larger podbuf size.
+The path belongs to the consumer; the values name the remote declaration
+and its old and new inline sizes. An inline member has no nested producer-size
+boundary, so its growth can move the fields after it even when only a remote
+pin changes and the local consumer declaration is unchanged. Producer-sized
+roots, array elements, map entries and union arms may grow, but their inline
+members may not. An append that fits entirely in the old head's pad bytes
+keeps the head size and draws no line; verify does not check pads.
+Shrinkage, other equal-size layout changes and general dependency semantic
+changes are deferred; this category judges only remote inline growth.
+  breaking    with `--encoding podbuf`
+  compatible  otherwise; listed under the heading "breaking under podbuf"
+```
+
+An enum value or an enum-set flag appended to a declaration that is not `open` is
 `strict_enum_append`, reported once per declaration with the appended names and
 breaking under every encoding, with or without `--encoding`; the same append to
 an `open` declaration is compatible, and `enum_opened` and `enum_closed` report
@@ -1951,6 +2118,7 @@ the categories `ridl diff` reports are:
   doc_only
   visibility_changed
   podbuf_inline_append
+  podbuf_remote_inline_growth
   podbuf_width_change
   podbuf_strict_enum_append
   strict_enum_append
@@ -2780,10 +2948,10 @@ compiler directly and want its stable, default-free flags.
 | --- | --- | --- | --- |
 | `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, a snapshot-named entry inside it that cannot be stat'ed, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, or a snapshot-named entry in the output directory cannot be stat'ed |
+| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, a snapshot-named entry in the output directory cannot be stat'ed, context/history evidence is invalid, historical inline evidence is missing or unusable without explicit recovery, current remote inline evidence is missing or unusable, or a transaction marker records an active or interrupted baseline publication |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, is `vendor/` at the manifest root or lies under it, or a directory the walk reaches is unreadable — named in the message, unlike `ridl check`, `ridl build`, `ridl baseline`, `ridl lock`, `ridlc check` and `ridlc build`, which name no path at all |
-| `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
+| `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing or has invalid context, explicit podbuf comparison has missing or unusable remote inline evidence, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one package, an instance edit from inside a member; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
 | `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written |

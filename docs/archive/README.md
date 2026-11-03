@@ -822,3 +822,16 @@ provenance. Nothing here is normative — the current references live in
   [the TypeScript client design](../design/ridl-transport-ws-ts.md) and
   [the binding rationale technote](../technotes/websocket-binding-rationale.md).
   Stages 5 and 6 continue from `docs/wip/2026-10-31-streams-design.md`.
+
+- **2026-11-02-podbuf-remote-inline-design.md** and
+  **2026-11-02-podbuf-remote-inline-plan.md** — remote struct growth held inline
+  across import pins (driftsys/ridl#1163). Archived verbatim after the
+  implementation tests passed on the development branch; this archival does not
+  claim a merge or release. The design preserves the approved complete-IR
+  option, rejected alternatives and combined delivery/recovery decisions. The
+  as-built records are
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decisions 10 and
+  13, [the podbuf codec design](../design/podbuf-codec.md),
+  [the CLI reference](../book/cli-reference.md#baseline-context), and
+  [the stability policy](../decisions/ADR-0029-stability-policy.md). The target
+  and minimum supporting tool release is 0.15.0; publication is separate work.

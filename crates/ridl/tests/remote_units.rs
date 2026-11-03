@@ -802,13 +802,12 @@ fn diff_judges_a_podbuf_inline_append_whose_head_reaches_a_remote_type() {
     );
 }
 
-/// A snapshot side carries no remote package, so when the new side is read
-/// from snapshots the remote packages the old side compiled are the diff's
-/// context: a pad-fit append to the struct whose head reaches the remote type
-/// is compatible, where with no context the old head would have no size and
-/// the append would be read as a break.
+/// A candidate snapshot needs its own remote evidence for an explicit podbuf
+/// judgment, even when the old source has the remote package available.
+/// A plain IR build does not retain that evidence; the error names the new
+/// side's consumer use and offers a source path or enriched directory instead.
 #[test]
-fn diff_resolves_the_old_sides_remotes_when_the_new_side_is_a_snapshot() {
+fn diff_requires_the_candidate_snapshots_own_remote_context() {
     let dir = TempDir::new("podbuf-diff-snapshot");
     let new = TempDir::new("podbuf-diff-snapshot-new");
     let out = TempDir::new("podbuf-diff-snapshot-out");
@@ -827,13 +826,33 @@ fn diff_resolves_the_old_sides_remotes_when_the_new_side_is_a_snapshot() {
     );
     assert_eq!(code, 0, "{stderr}");
     assert!(out.path().join("app.ir.json").is_file());
-    let (code, report) = podbuf_diff(dir.path(), &old, out.path());
-    assert_eq!(code, 0, "the pad-fit append is compatible: {report}");
-    assert_eq!(report["verdict"], "compatible", "{report}");
-    assert!(
-        !categories(&report).contains(&"podbuf_inline_append"),
-        "{report}"
+    let (code, stdout, stderr) = ridl(
+        &old,
+        dir.path(),
+        &[
+            "diff",
+            "--encoding",
+            "podbuf",
+            old.to_str().unwrap(),
+            out.path().to_str().unwrap(),
+        ],
     );
+    assert_eq!(
+        code, 2,
+        "a candidate without its own evidence is incomplete: {stdout}{stderr}"
+    );
+    assert!(stdout.is_empty());
+    for expected in [
+        "app/Reading/speed",
+        "new context is missing veh.common.Speed",
+        "candidate",
+        "source path",
+        "enriched snapshot directory",
+        "HISTORICAL_SOURCE --repair-context --out",
+        "CURRENT_SOURCE --reset-history --out",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
 }
 
 /// A field appended with a remote type that holds 0 is judged by that type's

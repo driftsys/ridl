@@ -440,13 +440,9 @@ fn baseline_discards_staging_on_an_rsdl_error() {
     );
 }
 
-/// A publication that fails part-way must not leave the output directory
-/// holding no snapshot: an empty directory is a first publication to the
-/// gate, so the next run would compare against nothing and publish whatever
-/// it was handed. The fresh snapshots move in before the stale ones are
-/// removed, so the failure here — the fresh snapshot's destination blocked by
-/// a directory of the same name, which refuses the rename — leaves the stale
-/// `veh.cluster.ir.json` where it was.
+/// A directory at a managed destination refuses publication before mutations.
+/// Every prior snapshot and history remains unchanged, and the staged files
+/// remain available at the reported path for diagnosis or recovery.
 #[test]
 fn a_failed_publication_keeps_the_stale_snapshot() {
     let dir = TempDir::new("gate-partial-publish");
@@ -454,6 +450,8 @@ fn a_failed_publication_keeps_the_stale_snapshot() {
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the first baseline is written: {stderr}");
     let published = root.join(".ridl").join("baseline");
+    // The manual snapshot mutation models a baseline without context evidence.
+    std::fs::remove_file(published.join("context.json")).expect("make a legacy baseline");
     // The package is renamed below, which leaves its unit. The snapshot is
     // rewritten as a pre-lock one (number 0), so that the gate lets the
     // replacement reach the publication step this test is about.
@@ -467,6 +465,8 @@ fn a_failed_publication_keeps_the_stale_snapshot() {
     std::fs::create_dir_all(published.join("veh.other.ir.json"))
         .expect("block the fresh snapshot's destination with a directory");
 
+    let prior_snapshot = std::fs::read(&stale).unwrap();
+    let prior_history = std::fs::read(published.join("veh.cluster.catalogs")).unwrap();
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
     assert_eq!(
@@ -483,8 +483,13 @@ fn a_failed_publication_keeps_the_stale_snapshot() {
          without it the next run reads an empty directory as a first publication",
     );
     assert!(
-        !root.join(".ridl").join(".baseline.staging").exists(),
-        "the staging directory is removed after the failure",
+        root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory remains available for recovery",
+    );
+    assert_eq!(std::fs::read(&stale).unwrap(), prior_snapshot);
+    assert_eq!(
+        std::fs::read(published.join("veh.cluster.catalogs")).unwrap(),
+        prior_history
     );
 }
 
@@ -1244,7 +1249,20 @@ fn the_first_publication_after_a_lock_fix_compares_nothing() {
         !stderr.contains("RIDL-41"),
         "the gate does not run after a failed compile:\n{stderr}",
     );
-    assert!(!root.join(".ridl").exists(), "nothing is published");
+    assert!(
+        !root.join(".ridl/baseline").exists(),
+        "no baseline is published"
+    );
+    assert!(
+        std::fs::read_dir(root.join(".ridl"))
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".baseline.staging")),
+        "the failed compile removes its own reserved stage"
+    );
 
     let (code, _, stderr) = ridl(&[
         "lock".as_ref(),
@@ -1391,6 +1409,8 @@ fn a_pre_lock_baseline_is_not_refused_for_an_interface_removal() {
     let dir = TempDir::new("gate-pre-lock");
     let root = package_workspace(&dir, THREE_AND_LIGHTS);
     publish(&root);
+    // The manual snapshot mutation models a baseline without context evidence.
+    std::fs::remove_file(root.join(".ridl/baseline/context.json")).expect("make a legacy baseline");
     let path = snapshot(&root);
     let text = std::fs::read_to_string(&path).expect("the published snapshot is readable");
     assert!(
@@ -1677,6 +1697,8 @@ fn legacy_per_package_baseline(
     assert_eq!(code, 0, "the unit's lock is allocated: {stderr}");
     publish(&root);
     let baseline = root.join(".ridl").join("baseline");
+    // This fixture represents snapshots published before context artifacts existed.
+    std::fs::remove_file(baseline.join("context.json")).expect("make a legacy baseline");
     for (file, before, after) in rewrites {
         let path = baseline.join(file);
         let text = std::fs::read_to_string(&path).expect("the published snapshot is readable");
@@ -2524,6 +2546,8 @@ fn a_renamed_unit_is_refused_as_a_unit_gone() {
 fn deleting_the_snapshots_of_a_gone_unit_lets_the_publication_through() {
     let dir = TempDir::new("gate-unit-gone-override");
     let root = two_unit_workspace(&dir);
+    // The manual snapshot mutation models a baseline without context evidence.
+    std::fs::remove_file(root.join(".ridl/baseline/context.json")).expect("make a legacy baseline");
 
     std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
     dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
@@ -2722,5 +2746,75 @@ fn one_number_lost_in_two_packages_draws_two_refusals() {
         stderr.contains("`Session` holds interface number 5")
             && stderr.contains("`cluster.Speed` holds interface number 5"),
         "each refusal names its own interface:\n{stderr}"
+    );
+}
+
+#[test]
+fn malformed_enriched_context_refuses_build_and_publication_without_changes() {
+    let dir = TempDir::new("malformed-enriched-context");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+    let context = root.join(".ridl/baseline/context.json");
+    std::fs::write(&context, "{broken").unwrap();
+    let prior = baseline_files(&root);
+    for args in [
+        vec!["baseline".as_ref(), root.as_os_str()],
+        vec![
+            "build".as_ref(),
+            root.as_os_str(),
+            "--emit".as_ref(),
+            "catalog".as_ref(),
+            "--out-dir".as_ref(),
+            dir.path().as_os_str(),
+        ],
+    ] {
+        let (code, _, stderr) = ridl(&args);
+        assert_eq!(code, 2, "malformed enriched evidence must refuse: {stderr}");
+        assert!(stderr.contains("invalid baseline context"), "{stderr}");
+        assert_eq!(baseline_files(&root), prior);
+    }
+}
+
+#[test]
+fn stale_enriched_fingerprints_refuse_publication_without_changes() {
+    let dir = TempDir::new("stale-enriched-context");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+    let path = snapshot(&root);
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, text.replace("\"number\": 1", "\"number\": 0")).unwrap();
+    let prior = baseline_files(&root);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 2, "stale context must refuse: {stderr}");
+    assert!(stderr.contains("fingerprints"), "{stderr}");
+    assert_eq!(baseline_files(&root), prior);
+}
+
+#[test]
+fn a_later_publication_preserves_retained_staging_artifacts() {
+    let dir = TempDir::new("retained-publication-staging");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+    let retained = root.join(".ridl/.baseline.staging");
+    std::fs::create_dir(&retained).unwrap();
+    std::fs::write(retained.join("context.json"), "retained recovery context").unwrap();
+    std::fs::write(
+        retained.join("veh.cluster.ir.json"),
+        "retained recovery snapshot",
+    )
+    .unwrap();
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "retry uses a separately reserved stage: {stderr}");
+    assert_eq!(
+        std::fs::read(retained.join("context.json")).unwrap(),
+        b"retained recovery context"
+    );
+    assert_eq!(
+        std::fs::read(retained.join("veh.cluster.ir.json")).unwrap(),
+        b"retained recovery snapshot"
+    );
+    assert!(
+        !root.join(".ridl/.baseline.staging.1").exists(),
+        "the retry cleans only its own successfully committed stage"
     );
 }

@@ -27,6 +27,7 @@
 use ridl_ir::v2::{Package, System};
 
 mod classify;
+mod remote_inline;
 pub mod system;
 pub mod unit_verdict;
 mod walk;
@@ -270,6 +271,8 @@ declare_categories! {
         /// `<package>/<struct>/<field>` and an interaction's request, reply
         /// or fixed payload as `<package>/<interface>/<interaction>`.
         PodbufInlineAppend,
+        /// A remote declaration held inline by an old consumer has a larger podbuf size.
+        PodbufRemoteInlineGrowth,
         /// An enum value, an enum-set flag or a union arm appended, compatible
         /// under the generic rule, after which the podbuf integer of the enum
         /// or the enum set or the tag of the union is a different integer, by
@@ -465,11 +468,12 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 }
 
 /// [`diff_sets`], with `context`: packages that a type reference resolves
-/// against without being compared. The `ridl` CLI passes the built-in
-/// `ridl.std` and the packages of the remote `[imports]` units a side
-/// compiled, so a struct field appended with a `ridl.std` type or a remote
-/// type is judged by that type's declaration (driftsys/ridl#598,
-/// driftsys/ridl#1141).
+/// against without being compared. This entry point shares one context.
+/// `ridl diff` and the MCP server use per-side contexts through
+/// [`diff_workspaces_with_contexts`]: the built-in `ridl.std` plus each side's
+/// own remote packages, compiled from source or retained in a snapshot
+/// directory, so historical layouts never borrow current remote definitions.
+/// `ridl check`'s baseline desk check passes one shared context and judges no encoding.
 pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
     let old: Vec<&Package> = old.iter().collect();
     let new: Vec<&Package> = new.iter().collect();
@@ -510,25 +514,148 @@ pub fn diff_refs_with(
     context: &[&Package],
     encodings: &[&str],
 ) -> DiffReport {
+    diff_refs_scoped(old, new, context, context, encodings)
+}
+
+/// The side whose remote evidence cannot establish inline compatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ContextSide {
+    Old,
+    New,
+}
+
+impl std::fmt::Display for ContextSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Old => "old",
+            Self::New => "new",
+        })
+    }
+}
+
+/// Why remote evidence cannot establish inline compatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ContextIssueReason {
+    Missing,
+    Unlayable,
+    KindChanged,
+}
+
+/// Unusable evidence for a consumer-owned podbuf comparison.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ContextIssue {
+    pub path: String,
+    pub declaration: String,
+    pub side: ContextSide,
+    pub reason: ContextIssueReason,
+}
+
+impl std::fmt::Display for ContextIssue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.reason {
+            ContextIssueReason::Missing => write!(
+                f,
+                "{}: {} context is missing {}",
+                self.path, self.side, self.declaration
+            ),
+            ContextIssueReason::Unlayable => write!(
+                f,
+                "{}: {} context cannot lay out {}",
+                self.path, self.side, self.declaration
+            ),
+            ContextIssueReason::KindChanged => write!(
+                f,
+                "{}: {} context changes {} from a struct to another declaration kind",
+                self.path, self.side, self.declaration
+            ),
+        }
+    }
+}
+
+/// An explicit podbuf comparison cannot use its own side's remote evidence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContextError {
+    pub issues: Vec<ContextIssue>,
+}
+
+impl std::fmt::Display for ContextError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, issue) in self.issues.iter().enumerate() {
+            if index != 0 {
+                f.write_str("; ")?;
+            }
+            write!(f, "{issue}")?;
+        }
+        Ok(())
+    }
+}
+impl std::error::Error for ContextError {}
+
+/// Compares packages using independent source-side resolution scopes.
+/// Missing remote evidence prevents only an explicit podbuf judgment.
+/// Context packages resolve references without being compared themselves.
+/// Local packages take precedence over context packages with the same name.
+/// Growth is reported once per old consumer path and remote declaration;
+/// issues are sorted by consumer path, declaration, then side.
+pub fn diff_refs_with_contexts(
+    old: &[&Package],
+    new: &[&Package],
+    old_context: &[&Package],
+    new_context: &[&Package],
+    encodings: &[&str],
+) -> Result<DiffReport, ContextError> {
+    let (result, issues) =
+        diff_refs_with_contexts_partial(old, new, old_context, new_context, encodings);
+    if encodings.contains(&"podbuf") && !issues.is_empty() {
+        return Err(ContextError { issues });
+    }
+    Ok(result)
+}
+
+/// Compares complete scopes while retaining independent missing-evidence issues.
+/// The report is not an affirmative compatibility judgment for any unit that
+/// owns or reaches an issue's consumer declaration. Such units require recovery;
+/// callers may use the report's proved verdicts for unaffected units.
+pub fn diff_refs_with_contexts_partial(
+    old: &[&Package],
+    new: &[&Package],
+    old_context: &[&Package],
+    new_context: &[&Package],
+    encodings: &[&str],
+) -> (DiffReport, Vec<ContextIssue>) {
+    let old_scope: Vec<_> = old.iter().chain(old_context).copied().collect();
+    let new_scope: Vec<_> = new.iter().chain(new_context).copied().collect();
+    let (mut remote, issues) = remote_inline::compare(old, new, &old_scope, &new_scope, encodings);
+    let mut result = diff_refs_scoped(old, new, old_context, new_context, encodings);
+    result.changes.append(&mut remote);
+    (report(result.changes), issues)
+}
+
+fn diff_refs_scoped(
+    old: &[&Package],
+    new: &[&Package],
+    old_context: &[&Package],
+    new_context: &[&Package],
+    encodings: &[&str],
+) -> DiffReport {
     use std::collections::BTreeMap;
 
     use ridl_ir::v2::{members_of_unit, unit_of};
 
-    let scope: Vec<&Package> = new.iter().chain(context).copied().collect();
+    let scope: Vec<&Package> = new.iter().chain(new_context).copied().collect();
     let matching = walk::Matching::new(old, new);
 
     let old_by: BTreeMap<&str, &Package> =
         old.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
     let new_by: BTreeMap<&str, &Package> =
         new.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
-    // The old side as the podbuf rule reads it: the old packages, and the
-    // context packages the old side does not name, which stand for both
-    // sides.
+    // Old packages take precedence over their own context, independently
+    // of the new side's definitions.
     let old_scope: Vec<&Package> = old
         .iter()
         .copied()
         .chain(
-            context
+            old_context
                 .iter()
                 .copied()
                 .filter(|pkg| !old_by.contains_key(pkg.name.as_str())),
@@ -648,6 +775,37 @@ pub fn diff_workspaces_with(
     report
 }
 
+/// Compares workspace packages with independent side contexts and, when both
+/// sides carry a system, lists the system changes, of which only an instance
+/// number change enters the verdict, as breaking ([`diff_workspaces_with`]).
+/// Missing remote evidence is an error for an explicit podbuf comparison.
+pub fn diff_workspaces_with_contexts(
+    old: &[Package],
+    old_system: Option<&System>,
+    new: &[Package],
+    new_system: Option<&System>,
+    old_context: &[Package],
+    new_context: &[Package],
+    encodings: &[&str],
+) -> Result<DiffReport, ContextError> {
+    let old: Vec<&Package> = old.iter().collect();
+    let new: Vec<&Package> = new.iter().collect();
+    let old_context: Vec<&Package> = old_context.iter().collect();
+    let new_context: Vec<&Package> = new_context.iter().collect();
+    let mut report = diff_refs_with_contexts(&old, &new, &old_context, &new_context, encodings)?;
+    if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
+        report.system = diff_systems(old_system, new_system);
+        if report
+            .system
+            .iter()
+            .any(|change| change.heading == SystemHeading::InstanceNumberChanged)
+        {
+            report.verdict = Verdict::Breaking;
+        }
+    }
+    Ok(report)
+}
+
 /// The stable lowercase word for a verdict — used by both the text and JSON
 /// renderers so the two stay in lockstep.
 pub(crate) fn verdict_word(verdict: Verdict) -> &'static str {
@@ -705,6 +863,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::DocOnly => "doc_only",
         Category::VisibilityChanged => "visibility_changed",
         Category::PodbufInlineAppend => "podbuf_inline_append",
+        Category::PodbufRemoteInlineGrowth => "podbuf_remote_inline_growth",
         Category::PodbufWidthChange => "podbuf_width_change",
         Category::PodbufStrictEnumAppend => "podbuf_strict_enum_append",
         Category::StrictEnumAppend => "strict_enum_append",
@@ -745,6 +904,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
             Some("compatible on the wire, may change the catalog hash")
         }
         Category::PodbufInlineAppend
+        | Category::PodbufRemoteInlineGrowth
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => Some("breaking under podbuf"),
         Category::DeclAdded

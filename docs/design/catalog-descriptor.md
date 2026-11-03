@@ -245,7 +245,7 @@ provider can accept an `attach` that names one of them (frame specification
 §6.1). The list is not an input of the hash, and a test checks that two builds
 differing only in the list have the same hash. The rule is
 [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, amended
-2026-10-09 and 2026-10-10, as built:
+2026-10-09, 2026-10-10 and 2026-11-03, as built:
 
 - **The chain file.** `ridl baseline` writes `<unit>.catalogs` beside the
   snapshots, one per unit with an interface shape: a header line that starts
@@ -256,25 +256,28 @@ differing only in the list have the same hash. The rule is
   hash `ridl build --emit catalog` writes. The following lines are copied from
   the file of the replaced baseline, as they are, when the unit's verdict from
   the replaced snapshots to the fresh ones is `Compatible` or `Identical`, or
-  when the new hash is the first line of that file: the catalog did not change,
-  so every hash the file lists still applies, whatever the verdict. Otherwise a
-  `Breaking` verdict, a unit with no snapshot in the replaced baseline, and a
-  replaced baseline with no file for the unit each write the one new hash. A
-  hash recorded at publication is never recomputed from a snapshot. The file of
-  a unit with a snapshot in the replaced baseline is read, and one that cannot
-  be read or parsed stops the publication, exit 2, naming the file and the line;
-  the file of a unit with no such snapshot is not read.
+  when the new hash is the first line of that file. Both cases require usable
+  inline evidence and no proved podbuf break for the unit. A proved podbuf break
+  restarts the affected chain even at the same hash; missing inline evidence for
+  an affected podbuf unit refuses normal publication with exit 2 and leaves the
+  prior baseline unchanged. Otherwise a `Breaking` verdict with a changed hash,
+  a unit with no snapshot in the replaced baseline, and a replaced baseline with
+  no file for the unit each write the one new hash. A hash recorded at
+  publication is never recomputed from a snapshot. The file of a unit with a
+  snapshot in the replaced baseline is read, and one that cannot be read or
+  parsed stops the publication, exit 2, naming the file and the line; the file
+  of a unit with no such snapshot is not read.
 - **A chain is carried only when its head describes the snapshots beside it.**
   Before any of the rules above carries a file, its first line is compared with
-  the hash recomputed from the replaced baseline's own snapshots of the unit.
-  When the two differ, the file does not describe the baseline it sits in — a
-  partially hand-edited baseline, for instance, where a unit's root package
-  snapshot was deleted and a sub-package snapshot left behind — and the chain
-  restarts from the one new hash. Restarting is the safe direction: the cost is
-  that a toolchain change that moves the hash restarts every chain once, and the
-  gain is that no hash is carried past a breaking change the edit hid. This is a
-  check on the pair, not a recorded value, so the rule above stands: the hashes
-  that are carried are still read from the file and never recomputed.
+  the hash recomputed from the replaced baseline's own snapshots and context of
+  the unit. When the two differ, the file does not describe the baseline it sits
+  in — a partially hand-edited baseline, for instance, where a unit's root
+  package snapshot was deleted and a sub-package snapshot left behind — and the
+  chain restarts from the one new hash. Restarting is the safe direction: the
+  cost is that a toolchain change that moves the hash restarts every chain once,
+  and the gain is that no hash is carried past a breaking change the edit hid.
+  This is a check on the pair, not a recorded value, so the rule above stands:
+  the hashes that are carried are still read from the file and never recomputed.
   `ridl build` applies the same check to the published baseline it reads
   (driftsys/ridl#808).
 - **The verdict is per unit.** `ridl_diff::unit_verdict` takes the maximum
@@ -287,13 +290,24 @@ differing only in the list have the same hash. The rule is
   (`root_manifest_encodings` in `crates/ridl/src/main.rs`), as
   [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decision 13
   states.
-- **Publication order.** `publish_baseline` removes every published `*.catalogs`
-  file, moves the fresh snapshots in, moves the fresh `*.catalogs` files in, and
-  then removes the stale snapshots. The histories are written to the staging
-  directory only after both publication gates have passed. After an
-  interruption, a unit has its fresh file or none, and a unit with none starts
-  its chain again, so a history is never read beside a snapshot of another
-  baseline.
+- **Publication order.** After both publication gates pass, histories are
+  written into the staging directory. `publish_baseline` discards staged system
+  dumps, which are not baseline artifacts. For an existing destination,
+  `baseline::replace_preserving` reserves a sibling `baseline.previous.N` backup
+  and writes its path into `.baseline.transaction` beside the baseline. For each
+  fresh managed file, it first hard-links any old file to the backup (falling
+  back to copying a regular file if linking fails), then atomically renames the
+  fresh file over its destination. Non-context files are installed in filename
+  order, then `context.json`, then stale managed files are moved to the backup.
+  Unrelated entries stay in place. A failure attempts rollback; incomplete
+  rollback retains the marker, staging files and backup. A crash leaves the
+  marker, and the next `ridl baseline` refuses until the operator restores or
+  inspects the files and removes it. Marker cleanup failure after publication
+  also causes that refusal. A proved break, repair or reset retains the backup;
+  ordinary compatible publication removes only its own backup. Cleanup failure
+  warns without failing the committed publication. First publication to an
+  absent destination renames the staging directory into place. Replacement is
+  atomic per file, not across the complete baseline.
 - **The build emits the list.** `ridl build` computes it when the build writes a
   catalog descriptor or generates code, from the build's own checked packages
   through `ridlc::run_build_computing` (`ridlc::run_build_with` takes a ready
@@ -302,20 +316,23 @@ differing only in the list have the same hash. The rule is
   and a package in the baseline, `ridl build` reads the unit's `<unit>.catalogs`
   file and lists its hashes, less the current catalog's hash, when the unit's
   verdict from the baseline to the tree is `Compatible` or `Identical`, or when
-  the current catalog's hash is the file's first hash. The list is empty for a
+  the current catalog's hash is the file's first hash. Both cases require usable
+  inline evidence and no proved podbuf break for the unit. The list is empty for
+  a proved podbuf break or missing inline evidence, even when the hash is
+  unchanged; missing evidence also draws a warning. It is also empty for a
   `Breaking` verdict when the current hash is not the file's first hash, for a
   file whose first hash is not the hash recomputed from the baseline's own
-  snapshots of the unit, for a workspace with no `.ridl/baseline/` directory or
-  one holding no `.ir.json` snapshot, for a unit with no package in the baseline
-  (a file left under its name is not read), and for a unit with no file. A tree
-  whose catalog changed and that is breaking relative to the baseline is built
-  with an empty list, and the recorded chain is not changed until the next
-  publication. A baseline with at least one `<unit>.catalogs` file that cannot
-  be loaded, and a file that cannot be read, are exit 2; a baseline with no such
-  file is not loaded. A compile with an error diagnostic gets no list, and its
-  baseline is not read. When the workspace names `[imports]` and a list is
-  computed, the build prints a note that a unit's list covers the workspace's
-  own packages only.
+  snapshots and context of the unit, for a workspace with no `.ridl/baseline/`
+  directory or one holding no `.ir.json` snapshot, for a unit with no package in
+  the baseline (a file left under its name is not read), and for a unit with no
+  file. A tree with a proved podbuf break, or a changed catalog and a breaking
+  verdict, is built with an empty list, and the recorded chain is not changed
+  until the next publication. A baseline with at least one `<unit>.catalogs`
+  file that cannot be loaded, and a file that cannot be read, are exit 2; a
+  baseline with no such file is not loaded. A compile with an error diagnostic
+  gets no list, and its baseline is not read. When the workspace names
+  `[imports]` and a list is computed, the build prints a note that a unit's list
+  covers the workspace's own packages only.
 - **One runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no generated code accepts an `attach` on
   the strength of the list. The frame specification (its As-built note and §6.1)

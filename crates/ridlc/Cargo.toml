@@ -20,7 +20,8 @@ ridl-sem.workspace = true
 ridl-syntax.workspace = true
 rowan.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2.workspace = true
 
 [dev-dependencies]
 # The `glob` feature drives the full-pipeline corpus runner (tests/corpus.rs); `json` rides in from the workspace default.

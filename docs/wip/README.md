@@ -5,6 +5,12 @@ that are not yet ratified as normative references. They graduate into
 [`../specification/`](../specification/) (or an ADR under
 [`../decisions/`](../decisions/)) as they settle.
 
+The remote-inline feature pair
+(`2026-11-02-podbuf-remote-inline-{design,plan}.md`, driftsys/ridl#1163) is
+archived verbatim in [`../archive/`](../archive/) after its implementation tests
+passed on the development branch. This is not a merge or release claim. See
+[the archive entry](../archive/README.md) for its durable records.
+
 Superpowers specs and plans live here while an epic runs and are archived
 verbatim to [`../archive/`](../archive/) at epic close, or as a design/plan pair
 once the story they cover lands. The epic E2 plan was archived by the E2

@@ -168,3 +168,23 @@ fn a_fence_line_is_split_at_a_pipe_and_a_semicolon() {
 fn a_program_path_is_reduced_to_its_file_name() {
     assert!(fence_failures("./target/debug/ridl check --format json").is_empty());
 }
+
+/// The documented category example must be an executable explanation, so a
+/// removed category or an outdated output example cannot reach a reader.
+#[test]
+fn the_remote_growth_explanation_example_equals_the_binary() {
+    let page = page("cli-reference.md");
+    let blocks = fences(&page);
+    let pair = blocks
+        .windows(2)
+        .find(|pair| {
+            pair[0].info == "sh"
+                && pair[0].body.trim() == "ridl diff --explain podbuf_remote_inline_growth"
+                && pair[1].info == "text"
+        })
+        .expect("the remote growth example must include its command and output");
+    let args: Vec<_> = pair[0].body.split_whitespace().skip(1).collect();
+    let (code, stdout, stderr) = run(Path::new(RIDL), &args);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout.trim_end(), pair[1].body.trim_end());
+}
