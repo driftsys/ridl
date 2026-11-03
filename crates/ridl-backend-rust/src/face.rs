@@ -30,7 +30,7 @@
 //!   return a call/sink pair and a Consumer or ByteConsumer on the provider side;
 //!   queries with one parameter stream return a plain reply after upload end
 //!   or drive a named-element reply stream concurrently. Multiple parameter
-//!   streams remain outside the face. The
+//!   streams remain outside the face (driftsys/ridl#1116). The
 //!   blocking client carries no streamed member;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;

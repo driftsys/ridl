@@ -28,7 +28,8 @@
 //! [`StreamHandler`] for queries whose only stream is a reply of named
 //! elements, bytes or text, commands with one parameter stream, and queries
 //! with one parameter stream and a plain or named-element streamed reply.
-//! Calls with multiple parameter streams have no generated method yet.
+//! Calls with two or more stream parameters have no generated method yet
+//! (driftsys/ridl#1116).
 
 use core::task::Waker;
 

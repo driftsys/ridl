@@ -985,11 +985,14 @@ type, a query whose reply is a fallible `T | E`, or a contract clause outside
 the form the translator accepts — is skipped along with its descriptors, and
 gets a `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason,
 and, when an issue tracks the limit, that issue. A query whose reply is a stream
-of named elements is on the face. A member with a stream in any other form, a
-stream of bytes or of text or a stream parameter, is left out of an otherwise
-emitted face, with no note: its descriptor row is written all the same, and the
-face carries no method for it yet (driftsys/ridl#1116). An `internal` interface
-gets no face in any case
+of named elements, bytes or text is on the face, as are commands with one stream
+parameter and queries with one stream parameter and a plain or named-element
+streamed reply. These forms run over `ridl-loopback`; the WebSocket upload
+direction and the corresponding TypeScript client methods are not built yet. A
+call with two or more stream parameters is left out of an otherwise emitted face
+without a note, while its descriptor row is still written (driftsys/ridl#1116).
+An upload query with a byte or text reply stream also has no face method. An
+`internal` interface gets no face in any case
 ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face)
 gives the rule). When its descriptors are refused, its note says that the
 descriptors are absent and gives the reason. Neither is an error: the rest of

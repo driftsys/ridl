@@ -1326,10 +1326,13 @@ query fetchDocument(id: DocId): <bytes>                  // byte stream, server 
 ```
 
 The stream port of `ridl-rt` is built, and `ridl-loopback` implements it in
-process. The generated Rust face carries one stream form, a query whose reply is
-a stream of named elements; no generated face carries a stream of bytes or of
-text, or a stream parameter, yet (driftsys/ridl#1116). This section states the
-contract a stream declares, which the checker and the IR already accept.
+process. Over it, the generated Rust face carries reply streams of named
+elements, bytes and text, commands with one stream parameter, and queries with
+one stream parameter and a plain or named-element streamed reply. Calls with two
+or more stream parameters remain outside the face (driftsys/ridl#1116). The
+WebSocket upload direction and the corresponding TypeScript client methods are
+not built yet. This section states the contract a stream declares, which the
+checker and the IR already accept.
 
 ### 12.1 Direction by Position
 
