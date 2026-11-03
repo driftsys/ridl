@@ -131,6 +131,10 @@
 //!
 //! The crate's as-built design record, with the reasoning behind each of these
 //! choices, is `docs/design/ridl-loopback.md` in this repository.
+//!
+//! With `node`, the conformance suite also runs the descriptor-based `identity`
+//! group over `Node` attachments. With `debug`, it additionally runs
+//! `identity_debug` for twins, reservation release and listener permissions.
 
 use std::sync::{Arc, Mutex};
 use std::task::Waker;

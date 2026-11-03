@@ -33,7 +33,7 @@ required-features = ["node"]
 # exists only after the release has published it. `cargo package` drops a
 # dev-dependency that has no version.
 [dev-dependencies]
-ridl-rt-conformance = { path = "../ridl-rt-conformance" }
+ridl-rt-conformance = { path = "../ridl-rt-conformance", features = ["debug"] }
 
 # The freeze check denies the major-level lints that cargo-semver-checks only
 # warns about by default (`[workspace.metadata.cargo-semver-checks.lints]`).

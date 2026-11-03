@@ -668,7 +668,7 @@ compat-check: toolchain-check
     fi
     mkdir -p "$pkg_loopback/tests"
     cp crates/ridl-loopback/tests/conformance.rs "$pkg_loopback/tests/conformance.rs"
-    printf 'ridl-rt-conformance = { path = "%s" }\n' "$pkg_conformance" >> "$pkg_loopback/Cargo.toml"
+    printf 'ridl-rt-conformance = { path = "%s", features = ["debug"] }\n' "$pkg_conformance" >> "$pkg_loopback/Cargo.toml"
     printf '\n[[test]]\nname = "conformance"\npath = "tests/conformance.rs"\n' >> "$pkg_loopback/Cargo.toml"
     append_tables "$pkg_loopback/Cargo.toml" "ridl-rt=$pkg" "ridl-descriptor=$pkg_descriptor" "ridl-ir=$pkg_ir"
     resolve_for "$descriptor_home" "$pkg_loopback/Cargo.toml" "$minimum" ridl-loopback
