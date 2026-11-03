@@ -134,6 +134,11 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
             type Output=Result<(),::ridl_rt::error::ClientError>;
             fn poll(self: ::core::pin::Pin<&mut Self>,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Self::Output> {
                 let this=self.get_mut(); assert!(!this.done,"call polled after completion");
+                if let Some(error)=this.state.call_error.get() {
+                    this.pending=None;
+                    this.done=true;
+                    return ::core::task::Poll::Ready(Err(error));
+                }
                 if this.pending.is_some() && this.deadline.is_some_and(|deadline| this.port.borrow().now()>deadline) {
                     let e=::ridl_rt::error::ClientError::Send(::ridl_rt::port::SendError::Busy);
                     this.done=true;this.state.call_error.set(Some(e));this.state.error.set(Some(e));return ::core::task::Poll::Ready(Err(e));
@@ -195,6 +200,11 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<P:#bounds> ::core::ops::Drop for #sink<'_,P> where #element_bound {
             fn drop(&mut self) {
                 if !self.state.ended.get() {
+                    if self.state.correlation.get().is_none() {
+                        let error=::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));
+                        self.state.call_error.set(Some(error));
+                        self.state.error.set(Some(error));
+                    }
                     if let (true,Some(c))=(self.state.error.get().is_none() && !self.state.forgotten.get(), self.state.correlation.get()) {let _=self.port.borrow_mut().abort(c,::ridl_rt::contract::StreamNo(1),::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}
                     self.state.forget(self.port);
                 }

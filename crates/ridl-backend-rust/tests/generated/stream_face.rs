@@ -2780,6 +2780,11 @@ pub mod log {
         ) -> ::core::task::Poll<Self::Output> {
             let this = self.get_mut();
             assert!(! this.done, "call polled after completion");
+            if let Some(error) = this.state.call_error.get() {
+                this.pending = None;
+                this.done = true;
+                return ::core::task::Poll::Ready(Err(error));
+            }
             if this.pending.is_some()
                 && this
                     .deadline
@@ -3100,6 +3105,15 @@ pub mod log {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
+                if self.state.correlation.get().is_none() {
+                    let error = ::ridl_rt::error::ClientError::Call(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                    self.state.call_error.set(Some(error));
+                    self.state.error.set(Some(error));
+                }
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -7335,6 +7349,11 @@ pub mod docs {
         ) -> ::core::task::Poll<Self::Output> {
             let this = self.get_mut();
             assert!(! this.done, "call polled after completion");
+            if let Some(error) = this.state.call_error.get() {
+                this.pending = None;
+                this.done = true;
+                return ::core::task::Poll::Ready(Err(error));
+            }
             if this.pending.is_some()
                 && this
                     .deadline
@@ -7556,6 +7575,15 @@ pub mod docs {
     > ::core::ops::Drop for PutSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
+                if self.state.correlation.get().is_none() {
+                    let error = ::ridl_rt::error::ClientError::Call(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                    self.state.call_error.set(Some(error));
+                    self.state.error.set(Some(error));
+                }
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -7609,6 +7637,11 @@ pub mod docs {
         ) -> ::core::task::Poll<Self::Output> {
             let this = self.get_mut();
             assert!(! this.done, "call polled after completion");
+            if let Some(error) = this.state.call_error.get() {
+                this.pending = None;
+                this.done = true;
+                return ::core::task::Poll::Ready(Err(error));
+            }
             if this.pending.is_some()
                 && this
                     .deadline
@@ -7833,6 +7866,15 @@ pub mod docs {
     > ::core::ops::Drop for NoteSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
+                if self.state.correlation.get().is_none() {
+                    let error = ::ridl_rt::error::ClientError::Call(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Interrupted,
+                        ),
+                    );
+                    self.state.call_error.set(Some(error));
+                    self.state.error.set(Some(error));
+                }
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),

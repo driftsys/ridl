@@ -605,3 +605,61 @@ fn dropping_a_locally_failed_sink_does_not_abort_again() {
     );
     assert_eq!(doubles::forgets(&ops).len(), 1);
 }
+
+macro_rules! cancelled_before_admission {
+    ($name:ident, $module:ident, $method:ident, $args:expr) => {
+        #[test]
+        fn $name() {
+            let rt = docs();
+            let ports = RecordingPorts::new(&rt);
+            let ops = ports.log();
+            let faults = ports.faults();
+            faults.send.set(Some(ridl_rt::port::SendError::Busy));
+            let mut client = generated::$module::Client::new(ports);
+            let (mut call, sink) = client.$method($args);
+            assert!(matches!(
+                ops.borrow().as_slice(),
+                [Op::Command(Err(ridl_rt::port::SendError::Busy))]
+            ));
+            drop(sink);
+            faults.send.set(None);
+            assert_eq!(
+                poll(&mut call),
+                Poll::Ready(Err(ClientError::Call(CallError::Transport(
+                    Transport::Interrupted
+                ))))
+            );
+            assert_eq!(
+                ops.borrow()
+                    .iter()
+                    .filter(|op| matches!(op, Op::Command(_)))
+                    .count(),
+                1,
+                "a cancelled request must never be retried"
+            );
+            drop(call);
+            assert!(
+                doubles::forgets(&ops).is_empty(),
+                "an unadmitted call has no correlation to forget"
+            );
+        }
+    };
+}
+cancelled_before_admission!(
+    a_sink_dropped_before_admission_cancels_the_pending_call,
+    docs,
+    put,
+    info()
+);
+cancelled_before_admission!(
+    a_named_sink_dropped_before_admission_cancels_the_pending_call,
+    log,
+    upload,
+    generated::LogUploadParams {}
+);
+cancelled_before_admission!(
+    a_text_sink_dropped_before_admission_cancels_the_pending_call,
+    docs,
+    note,
+    generated::DocsNoteParams {}
+);

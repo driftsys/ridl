@@ -25,9 +25,9 @@
 //!   verifies and decodes one named element per chunk. A byte stream has
 //!   `poll_read` and `read`, serving short buffers from inline storage; a text
 //!   stream has `poll_next` and `next`, yielding borrowed UTF-8 chunks. The
-//!   `StreamCaller` bound joins the `Client`'s bounds only when the interface
-//!   declares such a member. Commands with one parameter stream return a
-//!   call/sink pair and a Consumer or ByteConsumer on the provider side;
+//!   `StreamCaller` bound joins the `Client`'s bounds for a member with a
+//!   streamed reply or a parameter stream. Commands with one parameter stream
+//!   return a call/sink pair and a Consumer or ByteConsumer on the provider side;
 //!   other parameter-stream forms remain outside the face. The
 //!   blocking client carries no streamed member;
 //! - `Publisher<W>`, the provider face for signals and events, over
