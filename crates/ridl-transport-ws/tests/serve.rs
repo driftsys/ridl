@@ -985,6 +985,13 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
         latency < bound,
         "the change arrived after {latency:?}, over {bound:?}"
     );
+    // Answers to the subscribes may still be unread. Closing a TCP socket that
+    // holds unread data sends a reset instead of an orderly close, and the
+    // server would then end with a reset or a broken pipe. So the client shuts
+    // down its write side, reads until the server closes, and only then drops.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    client.set_read_timeout(Some(TEST_LIMIT)).unwrap();
+    while client.read(&mut chunk).unwrap() > 0 {}
     drop(client);
     assert_eq!(
         handle.join().0,
