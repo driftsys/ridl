@@ -247,52 +247,24 @@ const C_KEYWORDS: &[&str] = &[
 ];
 
 /// A field name as a C member name: the pinned snake case of ADR-0016, with a
-/// trailing underscore when C reserves the word.
+/// trailing underscore when the name is a C keyword followed by zero or
+/// more underscores.
 fn member_name(declared: &str) -> String {
     let snake = snake_case(declared);
-    if C_KEYWORDS.contains(&snake.as_str()) {
+    if C_KEYWORDS.contains(&snake.trim_end_matches('_')) {
         format!("{snake}_")
     } else {
         snake
     }
 }
 
-/// Whether the typl names of the tuple members of `head`, spelled as C
-/// members, would clash in a way the header refuses: two members whose C names
-/// are equal once a trailing underscore is removed (`low` and `low_`, or `int`,
-/// spelled `int_`, beside `int_`), or a member equal to the presence test
-/// `has_<member>` of an optional member (`hasX` next to `x?`).
-/// Such a head names its members by position instead. The decision reads the
-/// head's own fields only, so the header that declares the tuple and a header
-/// that lays it out inline make the same choice. The names are compared
-/// without the trailing underscore of a reserved word, as the accessor names
-/// are built. Two members equal under `snake_case` are refused earlier, by
-/// RIDL-149.
-fn spelled_tuple_names_clash(head: &v1::PodbufHead) -> bool {
-    use v1::podbuf_source::Kind;
-    let members: Vec<(String, bool)> = head
-        .fields
-        .iter()
-        .filter_map(|field| {
-            let source = field.source.as_ref()?;
-            if !matches!(source.kind, Some(Kind::Position(_))) || source.position_name.is_empty() {
-                return None;
-            }
-            let spelled = member_name(&source.position_name);
-            Some((
-                spelled.trim_end_matches('_').to_string(),
-                field.optional.is_some(),
-            ))
-        })
-        .collect();
-    let mut seen = HashSet::new();
-    let repeated = members.iter().any(|(name, _)| !seen.insert(name.as_str()));
-    let presence = members.iter().any(|(name, _)| {
-        members
-            .iter()
-            .any(|(other, optional)| *optional && *name == format!("has_{other}"))
-    });
-    repeated || presence
+/// The member name without the one underscore added by the C keyword escape.
+fn accessor_stem(member: &str) -> &str {
+    if C_KEYWORDS.contains(&member.trim_end_matches('_')) {
+        &member[..member.len() - 1]
+    } else {
+        member
+    }
 }
 
 /// `veh.cluster` as `veh_cluster`: each segment in snake case.
@@ -631,9 +603,6 @@ struct Header<'a> {
     prefix: String,
     /// The C type name of each head.
     type_names: Vec<String>,
-    /// Whether each head names its tuple members by position: see
-    /// [`spelled_tuple_names_clash`].
-    positional: Vec<bool>,
 }
 
 impl<'a> Header<'a> {
@@ -661,7 +630,6 @@ impl<'a> Header<'a> {
             });
             is_box.push(true);
         }
-        let positional = heads.iter().map(spelled_tuple_names_clash).collect();
         let mut header = Self {
             model,
             heads,
@@ -669,7 +637,6 @@ impl<'a> Header<'a> {
             package,
             prefix,
             type_names: Vec::new(),
-            positional,
         };
         header.type_names = (0..header.heads.len())
             .map(|at| header.type_name(at))
@@ -1053,11 +1020,10 @@ impl<'a> Header<'a> {
             },
             // A tuple member is named by its typl name, which the model
             // carries next to the position for the tuple of another package
-            // too. The member falls back to its position when the head's
-            // spelled names clash ([`spelled_tuple_names_clash`]), or when a
-            // model written before `position_name` existed leaves it empty.
+            // too. A model written before `position_name` existed leaves it
+            // empty, so that member is named by its position.
             Some(Kind::Position(position)) => {
-                if self.positional[at] || source.position_name.is_empty() {
+                if source.position_name.is_empty() {
                     format!("f{position}")
                 } else {
                     member_name(&source.position_name)
@@ -1406,7 +1372,7 @@ impl<'a> Header<'a> {
                 continue;
             }
             let member = self.field_name(at, field);
-            let function = format!("{owner}_{}", member.trim_end_matches('_'));
+            let function = format!("{owner}_{}", accessor_stem(&member));
             let offset = field.offset;
             let size = field.size;
             let inline_bytes =
@@ -1518,7 +1484,7 @@ impl<'a> Header<'a> {
                 let Some(flags) = flags_offset(bit.flags) else {
                     continue;
                 };
-                let has = format!("{owner}_has_{}", member.trim_end_matches('_'));
+                let has = format!("{owner}_has_{}", accessor_stem(&member));
                 claims.claim(
                     &format!("{has}_at"),
                     format!("the presence test of `{member}` of {owner_text}"),

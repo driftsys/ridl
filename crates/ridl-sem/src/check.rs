@@ -8866,6 +8866,24 @@ mod tests {
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
     }
 
+    #[test]
+    fn ridl_149_does_not_check_the_names_a_backend_derives_from_a_field() {
+        let checked = without_missing_docs(check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               x : Speed?\n\
+               hasX : Speed\n\
+               start : Speed\n\
+               startAt : Speed\n\
+               head : Speed\n\
+               t : (y : Speed?, hasY : Speed)\n\
+             }\n",
+        ));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
     /// A field that both re-declares a `reserved` name and collides under the
     /// transform reports both diagnostics, matching how the interface-member
     /// check orders its own.

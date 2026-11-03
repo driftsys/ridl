@@ -98,14 +98,12 @@ struct Gauge {
   span : (lowMark: integer [0..255], int: integer [0..255])
 }
 
-// Two tuples whose spelled C names clash — two members whose C names are equal
-// once a trailing underscore is removed, and a member equal to the presence
-// test of an optional member —
-// next to one that does not.
+// `pair` keeps a trailing underscore, and `kw` escapes both a keyword and
+// that keyword followed by an underscore. `plain` has no optional member,
+// so `hasX` is not a presence test. `clear` keeps ordinary member names.
 struct Clash {
-  pair     : (low: integer [0..255], low_: integer [0..255])
-  presence : (x: integer [0..255]?, hasX: integer [0..255])
-  trim     : (int: integer [0..255]?, hasInt: integer [0..255])
-  plain    : (x: integer [0..255], hasX: integer [0..255])
-  clear    : (left: integer [0..255], right: integer [0..255])
+  pair  : (low: integer [0..255], low_: integer [0..255])
+  kw    : (int: integer [0..255], int_: integer [0..255])
+  plain : (x: integer [0..255], hasX: integer [0..255])
+  clear : (left: integer [0..255], right: integer [0..255])
 }
