@@ -54,6 +54,10 @@ Non-goals:
   forms only (see §6.2).
 - A `ridl` subcommand that runs a gateway. The gateway is an example program and
   a test (see §5.2).
+- How a redundant provider set conveys which instance is active. That is the
+  arbitration of E19.12 (driftsys/ridl#1196); RSDL-409 already reports such a
+  set as not yet realizable. The tests of this design use components with one
+  instance. **(owner, 2026-11-03)**
 - A generated constant for the twin or the listener. ridl generates neither (the
   roadmap's identity rules).
 
