@@ -12,30 +12,9 @@ pub struct DiffSide {
     /// side; every snapshot, for a snapshot side.
     pub packages: Vec<ridl_ir::v2::Package>,
     pub system: Option<ridl_ir::v2::System>,
-    /// Remote packages available to the legacy shared-context diff API.
-    pub remotes: Vec<ridl_ir::v2::Package>,
     /// Side-specific verified remote evidence. `None` denotes legacy or
     /// standalone snapshots; source sides carry complete evidence.
     pub remote_context: Option<RemoteContext>,
-}
-
-/// The legacy shared resolution context: `ridl.std`, then the new side's
-/// remotes, then the old side's remotes whose name the new side does not hold.
-///
-/// This preserves the original shared-context API and its new-side precedence.
-/// It does not establish historical side-specific layouts or compare pins;
-/// callers needing that evidence use [`DiffSide::remote_context`].
-#[must_use]
-pub fn diff_context(old: &DiffSide, new: &DiffSide) -> Vec<ridl_ir::v2::Package> {
-    std::iter::once(crate::std_ir())
-        .chain(new.remotes.iter().cloned())
-        .chain(
-            old.remotes
-                .iter()
-                .filter(|remote| new.remotes.iter().all(|pkg| pkg.name != remote.name))
-                .cloned(),
-        )
-        .collect()
 }
 
 /// The resolution context of one side: `ridl.std` and only its own remotes.
@@ -43,7 +22,11 @@ pub fn diff_context(old: &DiffSide, new: &DiffSide) -> Vec<ridl_ir::v2::Package>
 #[must_use]
 pub fn diff_side_context(side: &DiffSide) -> Vec<ridl_ir::v2::Package> {
     std::iter::once(crate::std_ir())
-        .chain(side.remotes.iter().cloned())
+        .chain(
+            side.remote_context
+                .iter()
+                .flat_map(|context| context.packages.iter().cloned()),
+        )
         .collect()
 }
 
@@ -195,7 +178,6 @@ pub fn load_diff_side(
         return Ok(DiffSide {
             packages: load_snapshots(&[entry.to_path_buf()])?,
             system: None,
-            remotes: Vec::new(),
             remote_context: None,
         });
     }
@@ -209,14 +191,9 @@ pub fn load_diff_side(
             let packages = load_snapshots(&snapshots)?;
             let context = read_context(entry, &packages).map_err(DiffSideError::Context)?;
             let remote_context = context.map(|context| context.remote_context());
-            let remotes = remote_context
-                .as_ref()
-                .map(|c| c.packages.clone())
-                .unwrap_or_default();
             return Ok(DiffSide {
                 packages,
                 system: None,
-                remotes,
                 remote_context,
             });
         }
@@ -226,7 +203,6 @@ pub fn load_diff_side(
                 return Ok(DiffSide {
                     packages: Vec::new(),
                     system: None,
-                    remotes: remote_context.packages.clone(),
                     remote_context: Some(remote_context),
                 });
             }
@@ -280,11 +256,9 @@ pub fn load_diff_side(
     )
     .map_err(DiffSideError::Context)?;
     let remote_context = context.remote_context();
-    let remotes = remote_context.packages.clone();
     Ok(DiffSide {
         packages,
         system: output.system,
-        remotes,
         remote_context: Some(remote_context),
     })
 }
@@ -542,61 +516,29 @@ mod tests {
     use ridl_core::{Overlay, RidlDatabase, Severity};
     use std::fs;
 
-    /// A side with no compared package and the remote packages named, each
-    /// carrying `unit` so that two sides' copies of one name can be told
-    /// apart.
-    fn side_with_remotes(remotes: &[(&str, &str)]) -> DiffSide {
-        DiffSide {
+    #[test]
+    fn side_context_reads_only_its_own_remote_evidence() {
+        let mut side = DiffSide {
             packages: Vec::new(),
             system: None,
             remote_context: None,
-            remotes: remotes
-                .iter()
-                .map(|(name, unit)| ridl_ir::v2::Package {
-                    name: name.to_string(),
-                    unit: unit.to_string(),
-                    ..Default::default()
-                })
-                .collect(),
-        }
-    }
-
-    /// `ridl.std` first, then the new side's remotes, then the old side's
-    /// remotes whose name the new side does not hold: a package both sides
-    /// name is read from the new side, and one the old side alone names is
-    /// kept.
-    #[test]
-    fn diff_context_is_std_then_the_new_remotes_then_the_old_remotes_not_named_by_new() {
-        let old = side_with_remotes(&[("veh.common", "old"), ("veh.legacy", "old")]);
-        let new = side_with_remotes(&[("veh.common", "new"), ("veh.fresh", "new")]);
-        let context: Vec<(String, String)> = diff_context(&old, &new)
-            .into_iter()
-            .map(|package| (package.name, package.unit))
-            .collect();
+        };
+        side.remote_context = Some(RemoteContext {
+            packages: vec![ridl_ir::v2::Package {
+                name: "veh.common".into(),
+                unit: "historical".into(),
+                ..Default::default()
+            }],
+            pins: Default::default(),
+        });
+        let context = diff_side_context(&side);
         assert_eq!(
-            context,
-            [
-                ("ridl.std".to_string(), crate::std_ir().unit),
-                ("veh.common".to_string(), "new".to_string()),
-                ("veh.fresh".to_string(), "new".to_string()),
-                ("veh.legacy".to_string(), "old".to_string()),
-            ]
+            context.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            ["ridl.std", "veh.common"]
         );
-    }
-
-    /// A snapshot side carries no remote package: the context is then
-    /// `ridl.std` and the other side's remotes.
-    #[test]
-    fn diff_context_of_a_snapshot_side_is_the_other_sides_remotes() {
-        let source = side_with_remotes(&[("veh.common", "src")]);
-        let snapshot = side_with_remotes(&[]);
-        for (old, new) in [(&source, &snapshot), (&snapshot, &source)] {
-            let names: Vec<String> = diff_context(old, new)
-                .into_iter()
-                .map(|package| package.name)
-                .collect();
-            assert_eq!(names, ["ridl.std", "veh.common"]);
-        }
+        assert_eq!(context[1].unit, "historical");
+        side.remote_context = None;
+        assert_eq!(diff_side_context(&side).len(), 1);
     }
 
     fn is_txt(path: &Path) -> bool {

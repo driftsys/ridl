@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use ridl_core::RidlDatabase;
 use ridl_core::catalog_history::{CatalogHistory, FILE_SUFFIX, parse};
-use ridl_diff::{ContextIssue, Verdict};
+use ridl_diff::{Change, Verdict};
 use ridl_ir::catalog_hash::{catalog_hash, reachable_decls};
 use ridl_ir::v2::{Package, unit_of};
 use ridlc::baseline_context::RemoteContext;
@@ -21,7 +21,7 @@ pub(crate) fn compatible_catalogs(
     checked: &[&Package],
     std: &Package,
     names_imports: bool,
-    current: &RemoteContext,
+    current: &[&Package],
 ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, ExitCode> {
     let published = default_baseline_dir(entry);
     let mut compatible = BTreeMap::new();
@@ -33,11 +33,16 @@ pub(crate) fn compatible_catalogs(
     let old_context = ridlc::diff_side_context(&old);
     let old_context: Vec<_> = old_context.iter().collect();
     let new_context: Vec<_> = std::iter::once(std)
-        .chain(current.packages.iter())
+        .chain(current.iter().copied())
         .collect();
     let judgment = Judgment::new(entry, &old_refs, checked, &old_context, &new_context);
-    let scope = complete_scope(checked, std, &current.packages);
-    let published_scope = complete_scope(&old_refs, std, &old.remotes);
+    let packages: Vec<_> = checked.iter().chain(current).copied().collect();
+    let scope = ridlc::catalog_scope(&packages, Some(std));
+    let old_remotes = old
+        .remote_context
+        .as_ref()
+        .map_or(&[][..], |context| context.packages.as_slice());
+    let published_scope = complete_scope(&old_refs, std, old_remotes);
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&judgment.report, &published_scope, &scope);
     for unit in shaped_units(checked.iter().copied()) {
         if !old.packages.iter().any(|package| unit_of(package) == unit) {
@@ -174,7 +179,7 @@ fn complete_scope<'a>(
 struct Judgment {
     report: ridl_diff::DiffReport,
     podbuf_report: ridl_diff::DiffReport,
-    issues: Vec<ContextIssue>,
+    issues: Vec<Change>,
 }
 impl Judgment {
     fn new(
@@ -207,7 +212,17 @@ impl Judgment {
             report,
             podbuf_report,
             issues: if encodings.contains(&"podbuf") {
+                // These records use only the change path accessors for attribution.
                 issues
+                    .into_iter()
+                    .map(|issue| Change {
+                        path: issue.path,
+                        category: ridl_diff::Category::PodbufRemoteInlineGrowth,
+                        verdict: Verdict::Breaking,
+                        before: None,
+                        after: None,
+                    })
+                    .collect()
             } else {
                 Vec::new()
             },
@@ -223,9 +238,8 @@ impl Judgment {
         let reached_old = reachable_decls(unit, old);
         let reached_new = reachable_decls(unit, new);
         self.issues.iter().any(|issue| {
-            let mut path = issue.path.split('/');
-            let package = path.next().unwrap_or_default();
-            let declaration = path.next().map(|name| format!("{package}.{name}"));
+            let package = issue.package();
+            let declaration = issue.declaration().map(|name| format!("{package}.{name}"));
             old.iter()
                 .chain(new)
                 .any(|p| p.name == package && unit_of(p) == unit)

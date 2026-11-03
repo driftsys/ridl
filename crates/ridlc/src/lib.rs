@@ -52,7 +52,7 @@ mod link_encodings;
 pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod baseline_context;
 pub mod diff_side;
-pub use diff_side::{DiffSide, DiffSideError, diff_context, diff_side_context, load_diff_side};
+pub use diff_side::{DiffSide, DiffSideError, diff_side_context, load_diff_side};
 pub mod plugin;
 
 /// Serializes the write of a file this test binary then executes against

@@ -823,12 +823,11 @@ fn run_build(
     let mut compute = |checked: &[&ridl_ir::v2::Package],
                        std: &ridl_ir::v2::Package,
                        names_imports: bool,
-                       remotes: &ridlc::baseline_context::RemoteContext,
-                       _: &ridlc::baseline_context::BaselineContext| {
+                       remotes: &[&ridl_ir::v2::Package]| {
         catalogs::compatible_catalogs(&mut db, path, checked, std, names_imports, remotes)
             .map_err(BuildFailure::Exit)
     };
-    let run = ridlc::run_build_computing_with_context(
+    let run = ridlc::run_build_computing(
         path,
         out_dir,
         emits,

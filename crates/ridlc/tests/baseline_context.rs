@@ -137,14 +137,16 @@ fn context_round_trip_keeps_ownership_and_pin_evidence() {
         ["app.extra", "app"]
     );
     assert_eq!(
-        side.remotes
+        side.remote_context
+            .as_ref()
+            .unwrap()
+            .packages
             .iter()
             .map(|p| p.name.as_str())
             .collect::<Vec<_>>(),
         ["dep.a", "dep.b"]
     );
     let remote = side.remote_context.unwrap();
-    assert_eq!(remote.packages, side.remotes);
     assert_eq!(remote.pins["alpha"].url, "https://example.test/alpha.tar");
     assert_eq!(remote.pins["beta"].tree, "b".repeat(64));
 }
@@ -163,8 +165,9 @@ fn copied_directory_resolves_without_vendor_or_cache() {
     fixture.trees.close().unwrap();
     dir.close().unwrap();
     let side = load(copy.path()).unwrap();
-    assert_eq!(side.remote_context.unwrap().pins.len(), 2);
-    assert_eq!(side.remotes.len(), 2);
+    let remote = side.remote_context.unwrap();
+    assert_eq!(remote.pins.len(), 2);
+    assert_eq!(remote.packages.len(), 2);
 }
 
 #[test]
@@ -174,12 +177,10 @@ fn absent_evidence_is_legacy_and_standalone_files_ignore_siblings() {
     fixture.snapshots(dir.path());
     let side = load(dir.path()).unwrap();
     assert!(side.remote_context.is_none());
-    assert!(side.remotes.is_empty());
     fs::write(dir.path().join("context.json"), "malformed").unwrap();
     assert!(load(dir.path()).is_err());
     let standalone = load(&dir.path().join("app.ir.json")).unwrap();
     assert!(standalone.remote_context.is_none());
-    assert!(standalone.remotes.is_empty());
 }
 
 #[test]
@@ -458,9 +459,8 @@ fn source_preserves_verified_remote_pins_without_writing_the_lock() {
     let before = fs::read(&lock_path).unwrap();
     let side = load(dir.path()).unwrap();
     assert_eq!(side.packages.len(), 1);
-    assert_eq!(side.remotes.len(), 1);
     let context = side.remote_context.unwrap();
-    assert_eq!(context.packages, side.remotes);
+    assert_eq!(context.packages.len(), 1);
     assert_eq!(context.pins["dep"].tree, tree);
     assert_eq!(context.pins["dep"].url, url);
     assert_eq!(before, fs::read(lock_path).unwrap());
