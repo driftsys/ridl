@@ -1,6 +1,13 @@
-//! Committed identities of the descriptor fixture.
+//! Descriptor-based attachment tests, selected with `suite!(F; identity)`.
+//!
+//! Implement [`IdentityFactory`] to share one node between attachments. The
+//! `identity_debug` flag additionally checks twins and listeners and requires
+//! this crate's `debug` feature. No loopback or compiler dependency is needed.
 
 use ridl_rt::contract::{CatalogHash, CatalogRef};
+#[cfg(feature = "debug")]
+use ridl_rt::contract::{InterfaceNo, Ordinal};
+use ridl_rt::port::*;
 
 /// The `alpha` catalog of the identity fixture.
 pub const ALPHA: CatalogRef = CatalogRef {
@@ -37,3 +44,246 @@ pub const REMOTE: CatalogRef = CatalogRef {
         172, 195, 179, 109, 8, 97, 166, 74, 34, 7, 114, 94,
     ]),
 };
+
+/// The deployment descriptor shared by the identity tests.
+pub const DESCRIPTOR: &[u8] = include_bytes!("../fixtures/identity/identity.deployment.binfb");
+
+/// The node and attachment hooks required by the opt-in identity group.
+///
+/// `Local` in [`DESCRIPTOR`] places instances 1 and 3; instance 2 is remote.
+/// Instance 1 offers [`ALPHA`] and maps [`MAPPED`]; instance 3 offers
+/// [`BETA`] and maps [`ALPHA`]. Each call to `node` creates independent state.
+/// Attachments share stores and identity reservations within that node.
+pub trait IdentityFactory: crate::Factory {
+    /// One machine's stores and grants.
+    type Node;
+    /// A reserved identity with checked access to its catalog's ports.
+    type Attachment: Attached
+        + Clock
+        + SignalReader
+        + SignalWriter
+        + EventSource
+        + EventSink
+        + Caller
+        + Handler;
+    /// An attachment refusal, whose concrete variants are runtime-specific.
+    type Error: core::fmt::Debug;
+
+    /// Builds the named machine from a verified deployment descriptor.
+    fn node(bytes: &'static [u8], machine: &str) -> Self::Node;
+    /// Reserves an identity on a granted catalog, or refuses it.
+    fn attach(
+        node: &Self::Node,
+        who: ridl_rt::contract::InstanceNo,
+        catalog: &CatalogRef,
+    ) -> Result<Self::Attachment, Self::Error>;
+}
+
+fn id(number: i32) -> ridl_rt::contract::InstanceNo {
+    ridl_rt::contract::InstanceNo::new(number).unwrap()
+}
+
+#[cfg(feature = "debug")]
+const IFACE: InterfaceNo = InterfaceNo(1);
+#[cfg(feature = "debug")]
+const ORD: Ordinal = Ordinal(1);
+
+/// Local instances receive only their offered and mapped catalogs.
+pub fn identity_positive_grants<F: IdentityFactory>() {
+    let node = F::node(DESCRIPTOR, "Local");
+    for (number, catalog) in [(1, ALPHA), (1, MAPPED), (3, ALPHA), (3, BETA)] {
+        let attachment = F::attach(&node, id(number), &catalog).unwrap();
+        assert_eq!(attachment.catalog(), &catalog);
+    }
+    for (number, catalog) in [
+        (1, BETA),
+        (3, MAPPED),
+        (2, REMOTE),
+        (2, ALPHA),
+        (999, ALPHA),
+        (1, REMOTE),
+    ] {
+        assert!(
+            F::attach(&node, id(number), &catalog).is_err(),
+            "{number} / {catalog:?}"
+        );
+    }
+    let wrong = CatalogRef {
+        hash: CatalogHash([0; 32]),
+        ..ALPHA
+    };
+    assert!(F::attach(&node, id(1), &wrong).is_err());
+}
+
+/// A twin receives exactly the grants of its positive counterpart.
+#[cfg(feature = "debug")]
+pub fn identity_twin_grants<F: IdentityFactory>() {
+    let node = F::node(DESCRIPTOR, "Local");
+    for number in [1, 3, 2, 999] {
+        for catalog in [ALPHA, BETA, MAPPED, REMOTE] {
+            let positive = F::attach(&node, id(number), &catalog);
+            let granted = positive.is_ok();
+            drop(positive);
+            let twin = F::attach(&node, id(number).twin().unwrap(), &catalog);
+            assert_eq!(twin.is_ok(), granted, "{number} / {catalog:?}");
+            if let Ok(mut twin) = twin {
+                assert_eq!(twin.catalog(), &catalog);
+                twin.set(IFACE, ORD, &[7]).unwrap();
+                twin.commit();
+                let mut out = [0; 8];
+                assert_eq!(twin.read(IFACE, ORD, &mut out).unwrap().len, 1);
+                assert_eq!(out[0], 7);
+            }
+        }
+    }
+}
+
+/// Opposite identities exclude each other across catalogs in either order.
+#[cfg(feature = "debug")]
+pub fn identity_exclusion_both_orders<F: IdentityFactory>() {
+    let positive = id(1);
+    let twin = positive.twin().unwrap();
+    for (first, second) in [(positive, twin), (twin, positive)] {
+        let node = F::node(DESCRIPTOR, "Local");
+        let attachment = F::attach(&node, first, &ALPHA).unwrap();
+        assert!(F::attach(&node, second, &MAPPED).is_err());
+        drop(attachment);
+        assert!(F::attach(&node, second, &MAPPED).is_ok());
+    }
+}
+
+/// Only the last equal identity's drop permits its opposite to attach.
+#[cfg(feature = "debug")]
+pub fn identity_last_drop<F: IdentityFactory>() {
+    let positive = id(1);
+    let twin = positive.twin().unwrap();
+    for (first, second) in [(positive, twin), (twin, positive)] {
+        let node = F::node(DESCRIPTOR, "Local");
+        assert!(F::attach(&node, first, &BETA).is_err());
+        drop(F::attach(&node, second, &ALPHA).unwrap());
+        let a = F::attach(&node, first, &ALPHA).unwrap();
+        let b = F::attach(&node, first, &MAPPED).unwrap();
+        drop(a);
+        assert!(F::attach(&node, second, &ALPHA).is_err());
+        drop(b);
+        assert!(F::attach(&node, second, &ALPHA).is_ok());
+    }
+}
+
+/// A listener reads each catalog's own store.
+#[cfg(feature = "debug")]
+pub fn identity_listener_all_catalogs<F: IdentityFactory>() {
+    let node = F::node(DESCRIPTOR, "Local");
+    let mut providers = Vec::new();
+    for (number, catalog, byte) in [(1, ALPHA, 11), (3, BETA, 22), (1, MAPPED, 33)] {
+        let mut provider = F::attach(&node, id(number), &catalog).unwrap();
+        provider.set(IFACE, ORD, &[byte]).unwrap();
+        provider.commit();
+        providers.push(provider);
+    }
+    for (catalog, byte) in [(ALPHA, 11), (BETA, 22), (MAPPED, 33)] {
+        let listener = F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &catalog).unwrap();
+        assert_eq!(listener.catalog(), &catalog);
+        let mut out = [0; 8];
+        assert_eq!(listener.read(IFACE, ORD, &mut out).unwrap().len, 1);
+        assert_eq!(out[0], byte);
+    }
+    assert!(F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &REMOTE).is_err());
+}
+
+#[cfg(feature = "debug")]
+fn listener<F: IdentityFactory>() -> (F::Node, F::Attachment, F::Attachment) {
+    let node = F::node(DESCRIPTOR, "Local");
+    let mut provider = F::attach(&node, id(1), &ALPHA).unwrap();
+    provider.set(IFACE, ORD, &[42]).unwrap();
+    provider.commit();
+    let listener = F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &ALPHA).unwrap();
+    (node, provider, listener)
+}
+
+#[cfg(feature = "debug")]
+fn unchanged(provider: &impl SignalReader) {
+    let mut out = [0; 8];
+    assert_eq!(provider.read(IFACE, ORD, &mut out).unwrap().len, 1);
+    assert_eq!(out[0], 42);
+}
+
+/// A listener cannot stage a value.
+#[cfg(feature = "debug")]
+pub fn identity_listener_write_refusals_set<F: IdentityFactory>() {
+    let (_node, provider, mut listener) = listener::<F>();
+    assert_eq!(listener.set(IFACE, ORD, &[9]), Err(WriteError::NotOwner));
+    listener.commit();
+    unchanged(&provider);
+}
+
+/// A listener cannot stage an invalidation.
+#[cfg(feature = "debug")]
+pub fn identity_listener_write_refusals_invalidate<F: IdentityFactory>() {
+    let (_node, provider, mut listener) = listener::<F>();
+    assert_eq!(listener.invalidate(IFACE, ORD), Err(WriteError::NotOwner));
+    listener.commit();
+    unchanged(&provider);
+}
+
+/// A listener cannot stage a touch.
+#[cfg(feature = "debug")]
+pub fn identity_listener_write_refusals_touch<F: IdentityFactory>() {
+    let (_node, provider, mut listener) = listener::<F>();
+    assert_eq!(listener.touch(IFACE, ORD), Err(WriteError::NotOwner));
+    listener.commit();
+    unchanged(&provider);
+}
+
+/// A listener cannot raise an event.
+#[cfg(feature = "debug")]
+pub fn identity_listener_write_refusals_raise<F: IdentityFactory>() {
+    let (_node, mut provider, mut listener) = listener::<F>();
+    provider.subscribe(IFACE, &[ORD]).unwrap();
+    assert_eq!(
+        listener.raise(IFACE, ORD, &[9], None),
+        Err(RaiseError::NotOwner)
+    );
+    listener.commit();
+    assert!(provider.next(&mut [0; 8]).unwrap().is_none());
+}
+
+/// A listener cannot serve or claim a call.
+#[cfg(feature = "debug")]
+pub fn identity_listener_write_refusals_serve<F: IdentityFactory>() {
+    let (_node, mut provider, mut listener) = listener::<F>();
+    provider.serve(IFACE, &[ORD]).unwrap();
+    assert_eq!(listener.serve(IFACE, &[ORD]), Err(ServeError::NotOwner));
+    let call = listener.command(IFACE, ORD, &[9], None).unwrap();
+    assert!(listener.next_claim(&mut [0; 8]).unwrap().is_none());
+    let claim = provider.next_claim(&mut [0; 8]).unwrap().unwrap();
+    provider.settle(claim.id, Ok(&[])).unwrap();
+    listener.forget(call);
+}
+
+/// A listener can complete commands and queries through a positive provider.
+#[cfg(feature = "debug")]
+pub fn identity_listener_can_call<F: IdentityFactory>() {
+    let (_node, mut provider, mut listener) = listener::<F>();
+    provider.serve(IFACE, &[ORD]).unwrap();
+    for query in [false, true] {
+        let call = if query {
+            listener.query(IFACE, ORD, &[3], None)
+        } else {
+            listener.command(IFACE, ORD, &[3], None)
+        }
+        .unwrap();
+        let mut out = [0; 8];
+        assert!(listener.next_claim(&mut out).unwrap().is_none());
+        let claim = provider.next_claim(&mut out).unwrap().unwrap();
+        assert_eq!(&out[..claim.len], &[3]);
+        provider.settle(claim.id, Ok(&[5])).unwrap();
+        if query {
+            assert_eq!(listener.reply(call, &mut out).unwrap(), Some(Ok(1)));
+            assert_eq!(out[0], 5);
+        } else {
+            assert_eq!(listener.ack(call), Some(Ok(())));
+        }
+        listener.forget(call);
+    }
+}
