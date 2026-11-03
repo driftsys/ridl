@@ -310,8 +310,8 @@ Rust `tungstenite` client does when the TypeScript e2e setup makes that cheaper
 
 With the roles reversed the server sends `attach` first, so the gateway must
 know, before the client sends anything, which instance N the client replaces and
-which catalog the session carries. **This is open question Q1.** The
-recommendation, used in the rest of this note until the owner decides:
+which catalog the session carries. **This was question Q1** (§9). The
+recommendation, taken:
 
 - the injection listener reads the request path,
   `/<component>/<instance>/<catalog>` (the qualified component name, the
@@ -371,27 +371,23 @@ These crates are in the `runtime-crates` freeze surface, checked with
 `cargo semver-checks`. A step that the builder cannot make additive stops and
 reports it; it is not done as a breaking change without the owner's word.
 
-## 9. Open questions for the owner
+## 9. Owner questions, taken as recommended
 
-- **Q1 — how the injection gateway knows N and the catalog** (§6.5). The
-  recommendation is the request path, read by the gateway only. Alternative: one
-  injection port per (instance, catalog), chosen when the gateway starts; no
-  path, but many ports and a gateway restart to change the target.
-- **Q2 — may the listener call?** The roadmap says "commands and queries already
-  travel as `request` on a listening connection" and also that the listener
-  "writes nothing". This note reads both as: the listener may send commands and
-  queries (a call is not a write of a signal or an event), and refuses every
-  write. So the injection end-to-end test "serves a call" (the client answers a
-  call sent to N) instead of "injects a command". If a debug listener must not
-  call a production provider, the listener's `Caller` refuses too, and sending a
-  command becomes the job of a twin of the calling instance.
-- **Q3 — a redundant provider set.** When two instances on the machine offer the
-  same interface, this note refuses the twin of one while the other is attached
-  (§4.2), so that injection never has two writers. The consequence: to inject on
-  such an interface, every instance that offers it is stopped first. The
-  alternative, one store per provider instance, lets the twin replace one
-  instance while the other runs, but changes the node's design and overlaps the
-  active-instance rule of E19.12.
+On 2026-11-03 the three questions below were taken as this note recommends, so
+that the plan can be written; the owner reviews them with the plan and may still
+change them.
+
+- **Q1 — how the injection gateway knows N and the catalog** (§6.5): the request
+  path `/<component>/<instance>/<catalog>`, read by the gateway only.
+  Alternative kept on record: one injection port per (instance, catalog), chosen
+  when the gateway starts.
+- **Q2 — the listener may call.** The listener sends commands and queries and
+  refuses every write (signals, events, serving). The injection end-to-end test
+  "serves a call" (the client answers a call sent to N).
+- **Q3 — a redundant provider set.** The twin of one instance is refused while
+  another instance that offers one of the same interfaces is attached (§4.2), so
+  that injection never has two writers. Alternative kept on record: one store
+  per provider instance, which overlaps the active-instance rule of E19.12.
 
 ## 10. Alternatives considered
 
