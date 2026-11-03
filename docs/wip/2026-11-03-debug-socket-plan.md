@@ -883,3 +883,10 @@ name it.
   state and PR C's integration ordering must be checked by the owner when each
   PR starts.
 - Stop here for owner and Claude plan review. No task begins in phase 1.
+
+## Delegated rulings (the owner delegated decisions on 2026-11-03)
+
+- **R-DS-1.** The design, this plan and the handoff stay in `docs/wip/` until PR
+  C, because PRs B and C still build from them. PR A and PR B garden only their
+  own content into the durable records; PR C archives the three files. Each PR
+  body states this.
