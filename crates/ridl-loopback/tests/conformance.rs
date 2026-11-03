@@ -115,6 +115,7 @@ mod identity {
         }
     }
 
+    // The public extension syntax always includes the base suite, so it runs again here.
     #[cfg(not(feature = "debug"))]
     ridl_rt_conformance::suite!(NodeFactory; identity);
     #[cfg(feature = "debug")]
