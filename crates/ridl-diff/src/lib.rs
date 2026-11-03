@@ -467,10 +467,11 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 
 /// [`diff_sets`], with `context`: packages that a type reference resolves
 /// against without being compared. This entry point shares one context.
-/// The `ridl` CLI and MCP use per-side contexts through
+/// `ridl diff` and the MCP server use per-side contexts through
 /// [`diff_workspaces_with_contexts`]: the built-in `ridl.std` plus each side's
 /// own remote packages, compiled from source or retained in a snapshot
 /// directory, so historical layouts never borrow current remote definitions.
+/// `ridl check`'s baseline desk check passes one shared context and judges no encoding.
 pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
     let old: Vec<&Package> = old.iter().collect();
     let new: Vec<&Package> = new.iter().collect();

@@ -1623,10 +1623,9 @@ fn desk_check(
         .map(|checked| checked.ir.clone())
         .collect();
 
-    // `ridl.std` and the remote packages this compile resolved are context,
-    // as in `run_diff`, so the desk reads the verdict the gate gives and
-    // judges an appended field's type as the gate does (driftsys/ridl#598,
-    // driftsys/ridl#1141). This desk check reads ordinal and member
+    // `ridl.std` and the remote packages this compile resolved form one shared
+    // context for the desk check (driftsys/ridl#598, driftsys/ridl#1141).
+    // This desk check reads ordinal and member
     // categories, judged for no encoding, so no podbuf rule runs here and no
     // head is laid out; a workspace that builds podbuf judges those breaks
     // with `ridl diff --encoding podbuf`, `ridl build` and `ridl baseline`.

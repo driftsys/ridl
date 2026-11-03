@@ -41,9 +41,10 @@ stability assessment; the
 artifact and operational contract.
 
 **Amended 2026-11-03 — decision 10, every remote declaration held inline, from
-driftsys/ridl#1163.** The remote-growth rule covers a remote union, enum, enum
-set or scalar typedef as well as a struct when its podbuf size grows. Decision
-10 carries the dated clarification.
+driftsys/ridl#1163.** The remote-growth rule reports growth of remote structs,
+enums, enum sets and scalar typedefs held inline by surviving old consumer uses.
+A union head has a fixed size of 16 bytes and does not grow. Decision 10 carries
+the dated clarification.
 
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -707,9 +708,9 @@ a field is appended.
     layout or wire-hash change.
 
     _Amended (2026-11-03, driftsys/ridl#1163)._ The rule covers every remote
-    declaration held inline whose podbuf size grows, including struct, union,
-    enum, enum set and scalar typedef. A union tag widening that fits inside the
-    existing pad changes no size and draws no remote-growth line.
+    struct, enum, enum set or scalar typedef held inline by a surviving old
+    consumer use whose podbuf size grows. A union head has a fixed size of 16
+    bytes and does not grow, so a remote union draws no remote-growth line.
 
     **The inline-use rule, as built (builder's call).** `ridl diff` finds an
     inline use by asking the layout law what the encoder lays out inline, so the
@@ -897,10 +898,15 @@ a field is appended.
       comparisons use distinct old/new resolution contexts. Remote packages
       resolve references without becoming compared local packages. The legacy
       shared-context entry points keep their signatures and new-side precedence,
-      but cannot establish two historical remote layouts. A directory baseline
-      retains complete IR of the remote closure reached from every local
-      declaration and interaction, with owning units, verified URL/tree pins and
-      fingerprints binding all local snapshots. The CLI reference owns
+      but cannot establish two historical remote layouts. _Amended 2026-11-03,
+      from driftsys/ridl#1163:_ `ridlc::diff_context` and `DiffSide::remotes`
+      were removed; the signature guarantee applies to the retained
+      shared-context entry points. `ridl diff` and the MCP server pass per-side
+      contexts; `ridl check`'s baseline desk check passes one shared context and
+      judges no encoding. A directory baseline retains complete IR of the remote
+      closure reached from every local declaration and interaction, with owning
+      units, verified URL/tree pins and fingerprints binding all local
+      snapshots. The CLI reference owns
       [the version-1 envelope and validation](../book/cli-reference.md#baseline-context).
       Current pins never substitute for missing historical evidence.
 
@@ -1139,6 +1145,13 @@ rationale are preserved in the
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-02: remote growth detection and bounded deferred gaps replace the shared-context limit                                |
+| [ADR-0014](ADR-0014-ir-encodings.md)                                                           | amended 2026-11-03: decision 15: podbuf breaks and missing evidence end compatible history                                            |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-11-03: history verdicts and publication through replacement with rollback                                                |
+| [`docs/specification/frame-specification.md`](../specification/frame-specification.md)         | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                     |
+| [`docs/design/mcp-workspace-tools.md`](../design/mcp-workspace-tools.md)                       | amended 2026-11-03: per-side contexts, remote inline growth and evidence errors                                                       |
+| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-03: baseline context, remote growth and compatible history                                                            |
+| [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                     |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-03: reported remote declaration kinds, fixed union heads and context issues                                           |
 | [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-02: baseline context, separate comparison scopes, recovery, exit codes and publication guarantees                     |
 | [ADR-0029](ADR-0029-stability-policy.md) and [Stability](../book/stability.md)                 | amended 2026-11-02: approved minor-release adoption and minimum supporting tool version                                               |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
