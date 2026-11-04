@@ -663,7 +663,8 @@ export class Session {
    * Opens parameter stream 1 and reply stream 0 under one query. Both directions
    * have independent credit. Upload close leaves the reply open; reply end
    * interrupts an upload still open. Reply cancel sends stream-0 interrupted;
-   * upload abort sends stream-1 interrupted and then stream-0 interrupted.
+   * an abort of an open upload sends stream-1 interrupted and then stream-0
+   * interrupted (an abort after close sends nothing).
    * Both forget the call and reject writes waiting for credit. Upload abort
    * resolves once both interruptions are sent. Refusal errors both
    * streams with the same error. The first-reply-frame bound starts at the

@@ -138,6 +138,7 @@ the runtime package holds them.
 | `src/reassembly.ts` | `Reassembly`: the one payload in progress of a session, and the sequence rules of its blocks (frame specification §5.5)             |
 | `src/session.ts`    | `connect` and the `Session` class: the consumer's state machine over one `WebSocket`                                                |
 | `src/calls.ts`      | the calls in flight of one session (`Calls`, not exported from `mod.ts`): the caller counter, the bounds and the correlation        |
+| `src/duplex.ts`     | `DuplexCall`: the two stream states of one duplex query, its credit and sequence counters and its first-reply bound                 |
 | `src/errors.ts`     | the errors a session rejects with: `AttachRefused`, `ProtocolError`, `SessionError` and its `CallFailure`                           |
 | `mod.ts`            | the public exports: everything exported by `frame.ts`, `errors.ts` and `session.ts`                                                 |
 
@@ -732,16 +733,17 @@ credit of 4, credit counter and sequence counter. The target check precedes both
 directions' processing. Reply chunks can arrive before upload close; normal
 upload close leaves the reply open. A normal reply end closes the reply and
 errors an upload still open with `interrupted`. Reply cancel sends one stream-0
-interruption and errors the upload. Upload abort sends `stream_end interrupted`
-on stream 1 and then on stream 0, errors the reply and forgets the call. Abort
-resolves once both interruptions are sent; a write waiting for credit rejects
-with `interrupted`. Either cancellation releases a write waiting for credit,
-including abort before the sink can process it. A refusal of either stream, a
-refusing response before the first reply frame, or session end fails both
-streams with the same error object. A plain response, a response after the reply
-begins, inbound reply credit or inbound upload chunks violates the protocol as
-in D-20. Send exceptions release the call and fail both directions with the
-original exception.
+interruption and errors the upload. An abort of an upload that is still open
+sends `stream_end interrupted` on stream 1 and then on stream 0, errors the
+reply and forgets the call; an abort after upload close sends nothing, as the
+platform defines for a closed `WritableStream`. Abort resolves once both
+interruptions are sent. Either cancellation rejects a write waiting for credit
+with `interrupted`, including one the sink has not yet processed. A refusal of
+either stream, a refusing response before the first reply frame, or session end
+fails both streams with the same error object. A plain response, a response
+after the reply begins, inbound reply credit or inbound upload chunks violates
+the protocol as in D-20. Send exceptions release the call and fail both
+directions with the original exception.
 
 The duplex first-reply-frame bound runs from the request and stops at the first
 reply chunk or end; upload progress and close neither stop nor restart it. The
@@ -901,7 +903,7 @@ bytes are the value the provider set.
   empty-chunk credit, credit waits, close and abort sequences, acknowledgment
   lifetime, request and close timers, refusals, early replies, invalid
   directions and preflight errors. Send-exception tests cover chunk, close,
-  abort and over-limit interruption for both methods, checking exact error
+  abort and over-limit interruption for all three methods, checking exact error
   identity, prompt result rejection and forgetting through a late frame's
   `unknown-correlation` note. Exact-limit writes and close or abort after an
   acknowledgment have separate tests. Stream-target tests vary interface,

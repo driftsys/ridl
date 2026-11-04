@@ -135,7 +135,7 @@ operations with `unsupported` and send nothing.
 a `WritableStream<Uint8Array>` for parameter stream 1 and a concurrent
 `ReadableStream<Uint8Array>` for reply stream 0. Each direction has its own
 credit. Upload close leaves the reply open. Cancelling the reply sends
-`stream_end interrupted` on stream 0. Aborting the upload sends
+`stream_end interrupted` on stream 0. Aborting the upload while it is open sends
 `stream_end interrupted` on stream 1 and then on stream 0, and resolves once
 both are sent. Both forget the call, error the other stream and reject writes
 waiting for credit; refusals error both sides. The bound runs from the request
