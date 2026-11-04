@@ -1442,8 +1442,8 @@ driftsys/ridl#1180.
 E19.7 is one story in four parts, in this order. Its design is a design note of
 its own, approved before code starts.
 
-Status: parts 1 and 2 are built in driftsys/ridl#1220. Parts 3 and 4 are not
-built.
+Status: parts 1 and 2 are built in driftsys/ridl#1220. Part 3 is built in the
+pull request that follows it. Part 4 is not built.
 
 1. **The identities in `ridl-rt`, behind a `debug` feature that is off by
    default.** The instance number type gets the twin of a number (−N) and the

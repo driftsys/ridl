@@ -692,8 +692,9 @@ a buffer and one that frames it.
 - **`refused(reason)`**, with `reason` one of `unknown_catalog` (the name is not
   served), `catalog_mismatch` (the name is served, and the hash is neither the
   provider's own nor one its descriptor lists), `encoding_unsupported`,
-  `frame_version_unsupported`, or `range` (a number does not fit a native
-  field). The session is not open; nothing else is exchanged.
+  `frame_version_unsupported`, or `range` (a number does not fit a native field,
+  or the receiving side's message size limit cannot carry one message of a
+  member of the catalog). The session is not open; nothing else is exchanged.
 
 **The compatible catalogs list.** The toolchain writes the list at the
 provider's build: `ridl baseline` records, per unit, the chain of published
@@ -1234,24 +1235,27 @@ opening handshake, a configured limit below what one message of a member of the
 catalog needs: 36 bytes plus the member's limit, where a `fixed` counts the
 smaller of 36 bytes plus its limit and 4,130 bytes, one block message of binding
 version 2. So a limit the provider accepts carries every payload the catalog
-allows, whole or in blocks. The check counts the 36-byte header of a `response`
-for every member, although a signal and a `fixed` cross in a 27-byte `publish`,
-so it can refuse a limit that is up to 9 bytes larger than such a member needs.
-A `fixed` above the message limit minus the 27-byte `publish` header, 16,137
-bytes at the default limit, crosses in blocks (binding version 2). A provider
-whose message limit is below 4,130 bytes sends no block: it sends a `fixed` that
-fits one `publish`, records a larger value and answers its `read` with an
-`answer` carrying `contract(UnknownInteraction)`, the one refusal §6.3 defines
-for a `read`, so that the read ends instead of waiting until the session ends;
-with a member table, the check above admits such a limit only when every `fixed`
-of the catalog fits one message. The Rust provider answers a `read` of a signal
-or of a `fixed` whose value is above the member's limit the same way, so that no
-read waits on a value that is not sent. The codegen model carries the data-plane
-numbers as the `websocket` row, binding version `"3"`, `frame_header_max_bytes`
-20 (the largest header, without the envelope, of a message that carries a
-payload), `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The
-row is derived from this layout: the layout is frozen through the vectors below,
-and the row is a derived value, corrected in a patch release if it is wrong
+allows, whole or in blocks. A provider that learns the catalog only from the
+`attach` (its design record, D-11) cannot refuse before the handshake: it
+answers the `attach` `refused(range)` and closes with 1000. The check counts the
+36-byte header of a `response` for every member, although a signal and a `fixed`
+cross in a 27-byte `publish`, so it can refuse a limit that is up to 9 bytes
+larger than such a member needs. A `fixed` above the message limit minus the
+27-byte `publish` header, 16,137 bytes at the default limit, crosses in blocks
+(binding version 2). A provider whose message limit is below 4,130 bytes sends
+no block: it sends a `fixed` that fits one `publish`, records a larger value and
+answers its `read` with an `answer` carrying `contract(UnknownInteraction)`, the
+one refusal §6.3 defines for a `read`, so that the read ends instead of waiting
+until the session ends; with a member table, the check above admits such a limit
+only when every `fixed` of the catalog fits one message. The Rust provider
+answers a `read` of a signal or of a `fixed` whose value is above the member's
+limit the same way, so that no read waits on a value that is not sent. The
+codegen model carries the data-plane numbers as the `websocket` row, binding
+version `"3"`, `frame_header_max_bytes` 20 (the largest header, without the
+envelope, of a message that carries a payload), `envelope_bytes` 16
+(`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
+the layout is frozen through the vectors below, and the row is a derived value,
+corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the

@@ -362,9 +362,11 @@ crate the workspace holds — see `AGENTS.md` for that.
   serves the observe and call ports, applies the exact-match rule at `attach`
   unless the embedder gives it a member table with the compatible hashes, and
   keeps each settled response until its bound when that table gives one, the
-  last 64 otherwise. Its tests run it against `tungstenite` as the client and
-  over `ridl-loopback`. See frame specification §11.1 and
-  [its design record](../design/ridl-transport-ws.md).
+  last 64 otherwise. `serve_selected` picks the backend from the catalog the
+  client names in its `attach`, and the `debug_gateway` example uses it to serve
+  a loopback node's catalogs to a listener. Its tests run it against
+  `tungstenite` as the client and over `ridl-loopback`. See frame specification
+  §11.1 and [its design record](../design/ridl-transport-ws.md).
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract

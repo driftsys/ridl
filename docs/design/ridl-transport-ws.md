@@ -82,20 +82,21 @@ written from the specification alone does not interoperate with this server.
 
 **D-1. One crate, two layers.**
 
-| Module                              | Needs                   | Feature           | Holds                                                         |
-| ----------------------------------- | ----------------------- | ----------------- | ------------------------------------------------------------- |
-| `frame`                             | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`           |
-| `ws` (private)                      | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping |
-| `server`                            | `std`                   | `server`, default | the session core, the backend trait, `Config` and `serve`     |
-| `descriptor` (private, in `server`) | `std`                   | `descriptor`, off | `MemberTable::from_descriptor` over `ridl-descriptor`         |
+| Module                              | Needs                   | Feature           | Holds                                                                       |
+| ----------------------------------- | ----------------------- | ----------------- | --------------------------------------------------------------------------- |
+| `frame`                             | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`                         |
+| `ws` (private)                      | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping               |
+| `server`                            | `std`                   | `server`, default | the session core, the backend trait, `Config`, `serve` and `serve_selected` |
+| `descriptor` (private, in `server`) | `std`                   | `descriptor`, off | `MemberTable::from_descriptor` over `ridl-descriptor`                       |
 
 `cargo add ridl-transport-ws --no-default-features` gives the codec alone, with
 `ridl-rt` at its default features (`no_std`). The `server` feature turns on
 `std` for this crate and nothing else; it turns on no `ridl-rt` feature. The
-crate root re-exports `serve`, `Backend`, `Config`, `Connection`, `Described`,
-`Ended`, `LimitOutOfRange`, `MemberTable`, `Note`, `Polling`,
-`RetainedTooSmall`, `Scanning` and `TableMismatch` under that feature, and
-`DescriptorError` under `descriptor` (`crates/ridl-transport-ws/src/lib.rs`).
+crate root re-exports `serve`, `serve_selected`, `Backend`, `Config`,
+`Connection`, `Described`, `Ended`, `LimitOutOfRange`, `MemberTable`, `Note`,
+`Polling`, `RequestedCatalog`, `RetainedTooSmall`, `Scanning` and
+`TableMismatch` under that feature, and `DescriptorError` under `descriptor`
+(`crates/ridl-transport-ws/src/lib.rs`).
 
 **D-2. No unconditional dependency but `ridl-rt`.** The WebSocket layer is
 written in this crate, and only its server side: parse one HTTP/1.1 upgrade
@@ -240,6 +241,32 @@ thread, builds one `Backend` value for the connection, and calls `serve`.
 embedding example. Nothing in the crate calls `bind`, `listen`, `spawn` or
 `connect`.
 
+`serve` takes a backend that the embedder built before the client sent anything.
+A server that holds several catalogs cannot do that, because the catalog is
+named in the client's `attach`.
+`serve_selected(conn, max_version, select,
+&config) -> Ended` is the second
+entry point for that case. It takes no backend; it takes `select`, a closure
+that is called at most once, when the first `attach` has been parsed, with a
+`RequestedCatalog` that borrows the name and the hash from that message. The
+closure returns the backend for that catalog, or `None`. Everything else in this
+section applies to both functions: the embedder owns the socket and the thread,
+and the backend is dropped on every exit.
+
+The embedder states `max_version`, 2 or 3, in advance, because the opening
+handshake picks the subprotocol before the `attach` arrives, so the server
+cannot ask the selected backend what it serves. Any other value returns
+`Ended::ConfigRefused` without reading the connection. Version 1 is still
+negotiated for a client that offers only `ridl-ws-v1`, and is refused as `serve`
+refuses it (D-20). After the closure returns a backend, the session applies the
+ordinary checks of D-11 in their order. Only when they all pass does the server
+check the two things that the advance statement could not know: whether the
+backend serves the negotiated version, and whether the `Config` message limit
+carries the backend's members (D-26). Either failure is answered with an
+`attached` refusal and close 1000, and `serve_selected` returns
+`Ended::ConfigRefused` (D-18). The Origin check of the `Config` runs before the
+selection.
+
 `Connection` is `Read + Write` plus three methods: `set_read_timeout`,
 `set_write_timeout`, and `shutdown_write`, whose default does nothing. It is
 implemented for `std::net::TcpStream` and, on Unix,
@@ -346,6 +373,17 @@ answers:
   `refused(encoding_unsupported)`. A backend whose encoding is not in that table
   refuses every `attach` with this reason;
 - otherwise `attached(accepted)`.
+
+Under `serve_selected`, two more checks follow the four above and precede the
+acceptance, because the backend is known only after the `attach` is read. A
+`select` that returns `None` is answered `refused(unknown_catalog)`; when the
+`attach` already carries the wrong frame version, or the connection is a
+`ridl-ws-v1` one, that reason is `frame_version_unsupported` instead. A selected
+backend that cannot serve the negotiated version (version 3 needs streams and a
+member table) is refused `frame_version_unsupported`. A selected backend whose
+member table needs a larger message limit than the `Config` allows is refused
+`range` (frame specification §11.1, "The sizes"), and the server records
+`Note::MessageLimitTooSmall`. In both cases no session data has been sent.
 
 After a refusal the server closes with 1000. The checks run in the order above,
 so one reason is given. A second `attach` on an open session closes with 1002.
@@ -713,14 +751,14 @@ connection is dropped. A backend port that reports `Detached` from any call ends
 the session with close 1001, because the provider is going away. `serve` returns
 an `Ended`:
 
-| `Ended`              | When                                                                                                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                          |
-| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                   |
-| `Rejected`           | the handshake was answered `400` or `403` (D-19, D-20)                                                                                                 |
-| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, no message arrived for that long after it, or a write waited that long; no close frame is sent |
-| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                 |
-| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); returned before the handshake, nothing is read or sent   |
+| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                 |
+| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                          |
+| `Rejected`           | the handshake was answered `400` or `403` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                        |
+| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                        |
+| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                        |
+| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000 |
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
@@ -779,23 +817,27 @@ default ceiling of a command and a query, the largest payload one message
 carries (ADR-0030 decision 10). It is the default of `max_message_bytes` and the
 largest value accepted, and the smallest `max_retained_bytes` accepted.
 
-**The `Config` check.** With a member table, `serve` first checks that
-`max_message_bytes` is at least 36 plus the largest limit over the members of
-what one message carries: each member's limit, and for a `fixed` at most 4,130
-bytes minus 36, because a `fixed` that one message cannot carry crosses in
-blocks and a block message is at most 4,130 bytes (frame specification §11.1,
-"Binding version 2"). So a `fixed` counts the smaller of 36 plus its limit and
-4,130. A limit below that cannot carry a payload the catalog allows, which is a
-configuration error, not a session event: `serve` records `MessageLimitTooSmall`
-with the member and the limit it needs, returns `Ended::ConfigRefused` before
-the opening handshake without reading the connection, and the connection closes
-when it is dropped. No `attached` reason is added, because the frame has none
-for a configuration error and a new reason would change the frozen `wire`
-surface. The default `Config` carries every catalog, a catalog with a large
-`fixed` included, so a binding never refuses an allowed interaction at attach
-(ADR-0030 decision 20). Without a member table there is no `Config` check: the
-default ceiling of the frame's `kind`, under the message limit, bounds what the
-session sends and what a `request` carries.
+**The `Config` check.** `serve_selected` runs the same check after selection, as
+D-11 says: it answers `refused(range)` with close 1000 instead of returning
+before the handshake, because the backend is not known earlier. `range` is the
+reason for a limit the receiving side cannot carry, here the message limit of
+the `Config` (frame specification §6.1). With a member table, `serve` first
+checks that `max_message_bytes` is at least 36 plus the largest limit over the
+members of what one message carries: each member's limit, and for a `fixed` at
+most 4,130 bytes minus 36, because a `fixed` that one message cannot carry
+crosses in blocks and a block message is at most 4,130 bytes (frame
+specification §11.1, "Binding version 2"). So a `fixed` counts the smaller of 36
+plus its limit and 4,130. A limit below that cannot carry a payload the catalog
+allows, which is a configuration error, not a session event: `serve` records
+`MessageLimitTooSmall` with the member and the limit it needs, returns
+`Ended::ConfigRefused` before the opening handshake without reading the
+connection, and the connection closes when it is dropped. No `attached` reason
+is added, because the frame has none for a configuration error and a new reason
+would change the frozen `wire` surface. The default `Config` carries every
+catalog, a catalog with a large `fixed` included, so a binding never refuses an
+allowed interaction at attach (ADR-0030 decision 20). Without a member table
+there is no `Config` check: the default ceiling of the frame's `kind`, under the
+message limit, bounds what the session sends and what a `request` carries.
 
 The check uses one header size for every member, 36 bytes, the largest
 data-plane header with its envelope. A `fixed` crosses only in a `publish`,
@@ -819,7 +861,7 @@ before the other headers: when a well-formed request's version is not 13,
 whatever its other headers hold, the `400` carries `Sec-WebSocket-Version: 13`,
 the version the server speaks (RFC 6455 §4.2.2 item 4). The path, the query and
 other headers are ignored (§11.1 item 1: the binding places nothing there; the
-embedder's access policy runs before `serve`).
+embedder's access policy runs before `serve` or `serve_selected`).
 
 The `Origin` header is the one exception: it is read and given to a check the
 embedder sets with `Config::with_origin_check`, as `None` when the request has
@@ -963,6 +1005,32 @@ All under `crates/ridl-transport-ws/`.
   consumer-only port. The contract is a hand-written test catalog, not a
   generated face, because a generated face over a WebSocket client needs a
   public Rust client, which the crate does not ship (driftsys/ridl#989).
+- **Selection** (`tests/selected.rs`). `serve_selected` over `ridl-loopback`:
+  the closure runs once and receives the name and hash of the `attach`; `None`
+  answers `unknown_catalog`; the ordinary refusals keep their priority over the
+  two selected-backend refusals; a backend without streams under version 3
+  answers `frame_version_unsupported`, and a message limit that is too small
+  answers `range` and records the note; both end as `Ended::ConfigRefused` after
+  close 1000; an unsupported `max_version` reads nothing.
+- **The debug gateway** (`tests/debug_gateway.rs`, over the committed identity
+  deployment of `ridl-rt-conformance`). Independent `tungstenite` clients attach
+  per catalog, observe the initial and later signal values and the events of
+  every catalog the machine holds, including a mapped one, send a command and
+  read its answer, are closed with 1002 when they publish, and release their
+  attachment when they disconnect.
+- **The debug gateway example** (`examples/debug_gateway.rs`, with
+  `examples/support/debug_gateway.rs`; the `descriptor` feature). Reads a
+  deployment descriptor and a machine name, builds an `ridl-loopback` `Node`,
+  binds `127.0.0.1` on the port given (0 asks for any free port), prints
+  `port <n>`, and serves each connection on its own thread with
+  `serve_selected`. The selector finds the catalog the client names among the
+  node's catalogs and attaches to it as the listener (`InstanceNo::LISTENER`),
+  with the member table of the descriptor's embedded catalog. The listener reads
+  every signal and event of the machine's catalogs and may send commands and
+  queries; it writes nothing. The node lives in the gateway's own process, so
+  only components that run in that process are visible through it. The example
+  states `max_version` 2. The example has no access policy beyond the loopback
+  address (D-7).
 - **The loopback server** (`examples/loopback_server.rs`). Serves the scenario's
   test catalog and provider, with its member table, on `127.0.0.1:0`, one thread
   and one attachment per connection, prints `port <n>`, and exits when its
@@ -1026,6 +1094,9 @@ What the crate already does so that the addition is local:
 
 ## What is not built
 
+- The injection side of the debug socket, in which the WebSocket client provides
+  through a reversed-role subprotocol (see the previous section). The debug
+  gateway only listens.
 - The stand-in ports (driftsys/ridl#988).
 - A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
   of a `<string>` stream. A chunk from the client is refused (D-27). The `Rule`

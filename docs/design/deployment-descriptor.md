@@ -166,7 +166,10 @@ does not interpret it (rsdl section 5).
 
 The loopback runtime reads a descriptor to decide what an attach may do
 ([the loopback record](ridl-loopback.md) describes the types). This section
-states the rules applied by the in-process node.
+states the rules applied by the in-process node. A gateway that attaches to the
+in-process node as the listener and serves it over WebSocket exists as an
+example of `ridl-transport-ws` ([its design record](ridl-transport-ws.md)); it
+only listens, and nothing injects through it yet.
 
 - **Construction.** `Node::from_descriptor(bytes, machine)` takes a `&'static`
   descriptor, because the catalog names borrow its bytes, and a machine name. It
