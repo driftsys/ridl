@@ -464,3 +464,11 @@ and was not archived. The reason is stated once per file or group.
   (driftsys/ridl#1084).
 
   or superseded.
+
+The streams stage 5b plan (`2026-11-04-streams-stage-5b-plan.md`) was archived
+on 2026-11-04, once the work landed (driftsys/ridl#1241);
+[`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md),
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
+[ADR-0032](../decisions/ADR-0032-byte-streams.md) and
+[the frame specification](../specification/frame-specification.md) are its
+durable records. The streams design stays here, because stage 6 builds on it.
