@@ -75,12 +75,10 @@ fn a_foreign_nested_tuple_member_is_spelled_as_a_c_member() {
     assert!(parts.contains("pod_parts_gauge_span_int_at("), "{parts}");
 }
 
-/// A tuple whose spelled member names would clash — two members equal under
-/// snake case, or a member equal to the presence test of an optional member —
-/// falls back to positional names in both headers, and the build succeeds. A
-/// tuple next to it whose names do not clash keeps them.
+/// Tuple member names and their trailing underscores are kept in the
+/// declaring header and in an importing header.
 #[test]
-fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
+fn a_tuple_keeps_its_member_names_when_one_ends_with_an_underscore() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
     let packages = support::workspace(&path);
     for name in ["pod.parts", "pod.vehicle"] {
@@ -98,19 +96,12 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
         );
         let header = built.unwrap().header_source;
         let pair = head_body(&header, "pod_parts_clash_pair_head");
-        assert!(pair.contains("uint8_t f1;"), "{name}: {pair}");
-        assert!(pair.contains("uint8_t f2;"), "{name}: {pair}");
-        assert!(!pair.contains("min_speed"), "{name}: {pair}");
-        let presence = head_body(&header, "pod_parts_clash_presence_head");
-        assert!(presence.contains("uint8_t f1;"), "{name}: {presence}");
-        assert!(presence.contains("uint8_t f2;"), "{name}: {presence}");
-        assert!(!presence.contains("has_x"), "{name}: {presence}");
-        // The reserved word `int` is spelled `int_`, and its presence test
-        // is `has_int`, so the stems are compared without the underscore.
-        let trim = head_body(&header, "pod_parts_clash_trim_head");
-        assert!(trim.contains("uint8_t f1;"), "{name}: {trim}");
-        assert!(trim.contains("uint8_t f2;"), "{name}: {trim}");
-        assert!(!trim.contains("int_"), "{name}: {trim}");
+        assert!(pair.contains("uint8_t low;"), "{name}: {pair}");
+        assert!(pair.contains("uint8_t low_;"), "{name}: {pair}");
+        assert!(!pair.contains("f1"), "{name}: {pair}");
+        let kw = head_body(&header, "pod_parts_clash_kw_head");
+        assert!(kw.contains("uint8_t int_;"), "{name}: {kw}");
+        assert!(kw.contains("uint8_t int__;"), "{name}: {kw}");
         // A required `x` has no presence test, so `hasX` next to it is no
         // clash.
         let plain = head_body(&header, "pod_parts_clash_plain_head");
@@ -123,13 +114,10 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
         assert!(!clear.contains("f1"), "{name}: {clear}");
     }
     let parts = support::header(&packages, "pod.parts");
-    assert!(parts.contains("pod_parts_clash_pair_f1_at("), "{parts}");
-    assert!(
-        parts.contains("pod_parts_clash_presence_has_f1_at("),
-        "{parts}"
-    );
-    assert!(parts.contains("pod_parts_clash_presence_f2_at("), "{parts}");
-    assert!(parts.contains("pod_parts_clash_trim_has_f1_at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_pair_low_at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_pair_low__at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_kw_int_at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_kw_int__at("), "{parts}");
     assert!(parts.contains("pod_parts_clash_plain_x_at("), "{parts}");
     assert!(parts.contains("pod_parts_clash_plain_has_x_at("), "{parts}");
     assert!(parts.contains("pod_parts_clash_clear_left_at("), "{parts}");

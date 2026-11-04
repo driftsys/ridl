@@ -248,10 +248,10 @@ so that no embedder's connection is silently unbounded: `serve` sets the write
 timeout to `liveness_timeout`, and a write that fails with `WouldBlock` or
 `TimedOut` ends the session as `Ended::LivenessTimeout`, because the client has
 stopped taking messages for the liveness period. The timeout bounds each write
-call, not a whole message: a client that keeps reading, however slowly, is not
-ended, which driftsys/ridl#1160 tracks. A zero `poll_interval` or
-`liveness_timeout` is refused by the stream's setter, and `serve` returns
-`Ended::Io(InvalidInput)`.
+call, not a whole message, and the liveness clock does not run while the server
+writes (D-22): a client that keeps reading, however slowly, is not ended. A zero
+`poll_interval` or `liveness_timeout` is refused by the stream's setter, and
+`serve` returns `Ended::Io(InvalidInput)`.
 
 The crate sets no socket option. Each frame the server sends is written with one
 write call (D-21), and the rustdoc of `Connection` says that an embedder may set
@@ -865,9 +865,13 @@ The buffer keeps the capacity of the largest frame sent, which
 large message).
 
 **D-22. Liveness.** The server sends a ping every `ping_interval` and ends the
-session when no message of any kind has arrived for `liveness_timeout`. A
-browser answers a ping automatically, so 5 s pings detect a dead client in 15 s
-at a cost of one small frame per 5 s.
+session when no message of any kind has arrived for `liveness_timeout`. The time
+the server spends writing the frames of one message's answer or of one poll is
+not counted, because it cannot read while it writes; a client that stops reading
+is ended by the write timeout (D-7). The time a client takes to read bytes the
+kernel has already accepted is still counted. A browser answers a ping
+automatically, so 5 s pings detect a dead client in 15 s at a cost of one small
+frame per 5 s.
 
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol

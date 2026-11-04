@@ -1073,9 +1073,11 @@ fits the width is valid, an undeclared bit is kept, and the named flags are the
 declared bits that are set. The rules of §8.1 for evolution apply to bits in
 place of values: appending a bit to an open enumset is compatible (except under
 the podbuf encoding when the bit changes the integer width, which is breaking
-and reported by `ridl diff` as `podbuf_width_change`), appending a bit to a
-strict enumset is breaking for every encoding, and removing a bit or moving it
-to another position is breaking.
+and reported by `ridl diff` as `podbuf_width_change`, and under the FlatBuffers
+encoding when the bit changes the FlatBuffers scalar
+(`flatbuffers_width_change`)), appending a bit to a strict enumset is breaking
+for every encoding, and removing a bit or moving it to another position is
+breaking.
 
 ### 9.1 Standalone Form
 
@@ -1212,6 +1214,8 @@ struct SensorBounds {
 
 - Fields are always named — positional access is not permitted
 - A field name is unique within its tuple (TYPL-215), as in a struct (§7)
+- Two field names of one tuple that become one name under the pinned
+  `snake_case` are refused (RIDL-149, ridl §16.4), as in a struct
 - The empty tuple `()` is the unit type (its interaction role is defined by
   ridl)
 - The same tuple shape used in multiple places draws a linter warning: extract a
@@ -1436,11 +1440,11 @@ attribute-block rules) and `MANI-` (the manifest). Both are tabulated once in
 the family overview §7 and are not restated here.
 
 A `.typl` file also draws one `RIDL-` code, RIDL-149: two names in one scope
-that collide after a pinned name transform (ADR-0016). Three of its scopes are
-typl declarations — the fields of one struct, the arms of one union, and the
-values of one enum — so `LEVEL_10` beside `LEVEL10` in one enum is refused, as
-both become `Level10`. Its row, with the transform each scope is checked under,
-is in ridl §16.4.
+that collide after a pinned name transform (ADR-0016). Four of its scopes are
+typl declarations — the fields of one struct, the members of one tuple, the arms
+of one union, and the values of one enum — so `LEVEL_10` beside `LEVEL10` in one
+enum is refused, as both become `Level10`. Its row, with the transform each
+scope is checked under, is in ridl §16.4.
 
 ### 16.1 Module (TYPL-0xx)
 

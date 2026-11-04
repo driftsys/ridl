@@ -6,9 +6,9 @@ software components — in a vehicle, or in any component-based reactive system.
 
 Every `ridl` code block in this chapter is compiled by the repository's test
 suite against the toolchain in this repository, and must draw no diagnostic
-beyond the ones its own fence names. If a block is shown here, it compiles.
-The prose around the blocks is not machine-checked; where it describes
-behaviour rather than syntax, read
+beyond the ones its own fence names. If a block is shown here, it compiles. The
+prose around the blocks is not machine-checked; where it describes behaviour
+rather than syntax, read
 [the note below](#what-the-contract-requires-means-in-this-chapter) first.
 
 ## What ridl is
@@ -18,8 +18,8 @@ guarantee?_
 
 A `.ridl` file describes an **interface** — not an implementation. It does not
 say how a service works internally, only what it exposes at its boundary. That
-is what makes it usable as the single source of truth between teams,
-components, and tools.
+is what makes it usable as the single source of truth between teams, components,
+and tools.
 
 ridl is transport-neutral by design: the same contract is intended to bind to
 SOME/IP, gRPC, DDS, MQTT, or AIDL without modification. The transport bindings
@@ -51,16 +51,15 @@ the contract demands of a binding, not as something running.
 
 ridl does not define types. It references them. The vocabulary layer is a
 separate language, **typl**, and the two are used together: a `.ridl` file
-accepts every typl declaration in addition to its own interaction
-declarations.
+accepts every typl declaration in addition to its own interaction declarations.
 
-| Language | Describes                                                                | Status in this repository |
-| -------- | ------------------------------------------------------------------------ | ------------------------- |
-| **typl** | data — types, ranges, units, constants                                   | built                     |
-| **ridl** | system interactions — `signal`, `event`, `command`, `query`, `fixed`     | built                     |
-| **rxdl** | domain spellings — `present`, `notify`, `measure`, `detect`, `actuate`  | specified, not built      |
-| **rmdl** | behaviour — functions and reactive models                                | specified, not built      |
-| **rsdl** | architecture — components, wiring, deployment                            | built                     |
+| Language | Describes                                                              | Status in this repository |
+| -------- | ---------------------------------------------------------------------- | ------------------------- |
+| **typl** | data — types, ranges, units, constants                                 | built                     |
+| **ridl** | system interactions — `signal`, `event`, `command`, `query`, `fixed`   | built                     |
+| **rxdl** | domain spellings — `present`, `notify`, `measure`, `detect`, `actuate` | specified, not built      |
+| **rmdl** | behaviour — functions and reactive models                              | specified, not built      |
+| **rsdl** | architecture — components, wiring, deployment                          | built                     |
 
 This chapter covers typl and ridl; [Describing a system](rsdl.md) covers rsdl.
 Where this chapter mentions rxdl or rmdl, it is describing a plan.
@@ -70,7 +69,8 @@ Where this chapter mentions rxdl or rmdl, it is describing a plan.
 Released binaries of `ridl` and `ridlc` are attached to the GitHub Releases
 tagged `editor-v<version>`. On Linux and macOS, `install.sh` downloads the
 newest one, verifies its SHA-256 checksum, and installs it. It supports x86_64
-and aarch64 Linux and x86_64 and arm64 macOS, and exits with `unsupported
+and aarch64 Linux and x86_64 and arm64 macOS, and exits with
+`unsupported
 platform` on any other:
 
 ```sh
@@ -85,11 +85,11 @@ irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
 
 Both scripts read the same environment variables:
 
-| Variable              | Effect                                                                             |
-| --------------------- | ---------------------------------------------------------------------------------- |
+| Variable              | Effect                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
 | `RIDL_INSTALL_DIR`    | Directory to install into. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
-| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                       |
-| `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one.                 |
+| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                   |
+| `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one.                             |
 
 When the install directory is not on your `PATH`, the script prints the command
 that adds it.
@@ -109,23 +109,24 @@ or call it by path. `cargo install --path crates/ridl` installs `ridl` alone.
 ## Editor and agent setup
 
 **VS Code.** The RIDL extension is published to the VS Code Marketplace and to
-Open VSX under the name "RIDL". It highlights `.typl`, `.ridl` and `.rsdl`
-files and runs the language server. It bundles a `ridl` binary and starts it as
+Open VSX under the name "RIDL". It highlights `.typl`, `.ridl` and `.rsdl` files
+and runs the language server. It bundles a `ridl` binary and starts it as
 `ridl lsp`, so it needs no separate install. The command **RIDL: Install ridl to
 PATH** copies the bundled binary to `~/.local/bin`
-(`%LOCALAPPDATA%\Programs\ridl` on Windows). When that directory is not on your `PATH`, the command warns and
-offers a command that adds it. The setting `ridl.serverPath` names a different
-`ridl` binary to run, for both `ridl lsp` and `ridl mcp`; empty, the default,
-uses the bundled binary, or `ridl` on `PATH` when none is bundled. The setting
-`ridl.trace.server` (`off`, `messages` or
+(`%LOCALAPPDATA%\Programs\ridl` on Windows). When that directory is not on your
+`PATH`, the command warns and offers a command that adds it. The setting
+`ridl.serverPath` names a different `ridl` binary to run, for both `ridl lsp`
+and `ridl mcp`; empty, the default, uses the bundled binary, or `ridl` on `PATH`
+when none is bundled. The setting `ridl.trace.server` (`off`, `messages` or
 `verbose`) traces the traffic between the editor and the server. The
 [extension README](https://github.com/driftsys/ridl/blob/main/editors/vscode/README.md)
 lists the features.
 
-**Other editors.** `ridl lsp` serves the Language Server Protocol over stdio, the
-only transport it supports. Configure your editor's language-server client to
-run `ridl lsp` for `.typl`, `.ridl` and `.rsdl` files. [`ridl lsp`](cli-reference.md#ridl-lsp)
-in the CLI reference states the accepted flags and exit codes.
+**Other editors.** `ridl lsp` serves the Language Server Protocol over stdio,
+the only transport it supports. Configure your editor's language-server client
+to run `ridl lsp` for `.typl`, `.ridl` and `.rsdl` files.
+[`ridl lsp`](cli-reference.md#ridl-lsp) in the CLI reference states the accepted
+flags and exit codes.
 
 **Agent hosts.** `ridl mcp` serves the Model Context Protocol over stdio, with
 read-only tools that check, explain and inspect a workspace. It takes no flag.
@@ -154,16 +155,16 @@ command = "ridl"
 args = ["mcp"]
 ```
 
-The command `ridl` must be on the `PATH` the host uses. The RIDL extension
-needs VS Code 1.109 or newer, and registers `ridl mcp` automatically, so GitHub
+The command `ridl` must be on the `PATH` the host uses. The RIDL extension needs
+VS Code 1.109 or newer, and registers `ridl mcp` automatically, so GitHub
 Copilot in VS Code needs no configuration.
 
 **The authoring skill.** Each editor release attaches
 `ridl-authoring-<version>.zip`, a skill that teaches an agent to write and
 review RIDL and to check its work with the `ridl` MCP server. For Claude Code,
 unpack it into `~/.claude/skills/` or into a project's `.claude/skills/`; for
-Codex, into `~/.codex/skills/`. The VS Code extension already contains the
-skill for GitHub Copilot.
+Codex, into `~/.codex/skills/`. The VS Code extension already contains the skill
+for GitHub Copilot.
 
 [`ridl mcp`](cli-reference.md#ridl-mcp) lists the tools, and the
 [`ridl-mcp` README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md)
@@ -238,9 +239,9 @@ the member still sees `veh.common`, and the root's settings apply to it. The
 check then reports only the diagnostics of files in `veh/cluster`.
 
 To start a project of your own, `ridl new` scaffolds one. Run it outside the
-tutorial workspace, for example from the directory that holds `tutorial/`, because it refuses a directory
-that sits inside an existing unit. It creates the directory and writes a
-`ridl.toml` and a small `.ridl` file that already checks:
+tutorial workspace, for example from the directory that holds `tutorial/`,
+because it refuses a directory that sits inside an existing unit. It creates the
+directory and writes a `ridl.toml` and a small `.ridl` file that already checks:
 
 ```sh
 ridl new demo
@@ -250,8 +251,8 @@ ridl check demo
 `ridl init` does the same inside a directory that exists, and `--workspace`
 writes a workspace root with one member instead of a standalone package. Both
 refuse, and write nothing, when a file they would write exists or when the
-directory sits inside, or above, another unit. The [CLI reference](cli-reference.md#ridl-init)
-lists the flags and the refusals.
+directory sits inside, or above, another unit. The
+[CLI reference](cli-reference.md#ridl-init) lists the flags and the refusals.
 
 The manifest ends with a commented-out `[backend.rust]` table. Until you
 uncomment it, `ridl build --emit rust` generates the types only; with it, the
@@ -293,8 +294,7 @@ Line by line:
 
 - `package veh.cluster` — this file belongs to the `veh.cluster` package.
 - `import veh.common.Speed` — `Speed` is declared in another package. Imports
-  are single-type and qualified; there are no wildcards and no relative
-  imports.
+  are single-type and qualified; there are no wildcards and no relative imports.
 - `interface VehicleSpeed` — the contract boundary.
 - `signal currentSpeed: Speed @10ms` — a continuously published value, whose
   contract requires the provider to publish it every 10 ms.
@@ -326,9 +326,8 @@ Most diagnostics carry a stable code. `TYPL-` codes come from the vocabulary
 layer, `RIDL-` codes from the interaction layer, `FORM-` codes from the shared
 surface syntax, and `MANI-` codes from the manifest. Those codes are listed in
 the language references and are never renumbered or reused. A few diagnostics
-are still uncoded and print as a bare `error:` — a constant written where a
-type is expected is one — so do not assume a code is always there to search
-for.
+are still uncoded and print as a bare `error:` — a constant written where a type
+is expected is one — so do not assume a code is always there to search for.
 
 ## Primitives and named types
 
@@ -385,9 +384,9 @@ type Vin: string [17 match VIN_PATTERN] = "1HGCM82633A004352"
 
 Two details in that listing:
 
-- The range drives the wire width. `integer [0..255]` is a `uint8` on
-  transport; `integer [0..65535]` is a `uint16`. The generated language type is
-  always `int64`. You never write a width.
+- The range drives the wire width. `integer [0..255]` is a `uint8` on transport;
+  `integer [0..65535]` is a `uint16`. The generated language type is always
+  `int64`. You never write a width.
 - `= "ABC"` is an **init value** — the value a consumer holds before anything
   real arrives. It is derived automatically for most types: `false` for
   booleans, `0` for a number whose range contains it and the range minimum
@@ -395,9 +394,9 @@ Two details in that listing:
   0. It cannot be derived for a `string` **or** `bytes` type carrying a `match`
   pattern or a non-zero minimum length, so those declare one — which is why
   `ModelCode`, `Notes` and `Vin` above do. Without a declared init such a type
-  draws a `TYPL-115` note. That note stays informational, always; what turns a missing
-  init into an error is _using_ the type as a signal payload, and the error is
-  `RIDL-109`, raised at the signal.
+  draws a `TYPL-115` note. That note stays informational, always; what turns a
+  missing init into an error is _using_ the type as a signal payload, and the
+  error is `RIDL-109`, raised at the signal.
 
 Standard library types are always available without an import: `Uuid`, `Ulid`,
 `Uri`, `Url`, `Email`, `Label`, `Name`, `Message`, `Timestamp`, `Duration`,
@@ -406,8 +405,8 @@ implicitly imported `ridl.std` package.
 
 `ridl.std` holds only what is fixed by a cross-industry standard and means the
 same in every domain, because it is in scope in every file you write. A type
-that belongs to your industry — `Vin` above — is declared in your own
-vocabulary package, like any other domain type.
+that belongs to your industry — `Vin` above — is declared in your own vocabulary
+package, like any other domain type.
 
 ## Constants
 
@@ -445,8 +444,8 @@ satisfy the constant's own type constraints, and that is checked.
 
 The split between `signal` and `event` is the load-bearing distinction in ridl.
 It is a distinction in _meaning_, which the specification then turns into
-demands on a binding (see the note above; of the bindings, the WebSocket one
-is built):
+demands on a binding (see the note above; of the bindings, the WebSocket one is
+built):
 
 - A **signal** is continuous state. The latest sample is the truth, and an
   intermediate sample may be missed. The contract requires the channel never to
@@ -480,14 +479,14 @@ interface Sampling {
 }
 ```
 
-The bounds have one meaning everywhere: `min` is the **rate floor**, the
-minimum interval between publications, and `max` is the **staleness bound**,
-the maximum age of the value. Those two bounds are what the compiler records in
-the IR, and they are all it records. What a binding is _required_ to do at each
-bound follows from the declaring keyword — specified, not implemented:
+The bounds have one meaning everywhere: `min` is the **rate floor**, the minimum
+interval between publications, and `max` is the **staleness bound**, the maximum
+age of the value. Those two bounds are what the compiler records in the IR, and
+they are all it records. What a binding is _required_ to do at each bound
+follows from the declaring keyword — specified, not implemented:
 
-| Bound                   | Required on a `signal` (state)                 | Required on an `event` (occurrence)       |
-| ----------------------- | ---------------------------------------------- | ----------------------------------------- |
+| Bound                   | Required on a `signal` (state)                 | Required on an `event` (occurrence)        |
+| ----------------------- | ---------------------------------------------- | ------------------------------------------ |
 | `min` — rate floor      | debounce — coalesce a faster update            | throttle — do not raise occurrences faster |
 | `max` — staleness bound | refresh ceiling — re-publish even if unchanged | TTL — discard an older occurrence          |
 
@@ -529,9 +528,9 @@ A `command` or `query` with no response bound is treated the same way: it
 receives `command_timing` (built-in `[..1s]`) or `query_timing` (built-in
 `[..3s]`) and draws `RIDL-112`. Each key resolves on its own.
 
-Because the IR always carries resolved bounds, changing a default changes
-every untimed interaction it covers in the package, and `ridl diff` reports it
-as a contract change. Safety-graded packages should annotate every interaction
+Because the IR always carries resolved bounds, changing a default changes every
+untimed interaction it covers in the package, and `ridl diff` reports it as a
+contract change. Safety-graded packages should annotate every interaction
 explicitly.
 
 ## Enums and enum sets
@@ -664,11 +663,10 @@ A command or query takes the same `@[min..max]` range a signal does, with the
 same two bounds read for a call: `min` is the **call throttle** — the caller
 must not call faster — and `max` is the **response bound** — the provider must
 respond within it. For a query, responding is the reply; for a command it is
-acceptance, the delivery acknowledgment, not execution. `setGear` above
-declares both: callers throttle to one request per 20 ms, and the provider
-accepts within 100 ms. Only the range form is admitted — a strict periodic
-`@Xms` on a command or query is a `RIDL-103` error, because a caller is not
-isochronous by contract.
+acceptance, the delivery acknowledgment, not execution. `setGear` above declares
+both: callers throttle to one request per 20 ms, and the provider accepts within
+100 ms. Only the range form is admitted — a strict periodic `@Xms` on a command
+or query is a `RIDL-103` error, because a caller is not isochronous by contract.
 
 Like a signal, an RPC with no declared response bound takes a default: the
 package's `command_timing` or `query_timing`, else the built-in `[..1s]` for a
@@ -832,20 +830,19 @@ interface Transfer {
 }
 ```
 
-Direction follows position. A stream in return position is declared to flow
-from provider to consumer, one in parameter position the other way, and a query
-with both declares full duplex. That is a statement about the contract; nothing
-flows until a binding exists to carry it. A stream on a `signal` or an `event` is a `RIDL-201`
-error — a signal is the better stream for state, and an unbounded push of
-occurrences is an event.
+Direction follows position. A stream in return position is declared to flow from
+provider to consumer, one in parameter position the other way, and a query with
+both declares full duplex. That is a statement about the contract; nothing flows
+until a binding exists to carry it. A stream on a `signal` or an `event` is a
+`RIDL-201` error — a signal is the better stream for state, and an unbounded
+push of occurrences is an event.
 
 A stream's element is usually a named type, as above. A stream element is the
 only position where a bare `bytes` or `string` carries no bound (a bare map key
 takes the `[0..256]` default), and it means something different there: a **byte
-stream**. Use it for a file or a
-document whose size you do not know and whose chunking you have no reason to
-choose — the application reads or writes it as I/O, not as a sequence of
-messages.
+stream**. Use it for a file or a document whose size you do not know and whose
+chunking you have no reason to choose — the application reads or writes it as
+I/O, not as a sequence of messages.
 
 ```ridl
 package veh.docs
@@ -923,11 +920,11 @@ own signal instead.
 
 The clauses are not documentation, and one use of them runs today: `ridl test`
 draws sample parameter tuples and evaluates each `require` clause against them.
-It does not evaluate `ensure` clauses — it lists them as observer stubs,
-because checking a postcondition needs a result, and producing one needs the
-runtime that does not exist yet. That same unbuilt layer is where the
-specification puts the other use: a provider binding evaluating `require`
-before your code runs, and `ensure` after it returns.
+It does not evaluate `ensure` clauses — it lists them as observer stubs, because
+checking a postcondition needs a result, and producing one needs the runtime
+that does not exist yet. That same unbuilt layer is where the specification puts
+the other use: a provider binding evaluating `require` before your code runs,
+and `ensure` after it returns.
 
 ## Labels
 
@@ -952,14 +949,13 @@ interface LogService {
 }
 ```
 
-Different domains use different vocabularies: an automotive profile would
-define `ASIL_*`, a medical profile `IEC_62304_*`, an industrial profile
-`IEC_61508_*`.
+Different domains use different vocabularies: an automotive profile would define
+`ASIL_*`, a medical profile `IEC_62304_*`, an industrial profile `IEC_61508_*`.
 
-**As built, labels are carried through unchecked.** The compiler parses them
-and passes them into the IR unchanged. The assurance profiles that would
-validate a vocabulary and its combinations (diagnostics `TYPL-402` and
-`TYPL-403`) are specified but not implemented.
+**As built, labels are carried through unchecked.** The compiler parses them and
+passes them into the IR unchanged. The assurance profiles that would validate a
+vocabulary and its combinations (diagnostics `TYPL-402` and `TYPL-403`) are
+specified but not implemented.
 
 ## What the compiler produces
 
@@ -970,42 +966,40 @@ ridl build --emit rust --out-dir out
 `ridl build` compiles a workspace and writes one artifact per package for each
 emit target, except that `catalog` writes one per unit and none for a unit that
 declares no interface and no service with an inline body, and `deployment`
-writes one per deployment of the system.
-Twelve emit targets exist today:
+writes one per deployment of the system. Twelve emit targets exist today:
 
-| `--emit`          | Output                           | Contents                                                                      |
-| ----------------- | -------------------------------- | ----------------------------------------------------------------------------- |
-| `rust`            | `<package>.rs`                   | idiomatic Rust source (the default)                                           |
-| `ir-json`         | `<package>.ir.json`              | the lowered IR v2 as exact-decimal JSON                                       |
-| `ir-text`         | `<package>.ir.txtpb`             | the lowered IR v2 as prototext                                                |
-| `ir-binary`       | `<package>.ir.binpb`             | the lowered IR v2 as protobuf binary                                          |
-| `typescript`      | `<package>.ts`                   | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true` for a package with a payload root that gets a codec |
-| `proto`           | `<package>.proto`                | the proto3 schema — types and the ordinals                                    |
-| `flatbuffers`     | `<package>.fbs`                  | the FlatBuffers schema — types and the ordinals                               |
-| `podbuf`          | `<package>.h`                    | the podbuf C header — the head structs and the accessors a C consumer reads a verified buffer through |
-| `codegen-model`   | `<package>.codegen.json`         | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON      |
-| `codegen-request` | `<package>.codegen-request.json` | the whole codegen request a build hands a backend, as canonical protobuf JSON |
-| `catalog`         | `<unit>.catalog.binfb`           | the catalog descriptor an engine reads — interfaces, numbers, members, sizes  |
-| `deployment`      | `<package>.<Name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs |
+| `--emit`          | Output                              | Contents                                                                                                                       |
+| ----------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `rust`            | `<package>.rs`                      | idiomatic Rust source (the default)                                                                                            |
+| `ir-json`         | `<package>.ir.json`                 | the lowered IR v2 as exact-decimal JSON                                                                                        |
+| `ir-text`         | `<package>.ir.txtpb`                | the lowered IR v2 as prototext                                                                                                 |
+| `ir-binary`       | `<package>.ir.binpb`                | the lowered IR v2 as protobuf binary                                                                                           |
+| `typescript`      | `<package>.ts`                      | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true` for a package with a payload root that gets a codec |
+| `proto`           | `<package>.proto`                   | the proto3 schema — types and the ordinals                                                                                     |
+| `flatbuffers`     | `<package>.fbs`                     | the FlatBuffers schema — types and the ordinals                                                                                |
+| `podbuf`          | `<package>.h`                       | the podbuf C header — the head structs and the accessors a C consumer reads a verified buffer through                          |
+| `codegen-model`   | `<package>.codegen.json`            | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON                                                       |
+| `codegen-request` | `<package>.codegen-request.json`    | the whole codegen request a build hands a backend, as canonical protobuf JSON                                                  |
+| `catalog`         | `<unit>.catalog.binfb`              | the catalog descriptor an engine reads — interfaces, numbers, members, sizes                                                   |
+| `deployment`      | `<package>.<Name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs                      |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by
-package path and does not compile without the standard package beside it.
-The command above therefore writes `out/ridl.std.rs` as well, and
+package path and does not compile without the standard package beside it. The
+command above therefore writes `out/ridl.std.rs` as well, and
 `--emit typescript` writes `ridl.std.ts` the same way (and `ridl.std.codec.ts`
 under `[backend.typescript] codec = true`, when a codec module imports it). The
-three IR targets
-are an exception: a direct IR dump records the packages the workspace
-declares, and `ridl.std` ships with the compiler. `catalog` is the other
-exception: `ridl.std` declares no interface, so no `ridl.std.catalog.binfb`
-is written.
+three IR targets are an exception: a direct IR dump records the packages the
+workspace declares, and `ridl.std` ships with the compiler. `catalog` is the
+other exception: `ridl.std` declares no interface, so no
+`ridl.std.catalog.binfb` is written.
 
-[Using the generated Rust code](generated-code.md) shows how a program calls
-the crate that `--emit rust` writes, and
+[Using the generated Rust code](generated-code.md) shows how a program calls the
+crate that `--emit rust` writes, and
 [The catalog descriptor](catalog-descriptor.md) explains the `catalog` file.
 
-There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
-MQTT or AIDL yet. Those mappings are specified in the ridl language reference,
+There is no transport binding and no code generator for SOME/IP, gRPC, DDS, MQTT
+or AIDL yet. Those mappings are specified in the ridl language reference,
 Appendix B, and are the work of later epics.
 
 Classic CAN is not on that list, and never will be for a whole interface:
@@ -1015,15 +1009,15 @@ dataflow, not calls.
 
 ## The rest of the toolchain
 
-| Command         | What it does                                                                             |
-| --------------- | ---------------------------------------------------------------------------------------- |
-| `ridl check`    | type-check a file, package, or workspace                                                 |
-| `ridl build`    | compile to the artifacts above                                                           |
-| `ridl fmt`      | rewrite `.typl`, `.ridl` and `.rsdl` files into one canonical form; `--check` reports without writing |
+| Command         | What it does                                                                                                                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl check`    | type-check a file, package, or workspace                                                                                                                                                  |
+| `ridl build`    | compile to the artifacts above                                                                                                                                                            |
+| `ridl fmt`      | rewrite `.typl`, `.ridl` and `.rsdl` files into one canonical form; `--check` reports without writing                                                                                     |
 | `ridl baseline` | publish `.ridl/baseline/<package>.ir.json` snapshots, `<unit>.catalogs` files and `context.json`; `--repair-context` restores historical evidence, `--reset-history` starts new histories |
-| `ridl diff`     | compare two IR snapshots or source trees and classify the change                         |
-| `ridl lock`     | allocate interface numbers in each unit's `interfaces.lock`; `--rename` and `--retire` record a renamed or removed interface |
-| `ridl test`     | run the property suite: range self-corpora, and sampling of `require` clauses. `ensure` clauses are listed as observer stubs, never evaluated |
+| `ridl diff`     | compare two IR snapshots or source trees and classify the change                                                                                                                          |
+| `ridl lock`     | allocate interface numbers in each unit's `interfaces.lock`; `--rename` and `--retire` record a renamed or removed interface                                                              |
+| `ridl test`     | run the property suite: range self-corpora, and sampling of `require` clauses. `ensure` clauses are listed as observer stubs, never evaluated                                             |
 
 `ridlc` is the plumbing underneath, with `check` and `build` only. Use `ridl`
 unless you are scripting the compiler directly.
@@ -1032,13 +1026,13 @@ Two of those deserve a note.
 
 **`ridl fmt` applies the canonical layout used by this chapter's verified
 listings.** It tightens colons and spacing and places one member per line in
-brace bodies.
-The [CLI reference](cli-reference.md#ridl-fmt) describes the two-space
-indentation and configurable line width, which defaults to 100 characters.
+brace bodies. The [CLI reference](cli-reference.md#ridl-fmt) describes the
+two-space indentation and configurable line width, which defaults to 100
+characters.
 
 **`ridl diff` classifies, and its exit code carries the answer**: 0 when the
-change is compatible or the snapshots are identical, 1 when it is breaking, 2
-on an error. Interactions carry implicit ordinals by declaration order, so
+change is compatible or the snapshots are identical, 1 when it is breaking, 2 on
+an error. Interactions carry implicit ordinals by declaration order, so
 appending is compatible and inserting or reordering is not. Retire an
 interaction with a `reserved` tombstone rather than deleting it:
 
@@ -1056,9 +1050,9 @@ interface VehicleStatus {
 }
 ```
 
-`ridl check` also compares against a published baseline when
-`.ridl/baseline/` exists, and reports a moved ordinal as a `RIDL-407` warning
-at your desk, before CI sees it.
+`ridl check` also compares against a published baseline when `.ridl/baseline/`
+exists, and reports a moved ordinal as a `RIDL-407` warning at your desk, before
+CI sees it.
 
 ## Interfaces and services
 
@@ -1069,8 +1063,8 @@ A `service` is a global, named, published declaration of one or more of them —
 the catalog entry that gives contracts a concrete identity in the system. The
 specification defines its members as addressed `service.member`; no runtime
 resolves such an address today, so read it as the naming scheme a deployment
-will use. Service names are unique across the system and always public, and
-that uniqueness the compiler does enforce (`RIDL-140`).
+will use. Service names are unique across the system and always public, and that
+uniqueness the compiler does enforce (`RIDL-140`).
 
 ```ridl
 package veh.cluster
@@ -1087,38 +1081,38 @@ service veh.cluster.hvac {
 ```
 
 The first form names existing interfaces — a comma-separated list, and the
-commas are required, the one place the family's separators are not optional:
-the list has no closing token, so it ends where the next declaration begins.
-The last form declares an inline shape for a one-off contract not worth a
-reusable interface. A service declaration says nothing about how the contract
-is realized on the wire — that is a deployment question, and rsdl's (see
+commas are required, the one place the family's separators are not optional: the
+list has no closing token, so it ends where the next declaration begins. The
+last form declares an inline shape for a one-off contract not worth a reusable
+interface. A service declaration says nothing about how the contract is realized
+on the wire — that is a deployment question, and rsdl's (see
 [Describing a system](rsdl.md)).
 
-Composing interfaces is how a recurring interaction set — a diagnostics block,
-a heartbeat — is reused without duplication: each composed interface keeps its
-own ordinal space, and its number comes from its unit's `interfaces.lock`,
-not from its place in the list, so the list is a set and its order carries
-nothing. Because members stay addressed `service.member`, two composed
-interfaces must not share a member name (`RIDL-144`).
+Composing interfaces is how a recurring interaction set — a diagnostics block, a
+heartbeat — is reused without duplication: each composed interface keeps its own
+ordinal space, and its number comes from its unit's `interfaces.lock`, not from
+its place in the list, so the list is a set and its order carries nothing.
+Because members stay addressed `service.member`, two composed interfaces must
+not share a member name (`RIDL-144`).
 
 Interfaces are flat: there is no interface inheritance. Sharing a _shape_ is
 typl's job; a shared interaction _set_ is composed at the service, never
-flattened into the interface, so that a base change can never renumber a
-derived contract's wire identity.
+flattened into the interface, so that a base change can never renumber a derived
+contract's wire identity.
 
 ## Naming conventions
 
-| Construct                                     | Convention        | Example                        |
-| --------------------------------------------- | ----------------- | ------------------------------ |
-| `type`, `struct`, `enum`, `enumset`, `union`  | `CamelCase`       | `VehicleSpeed`, `WarningFlags` |
-| Interfaces                                    | `CamelCase`       | `VehicleStatus`                |
+| Construct                                      | Convention        | Example                        |
+| ---------------------------------------------- | ----------------- | ------------------------------ |
+| `type`, `struct`, `enum`, `enumset`, `union`   | `CamelCase`       | `VehicleSpeed`, `WarningFlags` |
+| Interfaces                                     | `CamelCase`       | `VehicleStatus`                |
 | Interactions, fields, tuple fields, parameters | `camelCase`       | `currentSpeed`                 |
-| Enum values, enumset bits, constants          | `SCREAMING_SNAKE` | `PARK`, `MAX_SPEED`            |
-| Packages and service names                    | `lowercase.dot`   | `veh.common`                   |
+| Enum values, enumset bits, constants           | `SCREAMING_SNAKE` | `PARK`, `MAX_SPEED`            |
+| Packages and service names                     | `lowercase.dot`   | `veh.common`                   |
 
-Beyond spelling: name signals and fixed values as nouns (`currentSpeed`), events as
-past-tense occurrences (`doorOpened`), commands as imperatives (`setGear`), and
-queries as `get…` or `stream…`. A query named like a mutation draws a
+Beyond spelling: name signals and fixed values as nouns (`currentSpeed`), events
+as past-tense occurrences (`doorOpened`), commands as imperatives (`setGear`),
+and queries as `get…` or `stream…`. A query named like a mutation draws a
 `RIDL-404` warning, because it probably wanted to be a command.
 
 Every registry word is reserved in every profile, including words this profile
@@ -1136,8 +1130,7 @@ profile implements one.
   `ensure`.
 - The [family overview][overview] — the map, the shared doctrines, and the
   decision ledger.
-- The four annexes below — complete, compiling interfaces from a vehicle
-  domain.
+- The four annexes below — complete, compiling interfaces from a vehicle domain.
 
 [ridl-ref]: https://github.com/driftsys/ridl/blob/main/docs/specification/ridl-language-reference.md
 [typl-ref]: https://github.com/driftsys/ridl/blob/main/docs/specification/typl-language-reference.md
@@ -1148,10 +1141,9 @@ profile implements one.
 
 ## Annex 1 — Vehicle identity
 
-A pure `fixed` interface: everything provisioned at the factory or over the
-air. Note that every capability flag names a type rather than writing
-`boolean`, and that `ModelYear` and `Speed` are declared types, not inline
-ranges.
+A pure `fixed` interface: everything provisioned at the factory or over the air.
+Note that every capability flag names a type rather than writing `boolean`, and
+that `ModelYear` and `Speed` are declared types, not inline ranges.
 
 ```ridl
 package veh.identity
@@ -1206,9 +1198,9 @@ interface VehicleIdentity {
 
 ## Annex 2 — Powertrain
 
-Two details worth reading closely. The engine's scalar speed is published as
-its own `signal engineRpm`, because a `require` clause may read a signal but
-not reach into a struct-typed one. And the engine state field is named
+Two details worth reading closely. The engine's scalar speed is published as its
+own `signal engineRpm`, because a `require` clause may read a signal but not
+reach into a struct-typed one. And the engine state field is named
 `engineState`: `state` is a reserved word family-wide, so it cannot be an
 identifier. This annex also draws RIDL-414 (`low-cohesion-interface`):
 `PowertrainManager` keeps every powertrain fact behind one interface, and its
@@ -1316,9 +1308,9 @@ interface PowertrainManager {
 A signal payload is a single named type, so a collection of door states is
 published through a struct that wraps the array rather than as a bare array.
 Command parameters name types too: `DoorIndex`, not `integer [0..7]`. And the
-lock parameter is named `lock`, because `state` is reserved. `BodyControl`
-draws RIDL-414 (`low-cohesion-interface`): its members fall into ten groups that
-share no named type, which the annex keeps to show one interface per subsystem.
+lock parameter is named `lock`, because `state` is reserved. `BodyControl` draws
+RIDL-414 (`low-cohesion-interface`): its members fall into ten groups that share
+no named type, which the annex keeps to show one interface per subsystem.
 
 ```ridl,allow=RIDL-406,allow=RIDL-414
 package veh.body

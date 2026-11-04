@@ -10,9 +10,9 @@ Most code snippets in this chapter are taken from
 `examples/cabin/consumer/src/main.rs`, a program that the repository's
 `just demo` gate builds and runs against the crate generated from
 `examples/cabin/cabin.ridl`. A snippet that is taken neither from that program
-nor from that schema is marked as an illustration in the sentence before it,
-and is not compiled. The interface the snippets call, and the types it uses,
-from that schema:
+nor from that schema is marked as an illustration in the sentence before it, and
+is not compiled. The interface the snippets call, and the types it uses, from
+that schema:
 
 ```ridl,ignore
 {{#include ../../examples/cabin/cabin.ridl:schema}}
@@ -31,33 +31,33 @@ A workspace that declares a `system` adds an `instances` module to the crate,
 written to `__ridl_instances.rs`. It holds one `pub const <NAME>: i32` for the
 number of each instance of the system, from `instances.lock`. A component is a
 module, named by its qualified name in snake case, and an instance is a
-constant, named by its instance name in screaming snake case: instance
-`primary` of component `veh.adas.Cruise` is `instances::veh::adas::cruise::PRIMARY`.
-The documentation of a constant names its key in `instances.lock`, and says so
-when the number is provisional, which means that the lock holds no entry for it
-yet and `ridl lock` writes it. A package whose first name segment is `instances`
+constant, named by its instance name in screaming snake case: instance `primary`
+of component `veh.adas.Cruise` is `instances::veh::adas::cruise::PRIMARY`. The
+documentation of a constant names its key in `instances.lock`, and says so when
+the number is provisional, which means that the lock holds no entry for it yet
+and `ridl lock` writes it. A package whose first name segment is `instances`
 makes the build fail, because the module name is taken.
 
-The cabin program imports the package module as `api`, the face of the
-interface `Cabin` as `cabin`, and the face's `prelude`:
+The cabin program imports the package module as `api`, the face of the interface
+`Cabin` as `cabin`, and the face's `prelude`:
 
 ```rust,noplayground
 {{#include ../../examples/cabin/consumer/src/main.rs:imports}}
 ```
 
-`prelude` brings into scope the traits that carry the fixed methods of the
-face: `ridl_rt::face::Bind` (`new`), `Events` (`next_event`), `Publish`
-(`commit`), and, under the crate's `std` feature, `Timeout` (`with_timeout` and
+`prelude` brings into scope the traits that carry the fixed methods of the face:
+`ridl_rt::face::Bind` (`new`), `Events` (`next_event`), `Publish` (`commit`),
+and, under the crate's `std` feature, `Timeout` (`with_timeout` and
 `set_timeout`); and, without a name, the interface's own `Subscribe`
 (`subscribe_<event>`) and `Invalidate` (`invalidate_<signal>`) traits. Each
-interface's prelude holds only the traits its face implements. These methods
-are trait methods rather than inherent methods so that a member of the
-interface can have one of these names. Without the `use` of the prelude,
-`cabin::Client::new` does not compile. The other imports are for the snippets
-below: `Loopback` is the runtime, `CatalogRef` and `Interface` name the catalog
-the face was generated from, and `Provenance` is read from a signal sample. A
-`Loopback` carries FlatBuffers, which is its default encoding; the face takes
-the encoding from the port it is bound to and names none itself.
+interface's prelude holds only the traits its face implements. These methods are
+trait methods rather than inherent methods so that a member of the interface can
+have one of these names. Without the `use` of the prelude, `cabin::Client::new`
+does not compile. The other imports are for the snippets below: `Loopback` is
+the runtime, `CatalogRef` and `Interface` name the catalog the face was
+generated from, and `Provenance` is read from a signal sample. A `Loopback`
+carries FlatBuffers, which is its default encoding; the face takes the encoding
+from the port it is bound to and names none itself.
 
 The package module holds:
 
@@ -68,42 +68,40 @@ The package module holds:
   them. `get` returns the value of a named scalar. An enum is a `#[repr(i64)]`
   enum with one variant per declared value, built from an integer with
   `TryFrom<i64>`, which returns an error for a value the declaration does not
-  name; an enum set is a newtype over `i64` with one constant per declared
-  bit, built with `TryFrom<i64>`, which returns an error for a value that
-  carries an undeclared bit. An `open` enum has, after its declared variants,
-  a last variant `Unknown(Unknown<Name>)`, where `Unknown<Name>` is a
-  generated type that holds an undeclared value as the integer the wire
-  carried and returns it from `raw`; the enum is `#[non_exhaustive]`, so a
-  `match` outside the generated crate keeps a wildcard arm, and it is built
-  with `From<i64>`, which returns the declared variant for every declared
-  value and `Unknown` for every other integer. An `open` enum set is built
-  with `From<i64>`, which keeps every bit, and `unknown_bits` returns the bits
-  that no declared bit names. In both forms `From<Name> for i64` returns the
-  integer, an `Unknown` value's included, so a value read from the wire is
-  written back unchanged. The doc of an open declaration says so. Every
-  codec the manifest names reads and writes an open declaration this way,
-  `podbuf` included.
-- **The codecs** of each payload type, one per encoding the manifest names
-  under `[backend.rust] encodings`: `flatbuffers`, `proto3`, or both. Each
-  codec is `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list
-  the module holds the types only. Each payload type also has a
+  name; an enum set is a newtype over `i64` with one constant per declared bit,
+  built with `TryFrom<i64>`, which returns an error for a value that carries an
+  undeclared bit. An `open` enum has, after its declared variants, a last
+  variant `Unknown(Unknown<Name>)`, where `Unknown<Name>` is a generated type
+  that holds an undeclared value as the integer the wire carried and returns it
+  from `raw`; the enum is `#[non_exhaustive]`, so a `match` outside the
+  generated crate keeps a wildcard arm, and it is built with `From<i64>`, which
+  returns the declared variant for every declared value and `Unknown` for every
+  other integer. An `open` enum set is built with `From<i64>`, which keeps every
+  bit, and `unknown_bits` returns the bits that no declared bit names. In both
+  forms `From<Name> for i64` returns the integer, an `Unknown` value's included,
+  so a value read from the wire is written back unchanged. The doc of an open
+  declaration says so. Every codec the manifest names reads and writes an open
+  declaration this way, `podbuf` included.
+- **The codecs** of each payload type, one per encoding the manifest names under
+  `[backend.rust] encodings`: `flatbuffers`, `proto3`, or both. Each codec is
+  `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list the module
+  holds the types only. Each payload type also has a
   `<T as Payload<FlatBuffers>>::Buffer` type and a zeroed `BUFFER` value, sized
   by that type's own `MAX_SIZE`, and the same in `Proto3`. Every `MAX_SIZE` is
-  finite: a declared type whose encoding has no finite bound, such as a
-  `string` with no length bound, is refused in either encoding, and
-  `ridl build` fails with an error that names the type and the cause; the
-  [proto3 codec record's known gaps][proto3-gaps] give the limit this sets
-  and its tracking issue. The face calls the codec; an application calls it only when it moves
-  payloads by itself.
+  finite: a declared type whose encoding has no finite bound, such as a `string`
+  with no length bound, is refused in either encoding, and `ridl build` fails
+  with an error that names the type and the cause; the
+  [proto3 codec record's known gaps][proto3-gaps] give the limit this sets and
+  its tracking issue. The face calls the codec; an application calls it only
+  when it moves payloads by itself.
 - **The interaction descriptors**: one unit type per interface (here
   `api::Cabin`) that implements `ridl_rt::contract::Interface` and carries the
   interface's `CATALOG`, `NUMBER` and `NAME`. Each interface also implements
-  `ridl_rt::contract::Sizes<E>` for each encoding the package carries, the
-  size table of that codec for the interface: its reservations, its largest
-  buffer (`MAX_BUFFER_SIZE`), and the claim and event buffers the face holds.
-  Like the codecs, the descriptors are
-  present only when the manifest names an encoding under
-  `[backend.rust] encodings`.
+  `ridl_rt::contract::Sizes<E>` for each encoding the package carries, the size
+  table of that codec for the interface: its reservations, its largest buffer
+  (`MAX_BUFFER_SIZE`), and the claim and event buffers the face holds. Like the
+  codecs, the descriptors are present only when the manifest names an encoding
+  under `[backend.rust] encodings`.
 - **The face**: one module per interface that has one, named after it (here
   `api::cabin`), present under the same condition. The face is what the
   application calls.
@@ -130,9 +128,9 @@ returns at once. A query whose reply is a stream does not count for the
 waiting member is such a query gets no `blocking` module either.
 
 An interface the face cannot carry gets none of these items and no interaction
-descriptor. In their place, the package module holds a
-`__RIDL_NO_FACE_<NAME>` constant whose documentation names the interface and
-the reason; the [CLI reference](cli-reference.md#ridl-build) lists the cases.
+descriptor. In their place, the package module holds a `__RIDL_NO_FACE_<NAME>`
+constant whose documentation names the interface and the reason; the
+[CLI reference](cli-reference.md#ridl-build) lists the cases.
 
 A call always sends one named type. A command or query with exactly one
 parameter of a named type sends that type. Any other parameter list gets an
@@ -141,14 +139,14 @@ field per parameter in declaration order, each carrying the parameter's
 documentation. A call with no parameter sends the same kind of struct with no
 field. A query whose reply is a tuple, or that declares no return type, gets a
 reply struct named `<Interface><Call>Reply` in the same way. These structs are
-generated types of the package module, and the face methods take and return
-them like any other payload.
-The wire backends emit the matching positional `.proto` messages and `.fbs`
-tables under the names assigned by lowering. When an induced payload has no
-finite bound in an encoding the manifest names — no finite FlatBuffers bound
-under `flatbuffers`; no finite proto3 bound, or a member proto3 cannot
-represent, under `proto3` — its interface is skipped with the refusal constant
-described above rather than emitting a descriptor that names a missing codec.
+generated types of the package module, and the face methods take and return them
+like any other payload. The wire backends emit the matching positional `.proto`
+messages and `.fbs` tables under the names assigned by lowering. When an induced
+payload has no finite bound in an encoding the manifest names — no finite
+FlatBuffers bound under `flatbuffers`; no finite proto3 bound, or a member
+proto3 cannot represent, under `proto3` — its interface is skipped with the
+refusal constant described above rather than emitting a descriptor that names a
+missing codec.
 
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from
@@ -188,8 +186,8 @@ dependency on an async runtime, and any executor can poll them. A call is sent
 when the method runs, not when its future is first polled.
 
 Inside an async function, the calls read like this. This snippet is an
-illustration and is not compiled; `port` and `handler` stand for ports a
-runtime gives the application, and `provider` for a value that implements
+illustration and is not compiled; `port` and `handler` stand for ports a runtime
+gives the application, and `provider` for a value that implements
 `cabin::Provider`:
 
 ```rust,noplayground
@@ -205,16 +203,16 @@ let failure = cabin::serve(handler, &mut provider).await;
 
 No executor is required either. The cabin program polls the same futures by
 hand, the way a frame loop does. `cx` is a `Context` built from the waker
-`ridl_rt::task::noop_waker()`, and `poll_once` is a function of the program
-that polls a future once with it:
+`ridl_rt::task::noop_waker()`, and `poll_once` is a function of the program that
+polls a future once with it:
 
 ```rust,noplayground
 {{#include ../../examples/cabin/consumer/src/main.rs:async-command}}
 ```
 
-`ridl_rt::task` exists only under `ridl-rt`'s `std` feature, which the
-generated crate's own `std` feature turns on. A frame loop built without it
-uses `core::task::Waker::noop()` instead, which Rust 1.85 and later provide.
+`ridl_rt::task` exists only under `ridl-rt`'s `std` feature, which the generated
+crate's own `std` feature turns on. A frame loop built without it uses
+`core::task::Waker::noop()` instead, which Rust 1.85 and later provide.
 
 A `serve` future settles at most 32 calls in one poll. When it reaches that
 limit, it wakes its own waker and returns `Pending`, so that an executor can run
@@ -222,21 +220,21 @@ other tasks before it polls the `serve` future again. Under `noop_waker` that
 wake is lost, so a frame loop that polls once per frame settles at most 32 calls
 per frame.
 
-The future of a command or a query call, and the `serve` future, panic when
-they are polled again after they resolved. The `next_event` future does not:
-polled again, it waits for the next occurrence.
+The future of a command or a query call, and the `serve` future, panic when they
+are polled again after they resolved. The `next_event` future does not: polled
+again, it waits for the next occurrence.
 
 ## Blocking calls
 
 The `blocking` module holds the same `Client` and `serve` for code that waits on
-a thread instead of polling. Each blocking call is
-`ridl_rt::task::block_on` over the async call, so the two forms cannot differ
-in what a call does; the blocking form only adds the wait and a timeout.
+a thread instead of polling. Each blocking call is `ridl_rt::task::block_on`
+over the async call, so the two forms cannot differ in what a call does; the
+blocking form only adds the wait and a timeout.
 
 A blocking client takes its timeout with `with_timeout` (or `set_timeout`). The
 default is no timeout. A call returns its outcome, or the timeout result when
-the timeout passes first. A signal read and a `subscribe_*` call return at
-once, as in the async client.
+the timeout passes first. A signal read and a `subscribe_*` call return at once,
+as in the async client.
 
 Blocking `serve` takes the handler, the provider and an optional timeout. It
 returns `Ok(())` when the timeout passes, so a thread that also does other work
@@ -248,9 +246,8 @@ declares:
 ```
 
 The cabin program runs that loop on a second thread and calls the blocking
-client on the first. `DoneOnDrop` is a type of the program that sets `done`
-when it is dropped, so that the serving loop also ends when the first thread
-panics:
+client on the first. `DoneOnDrop` is a type of the program that sets `done` when
+it is dropped, so that the serving loop also ends when the first thread panics:
 
 ```rust,noplayground
 {{#include ../../examples/cabin/consumer/src/main.rs:blocking-command}}
@@ -273,9 +270,9 @@ encodings = ["flatbuffers", "proto3"]
 transcode = true
 ```
 
-The function is named `transcode_<s>_to_<d>`, where `<s>` is the source
-encoding and `<d>` the target, spelled as in the manifest with `-` replaced by
-`_`. For a type `Speed` the crate holds:
+The function is named `transcode_<s>_to_<d>`, where `<s>` is the source encoding
+and `<d>` the target, spelled as in the manifest with `-` replaced by `_`. For a
+type `Speed` the crate holds:
 
 ```rust,ignore
 impl Speed {
@@ -293,23 +290,24 @@ impl Speed {
 
 The function verifies `bytes` under the source encoding, decodes the value, and
 encodes it under the target encoding into `out`. It calls
-`ridl_rt::payload::transcode`, which allocates no buffer of its own; the
-type's `decode` may allocate, as for a `string` field. An `out` that is too
-small is `TranscodeError::Encode` with `EncodeError::Capacity`, and bytes that
-do not verify are `TranscodeError::Verify`. A function exists only where
-the type has a `Payload` implementation under both encodings of the pair.
+`ridl_rt::payload::transcode`, which allocates no buffer of its own; the type's
+`decode` may allocate, as for a `string` field. An `out` that is too small is
+`TranscodeError::Encode` with `EncodeError::Capacity`, and bytes that do not
+verify are `TranscodeError::Verify`. A function exists only where the type has a
+`Payload` implementation under both encodings of the pair.
 
-A podbuf buffer starts on an 8-byte boundary. A caller passes an
-`out` for a podbuf target, and `bytes` for a podbuf source, that starts on one:
-the type's `<T as Payload<Podbuf>>::BUFFER` is an `Aligned` array, and
+A podbuf buffer starts on an 8-byte boundary. A caller passes an `out` for a
+podbuf target, and `bytes` for a podbuf source, that starts on one: the type's
+`<T as Payload<Podbuf>>::BUFFER` is an `Aligned` array, and
 `ridl_rt::podbuf::Aligned` wraps any other array. An `out` that is not aligned
-is `EncodeError::Unaligned`, and `bytes` that are not aligned do not verify.
-A map is written in key order, so a value whose map is in another order
-decodes from a podbuf source in key order.
+is `EncodeError::Unaligned`, and `bytes` that are not aligned do not verify. A
+map is written in key order, so a value whose map is in another order decodes
+from a podbuf source in key order.
 
 ## Cargo features
 
-The generated `Cargo.toml` declares three features; `std` and `validate-pattern` are on by default and `debug` is off:
+The generated `Cargo.toml` declares three features; `std` and `validate-pattern`
+are on by default and `debug` is off:
 
 | Feature            | Enables                                                                                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -321,11 +319,11 @@ With `std` and `validate-pattern` both off, the generated crate and `ridl-rt`
 are both `no_std` and build for a target that has no standard library. Its
 `lib.rs` declares this with
 `#![cfg_attr(not(any(feature = "std", feature = "validate-pattern")), no_std)]`.
-The crate still needs an allocator: under the same condition its `lib.rs`
-links `alloc` under the name `std` (`extern crate alloc as std;`), because the
-package files name `::std::string::String` and `::std::vec::Vec` for strings,
-bytes, arrays and maps. Single-file mode writes no `lib.rs`, so the crate that
-includes the file decides. A crate that is always `no_std` declares
+The crate still needs an allocator: under the same condition its `lib.rs` links
+`alloc` under the name `std` (`extern crate alloc as std;`), because the package
+files name `::std::string::String` and `::std::vec::Vec` for strings, bytes,
+arrays and maps. Single-file mode writes no `lib.rs`, so the crate that includes
+the file decides. A crate that is always `no_std` declares
 `extern crate alloc as std;` in its own root. A crate that is `no_std` only
 under a condition declares it under the same condition: where the alias is
 declared, `::std` names `alloc`, so a path that only the standard library has,
@@ -348,7 +346,8 @@ veh_cabin = { path = "generated", default-features = false }
 
 The generated crate depends on `ridl-rt` with one feature per encoding that the
 manifest names under `[backend.rust] encodings` — `flatbuffers`, `proto3`,
-`podbuf`, or a combination, which the codecs need — and no feature for a types-only build. An application that names `ridl-rt` itself, for example to use
+`podbuf`, or a combination, which the codecs need — and no feature for a
+types-only build. An application that names `ridl-rt` itself, for example to use
 `ridl_rt::task::noop_waker` or the error types, selects from its features:
 
 | `ridl-rt` feature | Default | Enables                                                                                                                                                                           |
@@ -356,12 +355,12 @@ manifest names under `[backend.rust] encodings` — `flatbuffers`, `proto3`,
 | `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                                                                                               |
 | `std`             | off     | The standard library; the `task` module: `block_on`, `noop_waker` and `flag_waker`; the `face::Timeout` trait; and the propagation hook of the `trace` module, `set_propagation`. |
 | `proto3`          | off     | The `proto3` module the generated proto3 codec calls.                                                                                                                             |
-| `podbuf`          | off     | The `podbuf` module the generated podbuf codec calls: the preamble check, the in-place reads, the writer and the `Aligned` buffer type.                                          |
+| `podbuf`          | off     | The `podbuf` module the generated podbuf codec calls: the preamble check, the in-place reads, the writer and the `Aligned` buffer type.                                           |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
 and its minimum Rust version is 1.88. The generated crate declares edition 2021
-and `rust-version = "1.88"`, and builds with Rust 1.88 or later with every
-cargo feature on or with default features off. To keep Rust 1.88, resolve its
+and `rust-version = "1.88"`, and builds with Rust 1.88 or later with every cargo
+feature on or with default features off. To keep Rust 1.88, resolve its
 dependencies as [Stability](stability.md) describes. When you build the
 generated crate as its own workspace root, its edition 2021 selects resolver 2,
 which by default does not read `rust-version`. Resolve with
@@ -373,11 +372,11 @@ dependency releases that Rust 1.88, the manifest's `rust-version`, supports, as
 
 With `[backend.rust] wasm = true` in the manifest, or `codec = true` on another
 backend table, which implies it, the generated `Cargo.toml` declares a third
-feature, `wasm-exports`, off by default, which turns `std` on.
-It compiles the exports of the crate's `wasm` module when the target is
-`wasm32`, and nothing on any other target. The manifest declares no crate type,
-so a Rust program that depends on the crate links no export. The WebAssembly
-module is built from the crate's directory with:
+feature, `wasm-exports`, off by default, which turns `std` on. It compiles the
+exports of the crate's `wasm` module when the target is `wasm32`, and nothing on
+any other target. The manifest declares no crate type, so a Rust program that
+depends on the crate links no export. The WebAssembly module is built from the
+crate's directory with:
 
 ```sh
 CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true \
@@ -386,13 +385,12 @@ cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
   --features wasm-exports
 ```
 
-The module exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`,
-`ridl_verify` and `ridl_type_id`. `ridl_type_id` returns the type id of a payload
-type named by its qualified name. It returns -1 for a name the list does not hold,
-an empty name, bytes that are not UTF-8, a null pointer with a length, a length
-above `isize::MAX`, and a pointer and length whose sum overflows the address
-space. A range past the end of the module's memory traps, as any read past it
-does.
+The module exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`, `ridl_verify`
+and `ridl_type_id`. `ridl_type_id` returns the type id of a payload type named
+by its qualified name. It returns -1 for a name the list does not hold, an empty
+name, bytes that are not UTF-8, a null pointer with a length, a length above
+`isize::MAX`, and a pointer and length whose sum overflows the address space. A
+range past the end of the module's memory traps, as any read past it does.
 
 The three variables are the recommended size settings, and `cargo` reads them
 from the environment. The module is
@@ -411,20 +409,19 @@ A command or query call resolves to `Result<_, ClientError>`:
   the client evaluates the `require` clauses before it sends anything.
 - **`ClientError::Call`** — the call was sent, and its outcome is a failure.
   `CallError::Contract` is a contract error the provider side reported:
-  `InvalidValue` (the payload breaks its typl constraints), `PreconditionFailed`,
-  `ContractBroken` (an `ensure` clause is false) or `UnknownInteraction` (the
-  peers disagree on an interface number or an ordinal). `CallError::Transport`
-  is an infrastructure failure: `Timeout`, `Undelivered`, `Down`, `Corrupt` or
-  `Busy`.
+  `InvalidValue` (the payload breaks its typl constraints),
+  `PreconditionFailed`, `ContractBroken` (an `ensure` clause is false) or
+  `UnknownInteraction` (the peers disagree on an interface number or an
+  ordinal). `CallError::Transport` is an infrastructure failure: `Timeout`,
+  `Undelivered`, `Down`, `Corrupt` or `Busy`.
 - **`ClientError::Read`** — the port failed while the reply was read.
 
 When a call's `max` bound passes, a sent command resolves to
 `Transport::Undelivered` and a sent query to `Transport::Timeout`. The bound is
 measured on the port's clock, so it depends on the runtime. The clock of
 `ridl-loopback` moves only when the program calls `Loopback::advance`, so over
-it a bound passes only after the program advances the clock past it; until
-then, a call that is never served returns only at the blocking client's own
-timeout.
+it a bound passes only after the program advances the clock past it; until then,
+a call that is never served returns only at the blocking client's own timeout.
 
 A signal read returns `Result<Sample<T>, ReadError>`. `serve` resolves to
 `ProviderError::Serve` when the handler refuses the interface's members, which
@@ -433,13 +430,13 @@ port fails while a call is read. The calls it settled before a failure stay
 settled.
 
 **A catalog mismatch panics.** Binding a `Client` or a `Publisher`, and starting
-`serve`, compare the port's catalog — the unit name and the catalog hash —
-with the `CATALOG` the face was generated from. When they differ, the face was
-generated from a different version of the unit than the one the runtime
-serves, and the bind panics with a message that names the interface and both
-catalogs. A program that must not panic compares the two itself before it
-binds. This snippet is an illustration and is not compiled; `port` stands for
-the port the program is about to bind:
+`serve`, compare the port's catalog — the unit name and the catalog hash — with
+the `CATALOG` the face was generated from. When they differ, the face was
+generated from a different version of the unit than the one the runtime serves,
+and the bind panics with a message that names the interface and both catalogs. A
+program that must not panic compares the two itself before it binds. This
+snippet is an illustration and is not compiled; `port` stands for the port the
+program is about to bind:
 
 ```rust,noplayground
 use ridl_rt::contract::Interface; // carries `CATALOG`
@@ -450,26 +447,25 @@ if port.catalog() != <api::Cabin as Interface>::CATALOG {
 }
 ```
 
-The catalog and its hash are described in [The catalog
-descriptor](catalog-descriptor.md).
+The catalog and its hash are described in
+[The catalog descriptor](catalog-descriptor.md).
 
 ## TypeScript
 
-`ridl build --emit typescript` writes the domain types of a package as one
-`.ts` file: branded scalars, interfaces, enums, enum sets, discriminated unions
-and init functions. It emits no face and no feature selection, so there is no
-async or blocking API to choose between.
+`ridl build --emit typescript` writes the domain types of a package as one `.ts`
+file: branded scalars, interfaces, enums, enum sets, discriminated unions and
+init functions. It emits no face and no feature selection, so there is no async
+or blocking API to choose between.
 
 With `[backend.typescript] codec = true` it also writes `<base>.codec.ts`, for
 every package that has a payload root with a codec (its own, or one of another
-package that its interfaces name): one
-`encode<Name>` and one `decode<Name>` function per payload type, which take
-and return the plain objects of `<base>.ts` and call the object API that
-`flatc` generates; one table per interface, which gives each interaction its
-interface number, its ordinal, its kind and the functions of its payloads; and
-the catalog's name and hash, the payload type names and the rule texts that
-the wasm codec takes at load. `ridl` does not run `flatc`. Build the files in
-two steps:
+package that its interfaces name): one `encode<Name>` and one `decode<Name>`
+function per payload type, which take and return the plain objects of
+`<base>.ts` and call the object API that `flatc` generates; one table per
+interface, which gives each interaction its interface number, its ordinal, its
+kind and the functions of its payloads; and the catalog's name and hash, the
+payload type names and the rule texts that the wasm codec takes at load. `ridl`
+does not run `flatc`. Build the files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
@@ -478,8 +474,8 @@ flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs
 
 The codec file imports `flatc`'s output from `./<package path>.js` (for
 `veh.cabin`, `./veh/cabin.js`), so `flatc`'s `-o` is the directory of the
-TypeScript files. When a payload type of an interaction is a named scalar or
-an enum set of another package (`ridl.std.Name` as the request of a query, for
+TypeScript files. When a payload type of an interaction is a named scalar or an
+enum set of another package (`ridl.std.Name` as the request of a query, for
 example), the codec file goes through that package's own codec file,
 `<package>.codec.ts`, which the build writes beside it; `flatc` then runs on
 that package's schema too, in the same directory:
@@ -493,40 +489,43 @@ its module, gets no codec file. The converters cover every typl kind: a union by
 its `kind` and `value`, a tuple by its named fields, an array, a map by its
 entries, an optional field (absent when the buffer leaves it out; an optional
 array, bytes or map field reads back as empty, because the object API cannot
-leave a vector out of the buffer), and an induced tuple of an interaction,
-which the codec file exports as an `interface` (`export type X = Record<string,
-never>` for one with no field). An optional array element, map
-key or map value is refused, as the Rust codec refuses it. A named scalar of
-another package converts by a type assertion, and an enum set of another
-package through a checking function of the file. A payload type of another
-package that is a named scalar or an enum set goes through that package's own
-codec file; a payload type that reaches a struct, a union or an enum of another
-package is refused with an error that names both. An internal payload type has no
-`encode`/`decode`, because `<base>.ts` does not export its type.
-[The codec table design record][codec-table] gives the rules in full.
+leave a vector out of the buffer), and an induced tuple of an interaction, which
+the codec file exports as an `interface`
+(`export type X = Record<string,
+never>` for one with no field). An optional
+array element, map key or map value is refused, as the Rust codec refuses it. A
+named scalar of another package converts by a type assertion, and an enum set of
+another package through a checking function of the file. A payload type of
+another package that is a named scalar or an enum set goes through that
+package's own codec file; a payload type that reaches a struct, a union or an
+enum of another package is refused with an error that names both. An internal
+payload type has no `encode`/`decode`, because `<base>.ts` does not export its
+type. [The codec table design record][codec-table] gives the rules in full.
 
 An `open` enum keeps its `export enum` and adds the type
 `<Name>Value = <Name> | { readonly unknown: number }`; a field of the enum has
-that type. The codec decodes a declared value to the member and any other
-value to `{ unknown: n }`, and it encodes `{ unknown: n }` as `n`, so a caller
-who writes `{ unknown: n }` for a declared `n` gets the member back after a
-round trip. A field that the buffer leaves out decodes to `{ unknown: 0 }` when
-the enum declares no zero member. The codec refuses an unknown value outside
+that type. The codec decodes a declared value to the member and any other value
+to `{ unknown: n }`, and it encodes `{ unknown: n }` as `n`, so a caller who
+writes `{ unknown: n }` for a declared `n` gets the member back after a round
+trip. A field that the buffer leaves out decodes to `{ unknown: 0 }` when the
+enum declares no zero member. The codec refuses an unknown value outside
 `Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`, on decode and on encode,
 with a `RuleError` whose `rule` is `variant`. An `open` enum set keeps its
 branded type, and `<Name>Bits.unknownBits(value)` returns the bits of `value`
 that the set does not declare. The codec refuses an open enum set value that
-does not fit the width of the set, on encode, with a `RuleError` whose `rule`
-is `range`.
+does not fit the width of the set, on encode, with a `RuleError` whose `rule` is
+`range`.
 
 The `.proto` and `.fbs` files that the build writes carry one comment line above
-each enum that states the rule of its declaration: `// strict: a value outside
-this list is not valid` or `// open: a value outside this list is valid and is
-kept`. The comment states the rule, not who enforces it. The Rust codecs and
-the TypeScript codec refuse a value outside the list of a strict enum, and a
-bit outside the declared bits of a strict enum set, when they read it. The
-TypeScript codec throws a `RuleError` whose `rule` is `variant`. The enum type
-itself is the same in both cases.
+each enum that states the rule of its declaration:
+`// strict: a value outside
+this list is not valid` or
+`// open: a value outside this list is valid and is
+kept`. The comment states
+the rule, not who enforces it. The Rust codecs and the TypeScript codec refuse a
+value outside the list of a strict enum, and a bit outside the declared bits of
+a strict enum set, when they read it. The TypeScript codec throws a `RuleError`
+whose `rule` is `variant`. The enum type itself is the same in both cases.
 
 ## Documentation in the generated code
 
@@ -534,8 +533,8 @@ The doc comment of a declaration or a member (see
 [Documenting your API](documenting.md)) becomes the doc comment of the item
 generated from it: rustdoc in the Rust crate, TSDoc in the TypeScript module.
 The generated doc also lists the item's _rules_: the facts the schema states
-about the values the item admits and the way it is used. They are the same
-lines the editor's hover shows in its **Contract** list.
+about the values the item admits and the way it is used. They are the same lines
+the editor's hover shows in its **Contract** list.
 
 A generated doc holds these parts, in this order, and leaves out each part that
 is empty:
@@ -555,25 +554,25 @@ written as a code span of the target's qualified name, such as
 emits holds a link that does not resolve. Both backends link only to a
 declaration of the package itself or to a declaration of another package that
 this package reaches through a type. A target that this package does not reach
-through a type is written as a code span. In both languages, so is an
-`internal` declaration, a constant the backend does not emit (such as a `bytes`
-constant), and a member of a named scalar or of a constant, which has no member
-item. In Rust it is also the case for an event, a `fixed`, an interface with no
-face module, a target whose path Rust spells with a raw identifier (`r#move`),
-and an item whose name the module of a child package takes, which a program
-reaches only through the hidden `__ridl_package` module. In TypeScript it is
-also the case for an interface, an interaction and a union arm, which the module
-holds no item for, and for a declaration of another package that the module
-does not import. `@labels` is not rendered.
+through a type is written as a code span. In both languages, so is an `internal`
+declaration, a constant the backend does not emit (such as a `bytes` constant),
+and a member of a named scalar or of a constant, which has no member item. In
+Rust it is also the case for an event, a `fixed`, an interface with no face
+module, a target whose path Rust spells with a raw identifier (`r#move`), and an
+item whose name the module of a child package takes, which a program reaches
+only through the hidden `__ridl_package` module. In TypeScript it is also the
+case for an interface, an interaction and a union arm, which the module holds no
+item for, and for a declaration of another package that the module does not
+import. `@labels` is not rendered.
 
 A Rust link uses the short form `[Speed]` when that text is the target's Rust
 name and the target is in the module that holds the doc. When a Markdown
 reference definition uses the same label, the generated shortcut uses code
-formatting to preserve the resolved target. Other links use an
-absolute path from the crate root, such as `crate::veh::common::Speed`, which
-resolves in the crate `ridl build` emits. A program that brings a generated file
-in with `include!` inside a module of its own moves the items away from those
-absolute paths, so rustdoc reports those links as unresolved.
+formatting to preserve the resolved target. Other links use an absolute path
+from the crate root, such as `crate::veh::common::Speed`, which resolves in the
+crate `ridl build` emits. A program that brings a generated file in with
+`include!` inside a module of its own moves the items away from those absolute
+paths, so rustdoc reports those links as unresolved.
 
 In the Rust face, the doc of an interaction goes on these methods: for a signal,
 the method of the async `Client`, of the blocking `Client` and of the
@@ -588,8 +587,8 @@ interaction's doc text, then a sentence the backend writes about the method
 itself, then the `# Rules` section, then, for a command or a query, a
 `# Parameters` section (one bullet per parameter with its name and its doc, and
 the parameter's rules as nested bullets), then the `# See also` section and the
-`Available since` lines. The doc of an interface goes on its face module, in
-the same order around the module's own sentence.
+`Available since` lines. The doc of an interface goes on its face module, in the
+same order around the module's own sentence.
 
 ### What the generated code checks
 
@@ -599,9 +598,9 @@ both languages, whether or not the generated code checks it. The sentence the
 backend writes about a method describes what that method does, its checks
 included: the doc of a named scalar's `new` says that it returns an error for a
 value that breaks a constraint the generated code checks, the doc of a `Client`
-call method says what happens when a
-`require` clause fails, and the doc of a query's `Provider` method says that
-`serve` discards a reply that breaks an `ensure` clause.
+call method says what happens when a `require` clause fails, and the doc of a
+query's `Provider` method says that `serve` discards a reply that breaks an
+`ensure` clause.
 
 This table records, for each kind of rule, the generated item that checks it:
 
@@ -612,7 +611,7 @@ This table records, for each kind of rule, the generated item that checks it:
 | unit             | not checked                                               | not checked |
 | length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | not checked |
 | pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | not checked |
-| collection bound | checked by `encode` and `verify` | not checked |
+| collection bound | checked by `encode` and `verify`                          | not checked |
 | timing           | not checked                                               | not checked |
 | response bound   | `max` checked by the future of a `Client` call            | not checked |
 | errors           | not checked                                               | not checked |
@@ -624,27 +623,27 @@ In the Rust column:
 - `new` and `TryFrom` are the constructors of a named scalar. `verify` is the
   FlatBuffers codec's check of a received payload. It also checks a field whose
   type is written inline, which has no constructor. `encode` also checks
-  anonymous string and byte lengths and variable-length collection counts.
-  Exact array counts are enforced by their Rust type. Other field constraints
-  and map-key uniqueness are checked by `verify`.
-- An enum's and an enum set's set of declared values is not a rule of the
-  table, but it is checked the same way: for a strict declaration `TryFrom`
-  and `verify` refuse a value the declaration does not name, and for an `open`
-  one nothing refuses it (see [What the crate contains](#what-the-crate-contains)).
+  anonymous string and byte lengths and variable-length collection counts. Exact
+  array counts are enforced by their Rust type. Other field constraints and
+  map-key uniqueness are checked by `verify`.
+- An enum's and an enum set's set of declared values is not a rule of the table,
+  but it is checked the same way: for a strict declaration `TryFrom` and
+  `verify` refuse a value the declaration does not name, and for an `open` one
+  nothing refuses it (see [What the crate contains](#what-the-crate-contains)).
   The proto3 codec carries an enum as an int32, so its `encode` refuses an
-  `Unknown` whose integer does not fit int32 with the range error; such a
-  value can only come from another encoding. The podbuf codec carries an
-  enum or enum set at the width its declared values infer, so its `encode`
-  refuses with the range error an `open` value whose integer does not fit
-  that width when it is below 64 bits; at 64 bits the raw value is the bit
-  pattern of the wire integer, so every value is written back unchanged.
+  `Unknown` whose integer does not fit int32 with the range error; such a value
+  can only come from another encoding. The podbuf codec carries an enum or enum
+  set at the width its declared values infer, so its `encode` refuses with the
+  range error an `open` value whose integer does not fit that width when it is
+  below 64 bits; at 64 bits the raw value is the bit pattern of the wire
+  integer, so every value is written back unchanged.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a
   failure when the response bound's `max` passes (see [Failures](#failures)).
   Its `min` is not checked.
-- A query that declares an error type gets no face, so no generated item
-  carries the errors rule.
+- A query that declares an error type gets no face, so no generated item carries
+  the errors rule.
 - A `Client` call method evaluates the `require` clauses before it sends.
   `serve` evaluates them before it calls the `Provider`, and evaluates the
   `ensure` clauses on the reply before it sends the reply. The `Client` does not

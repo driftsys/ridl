@@ -358,13 +358,16 @@ carry it and `ridl-ir` is below all of them:
   for a plugin, for `--deployment`, or for a system dump.
 
 **One scope for every hash.** `catalog_scope` gives the descriptor and the
-regions the same packages: every checked package of the workspace, then
-`ridl.std` when a package references it. `Emit::Catalog` is classed as a code
-emit for that reason, so a build with `--emit catalog` alone keeps `ridl.std` in
-`others`, and its hash equals the hash the Rust face carries. The system write
-checks `ridl.std` itself when a package references it and no code emit checked
-it. A package that the list names twice is read once, so the hash is the same
-whether or not a caller includes a package of the unit there a second time.
+regions the same packages: every checked package of the build, the packages of
+the remote units it resolves included, then `ridl.std` when a package references
+it. `Emit::Catalog` is classed as a code emit for that reason, so a build with
+`--emit catalog` alone keeps `ridl.std` in `others`, and its hash equals the
+hash the Rust face carries. The system write checks `ridl.std` itself when a
+package references it and no code emit checked it. A package that the list names
+twice is read once, so the hash is the same whether or not a caller includes a
+package of the unit there a second time. The hashes of a `<unit>.catalogs` file
+use the same scope; the rules for computing and checking them are under the
+chain file above.
 
 The golden test is `crates/ridl-descriptor/tests/golden_hash.rs`: it hashes the
 corpus package's checked-in IR snapshot, its shapes numbered 1.. by the test,

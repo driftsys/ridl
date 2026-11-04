@@ -2300,13 +2300,13 @@ fn emit_union(
 /// A tuple field name is projected through the pinned transform, the same one
 /// [`emit_field`] applies to a declared struct's field (ADR-0016 decisions 1
 /// and 2); a nested tuple's type name is spelled through `camel_case` by the
-/// lowering. Neither namespace is checked by RIDL-149: two tuple field names
-/// distinct in typl can spell one Rust field name, which rustc would reject
-/// with E0124 (driftsys/ridl#449). The `docs/technotes/rust-backend-name-collisions.md`
-/// (ADR-0016's 2026-09-29 amendment) makes that this backend's to refuse, and
-/// the claim table per induced tuple refuses it before this runs
-/// (`claims::check`). A field name repeated verbatim is the language's,
-/// TYPL-215.
+/// lowering. RIDL-149 refuses two tuple field names equal under `snake_case`
+/// in a checked package (ADR-0016, amendment of 2026-11-03). The claim table
+/// per induced tuple refuses the same pair for IR handed to the backend
+/// directly, before this runs (`claims::check`). The `camel_case` type-name
+/// namespace stays unchecked by RIDL-149; see
+/// `docs/technotes/rust-backend-name-collisions.md`. A field name repeated
+/// verbatim is TYPL-215.
 fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
     let name = tuple_name(induced);
     let name_id = ident(name);

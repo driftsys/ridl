@@ -2964,13 +2964,11 @@ impl Checker<'_> {
             ast::FieldType::Path(path) => self.lower_named_type(path),
             ast::FieldType::Primitive(node) => self.lower_primitive_type(node, map_key),
             ast::FieldType::Tuple(tuple) => {
-                // TYPL-215: a tuple field name declared twice, exactly (issue
-                // #449), keyed on the raw source name as in a struct. Both
-                // fields still lower. Two names that are equal only under
-                // snake_case are not the language's collision: of the in-tree
-                // backends only the Rust backend applies snake_case to a tuple
-                // field, so the pair belongs to that backend (`docs/technotes/rust-backend-name-collisions.md`, per-namespace table).
+                // TYPL-215 checks exact repeats first, then RIDL-149 checks
+                // distinct names under snake_case, as in a struct. Both fields
+                // still lower, and each tuple has its own name scope.
                 let mut declared: HashMap<String, TextRange> = HashMap::new();
+                let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
                 let fields = tuple
                     .fields()
                     .map(|field| {
@@ -2981,6 +2979,20 @@ impl Checker<'_> {
                                 self.duplicate_field(name, range, first, FieldContainer::Tuple);
                             } else {
                                 declared.insert(name.clone(), range);
+                                let projection = snake_case(name);
+                                if let Some((first_name, first)) =
+                                    projected.get(&projection).cloned()
+                                {
+                                    self.colliding_projected_name(
+                                        name,
+                                        &first_name,
+                                        &Collision::Snake(projection),
+                                        range,
+                                        first,
+                                    );
+                                } else {
+                                    projected.insert(projection, (name.clone(), range));
+                                }
                             }
                         }
                         v2::TupleField {
@@ -3815,7 +3827,7 @@ impl Checker<'_> {
 
     /// TYPL-215: a field name declared twice in one struct or one tuple —
     /// the same source name, not merely a collision after the projection
-    /// (that is RIDL-149, and struct fields only). Unlike RIDL-402, neither
+    /// (that is RIDL-149). Unlike RIDL-402, neither
     /// declaration is dropped: both fields still lower, so the message states
     /// the rule and points at the first declaration without claiming a
     /// winner.
@@ -4400,8 +4412,8 @@ impl Checker<'_> {
 
     /// RIDL-149: two names in one scope that collide after a pinned name
     /// transform (ADR-0016 decision 3, as amended). Shared by the
-    /// interface-member, parameter, struct-field, union-arm and enum-value
-    /// checks — one rule over five namespaces.
+    /// interface-member, parameter, struct-field, tuple-member, union-arm and
+    /// enum-value checks — one rule over six namespaces.
     ///
     /// The message names the transform that actually collided. It used to
     /// state `snake_case` for every input, which stopped being true when
@@ -8854,6 +8866,24 @@ mod tests {
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
     }
 
+    #[test]
+    fn ridl_149_does_not_check_the_names_a_backend_derives_from_a_field() {
+        let checked = without_missing_docs(check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               x : Speed?\n\
+               hasX : Speed\n\
+               start : Speed\n\
+               startAt : Speed\n\
+               head : Speed\n\
+               t : (y : Speed?, hasY : Speed)\n\
+             }\n",
+        ));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
     /// A field that both re-declares a `reserved` name and collides under the
     /// transform reports both diagnostics, matching how the interface-member
     /// check orders its own.
@@ -9182,29 +9212,6 @@ mod tests {
         }
     }
 
-    /// Two tuple field names that differ in source but agree under
-    /// snake_case are not the language's collision: of the in-tree backends
-    /// only the Rust backend applies snake_case to a tuple field, so the
-    /// collision belongs to that backend's claim table (`docs/technotes/rust-backend-name-collisions.md`, per-namespace table). This pins that `ridl check` still accepts the
-    /// source.
-    #[test]
-    fn a_snake_case_equal_tuple_field_pair_draws_no_diagnostic() {
-        let checked = check_source(
-            "app",
-            "package app\n\
-             type Speed : integer [0..250]\n\
-             struct Reading {\n\
-               bounds : (minSpeed : Speed, min_speed : Speed)\n\
-             }\n",
-        );
-        assert_eq!(
-            codes(&checked),
-            Vec::<&str>::new(),
-            "got: {:?}",
-            checked.diagnostics
-        );
-    }
-
     /// The duplicate tuple field is reported, not dropped: both fields still
     /// lower, as they do in a struct. Asserted over the IR, because no
     /// diagnostic can show it.
@@ -9258,6 +9265,124 @@ mod tests {
             "got: {}",
             checked.diagnostics[0].message
         );
+    }
+
+    // --- RIDL-149: tuple members under snake_case -----------------------
+
+    /// A tuple collision reports both source names and keeps both fields.
+    #[test]
+    fn ridl_149_two_tuple_fields_equal_under_snake_case_are_refused() {
+        let source = "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (minSpeed : Speed, min_speed : Speed)\n\
+             }\n";
+        let checked = without_missing_docs(check_source("app", source));
+        assert_eq!(codes(&checked), vec!["RIDL-149"]);
+        let diagnostic = &checked.diagnostics[0];
+        let first = source.find("minSpeed").unwrap();
+        let second = source.find("min_speed").unwrap();
+        let span = |range: TextRange| (usize::from(range.start()), usize::from(range.end()));
+        assert_eq!(
+            span(diagnostic.primary.range),
+            (second, second + "min_speed".len())
+        );
+        assert_eq!(
+            span(diagnostic.labels[0].span.range),
+            (first, first + "minSpeed".len())
+        );
+        assert_eq!(
+            diagnostic.message,
+            "`min_speed` and `minSpeed` both become `min_speed` under the snake_case name transform, \
+             so a target whose namespace is snake_case would carry one identifier twice. \
+             Rename one of them (ridl §16.4; ADR-0016 decision 3)"
+        );
+        assert_eq!(
+            only_label(diagnostic),
+            "`minSpeed` becomes `min_speed` here"
+        );
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "Reading").members[0].member
+        else {
+            panic!("`bounds` is not a field");
+        };
+        let Some(v2::field_type::Kind::Tuple(tuple)) = &field.r#type.as_ref().unwrap().kind else {
+            panic!("`bounds` is not a tuple");
+        };
+        let names: Vec<&str> = tuple
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["minSpeed", "min_speed"]);
+    }
+
+    /// Every tuple position uses the same projection check.
+    #[test]
+    fn ridl_149_a_tuple_collision_is_refused_wherever_the_tuple_is_written() {
+        for field in [
+            "bounds : [(minSpeed : Speed, min_speed : Speed); 4]",
+            "bounds : (minSpeed : Speed, min_speed : Speed)?",
+            "bounds : (outer : (minSpeed : Speed, min_speed : Speed), b : Speed)",
+        ] {
+            let checked = without_missing_docs(check_source(
+                "app",
+                &format!(
+                    "package app\ntype Speed : integer [0..250]\nstruct Reading {{\n  {field}\n}}\n"
+                ),
+            ));
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-149"],
+                "{field}: {:?}",
+                checked.diagnostics
+            );
+        }
+        let checked = without_missing_docs(check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Svc {{\n  query range() : (minSpeed : Speed, min_speed : Speed) @[..50ms]\n}}\n"
+            ),
+        ));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "{:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Struct fields and each nested tuple have separate projection scopes.
+    #[test]
+    fn ridl_149_each_tuple_is_its_own_projection_scope() {
+        let checked = without_missing_docs(check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               minSpeed : Speed\n\
+               bounds : (min_speed : Speed, inner : (minSpeed : Speed, b : Speed))\n\
+             }\n",
+        ));
+        assert!(
+            !codes(&checked).contains(&"RIDL-149"),
+            "{:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// An exact repeat after a projection collision draws only TYPL-215.
+    #[test]
+    fn ridl_149_a_tuple_repeat_after_a_collision_is_typl_215() {
+        let checked = without_missing_docs(check_source(
+            "app",
+            "package app\n\
+             type Speed : integer [0..250]\n\
+             struct Reading {\n\
+               bounds : (minSpeed : Speed, min_speed : Speed, minSpeed : Speed)\n\
+             }\n",
+        ));
+        assert_eq!(codes(&checked), vec!["RIDL-149", "TYPL-215"]);
     }
 
     // --- RIDL-413: exact duplicate parameter name (issue #244) -------------

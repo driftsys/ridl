@@ -97,6 +97,93 @@ fn compatible(out: &Path, home: &Path, unit: &str) -> Vec<serde_json::Value> {
     json["compatible"].as_array().unwrap().clone()
 }
 
+fn catalog_hash(out: &Path, home: &Path, unit: &str) -> serde_json::Value {
+    let file = out.join(format!("{unit}.catalog.binfb"));
+    let (code, stdout, stderr) = ridl(out, home, &["describe", file.to_str().unwrap()]);
+    assert_eq!(code, 0, "{stderr}");
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    json["hash"].clone()
+}
+
+/// History heads equal descriptor hashes for direct and transitive remote type
+/// references, and a compatible publication preserves the prior head.
+#[test]
+fn a_history_head_equals_the_descriptor_hash_of_a_unit_reaching_a_remote_type() {
+    let dir = TempDir::new("remote-history-hash");
+    let home = TempDir::new("remote-history-hash-home");
+    let out = TempDir::new("remote-history-hash-out");
+    let out2 = TempDir::new("remote-history-hash-out2");
+    setup(&dir, &home, true);
+    let baseline = dir.path().join(".ridl/baseline");
+    let heads = ["veh.cluster", "veh.body"].map(|unit| {
+        let history = ridl_core::catalog_history::parse(
+            &std::fs::read_to_string(baseline.join(format!("{unit}.catalogs"))).unwrap(),
+        )
+        .unwrap();
+        (unit, history.hashes[0])
+    });
+    command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    for (unit, head) in &heads {
+        assert_eq!(
+            catalog_hash(out.path(), home.path(), unit),
+            serde_json::json!(head),
+            "{unit}: the history head equals the descriptor hash"
+        );
+        assert!(
+            compatible(out.path(), home.path(), unit).is_empty(),
+            "{unit}: the published tree lists no earlier catalog"
+        );
+    }
+
+    let old_cluster_head = serde_json::json!(heads[0].1);
+    dir.write(
+        "cluster/cluster.ridl",
+        &CLUSTER.replace("@10ms }", "@10ms\n signal extra: Envelope @20ms }"),
+    );
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out2.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    assert_eq!(
+        compatible(out2.path(), home.path(), "veh.cluster"),
+        vec![old_cluster_head.clone()],
+        "the changed tree lists the published hash as compatible"
+    );
+    let new = catalog_hash(out2.path(), home.path(), "veh.cluster");
+    assert_ne!(new, old_cluster_head);
+
+    command(dir.path(), home.path(), &["baseline"], 0);
+    let history = ridl_core::catalog_history::parse(
+        &std::fs::read_to_string(baseline.join("veh.cluster.catalogs")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::json!(history.hashes),
+        serde_json::json!([new, old_cluster_head]),
+        "publication prepends the new descriptor hash to the published history"
+    );
+}
+
 #[test]
 fn non_podbuf_baseline_accepts_missing_remote_evidence() {
     let dir = TempDir::new("non-podbuf-evidence");

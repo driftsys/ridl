@@ -4,10 +4,10 @@ The catalog descriptor is a small binary file, one per unit, that lists what a
 runtime needs to route and check the traffic of that unit's interfaces: the
 interface numbers, the members and their ordinals, the maximum encoded size of
 each payload, the timing bounds, and the retired interfaces. A program reads it
-without the compiler and without decoding the IR. A unit is one `ridl.toml`
-with a `[package]` table and every source package in its directory tree; the
-unit's name is the manifest's `name`, which is also the name of its root source
-package ([the design record][design]).
+without the compiler and without decoding the IR. A unit is one `ridl.toml` with
+a `[package]` table and every source package in its directory tree; the unit's
+name is the manifest's `name`, which is also the name of its root source package
+([the design record][design]).
 
 ## What it is for
 
@@ -21,9 +21,8 @@ questions such as:
 - Is this member a signal, an event, a command or a query, and which payload
   does it carry?
 - What is the largest payload this member can send, so that a buffer can be
-  sized in advance, and so that a larger payload can be refused? The size
-  counts the payload alone, without the envelope and the framing a transport
-  adds.
+  sized in advance, and so that a larger payload can be refused? The size counts
+  the payload alone, without the envelope and the framing a transport adds.
 - What timing bound does this member declare?
 - Do both peers speak the same version of the unit?
 
@@ -50,8 +49,8 @@ ridl build examples/cabin --emit catalog --out-dir out
 # writes out/veh.cabin.catalog.binfb
 ```
 
-A unit with no interface gets no file. The flag combines with the others, so
-one build can write the Rust crate and the descriptor together. The other emit
+A unit with no interface gets no file. The flag combines with the others, so one
+build can write the Rust crate and the descriptor together. The other emit
 targets stay one file per source package; only the catalog is per unit.
 
 ## Reading it
@@ -117,58 +116,58 @@ The member `average`, a query, as it appears in `members`:
 ```
 
 The keys are in alphabetical order, and an absent timing bound or limit is
-`null`. A file that is not a valid descriptor, or that has a schema version this toolchain
-does not read, makes `ridl describe` exit with code 2. The
+`null`. A file that is not a valid descriptor, or that has a schema version this
+toolchain does not read, makes `ridl describe` exit with code 2. The
 [CLI reference](cli-reference.md#ridl-describe) has the details.
 
 ## What it contains
 
-- **The catalog**: the unit `name`; the `hash`, which identifies this version
-  of the unit (see below); `toolchain`, the version of `ridl` that wrote the
-  file; the schema `version`; the `interfaces`; the `retired` interfaces,
-  each with its name and number, so a reader can refuse a peer that still uses
-  one; and `compatible`, the hashes of earlier catalogs of the unit that the
-  toolchain judged compatible or carried over unchanged with this one (see
+- **The catalog**: the unit `name`; the `hash`, which identifies this version of
+  the unit (see below); `toolchain`, the version of `ridl` that wrote the file;
+  the schema `version`; the `interfaces`; the `retired` interfaces, each with
+  its name and number, so a reader can refuse a peer that still uses one; and
+  `compatible`, the hashes of earlier catalogs of the unit that the toolchain
+  judged compatible or carried over unchanged with this one (see
   [The compatible catalogs](#the-compatible-catalogs)).
-- **Each interface**: its `name`, qualified relative to the unit (`Cabin` for
-  an interface of the root source package, `cluster.Speed` for one of the
-  source package `cluster` below it); its `number`, which is one space per
-  unit; and `provisional`, which is true while the number is not yet recorded
-  in the unit's `interfaces.lock`, the one lock file beside the unit's
-  `ridl.toml`. `Cabin` above is provisional because `examples/cabin` has no
-  lock file; a number becomes permanent when
-  [`ridl lock`](cli-reference.md#ridl-lock) records it. `reserved_ordinals`
-  lists the ordinals that `reserved` tombstones hold. The ridl reference,
-  [section 11](reference/ridl.md#11-interaction-identity-and-evolution), is
-  the rule for the names and the numbers.
+- **Each interface**: its `name`, qualified relative to the unit (`Cabin` for an
+  interface of the root source package, `cluster.Speed` for one of the source
+  package `cluster` below it); its `number`, which is one space per unit; and
+  `provisional`, which is true while the number is not yet recorded in the
+  unit's `interfaces.lock`, the one lock file beside the unit's `ridl.toml`.
+  `Cabin` above is provisional because `examples/cabin` has no lock file; a
+  number becomes permanent when [`ridl lock`](cli-reference.md#ridl-lock)
+  records it. `reserved_ordinals` lists the ordinals that `reserved` tombstones
+  hold. The ridl reference,
+  [section 11](reference/ridl.md#11-interaction-identity-and-evolution), is the
+  rule for the names and the numbers.
 - **Each member**: its `name`, its `ordinal` (its position in the interface
-  body), its `kind`, its `payloads`, its `timing` when the member declares
-  one, its `limit`, the payload limit in bytes that a `[limits]` entry of
-  the unit's `ridl.toml` gives it, absent when no entry applies, and its
-  `streams`, one entry per stream of the call. An entry has its `no` (0 for a
-  query's reply stream, `k` for the `k`-th stream parameter, counting only the
-  stream parameters), its `form` (`Elements`, `Bytes` or `Text`), its
-  `element`, the element type's name qualified by its package under
-  `Elements` and `null` otherwise, and its `max_sizes`, the element's rows
-  under `Elements` and none otherwise. A member with no stream, and every
-  member of a file written before the field existed, prints `[]`.
+  body), its `kind`, its `payloads`, its `timing` when the member declares one,
+  its `limit`, the payload limit in bytes that a `[limits]` entry of the unit's
+  `ridl.toml` gives it, absent when no entry applies, and its `streams`, one
+  entry per stream of the call. An entry has its `no` (0 for a query's reply
+  stream, `k` for the `k`-th stream parameter, counting only the stream
+  parameters), its `form` (`Elements`, `Bytes` or `Text`), its `element`, the
+  element type's name qualified by its package under `Elements` and `null`
+  otherwise, and its `max_sizes`, the element's rows under `Elements` and none
+  otherwise. A member with no stream, and every member of a file written before
+  the field existed, prints `[]`.
 - **Each payload**: its `role` (`value` for a signal or a `fixed`, `occurrence`
   for an event, `request` for a command or a query, `response` for a query's
   reply), its `type_name`, and one `max_sizes` row per encoding. A request
-  spells only the parameters that are not streams. A row is
-  `Bounded`, with `bytes` the maximum encoded size of the payload, envelope and
-  framing excluded; or `Unbounded`, with `bytes` 0 and a `cause` that says why
-  the compiler cannot bound it in that encoding. For example, a FlatBuffers row
-  is `Unbounded` when the payload's largest encoding would exceed 4 GiB, the
-  most that FlatBuffers' 32-bit offsets can address. An encoding with no row
-  has no size computed by this toolchain. The response payload of a stream
-  reply (`<T>`), a request of zero or of several non-stream parameters, and an
-  inline `T | E` reply have no row in any encoding; a stream's element carries
-  its rows in the member's `streams` entry. A `podbuf` row is present for a payload with a podbuf root, sized
-  by `ridl_ir::projection::podbuf::max_size`, and a proto3 row is present only
-  for a payload that is a struct, a union, a named scalar, an enum or an enum
-  set, the kinds the proto3 schema gives a message of their own. A named
-  scalar, an enum and an enum set are sized as their root message
+  spells only the parameters that are not streams. A row is `Bounded`, with
+  `bytes` the maximum encoded size of the payload, envelope and framing
+  excluded; or `Unbounded`, with `bytes` 0 and a `cause` that says why the
+  compiler cannot bound it in that encoding. For example, a FlatBuffers row is
+  `Unbounded` when the payload's largest encoding would exceed 4 GiB, the most
+  that FlatBuffers' 32-bit offsets can address. An encoding with no row has no
+  size computed by this toolchain. The response payload of a stream reply
+  (`<T>`), a request of zero or of several non-stream parameters, and an inline
+  `T | E` reply have no row in any encoding; a stream's element carries its rows
+  in the member's `streams` entry. A `podbuf` row is present for a payload with
+  a podbuf root, sized by `ridl_ir::projection::podbuf::max_size`, and a proto3
+  row is present only for a payload that is a struct, a union, a named scalar,
+  an enum or an enum set, the kinds the proto3 schema gives a message of their
+  own. A named scalar, an enum and an enum set are sized as their root message
   `<Name>Box`.
 
 The descriptor does not contain type layouts, field lists, constraints other
@@ -181,12 +180,12 @@ emits.
 The `hash` identifies one version of the unit exactly. `compatible` lists, as
 32-byte hashes, the earlier versions of the unit that `ridl diff`'s classifier,
 scoped to the unit, judged compatible with this one, newest first. When the
-current hash is the newest published one, the published list is carried only
-if inline evidence is usable and no proved podbuf break affects the unit.
-The current hash is never in it. A reader built for one of those versions can be accepted by a
-provider that serves this one, which is the use the frame specification makes
-of the list ([section 6.1][attach]). No runtime in this repository accepts an
-`attach` on the strength of the list.
+current hash is the newest published one, the published list is carried only if
+inline evidence is usable and no proved podbuf break affects the unit. The
+current hash is never in it. A reader built for one of those versions can be
+accepted by a provider that serves this one, which is the use the frame
+specification makes of the list ([section 6.1][attach]). No runtime in this
+repository accepts an `attach` on the strength of the list.
 
 The list comes from the published baseline. `ridl baseline` records, for each
 unit with an interface, a `<unit>.catalogs` file beside the snapshots, and
@@ -196,33 +195,34 @@ changes the catalog, which restarts the chain. Missing inline evidence for an
 affected podbuf unit refuses normal publication with exit 2; a build warns and
 omits that unit's compatible catalogs. A file is used only when its newest hash
 is the hash recomputed from the snapshots and context published beside it; a
-file that does not describe those snapshots, such as one left behind by a hand-edited baseline,
-restarts the chain instead. A breaking change that leaves the catalog hash as
-it was, such as the removal of a declaration no interface reaches, keeps the
-chain only when usable inline evidence and no proved podbuf break permit it. A
-change in another unit counts for this unit only when an interface of this unit
-reaches the changed declaration. `ridlc build` reads no baseline and
-writes an empty list. The [CLI reference](cli-reference.md#ridl-baseline)
-states the file format and the rules.
+file that does not describe those snapshots, such as one left behind by a
+hand-edited baseline, restarts the chain instead. A breaking change that leaves
+the catalog hash as it was, such as the removal of a declaration no interface
+reaches, keeps the chain only when usable inline evidence and no proved podbuf
+break permit it. A change in another unit counts for this unit only when an
+interface of this unit reaches the changed declaration. `ridlc build` reads no
+baseline and writes an empty list. The
+[CLI reference](cli-reference.md#ridl-baseline) states the file format and the
+rules.
 
 ## The catalog and the face
 
-The catalog hash is a SHA-256 hash over the unit's interfaces, from every
-source package of the unit, their numbers, and every declaration they reach, in
-the unit or in another one. Doc comments, labels and `deprecated` do not change
-it; any other change to an interface or to a type it uses does, so a change in
-any source package of the unit that an interface reaches changes the one hash.
-A `[limits]` entry in the unit's `ridl.toml` that gives an interaction its
-payload limit changes the hash too, so adding, removing or editing such an
-entry changes the hash of the interaction's unit. The design record's
-[hash section][hash] has the exact input.
+The catalog hash is a SHA-256 hash over the unit's interfaces, from every source
+package of the unit, their numbers, and every declaration they reach, in the
+unit or in another one. Doc comments, labels and `deprecated` do not change it;
+any other change to an interface or to a type it uses does, so a change in any
+source package of the unit that an interface reaches changes the one hash. A
+`[limits]` entry in the unit's `ridl.toml` that gives an interaction its payload
+limit changes the hash too, so adding, removing or editing such an entry changes
+the hash of the interaction's unit. The design record's [hash section][hash] has
+the exact input.
 
 The generated Rust face carries the same unit name and hash as its `CATALOG`.
-When a face binds to a port, it compares its `CATALOG` with the catalog of
-that port, and panics when they differ. So a face generated from a different
-version of the unit than the one its runtime serves fails at bind time,
-instead of misreading payloads. The face compares itself with its own
-port only; it does not compare catalogs with the party at the other end. The
+When a face binds to a port, it compares its `CATALOG` with the catalog of that
+port, and panics when they differ. So a face generated from a different version
+of the unit than the one its runtime serves fails at bind time, instead of
+misreading payloads. The face compares itself with its own port only; it does
+not compare catalogs with the party at the other end. The
 [failures section](generated-code.md#failures) of "Using the generated Rust
 code" shows what that check does.
 

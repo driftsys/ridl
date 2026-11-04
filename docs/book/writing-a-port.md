@@ -9,26 +9,26 @@ trait is in the [`ridl_rt::port` documentation][port-docs].
 
 ## The runtime and the face
 
-A generated face holds no runtime. Each `Client`, `Publisher` and `serve` of
-the face runs over a value that implements some of the traits of
-`ridl_rt::port`, and calls only those traits; it never names the runtime that
-implements them ([Using the generated Rust code](generated-code.md#the-face)).
-A runtime is a separate crate that implements those traits.
+A generated face holds no runtime. Each `Client`, `Publisher` and `serve` of the
+face runs over a value that implements some of the traits of `ridl_rt::port`,
+and calls only those traits; it never names the runtime that implements them
+([Using the generated Rust code](generated-code.md#the-face)). A runtime is a
+separate crate that implements those traits.
 
 Three properties hold for every port method. It returns without waiting: a face
-that waits registers its interest with the runtime and reads the port again
-when the runtime wakes it. It names no payload type: it carries an interface
-number, an ordinal and bytes, and the generated code encodes and decodes. It
-takes no current time: the runtime reads its own clock.
+that waits registers its interest with the runtime and reads the port again when
+the runtime wakes it. It names no payload type: it carries an interface number,
+an ordinal and bytes, and the generated code encodes and decodes. It takes no
+current time: the runtime reads its own clock.
 
 A runtime exposes one handle type for each port trait it implements, and it may
 also offer an aggregate handle that implements every trait one interface's face
 needs. `ridl-rt` already implements every port trait for `&mut P`, and the
-traits whose methods all take `&self` also for `&P`, so a runtime does not
-write those implementations. No port trait has `Send` or `Sync` as a
-supertrait. A runtime whose handles are used from more than one thread makes a
-handle `Send + Sync` when all its traits take `&self`, and `Send` when one of
-them has a `&mut self` method, and checks this itself.
+traits whose methods all take `&self` also for `&P`, so a runtime does not write
+those implementations. No port trait has `Send` or `Sync` as a supertrait. A
+runtime whose handles are used from more than one thread makes a handle
+`Send + Sync` when all its traits take `&self`, and `Send` when one of them has
+a `&mut self` method, and checks this itself.
 
 ## The port traits
 
@@ -51,9 +51,9 @@ them has a `&mut self` method, and checks this itself.
 | `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | `serve`, for a query whose reply is a stream of named elements          |
 
 **`Attached` and `Clock`.** `Attached` has one method, `catalog`, which returns
-the `CatalogRef` the port serves; every interaction port has it as a
-supertrait. `Clock` has one method, `now`. A runtime has one clock and stamps
-every envelope from it. Neither method returns an error.
+the `CatalogRef` the port serves; every interaction port has it as a supertrait.
+`Clock` has one method, `now`. A runtime has one clock and stamps every envelope
+from it. Neither method returns an error.
 
 **`Encoded`.** A port states the encoding of the bytes it carries through one
 associated type:
@@ -79,13 +79,13 @@ a type parameter: `Loopback::new(catalog)` carries FlatBuffers, and
 **Signals.** `SignalReader::read` copies a signal's current value into a buffer
 and returns its provenance, its freshness and its envelope. `SignalWriter`
 stages a change with `set`, `invalidate` or `touch`, and `commit` publishes
-every staged change with one timestamp per interface, so that several signals
-of one interface updated together appear as one publication. A read fails with
+every staged change with one timestamp per interface, so that several signals of
+one interface updated together appear as one publication. A read fails with
 `ReadError`, a staged change with `WriteError`; `commit` cannot fail.
 
 **Events.** `EventSource` subscribes to and unsubscribes from the events of an
-interface, and `next` takes the next occurrence of anything subscribed, with
-its interface and its ordinal. `EventSink::raise` sends one occurrence; an
+interface, and `next` takes the next occurrence of anything subscribed, with its
+interface and its ordinal. `EventSink::raise` sends one occurrence; an
 occurrence is not staged and has no `commit`. A subscription fails with
 `SubscribeError`, `next` with `ReadError`, and `raise` with `RaiseError`.
 
@@ -93,12 +93,12 @@ occurrence is not staged and has no `commit`. A subscription fails with
 identifier of that call to its caller. `ack` reads a command's acknowledgment
 and `reply` a query's reply, once each is known, and `forget` releases a
 correlation whose outcome the caller no longer needs. `Handler::serve` starts
-presenting the calls to the listed members, `next_claim` presents each
-delivered call once as a `Claim`, and `settle` gives the claim its outcome:
-the reply bytes, or the `CallError` the caller sees. A send fails with
-`SendError`, a `serve` with `ServeError`, `next_claim` and `reply` with
-`ReadError`, and a settlement with `SettleError`. The outcome of a call is a
-`CallError` from `ridl_rt::error`, not a port error.
+presenting the calls to the listed members, `next_claim` presents each delivered
+call once as a `Claim`, and `settle` gives the claim its outcome: the reply
+bytes, or the `CallError` the caller sees. A send fails with `SendError`, a
+`serve` with `ServeError`, `next_claim` and `reply` with `ReadError`, and a
+settlement with `SettleError`. The outcome of a call is a `CallError` from
+`ridl_rt::error`, not a port error.
 
 **Fixed.** `FixedReader::read_fixed` copies a provisioned value into a buffer.
 It fails with `ReadError`. How a value is provisioned into the runtime is the
@@ -106,30 +106,29 @@ runtime's own API, not a port.
 
 **Extensions.** A runtime may omit `ScannableSignals`, `CoherentSignals`,
 `StreamCaller` and `StreamHandler`, because they describe mechanisms that some
-runtimes have.
-`ScannableSignals` reports a generation counter for each interface and writes
-the signals that changed since a `Watermark`; neither method returns an error.
-`CoherentSignals::read_coherent` answers several ordinals of one interface from
-one publication and fails with `ReadError`. A runtime whose transport delivers
-each field separately cannot present it. `Wakeable::wake_on` stores a waker
-for an `Interest` — a call's outcome, a free call slot, an event, a claim, or
-a stream of a call or of a claim — and wakes it when that interest may have
-changed. A runtime that serves a
-generated async client implements `Wakeable`, because every face future that
-waits is bounded on it.
+runtimes have. `ScannableSignals` reports a generation counter for each
+interface and writes the signals that changed since a `Watermark`; neither
+method returns an error. `CoherentSignals::read_coherent` answers several
+ordinals of one interface from one publication and fails with `ReadError`. A
+runtime whose transport delivers each field separately cannot present it.
+`Wakeable::wake_on` stores a waker for an `Interest` — a call's outcome, a free
+call slot, an event, a claim, or a stream of a call or of a claim — and wakes it
+when that interest may have changed. A runtime that serves a generated async
+client implements `Wakeable`, because every face future that waits is bounded on
+it.
 
 The documentation of the event and call traits also states how a runtime
-delivers the trace context a sender passes. Every error enum of
-`ridl_rt::port` is `#[non_exhaustive]`.
+delivers the trace context a sender passes. Every error enum of `ridl_rt::port`
+is `#[non_exhaustive]`.
 
 ## Testing a port
 
 The crate `ridl-rt-conformance` holds the port contract tests as functions
 generic over a runtime. A runtime runs the whole suite from its own tests. Add
 it as a dev-dependency at the same version as `ridl-rt`, because its public
-surface follows the port contract of that version. A patch release can add
-tests to the suite, so a runtime that wants a fixed set of tests pins the crate
-with `=`. This `Cargo.toml` fragment is an illustration and is not compiled:
+surface follows the port contract of that version. A patch release can add tests
+to the suite, so a runtime that wants a fixed set of tests pins the crate with
+`=`. This `Cargo.toml` fragment is an illustration and is not compiled:
 
 ```toml
 [dependencies]
@@ -184,55 +183,54 @@ ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace);
 ```
 
 The `wakeable` flag also requires that the three role handles implement
-`Wakeable`, and that the factory and the handles are `'static`, because one
-test runs on a thread of its own. The `streams` flag runs the tests of
-`StreamCaller` and `StreamHandler`, and requires that the runtime implements
-both and `Wakeable`. The working example is
+`Wakeable`, and that the factory and the handles are `'static`, because one test
+runs on a thread of its own. The `streams` flag runs the tests of `StreamCaller`
+and `StreamHandler`, and requires that the runtime implements both and
+`Wakeable`. The working example is
 [`crates/ridl-loopback/tests/conformance.rs`][loopback-conformance], which runs
 every test of the suite, with all five flags, over `ridl-loopback`.
 
 A runtime that attaches an instance identity to a catalog from a deployment
 descriptor can also run two opt-in groups. Implement
-`ridl_rt_conformance::identity::IdentityFactory` on the same type, which adds the
-`Node`, `Attachment` and `Error` types and the functions `node` and `attach`,
-and name a flag: `identity` checks the grant of a positive instance, and
-`identity_debug` checks the twin, the exclusion of `N` and `-N`, and the
+`ridl_rt_conformance::identity::IdentityFactory` on the same type, which adds
+the `Node`, `Attachment` and `Error` types and the functions `node` and
+`attach`, and name a flag: `identity` checks the grant of a positive instance,
+and `identity_debug` checks the twin, the exclusion of `N` and `-N`, and the
 listener's read-only access. `identity_debug` requires the `debug` feature of
 `ridl-rt-conformance`. The suite supplies the descriptor, so the runtime needs
 no compiler dependency. The original `Factory` is unchanged.
 
-The suite does not test every case. The one list of
-what it leaves out is the section [What the suite leaves out][leaves-out] of the
-crate documentation; a runtime that wants one of those cases tested keeps its
-own test of it.
+The suite does not test every case. The one list of what it leaves out is the
+section [What the suite leaves out][leaves-out] of the crate documentation; a
+runtime that wants one of those cases tested keeps its own test of it.
 
 ## What a binding decides
 
 A runtime that carries frames to a second process does so through a _binding_:
 the [frame specification](reference/frame.md) carried over one transport. A
-binding is written from that specification, the [`ridl-rt` design record][ridl-rt]
-for the exact shape of each name, and the projection record of the encoding its
-path carries. Its own document states the
-ten items of [§10](reference/frame.md#10-what-a-binding-decides), each a
-choice the frame leaves to the transport:
+binding is written from that specification, the
+[`ridl-rt` design record][ridl-rt] for the exact shape of each name, and the
+projection record of the encoding its path carries. Its own document states the
+ten items of [§10](reference/frame.md#10-what-a-binding-decides), each a choice
+the frame leaves to the transport:
 
 1. How a consumer reaches a provider, what opens and ends the session, and what
    an ended session is on that transport, so that `Detached` and
    `Transport::Down` have a cause.
 2. The byte layout, order and width of each header field, and how the frame's
-   form is carried. An interface number or an ordinal keeps its 32-bit range,
-   or the binding refuses it at attach time.
+   form is carried. An interface number or an ordinal keeps its 32-bit range, or
+   the binding refuses it at attach time.
 3. Which payload encoding the path carries, as an encoding tag.
 4. Where one frame ends and the next starts on a stream, how a payload's length
    is carried, and what happens when that framing is lost.
-5. What the provider derives a caller's identity from for duplicate
-   suppression, and whether that identity survives a reconnect.
+5. What the provider derives a caller's identity from for duplicate suppression,
+   and whether that identity survives a reconnect.
 6. How long a settled response is kept for a call that has no response bound.
 7. Whether the frames of one commit cross as one unit, and so whether a runtime
    over the binding presents `CoherentSignals`.
 8. On a path that maps a buffer instead of sending a frame, which header fields
-   are in the mapped region's own layout and which are in a frame beside it.
-   The control plane is framed on every binding.
+   are in the mapped region's own layout and which are in a frame beside it. The
+   control plane is framed on every binding.
 9. The answer to a call that arrives faster than its rate floor, when the
    binding enforces one.
 10. Whether the binding carries the `publish` of a `fixed` in `block` frames,
@@ -241,10 +239,11 @@ choice the frame leaves to the transport:
 
 A binding adds nothing to the frame. It does not change the field set, the
 meaning of a field, what a receiver does with a frame, the per-kind presence
-rules, the invalid payload rules, or the control-plane operations. [§11](reference/frame.md#11-the-bindings) names the bindings, and
-[§12](reference/frame.md#12-conformance) lists the twenty-four statements a second
-implementation — a runtime, a binding, or both — shows with its own tests to
-conform.
+rules, the invalid payload rules, or the control-plane operations.
+[§11](reference/frame.md#11-the-bindings) names the bindings, and
+[§12](reference/frame.md#12-conformance) lists the twenty-four statements a
+second implementation — a runtime, a binding, or both — shows with its own tests
+to conform.
 
 One binding is built in this repository: the WebSocket binding of
 [§11.1](reference/frame.md#111-websocket), whose Rust side is

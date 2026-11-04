@@ -284,6 +284,19 @@ pub fn enum_field_needs_null_default(def: &v2::EnumDef) -> bool {
     !def.values.iter().any(|value| value.value == 0)
 }
 
+/// The integer of every enum in the FlatBuffers projection.
+/// The IR holds `int64` values; a fixed width avoids widening on a later append.
+#[must_use]
+pub fn enum_integer(_def: &v2::EnumDef) -> v2::IntWidth {
+    v2::IntWidth::I64
+}
+
+/// The unsigned integer of an enum set: its declared width.
+#[must_use]
+pub fn enum_set_integer(def: &v2::EnumSetDef) -> v2::IntWidth {
+    def.width()
+}
+
 /// The typl ordinal minus one, refused on 0.
 fn slot_id(owner: &str, ordinal: u32) -> Result<u32, ProjectionError> {
     ordinal.checked_sub(1).ok_or_else(|| ProjectionError {
