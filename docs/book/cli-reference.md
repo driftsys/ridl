@@ -1696,7 +1696,7 @@ Arguments:
 Options:
       --format <FORMAT>      Output format for the report [default: text] [possible values: text, json]
       --explain <CATEGORY>   Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
-      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. `podbuf` and `flatbuffers` have rules of their own: with one of them, a change under the heading "breaking under <that name>" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
+      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. `podbuf`, `flatbuffers` and `proto3` each have rules of their own: with one of them, a change under the heading "breaking under <that name>" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
   -h, --help                 Print help
 ```
 
@@ -1748,6 +1748,15 @@ it, and listed under `breaking under flatbuffers` either way:
   with the old and the new integer. An enum set uses the unsigned scalar of its
   width; every enum uses `long`, so an enum value appended past 255 keeps its
   integer and draws no such line.
+
+A fifth category is breaking with `--encoding proto3`, compatible without it,
+and listed under `breaking under proto3` either way:
+
+- `proto3_width_change`: an otherwise compatible enum-set flag append changes
+  the proto3 scalar, reported once per declaration with the old and the new
+  scalar. Only a flag at bit 32 above a highest bit of 31 or below changes the
+  scalar, from `uint32` to `uint64`; a flag at bit 8 or 16 keeps `uint32`. Every
+  enum uses `int32`, so an appended enum value never changes its scalar.
 
 Each head is measured in its own side's local, standard and remote scope. Remote
 packages supply context without being compared as consumer declarations. Old
@@ -2120,6 +2129,7 @@ the categories `ridl diff` reports are:
   enum_opened
   enum_closed
   flatbuffers_width_change
+  proto3_width_change
 ```
 
 ### `ridl lock`

@@ -235,9 +235,10 @@ fn every_reported_category_is_explainable() {
 /// fixed verdict cannot be read without a pair of bodies, and
 /// `explain_prints_the_rule_row_for_a_category` covers such a row. So are
 /// `podbuf_inline_append`, `podbuf_remote_inline_growth`, `podbuf_width_change`,
-/// `podbuf_strict_enum_append` and `flatbuffers_width_change`, whose verdict
-/// the classifier reads from the encodings `--encoding` names: each row
-/// prints one label per case, and `diff_cli.rs` covers both.
+/// `podbuf_strict_enum_append`, `flatbuffers_width_change` and
+/// `proto3_width_change`, whose verdict the classifier reads from the
+/// encodings `--encoding` names: each row prints one label per case, and
+/// `diff_cli.rs` covers both.
 /// (`podbuf_strict_enum_append` is superseded and no longer reported, but
 /// its row keeps its two labels.)
 #[test]
@@ -256,6 +257,7 @@ fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
         Category::PodbufWidthChange,
         Category::PodbufStrictEnumAppend,
         Category::FlatbuffersWidthChange,
+        Category::Proto3WidthChange,
     ];
     let empty = ridl_ir::v2::Package::default();
     let mut checked = 0;
@@ -353,6 +355,7 @@ fn the_category_spellings_are_pinned() {
             "enum_opened",
             "enum_closed",
             "flatbuffers_width_change",
+            "proto3_width_change",
         ],
         "a category word is part of the stable report schema"
     );

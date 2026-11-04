@@ -197,8 +197,8 @@ enum Command {
         explain: Option<String>,
         /// An encoding the change is judged for, as `[backend.<name>]
         /// encodings` names it; repeat the flag for several. A snapshot does
-        /// not record the encodings a workspace builds. `podbuf` and
-        /// `flatbuffers` have rules of their own: with one of them, a change
+        /// not record the encodings a workspace builds. `podbuf`,
+        /// `flatbuffers` and `proto3` each have rules of their own: with one of them, a change
         /// under the heading "breaking under <that name>" is breaking;
         /// without it, compatible.
         #[arg(long, value_enum, value_name = "ENCODING")]

@@ -876,9 +876,12 @@ a field is appended.
       draws no `podbuf_width_change` line, because that rule reads only the
       appends that are compatible. The three rules are stated in decision 10;
       `ridl diff --explain <category>` states each in full. The compatible
-      verdict without podbuf holds under proto3; an enum-set flag that widens
-      the integer also widens the enum set's FlatBuffers scalar, which
-      `ridl diff` reports as `flatbuffers_width_change`
+      verdict without podbuf holds under proto3, except for a flag at bit 32,
+      which widens the proto3 field and which `ridl diff` reports as
+      `proto3_width_change` ([ADR-0017](ADR-0017-proto3-projection-rules.md)
+      decision 9); an enum-set flag that widens the integer also widens the enum
+      set's FlatBuffers scalar, which `ridl diff` reports as
+      `flatbuffers_width_change`
       ([ADR-0019](ADR-0019-flatbuffers-projection-rules.md) decision 10). An
       appended union arm that keeps the tag is reported as the generic rule
       judges it, compatible. `ridl diff --encoding <name>` and the `ridl_diff`

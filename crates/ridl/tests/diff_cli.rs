@@ -770,6 +770,41 @@ fn an_appended_enum_set_flag_that_widens_is_a_flatbuffers_break() {
     assert!(stdout.contains("breaking under flatbuffers:\n  [compatible] flatbuffers_width_change veh.cluster/Flags: u8 -> u16"), "{stdout}");
 }
 
+#[test]
+fn an_appended_enum_set_flag_at_bit_32_is_a_proto3_break() {
+    let dir = TempDir::new("proto3-width");
+    let source = |last, added: &str| {
+        format!("package veh.cluster\nopen enumset Flags {{\n  A = 0\n  B = {last}\n{added}}}\n")
+    };
+    for (name, last, added) in [("kept-31", 30, "  C = 31\n"), ("kept-8", 7, "  C = 8\n")] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), &source(last, ""));
+        let v2 = dir.write(&format!("{name}-v2.typl"), &source(last, added));
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "proto3".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(code, 0, "{name}: {stderr}\n{stdout}");
+        assert!(!stdout.contains("proto3_width_change"), "{name}: {stdout}");
+    }
+    let v1 = dir.write("v1.typl", &source(31, ""));
+    let v2 = dir.write("v2.typl", &source(31, "  C = 32\n"));
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "proto3".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}\nstdout:\n{stdout}");
+    assert!(stdout.contains("breaking under proto3:\n  [breaking] proto3_width_change veh.cluster/Flags: uint32 -> uint64"), "{stdout}");
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("breaking under proto3:\n  [compatible] proto3_width_change veh.cluster/Flags: uint32 -> uint64"), "{stdout}");
+}
+
 /// An enum value or an enum-set flag appended to a strict declaration:
 /// `strict_enum_append`, exit 1 with no `--encoding` and under each one. The
 /// same append to an `open` declaration exits 0. Opening exits 0 and closing

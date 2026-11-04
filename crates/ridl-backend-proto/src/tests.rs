@@ -690,6 +690,57 @@ fn an_enum_set_becomes_an_integer_with_its_bits_in_a_comment() {
 }
 
 #[test]
+fn the_projection_enum_set_scalar_is_what_the_schema_emits() {
+    for (width, literal) in [
+        (v2::IntWidth::U8, "uint32"),
+        (v2::IntWidth::U16, "uint32"),
+        (v2::IntWidth::U32, "uint32"),
+        (v2::IntWidth::U64, "uint64"),
+    ] {
+        assert_eq!(
+            ridl_ir::projection::proto3::enum_set_scalar(width as i32).as_str(),
+            literal
+        );
+        let package = v2::Package {
+            name: "veh.common".to_string(),
+            decls: vec![
+                v2::Decl {
+                    name: "Warnings".to_string(),
+                    kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                        bits: vec![v2::EnumValue {
+                            name: "LOW_FUEL".to_string(),
+                            value: 0,
+                            ..Default::default()
+                        }],
+                        width: width as i32,
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "Status".to_string(),
+                    kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                        members: vec![field_member("warnings", 1, named_type("Warnings"))],
+                        fixed_layout: false,
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let generated = generate(&package).expect("generate enum set");
+        assert!(
+            generated
+                .proto_source
+                .contains(&format!("{literal} warnings = 1;")),
+            "{width:?}: {}",
+            generated.proto_source
+        );
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
 fn a_struct_field_number_in_the_protobuf_reserved_span_is_refused() {
     // The 19,000–19,999 span and the 536,870,911 ceiling constrain message
     // field numbers, which is what a struct field becomes.
