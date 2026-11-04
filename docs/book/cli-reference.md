@@ -1754,7 +1754,9 @@ it, and listed under `breaking under flatbuffers` either way:
   flag append changes the FlatBuffers integer, reported once per declaration
   with the old and the new integer. An enum set uses the unsigned scalar of its
   width; every enum uses `long`, so an enum value appended past 255 keeps its
-  integer and draws no such line.
+  integer and draws no such line. A remote declaration reached by a surviving
+  old consumer use is reported once per consumer path and remote declaration, at
+  the consumer path, with `<remote declaration>: <integer>` values.
 
 A fifth category is breaking with `--encoding proto3`, compatible without it,
 and listed under `breaking under proto3` either way:
@@ -1763,7 +1765,10 @@ and listed under `breaking under proto3` either way:
   the proto3 scalar, reported once per declaration with the old and the new
   scalar. Only a flag at bit 32 above a highest bit of 31 or below changes the
   scalar, from `uint32` to `uint64`; a flag at bit 8 or 16 keeps `uint32`. Every
-  enum uses `int32`, so an appended enum value never changes its scalar.
+  enum uses `int32`, so an appended enum value never changes its scalar. A
+  remote declaration reached by a surviving old consumer use is reported once
+  per consumer path and remote declaration, at the consumer path, with
+  `<remote declaration>: <scalar>` values.
 
 Each head is measured in its own side's local, standard and remote scope. Remote
 packages supply context without being compared as consumer declarations. Old
@@ -1775,13 +1780,16 @@ holders do not establish a published inline copy. Equal-size pad-fit appends
 draw no remote-growth line. Equal-size remote layout changes, shrinkage and
 general dependency semantic changes remain outside this rule.
 
-These rules are owned by [ADR-0031][adr-0031] decisions 10 and 13. Missing or
-unresolvable evidence is never replaced by the other side's definitions. With
-explicit `--encoding podbuf`, inability to judge remote inline compatibility
-exits 2 with consumer paths and repair/reset guidance; it is not exit 1, which
-means a proved break. Without podbuf, the command returns its ordinary report
-without an affirmative remote inline compatibility judgment. Malformed enriched
-context is exit 2 with or without that flag. See
+These rules are owned by [ADR-0031][adr-0031] decisions 10 and 13,
+[ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 10
+and [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) decision 9.
+Missing or unresolvable evidence is never replaced by the other side's
+definitions. With explicit `--encoding podbuf`, inability to judge remote inline
+compatibility exits 2 with consumer paths and repair/reset guidance; it is not
+exit 1, which means a proved break. Without podbuf, the command returns its
+ordinary report without an affirmative remote inline or remote width
+compatibility judgment; a side without remote context draws no remote width
+line. Malformed enriched context is exit 2 with or without that flag. See
 [baseline context](#baseline-context) for snapshot pairing and
 [recovery](#baseline-publication-and-recovery) for migration.
 

@@ -313,6 +313,12 @@ declare_categories! {
         /// Breaking when `flatbuffers` is among the encodings the comparison
         /// is judged for, compatible otherwise. Reported once per declaration,
         /// at `<package>/<decl>`, with the old and the new integer.
+        /// With per-side contexts, a remote declaration reached by a surviving
+        /// old consumer use is reported once per consumer path and remote
+        /// declaration, at the consumer path, with
+        /// `<remote declaration>: <integer>` values. A side without remote
+        /// context draws no remote width line; shared-context entry points
+        /// do not report remote widths.
         FlatbuffersWidthChange,
         /// An enum-set flag appended, compatible under the generic rule,
         /// after which the proto3 scalar of the enum set is a different
@@ -321,6 +327,12 @@ declare_categories! {
         /// Breaking when `proto3` is among the encodings the comparison is
         /// judged for, compatible otherwise. Reported once per declaration,
         /// at `<package>/<decl>`, with the old and the new proto3 scalar.
+        /// With per-side contexts, a remote declaration reached by a surviving
+        /// old consumer use is reported once per consumer path and remote
+        /// declaration, at the consumer path, with
+        /// `<remote declaration>: <integer>` values. A side without remote
+        /// context draws no remote width line; shared-context entry points
+        /// do not report remote widths.
         Proto3WidthChange,
     }
 }
@@ -636,6 +648,11 @@ pub fn diff_refs_with_contexts(
 /// The report is not an affirmative compatibility judgment for any unit that
 /// owns or reaches an issue's consumer declaration. Such units require recovery;
 /// callers may use the report's proved verdicts for unaffected units.
+/// Remote FlatBuffers and proto3 widths are reported once per consumer path
+/// and remote declaration reached by a surviving old consumer use, at the
+/// consumer path, with `<remote declaration>: <integer>` values. Only the
+/// per-side context entry points report remote widths; a side without remote
+/// context draws no such line.
 pub fn diff_refs_with_contexts_partial(
     old: &[&Package],
     new: &[&Package],

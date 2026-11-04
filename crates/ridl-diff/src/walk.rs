@@ -1868,7 +1868,7 @@ fn type_repr_str(def: &v2::TypeDef) -> String {
     }
 }
 
-fn int_width_name(width: i32) -> &'static str {
+pub(crate) fn int_width_name(width: i32) -> &'static str {
     match v2::IntWidth::try_from(width) {
         Ok(v2::IntWidth::U8) => "u8",
         Ok(v2::IntWidth::I8) => "i8",

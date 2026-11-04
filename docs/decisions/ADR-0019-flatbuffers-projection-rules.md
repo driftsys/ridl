@@ -190,6 +190,11 @@ its decision 16 moves the store and dispatcher into Epic 11 — both bear on whe
 the questions this record leaves open are answered, not on the projection rules
 below.
 
+**Amended 2026-11-04 — decision 10, remote declarations reached through an
+import pin, from driftsys/ridl#1211.** A remote declaration reached by a
+surviving old consumer use is compared at both pins; a changed FlatBuffers
+integer is reported at the consumer path.
+
 ## Context
 
 ADR-0016 decision 6 ratified four properties every projection must satisfy —
@@ -506,6 +511,17 @@ refused.
     FlatBuffers width line. Reading the projection fact means a narrower enum
     (driftsys/ridl#1020) is covered by the same rule when that fact changes.
     Unions are not read: a FlatBuffers union's type field is always `ubyte`.
+
+    The per-side context comparison also reads a remote declaration reached by a
+    surviving old consumer use when an import pin changes, at every position
+    including a producer-sized position; it reports `flatbuffers_width_change`
+    once per consumer path and remote declaration, at `<package>/<decl>/<field>`
+    or `<package>/<interface>/<interaction>`, with
+    `<remote declaration>: <integer>` before and after values and the same
+    encoding-dependent verdict. A dropped or retyped holder draws no such line.
+    Only the per-side context entry points report these remote widths; a side
+    without remote context draws no such line, including plain IR snapshots and
+    legacy baselines without `context.json`.
 
 ## Alternatives considered
 

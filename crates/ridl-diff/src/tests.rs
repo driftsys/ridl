@@ -2625,34 +2625,35 @@ mod podbuf {
         }
     }
 
+    fn remote_flags(count: u64, width: v2::IntWidth) -> v2::Package {
+        package(
+            "dep.types",
+            vec![typl_decl(
+                "Flags",
+                v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    bits: (0..count)
+                        .map(|value| v2::EnumValue {
+                            name: format!("F{value}"),
+                            value: value.try_into().unwrap(),
+                            ..Default::default()
+                        })
+                        .collect(),
+                    width: width as i32,
+                    open: true,
+                    ..Default::default()
+                }),
+            )],
+        )
+    }
+
     #[test]
     fn remote_enum_set_width_growth_is_reported() {
         // Mutation: skip remote enum sets when measuring inline heads.
         let local = remote_holder(named("dep.types.Flags"));
-        let flags = |count, width| {
-            package(
-                "dep.types",
-                vec![typl_decl(
-                    "Flags",
-                    v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
-                        bits: (0..count)
-                            .map(|value| v2::EnumValue {
-                                name: format!("F{value}"),
-                                value,
-                                ..Default::default()
-                            })
-                            .collect(),
-                        width: width as i32,
-                        open: true,
-                        ..Default::default()
-                    }),
-                )],
-            )
-        };
         let report = checked_remote(
             &local,
-            &flags(8, v2::IntWidth::U8),
-            &flags(9, v2::IntWidth::U16),
+            &remote_flags(8, v2::IntWidth::U8),
+            &remote_flags(9, v2::IntWidth::U16),
             &["podbuf"],
         );
         let changes = remote_changes(&report);
@@ -2661,6 +2662,260 @@ mod podbuf {
         assert_eq!(changes[0].before.as_deref(), Some("dep.types.Flags: 1"));
         assert_eq!(changes[0].after.as_deref(), Some("dep.types.Flags: 2"));
         assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_enum_set_flatbuffers_width_is_reported_at_the_consumer_path() {
+        // Mutations: skip enum-set FlatBuffers facts; always report Compatible.
+        let local = remote_holder(named("dep.types.Flags"));
+        for (encodings, verdict) in [
+            (vec!["flatbuffers"], Verdict::Breaking),
+            (vec![], Verdict::Compatible),
+        ] {
+            let report = checked_remote(
+                &local,
+                &remote_flags(8, v2::IntWidth::U8),
+                &remote_flags(9, v2::IntWidth::U16),
+                &encodings,
+            );
+            let changes: Vec<_> = report
+                .changes
+                .iter()
+                .filter(|c| c.category == Category::FlatbuffersWidthChange)
+                .collect();
+            assert_eq!(changes.len(), 1, "{report:?}");
+            assert_eq!(changes[0].path, "app.api/Sample/reading");
+            assert_eq!(changes[0].before.as_deref(), Some("dep.types.Flags: u8"));
+            assert_eq!(changes[0].after.as_deref(), Some("dep.types.Flags: u16"));
+            assert_eq!(changes[0].verdict, verdict);
+        }
+    }
+
+    #[test]
+    fn remote_enum_set_proto3_width_is_reported_only_at_bit_32() {
+        // Mutation: emit a proto3 line even when the scalars are equal.
+        let local = remote_holder(named("dep.types.Flags"));
+        let report = checked_remote(
+            &local,
+            &remote_flags(32, v2::IntWidth::U32),
+            &remote_flags(33, v2::IntWidth::U64),
+            &["proto3"],
+        );
+        let changes: Vec<_> = report
+            .changes
+            .iter()
+            .filter(|c| c.category == Category::Proto3WidthChange)
+            .collect();
+        assert_eq!(changes.len(), 1, "{report:?}");
+        assert_eq!(changes[0].path, "app.api/Sample/reading");
+        assert_eq!(
+            changes[0].before.as_deref(),
+            Some("dep.types.Flags: uint32")
+        );
+        assert_eq!(changes[0].after.as_deref(), Some("dep.types.Flags: uint64"));
+        assert_eq!(changes[0].verdict, Verdict::Breaking);
+        let report = checked_remote(
+            &local,
+            &remote_flags(8, v2::IntWidth::U8),
+            &remote_flags(9, v2::IntWidth::U16),
+            &["proto3"],
+        );
+        assert!(
+            !report
+                .changes
+                .iter()
+                .any(|c| c.category == Category::Proto3WidthChange),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn remote_width_is_reported_at_producer_sized_positions() {
+        // Mutation: gate the width comparison on fixed positions.
+        let local = remote_holder(array(named("dep.types.Flags"), 0, 4));
+        let report = checked_remote(
+            &local,
+            &remote_flags(8, v2::IntWidth::U8),
+            &remote_flags(9, v2::IntWidth::U16),
+            &["flatbuffers"],
+        );
+        assert_eq!(
+            report
+                .changes
+                .iter()
+                .filter(|c| c.category == Category::FlatbuffersWidthChange)
+                .count(),
+            1,
+            "{report:?}"
+        );
+        assert!(remote_changes(&report).is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn remote_width_reaches_a_stream_parameter() {
+        // Mutation: omit stream parameters from the width traversal.
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![command(
+                "send",
+                1,
+                vec![param("items", named_flags_stream())],
+            )],
+        )];
+        assert_stream_widths(&local, "app.api/Api/send");
+    }
+
+    #[test]
+    fn remote_width_reaches_a_streamed_reply() {
+        // Mutation: do not visit a streamed reply's element type.
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![query("receive", 1, vec![], named_flags_stream())],
+        )];
+        assert_stream_widths(&local, "app.api/Api/receive");
+    }
+
+    fn named_flags_stream() -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                element: Some(v2::stream_type::Element::Named("dep.types.Flags".into())),
+            })),
+        }
+    }
+
+    #[track_caller]
+    fn assert_stream_widths(local: &v2::Package, path: &str) {
+        for encoding in ["proto3", "flatbuffers", "podbuf"] {
+            let report = checked_remote(
+                local,
+                &remote_flags(32, v2::IntWidth::U32),
+                &remote_flags(33, v2::IntWidth::U64),
+                &[encoding],
+            );
+            // Stream elements remain excluded from podbuf growth.
+            assert!(remote_changes(&report).is_empty(), "{report:?}");
+            for (category, before, after, selected) in [
+                (Category::Proto3WidthChange, "uint32", "uint64", "proto3"),
+                (
+                    Category::FlatbuffersWidthChange,
+                    "u32",
+                    "u64",
+                    "flatbuffers",
+                ),
+            ] {
+                let changes: Vec<_> = report
+                    .changes
+                    .iter()
+                    .filter(|c| c.category == category)
+                    .collect();
+                assert_eq!(changes.len(), 1, "{report:?}");
+                assert_eq!(changes[0].path, path);
+                assert_eq!(
+                    changes[0].before,
+                    Some(format!("dep.types.Flags: {before}"))
+                );
+                assert_eq!(changes[0].after, Some(format!("dep.types.Flags: {after}")));
+                assert_eq!(
+                    changes[0].verdict,
+                    if encoding == selected {
+                        Verdict::Breaking
+                    } else {
+                        Verdict::Compatible
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn remote_width_reached_through_a_remote_struct_keeps_the_consumer_path() {
+        // Mutations: compare widths only at the holder root; make each dedup key unique.
+        let local = remote_holder(named("dep.types.Reading"));
+        let mut old = remote_flags(32, v2::IntWidth::U32);
+        let mut new = remote_flags(33, v2::IntWidth::U64);
+        for package in [&mut old, &mut new] {
+            package.decls.push(struct_decl(
+                "Reading",
+                vec![
+                    field("flags", 1, named("Flags")),
+                    field("other_flags", 2, named("Flags")),
+                ],
+            ));
+        }
+        let report = checked_remote(&local, &old, &new, &["flatbuffers", "proto3"]);
+        for (category, before, after) in [
+            (Category::FlatbuffersWidthChange, "u32", "u64"),
+            (Category::Proto3WidthChange, "uint32", "uint64"),
+        ] {
+            let changes: Vec<_> = report
+                .changes
+                .iter()
+                .filter(|c| c.category == category)
+                .collect();
+            assert_eq!(changes.len(), 1, "{report:?}");
+            assert_eq!(changes[0].path, "app.api/Sample/reading");
+            assert_eq!(
+                changes[0].before,
+                Some(format!("dep.types.Flags: {before}"))
+            );
+            assert_eq!(changes[0].after, Some(format!("dep.types.Flags: {after}")));
+            assert_eq!(changes[0].verdict, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn remote_width_ignores_a_retyped_holder() {
+        // Mutation: ignore require_new for width comparisons.
+        let old = remote_holder(named("dep.types.Flags"));
+        let new = remote_holder(wide());
+        let report = crate::diff_refs_with_contexts(
+            &[&old],
+            &[&new],
+            &[&remote_flags(8, v2::IntWidth::U8)],
+            &[&remote_flags(9, v2::IntWidth::U16)],
+            &["flatbuffers"],
+        )
+        .unwrap();
+        assert!(
+            !report
+                .changes
+                .iter()
+                .any(|c| c.category == Category::FlatbuffersWidthChange),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn remote_width_without_new_context_draws_no_line() {
+        // Mutation: fall back to the old declaration without new context.
+        let local = remote_holder(named("dep.types.Flags"));
+        let old = remote_flags(8, v2::IntWidth::U8);
+        let (report, issues) = crate::diff_refs_with_contexts_partial(
+            &[&local],
+            &[&local],
+            &[&old],
+            &[],
+            &["flatbuffers"],
+        );
+        assert!(
+            !report
+                .changes
+                .iter()
+                .any(|c| c.category == Category::FlatbuffersWidthChange),
+            "{report:?}"
+        );
+        assert_eq!(
+            issues,
+            vec![crate::ContextIssue {
+                path: "app.api/Sample/reading".into(),
+                declaration: "dep.types.Flags".into(),
+                side: crate::ContextSide::New,
+                reason: crate::ContextIssueReason::Missing,
+            }]
+        );
     }
 
     #[test]
@@ -2724,35 +2979,54 @@ mod podbuf {
         );
     }
 
+    fn remote_modes(count: u64) -> v2::Package {
+        package(
+            "dep.types",
+            vec![typl_decl(
+                "Mode",
+                v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: (0..count)
+                        .map(|value| v2::EnumValue {
+                            name: format!("V{value}"),
+                            value: value.try_into().unwrap(),
+                            ..Default::default()
+                        })
+                        .collect(),
+                    open: true,
+                    ..Default::default()
+                }),
+            )],
+        )
+    }
+
     #[test]
     fn remote_enum_width_growth_is_reported() {
         let local = remote_holder(named("dep.types.Mode"));
-        let enumeration = |count| {
-            package(
-                "dep.types",
-                vec![typl_decl(
-                    "Mode",
-                    v2::decl::Kind::EnumDef(v2::EnumDef {
-                        values: (0..count)
-                            .map(|value| v2::EnumValue {
-                                name: format!("V{value}"),
-                                value,
-                                ..Default::default()
-                            })
-                            .collect(),
-                        open: true,
-                        ..Default::default()
-                    }),
-                )],
-            )
-        };
-        let report = checked_remote(&local, &enumeration(256), &enumeration(257), &["podbuf"]);
+        let report = checked_remote(&local, &remote_modes(256), &remote_modes(257), &["podbuf"]);
         let changes = remote_changes(&report);
         assert_eq!(changes.len(), 1, "{report:?}");
         assert_eq!(changes[0].path, "app.api/Sample/reading");
         assert_eq!(changes[0].before.as_deref(), Some("dep.types.Mode: 1"));
         assert_eq!(changes[0].after.as_deref(), Some("dep.types.Mode: 2"));
         assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_enum_draws_no_flatbuffers_width_line() {
+        // Mutation: use podbuf enum_width instead of the FlatBuffers integer.
+        let report = checked_remote(
+            &remote_holder(named("dep.types.Mode")),
+            &remote_modes(256),
+            &remote_modes(257),
+            &["flatbuffers", "proto3"],
+        );
+        assert!(
+            !report.changes.iter().any(|c| matches!(
+                c.category,
+                Category::FlatbuffersWidthChange | Category::Proto3WidthChange
+            )),
+            "{report:?}"
+        );
     }
 
     #[test]
@@ -2774,6 +3048,7 @@ mod podbuf {
 
     #[test]
     fn remote_union_tag_growth_that_fits_padding_is_not_head_growth() {
+        // Mutation: compare union_tag_width for unions.
         let union = |count| {
             package(
                 "dep.types",
@@ -2800,7 +3075,7 @@ mod podbuf {
             &remote_holder(named("dep.types.Choice")),
             &union(255),
             &union(256),
-            &["podbuf"],
+            &["podbuf", "flatbuffers", "proto3"],
         );
         assert_eq!(report.verdict, Verdict::Identical, "{report:?}");
         assert!(remote_changes(&report).is_empty(), "{report:?}");

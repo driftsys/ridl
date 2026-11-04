@@ -46,6 +46,10 @@ enums, enum sets and scalar typedefs held inline by surviving old consumer uses.
 A union head has a fixed size of 16 bytes and does not grow. Decision 10 carries
 the dated clarification.
 
+**Amended 2026-11-04 — decision 13, remote width reporting, from
+driftsys/ridl#1211.** Remote podbuf widths remain judged by remote inline
+growth; FlatBuffers and proto3 report their own remote integer changes.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -874,14 +878,17 @@ a field is appended.
       judged by encoding: it is `strict_enum_append`, reported once per
       declaration and breaking always (decision 12, note of 2026-11-01), and it
       draws no `podbuf_width_change` line, because that rule reads only the
-      appends that are compatible. The three rules are stated in decision 10;
-      `ridl diff --explain <category>` states each in full. The compatible
-      verdict without podbuf holds under proto3, except for a flag at bit 32,
-      which widens the proto3 field and which `ridl diff` reports as
-      `proto3_width_change` ([ADR-0017](ADR-0017-proto3-projection-rules.md)
-      decision 9); an enum-set flag that widens the integer also widens the enum
-      set's FlatBuffers scalar, which `ridl diff` reports as
-      `flatbuffers_width_change`
+      appends that are compatible. A remote declaration draws no
+      `podbuf_width_change`; its podbuf width is judged by
+      `podbuf_remote_inline_growth` where it is held inline, with the equal-size
+      and producer-sized limits of [decision 10](#decision). The three rules are
+      stated in decision 10; `ridl diff --explain <category>` states each in
+      full. The compatible verdict without podbuf holds under proto3, except for
+      a flag at bit 32, which widens the proto3 field and which `ridl diff`
+      reports as `proto3_width_change`
+      ([ADR-0017](ADR-0017-proto3-projection-rules.md) decision 9); an enum-set
+      flag that widens the integer also widens the enum set's FlatBuffers
+      scalar, which `ridl diff` reports as `flatbuffers_width_change`
       ([ADR-0019](ADR-0019-flatbuffers-projection-rules.md) decision 10). An
       appended union arm that keeps the tag is reported as the generic rule
       judges it, compatible. `ridl diff --encoding <name>` and the `ridl_diff`

@@ -215,6 +215,8 @@ other entry below is Accepted.
   element and an optional map value, as decision 7 said it would. Amended
   2026-11-04, adding decision 9 from driftsys/ridl#1212: an enum-set append that
   changes the proto3 scalar is `proto3_width_change`, breaking under proto3.
+  Amended 2026-11-04 on decision 9 from driftsys/ridl#1211: remote integer
+  changes through an import pin are reported at the surviving consumer path.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and
@@ -258,6 +260,8 @@ other entry below is Accepted.
   driftsys/ridl#713. Amended 2026-11-03, adding decision 10 from
   driftsys/ridl#1120: an append that changes the FlatBuffers integer of an enum
   or an enum set is `flatbuffers_width_change`, breaking under FlatBuffers.
+  Amended 2026-11-04 on decision 10 from driftsys/ridl#1211: remote integer
+  changes through an import pin are reported at the surviving consumer path.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `podbuf` joins proto3 and FlatBuffers as a
