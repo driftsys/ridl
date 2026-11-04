@@ -399,10 +399,20 @@ function contractFrom(outcome: number, detail: number): Contract {
   }
 }
 
-function contractCodes(contract: Contract): [number, number] {
+function contractCodes(
+  contract: Contract,
+  frameVersion: number,
+  notCarried: number,
+): [number, number] {
   switch (contract.category) {
-    case "invalid-value":
-      return [OUT_INVALID_VALUE, RULES.indexOf(contract.rule) + 1];
+    case "invalid-value": {
+      const detail = RULES.indexOf(contract.rule) + 1;
+      if (
+        detail === 0 ||
+        (contract.rule === "utf8" && frameVersion < FRAME_VERSION_3)
+      ) return [notCarried, 0];
+      return [OUT_INVALID_VALUE, detail];
+    }
     case "precondition-failed":
       return [OUT_PRECONDITION_FAILED, 0];
     case "contract-broken":
@@ -423,7 +433,7 @@ function streamCodes(outcome: StreamOutcome): [number, number] {
     case "busy":
       return [OUT_BUSY, 0];
     case "contract":
-      return contractCodes(outcome.contract);
+      return contractCodes(outcome.contract, FRAME_VERSION_3, OUT_CORRUPT);
   }
 }
 
@@ -819,12 +829,17 @@ function encodedLength(frame: Frame, nameBytes: Uint8Array): number {
 
 /**
  * Writes one frame as one message. The `detail` byte is the rule code under
- * `contract(invalid-value)` and 0 everywhere else.
+ * `contract(invalid-value)` and 0 everywhere else. A rule with no code in
+ * `frameVersion` becomes contract-broken in an answer and corrupt in a response.
+ * The default is frame version 3; sessions below it must pass their version.
  *
  * @throws {RangeError} for an `attach` frame whose name is empty or longer
  * than 255 UTF-8 bytes, or whose hash is not 32 bytes long.
  */
-export function encode(frame: Frame): Uint8Array {
+export function encode(
+  frame: Frame,
+  frameVersion = FRAME_VERSION_3,
+): Uint8Array {
   const nameBytes = frame.form === "attach"
     ? textEncoder.encode(frame.name)
     : new Uint8Array(0);
@@ -867,7 +882,11 @@ export function encode(frame: Frame): Uint8Array {
       targetBytes(out, view, FORM_ANSWER, frame.target);
       const [code, detail] = frame.outcome.outcome === "accepted"
         ? [OUT_ACCEPTED, 0]
-        : contractCodes(frame.outcome.contract);
+        : contractCodes(
+          frame.outcome.contract,
+          frameVersion,
+          OUT_CONTRACT_BROKEN,
+        );
       out[10] = code;
       out[11] = detail;
       break;
@@ -913,7 +932,7 @@ export function encode(frame: Frame): Uint8Array {
           out.set(o.payload, RESPONSE_LEN);
           break;
         case "contract":
-          [code, detail] = contractCodes(o.contract);
+          [code, detail] = contractCodes(o.contract, frameVersion, OUT_CORRUPT);
           break;
         case "corrupt":
           code = OUT_CORRUPT;

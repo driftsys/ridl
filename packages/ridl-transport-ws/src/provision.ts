@@ -202,7 +202,7 @@ export class Provision {
     if (!this.#ended) this.socket.send(bytes as Uint8Array<ArrayBuffer>);
   }
   #send(frame: Frame): void {
-    this.#sendBytes(encode(frame));
+    this.#sendBytes(encode(frame, FRAME_VERSION));
   }
   #next(t: Target): bigint {
     const k = key(t), n = nextSequence(this.#sequences.get(k) ?? 0n);

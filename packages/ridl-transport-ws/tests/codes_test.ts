@@ -430,3 +430,35 @@ Deno.test("a chunk and a stream_credit map to their bytes", () => {
     credit: 0x12345678,
   });
 });
+
+Deno.test("encoding_contract_rules_respects_the_sender_version", () => {
+  for (const rule of ["utf8", "future-rule"] as const) {
+    for (const version of [2, 3]) {
+      const contract: Contract = {
+        category: "invalid-value",
+        rule: rule as Rule,
+      };
+      const carried = rule === "utf8" && version === 3;
+      const answer: Frame = {
+        form: "answer",
+        target: target(Kind.Signal),
+        outcome: { outcome: "contract", contract },
+      };
+      assert.deepEqual(
+        [...encode(answer, version).slice(-2)],
+        carried ? [3, 7] : [5, 0],
+      );
+      const response: Frame = {
+        form: "response",
+        target: target(Kind.Query),
+        envelope,
+        correlation: 1n,
+        outcome: { outcome: "contract", contract },
+      };
+      assert.deepEqual(
+        [...encode(response, version).slice(-2)],
+        carried ? [3, 7] : [7, 0],
+      );
+    }
+  }
+});

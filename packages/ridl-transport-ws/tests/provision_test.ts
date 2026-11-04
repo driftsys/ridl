@@ -891,3 +891,50 @@ Deno.test("provide_synchronous_settle_clock_failure_is_recorded_and_retryable", 
     );
   }
 });
+
+// Mutation: drop the sender's frame-version check for the utf8 rule.
+Deno.test("provide_version_2_does_not_carry_utf8_violations", async () => {
+  for (const target of [C, Q]) {
+    const h = await open({
+      onRequest: () => ({
+        outcome: "contract",
+        contract: { category: "invalid-value", rule: "utf8" },
+      }),
+    });
+    h.socket.deliver(req(target, 1n));
+    await tick();
+    const response = last(h.socket);
+    assert(response.form === "response");
+    assert.deepEqual(response.outcome, { outcome: "corrupt" });
+    // Replays retain the downgraded response, rather than encoding it again.
+    h.socket.deliver(req(target, 1n));
+    await tick();
+    assert.deepEqual(h.socket.sent[2], h.socket.sent[1]);
+    assert.deepEqual(h.notes, []);
+    h.p.close();
+  }
+});
+Deno.test("provide_version_2_carries_other_value_rules_unchanged", async () => {
+  for (
+    const rule of [
+      "range",
+      "step",
+      "length",
+      "pattern",
+      "variant",
+      "unique",
+    ] as const
+  ) {
+    const outcome = {
+      outcome: "contract",
+      contract: { category: "invalid-value", rule },
+    } as const;
+    const h = await open({ onRequest: () => outcome });
+    h.socket.deliver(req(Q, 1n));
+    await tick();
+    const response = last(h.socket);
+    assert(response.form === "response");
+    assert.deepEqual(response.outcome, outcome);
+    h.p.close();
+  }
+});
