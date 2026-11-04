@@ -8,9 +8,8 @@
 //! edit to `examples/` or to `evals/corpus/` does not change the dump.
 //!
 //! The vectors are read from the frame specification itself
-//! (`docs/specification/frame-specification.md` §11.1), because its two
-//! tables, one per binding version, are their source and no encoder exists;
-//! each is checked against the binding's header layout before it becomes a
+//! (`docs/specification/frame-specification.md` §11.1), because its four
+//! tables are their source. Each is checked against the binding's header layout before it becomes a
 //! line.
 
 use super::bin;
@@ -373,10 +372,11 @@ fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
 /// frame specification §11.1: the first table under `### 11.1 WebSocket`
 /// whose columns are `Id`, `Vector` and `Hex` (binding version 1), then the
 /// first such table under `#### Binding version 2` and the first such table
-/// under `#### Binding version 3`, which the section must have. The tables
-/// are the vectors' source; no encoder exists. A
+/// under `#### Binding version 3` and `#### Reversed role`, which the section
+/// must have. The reversed table uses frame version 2. The tables
+/// are the vectors' source. A
 /// row whose bytes [`check_vector`] rejects, a malformed row, a separator
-/// row that is not one, an `Id` used twice (in one table or in both), a
+/// row that is not one, an `Id` used twice (within or across tables), a
 /// blank line inside a table and a missing or empty table are errors. The
 /// bytes after a row's header must be the payload that its `Vector` cell
 /// names as ``payload `<hex>` `` ([`named_payload`]), or none when the cell
@@ -394,11 +394,15 @@ fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
     let (version_2, version_3) = rest
         .split_once("\n#### Binding version 3\n")
         .ok_or("§11.1 has no `#### Binding version 3` heading")?;
+    let (version_3, reversed) = version_3
+        .split_once("\n#### Reversed role\n")
+        .ok_or("§11.1 has no `#### Reversed role` heading")?;
     let mut ids = std::collections::BTreeSet::new();
     let mut out = Vec::new();
     table_vectors(version_1, 1, "§11.1", &mut ids, &mut out)?;
     table_vectors(version_2, 2, "the binding version 2", &mut ids, &mut out)?;
     table_vectors(version_3, 3, "the binding version 3", &mut ids, &mut out)?;
+    table_vectors(reversed, 2, "the reversed role", &mut ids, &mut out)?;
     Ok(out)
 }
 
@@ -711,6 +715,83 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn all_reversed_rows_are_read() {
+        let spec = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
+        let vectors = frame_vectors(&spec).unwrap();
+        let ids: Vec<_> = vectors
+            .iter()
+            .filter(|line| line.starts_with("frame-vector provider-"))
+            .map(|line| line.split_whitespace().nth(1).unwrap())
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                "provider-attach-2",
+                "provider-attached-accepted",
+                "provider-publish-live"
+            ]
+        );
+    }
+
+    #[test]
+    fn reversed_vector_table_is_required_and_unique() {
+        let spec = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
+        assert!(frame_vectors(&spec).is_ok());
+        let (head, tail) = spec.split_once("#### Reversed role\n").unwrap();
+        let (_, after) = tail.split_once("### 11.2").unwrap();
+        assert!(
+            frame_vectors(&format!("{head}### 11.2{after}")).is_err(),
+            "missing table"
+        );
+        assert!(
+            frame_vectors(&spec.replace("`provider-attached-accepted`", "`attached-accepted`"))
+                .is_err(),
+            "duplicate across tables"
+        );
+        assert!(
+            frame_vectors(&spec.replace("`provider-attached-accepted`", "`provider-attach-2`"))
+                .is_err(),
+            "duplicate within table"
+        );
+        let reversed = |row: &str| {
+            format!(
+                "{head}#### Reversed role\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{row}\n\n### 11.2{after}"
+            )
+        };
+        assert!(frame_vectors(&reversed("")).is_err(), "empty table");
+        assert!(
+            frame_vectors(&format!(
+                "{head}#### Reversed role\nNo table.\n### 11.2{after}"
+            ))
+            .is_err(),
+            "no table"
+        );
+        let attach3 = format!(
+            "{} 01 61",
+            ATTACH_HEAD.replace("01 01000000", "01 03000000")
+        );
+        assert!(
+            frame_vectors(&reversed(&format!("| `bad` | x | `{attach3}` |"))).is_err(),
+            "frame version 3"
+        );
+        for hex in [
+            "0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 ff01",
+            "0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00",
+            "0e 04 01000000 04000000 0200000000000000 00 04000000",
+        ] {
+            let payload = if hex.starts_with("0c") {
+                "payload `ff01`"
+            } else {
+                "x"
+            };
+            assert!(
+                frame_vectors(&reversed(&format!("| `bad` | {payload} | `{hex}` |"))).is_err(),
+                "stream form {hex}"
+            );
+        }
+    }
+
     /// The dump, computed once for the tests of this module.
     fn lines() -> &'static [String] {
         static LINES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
@@ -869,11 +950,12 @@ mod tests {
 
     /// A frame specification that holds only a §11.1 vector table with
     /// `rows`, a binding version 2 table whose one row is `filler`, a binding
-    /// version 3 table whose one row is `filler-3` and a §11.2 table whose row
+    /// version 3 table whose one row is `filler-3`, a reversed-role table whose
+    /// one row is `filler-provider`, and a §11.2 table whose row
     /// would be valid if it were read.
     fn spec_with_2(rows: &[&str], filler: &str) -> String {
         format!(
-            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{filler}\n\n#### Binding version 3\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-3` | x | `02 01 00` |\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `02 01 00` |\n",
+            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{filler}\n\n#### Binding version 3\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-3` | x | `02 01 00` |\n\n#### Reversed role\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-provider` | x | `02 01 00` |\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `02 01 00` |\n",
             rows.join("\n")
         )
     }
@@ -1072,7 +1154,8 @@ mod tests {
             vec![
                 "frame-vector ok 020100",
                 "frame-vector filler 020100",
-                "frame-vector filler-3 020100"
+                "frame-vector filler-3 020100",
+                "frame-vector filler-provider 020100"
             ]
         );
     }
@@ -1460,7 +1543,8 @@ mod tests {
             vec![
                 "frame-vector one 020100",
                 "frame-vector two 020902",
-                "frame-vector filler-3 020100"
+                "frame-vector filler-3 020100",
+                "frame-vector filler-provider 020100"
             ]
         );
         let err = frame_vectors(&two("| `one` | x | `02 09 02` |")).expect_err("a repeated Id");
@@ -1572,7 +1656,8 @@ mod tests {
             vec![
                 "frame-vector ok 020100",
                 "frame-vector filler 020100",
-                "frame-vector filler-3 020100"
+                "frame-vector filler-3 020100",
+                "frame-vector filler-provider 020100"
             ]
         );
         // A blank line inside the table does not drop the rows after it.
@@ -1594,7 +1679,7 @@ mod tests {
     fn the_separator_row_is_three_non_empty_cells_of_dashes_and_colons() {
         let with = |separator: &str| {
             format!(
-                "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n{separator}\n| `ok` | x | `02 01 00` |\n\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler` | x | `02 01 00` |\n\n#### Binding version 3\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-3` | x | `02 01 00` |\n"
+                "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n{separator}\n| `ok` | x | `02 01 00` |\n\n\n#### Binding version 2\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler` | x | `02 01 00` |\n\n#### Binding version 3\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-3` | x | `02 01 00` |\n\n#### Reversed role\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `filler-provider` | x | `02 01 00` |\n"
             )
         };
         assert!(
