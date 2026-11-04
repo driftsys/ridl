@@ -315,11 +315,12 @@ member; rsdl is the apex.
                          both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
-    just pre-push        lint-commits + the static-check members of build,
-                         ts-check included; skips freeze-check, compile, lint,
-                         test, wasm-check, compat-check, demo, ts-e2e,
-                         cabin-ws-demo, ts-npm-check, and install-check — wired as the pre-push hook,
-                         which skips it on a push of tags only
+    just pre-push        lint-commits, toolchain-check, gate-parity, check and
+                         ts-check; skips every other member of build, fmt-check
+                         and the documentation checks included (the pre-commit
+                         hook formats Rust, TypeScript and the connective tissue;
+                         CI runs the rest) — wired as the pre-push hook, which
+                         skips it on a push of tags only
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages
