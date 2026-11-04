@@ -98,9 +98,18 @@ pub enum Note {
         /// The `seq` of the abandoned request.
         seq: u64,
     },
-    /// A `chunk` arrived from the client on a stream for which the server
-    /// granted it no credit: a stream parameter, which no member the server
-    /// serves over frame version 3 has. The session closes with 1002.
+    /// A parameter stream chunk exceeded its member's payload limit.
+    /// The stream is answered `corrupt` and the call is forgotten.
+    ChunkTooLarge {
+        /// The request sequence number.
+        seq: u64,
+        /// The parameter stream number.
+        stream: u8,
+        /// The payload length in bytes.
+        len: usize,
+    },
+    /// A `chunk` exceeded the credit granted on a parameter stream, or
+    /// named a stream the member does not declare. The session closes with 1002.
     StreamCreditExceeded {
         /// The `correlation` of the `chunk`: the `seq` of the request it
         /// names.

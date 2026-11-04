@@ -169,11 +169,16 @@ impl MemberTable {
                 }
                 // Absent in a file written before the field existed.
                 if let Some(streams) = member.streams().map_err(invalid)? {
+                    let mut parameters = 0;
                     for stream in streams {
-                        if stream.map_err(invalid)?.no().map_err(invalid)? == 0 {
+                        let no = stream.map_err(invalid)?.no().map_err(invalid)?;
+                        if no == 0 {
                             table.set_reply_stream(iface, ord);
+                        } else {
+                            parameters = parameters.max(no);
                         }
                     }
+                    table.set_parameter_streams(iface, ord, parameters);
                 }
             }
         }

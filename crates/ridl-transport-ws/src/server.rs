@@ -11,6 +11,7 @@ mod members;
 mod provided;
 mod provided_backend;
 mod session;
+mod upload;
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};

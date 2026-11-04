@@ -8,6 +8,7 @@ use std::time::Instant;
 use ridl_rt::port::Correlation;
 use ridl_rt::sample::Timestamp;
 
+use super::upload::Upload;
 use crate::frame::Target;
 
 /// The number of settled responses kept when their bound is not known: a
@@ -15,7 +16,7 @@ use crate::frame::Target;
 /// deviation from frame specification §11.1 item 6 (driftsys/ridl#986).
 const RETAINED: usize = 64;
 
-/// One call sent to the backend whose outcome is not known yet.
+/// One backend call with a pending outcome or an open parameter stream.
 #[derive(Clone)]
 pub(super) struct InFlight {
     /// The backend's name for the call.
@@ -35,6 +36,10 @@ pub(super) struct InFlight {
     /// The state of the reply stream, for a query whose reply is a stream;
     /// `None` for a call answered by one `response`.
     pub(super) stream: Option<ReplyStream>,
+    /// Parameter streams that remain owned after an accepted acknowledgment.
+    pub(super) uploads: Vec<Upload>,
+    /// Whether the response was sent, or the reply stream ended.
+    pub(super) settled: bool,
 }
 
 /// The server's side of the reply stream of one call in flight.
@@ -121,6 +126,18 @@ impl Calls {
     /// A copy of the calls in flight, for a pass that settles some of them.
     pub(super) fn in_flight(&self) -> Vec<InFlight> {
         self.in_flight.clone()
+    }
+
+    /// The call whose request carried `seq`.
+    pub(super) fn by_seq(&mut self, seq: u64) -> Option<&mut InFlight> {
+        self.in_flight.iter_mut().find(|call| call.seq == seq)
+    }
+
+    /// Saves the state of a call still in flight.
+    pub(super) fn save(&mut self, call: InFlight) {
+        if let Some(current) = self.by_seq(call.seq) {
+            *current = call;
+        }
     }
 
     /// The call in flight whose reply is a stream and whose request carried
