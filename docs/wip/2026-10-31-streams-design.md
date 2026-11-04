@@ -1393,13 +1393,14 @@ rulings override the earlier design where it differs.
 
 ## As built (stage 5b)
 
-The server and UTF-8 wire code are built. This section records the committed
-server behavior; it does not claim completion of the TypeScript upload API or
-the upload end-to-end tests. These rulings supersede earlier sections where they
-differ. The implementation record is
-[the server design](../design/ridl-transport-ws.md), D-28; wire behavior belongs
-to [the frame specification](../specification/frame-specification.md) §5.3,
-§5.4, §6.4, §9.6 and §11.1.
+The server, UTF-8 wire code and TypeScript upload API are built. The upload
+end-to-end tests are written and type-checked; their execution over TCP or in a
+browser is not verified by the available local results. These rulings supersede
+earlier sections where they differ. The implementation records are
+[the server design](../design/ridl-transport-ws.md), D-28, and
+[the client design](../design/ridl-transport-ws-ts.md), D-21; wire behavior
+belongs to [the frame specification](../specification/frame-specification.md)
+§5.3, §5.4, §6.4, §9.6 and §11.1.
 
 ### Server rulings
 
@@ -1435,28 +1436,75 @@ to [the frame specification](../specification/frame-specification.md) §5.3,
   mismatch is discarded with `Note::UnknownInteraction`, sends nothing and
   changes no stream or credit (frame specification §6.4).
 
-### Accepted plan choices and remaining records
+### Client rulings
+
+- B-12 and Q5: `commandStream` and `queryWithUpload` each send one `chunk` per
+  write on stream 1, with sequences from 1. Each write, including an empty one,
+  spends one of the four initial credits; later server grants release a waiting
+  write. A write above the member limit interrupts and errors the upload as
+  `corrupt` instead of splitting; a write at the limit is accepted.
+- B-13 and Q4(f): Close resolves when the client sends `stream_end end` with the
+  next sequence. It confirms local sending only, because no frame confirms
+  consumption of the upload end. A processed refusal errors a pending write or
+  close; close cannot detect every late refusal. An acknowledged command is
+  forgotten at close, while a pending acknowledgment stays in flight.
+- B-14: A refusal on stream 1 errors the upload and rejects a pending result
+  with the same error, without changing a resolved `accepted`. Refusal releases
+  a write waiting for credit, and a same-turn credit grant cannot cause a write
+  after refusal. A refusing response has the same failure behavior. A server end
+  with sequence other than 1 or outcome `end` is `interrupted`. Abort sends
+  `interrupted`; a query rejects its reply and is forgotten, while a command
+  keeps any pending acknowledgment. Session end errors an upload still in flight
+  and its pending result with `down`.
+- B-15: A command's acknowledgment bound starts at the request and expires as
+  `undelivered`. A query's reply bound starts when close sends the upload end
+  and expires as `timeout`; it has no client timer while the upload is open.
+  Both expiries error the upload and forget the call.
+- A plain query reply within the member limit while the upload is open resolves
+  the reply, errors the upload with `interrupted`, releases a waiting write and
+  forgets the call. An oversized reply rejects both as `corrupt`.
+- A request, chunk or end send that throws forgets the call and rejects its
+  pending reply or acknowledgment with that exact error. A failed chunk or end
+  also rejects the writer operation with that error, including an attempted
+  interruption for an oversized write.
+- Client target validation precedes direction handling for every call shape. A
+  stream frame whose interface, ordinal or kind differs from its call is
+  discarded and recorded as `unknown-correlation`, without changing credit,
+  timers, sequences or stream state (frame specification §6.4). This preserves
+  the existing note vocabulary.
+
+### Accepted plan choices and verification
 
 - Q1: The server carries duplex queries. No TypeScript duplex method is built;
-  filing its tracking issue remains for the driver. No issue number is assigned
-  here.
+  no tracking issue number is present in the available records. Filing its
+  tracking issue remains for the driver at PR time.
 - Q2: The loopback test provider has `UPLOAD` (11), `UPLOAD_QUERY` (12), `FETCH`
   (13) and `DUPLEX` (14). Their behavior and the late-refusal handling are
-  recorded once in the server design's "The loopback server" entry.
-- Q3: Browser upload/read-back coverage remains for the driver after the
-  TypeScript upload API is built.
+  recorded in the server design's "The loopback server" entry.
+- Q3: The browser page uploads 200,000 bytes through `commandStream` to key 3
+  and reads them back through `FETCH`; the browser test requires
+  `upload: "200000:true"`. The extension is type-checked against DOM types; no
+  browser execution result is available in the Task 5 report.
 - Q4(a–e): D-28 records direction-aware ends, `ChunkTooLarge`, silent drops
   after refusal or the client's end, upload-end clock inputs and the sender's
-  UTF-8 version gate. Q4(f): no frame confirms consumption of the upload end;
-  D-28 states the server's resulting observation limit. The client close
-  semantics remain for its own record.
-- Q5 and B-12 to B-15: The accepted TypeScript upload choices remain in the
-  [implementation plan](2026-11-04-streams-stage-5b-plan.md#rulings-taken-in-this-plan).
-  Their implementation and D-21 record are outside this server-record pass.
-- B-16: The plan retains per-task mutation review and whole-branch review. The
-  earlier server reports contain their assertion-failure evidence; this records
-  task adds no tests or named mutations. Socket tests are compiled in the
-  earlier tasks and still require driver execution outside the sandbox.
+  UTF-8 version gate. D-21 records the client's close limit for Q4(f).
+- Task 5's catalog parity target passes 3/3. Six separate mutations of the three
+  upload/fetch ordinals, fetch chunk size and two refusal modes each fail an
+  equality assertion; the restored target passes. The Deno scenarios assert
+  200,000-byte command upload/read-back, query count/sum, a refused third
+  command chunk and a UTF-8 query refusal. Their code and finite limits are
+  recorded in D-14 of the client design. Deno and DOM type checks pass; these
+  scenarios have not run against TCP in the available Task 5 evidence.
+- The Task 4 report records 267 passing package unit tests and 27 detected
+  mutations. Its fix report records 278 passing unit tests and six mutation
+  variants producing 27 assertion failures, followed by restored passing runs.
+  These results cover the send-exception fix and command cleanup; they do not
+  establish execution of the upload end-to-end scenarios.
+- B-16: The plan specifies per-task mutation review and whole-branch review.
+  Implementation and fix reports contain assertion-failure evidence, but do not
+  establish completion of the independent per-task and whole-branch review
+  process. No review completion is claimed here. Server TCP tests remain
+  compiled but unexecuted in the available sandbox reports.
 
 ## Trace
 

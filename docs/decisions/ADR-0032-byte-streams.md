@@ -36,10 +36,13 @@ with one parameter stream and a plain or named-element streamed reply. The
 WebSocket server also receives parameter streams on commands and queries,
 including a query with an upload and a reply stream
 ([the server record](../design/ridl-transport-ws.md), D-28). Frame version 3
-carries `Utf8` as rule code 7 (frame specification §9.6). The corresponding
-TypeScript upload methods are not built. Calls with two or more parameter
-streams remain outside the Rust face (driftsys/ridl#1224). A query with an
-upload and a byte or text reply stream also remains outside the face.
+carries `Utf8` as rule code 7 (frame specification §9.6). The TypeScript client
+provides `commandStream` and `queryWithUpload`, each with one
+`WritableStream<Uint8Array>` upload; a query's reply is a plain payload
+([the client record](../design/ridl-transport-ws-ts.md), D-21). No TypeScript
+method combines an upload with a streamed reply. Calls with two or more
+parameter streams remain outside the Rust face (driftsys/ridl#1224). A query
+with an upload and a byte or text reply stream also remains outside the face.
 
 ## Context
 

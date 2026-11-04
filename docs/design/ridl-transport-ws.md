@@ -1193,6 +1193,20 @@ All under `crates/ridl-transport-ws/`.
   abandonment clock; a client `stream_end`, a client `chunk` and a `stream_end`
   with `end`; and the stream forms on a session below version 3, which are an
   unknown code. The frame codes of the three forms are in `tests/codes.rs`.
+- **TypeScript fixture parity** (`tests/ts_ceilings.rs`). The catalog parity
+  test compares `UPLOAD`, `UPLOAD_QUERY`, `FETCH`, `FETCH_CHUNK` and both
+  refusal modes in `e2e/catalog.ts` with the Rust provider, alongside the fixed
+  ordinals and lengths. Each of the six upload-related comparisons has a
+  recorded assertion-failure mutation and a passing restored run.
+- **TypeScript upload scenarios** (`packages/ridl-transport-ws/e2e/`). The Deno
+  tests assert a 200,000-byte command upload and byte-for-byte `FETCH`
+  read-back, a query upload's little-endian count and wrapping sum, a range
+  refusal of the third chunk on a later write with acknowledgment still
+  resolved, and a UTF-8 refusal on both the write and query reply. The browser
+  page adds a 200,000-byte upload/read-back and its test requires
+  `upload: "200000:true"`. The upload tests are written and type-checked; their
+  execution over TCP or in a browser is not verified by the available local
+  results. The client record's D-14 gives their assertions and limits.
 - **The constraints** (`tests/constraints.rs`). D-1's "no `alloc`" and D-2's
   dependency set, read from the sources and the manifests (see "Gates").
 - **The codec's failures** (`tests/decode_errors.rs`). One test per case of D-4
