@@ -6,3 +6,6 @@
 #
 # Format the connective tissue before committing.
 ~ prim .
+~ cargo fmt --all   *.rs
+~ deno fmt --config packages/ridl-runtime/deno.json packages/ridl-runtime   packages/ridl-runtime/**/*.ts
+~ deno fmt --config packages/ridl-transport-ws/deno.json packages/ridl-transport-ws   packages/ridl-transport-ws/**/*.ts

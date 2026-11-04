@@ -3337,13 +3337,16 @@ lint-commits base="main":
         git std lint --range "$ref"..HEAD
     fi
 
-# Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`,
-# `ts-e2e`, `cabin-ws-demo`, and `install-check`.
-# Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
-# the full `just build` gate on the PR; `just verify` runs that same gate
-# locally before opening one.
-pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check ts-check
+# Fast gate before pushing: the commit messages, the toolchain pin, the gate
+# parity, `prim lint` and `ts-check`. It skips every other member of `build`.
+# Rust formatting is not checked here, because the pre-commit hook
+# (.githooks/pre-commit.hooks) formats Rust, TypeScript and the connective
+# tissue before each commit; `check` and `ts-check` still verify the connective
+# tissue and the TypeScript. Wired as the pre-push hook
+# (.githooks/pre-push.hooks). CI (ci.yml) still runs the full `just build` gate
+# on the PR, `fmt-check` and the documentation checks included; `just verify`
+# runs that same gate locally before opening one.
+pre-push: lint-commits toolchain-check gate-parity check ts-check
 
 # Commit-message lint over commits not yet on origin/main, then build.
 # Run before opening a PR.
