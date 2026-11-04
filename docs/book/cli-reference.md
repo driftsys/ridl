@@ -995,9 +995,9 @@ and, when an issue tracks the limit, that issue. A query whose reply is a stream
 of named elements, bytes or text is on the face, as are commands with one stream
 parameter and queries with one stream parameter and a plain or named-element
 streamed reply. These forms run over `ridl-loopback`. The WebSocket server's
-upload support is recorded in [D-28](../design/ridl-transport-ws.md); the
+upload support is recorded in [D-30](../design/ridl-transport-ws.md); the
 TypeScript upload methods and their limits are recorded in
-[D-21](../design/ridl-transport-ws-ts.md). A call with two or more stream
+[D-23](../design/ridl-transport-ws-ts.md). A call with two or more stream
 parameters is left out of an otherwise emitted face without a note, while its
 descriptor row is still written (driftsys/ridl#1224). An upload query with a
 byte or text reply stream also has no face method. An `internal` interface gets

@@ -49,7 +49,7 @@ must be right.
 - Serves the observe-and-call ports — `SignalReader`, `EventSource`, `Caller` —
   plus `FixedReader` for a `read` of a `fixed`, over WebSocket, and, through
   `StreamCaller`, the reply stream of a query (D-27) and parameter streams on
-  commands and queries (D-28) on a session of frame version 3.
+  commands and queries (D-30) on a session of frame version 3.
 - Detects changed signals with `ScannableSignals` when the backend has it, and
   by reading each subscribed signal when it does not.
 - Builds the member table, which checks `kind` and gives the response bounds,
@@ -605,7 +605,7 @@ responses kept for duplicates are `server/calls.rs`.
   `correlation` = the client's `seq`, `seq` = the next value of the server's
   response counter for this session (from 1, §7), and `stamp` = `Clock::now()`
   of the backend at that tick. Then the server calls `forget`, subject to the
-  upload lifetime rules of D-28.
+  upload lifetime rules of D-30.
 
   | Backend outcome                                           | `response` outcome     |
   | --------------------------------------------------------- | ---------------------- |
@@ -636,7 +636,7 @@ responses kept for duplicates are `server/calls.rs`.
   (16 slots), so sixteen such calls would make every caller of that runtime
   `Busy`. A zero duration forgets every call whose outcome is not known on the
   first poll after the request. Calls with uploads use the activity and
-  upload-end clocks of D-28 instead.
+  upload-end clocks of D-30 instead.
 - **Duplicates.** §11.1 item 5 says the binding never retransmits, so a
   duplicate `request` is a peer defect. The server still follows §7: a `request`
   whose `seq` is in flight is not sent to the backend again; one whose `seq`
@@ -803,26 +803,26 @@ chooses.
   member's limit, held per stream. A chunk longer than the member's limit, or
   than one message carries, stops the stream with `stream_end corrupt` and is
   recorded as `ValueTooLarge`. The server grants credit for parameter streams as
-  D-28 states. After a reply `stream_end` it interrupts any open uploads and
+  D-30 states. After a reply `stream_end` it interrupts any open uploads and
   forgets the call.
 - **Abandonment.** The clock of `call_abandon_after` for a streamed call
   restarts at each `chunk` sent and each `stream_credit` received. When it
   passes with neither, the server sends `stream_end interrupted`, forgets the
   call and records `Note::CallAbandoned`. The clock is the host's monotonic
   clock (`Instant`), not the backend's. A duplex call also takes upload activity
-  into account as D-28 states.
+  into account as D-30 states.
 - **What the client may send.** On stream 0, a `stream_credit` adds to the
   credit; one for a call that is not streaming, which can arrive just after the
   end, is ignored and records no note. A `stream_end` stops the stream: the
   server aborts it, forgets the call at once, records `Note::StreamStopped`,
-  interrupts any open uploads (D-28), and keeps a `stream_end interrupted` for a
+  interrupts any open uploads (D-30), and keeps a `stream_end interrupted` for a
   later retransmit of the `request`. The server aborts the stream on the backend
   with the error of the client's outcome (`interrupted`, `contract` or
   `corrupt`) and then forgets the call, so a provider on the loopback reads
   `Interrupted` whatever the abort carried: after a forget a push answers
   `Interrupted`. A `stream_end` on stream 0 with `end` or `busy` closes 1002
   with `ProtocolViolation::OutcomeNotAllowed`. A client `chunk` on stream 0 is
-  `Note::UnexpectedDirection` and closes 1002. D-28 states the rules on
+  `Note::UnexpectedDirection` and closes 1002. D-30 states the rules on
   parameter streams. Before dispatch, all three client stream forms must match
   the full target of the call named by correlation: a mismatch is discarded with
   `Note::UnknownInteraction`, as frame specification §6.4 states.
@@ -836,7 +836,7 @@ chooses.
   (`ridl_rt::error::Transport`). The provider cannot read `Transport::Down`
   through the port, so none is sent.
 
-**D-28. A parameter stream over frame version 3.** The code is in
+**D-30. A parameter stream over frame version 3.** The code is in
 `server/upload.rs` and `server/session.rs`. The wire rules are
 [frame specification](../specification/frame-specification.md) §5.3, §5.4 and
 §11.1, "Binding version 3".
@@ -950,7 +950,7 @@ client on a stream the server granted it no credit for; closes 1002),
 violation's rule the frame has no code for; the outcome is replaced),
 `UnknownInteraction` (an interaction the member table does not hold, or a stream
 target that mismatches its call; dropped or answered as D-12 and D-27 say),
-`ChunkTooLarge` (an upload chunk above its member's limit, D-28) and
+`ChunkTooLarge` (an upload chunk above its member's limit, D-30) and
 `MessageLimitTooSmall` (the member whose messages the `Config` cannot carry,
 with the limit it needs; `serve` records it before the handshake.
 `serve_selected` records it after selection when ordinary attach checks pass,
@@ -1507,7 +1507,7 @@ No frozen port trait changes.
   set (driftsys/ridl#1196): the instances of a set are all attached, and the
   node does not choose between them.
 - Typed stream encoding and text validation in the transport: it carries opaque
-  chunks and the typed boundary verifies them (D-28).
+  chunks and the typed boundary verifies them (D-30).
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
   `temperature` signal to a TypeScript client, with the member table read from

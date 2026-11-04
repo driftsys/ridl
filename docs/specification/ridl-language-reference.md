@@ -1331,8 +1331,8 @@ elements, bytes and text, commands with one stream parameter, and queries with
 one stream parameter and a plain or named-element streamed reply. Calls with two
 or more stream parameters remain outside the face (driftsys/ridl#1224). The
 WebSocket server's upload support is recorded in
-[D-28](../design/ridl-transport-ws.md); the TypeScript upload methods and their
-limits are recorded in [D-21](../design/ridl-transport-ws-ts.md). This section
+[D-30](../design/ridl-transport-ws.md); the TypeScript upload methods and their
+limits are recorded in [D-23](../design/ridl-transport-ws-ts.md). This section
 states the contract a stream declares, which the checker and the IR already
 accept.
 

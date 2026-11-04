@@ -60,9 +60,9 @@ pinned toolchain.
 
 - calls with two or more parameter streams on the generated Rust face
   (driftsys/ridl#1224). The WebSocket server's upload support is recorded in
-  [D-28](../../docs/design/ridl-transport-ws.md); the TypeScript upload methods
+  [D-30](../../docs/design/ridl-transport-ws.md); the TypeScript upload methods
   and their limits are recorded in
-  [D-21](../../docs/design/ridl-transport-ws-ts.md)
+  [D-23](../../docs/design/ridl-transport-ws-ts.md)
 - `Inline`
 - the three payload codecs (proto3, FlatBuffers, `podbuf`)
 - `Encoding::FORMAT`

@@ -479,7 +479,7 @@ chunk sends `stream_end` with the refusal on stream `k`; an acknowledgment
 already sent stays accepted. Later chunks of the stopped stream are dropped
 silently, including after the call is forgotten. A chunk after the consumer's
 own `stream_end` is also dropped silently. The server's queue and call lifetime
-rules are in [its design record](../design/ridl-transport-ws.md), D-28.
+rules are in [its design record](../design/ridl-transport-ws.md), D-30.
 
 **What the provider does.** A providing runtime that cannot admit the call — no
 slot, no budget, or a call faster than the member's `min` (§8) — does not
@@ -597,7 +597,7 @@ For this plain-reply query, the WebSocket server retains the settled response
 until `min(end.stamp, end receipt) + max`, where `end receipt` is the backend's
 clock when the valid normal upload end arrives. Its abandonment clock also
 restarts at that end's monotonic receipt; open uploads use the activity rules in
-[the server record](../design/ridl-transport-ws.md), D-28. A provider can refuse
+[the server record](../design/ridl-transport-ws.md), D-30. A provider can refuse
 an upload before the reply. When discovered before settlement, the refusal
 crosses on stream `k`; a query settled with that error also sends its refusing
 `response`. A refusing response discards upload frames queued during that
@@ -1515,7 +1515,7 @@ is one chunk and consumes one credit; it returns credit under the same rule. The
 provider holds at most 4 queued chunks per parameter stream and pushes the end
 only after those chunks. Exceeding credit closes the session with 1002; a chunk
 above the member's limit ends the stream as `corrupt` and forgets the call
-([the server design](../design/ridl-transport-ws.md), D-28).
+([the server design](../design/ridl-transport-ws.md), D-30).
 
 **Framing.** A stream frame that is wrong by itself (§4, "The stream forms") is
 a protocol violation of item 4: a `kind` other than `Command` or `Query`, an

@@ -28,7 +28,7 @@ row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions are numbered D-1 to D-21. D-1 to D-18 retain their numbers from the
+decisions are numbered D-1 to D-23. D-1 to D-18 retain their numbers from the
 original design, archived as
 [`2026-10-20-ts-transport-ws-design.md`](../archive/2026-10-20-ts-transport-ws-design.md),
 with its plan beside it.
@@ -621,7 +621,7 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   does for `connect` and the consumer role. The reversed role has the same
   specification gap; the issue should be widened to cover it.
 
-**D-22. An upload.** The two methods return platform streams and promises:
+**D-23. An upload.** The two methods return platform streams and promises:
 
 ```ts
 commandStream(iface: number, ord: number, args: Uint8Array, opts: { bound: number }):
@@ -634,7 +634,7 @@ Both send a `request` that opens parameter stream 1. Its chunks and end carry
 the request's caller number as `correlation`, the same target and a stream `seq`
 starting at 1. Upload state belongs to `src/calls.ts`; `src/session.ts` encodes
 and sends its frames. The server's receiving rules are in
-[the server record](ridl-transport-ws.md), D-28. These methods each carry one
+[the server record](ridl-transport-ws.md), D-30. These methods each carry one
 upload and an acknowledgment or plain reply. No TypeScript method combines an
 upload with a streamed reply (driftsys/ridl#1240) or carries two or more
 parameter streams (driftsys/ridl#1224).
@@ -697,7 +697,7 @@ parameter streams (driftsys/ridl#1224).
   expiry rejects `accepted` and errors its upload with `undelivered`. A query
   starts its reply timer only when `close` sends `stream_end end`; expiry
   rejects `reply` and errors the upload with `timeout`. Before close the query
-  has no client timer; the server bounds inactivity through abandonment (D-28).
+  has no client timer; the server bounds inactivity through abandonment (D-30).
   Both timer expiries forget the call.
 - **Preflight.** On a session below version 3 both methods return an errored
   upload and a rejected result with `unsupported`, sending nothing. Invalid
@@ -845,7 +845,7 @@ bytes are the value the provider set.
   settles), each violation of D-21 through `onNote`, a clock that fails before
   the attach is answered or while a response is built, and the absence of a
   liveness timer. The vectors of the reversed role are in `vectors_test.ts`.
-- **Uploads** (`calls_test.ts`, `session_test.ts`). D-21's one chunk per write,
+- **Uploads** (`calls_test.ts`, `session_test.ts`). D-23's one chunk per write,
   empty-chunk credit, credit waits, close and abort sequences, acknowledgment
   lifetime, request and close timers, refusals, early replies, invalid
   directions and preflight errors. Send-exception tests cover chunk, close,

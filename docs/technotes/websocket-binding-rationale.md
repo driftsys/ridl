@@ -284,7 +284,7 @@ vectors are never edited, which is what ADR-0029 asks of a frozen surface.
 Version 3 carries query reply streams and command and query parameter streams;
 the rules are in frame specification §5.3, §5.4 and §11.1 "Binding version 3",
 and the server's choices are in
-[the crate's design record](../design/ridl-transport-ws.md), D-27 and D-28. The
+[the crate's design record](../design/ridl-transport-ws.md), D-27 and D-30. The
 upload uses the same forms with the producer and receiver reversed, so it needs
 no additional frame version. The server can carry an upload and a reply stream
 concurrently. Rule code 7 carries a UTF-8 refusal from version 3 (frame
@@ -329,7 +329,7 @@ Splitting a named element would violate its boundary, so the caller chooses
 write sizes within the member limit. This preserves the boundaries of named
 elements while allowing a byte writer to choose smaller chunks. The sending,
 credit and completion behavior is in
-[the client record](../design/ridl-transport-ws-ts.md), D-21. Alternative: split
+[the client record](../design/ridl-transport-ws-ts.md), D-23. Alternative: split
 every write automatically, rejected because it changes the meaning of a
 named-element stream. Cost if wrong: byte-stream callers must divide their
 writes themselves.

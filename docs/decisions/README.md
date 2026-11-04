@@ -658,8 +658,8 @@ other entry below is Accepted.
   and named-element reply streams and commands and queries with one parameter
   stream. An upload query has a plain or named-element streamed reply. The
   WebSocket server carries uploads as
-  [D-28 records](../design/ridl-transport-ws.md). The TypeScript upload methods
-  and their limits are recorded in [D-21](../design/ridl-transport-ws-ts.md).
+  [D-30 records](../design/ridl-transport-ws.md). The TypeScript upload methods
+  and their limits are recorded in [D-23](../design/ridl-transport-ws-ts.md).
   Calls with two or more parameter streams remain outside the Rust face
   (driftsys/ridl#1224).
 
