@@ -27,8 +27,7 @@ runs on real target-class cores and on host-independent instruction counts.
   - encoded size in bytes;
   - heap allocations per encode, per decode and per verify;
   - CPU time per encode, decode and verify, and the CPU % of one core that a
-    sustained stream of 4 000 updates per second costs, and the CPU % over a
-    burst of 200 messages in 10 ms (an instantaneous rate of 20 000 per second).
+    sustained stream of 4 000 updates per second costs.
 - Rerun every table with one command per platform.
 - State in a technote what each number does and does not show.
 
@@ -126,15 +125,10 @@ the new numbers relate to it, instead of restating it.
 ## The load target (stated by the owner)
 
 The system goal is **4 000 updates per second sustained, plus a burst of 200
-messages in 10 ms**. The burst is an instantaneous rate of 20 000 messages per
-second. The bench reports two load shapes:
-
-- **Sustained:** CPU % of one core at 4 000 updates per second.
-- **Burst:** the CPU time to encode, verify and decode 200 messages back to
-  back, as a share of the 10 ms window (a value above 100 % means the core
-  cannot keep up and the backlog grows). The technote also states how long the
-  burst takes to drain and whether a burst on top of the sustained load fits in
-  one core.
+messages in 10 ms**. The owner deferred the burst on 2026-11-04: this work
+reports the sustained load only. The burst (an instantaneous rate of 20 000
+messages per second) and any normalisation over a short window are a later
+extension, and per-update CPU time is reported so that they can be computed.
 
 ## The unit of work (answered by the code)
 
@@ -161,8 +155,8 @@ These are the author's calls and are open to change:
 
 - **CPU load is derived, then checked.** The primary number is the per-update
   CPU time from a busy loop (no pacing), multiplied by the rate. One paced run
-  per load shape on the Pixel 5 checks the derivation and shows the cost of
-  timers and wake-ups; a paced run that disagrees with the derived figure is
+  at the sustained rate on the Pixel 5 checks the derivation and shows the cost
+  of timers and wake-ups; a paced run that disagrees with the derived figure is
   reported, not hidden.
 - **The headline stream** is the equal-weight mix of the signal payloads of
   `veh-cluster` and `examples/cabin`. The per-payload table is the full result.
