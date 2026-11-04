@@ -1,8 +1,9 @@
 //! Descriptor-based attachment tests, selected with `suite!(F; identity)`.
 //!
-//! Implement [`IdentityFactory`] to share one node between attachments. The
-//! `identity_debug` flag additionally checks twins and listeners and requires
-//! this crate's `debug` feature. No loopback or compiler dependency is needed.
+//! Implement [`IdentityFactory`](crate::identity::IdentityFactory) to share
+//! one node between attachments. The `identity_debug` flag additionally checks
+//! twins and listeners and requires this crate's `debug` feature. No loopback
+//! or compiler dependency is needed.
 
 use ridl_rt::contract::{CatalogHash, CatalogRef};
 #[cfg(feature = "debug")]
