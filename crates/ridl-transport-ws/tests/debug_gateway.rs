@@ -69,7 +69,13 @@ fn server(
             let deadline = Instant::now() + LIMIT;
             let conn = loop {
                 match listener.accept() {
-                    Ok((conn, _)) => break conn,
+                    Ok((conn, _)) => {
+                        // macOS and the BSDs give the accepted socket the
+                        // listener's non-blocking mode; the server reads it
+                        // blocking.
+                        conn.set_nonblocking(false).unwrap();
+                        break conn;
+                    }
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                         assert!(Instant::now() < deadline, "accept deadline");
                         thread::yield_now();
