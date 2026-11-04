@@ -604,7 +604,8 @@ responses kept for duplicates are `server/calls.rs`.
   each query in flight. A known outcome becomes one `response` with
   `correlation` = the client's `seq`, `seq` = the next value of the server's
   response counter for this session (from 1, §7), and `stamp` = `Clock::now()`
-  of the backend at that tick. Then the server calls `forget`.
+  of the backend at that tick. Then the server calls `forget`, subject to the
+  upload lifetime rules of D-28.
 
   | Backend outcome                                           | `response` outcome     |
   | --------------------------------------------------------- | ---------------------- |
@@ -634,7 +635,8 @@ responses kept for duplicates are `server/calls.rs`.
   disconnects; on `ridl-loopback` the call table is shared by the whole runtime
   (16 slots), so sixteen such calls would make every caller of that runtime
   `Busy`. A zero duration forgets every call whose outcome is not known on the
-  first poll after the request.
+  first poll after the request. Calls with uploads use the activity and
+  upload-end clocks of D-28 instead.
 - **Duplicates.** §11.1 item 5 says the binding never retransmits, so a
   duplicate `request` is a peer defect. The server still follows §7: a `request`
   whose `seq` is in flight is not sent to the backend again; one whose `seq`
@@ -646,21 +648,22 @@ responses kept for duplicates are `server/calls.rs`.
   member's bound from the member table (D-10); the `min` keeps §7's "measured
   from the request's `stamp`" when the client's clock is behind, and caps the
   retention when a client stamps ahead, so stamping requests in the future holds
-  no response. The bound is taken only when the table holds the request's
-  identity as a command or query under the request's `kind`: a request the table
-  refuses (D-12) takes no bound from a member of another kind and is kept as one
-  of the last 64. Expired responses go on each tick. The kept responses are
-  indexed by `seq` and, for those with a bound, by the bound, so a repeat and an
-  expiry pass cost no scan of the kept set (up to the cap, a session may keep
-  hundreds of thousands of small responses). For a member the table gives no
-  bound (a catalog built before the default response bound), or with no table,
-  the server keeps the last 64 as before: a stated deviation from §11.1 item 6
-  (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
-  retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
-  by default, and never below 16,164 bytes, the largest message limit); when a
-  response makes the kept bytes pass the cap, the response is sent, then the
-  session closes with 1008, which `serve` returns as
-  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
+  no response. A plain-reply query with an upload substitutes the upload end's
+  stamp and receipt as D-28 states. The bound is taken only when the table holds
+  the request's identity as a command or query under the request's `kind`: a
+  request the table refuses (D-12) takes no bound from a member of another kind
+  and is kept as one of the last 64. Expired responses go on each tick. The kept
+  responses are indexed by `seq` and, for those with a bound, by the bound, so a
+  repeat and an expiry pass cost no scan of the kept set (up to the cap, a
+  session may keep hundreds of thousands of small responses). For a member the
+  table gives no bound (a catalog built before the default response bound), or
+  with no table, the server keeps the last 64 as before: a stated deviation from
+  §11.1 item 6 (driftsys/ridl#986, ruled a deviation of this crate on
+  2026-10-23). The retained bytes of a session are capped by
+  `Config::max_retained_bytes` (16 MiB by default, and never below 16,164 bytes,
+  the largest message limit); when a response makes the kept bytes pass the cap,
+  the response is sent, then the session closes with 1008, which `serve` returns
+  as `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
   server with no table, or one whose members have no bound, closes with 1008
   when its replies are large enough to pass the cap before the ring holds 64. At
   the default message limit, 64 replies are at most 64 × 16,164 = 1,034,496
@@ -798,29 +801,30 @@ chooses.
   credit that the client may not send; the cost is one chunk, at most the
   member's limit, held per stream. A chunk longer than the member's limit, or
   than one message carries, stops the stream with `stream_end corrupt` and is
-  recorded as `ValueTooLarge`. The server grants no credit of its own: no member
-  it serves has a parameter stream. After a `stream_end` the server forgets the
-  call.
+  recorded as `ValueTooLarge`. The server grants credit for parameter streams as
+  D-28 states. After a reply `stream_end` it interrupts any open uploads and
+  forgets the call.
 - **Abandonment.** The clock of `call_abandon_after` for a streamed call
   restarts at each `chunk` sent and each `stream_credit` received. When it
   passes with neither, the server sends `stream_end interrupted`, forgets the
   call and records `Note::CallAbandoned`. The clock is the host's monotonic
-  clock (`Instant`), not the backend's.
-- **What the client may send.** A `stream_credit` adds to the credit; one for a
-  call that is not streaming, which can arrive just after the end, is ignored
-  and records no note. A `stream_end` stops the stream: the server aborts it,
-  forgets the call at once, records `Note::StreamStopped`, sends nothing more
-  for the call, and keeps a `stream_end interrupted` for a later retransmit of
-  the `request`. The server aborts the stream on the backend with the error of
-  the client's outcome (`interrupted`, `contract` or `corrupt`) and then forgets
-  the call, so a provider on the loopback reads `Interrupted` whatever the abort
-  carried: after a forget a push answers `Interrupted`. The verdict reaches a
-  provider only on a parameter stream, which is not built. A `stream_end` with
-  `end` or `busy` closes 1002 with `ProtocolViolation::OutcomeNotAllowed`. A
-  `stream_credit` or a `stream_end` on a stream other than 0 is ignored and
-  records no note. A client `chunk` on stream 0 is `Note::UnexpectedDirection`
-  and a client `chunk` on any other stream is `Note::StreamCreditExceeded`, each
-  closing 1002.
+  clock (`Instant`), not the backend's. A duplex call also takes upload activity
+  into account as D-28 states.
+- **What the client may send.** On stream 0, a `stream_credit` adds to the
+  credit; one for a call that is not streaming, which can arrive just after the
+  end, is ignored and records no note. A `stream_end` stops the stream: the
+  server aborts it, forgets the call at once, records `Note::StreamStopped`,
+  interrupts any open uploads (D-28), and keeps a `stream_end interrupted` for a
+  later retransmit of the `request`. The server aborts the stream on the backend
+  with the error of the client's outcome (`interrupted`, `contract` or
+  `corrupt`) and then forgets the call, so a provider on the loopback reads
+  `Interrupted` whatever the abort carried: after a forget a push answers
+  `Interrupted`. A `stream_end` on stream 0 with `end` or `busy` closes 1002
+  with `ProtocolViolation::OutcomeNotAllowed`. A client `chunk` on stream 0 is
+  `Note::UnexpectedDirection` and closes 1002. D-28 states the rules on
+  parameter streams. Before dispatch, all three client stream forms must match
+  the full target of the call named by correlation: a mismatch is discarded with
+  `Note::UnknownInteraction`, as frame specification §6.4 states.
 - **A streamed member on a session below version 3.** A `request` for a member
   whose reply is a stream is answered `response` with
   `contract(UnknownInteraction)` and `Note::UnknownInteraction`, because version
@@ -830,6 +834,87 @@ chooses.
   `forget` stops every open stream with `Transport::Interrupted`
   (`ridl_rt::error::Transport`). The provider cannot read `Transport::Down`
   through the port, so none is sent.
+
+**D-28. A parameter stream over frame version 3.** The code is in
+`server/upload.rs` and `server/session.rs`. The wire rules are
+[frame specification](../specification/frame-specification.md) §5.3, §5.4 and
+§11.1, "Binding version 3".
+
+- **Members and opening.** `MemberTable::set_parameter_streams` records a
+  member's count; `parameter_streams` returns it, or 0 for an unknown member.
+  Replacing the member with `insert` clears the count. With the `descriptor`
+  feature, the count is the largest nonzero stream number in the member's
+  descriptor, not the number of entries (stream 0 is the reply). An admitted
+  request opens one upload for each stream from 1 to that count. A member with
+  an upload on a session below version 3 gets
+  `response contract(UnknownInteraction)` and `Note::UnknownInteraction`.
+- **Receiving and credit.** Each upload starts with 4 credits and inbound
+  `seq` 1. The server queues at most 4 chunks per upload. It tries to push them
+  with `StreamCaller::push` immediately and on each tick, without waiting for
+  backend room. A nonempty chunk whose push returns 0 stays queued. Each chunk
+  taken returns one credit; one drain sends one `stream_credit` for their total.
+  An empty chunk whose push returns 0 counts as taken and returns one credit. A
+  stalled upload does not stop polling other calls and subscriptions.
+- **Discarding and violations.** A frame for no call in flight is ignored
+  without a note. After target validation (D-27), a chunk on an undeclared
+  parameter stream, or beyond its credit, records `StreamCreditExceeded` and
+  closes 1002. A stopped upload, or one whose client end has already arrived,
+  drops later chunks and repeated ends silently, even while preceding chunks
+  remain queued. A chunk or end with the wrong next `seq` aborts that upload
+  with `Interrupted`, clears its queue and sends `stream_end interrupted`
+  without a note. Credit and sequence checks precede the size check.
+- **Oversized chunks.** A chunk longer than its member's limit records
+  `Note::ChunkTooLarge { seq, stream, len }`, where `seq` is the request's
+  sequence number. The server sends `stream_end corrupt` on that stream,
+  interrupts any other open uploads, and forgets the call. The session remains
+  open.
+- **Client ends.** On an open parameter stream, a valid `stream_end end` waits
+  behind all queued chunks before `StreamCaller::end`. A valid
+  `stream_end interrupted` aborts the backend stream and discards its queue.
+  `contract`, `corrupt` and `busy` instead close 1002 with `OutcomeNotAllowed`:
+  the client produces this stream and gives no verdict on it. An end on an
+  undeclared stream is ignored. A client `stream_credit` on a parameter stream
+  is ignored; the server is its receiver, not its sender.
+- **Provider refusal.** A push or end returning `PushError::Failed(e)` sends
+  `stream_end` with the mapped stream outcome, drops the queue and marks the
+  upload stopped. `PushError::Contract` maps to `contract`, `TooLarge` to
+  `corrupt`, and `Ended` to `interrupted`; a detached port ends the session
+  with 1001. Server-sent ends on parameter streams have `seq` 1 because the
+  server sends no chunks in that direction. `InvalidValue(Utf8)` crosses as
+  detail 7 from version 3; the sender's version gate is frame specification
+  §9.6. The transport checks sizes and framing; the typed boundary checks text.
+- **Call lifetime.** A command's accepted acknowledgment leaves its uploads
+  open. A call is forgotten once its outcome has settled and every upload has
+  ended or stopped. A refusing response (`contract`, `corrupt` or `busy`)
+  forgets it at once and sends no upload end; upload frames produced during that
+  polling pass are discarded. An early plain reply interrupts open uploads after
+  the response. A reply stream's end interrupts them after that end. Timeout,
+  undelivered or down outcomes send no response but interrupt open uploads
+  before forgetting. A session's end forgets all calls and the backend releases
+  their streams with `Transport::Interrupted`.
+- **Abandonment and retention.** An upload's activity clock restarts on a
+  received chunk, a valid normal end, and a drain that pushes a chunk to the
+  backend. For a call without a reply stream, an open upload idle for
+  `call_abandon_after` is interrupted; the server forgets the call and records
+  one `CallAbandoned`. When a command's uploads have ended or stopped but its
+  acknowledgment is pending, abandonment is measured from the request's
+  monotonic send time. For a plain-reply query, receipt of the valid upload end
+  replaces that time with the end's monotonic receipt and sets retention to
+  `min(end.stamp, end receipt) + max`, using the backend clock for the latter. A
+  retransmitted request while the upload is in flight is `DuplicateDropped` and
+  leaves it running.
+- **Duplex.** Stream 0 is polled while parameter streams remain open, so a reply
+  chunk can precede the client's end. Retention stays measured from the request.
+  The call is abandoned only when neither the reply stream nor any upload has
+  progressed for `call_abandon_after`. Reply progress is a chunk sent or credit
+  received; upload activity remains relevant after its end. Abandonment sends
+  interrupted ends on the reply and any open uploads, forgets the call, and
+  records one `CallAbandoned`.
+- **End acknowledgment limit.** No frame confirms that the provider has consumed
+  an upload's end. Once the backend takes that end, the server makes no further
+  push on the stream and cannot learn a later refusal through it. A command's
+  accepted acknowledgment therefore does not confirm consumption of its final
+  chunks. A query can still report its outcome in its response.
 
 ### The end of a session
 
@@ -858,11 +943,13 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 client on a stream the server granted it no credit for; closes 1002),
 `StreamStopped` (the client stopped a reply stream), `RuleNotCarried` (a
 violation's rule the frame has no code for; the outcome is replaced),
-`UnknownInteraction` (an interaction the member table does not hold; dropped or
-answered as D-12 says) and `MessageLimitTooSmall` (the member whose messages the
-`Config` cannot carry, with the limit it needs; `serve` records it before the
-handshake. `serve_selected` records it after selection when ordinary attach
-checks pass, with `refused(range)` or, when the capability check also fails,
+`UnknownInteraction` (an interaction the member table does not hold, or a stream
+target that mismatches its call; dropped or answered as D-12 and D-27 say),
+`ChunkTooLarge` (an upload chunk above its member's limit, D-28) and
+`MessageLimitTooSmall` (the member whose messages the `Config` cannot carry,
+with the limit it needs; `serve` records it before the handshake.
+`serve_selected` records it after selection when ordinary attach checks pass,
+with `refused(range)` or, when the capability check also fails,
 `refused(frame_version_unsupported)`. Both return `ConfigRefused`, D-26).
 
 ### `Config`
@@ -1224,7 +1311,22 @@ All under `crates/ridl-transport-ws/`.
   test catalog and provider, with its member table, on `127.0.0.1:0`, one thread
   and one attachment per connection, prints `port <n>`, and exits when its
   standard input ends. It serves the TypeScript package's end-to-end tests. The
-  package leaves it out.
+  package leaves it out. Its additional stream members are listed below; each
+  has a 1 s bound and a 16,128-byte payload limit.
+
+  | Ordinal | Member         | Behavior                                                                                                                                                                                                                                                                           |
+  | ------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 11      | `UPLOAD`       | Command with arguments `[key, mode]`, accepted at claim; consumes stream 1 into the byte-keyed store, replacing the value at claim. Mode 0 stores; modes 1 and 2 refuse the third chunk with `InvalidValue(Range)` and `InvalidValue(Utf8)` respectively.                          |
+  | 12      | `UPLOAD_QUERY` | Query with argument `[mode]`; consumes stream 1 to its end, then replies with the byte count as little-endian `u64` followed by the wrapping byte sum as little-endian `u32`. Modes 1 and 2 abort the upload as above and settle with the same error.                              |
+  | 13      | `FETCH`        | Query with argument `[key]`; sends the stored value on stream 0 in chunks of `FETCH_CHUNK` (16,128 bytes), then ends. An empty or unknown key ends at once. Pending uploads are consumed before the snapshot; an unfinished upload contributes only bytes available at claim time. |
+  | 14      | `DUPLEX`       | Query that echoes each chunk of stream 1 unchanged on stream 0, respecting backpressure, then ends the reply when the upload ends.                                                                                                                                                 |
+
+  Refusals use type name `Block` locally; the frame carries only the rule. The
+  provider preserves the first empty chunk, end or failure observed while naming
+  an upload before acknowledgment. If the upload has already ended before the
+  third chunk is refused, `PushError::Ended` from the abort is accepted: a
+  command keeps its accepted acknowledgment and stores its first two chunks; a
+  query still settles with the selected contract error.
 
 The test targets `serve` and `scenario` require the `server` feature, so
 `--no-default-features` still runs the codec's tests.
@@ -1386,9 +1488,8 @@ No frozen port trait changes.
   later binding version would add them. The arbitration of a redundant provider
   set (driftsys/ridl#1196): the instances of a set are all attached, and the
   node does not choose between them.
-- A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
-  of a `<string>` stream. A chunk from the client is refused (D-27). No frame
-  checks a `<string>` stream against `Rule::Utf8` yet.
+- Typed stream encoding and text validation in the transport: it carries opaque
+  chunks and the typed boundary verifies them (D-28).
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
   `temperature` signal to a TypeScript client, with the member table read from

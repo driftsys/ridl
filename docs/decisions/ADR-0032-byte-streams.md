@@ -33,10 +33,13 @@ WebSocket. The other cases of this record are not carried by a transport yet.
 Amended 2026-11-04. Over `ridl-loopback`, the Rust face carries byte, text and
 named-element reply streams, commands with one parameter stream, and queries
 with one parameter stream and a plain or named-element streamed reply. The
-WebSocket upload direction, the corresponding TypeScript methods, and calls with
-two or more parameter streams are not built; the last omission is tracked as
-driftsys/ridl#1224. A query with an upload and a byte or text reply stream also
-remains outside the face.
+WebSocket server also receives parameter streams on commands and queries,
+including a query with an upload and a reply stream
+([the server record](../design/ridl-transport-ws.md), D-28). Frame version 3
+carries `Utf8` as rule code 7 (frame specification §9.6). The corresponding
+TypeScript upload methods are not built. Calls with two or more parameter
+streams remain outside the Rust face (driftsys/ridl#1224). A query with an
+upload and a byte or text reply stream also remains outside the face.
 
 ## Context
 

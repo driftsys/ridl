@@ -1391,6 +1391,73 @@ rulings override the earlier design where it differs.
   named sources when needed while keeping the existing correct named-only
   description unchanged.
 
+## As built (stage 5b)
+
+The server and UTF-8 wire code are built. This section records the committed
+server behavior; it does not claim completion of the TypeScript upload API or
+the upload end-to-end tests. These rulings supersede earlier sections where they
+differ. The implementation record is
+[the server design](../design/ridl-transport-ws.md), D-28; wire behavior belongs
+to [the frame specification](../specification/frame-specification.md) §5.3,
+§5.4, §6.4, §9.6 and §11.1.
+
+### Server rulings
+
+- B-4: Parameter chunks are admitted by the member's stream count, credit,
+  sequence and payload limit. Unknown correlations are ignored; stopped streams
+  and streams whose client end has arrived drop later chunks silently.
+  `ChunkTooLarge` ends the offending upload as `corrupt` and forgets the call.
+- B-5: Ends are direction-aware. A client ends or interrupts its parameter
+  stream; only a receiver can send a verdict. The server pushes a normal end
+  after its queued chunks. Repeated ends after the client's end are ignored.
+- B-6: An accepted command remains in flight until its uploads end or stop.
+  Refusing responses discard queued upload frames and forget without another
+  upload end. Other terminal call paths interrupt open uploads.
+- B-7: Upload activity includes received chunks, valid normal ends and chunks
+  taken by the backend. The owner-approved duplex amendment abandons a duplex
+  call only after neither direction has progressed for `call_abandon_after`;
+  upload activity remains relevant after its end. Calls without a reply stream
+  retain their upload abandonment checks.
+- B-8: Only a query with a plain reply resets its monotonic abandonment origin
+  and its backend-clock retention inputs at the upload end. Retention is
+  `min(end.stamp, end receipt) + max`. A duplex query keeps request-based
+  retention.
+- B-9: Credit is granted for chunks taken by the backend, not merely received.
+  One empty chunk consumes and returns one credit, even when `push` returns 0.
+- B-10: A parameter-stream member on a session below version 3 is answered
+  `contract(UnknownInteraction)`.
+- B-11: Rule code 7 is `Utf8`. The codecs decode it without session state;
+  senders carry it only from version 3, using `corrupt` and `RuleNotCarried`
+  below that version. Invalid UTF-8 inside an ordinary payload remains a
+  structural failure.
+- Target validation precedes dispatch of all three client stream forms. The
+  interface, ordinal and kind must match the call named by correlation. A
+  mismatch is discarded with `Note::UnknownInteraction`, sends nothing and
+  changes no stream or credit (frame specification §6.4).
+
+### Accepted plan choices and remaining records
+
+- Q1: The server carries duplex queries. No TypeScript duplex method is built;
+  filing its tracking issue remains for the driver. No issue number is assigned
+  here.
+- Q2: The loopback test provider has `UPLOAD` (11), `UPLOAD_QUERY` (12), `FETCH`
+  (13) and `DUPLEX` (14). Their behavior and the late-refusal handling are
+  recorded once in the server design's "The loopback server" entry.
+- Q3: Browser upload/read-back coverage remains for the driver after the
+  TypeScript upload API is built.
+- Q4(a–e): D-28 records direction-aware ends, `ChunkTooLarge`, silent drops
+  after refusal or the client's end, upload-end clock inputs and the sender's
+  UTF-8 version gate. Q4(f): no frame confirms consumption of the upload end;
+  D-28 states the server's resulting observation limit. The client close
+  semantics remain for its own record.
+- Q5 and B-12 to B-15: The accepted TypeScript upload choices remain in the
+  [implementation plan](2026-11-04-streams-stage-5b-plan.md#rulings-taken-in-this-plan).
+  Their implementation and D-21 record are outside this server-record pass.
+- B-16: The plan retains per-task mutation review and whole-branch review. The
+  earlier server reports contain their assertion-failure evidence; this records
+  task adds no tests or named mutations. Socket tests are compiled in the
+  earlier tasks and still require driver execution outside the sandbox.
+
 ## Trace
 
 - Issues: driftsys/ridl#1116, driftsys/ridl#336, driftsys/ridl#943.

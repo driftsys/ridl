@@ -281,14 +281,19 @@ Streams need new forms (an item, an end, flow-control credit) and a per-element
 bound. The subprotocol list plus `frame_version` is a negotiation the binding
 already has, so additions need no new mechanism. Version 1's layout, codes and
 vectors are never edited, which is what ADR-0029 asks of a frozen surface.
-Version 3 is built for the reply stream of a query; the rules are in frame
-specification §5.4 and §11.1 "Binding version 3", and the server's choices are
-in [the crate's design record](../design/ridl-transport-ws.md), D-27.
-Alternative: add stream forms to version 1 as forms an old peer discards,
-rejected because an unknown form is a protocol violation and an old provider
-cannot know the new consumer will never subscribe a stream. Cost if wrong: a
-newer peer carries two layouts for a while; no break for the older one. The same
-path serves a new `Rule` code, a new form or a new field.
+Version 3 carries query reply streams and command and query parameter streams;
+the rules are in frame specification §5.3, §5.4 and §11.1 "Binding version 3",
+and the server's choices are in
+[the crate's design record](../design/ridl-transport-ws.md), D-27 and D-28. The
+upload uses the same forms with the producer and receiver reversed, so it needs
+no additional frame version. The server can carry an upload and a reply stream
+concurrently. Rule code 7 carries a UTF-8 refusal from version 3 (frame
+specification §9.6); the codecs remain stateless and the sender checks the
+session's version. Alternative: add stream forms to version 1 as forms an old
+peer discards, rejected because an unknown form is a protocol violation and an
+old provider cannot know the new consumer will never subscribe a stream. Cost if
+wrong: a newer peer carries two layouts for a while; no break for the older one.
+The same path serves a new `Rule` code, a new form or a new field.
 
 **A missing capability is not a defect of the peer.** A consumer given a
 contract that declares a stream over a session of frame version 1 or 2 reports a
