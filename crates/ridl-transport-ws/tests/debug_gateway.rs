@@ -1128,3 +1128,115 @@ fn gateway_injection_refuses_streamed_query_locally() {
         .all(|f| !matches!(f, Frame::Request { .. })));
     drop(provider(&g, 1, cat));
 }
+
+/// Captures complete startup announcements without sharing stdout with tests.
+struct Announcements {
+    bytes: Vec<u8>,
+    send: std::sync::mpsc::Sender<String>,
+}
+impl io::Write for Announcements {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.send
+            .send(String::from_utf8(std::mem::take(&mut self.bytes)).unwrap())
+            .map_err(|_| io::ErrorKind::BrokenPipe.into())
+    }
+}
+fn executable_options(injection: bool) -> Options {
+    let mut args = vec![
+        format!(
+            "{}/../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb",
+            env!("CARGO_MANIFEST_DIR")
+        ),
+        "Local".into(),
+        "0".into(),
+    ];
+    if injection {
+        args.push("0".into());
+    }
+    Options::parse(args).unwrap()
+}
+
+#[test]
+fn gateway_executable_wiring_negotiates_both_roles() {
+    let (announcements, receive) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        gateway::run(
+            executable_options(true),
+            &mut Announcements {
+                bytes: vec![],
+                send: announcements,
+            },
+        )
+        .unwrap();
+    });
+    let listening = receive.recv_timeout(LIMIT).unwrap();
+    let injection = receive.recv_timeout(LIMIT).unwrap();
+    let port = |line: &str, prefix: &str| -> SocketAddr {
+        format!("127.0.0.1:{}", line.trim().strip_prefix(prefix).unwrap())
+            .parse()
+            .unwrap()
+    };
+    let g = gateway();
+    let mut listen = connect(port(&listening, "port "), catalog(&g, "alpha"));
+    subscribe(&mut listen, SIGNAL);
+    let addr = port(&injection, "inject-port ");
+    let stream = TcpStream::connect_timeout(&addr, LIMIT).unwrap();
+    stream.set_read_timeout(Some(LIMIT)).unwrap();
+    let mut request = format!("ws://{addr}/alpha.First/Unit/alpha")
+        .into_client_request()
+        .unwrap();
+    request.headers_mut().insert(
+        "Sec-WebSocket-Protocol",
+        "ridl-ws-v2-provider".parse().unwrap(),
+    );
+    let (mut provider, _) = tungstenite::client(request, stream).unwrap();
+    assert!(matches!(
+        frame::decode(&read(&mut provider)).unwrap(),
+        Frame::Attach(_)
+    ));
+    send(&mut provider, Frame::Attached(AttachOutcome::Accepted));
+    assert!(matches!(
+        frame::decode(&read(&mut provider)).unwrap(),
+        Frame::Subscribe(_)
+    ));
+}
+
+#[test]
+fn gateway_executable_without_injection_announces_only_listening() {
+    let (announcements, receive) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        gateway::run(
+            executable_options(false),
+            &mut Announcements {
+                bytes: vec![],
+                send: announcements,
+            },
+        )
+        .unwrap();
+    });
+    let listening = receive.recv_timeout(LIMIT).unwrap();
+    assert!(listening.starts_with("port "));
+    assert!(receive.recv_timeout(Duration::from_millis(50)).is_err());
+}
+
+#[test]
+fn gateway_failed_injection_bind_announces_nothing() {
+    let busy = options().bind().unwrap();
+    let options = Options::parse([
+        format!(
+            "{}/../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb",
+            env!("CARGO_MANIFEST_DIR")
+        ),
+        "Local".into(),
+        "0".into(),
+        busy.local_addr().unwrap().port().to_string(),
+    ])
+    .unwrap();
+    let mut output = vec![];
+    assert!(gateway::run(options, &mut output).is_err());
+    assert!(output.is_empty());
+}

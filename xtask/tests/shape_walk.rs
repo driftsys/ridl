@@ -274,6 +274,16 @@ const ALLOWED: &[Allowed] = &[
               `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-transport-ws/tests/debug_gateway.rs",
+        lines: 3,
+        why: "tests edit the owned catalog descriptor's `Catalog.interfaces` field, not `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-transport-ws/examples/support/debug_gateway.rs",
+        lines: 1,
+        why: "a test edits the owned catalog descriptor's `Catalog.interfaces` field to verify copied member limits",
+    },
+    Allowed {
         path: "crates/ridl-transport-ws/tests/descriptor.rs",
         lines: 9,
         why: "a test fixture building and editing the owned descriptor \

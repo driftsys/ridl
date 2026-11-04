@@ -64,6 +64,30 @@ pub fn announce(listener: &TcpListener, output: &mut impl Write) -> io::Result<(
     output.flush()
 }
 
+/// Runs the executable's listener wiring after both requested binds succeed.
+pub fn run(options: Options, output: &mut impl Write) -> Result<()> {
+    let gateway = Arc::new(Gateway::load(&options)?);
+    let listener = options.bind()?;
+    let injection = options.bind_injection()?;
+    announce(&listener, output)?;
+    if let Some(injection) = injection {
+        writeln!(output, "inject-port {}", injection.local_addr()?.port())?;
+        output.flush()?;
+        let gateway = gateway.clone();
+        std::thread::spawn(move || {
+            for conn in accepted(injection.incoming()) {
+                let gateway = gateway.clone();
+                std::thread::spawn(move || gateway.serve_injection(conn, &Config::default()));
+            }
+        });
+    }
+    for conn in accepted(listener.incoming()) {
+        let gateway = gateway.clone();
+        std::thread::spawn(move || gateway.serve(conn, &Config::default()));
+    }
+    Ok(())
+}
+
 struct Injection {
     path: String,
     who: InstanceNo,
@@ -250,6 +274,51 @@ pub fn accepted<T>(connections: impl Iterator<Item = io::Result<T>>) -> impl Ite
 mod tests {
     use super::*;
     use ridl_transport_ws::frame::{Attach, Frame};
+
+    #[test]
+    fn injection_table_preserves_bounds_and_limits() {
+        use ridl_rt::contract::{InterfaceNo, Kind, Ordinal};
+        use ridl_transport_ws::ProvidedBackend;
+        use std::time::Duration;
+        let bytes = include_bytes!(
+            "../../../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb"
+        );
+        let mut descriptor =
+            deployment::Deployment::try_from(deployment::verify(bytes).unwrap()).unwrap();
+        let embedded = descriptor
+            .catalogs
+            .iter_mut()
+            .find(|c| c.name == "alpha")
+            .unwrap();
+        let mut catalog =
+            ridl_descriptor::Catalog::try_from(ridl_descriptor::verify(&embedded.bytes).unwrap())
+                .unwrap();
+        for interface in &mut catalog.interfaces {
+            for member in &mut interface.members {
+                member.limit = Some(17 + member.ordinal);
+            }
+        }
+        embedded.bytes = ridl_descriptor::finish(&catalog);
+        let bytes = Box::leak(deployment::finish(&descriptor).into_boxed_slice());
+        let gateway = Gateway::from_descriptor(bytes, "Local").unwrap();
+        let backend = gateway.select_injection("/alpha.First/Unit/alpha").unwrap();
+        let table = backend.members();
+        for (ordinal, kind) in [
+            (1, Kind::Signal),
+            (2, Kind::Event),
+            (3, Kind::Command),
+            (4, Kind::Query),
+        ] {
+            assert_eq!(
+                table.member(InterfaceNo(1), Ordinal(ordinal)),
+                Some((kind, Some(Duration::from_millis(100))))
+            );
+            assert_eq!(
+                table.limit(InterfaceNo(1), Ordinal(ordinal)),
+                Some(17 + ordinal)
+            );
+        }
+    }
 
     #[test]
     fn missing_member_table_logs_to_stderr() {
