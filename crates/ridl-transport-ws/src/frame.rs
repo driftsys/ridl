@@ -480,15 +480,15 @@ fn kind_from(code: u8) -> Result<Kind, ProtocolViolation> {
 }
 
 /// The `detail` code of a violation's rule: `Range` 1, `Step` 2, `Length` 3,
-/// `Pattern` 4, `Variant` 5, `Unique` 6 (frame specification §9.6), or
-/// `None` for a `Rule` variant the supported frame versions have no code for.
-/// `Rule` is
-/// `#[non_exhaustive]`; `Rule::Utf8` exists in `ridl-rt` without a wire code.
-/// A rule receives its wire code with the frame version that first carries it,
-/// so a sender built against a newer `ridl-rt` checks here before
-/// it builds a `contract(InvalidValue)` outcome: the server sends such a
-/// violation as `corrupt` on a `response` and as `contract(ContractBroken)`
-/// on an `answer`, which has no `corrupt` outcome.
+/// `Pattern` 4, `Variant` 5, `Unique` 6, `Utf8` 7 (frame specification §9.6),
+/// or `None` for a `Rule` variant the supported frame versions have no code for.
+/// `Rule` is `#[non_exhaustive]`. `Utf8` has code 7 from frame version 3;
+/// a sender does not send it on a session below version 3.
+/// A rule receives its wire code with the frame version that first carries it.
+/// The server checks both the tag and the session's version before it builds
+/// a `contract(InvalidValue)` outcome: it sends an uncarried violation as
+/// `corrupt` on a `response` and as `contract(ContractBroken)` on an `answer`,
+/// which has no `corrupt` outcome. The stateless decoder accepts every known tag.
 pub fn rule_tag(rule: Rule) -> Option<u8> {
     match rule {
         Rule::Range => Some(1),
@@ -497,6 +497,7 @@ pub fn rule_tag(rule: Rule) -> Option<u8> {
         Rule::Pattern => Some(4),
         Rule::Variant => Some(5),
         Rule::Unique => Some(6),
+        Rule::Utf8 => Some(7),
         _ => None,
     }
 }
@@ -517,6 +518,7 @@ fn rule_from(code: u8) -> Result<Rule, ProtocolViolation> {
         4 => Ok(Rule::Pattern),
         5 => Ok(Rule::Variant),
         6 => Ok(Rule::Unique),
+        7 => Ok(Rule::Utf8),
         _ => Err(ProtocolViolation::UnknownCode),
     }
 }
@@ -975,6 +977,8 @@ impl Frame<'_> {
     /// A `contract(InvalidValue)` outcome whose `Rule` has no tag
     /// ([`rule_tag`] is `None`) is written with `detail` 0, which a receiver
     /// refuses as an unknown code; check the rule before building the frame.
+    /// The frame version is not checked: `Rule::Utf8` is written as 7 on any
+    /// session, though only frame version 3 carries it.
     /// A [`Frame::Block`] is written without a check of its `kind`, `total`,
     /// `index` or payload length: a block with `total` 0 or an `index` at or
     /// past the block count encodes, and every receiver closes with 1002. A

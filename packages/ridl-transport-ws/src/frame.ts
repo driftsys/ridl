@@ -137,14 +137,15 @@ export interface Envelope {
   seq: bigint;
 }
 
-/** The rule a value broke, with the `detail` codes 1 to 6 in this order. */
+/** The rule a value broke: detail codes 1 to 7 in this order; utf8 is sent from frame version 3. */
 export type Rule =
   | "range"
   | "step"
   | "length"
   | "pattern"
   | "variant"
-  | "unique";
+  | "unique"
+  | "utf8";
 
 /** A contract error carried by an `answer` or a `response`. */
 export type Contract =
@@ -349,6 +350,7 @@ const RULES: readonly Rule[] = [
   "pattern",
   "variant",
   "unique",
+  "utf8",
 ];
 const REASONS: readonly Reason[] = [
   "unknown-catalog",

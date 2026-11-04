@@ -377,7 +377,7 @@ Deno.test("an unknown outcome code is an unknown code", () => {
 });
 
 Deno.test("an unknown rule is an unknown code", () => {
-  for (const rule of [0, 7]) {
+  for (const rule of [0, 8]) {
     const m = patched(patched(RESPONSE_ACCEPTED, 34, 3), 35, rule);
     assert.equal(violation(m), "unknown-code");
   }
@@ -507,8 +507,8 @@ Deno.test("a stream_end with a nonzero detail is refused", () => {
   for (const outcome of [7, 8, 10, 11, 4, 5, 6]) {
     assert.equal(violation(streamEnd(4, outcome, 1)), "nonzero-detail");
   }
-  // `invalid-value` takes a rule code, and 0 and 7 are not one.
-  for (const detail of [0, 7]) {
+  // `invalid-value` takes a rule code, and 0 and 8 are not one.
+  for (const detail of [0, 8]) {
     assert.equal(violation(streamEnd(4, 3, detail)), "unknown-code");
   }
 });

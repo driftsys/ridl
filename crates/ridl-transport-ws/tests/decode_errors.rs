@@ -432,7 +432,7 @@ fn an_unknown_outcome_code_is_an_unknown_code() {
 
 #[test]
 fn an_unknown_rule_is_an_unknown_code() {
-    for rule in [0u8, 7] {
+    for rule in [0u8, 8] {
         let mut m = RESPONSE_ACCEPTED;
         m[34] = 3;
         m[35] = rule;
@@ -577,8 +577,8 @@ fn stream_end_interrupted_with_nonzero_detail_is_refused() {
             "outcome {outcome}"
         );
     }
-    // `InvalidValue` takes a `Rule` code, and 0 and 7 are not one.
-    for detail in [0, 7] {
+    // `InvalidValue` takes a `Rule` code, and 0 and 8 are not one.
+    for detail in [0, 8] {
         assert_eq!(
             decode_err(&stream_end(4, 3, detail)),
             violation(ProtocolViolation::UnknownCode),

@@ -126,6 +126,7 @@ const RULES: [number, Rule][] = [
   [4, "pattern"],
   [5, "variant"],
   [6, "unique"],
+  [7, "utf8"],
 ];
 
 Deno.test("each response outcome code maps to its outcome", () => {
@@ -390,6 +391,7 @@ Deno.test("each stream outcome maps to its code and back", () => {
     [3, 4, { kind: "contract", contract: invalid("pattern") }],
     [3, 5, { kind: "contract", contract: invalid("variant") }],
     [3, 6, { kind: "contract", contract: invalid("unique") }],
+    [3, 7, { kind: "contract", contract: invalid("utf8") }],
   ];
   for (const [code, detail, outcome] of cases) {
     roundTrip([13, ...T(4), ...E, ...CORR, 0, code, detail], {

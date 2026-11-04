@@ -114,8 +114,9 @@ pub enum Note {
         seq: u64,
     },
     /// The backend reported a `contract(InvalidValue)` whose `Rule` the
-    /// frame has no code for (frame specification §9.6), from a `ridl-rt`
-    /// newer than this crate. A `response` is sent as `corrupt` and an
+    /// session's frame version does not carry (frame specification §9.6): a
+    /// rule from a `ridl-rt` newer than this crate, or `Rule::Utf8` on a
+    /// session below frame version 3. A `response` is sent as `corrupt` and an
     /// `answer` as `contract(ContractBroken)` instead.
     RuleNotCarried {
         /// The interaction answered.

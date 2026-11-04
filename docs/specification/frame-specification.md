@@ -1062,15 +1062,17 @@ it is the consumer's own finding about bytes it received.
 **What a violation carries.** `contract(InvalidValue(violation))` crosses as the
 violation's `Rule` alone; the name of the typl type whose constraint failed does
 not cross. The `Rule` codes: `Range` 1, `Step` 2, `Length` 3, `Pattern` 4,
-`Variant` 5, `Unique` 6. `Rule::Utf8` exists in `ridl-rt` without a wire code. A
-rule receives its wire code with the frame version that first carries it,
-because a receiver cannot construct a variant it does not know. A runtime that
-decodes the violation from a frame reports it with no type name, which
-`ridl_rt::payload::Violation` represents as `type_name: None`; a violation the
-generated binding detects locally keeps its name, and an in-process transport
-delivers a violation with its name. A type identifier was rejected because the
-catalog descriptor carries no type table, and the name is diagnostic, not
-contractual.
+`Variant` 5, `Unique` 6, and, from frame version 3, `Utf8` 7, for a chunk of a
+`<string>` stream that is not valid UTF-8 (ADR-0032 decision 12). A sender does
+not send 7 on a session below version 3. Invalid UTF-8 inside a payload stays
+`corrupt`. A rule receives its wire code with the frame version that first
+carries it, because a receiver cannot construct a variant it does not know. A
+runtime that decodes the violation from a frame reports it with no type name,
+which `ridl_rt::payload::Violation` represents as `type_name: None`; a violation
+the generated binding detects locally keeps its name, and an in-process
+transport delivers a violation with its name. A type identifier was rejected
+because the catalog descriptor carries no type table, and the name is
+diagnostic, not contractual.
 
 ## 10. What a Binding Decides
 
@@ -1473,12 +1475,13 @@ spaces for reading only, with the stamp, the hash and the unit name of the
 version 1 table. A `chunk` and a `stream_end` are sent by the provider here, so
 their stamp is `0x0123456789AC`.
 
-| Id               | Vector                                                                                | Hex                                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `attach-3`       | `attach` frame 3, FlatBuffers, `veh.cabin`                                            | `01 03000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
-| `chunk-reply`    | `chunk` query, interface 1, ordinal 4, seq 1, correlation 2, stream 0, payload `ff01` | `0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 ff01`                    |
-| `stream-end-end` | `stream_end` `end`, query, interface 1, ordinal 4, seq 2, correlation 2, stream 0     | `0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00`                   |
-| `stream-credit`  | `stream_credit` 4, query, interface 1, ordinal 4, correlation 2, stream 0             | `0e 04 01000000 04000000 0200000000000000 00 04000000`                                                  |
+| Id                | Vector                                                                                                       | Hex                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `attach-3`        | `attach` frame 3, FlatBuffers, `veh.cabin`                                                                   | `01 03000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `chunk-reply`     | `chunk` query, interface 1, ordinal 4, seq 1, correlation 2, stream 0, payload `ff01`                        | `0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 ff01`                    |
+| `stream-end-end`  | `stream_end` `end`, query, interface 1, ordinal 4, seq 2, correlation 2, stream 0                            | `0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00`                   |
+| `stream-credit`   | `stream_credit` 4, query, interface 1, ordinal 4, correlation 2, stream 0                                    | `0e 04 01000000 04000000 0200000000000000 00 04000000`                                                  |
+| `stream-end-utf8` | `stream_end` `contract(InvalidValue(Utf8))`, command, interface 1, ordinal 3, seq 1, correlation 2, stream 1 | `0d 03 01000000 03000000 ac89674523010000 0100000000000000 0200000000000000 01 03 07`                   |
 
 #### Reversed role
 
@@ -1658,8 +1661,8 @@ Each item is left out on purpose, with the record that takes it.
   A parameter stream on a command or a query is not built: no frame direction
   carries a consumer's `chunk` yet, and a `chunk` from the consumer is refused.
   A `<string>` stream has no UTF-8 check on the frame yet; the `Rule` that names
-  it arrives with the parameter streams. Frame version 2 holds the blocks of a
-  `fixed` (§4, §5.5).
+  that check has code 7 from frame version 3 (§9.6). Frame version 2 holds the
+  blocks of a `fixed` (§4, §5.5).
 - **The family.** Which of ridl §3.2's five boundaries an interaction sits on is
   not on the frame, because `ridl-rt` 0.1 carries no `Family` and the IR has no
   family field yet; it returns as a `Member` field, a breaking change under

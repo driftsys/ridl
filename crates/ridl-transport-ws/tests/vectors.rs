@@ -202,8 +202,7 @@ fn expected_2(id: &str) -> Option<Frame<'static>> {
 }
 
 fn assert_round_trip(id: &str, want: Frame<'_>, bytes: &[u8]) {
-    let got = decode(bytes).unwrap_or_else(|e| panic!("vector {id} did not decode: {e:?}"));
-    assert_eq!(got, want, "vector {id}");
+    assert_eq!(decode(bytes), Ok(want), "vector {id}");
     assert_eq!(want.encoded_len(), bytes.len(), "encoded_len of {id}");
     let mut out = vec![0u8; bytes.len()];
     let n = want.encode(&mut out).unwrap();
@@ -290,7 +289,13 @@ fn spec_version_3_vectors() -> Vec<(String, Vec<u8>)> {
     rows
 }
 
-const KNOWN_3: [&str; 4] = ["attach-3", "chunk-reply", "stream-end-end", "stream-credit"];
+const KNOWN_3: [&str; 5] = [
+    "attach-3",
+    "chunk-reply",
+    "stream-end-end",
+    "stream-credit",
+    "stream-end-utf8",
+];
 
 /// The frame a row of the version 3 table describes, by its `Id`.
 fn expected_3(id: &str) -> Option<Frame<'static>> {
@@ -313,6 +318,16 @@ fn expected_3(id: &str) -> Option<Frame<'static>> {
             correlation: 2,
             stream: 0,
             outcome: StreamOutcome::End,
+        },
+        "stream-end-utf8" => Frame::StreamEnd {
+            target: target(Kind::Command, 1, 3),
+            envelope: envelope(0x0123_4567_89AC, 1),
+            correlation: 2,
+            stream: 1,
+            outcome: StreamOutcome::Contract(Contract::InvalidValue(Violation {
+                type_name: None,
+                rule: Rule::Utf8,
+            })),
         },
         "stream-credit" => Frame::StreamCredit {
             target: target(Kind::Query, 1, 4),

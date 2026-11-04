@@ -647,7 +647,7 @@ impl<B: Backend> Session<B> {
     /// `answer` form has no `corrupt` outcome.
     fn answer(&self, target: Target, outcome: AnswerOutcome, out: &mut Vec<Vec<u8>>) {
         let outcome = match outcome {
-            AnswerOutcome::Contract(c) if !carried(c) => {
+            AnswerOutcome::Contract(c) if !carried(c, self.frame_version) => {
                 self.note(Note::RuleNotCarried { target });
                 AnswerOutcome::Contract(Contract::ContractBroken)
             }
@@ -1039,7 +1039,7 @@ impl<B: Backend> Session<B> {
         out: &mut Vec<Vec<u8>>,
     ) -> Step {
         let outcome = match outcome {
-            ResponseOutcome::Contract(c) if !carried(c) => {
+            ResponseOutcome::Contract(c) if !carried(c, self.frame_version) => {
                 self.note(Note::RuleNotCarried { target });
                 ResponseOutcome::Corrupt
             }
@@ -1206,7 +1206,7 @@ impl<B: Backend> Session<B> {
         out: &mut Vec<Vec<u8>>,
     ) {
         let outcome = match outcome {
-            StreamOutcome::Contract(c) if !carried(c) => {
+            StreamOutcome::Contract(c) if !carried(c, self.frame_version) => {
                 self.note(Note::RuleNotCarried { target });
                 StreamOutcome::Corrupt
             }
@@ -1530,13 +1530,14 @@ enum Fetch {
     Gone,
 }
 
-/// Whether the frame can carry `c`: every contract error but an
-/// `InvalidValue` whose `Rule` frame version 2 has no code for (frame
-/// specification §9.6), which a backend built against a newer `ridl-rt`
-/// could report.
-fn carried(c: Contract) -> bool {
+/// Whether the session version can carry `c` (frame specification §9.6).
+/// An unknown rule has no code; `Utf8` requires frame version 3 or later.
+fn carried(c: Contract, frame_version: u32) -> bool {
     match c {
-        Contract::InvalidValue(v) => frame::rule_tag(v.rule).is_some(),
+        Contract::InvalidValue(v) => {
+            frame::rule_tag(v.rule).is_some()
+                && (v.rule != ridl_rt::payload::Rule::Utf8 || frame_version >= FRAME_VERSION_3)
+        }
         _ => true,
     }
 }
@@ -3590,6 +3591,54 @@ mod tests {
                 }))
             )
         );
+    }
+
+    #[test]
+    fn a_utf8_violation_is_carried_from_version_3_only() {
+        for version in [FRAME_VERSION_3, 2] {
+            let (mut s, mut p, notes) = scanning();
+            s.upgraded(version);
+            let (step, out) = send(&mut s, &attach_msg(version, 1, [7u8; 32], "ws.test"));
+            assert_eq!(step, Step::Continue);
+            assert_eq!(out.len(), 1);
+            assert_eq!(
+                decode(&out[0]),
+                Ok(Frame::Attached(AttachOutcome::Accepted))
+            );
+            let violation = Contract::InvalidValue(Violation {
+                type_name: Some("Text"),
+                rule: Rule::Utf8,
+            });
+            let out = settled(
+                &mut s,
+                &mut p,
+                QUERY,
+                1,
+                Err(CallError::Contract(violation)),
+            );
+            assert_eq!(out.len(), 1, "version {version}");
+            let (outcome, expected_notes) = if version == FRAME_VERSION_3 {
+                assert_eq!(out[0][35], 7);
+                (
+                    ResponseOutcome::Contract(Contract::InvalidValue(Violation {
+                        type_name: None,
+                        rule: Rule::Utf8,
+                    })),
+                    vec![],
+                )
+            } else {
+                (
+                    ResponseOutcome::Corrupt,
+                    vec![Note::RuleNotCarried { target: QUERY }],
+                )
+            };
+            assert_eq!(
+                decode(&out[0]),
+                Ok(response(QUERY, 0, 1, 1, outcome)),
+                "version {version}"
+            );
+            assert_eq!(*notes.lock().unwrap(), expected_notes, "version {version}");
+        }
     }
 
     #[test]

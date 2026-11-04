@@ -165,13 +165,15 @@ a value:
 
 `Contract` is `ridl_rt::error::Contract`. A decoded `InvalidValue` carries the
 `Rule` from `detail` and `type_name: None`, as §9.6 states; an encoded one
-writes the rule code and drops the name. `Rule` is `#[non_exhaustive]`.
-`Rule::Utf8` exists in `ridl-rt` without a wire code. A rule receives its wire
-code with the frame version that first carries it (§9.6). `frame::rule_tag`
-gives the code of a rule, or `None` for one this frame version has no code for;
-the codec writes `detail` 0 for such a rule, which no receiver accepts, and does
-not panic. The server checks the rule before it builds an outcome: a `response`
-with such a violation is sent as `corrupt`, an `answer` as
+writes the rule code and drops the name. `Rule` is `#[non_exhaustive]`. A rule
+receives its wire code with the frame version that first carries it (§9.6):
+`Rule::Utf8` has code 7, carried from frame version 3. `frame::rule_tag` gives
+the code of a rule, or `None` for a rule the frame has no code for; the codec
+writes `detail` 0 for such a rule, which no receiver accepts, and does not
+panic. The codec does not apply the version gate: it writes `Rule::Utf8` as 7 on
+any session. The server checks the rule before it builds an outcome, and treats
+a rule with no code, or `Rule::Utf8` on a session below version 3, as not
+carried: a `response` with such a violation is sent as `corrupt`, an `answer` as
 `contract(ContractBroken)`, and `Note::RuleNotCarried` is recorded. The common
 header fields are one `Target { kind, iface, ord }` with `ridl-rt`'s `Kind`,
 `InterfaceNo` and `Ordinal`; the envelope is `ridl-rt`'s `Envelope`.
@@ -1386,8 +1388,8 @@ No frozen port trait changes.
   node does not choose between them.
 - A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
   of a `<string>` stream. A chunk from the client is refused (D-27).
-  `Rule::Utf8` already exists in `ridl-rt`, without a wire code. A rule receives
-  its wire code with the frame version that first carries it.
+  `Rule::Utf8` has wire code 7 from frame version 3, but no frame checks a
+  `<string>` stream against it yet.
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
   `temperature` signal to a TypeScript client, with the member table read from
