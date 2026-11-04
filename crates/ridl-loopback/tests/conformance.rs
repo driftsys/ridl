@@ -12,6 +12,17 @@ use ridl_rt::contract::CatalogRef;
 use ridl_rt::sample::Duration;
 use ridl_rt_conformance::Factory;
 
+// Compile the production wrapper here so the factory can drive its private
+// clock and fault hooks without adding a raw-handle escape to the API.
+// Identity tests below use the exported Node and its real reservations.
+#[cfg(feature = "node")]
+struct Reservation;
+#[cfg(feature = "node")]
+#[path = "../src/node/attachment.rs"]
+mod attachment;
+#[cfg(feature = "node")]
+use attachment::Attachment;
+
 /// The loopback as the suite builds it: the aggregate, the additional role
 /// handles `Loopback` hands out, its call table's size, and its two test
 /// hooks.
@@ -59,35 +70,39 @@ mod identity {
 
     struct NodeFactory;
     impl Factory for NodeFactory {
-        type Runtime = Loopback;
+        type Runtime = Attachment;
         type Source = SourceHandle;
         type Caller = CallerHandle;
         type Handler = HandlerHandle;
 
         const SLOTS: usize = Loopback::SLOTS;
 
-        fn runtime(catalog: CatalogRef) -> Loopback {
-            Loopback::new(catalog)
+        fn runtime(catalog: CatalogRef) -> Attachment {
+            Attachment {
+                ports: Loopback::new(catalog),
+                _reservation: Reservation,
+                listener: false,
+            }
         }
 
-        fn source(runtime: &Loopback) -> SourceHandle {
-            runtime.source()
+        fn source(runtime: &Attachment) -> SourceHandle {
+            runtime.ports.source()
         }
 
-        fn caller(runtime: &Loopback) -> CallerHandle {
-            runtime.caller()
+        fn caller(runtime: &Attachment) -> CallerHandle {
+            runtime.ports.caller()
         }
 
-        fn handler(runtime: &Loopback) -> HandlerHandle {
-            runtime.handler()
+        fn handler(runtime: &Attachment) -> HandlerHandle {
+            runtime.ports.handler()
         }
 
-        fn advance(runtime: &mut Loopback, by: Duration) {
-            runtime.advance(by);
+        fn advance(runtime: &mut Attachment, by: Duration) {
+            runtime.ports.advance(by);
         }
 
-        fn fail_next_settle(runtime: &mut Loopback) {
-            runtime.fail_next_settle();
+        fn fail_next_settle(runtime: &mut Attachment) {
+            runtime.ports.fail_next_settle();
         }
     }
 
@@ -111,9 +126,9 @@ mod identity {
 
     // The public extension syntax always includes the base suite, so it runs again here.
     #[cfg(not(feature = "debug"))]
-    ridl_rt_conformance::suite!(NodeFactory; identity);
+    ridl_rt_conformance::suite!(NodeFactory; scannable, coherent, wakeable, trace, identity);
     #[cfg(feature = "debug")]
-    ridl_rt_conformance::suite!(NodeFactory; identity, identity_debug);
+    ridl_rt_conformance::suite!(NodeFactory; scannable, coherent, wakeable, trace, identity, identity_debug);
 }
 
 #[test]

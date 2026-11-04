@@ -247,9 +247,10 @@ impl Drop for Reservation {
     }
 }
 
-#[cfg(all(test, feature = "debug"))]
+#[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "debug")]
     use std::sync::{mpsc, TryLockError};
 
     #[test]
@@ -257,12 +258,16 @@ mod tests {
         use ridl_rt::contract::{InterfaceNo, Ordinal};
         use ridl_rt::port::*;
         use ridl_rt::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
-        let mut node = Node::from_descriptor(
-            include_bytes!("../../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb"),
-            "Local",
-        )
-        .unwrap();
-        let catalog = *node.catalogs().find(|c| c.name == "alpha").unwrap();
+        let catalog = CatalogRef {
+            name: "test",
+            hash: CatalogHash([0; 32]),
+        };
+        let key = (catalog.name, catalog.hash);
+        let mut node = Node {
+            stores: BTreeMap::from([(key, Loopback::new(catalog))]),
+            grants: BTreeMap::from([(1, BTreeSet::from([key])), (3, BTreeSet::from([key]))]),
+            reservations: Arc::new(Mutex::new(BTreeMap::new())),
+        };
         let iface = InterfaceNo(1);
         let key = (catalog.name, catalog.hash);
         let store = node.stores.get_mut(&key).unwrap();
@@ -320,6 +325,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "debug")]
     #[test]
     fn simultaneous_opposites_have_one_winner() {
         let catalog = CatalogRef {
