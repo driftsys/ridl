@@ -16,9 +16,10 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, those of the five
-//! // extension flags, and those of a runtime that carries the trace
-//! // context.
+//! // Every test of the ports every runtime presents, and those of the five
+//! // extension flags named here; `trace` is the flag of a runtime that
+//! // carries the trace context. The `identity` and `identity_debug` flags
+//! // need `IdentityFactory` as well (see the `identity` module).
 //! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams);
 //! ```
 //!

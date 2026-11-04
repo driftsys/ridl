@@ -1,9 +1,9 @@
 //! The port contract suite of `ridl-rt-conformance`, run over this runtime.
 //!
-//! The five base extension flags run here, including those of both signal
-//! extensions, of `Wakeable` and of the two stream extensions, which the
-//! loopback implements, and those of the `trace` arm, because the loopback
-//! carries the trace context. The tests
+//! Five extension flags run here: those of both signal extensions
+//! (`scannable`, `coherent`), of `Wakeable`, of the two stream extensions
+//! (`streams`), which the loopback implements, and `trace`, because the
+//! loopback carries the trace context. The tests
 //! of what only this runtime can express are in `tests/ports.rs`. The identity
 //! group runs with `node`, and `identity_debug` runs with `debug`.
 
@@ -14,7 +14,9 @@ use ridl_rt_conformance::Factory;
 
 // Compile the production wrapper here so the factory can drive its private
 // clock and fault hooks without adding a raw-handle escape to the API.
-// Identity tests below use the exported Node and its real reservations.
+// The identity tests attach through the exported Node and its real
+// reservations; the base suite run through `Attachment` uses the stub
+// `Reservation` below.
 #[cfg(feature = "node")]
 struct Reservation;
 #[cfg(feature = "node")]
