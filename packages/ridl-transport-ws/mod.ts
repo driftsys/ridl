@@ -2,3 +2,4 @@
 export * from "./src/frame.ts";
 export * from "./src/errors.ts";
 export * from "./src/session.ts";
+export * from "./src/provision.ts";
