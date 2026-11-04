@@ -32,6 +32,8 @@ import { BLOCK_BYTES, blockCount, FORM_BLOCK } from "./blocks.ts";
 export const FRAME_VERSION = 2;
 /** The WebSocket subprotocol name of binding version 2. */
 export const SUBPROTOCOL = "ridl-ws-v2";
+/** The WebSocket subprotocol with a version 2 provider client. */
+export const SUBPROTOCOL_PROVIDER = "ridl-ws-v2-provider";
 /** The frame version that adds the stream forms. */
 export const FRAME_VERSION_3 = 3;
 /** The WebSocket subprotocol name of binding version 3. */
