@@ -2969,9 +2969,12 @@ ts-e2e:
         exit 1
     fi
     cargo build --locked -p ridl-transport-ws --example loopback_server
+    cargo build --locked -p ridl-transport-ws --features descriptor --example debug_gateway_fixture
+    fixture="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/debug_gateway_fixture"
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
     cd packages/ridl-transport-ws
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
+    RIDL_DEBUG_GATEWAY_FIXTURE="$fixture" deno test --allow-read --allow-net --allow-run --allow-env=RIDL_DEBUG_GATEWAY_FIXTURE e2e/provide_test.ts
 
 # The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
 # `deno` checks, the TypeScript types, codec module and `.fbs` schema that

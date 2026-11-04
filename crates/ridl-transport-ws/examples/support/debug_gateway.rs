@@ -7,10 +7,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ridl_descriptor::deployment;
-use ridl_loopback::{Attachment, Node};
+use ridl_loopback::{AttachError, Attachment, Node};
 use ridl_rt::contract::{CatalogRef, InstanceNo};
 use ridl_transport_ws::{
-    serve_selected, Config, Connection, Described, Ended, MemberTable, RequestedCatalog, Scanning,
+    serve_provided_selected, serve_selected, Config, Connection, Described, Ended, MemberTable,
+    Providing, RequestedCatalog, Scanning, SelectionError,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -20,6 +21,7 @@ pub struct Options {
     pub descriptor: PathBuf,
     pub machine: String,
     port: u16,
+    inject_port: Option<u16>,
 }
 
 impl Options {
@@ -28,12 +30,13 @@ impl Options {
         let usage = || {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "usage: debug_gateway <descriptor> <machine> <listen-port>",
+                "usage: debug_gateway <descriptor> <machine> <listen-port> [inject-port]",
             )
         };
         let descriptor = args.next().ok_or_else(usage)?.into();
         let machine = args.next().ok_or_else(usage)?;
         let port = args.next().ok_or_else(usage)?.parse()?;
+        let inject_port = args.next().map(|p| p.parse()).transpose()?;
         if args.next().is_some() {
             return Err(usage().into());
         }
@@ -41,7 +44,14 @@ impl Options {
             descriptor,
             machine,
             port,
+            inject_port,
         })
+    }
+
+    pub fn bind_injection(&self) -> io::Result<Option<TcpListener>> {
+        self.inject_port
+            .map(|port| TcpListener::bind((Ipv4Addr::LOCALHOST, port)))
+            .transpose()
     }
 
     pub fn bind(&self) -> io::Result<TcpListener> {
@@ -54,8 +64,16 @@ pub fn announce(listener: &TcpListener, output: &mut impl Write) -> io::Result<(
     output.flush()
 }
 
+struct Injection {
+    path: String,
+    who: InstanceNo,
+    catalog: CatalogRef,
+    table: MemberTable,
+}
+
 pub struct Gateway {
     node: Node,
+    injections: Vec<Injection>,
     tables: Vec<(CatalogRef, Arc<MemberTable>)>,
 }
 
@@ -85,7 +103,57 @@ impl Gateway {
                 ));
             }
         }
-        Ok(Self { node, tables })
+        let mut injections = Vec::new();
+        for instance in view.instances().map_err(invalid)? {
+            let instance = instance.map_err(invalid)?;
+            if instance.machine().map_err(invalid)? != machine {
+                continue;
+            }
+            let offers = instance
+                .offers()
+                .map_err(invalid)?
+                .into_iter()
+                .map(|offer| {
+                    let offer = offer.map_err(invalid)?;
+                    Ok((
+                        offer.catalog().map_err(invalid)?,
+                        offer.number().map_err(invalid)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for (catalog, full) in &tables {
+                let mut table = MemberTable::new(catalog.name, catalog.hash);
+                for (target, max, limit) in full.iter() {
+                    if !offers.contains(&(catalog.name, target.iface.0)) {
+                        continue;
+                    }
+                    table.insert(target.iface, target.ord, target.kind, max);
+                    if let Some(limit) = limit {
+                        table.set_limit(target.iface, target.ord, limit);
+                    }
+                }
+                if !offers.iter().any(|(name, _)| *name == catalog.name) {
+                    continue;
+                }
+                injections.push(Injection {
+                    path: format!(
+                        "/{}/{}/{}",
+                        instance.component().map_err(invalid)?,
+                        instance.instance().map_err(invalid)?,
+                        catalog.name
+                    ),
+                    who: InstanceNo::new(instance.number().map_err(invalid)?)
+                        .expect("verified positive instance"),
+                    catalog: *catalog,
+                    table,
+                });
+            }
+        }
+        Ok(Self {
+            node,
+            tables,
+            injections,
+        })
     }
 
     pub fn node(&self) -> &Node {
@@ -123,6 +191,40 @@ impl Gateway {
                 None
             }
         }
+    }
+
+    fn select_injection(
+        &self,
+        path: &str,
+    ) -> std::result::Result<Providing<Attachment>, SelectionError> {
+        let segments: Vec<_> = path.split('/').collect();
+        if segments.len() != 4
+            || !segments[0].is_empty()
+            || segments[1..].iter().any(|s| s.is_empty())
+            || path.contains(['?', '%', '#'])
+        {
+            return Err(SelectionError::NotFound);
+        }
+        let selected = self
+            .injections
+            .iter()
+            .find(|i| i.path == path)
+            .ok_or(SelectionError::NotFound)?;
+        let ports = self
+            .node
+            .attach(
+                selected.who.twin().expect("positive instance"),
+                &selected.catalog,
+            )
+            .map_err(|error| match error {
+                AttachError::IdentityConflict => SelectionError::Conflict,
+                _ => SelectionError::NotFound,
+            })?;
+        Providing::new(ports, selected.table.clone()).map_err(|_| SelectionError::NotFound)
+    }
+
+    pub fn serve_injection(&self, conn: impl Connection, config: &Config) -> Ended {
+        serve_provided_selected(conn, |path| self.select_injection(path), config)
     }
 
     pub fn serve(&self, conn: impl Connection, config: &Config) -> Ended {

@@ -92,3 +92,7 @@ required-features = ["server"]
 [[test]]
 name = "provided_calls"
 required-features = ["server"]
+
+[[example]]
+name = "debug_gateway_fixture"
+required-features = ["descriptor"]

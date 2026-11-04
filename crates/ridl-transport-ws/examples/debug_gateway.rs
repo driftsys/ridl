@@ -1,10 +1,10 @@
-//! A listening debug gateway for an in-process loopback node.
+//! A listening and injecting debug gateway for an in-process loopback node.
 //!
-//! Usage: `debug_gateway <descriptor> <machine> <listen-port>`. Port 0 requests
+//! Usage: `debug_gateway <descriptor> <machine> <listen-port> [inject-port]`. Port 0 requests
 //! an ephemeral port; stdout prints `port <n>` after binding. The example has
 //! no access policy beyond binding to 127.0.0.1. It reaches only its own node;
 //! components must share this process and node to make their activity visible.
-//! There is no connection to an external runtime and no injection listener.
+//! There is no connection to an external runtime. Injection is opt-in.
 
 #[path = "support/debug_gateway.rs"]
 mod gateway;
@@ -23,6 +23,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     let listener = options.bind()?;
     gateway::announce(&listener, &mut io::stdout().lock())?;
     for conn in gateway::accepted(listener.incoming()) {
+    if let Some(injection) = options.bind_injection()? {
+        println!("inject-port {}", injection.local_addr()?.port());
+        use std::io::Write;
+        io::stdout().flush()?;
+        let gateway = gateway.clone();
+        thread::spawn(move || {
+            for conn in injection.incoming().flatten() {
+                let gateway = gateway.clone();
+                thread::spawn(move || gateway.serve_injection(conn, &Config::default()));
+            }
+        });
+    }
+    for conn in listener.incoming() {
+        let conn = conn?;
         let gateway = gateway.clone();
         thread::spawn(move || gateway.serve(conn, &Config::default()));
     }
