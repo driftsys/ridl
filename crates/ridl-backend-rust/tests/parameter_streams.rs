@@ -26,6 +26,7 @@ struct State {
     ends: usize,
     failed: Vec<CallError>,
     partial: usize,
+    blocked: bool,
 }
 #[derive(Clone)]
 struct Receiver(Rc<RefCell<State>>);
@@ -51,7 +52,11 @@ impl ByteConsumer for Receiver {
 impl Consumer for Receiver {
     type Item = generated::Reading;
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
-        Poll::Ready(())
+        if self.0.borrow().blocked {
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
     }
     fn accept(&mut self, item: Self::Item) {
         self.0.borrow_mut().readings.push(item);
@@ -739,4 +744,191 @@ impl ridl_rt::face::Source for Receiver {
     ) -> Poll<Option<Result<generated::Reading, ridl_rt::face::Interrupted>>> {
         Poll::Ready(None)
     }
+}
+
+#[test]
+fn validation_before_admission_cancels_the_command() {
+    let rt = log_rt();
+    let ports = RecordingPorts::new(&rt);
+    let ops = ports.log();
+    ports
+        .faults()
+        .send
+        .set(Some(ridl_rt::port::SendError::Busy));
+    let mut client = generated::log::Client::new(ports);
+    let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+    let error = sink.send(&reading(200)).unwrap_err();
+    assert_eq!(poll(&mut call), Poll::Ready(Err(error)));
+    assert_eq!(
+        ops.borrow()
+            .iter()
+            .filter(|op| matches!(op, Op::Command(_)))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn dropping_an_admitted_sink_settles_the_unresolved_command() {
+    let rt = docs();
+    let (_, mut provider) = state();
+    let mut serve = generated::docs::serve(rt.handler(), &mut provider);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let (mut call, sink) = client.put(info());
+    let count = std::sync::Arc::new(WakeCount::default());
+    let waker = std::task::Waker::from(count.clone());
+    assert!(
+        Pin::new(&mut call)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    pending(&mut serve);
+    count.0.store(0, std::sync::atomic::Ordering::SeqCst);
+    drop(sink);
+    assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        poll(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        ))))
+    );
+}
+
+#[derive(Default)]
+struct WakeCount(std::sync::atomic::AtomicUsize);
+impl std::task::Wake for WakeCount {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn cancellation_wakes_the_pending_sibling_once() {
+    for sink_first in [true, false] {
+        let rt = docs();
+        let ports = RecordingPorts::new(&rt);
+        let faults = ports.faults();
+        faults.send.set(Some(ridl_rt::port::SendError::Busy));
+        let mut client = generated::docs::Client::new(ports);
+        let (mut call, mut sink) = client.put(info());
+        let count = std::sync::Arc::new(WakeCount::default());
+        let waker = std::task::Waker::from(count.clone());
+        let mut cx = Context::from_waker(&waker);
+        if sink_first {
+            faults.send.set(Some(ridl_rt::port::SendError::Busy));
+            assert!(Pin::new(&mut call).poll(&mut cx).is_pending());
+            count.0.store(0, std::sync::atomic::Ordering::SeqCst);
+            drop(sink);
+            assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+            assert_eq!(
+                poll(&mut call),
+                Poll::Ready(Err(ClientError::Call(CallError::Transport(
+                    Transport::Interrupted
+                ))))
+            );
+            drop(call);
+        } else {
+            assert!(sink.poll_write(&mut cx, b"x").is_pending());
+            count.0.store(0, std::sync::atomic::Ordering::SeqCst);
+            drop(call);
+            assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+            assert!(matches!(
+                sink.poll_write(&mut cx, b"x"),
+                Poll::Ready(Err(_))
+            ));
+            drop(sink);
+        }
+        assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
+fn ending_after_acknowledgment_forgets_immediately_once() {
+    let rt = docs();
+    let (_, mut provider) = state();
+    let mut serve = generated::docs::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let ops = ports.log();
+    let mut client = generated::docs::Client::new(ports);
+    let (mut call, mut sink) = client.put(info());
+    pending(&mut serve);
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    assert!(doubles::forgets(&ops).is_empty());
+    assert_eq!(cx_write(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+    drop(sink);
+    drop(call);
+    assert_eq!(doubles::forgets(&ops).len(), 1);
+}
+
+#[test]
+fn a_blocked_command_consumer_receives_terminal_outcomes_and_releases_busy() {
+    for abort in [true, false] {
+        let rt = log_rt();
+        let (s, mut provider) = state();
+        s.borrow_mut().blocked = true;
+        let mut serve = generated::log::serve(rt.handler(), &mut provider);
+        let mut client = generated::log::Client::new(rt.caller());
+        let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+        pending(&mut serve);
+        assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+        if abort {
+            drop(sink);
+        } else {
+            assert_eq!(cx_write(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+            drop(sink);
+        }
+        for _ in 0..3 {
+            pending(&mut serve);
+        }
+        assert_eq!(s.borrow().ends, usize::from(!abort));
+        assert_eq!(s.borrow().failed.len(), usize::from(abort));
+        drop(call);
+        let (mut next, _sink) = client.upload(generated::LogUploadParams {});
+        pending(&mut serve);
+        assert_eq!(poll(&mut next), Poll::Ready(Ok(())));
+    }
+}
+
+#[test]
+fn a_held_command_element_precedes_end() {
+    let rt = log_rt();
+    let (s, mut provider) = state();
+    s.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (_call, mut sink) = client.upload(generated::LogUploadParams {});
+    pending(&mut serve);
+    sink.send(&reading(7)).unwrap();
+    assert_eq!(cx_write(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    pending(&mut serve);
+    assert_eq!(s.borrow().ends, 0);
+    assert!(s.borrow().readings.is_empty());
+    s.borrow_mut().blocked = false;
+    for _ in 0..4 {
+        pending(&mut serve);
+    }
+    assert_eq!(s.borrow().readings, vec![reading(7)]);
+    assert_eq!(s.borrow().ends, 1);
+}
+
+#[test]
+fn dropping_a_locally_refused_admitted_sink_interrupts_the_unresolved_command() {
+    let rt = log_rt();
+    let (_, mut provider) = state();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+    pending(&mut serve);
+    assert!(matches!(
+        sink.send(&reading(200)),
+        Err(ClientError::Call(CallError::Contract(_)))
+    ));
+    drop(sink);
+    assert_eq!(
+        poll(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        ))))
+    );
 }

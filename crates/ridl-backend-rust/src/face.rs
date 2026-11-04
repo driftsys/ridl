@@ -30,7 +30,7 @@
 //!   return a call/sink pair and a Consumer or ByteConsumer on the provider side;
 //!   queries with one parameter stream return a plain reply after upload end
 //!   or drive a named-element reply stream concurrently. Multiple parameter
-//!   streams remain outside the face (driftsys/ridl#1116). The
+//!   streams remain outside the face (driftsys/ridl#1224). The
 //!   blocking client carries no streamed member;
 //! - `Publisher<W>`, the provider face for signals and events, over
 //!   `SignalWriter` and `EventSink` on the same rule;
@@ -135,6 +135,9 @@ use crate::{
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote};
 use ridl_ir::codegen::v1;
+
+// Kept equal to the command and query runtime ceilings by backend tests.
+const CALL_STREAM_LIMIT: u32 = 16_128;
 
 mod blocking;
 mod dispatch;
@@ -307,8 +310,8 @@ pub(crate) fn one_interface(
     let mut streams: Vec<Call> = Vec::new();
 
     for (ordinal, interaction) in interactions(interface) {
-        // The face carries a streamed reply with no stream parameter; its
-        // descriptor is emitted whatever the form.
+        // The face carries reply streams and supported single-parameter
+        // uploads; every form retains its descriptor row.
         if has_stream(interaction)
             && !supported_stream_reply(interaction)
             && !supported_stream_command(interaction)
@@ -361,7 +364,7 @@ pub(crate) fn one_interface(
                         .streams
                         .first()
                         .map(|s| s.element.as_ref().map_or("", |t| t.reference.as_str())),
-                    limit: interaction.limit.unwrap_or(16_128) as usize,
+                    limit: interaction.limit.unwrap_or(CALL_STREAM_LIMIT) as usize,
                     params: docs::parameter_lines(&command.params, &member_links),
                 });
             }
@@ -376,8 +379,7 @@ pub(crate) fn one_interface(
                     stream_form,
                     Some(v1::StreamForm::Bytes | v1::StreamForm::Text)
                 );
-                // Kept equal to contract::default_ceiling(Kind::Query) by a backend test.
-                let limit = interaction.limit.unwrap_or(16_128) as usize;
+                let limit = interaction.limit.unwrap_or(CALL_STREAM_LIMIT) as usize;
                 if raw && limit < 4 {
                     return Err(GenerateError {
                         message: format!(

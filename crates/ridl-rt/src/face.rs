@@ -277,7 +277,9 @@ pub trait ByteSource {
 ///
 /// The driver waits for readiness before accepting each checked element.
 /// The stream terminates with exactly one of `end` or `failed`; the driver
-/// calls no method after that notification. The trait is object safe.
+/// calls no method after that notification. Terminal notifications do not wait
+/// for readiness when no earlier element is held. A held element is accepted
+/// before the driver reads the next outcome. The trait is object safe.
 pub trait Consumer {
     /// The stream's declared element type in the generated crate.
     type Item;
@@ -301,7 +303,10 @@ pub trait Consumer {
 ///
 /// The driver offers any unconsumed suffix again before taking another
 /// chunk. The stream terminates with exactly one of `end` or `failed`,
-/// after which no method is called. The trait is object safe.
+/// after which no method is called. Terminal notifications do not wait for
+/// readiness when no earlier bytes are held. The generated `serve` panics if
+/// `poll_write` returns zero or more than the offered length for a nonempty
+/// buffer. The trait is object safe.
 pub trait ByteConsumer {
     /// Takes a prefix of `buf` and answers its length, at most `buf.len()`
     /// and at least 1 when `buf` is nonempty. `Pending` takes nothing and

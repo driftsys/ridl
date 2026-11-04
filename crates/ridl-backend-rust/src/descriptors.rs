@@ -17,11 +17,13 @@
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
-//!   A query whose reply is a stream of named elements, bytes or text, with no stream
-//!   parameter, has a `Query` impl whose `Reply` is `()`: its settlement
+//!   A supported query whose reply is a stream of named elements, bytes or text
+//!   has a `Query` impl whose `Reply` is `()`: its settlement
 //!   carries no reply bytes, because the chunks travel on the reply
 //!   stream, and its `ensure` is always `Ok` (ridl refuses `result` on a
 //!   stream). Commands with one parameter stream have a `Command` impl.
+//!   Queries with one parameter stream and a plain reply have a `Query` impl
+//!   with that reply type; duplex queries use `Reply = ()`.
 //!   Other members with streams have no `Command` or `Query` impl until
 //!   the face carries their form; their
 //!   `MEMBERS` row is written all the same, and every row lists the member's
@@ -473,7 +475,7 @@ fn interaction_item(
         // generic caller of such an impl could send the call without its
         // stream. Its row of `MEMBERS` and its size-table row are written all
         // the same; a streamed reply has no reply type and no row of the
-        // table. A query whose only stream is its reply gets a `Query` impl
+        // table. A supported query with a streamed reply gets a `Query` impl
         // whose `Reply` is `()`: the face's send evaluates `require` through
         // it, and no payload type is claimed for a settlement that carries
         // no reply bytes.
@@ -974,8 +976,9 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
 }
 
 /// Whether the interaction has a stream, as a parameter or as its reply. The
-/// face carries such a member only in the form [`supported_stream_reply`] names;
-/// its descriptor row is written all the same.
+/// face carries the forms named by [`supported_stream_reply`],
+/// [`supported_stream_command`] and [`supported_stream_query`]. Every form
+/// retains its descriptor row.
 pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
     !interaction.streams.is_empty()
 }

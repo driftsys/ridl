@@ -1661,9 +1661,9 @@ fn a_member_row_lists_its_streams() {
     assert!(!source.contains("type_name:\"<veh.hvac"), "{face}");
 
     // A member with a stream has its row and its `Interaction` impl, and no
-    // `Query` impl for a stream parameter. A supported command has a Command
-    // impl. A query whose only
-    // stream is its reply has a `Query` impl with no reply payload, for
+    // kind impl for an unsupported form. Supported uploads have Command or
+    // Query impls. A supported query with a streamed reply has a `Query` impl
+    // with no reply payload, for
     // named elements, bytes and text alike.
     for streamed in [
         "CabinReplayTrace",

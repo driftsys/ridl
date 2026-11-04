@@ -99,7 +99,7 @@ pub(super) fn call_items(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<'a,P:#bounds> ::core::future::Future for #future<'a,P> where #encoding {
             type Output=Result<#output,::ridl_rt::error::ClientError>;
             fn poll(self: ::core::pin::Pin<&mut Self>,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Self::Output> {
-                let this=self.get_mut();assert!(!this.done,"query polled after completion");
+                let this=self.get_mut();this.state.call_waker.take();assert!(!this.done,"query polled after completion");
                 if let Some(e)=this.state.call_error.get(){return this.fail(e);}
                 if this.state.forgotten.get(){return this.fail(this.state.error.get().unwrap_or(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted))));}
                 if let Some(arg)=this.pending.take(){
@@ -112,6 +112,7 @@ pub(super) fn call_items(call: &Call, encoding: &TokenStream) -> TokenStream {
                     #response
                 }
                 if this.state.reply_deadline.get().is_some_and(|deadline|this.port.borrow().now()>deadline){return this.fail(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Timeout)));}
+                this.state.call_waker.set(Some(cx.waker().clone()));
                 ::core::task::Poll::Pending
             }
         }
@@ -133,6 +134,7 @@ fn shared_stream(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<P:#bounds> #stream<'_,P> where #encoding {
             #[doc="Pulls one checked reply element, or its terminal outcome. The upload can remain open while replies arrive."]
             pub fn poll_next(&mut self,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Option<Result<#reply,::ridl_rt::error::ClientError>>> {
+                self.shared.call_waker.take();
                 let n=match self.state {
                     StreamState::Done|StreamState::Stopped=>{self.shared.reply_stream.set(false);self.shared.forget(self.port);return ::core::task::Poll::Ready(None);},
                     StreamState::Refused(e)=>{self.shared.error.set(Some(::ridl_rt::error::ClientError::Call(e)));self.state=StreamState::Stopped;return ::core::task::Poll::Ready(Some(Err(::ridl_rt::error::ClientError::Call(e))));},
@@ -142,7 +144,7 @@ fn shared_stream(call: &Call, encoding: &TokenStream) -> TokenStream {
                         self.port.borrow().wake_on(::ridl_rt::port::Interest::Stream(self.correlation,::ridl_rt::port::REPLY_STREAM),cx.waker());
                         let result=self.port.borrow_mut().pull(self.correlation,::ridl_rt::port::REPLY_STREAM,::core::convert::AsMut::as_mut(&mut self.buffer));
                         match result {
-                            Ok(::ridl_rt::port::Pull::Pending)=>return ::core::task::Poll::Pending,
+                            Ok(::ridl_rt::port::Pull::Pending)=>{self.shared.call_waker.set(Some(cx.waker().clone()));return ::core::task::Poll::Pending;},
                             Ok(::ridl_rt::port::Pull::Chunk(n))=>n,
                             Ok(::ridl_rt::port::Pull::End)=>{self.state=StreamState::Done;self.shared.reply_stream.set(false);self.shared.forget(self.port);return ::core::task::Poll::Ready(None);},
                             Ok(::ridl_rt::port::Pull::Failed(e))=>{self.shared.error.set(Some(::ridl_rt::error::ClientError::Call(e)));self.state=StreamState::Stopped;return ::core::task::Poll::Ready(Some(Err(::ridl_rt::error::ClientError::Call(e))));},
@@ -207,9 +209,11 @@ pub(super) fn slot_items(call: &Call) -> TokenStream {
         let t = ty(call.input.unwrap());
         quote! {<#t as ::ridl_rt::payload::Payload<H::Encoding>>::Buffer}
     };
-    let held = call
-        .raw_stream()
-        .then(|| quote! {held:Option<(usize,usize)>,});
+    let held = if call.raw_stream() {
+        quote! {held:Option<(usize,usize)>,}
+    } else {
+        quote! {held:Option<usize>,}
+    };
     let alias = format_ident!("__Ridl{}Reply", call.member.camel);
     let alias_item=call.duplex().then(||{let wrapper=wrapper_name(call);quote!{type #alias<H,P> = StreamSlot<#wrapper<<P as Provider>::#assoc>,ElementBuffer<H,#reply>>;}});
     let owner = if call.duplex() {
@@ -266,7 +270,6 @@ fn step(call: &Call) -> TokenStream {
     let input = input_bound(call);
     let output = call.duplex().then(|| output_bound(call));
     let receiver = receiver(call);
-    let ready=(!call.raw_stream()).then(||quote!{if ::ridl_rt::face::Consumer::poll_ready(&mut #receiver,cx).is_pending(){return __RidlUploadStep::Pending;}});
     let held=call.raw_stream().then(||quote!{
         if let Some((start,end))=stream.held {
             if start<end {
@@ -278,7 +281,7 @@ fn step(call: &Call) -> TokenStream {
             stream.held=None;
         }
     });
-    let chunk = if call.raw_stream() {
+    let deliver = if call.raw_stream() {
         let text=(call.stream_form==Some(ridl_ir::codegen::v1::StreamForm::Text)).then(||quote!{
             if ::core::str::from_utf8(&stream.buffer[..n]).is_err(){return __RidlUploadStep::Failed(::ridl_rt::error::CallError::Contract(::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation{type_name:Some("string"),rule: ::ridl_rt::payload::Rule::Utf8})));}
         });
@@ -294,12 +297,29 @@ fn step(call: &Call) -> TokenStream {
             }
         }
     };
+    let held = if call.raw_stream() {
+        held.unwrap()
+    } else {
+        quote! {
+            if let Some(n)=stream.held {
+                if ::ridl_rt::face::Consumer::poll_ready(&mut #receiver,cx).is_pending(){return __RidlUploadStep::Pending;}
+                stream.held=None;
+                return {#deliver};
+            }
+        }
+    };
+    let chunk = if call.raw_stream() {
+        deliver
+    } else {
+        quote! {
+            if ::ridl_rt::face::Consumer::poll_ready(&mut #receiver,cx).is_pending(){stream.held=Some(n);__RidlUploadStep::Pending}else{#deliver}
+        }
+    };
     quote! {
         fn #method<H,P>(h:&mut H,stream:&mut #name<H,P>,cx:&mut ::core::task::Context<'_>,budget:&mut usize)->__RidlUploadStep
         where H: ::ridl_rt::port::Encoded+::ridl_rt::port::StreamHandler+::ridl_rt::port::Wakeable,P:Provider,#input #output {
             if *budget==0{return __RidlUploadStep::Budget;}*budget-=1;
             #held
-            #ready
             h.wake_on(::ridl_rt::port::Interest::ClaimStream(stream.claim,::ridl_rt::contract::StreamNo(1)),cx.waker());
             match h.pull_claim(stream.claim,::ridl_rt::contract::StreamNo(1),::core::convert::AsMut::as_mut(&mut stream.buffer)){
                 Ok(::ridl_rt::port::Pull::Pending)=>__RidlUploadStep::Pending,
@@ -409,7 +429,7 @@ pub(super) fn dispatch(call: &Call) -> TokenStream {
     } else {
         super::payload_buffer(call.input.unwrap(), &ident("H"))
     };
-    let held = call.raw_stream().then(|| quote! {held:None,});
+    let held = quote! {held:None,};
     let owner = if call.duplex() {
         let wrapper = wrapper_name(call);
         let out = super::payload_buffer(call.reply_type.unwrap(), &ident("H"));

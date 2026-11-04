@@ -83,3 +83,11 @@ interface Docs {
   /// Stores text.
   command note(data: <string>) @[..1s]
 }
+
+/// Upload queries with raw byte and text chunks.
+interface RawQueries {
+  /// Counts uploaded bytes.
+  query sum(data: <bytes>): Summary @[..100ms]
+  /// Returns readings while text is uploaded.
+  query pipe(data: <string>): <Reading> @[..1s]
+}

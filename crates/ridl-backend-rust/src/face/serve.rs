@@ -204,7 +204,7 @@ pub(super) fn serve(
         .any(|call| !call.upload() && call.raw_stream())
     {
         format!(
-            "{serve_doc}\n\n# Streamed replies\n\nEach query's Provider method returns \
+            "{serve_doc}\n\n# Streamed replies\n\nEach query with a streamed reply and no upload returns \
              its reply source after the arguments and require clauses pass. Each serve \
              poll first drives running streams, then takes claims, sharing a budget of \
              {SERVE_BUDGET}. A source is polled at most once for each running call and \
@@ -229,7 +229,7 @@ pub(super) fn serve(
              waker. Dropping serve interrupts every running stream and drops its \
              source."
         )
-    } else if streams.is_empty() {
+    } else if !streams.iter().any(|call| !call.upload()) {
         serve_doc
     } else {
         format!(
@@ -262,6 +262,24 @@ pub(super) fn serve(
              stops every stream it still drives with `Transport::Interrupted` \
              and drops its source."
         )
+    };
+    let serve_doc = if streams.iter().any(|call| call.upload()) {
+        format!(
+            "{serve_doc}\n\n# Parameter streams\n\nCommands and queries with one \
+             parameter stream return a Consumer for named elements or a ByteConsumer \
+             for bytes and text. Commands acknowledge delivery before driving the \
+             consumer. A plain query reply is computed after the upload ends; a \
+             duplex query drives the consumer and its named-element reply Source \
+             concurrently. Each member has one active slot. Checked elements wait \
+             for readiness; a held element or byte suffix is offered before another \
+             pull. With nothing held, end and failure are delivered immediately, \
+             regardless of readiness. Terminal notifications occur once. Dropping \
+             serve interrupts unfinished uploads. ByteConsumer::poll_write must \
+             accept between one byte and the offered length for nonempty input; \
+             violating this contract panics."
+        )
+    } else {
+        serve_doc
     };
     let future_doc = format!(
         "The future `serve` returns over interface `{iface_name}`. It holds \

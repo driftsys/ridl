@@ -82,6 +82,8 @@ pub(super) fn provider(call: &Call) -> TokenStream {
 pub(super) fn state() -> TokenStream {
     quote! {
         struct UploadState {
+            call_waker: ::core::cell::Cell<Option<::core::task::Waker>>,
+            sink_waker: ::core::cell::Cell<Option<::core::task::Waker>>,
             reply_bound: ::core::cell::Cell<Option<::ridl_rt::sample::Duration>>,
             reply_deadline: ::core::cell::Cell<Option<::ridl_rt::sample::Timestamp>>,
             reply_stream: ::core::cell::Cell<bool>,
@@ -93,8 +95,13 @@ pub(super) fn state() -> TokenStream {
             error: ::core::cell::Cell<Option<::ridl_rt::error::ClientError>>,
         }
         impl UploadState {
-            fn new()->Self { Self {reply_bound: ::core::cell::Cell::new(None), reply_deadline: ::core::cell::Cell::new(None), reply_stream: ::core::cell::Cell::new(false), call_error: ::core::cell::Cell::new(None), correlation: ::core::cell::Cell::new(None), ack: ::core::cell::Cell::new(false), ended: ::core::cell::Cell::new(false), forgotten: ::core::cell::Cell::new(false), error: ::core::cell::Cell::new(None)} }
+            fn new()->Self { Self {call_waker: ::core::cell::Cell::new(None), sink_waker: ::core::cell::Cell::new(None), reply_bound: ::core::cell::Cell::new(None), reply_deadline: ::core::cell::Cell::new(None), reply_stream: ::core::cell::Cell::new(false), call_error: ::core::cell::Cell::new(None), correlation: ::core::cell::Cell::new(None), ack: ::core::cell::Cell::new(false), ended: ::core::cell::Cell::new(false), forgotten: ::core::cell::Cell::new(false), error: ::core::cell::Cell::new(None)} }
+            fn wake(&self) {
+                if let Some(waker)=self.call_waker.take(){waker.wake();}
+                if let Some(waker)=self.sink_waker.take(){waker.wake();}
+            }
             fn forget<P: ::ridl_rt::port::Caller>(&self,port:&::core::cell::RefCell<P>) {
+                self.wake();
                 match self.correlation.get() {Some(c) if !self.forgotten.replace(true)=>port.borrow_mut().forget(c),_=>{}}
             }
         }
@@ -126,13 +133,13 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
     } else {
         quote! {
                     let Some((start,end))=self.held else {return ::core::task::Poll::Ready(Ok(()));};
-                    let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());return ::core::task::Poll::Pending;};
+                    let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());self.state.sink_waker.set(Some(cx.waker().clone()));return ::core::task::Poll::Pending;};
                     self.port.borrow().wake_on(::ridl_rt::port::Interest::Stream(c,::ridl_rt::contract::StreamNo(1)),cx.waker());
                     let bytes=&::core::convert::AsRef::<[u8]>::as_ref(&self.buffer)[start..end];
                     let pushed=self.port.borrow_mut().push(c,::ridl_rt::contract::StreamNo(1),bytes);
                     match pushed {
                         Ok(n) if n==bytes.len()=>{self.held=None;::core::task::Poll::Ready(Ok(()))},
-                        Ok(_)=>::core::task::Poll::Pending,
+                        Ok(_)=>{self.state.sink_waker.set(Some(cx.waker().clone()));::core::task::Poll::Pending},
                         Err(e)=>{let error=upload_push_error(e);self.state.error.set(Some(error));::core::task::Poll::Ready(Err(error))},
                     }
         }
@@ -153,7 +160,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<P:#bounds> ::core::future::Future for #future<'_,P> where #encoding {
             type Output=Result<(),::ridl_rt::error::ClientError>;
             fn poll(self: ::core::pin::Pin<&mut Self>,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Self::Output> {
-                let this=self.get_mut(); assert!(!this.done,"call polled after completion");
+                let this=self.get_mut(); this.state.call_waker.take(); assert!(!this.done,"call polled after completion");
                 if let Some(error)=this.state.call_error.get() {
                     this.pending=None;
                     this.done=true;
@@ -184,7 +191,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
                     if result.is_err() {this.state.error.set(result.err());this.state.forget(this.port);}
                     else if this.state.ended.get(){this.state.forget(this.port);}
                     ::core::task::Poll::Ready(result)
-                } else {::core::task::Poll::Pending}
+                } else {this.state.call_waker.set(Some(cx.waker().clone()));::core::task::Poll::Pending}
             }
         }
         impl<P:#bounds> ::core::ops::Drop for #future<'_,P> {
@@ -214,6 +221,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
             #write
             #[doc="Flushes a held element. With no held element readiness describes local capacity and does not probe the peer."]
             pub fn poll_ready(&mut self,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Result<(),::ridl_rt::error::ClientError>> {
+                self.state.sink_waker.take();
                 if let Some(e)=self.state.error.get(){return ::core::task::Poll::Ready(Err(e));}
                 #flush
             }
@@ -223,7 +231,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
             pub fn poll_end(&mut self,cx:&mut ::core::task::Context<'_>)->::core::task::Poll<Result<(),::ridl_rt::error::ClientError>> {
                 if self.state.ended.get(){return ::core::task::Poll::Ready(Ok(()));}
                 match self.poll_ready(cx) {::core::task::Poll::Ready(Ok(()))=>{},other=>return other}
-                let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());return ::core::task::Poll::Pending;};
+                let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());self.state.sink_waker.set(Some(cx.waker().clone()));return ::core::task::Poll::Pending;};
                 let result=self.port.borrow_mut().end(c,::ridl_rt::contract::StreamNo(1)).map_err(upload_push_error);
                 if result.is_ok(){self.state.ended.set(true);
                     if let Some(bound)=self.state.reply_bound.get(){self.state.reply_deadline.set(Some(::ridl_rt::sample::Timestamp(self.port.borrow().now().0.saturating_add(bound.0))));}
@@ -237,12 +245,10 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<P:#bounds> ::core::ops::Drop for #sink<'_,P> where #element_bound {
             fn drop(&mut self) {
                 if !self.state.ended.get() {
-                    if self.state.correlation.get().is_none() {
-                        let error=::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));
-                        self.state.call_error.set(Some(error));
-                        self.state.error.set(Some(error));
-                    }
+                    let error=::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));
                     if let (true,Some(c))=(self.state.error.get().is_none() && !self.state.forgotten.get(), self.state.correlation.get()) {let _=self.port.borrow_mut().abort(c,::ridl_rt::contract::StreamNo(1),::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}
+                    if self.state.error.get().is_none(){self.state.error.set(Some(error));}
+                    if self.state.call_error.get().is_none(){self.state.call_error.set(Some(error));}
                     self.state.forget(self.port);
                 }
             }
@@ -273,14 +279,15 @@ fn write_methods(call: &Call) -> TokenStream {
             #[doc="Offers a chunk up to LIMIT. Empty input returns zero without a port call. Pending input registers the stream wake interest before trying the push."]
             pub fn #method(&mut self,cx:&mut ::core::task::Context<'_>,input:#input)->::core::task::Poll<Result<usize,::ridl_rt::error::ClientError>> {
                 if input.is_empty(){return ::core::task::Poll::Ready(Ok(0));}
+                self.state.sink_waker.take();
                 if let Some(e)=self.state.error.get(){return ::core::task::Poll::Ready(Err(e));}
                 if self.state.ended.get(){return ::core::task::Poll::Ready(Err(upload_push_error(::ridl_rt::port::PushError::Ended)));}
-                let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());return ::core::task::Poll::Pending;};
+                let Some(c)=self.state.correlation.get() else {self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot,cx.waker());self.state.sink_waker.set(Some(cx.waker().clone()));return ::core::task::Poll::Pending;};
                 #length
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Stream(c,::ridl_rt::contract::StreamNo(1)),cx.waker());
                 let result=self.port.borrow_mut().push(c,::ridl_rt::contract::StreamNo(1),#bytes);
                 match result {
-                    Ok(0)=>::core::task::Poll::Pending,
+                    Ok(0)=>{self.state.sink_waker.set(Some(cx.waker().clone()));::core::task::Poll::Pending},
                     Ok(n)=>::core::task::Poll::Ready(Ok(n)),
                     Err(e)=>{let error=upload_push_error(e);self.state.error.set(Some(error));::core::task::Poll::Ready(Err(error))},
                 }
@@ -313,7 +320,9 @@ fn write_methods(call: &Call) -> TokenStream {
             })();
             let (start,len)=match checked {Ok(range)=>range,Err(e)=>{
                 if let Some(c)=self.state.correlation.get(){let _=self.port.borrow_mut().abort(c,::ridl_rt::contract::StreamNo(1),e);}
-                let error=::ridl_rt::error::ClientError::Call(e);self.state.error.set(Some(error));return Err(error);
+                let error=::ridl_rt::error::ClientError::Call(e);self.state.error.set(Some(error));
+                if self.state.correlation.get().is_none(){self.state.call_error.set(Some(error));self.state.forget(self.port);}
+                return Err(error);
             }};
             self.held=Some((start,start+len));
             if let Some(c)=self.state.correlation.get() {
@@ -368,7 +377,7 @@ pub(super) fn slot_items(calls: &[&Call]) -> TokenStream {
         .map(|call| super::upload_query::slot_items(call));
     let named = calls.iter().any(|call| !call.query_upload() && !call.raw_stream()).then(
         || quote! {type InputBuffer<H,T> = <T as ::ridl_rt::payload::Payload<<H as ::ridl_rt::port::Encoded>::Encoding>>::Buffer;
-        struct InputSlot<C,B> {claim: ::ridl_rt::port::ClaimId, consumer:C, buffer:B}},
+        struct InputSlot<C,B> {claim: ::ridl_rt::port::ClaimId, consumer:C, buffer:B, held:Option<usize>}},
     );
     let bytes=calls.iter().any(|call| !call.query_upload() && call.raw_stream()).then(||quote! {struct ByteInputSlot<C,B> {claim: ::ridl_rt::port::ClaimId, consumer:C, buffer:B, held:Option<(usize,usize)>}});
     quote! {
@@ -390,7 +399,7 @@ pub(super) fn dispatch(call: &Call) -> TokenStream {
     } else {
         ident("InputSlot")
     };
-    let held = call.raw_stream().then(|| quote! {held:None,});
+    let held = quote! {held:None,};
     quote! {
         #ordinal => {
             match #decode {
@@ -424,17 +433,7 @@ fn driver(call: &Call) -> TokenStream {
     } else {
         quote! {::ridl_rt::face::Consumer}
     };
-    let ready = if call.raw_stream() {
-        TokenStream::new()
-    } else {
-        quote! {
-            match ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer,cx) {
-                ::core::task::Poll::Pending=>{*slot=Some(stream);return false;},
-                ::core::task::Poll::Ready(())=>{},
-            }
-        }
-    };
-    let chunk = if call.raw_stream() {
+    let deliver = if call.raw_stream() {
         let verify = if call.stream_form == Some(ridl_ir::codegen::v1::StreamForm::Text) {
             quote! {
                 if ::core::str::from_utf8(&stream.buffer[..n]).is_err() {
@@ -461,24 +460,42 @@ fn driver(call: &Call) -> TokenStream {
             }
         }
     };
-    let partial=call.raw_stream().then(||quote!{
-        if let Some((start,end))=stream.held {
-            if start!=end {
-                match ::ridl_rt::face::ByteConsumer::poll_write(&mut stream.consumer,cx,&stream.buffer[start..end]) {
-                    ::core::task::Poll::Pending=>{*slot=Some(stream);return false;},
-                    ::core::task::Poll::Ready(n)=>{assert!(n>0 && n<=end-start,"ByteConsumer returned invalid length");stream.held=if start+n==end {None}else{Some((start+n,end))};*slot=Some(stream);return true;},
+    let partial = if call.raw_stream() {
+        quote! {
+            if let Some((start,end))=stream.held {
+                if start!=end {
+                    match ::ridl_rt::face::ByteConsumer::poll_write(&mut stream.consumer,cx,&stream.buffer[start..end]) {
+                        ::core::task::Poll::Pending=>{*slot=Some(stream);return false;},
+                        ::core::task::Poll::Ready(n)=>{assert!(n>0 && n<=end-start,"ByteConsumer returned invalid length");stream.held=if start+n==end {None}else{Some((start+n,end))};*slot=Some(stream);return true;},
+                    }
                 }
+                stream.held=None;
             }
-            stream.held=None;
         }
-    });
+    } else {
+        quote! {
+            if let Some(n)=stream.held {
+                if ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer,cx).is_pending(){*slot=Some(stream);return false;}
+                stream.held=None;
+                #deliver
+                *slot=Some(stream);return true;
+            }
+        }
+    };
+    let chunk = if call.raw_stream() {
+        deliver
+    } else {
+        quote! {
+            if ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer,cx).is_pending(){stream.held=Some(n);*slot=Some(stream);return false;}
+            #deliver
+        }
+    };
     quote! {
         fn #name<H,P>(h:&mut H,slot:&mut #slot_type,cx:&mut ::core::task::Context<'_>,budget:&mut usize)->bool
         where H: ::ridl_rt::port::Encoded+::ridl_rt::port::StreamHandler+::ridl_rt::port::Wakeable,P:Provider,#bounds {
             if slot.is_none(){return false;} if *budget==0{return true;} *budget-=1;
             let mut stream=slot.take().expect("checked above");
             #partial
-            #ready
             h.wake_on(::ridl_rt::port::Interest::ClaimStream(stream.claim,::ridl_rt::contract::StreamNo(1)),cx.waker());
             match h.pull_claim(stream.claim,::ridl_rt::contract::StreamNo(1),::core::convert::AsMut::as_mut(&mut stream.buffer)) {
                 Ok(::ridl_rt::port::Pull::Chunk(n))=>{#chunk *slot=Some(stream);true},

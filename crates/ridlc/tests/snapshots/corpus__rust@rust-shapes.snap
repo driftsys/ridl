@@ -9227,6 +9227,8 @@ pub mod station {
         Changed(::ridl_rt::sample::Occurrence<super::Panel>),
     }
     struct UploadState {
+        call_waker: ::core::cell::Cell<Option<::core::task::Waker>>,
+        sink_waker: ::core::cell::Cell<Option<::core::task::Waker>>,
         reply_bound: ::core::cell::Cell<Option<::ridl_rt::sample::Duration>>,
         reply_deadline: ::core::cell::Cell<Option<::ridl_rt::sample::Timestamp>>,
         reply_stream: ::core::cell::Cell<bool>,
@@ -9240,6 +9242,8 @@ pub mod station {
     impl UploadState {
         fn new() -> Self {
             Self {
+                call_waker: ::core::cell::Cell::new(None),
+                sink_waker: ::core::cell::Cell::new(None),
                 reply_bound: ::core::cell::Cell::new(None),
                 reply_deadline: ::core::cell::Cell::new(None),
                 reply_stream: ::core::cell::Cell::new(false),
@@ -9251,7 +9255,16 @@ pub mod station {
                 error: ::core::cell::Cell::new(None),
             }
         }
+        fn wake(&self) {
+            if let Some(waker) = self.call_waker.take() {
+                waker.wake();
+            }
+            if let Some(waker) = self.sink_waker.take() {
+                waker.wake();
+            }
+        }
         fn forget<P: ::ridl_rt::port::Caller>(&self, port: &::core::cell::RefCell<P>) {
+            self.wake();
             match self.correlation.get() {
                 Some(c) if !self.forgotten.replace(true) => port.borrow_mut().forget(c),
                 _ => {}
@@ -9635,6 +9648,7 @@ pub mod station {
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Self::Output> {
             let this = self.get_mut();
+            this.state.call_waker.take();
             assert!(! this.done, "call polled after completion");
             if let Some(error) = this.state.call_error.get() {
                 this.pending = None;
@@ -9707,6 +9721,7 @@ pub mod station {
                 }
                 ::core::task::Poll::Ready(result)
             } else {
+                this.state.call_waker.set(Some(cx.waker().clone()));
                 ::core::task::Poll::Pending
             }
         }
@@ -9777,6 +9792,7 @@ pub mod station {
             if input.is_empty() {
                 return ::core::task::Poll::Ready(Ok(0));
             }
+            self.state.sink_waker.take();
             if let Some(e) = self.state.error.get() {
                 return ::core::task::Poll::Ready(Err(e));
             }
@@ -9787,6 +9803,7 @@ pub mod station {
             }
             let Some(c) = self.state.correlation.get() else {
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                self.state.sink_waker.set(Some(cx.waker().clone()));
                 return ::core::task::Poll::Pending;
             };
             let n = input.len().min(Self::LIMIT);
@@ -9804,7 +9821,10 @@ pub mod station {
                 .borrow_mut()
                 .push(c, ::ridl_rt::contract::StreamNo(1), &input[..n]);
             match result {
-                Ok(0) => ::core::task::Poll::Pending,
+                Ok(0) => {
+                    self.state.sink_waker.set(Some(cx.waker().clone()));
+                    ::core::task::Poll::Pending
+                }
                 Ok(n) => ::core::task::Poll::Ready(Ok(n)),
                 Err(e) => {
                     let error = upload_push_error(e);
@@ -9825,6 +9845,7 @@ pub mod station {
             &mut self,
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Result<(), ::ridl_rt::error::ClientError>> {
+            self.state.sink_waker.take();
             if let Some(e) = self.state.error.get() {
                 return ::core::task::Poll::Ready(Err(e));
             }
@@ -9849,6 +9870,7 @@ pub mod station {
             }
             let Some(c) = self.state.correlation.get() else {
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                self.state.sink_waker.set(Some(cx.waker().clone()));
                 return ::core::task::Poll::Pending;
             };
             let result = self
@@ -9888,15 +9910,11 @@ pub mod station {
     > ::core::ops::Drop for LoadSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                if self.state.correlation.get().is_none() {
-                    let error = ::ridl_rt::error::ClientError::Call(
-                        ::ridl_rt::error::CallError::Transport(
-                            ::ridl_rt::error::Transport::Interrupted,
-                        ),
-                    );
-                    self.state.call_error.set(Some(error));
-                    self.state.error.set(Some(error));
-                }
+                let error = ::ridl_rt::error::ClientError::Call(
+                    ::ridl_rt::error::CallError::Transport(
+                        ::ridl_rt::error::Transport::Interrupted,
+                    ),
+                );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -9911,6 +9929,12 @@ pub mod station {
                                 ::ridl_rt::error::Transport::Interrupted,
                             ),
                         );
+                }
+                if self.state.error.get().is_none() {
+                    self.state.error.set(Some(error));
+                }
+                if self.state.call_error.get().is_none() {
+                    self.state.call_error.set(Some(error));
                 }
                 self.state.forget(self.port);
             }
@@ -9964,6 +9988,7 @@ pub mod station {
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Self::Output> {
             let this = self.get_mut();
+            this.state.call_waker.take();
             assert!(! this.done, "call polled after completion");
             if let Some(error) = this.state.call_error.get() {
                 this.pending = None;
@@ -10036,6 +10061,7 @@ pub mod station {
                 }
                 ::core::task::Poll::Ready(result)
             } else {
+                this.state.call_waker.set(Some(cx.waker().clone()));
                 ::core::task::Poll::Pending
             }
         }
@@ -10177,6 +10203,10 @@ pub mod station {
                     }
                     let error = ::ridl_rt::error::ClientError::Call(e);
                     self.state.error.set(Some(error));
+                    if self.state.correlation.get().is_none() {
+                        self.state.call_error.set(Some(error));
+                        self.state.forget(self.port);
+                    }
                     return Err(error);
                 }
             };
@@ -10214,6 +10244,7 @@ pub mod station {
             &mut self,
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Result<(), ::ridl_rt::error::ClientError>> {
+            self.state.sink_waker.take();
             if let Some(e) = self.state.error.get() {
                 return ::core::task::Poll::Ready(Err(e));
             }
@@ -10222,6 +10253,7 @@ pub mod station {
             };
             let Some(c) = self.state.correlation.get() else {
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                self.state.sink_waker.set(Some(cx.waker().clone()));
                 return ::core::task::Poll::Pending;
             };
             self.port
@@ -10245,7 +10277,10 @@ pub mod station {
                     self.held = None;
                     ::core::task::Poll::Ready(Ok(()))
                 }
-                Ok(_) => ::core::task::Poll::Pending,
+                Ok(_) => {
+                    self.state.sink_waker.set(Some(cx.waker().clone()));
+                    ::core::task::Poll::Pending
+                }
                 Err(e) => {
                     let error = upload_push_error(e);
                     self.state.error.set(Some(error));
@@ -10271,6 +10306,7 @@ pub mod station {
             }
             let Some(c) = self.state.correlation.get() else {
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                self.state.sink_waker.set(Some(cx.waker().clone()));
                 return ::core::task::Poll::Pending;
             };
             let result = self
@@ -10313,15 +10349,11 @@ pub mod station {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                if self.state.correlation.get().is_none() {
-                    let error = ::ridl_rt::error::ClientError::Call(
-                        ::ridl_rt::error::CallError::Transport(
-                            ::ridl_rt::error::Transport::Interrupted,
-                        ),
-                    );
-                    self.state.call_error.set(Some(error));
-                    self.state.error.set(Some(error));
-                }
+                let error = ::ridl_rt::error::ClientError::Call(
+                    ::ridl_rt::error::CallError::Transport(
+                        ::ridl_rt::error::Transport::Interrupted,
+                    ),
+                );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -10336,6 +10368,12 @@ pub mod station {
                                 ::ridl_rt::error::Transport::Interrupted,
                             ),
                         );
+                }
+                if self.state.error.get().is_none() {
+                    self.state.error.set(Some(error));
+                }
+                if self.state.call_error.get().is_none() {
+                    self.state.call_error.set(Some(error));
                 }
                 self.state.forget(self.port);
             }
@@ -11663,6 +11701,7 @@ pub mod station {
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Self::Output> {
             let this = self.get_mut();
+            this.state.call_waker.take();
             assert!(! this.done, "query polled after completion");
             if let Some(e) = this.state.call_error.get() {
                 return this.fail(e);
@@ -11760,6 +11799,7 @@ pub mod station {
                         ),
                     );
             }
+            this.state.call_waker.set(Some(cx.waker().clone()));
             ::core::task::Poll::Pending
         }
     }
@@ -11834,6 +11874,7 @@ pub mod station {
         ) -> ::core::task::Poll<
             Option<Result<super::Inner, ::ridl_rt::error::ClientError>>,
         > {
+            self.shared.call_waker.take();
             let n = match self.state {
                 StreamState::Done | StreamState::Stopped => {
                     self.shared.reply_stream.set(false);
@@ -11886,6 +11927,7 @@ pub mod station {
                         );
                     match result {
                         Ok(::ridl_rt::port::Pull::Pending) => {
+                            self.shared.call_waker.set(Some(cx.waker().clone()));
                             return ::core::task::Poll::Pending;
                         }
                         Ok(::ridl_rt::port::Pull::Chunk(n)) => n,
@@ -12100,6 +12142,10 @@ pub mod station {
                     }
                     let error = ::ridl_rt::error::ClientError::Call(e);
                     self.state.error.set(Some(error));
+                    if self.state.correlation.get().is_none() {
+                        self.state.call_error.set(Some(error));
+                        self.state.forget(self.port);
+                    }
                     return Err(error);
                 }
             };
@@ -12137,6 +12183,7 @@ pub mod station {
             &mut self,
             cx: &mut ::core::task::Context<'_>,
         ) -> ::core::task::Poll<Result<(), ::ridl_rt::error::ClientError>> {
+            self.state.sink_waker.take();
             if let Some(e) = self.state.error.get() {
                 return ::core::task::Poll::Ready(Err(e));
             }
@@ -12145,6 +12192,7 @@ pub mod station {
             };
             let Some(c) = self.state.correlation.get() else {
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                self.state.sink_waker.set(Some(cx.waker().clone()));
                 return ::core::task::Poll::Pending;
             };
             self.port
@@ -12168,7 +12216,10 @@ pub mod station {
                     self.held = None;
                     ::core::task::Poll::Ready(Ok(()))
                 }
-                Ok(_) => ::core::task::Poll::Pending,
+                Ok(_) => {
+                    self.state.sink_waker.set(Some(cx.waker().clone()));
+                    ::core::task::Poll::Pending
+                }
                 Err(e) => {
                     let error = upload_push_error(e);
                     self.state.error.set(Some(error));
@@ -12194,6 +12245,7 @@ pub mod station {
             }
             let Some(c) = self.state.correlation.get() else {
                 self.port.borrow().wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                self.state.sink_waker.set(Some(cx.waker().clone()));
                 return ::core::task::Poll::Pending;
             };
             let result = self
@@ -12236,15 +12288,11 @@ pub mod station {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                if self.state.correlation.get().is_none() {
-                    let error = ::ridl_rt::error::ClientError::Call(
-                        ::ridl_rt::error::CallError::Transport(
-                            ::ridl_rt::error::Transport::Interrupted,
-                        ),
-                    );
-                    self.state.call_error.set(Some(error));
-                    self.state.error.set(Some(error));
-                }
+                let error = ::ridl_rt::error::ClientError::Call(
+                    ::ridl_rt::error::CallError::Transport(
+                        ::ridl_rt::error::Transport::Interrupted,
+                    ),
+                );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -12259,6 +12307,12 @@ pub mod station {
                                 ::ridl_rt::error::Transport::Interrupted,
                             ),
                         );
+                }
+                if self.state.error.get().is_none() {
+                    self.state.error.set(Some(error));
+                }
+                if self.state.call_error.get().is_none() {
+                    self.state.call_error.set(Some(error));
                 }
                 self.state.forget(self.port);
             }
@@ -14429,6 +14483,7 @@ pub mod station {
                                                             buffer: <super::Inner as ::ridl_rt::payload::Payload<
                                                                 H::Encoding,
                                                             >>::BUFFER,
+                                                            held: None,
                                                         });
                                                         streams.__started = true;
                                                     }
@@ -15090,6 +15145,7 @@ pub mod station {
                                                         buffer: <super::Inner as ::ridl_rt::payload::Payload<
                                                             H::Encoding,
                                                         >>::BUFFER,
+                                                        held: None,
                                                         reply: Some(StreamSlot {
                                                             claim: claim.id,
                                                             source: __RidlBlendSource {
@@ -15187,6 +15243,7 @@ pub mod station {
     {
         claim: ::ridl_rt::port::ClaimId,
         buffer: <super::Inner as ::ridl_rt::payload::Payload<H::Encoding>>::Buffer,
+        held: Option<usize>,
         reply: Option<__RidlBlendReply<H, P>>,
         __port: ::core::marker::PhantomData<H>,
     }
@@ -15207,32 +15264,17 @@ pub mod station {
             return __RidlUploadStep::Budget;
         }
         *budget -= 1;
-        if ::ridl_rt::face::Consumer::poll_ready(
-                &mut stream.reply.as_mut().expect("active reply").source.inner,
-                cx,
-            )
-            .is_pending()
-        {
-            return __RidlUploadStep::Pending;
-        }
-        h.wake_on(
-            ::ridl_rt::port::Interest::ClaimStream(
-                stream.claim,
-                ::ridl_rt::contract::StreamNo(1),
-            ),
-            cx.waker(),
-        );
-        match h
-            .pull_claim(
-                stream.claim,
-                ::ridl_rt::contract::StreamNo(1),
-                ::core::convert::AsMut::as_mut(&mut stream.buffer),
-            )
-        {
-            Ok(::ridl_rt::port::Pull::Pending) => __RidlUploadStep::Pending,
-            Ok(::ridl_rt::port::Pull::End) => __RidlUploadStep::End,
-            Ok(::ridl_rt::port::Pull::Failed(e)) => __RidlUploadStep::Failed(e),
-            Ok(::ridl_rt::port::Pull::Chunk(n)) => {
+        if let Some(n) = stream.held {
+            if ::ridl_rt::face::Consumer::poll_ready(
+                    &mut stream.reply.as_mut().expect("active reply").source.inner,
+                    cx,
+                )
+                .is_pending()
+            {
+                return __RidlUploadStep::Pending;
+            }
+            stream.held = None;
+            return {
                 let bytes = &::core::convert::AsRef::<[u8]>::as_ref(&stream.buffer)[..n];
                 match ::ridl_rt::payload::Ref::<
                     super::Inner,
@@ -15263,6 +15305,70 @@ pub mod station {
                                 ::ridl_rt::error::Transport::Corrupt,
                             ),
                         )
+                    }
+                }
+            };
+        }
+        h.wake_on(
+            ::ridl_rt::port::Interest::ClaimStream(
+                stream.claim,
+                ::ridl_rt::contract::StreamNo(1),
+            ),
+            cx.waker(),
+        );
+        match h
+            .pull_claim(
+                stream.claim,
+                ::ridl_rt::contract::StreamNo(1),
+                ::core::convert::AsMut::as_mut(&mut stream.buffer),
+            )
+        {
+            Ok(::ridl_rt::port::Pull::Pending) => __RidlUploadStep::Pending,
+            Ok(::ridl_rt::port::Pull::End) => __RidlUploadStep::End,
+            Ok(::ridl_rt::port::Pull::Failed(e)) => __RidlUploadStep::Failed(e),
+            Ok(::ridl_rt::port::Pull::Chunk(n)) => {
+                if ::ridl_rt::face::Consumer::poll_ready(
+                        &mut stream.reply.as_mut().expect("active reply").source.inner,
+                        cx,
+                    )
+                    .is_pending()
+                {
+                    stream.held = Some(n);
+                    __RidlUploadStep::Pending
+                } else {
+                    let bytes = &::core::convert::AsRef::<
+                        [u8],
+                    >::as_ref(&stream.buffer)[..n];
+                    match ::ridl_rt::payload::Ref::<
+                        super::Inner,
+                        H::Encoding,
+                    >::verify(bytes) {
+                        Ok(value) => {
+                            ::ridl_rt::face::Consumer::accept(
+                                &mut stream
+                                    .reply
+                                    .as_mut()
+                                    .expect("active reply")
+                                    .source
+                                    .inner,
+                                value.decode(),
+                            );
+                            __RidlUploadStep::Progress
+                        }
+                        Err(::ridl_rt::payload::VerifyError::Contract(v)) => {
+                            __RidlUploadStep::Failed(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::InvalidValue(v),
+                                ),
+                            )
+                        }
+                        _ => {
+                            __RidlUploadStep::Failed(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -15337,6 +15443,7 @@ pub mod station {
         claim: ::ridl_rt::port::ClaimId,
         consumer: C,
         buffer: B,
+        held: Option<usize>,
     }
     struct ByteInputSlot<C, B> {
         claim: ::ridl_rt::port::ClaimId,
@@ -15452,12 +15559,46 @@ pub mod station {
         }
         *budget -= 1;
         let mut stream = slot.take().expect("checked above");
-        match ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer, cx) {
-            ::core::task::Poll::Pending => {
+        if let Some(n) = stream.held {
+            if ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer, cx)
+                .is_pending()
+            {
                 *slot = Some(stream);
                 return false;
             }
-            ::core::task::Poll::Ready(()) => {}
+            stream.held = None;
+            let bytes = &::core::convert::AsRef::<[u8]>::as_ref(&stream.buffer)[..n];
+            let decoded = match ::ridl_rt::payload::Ref::<
+                super::Inner,
+                H::Encoding,
+            >::verify(bytes) {
+                Ok(v) => Ok(v.decode()),
+                Err(::ridl_rt::payload::VerifyError::Contract(v)) => {
+                    Err(
+                        ::ridl_rt::error::CallError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(v),
+                        ),
+                    )
+                }
+                _ => {
+                    Err(
+                        ::ridl_rt::error::CallError::Transport(
+                            ::ridl_rt::error::Transport::Corrupt,
+                        ),
+                    )
+                }
+            };
+            match decoded {
+                Ok(item) => ::ridl_rt::face::Consumer::accept(&mut stream.consumer, item),
+                Err(e) => {
+                    let _ = h
+                        .abort_claim(stream.claim, ::ridl_rt::contract::StreamNo(1), e);
+                    ::ridl_rt::face::Consumer::failed(&mut stream.consumer, e);
+                    return false;
+                }
+            }
+            *slot = Some(stream);
+            return true;
         }
         h.wake_on(
             ::ridl_rt::port::Interest::ClaimStream(
@@ -15474,6 +15615,13 @@ pub mod station {
             )
         {
             Ok(::ridl_rt::port::Pull::Chunk(n)) => {
+                if ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer, cx)
+                    .is_pending()
+                {
+                    stream.held = Some(n);
+                    *slot = Some(stream);
+                    return false;
+                }
                 let bytes = &::core::convert::AsRef::<[u8]>::as_ref(&stream.buffer)[..n];
                 let decoded = match ::ridl_rt::payload::Ref::<
                     super::Inner,
@@ -15841,11 +15989,15 @@ pub mod station {
     ///
     /// # Streamed replies
     ///
-    /// Each query's Provider method returns its reply source after the arguments and require clauses pass. Each serve poll first drives running streams, then takes claims, sharing a budget of 32. A source is polled at most once for each running call and spends one budget unit. A chunk held while the port window is full is retried before another source poll.
+    /// Each query with a streamed reply and no upload returns its reply source after the arguments and require clauses pass. Each serve poll first drives running streams, then takes claims, sharing a budget of 32. A source is polled at most once for each running call and spends one budget unit. A chunk held while the port window is full is retried before another source poll.
     ///
     /// A named-element source uses Source::poll_next: each element is encoded and checked in an inline Payload buffer before transmission. Ready(None) ends it; Ready(Some(Err(Interrupted))) interrupts it. A byte or text source uses ByteSource::poll_read and fills an inline byte buffer without element encoding: Ready(Ok(0)) ends it and Ready(Err(Interrupted)) interrupts it. A partial buffer is pushed when the source is pending or ends. Text chunks preserve complete code points; invalid text or an incomplete code point at normal end is refused with Contract::InvalidValue and Rule::Utf8, after the valid prefix.
     ///
     /// An end settles the reply claim successfully; an interruption stops it with Transport::Interrupted. PushError::TooLarge stops it with Transport::Interrupted, and PushError::Failed ends the claim with the caller's outcome. The source is dropped when its stream ends or stops. One stream runs per member; a concurrent call is settled Transport::Busy. A caller's forget is detected by the next push, so a pending source can keep its member busy until it yields again. Ready progress wakes serve for another poll; a pending source registers its own waker. Dropping serve interrupts every running stream and drops its source.
+    ///
+    /// # Parameter streams
+    ///
+    /// Commands and queries with one parameter stream return a Consumer for named elements or a ByteConsumer for bytes and text. Commands acknowledge delivery before driving the consumer. A plain query reply is computed after the upload ends; a duplex query drives the consumer and its named-element reply Source concurrently. Each member has one active slot. Checked elements wait for readiness; a held element or byte suffix is offered before another pull. With nothing held, end and failure are delivered immediately, regardless of readiness. Terminal notifications occur once. Dropping serve interrupts unfinished uploads. ByteConsumer::poll_write must accept between one byte and the offered length for nonempty input; violating this contract panics.
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
