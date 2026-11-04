@@ -128,6 +128,9 @@ impl Gateway {
                         continue;
                     }
                     table.insert(target.iface, target.ord, target.kind, max);
+                    if full.reply_stream(target.iface, target.ord) {
+                        table.set_reply_stream(target.iface, target.ord);
+                    }
                     if let Some(limit) = limit {
                         table.set_limit(target.iface, target.ord, limit);
                     }

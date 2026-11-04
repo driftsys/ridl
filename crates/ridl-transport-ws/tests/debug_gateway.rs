@@ -1070,3 +1070,61 @@ fn gateway_memory_injection_reaches_local_ports() {
     assert_eq!(bytes[0], 91);
     drop(provider(&g, 1, cat));
 }
+
+#[test]
+fn gateway_injection_refuses_streamed_query_locally() {
+    use ridl_rt::error::{CallError, Contract};
+    use ridl_rt::port::Caller;
+    let mut descriptor = ridl_descriptor::deployment::Deployment::try_from(
+        ridl_descriptor::deployment::verify(DESCRIPTOR).unwrap(),
+    )
+    .unwrap();
+    let embedded = descriptor
+        .catalogs
+        .iter_mut()
+        .find(|c| c.name == "alpha")
+        .unwrap();
+    let mut cat =
+        ridl_descriptor::Catalog::try_from(ridl_descriptor::verify(&embedded.bytes).unwrap())
+            .unwrap();
+    let query = cat.interfaces[0]
+        .members
+        .iter_mut()
+        .find(|m| m.ordinal == 4)
+        .unwrap();
+    query.streams = Some(vec![ridl_descriptor::StreamPayload {
+        no: 0,
+        element: Some("u8".into()),
+        ..Default::default()
+    }]);
+    embedded.bytes = ridl_descriptor::finish(&cat);
+    let bytes = Box::leak(ridl_descriptor::deployment::finish(&descriptor).into_boxed_slice());
+    let g = Gateway::from_descriptor(bytes, "Local").unwrap();
+    let cat = catalog(&g, "alpha");
+    let mut local = g.node().attach(InstanceNo::LISTENER, &cat).unwrap();
+    let call = local
+        .query(InterfaceNo(1), Ordinal(4), &[13], None)
+        .unwrap();
+    let mut conn = injection(
+        "/alpha.First/Unit/alpha",
+        &[Frame::Attached(AttachOutcome::Accepted)],
+    );
+    let output = conn.output.clone();
+    // Observe settlement during the session, before EOF could interrupt it.
+    conn.on_idle = Some(Box::new(move || {
+        assert_eq!(
+            local.reply(call, &mut [0; 8]),
+            Ok(Some(Err(CallError::Contract(Contract::UnknownInteraction))))
+        );
+    }));
+    let mut config = Config::default();
+    config.poll_interval = Duration::ZERO;
+    assert_eq!(
+        g.serve_injection(conn, &config),
+        Ended::Io(io::ErrorKind::UnexpectedEof)
+    );
+    assert!(binary_frames(&output.borrow())
+        .iter()
+        .all(|f| !matches!(f, Frame::Request { .. })));
+    drop(provider(&g, 1, cat));
+}
