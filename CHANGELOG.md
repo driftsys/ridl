@@ -1,5 +1,533 @@
 # Changelog
 
+## [0.15.0] (2026-11-04)
+
+### Refactoring
+
+- **ridl-rt-conformance:** drop the Factory supertrait of IdentityFactory
+  ([#1244]) ([4e080e5])
+
+### Documentation
+
+- **docs:** archive the streams stage 5b plan ([#1243]) ([639e694])
+- **docs:** name the pull request that built part 4 of the debug socket
+  ([#1238]) ([98a78b5])
+- **repo:** name the ridl-rt all-features wasm32 check in the wasm-check entry
+  ([#1234]) ([4ea10ed]), refs [#526]
+- **docs:** archive the streams stage 5a plan ([#1233]) ([cad1eb0])
+- **docs:** archive the streams stage 4 plan ([#1199]) ([a8bb865]), refs [#1116]
+- **docs:** record frame version 2 blocks and read their vectors in the wire
+  freeze check ([#1169]) ([9168765])
+- **docs:** archive the streams stage 1-2 plan ([#1165]) ([1e73b92])
+- **adr:** accept ADR-0032 with decisions on the six open questions ([#1145])
+  ([fe63b6e])
+- **adr:** match ADR-0030 and ADR-0032 to the built size rules ([#1136])
+  ([968f72a])
+- **adr:** remove the superseded proposals from the postponed ceiling note
+  ([#1125]) ([c78af6a])
+- **ridl-transport-ws:** design WebSocket blocks for a fixed larger than one
+  message ([#1131]) ([55cb1e6]), refs [#1129], [#1129]
+- **adr:** amend ADR-0030 with one size rule for every kind ([#1130])
+  ([f556028])
+- **adr:** amend ADR-0024 with inline lint directives ([#1126]) ([3274b79])
+- **roadmap:** add E11.22, measuring the three payload encodings ([#1119])
+  ([952ebb2])
+- **roadmap:** schedule nested interfaces and a machine partition in the next
+  breaking release ([#1086]) ([c9bf466])
+- **ridl-backend-rust:** design a generated probe for every interface ([#1008])
+  ([2f914fb]), refs [#1007]
+- **adr:** propose ADR-0032, byte streams ([#1115]) ([58db427])
+- **adr:** amend ADR-0030 with a per-kind payload ceiling ([#1109]) ([d600fab])
+- **repo:** garden the payload limits lane ([#1106]) ([d21725c])
+- **roadmap:** schedule Epic 18 over two breaking releases and add E18.0
+  ([#1094]) ([f37c337])
+- **roadmap:** add Epic 18, exact numerics ([#1088]) ([7a432a3])
+
+### Features
+
+- **ridl-transport-ws:** send parameter streams over the WebSocket binding
+  ([#1241]) ([8d7d1e3])
+- **ridl-transport-ws:** inject through the debug gateway over a reversed-role
+  subprotocol ([#1232]) ([6bcde57])
+- **ridl-backend-rust:** emit the Rust face for every stream form ([#1222])
+  ([2feb58f]), refs [#1116], [#1116], [#1116], [#1116], [#1116], [#1116],
+  [#1116], [#1116]
+- **ridl-transport-ws:** listen to a machine through a debug gateway ([#1227])
+  ([70d7e7e])
+- **ridl-loopback:** attach instance identities to a loopback node ([#1220])
+  ([6446e43])
+- **ridl-diff:** report a podbuf break when an imported struct held inline grows
+  ([#1201]) ([063e155]), refs 1163
+
+* docs(docs): record approved remote inline
+  design decisions, 1163
+
+* docs(docs): plan remote inline compatibility
+  implementation, 1163
+
+* feat(ridl-diff): detect remote podbuf inline growth,
+  1163
+
+* fix(ridl-diff): restore fixed offsets within nested arrays, 1163
+
+*
+  feat(ridlc): retain versioned remote baseline context, 1163
+
+* fix(ridl):
+  compare remote inline heads using each side context, 1163
+
+* fix(ridl): bind
+  catalog history to historical remote context, 1163
+
+* fix(ridl): preserve
+  incomplete baseline recovery evidence
+
+Refuse missing inline context for
+  type-only units and defer same-name rollback restores after failed
+  retractions., 1163
+
+* feat(ridl): add baseline context repair and history
+  reset, 1163
+
+* docs(docs): record remote inline compatibility and recovery,
+  1163
+
+* test(xtask): justify remote growth interface fixtures, 1163
+
+*
+  test(ridl-transport-ws): drain responses before teardown, 1163
+
+* docs(docs):
+  consolidate remote inline baseline design, 1163
+
+* fix(ridl): resolve catalog
+  verdicts through remote context, 1163
+
+* fix(ridl-diff): compare remote inline
+  types with each side's holders
+
+* docs(docs): describe remote inline growth
+  for every declaration kind
+
+* fix(ridl-diff): report why remote inline
+  evidence cannot be used
+
+Each context issue now carries a reason (missing,
+  cannot be laid out, kind changed), and each side of the comparison uses its
+  own set of local
+holder packages.
+
+* fix(ridl): say unusable as well as
+  missing in the candidate evidence hint
+
+* fix(ridlc): compile source
+  workspaces before reading baseline context
+
+* fix(ridl): preserve snapshots
+  during baseline replacement
+
+Each fresh file now replaces its old file in one
+  rename after the old
+bytes are hard-linked into the backup, removals come
+  last, and a
+transaction marker beside the baseline makes the next ridl
+  baseline
+refuse an interrupted publication. The system dump is removed
+  from
+staging before publication, so it no longer reaches the baseline.
+
+*
+  fix(ridl): handle baseline transaction marker failures
+
+A refusal names the
+  marker when its backup path is unknown, a failed
+marker write or a concurrent
+  run leaves no empty backup behind, a marker
+that cannot be removed after a
+  committed publication is a warning, and
+an old file is copied into the backup
+  when a hard link is refused.
+
+* test(ridlc): assert specific baseline context
+  refusals
+
+* test(ridl): pin baseline evidence and repair checks
+
+*
+  refactor(ridl): read diff remotes from their verified context
+
+DiffSide no
+  longer keeps a copy of the remote packages beside its remote
+context, an
+  ordinary ridl build no longer captures fingerprints it
+discards, and context
+  issues are attributed with the existing change path
+accessors.
+
+* docs(docs):
+  describe per-side remote contexts and the baseline transaction
+
+*
+  fix(ridl-diff): limit remote growth checks to surviving consumer uses
+
+*
+  test(ridl): preserve recovery markers after rollback failures
+
+* fix(ridl):
+  name the side of unusable baseline evidence
+
+The reachability test of the
+  catalog history now holds an earlier hash, so it fails when the chain is
+  carried.
+
+* docs(docs): clarify podbuf growth and context contracts
+
+*
+  fix(ridl-diff): judge an instance number change breaking with per-side
+  contexts
+
+ridl diff now goes through diff_workspaces_with_contexts, which
+  listed the
+system changes but did not apply the rule from main that an
+  instance
+number change is breaking.
+
+* test(xtask): justify the unresolved
+  payload root interface fixture
+- **ridl-descriptor:** emit a deployment descriptor per rsdl deployment
+  ([#1179]) ([0b01461])
+- **ridl-transport-ws:** carry a query's streamed reply over WebSocket (frame
+  version 3) ([#1182]) ([fe60eee])
+- **ridl-backend-rust:** carry open enums and enum sets in podbuf ([#1178])
+  ([42d04b3]), closes 1168.
+- **typl:** the contextual keyword open on enum and enumset ([#1174])
+  ([82432db]), refs [#1121], [#1121], [#1121], [#1121], [#1121], [#1121],
+  [#1121], [#1121], [#1121], [#1121], [#1121], [#1121], [#1121], [#1121],
+  [#1121], [#1121], [#1121], [#1121], [#1121], [#1121], [#1121], [#1121],
+  [#1121], [#1121], [#1121], [#1121]
+- **ridl-backend-rust:** emit the Rust face for a streamed reply of named
+  elements ([#1171]) ([c3a449e])
+- **ridl-transport-ws:** send a fixed larger than one message in blocks (frame
+  version 2) ([#1156]) ([e748a61]), refs [#1129]
+- **ridl-transport-ws:** reassemble blocks in the TypeScript client (frame
+  version 2) ([#1155]) ([8e4fd01])
+- **ridl-rt:** add the stream port and list a member's streams in every
+  descriptor ([#1154]) ([ed336b9])
+- **ridl-backend-podbuf:** read a boxed podbuf root from the C header ([#1152])
+  ([a244bda])
+- **ridl-core:** inline lint directives ([#1147]) ([f348240])
+- **ridl-rt:** name a member's rate floor and staleness bound ([#1149])
+  ([61eb885]), closes [#1123]
+- **ridlc:** one size rule for every kind, and the transport owns payload size
+  ([#1132]) ([202fc03])
+- **ridl-rt:** add podbuf, the in-place payload encoding ([#1097]) ([6c1d62c])
+- **ridl-transport-ws:** payload limits in the descriptor and the transport
+  ([#1098]) ([bcca636])
+
+### Bug Fixes
+
+- **ridl-transport-ws:** bound the wait for attach in serve and serve_selected
+  ([#1248]) ([d5c9fe4])
+- **ridl-rt:** keep a signal's last good value when a payload fails its check
+  ([#1237]) ([5536249]), refs [#526], [#526]
+- **ridl-diff:** report a remote enum set that widens through an import pin
+  ([#1230]) ([c98e934]), closes [#1211]
+- **ridl-diff:** report an enum-set flag at bit 32 that widens the proto3 field
+  ([#1225]) ([df6fdc3]), closes [#1212]
+- **ridlc:** refuse to read a baseline whose publication was interrupted
+  ([#1223]) ([6ff3d21]), closes [#1207]
+- **docs:** name the frame section of the WebSocket binding without an anchor
+  link ([bdacb3c])
+- **repo:** anchor the mdBook output pattern to the repository root ([9dffb3a]),
+  closes [#1164]
+- **ridl-backend-podbuf:** keep tuple member names and refuse presence clashes
+  ([#1217]) ([c362dde]), closes [#1114]
+- **ridl-diff:** report an enum-set flag that widens the FlatBuffers scalar
+  ([#1214]) ([e2057aa]), closes [#1120]
+- **ridl-sem:** refuse tuple members that collide under snake_case ([#1210])
+  ([d0626d1]), fixes [#1113]
+- **ridl-transport-ws:** do not count the server's writes against liveness
+  ([#1209]) ([3c683ef]), closes [#1160]
+- **ridl-descriptor:** refuse a deployment in which two instances share a number
+  ([#1206]) ([27e3706]), closes [#1203]
+- **ridl-backend-podbuf:** claim the names that stdint.h and stddef.h define
+  ([#1200]) ([1aa9917]), closes 1158
+
+* test(ridl-backend-podbuf): cover every
+  standard header name
+
+Exercise collision refusal for an independent C17 name
+  inventory and generation refusal for reachable type and limit macro families.
+  The tests detect reducing the table to the two previously covered names.
+
+*
+  test(ridl-backend-podbuf): pin that two unrelated packages do not clash on the
+  fixed names
+- **ridl-backend-ts:** refuse an undeclared value of a strict enum ([#1177])
+  ([2ef8941]), closes [#1173]
+- **ridl-transport-ws:** close three leftovers of the block frames ([#1175])
+  ([f023f50])
+- **ridl-ir:** name a foreign podbuf tuple head by the declaring package and key
+  it by a typed path ([#1166]) ([e0d8abb])
+- **ridl-diff:** judge a podbuf inline append whose head reaches a remote type
+  ([#1161]) ([db21f81])
+- **ridl-backend-podbuf:** refuse C names that collide across headers ([#1157])
+  ([beb9994])
+- **ridl-ir:** find an inline podbuf tuple head by the tuple's identity
+  ([#1148]) ([94b5273])
+- **ridl-backend-rust:** lint a generated crate that holds every shape the
+  backend emits ([#1146]) ([8d758ce]), closes [#1143]
+- **ridl-backend-rust:** put each clippy allow on its generated item, and lint
+  as edition 2024 ([#1140]) ([e5e3e7e]), refs 1133 (items 3, 4 and 5)., [#1133]
+- **ridl:** judge the catalog history for the root manifest's encodings
+  ([#1138]) ([e6c8842])
+- **ridl-backend-rust:** write generated doc comments with ///, and skip
+  generated files in rustfmt ([#1135]) ([3b51d16]), refs 1133 (items 1 and 2).,
+  [#1133]
+- **ridl-diff:** narrow the podbuf inline-append break, and clear the podbuf
+  review debt ([#1127]) ([8b20552])
+- **ridl-diff:** report a podbuf width change for an enum set, and close the
+  podbuf test gaps ([#1118]) ([0b4d0d4]), closes [#1107], [#1102]
+- **repo:** make the release commit build, and push tags only after CI passes
+  ([#1104]) ([079aac1])
+- **ridl-backend-podbuf:** name tuple members by their typl names ([#1111])
+  ([6d9903d]), closes [#1103]
+- **ci:** skip a crate that crates.io reports as already uploaded ([1db5c7d])
+
+### BREAKING CHANGES
+
+- serve and serve_selected return `Ended::LivenessTimeout` for a
+client that does not send `attach` within `Config::liveness_timeout` (15 s by
+default) after the upgrade, whatever ping and pong traffic there is. A client
+that attaches as it connects is not affected.
+
+Part of #1235.
+- SignalReader has a required method, check_with. Every
+runtime must implement it, and a generated crate needs this ridl-rt.
+- ridl diff, ridl build and ridl baseline report new
+flatbuffers_width_change and proto3_width_change lines for remote enum sets,
+and exit 1 or end a catalog history under those encodings where they did not.
+- ridl diff --encoding proto3, and the catalog history of
+ridl build and ridl baseline in a workspace that builds proto3, now judge
+an open enum-set append at bit 32 as breaking. ridl_diff::Category gains
+the variant Proto3WidthChange, and the report gains the category word
+proto3_width_change.
+- `ridl build --emit podbuf` refuses a tuple that has an
+optional member `x` and a member `hasX`; it wrote positional members
+before. A member whose snake case ends with an underscore keeps it in
+its accessors (`low_` gives `<owner>_low__at`, was `<owner>_low_at`), and
+a keyword followed by underscores takes one more (`int_` is the C member
+`int__`).
+- ridl diff --encoding flatbuffers, and the catalog history
+of ridl build and ridl baseline in a workspace that builds flatbuffers,
+now judge an open enum-set append that widens the integer as breaking.
+- a source that declares a tuple with two members equal
+under snake_case, such as (minSpeed : Speed, min_speed : Speed), checked
+before and is now refused with RIDL-149. Rename one of the two members.
+- `deployment::VerifyError` gains the
+`DuplicateInstanceNumber` variant; an exhaustive match on it no longer
+compiles.
+- a workspace that declares a `system` and has a package
+whose first name segment is `instances` built with exit 0 before the
+`instances` module was added; `ridl build` now refuses it with exit 1.
+Rename the package to build such a workspace.
+- a TypeScript reader built from the generated codec throws a
+RuleError instead of returning a value that a strict enum or a strict enum
+set does not declare.
+- an append to an enum or an enum set that is not `open` is now
+breaking for every encoding, with or without `--encoding podbuf`. Declare the
+enum or the enum set `open` to keep the append compatible.
+- generated code and every other builder of a `Member`
+literal must set `streams`.
+- ridl_rt::port::Interest gains the variants Stream and
+ClaimStream; a match over Interest must handle them.
+- in the codegen plugin protocol, a call with a stream
+parameter now has a request (or a request_tuple) made of its non-stream
+parameters, so a codegen plugin that does not read Interaction.streams
+sees it as a plain call. Such a plugin must skip every member whose
+Interaction.streams is not empty. A query that replies with a stream now
+reserves its request alone, where its reservation was unsized.
+- ridl_descriptor::Member has a new public field,
+streams; a struct literal of Member must set it.
+- the `diagnostics` surface loses the line of RIDL-150 and
+gains `RIDL-157 error`.
+- a payload above the default ceiling of its kind, with no
+`[limits.interaction]` entry for it, stops compiling.
+- `Loopback::provision_fixed` returns `Result<(), WriteError>`,
+and every sending port of the loopback refuses a payload above its member's
+limit.
+- `MAX_MESSAGE_LIMIT` is 16,164 bytes, not 16,292; a
+`Config` whose message limit cannot carry a member of the catalog is
+refused by `serve` with `Ended::ConfigRefused`; `Note` and `Ended` gain a
+variant each; a reply above the member's limit is answered `corrupt`.
+- a `reply`, a `publish` or an `occurrence` whose payload is
+longer than its member's limit no longer reaches the application. `Sample`
+and `Occurrence` gain the optional field `detected`. The cabin web programs
+pass their generated tables to `connect`.
+- the generated Member struct has a new public field, limit.
+- a request whose arguments are longer than its member's limit in the member table is answered corrupt and does not reach the backend.
+- the default message limit is 16,292 bytes instead of 1 MiB; with_max_message_bytes refuses a value above 16,292 with LimitOutOfRange, which replaces LimitTooSmall; with_max_retained_bytes refuses a value below 16,292, and RetainedTooSmall has no message_limit field.
+
+[0.15.0]: https://github.com/driftsys/ridl/compare/v0.14.0...v0.15.0
+[4e080e5]: https://github.com/driftsys/ridl/commit/4e080e5
+[#1244]: https://github.com/driftsys/ridl/issues/1244
+[639e694]: https://github.com/driftsys/ridl/commit/639e694
+[#1243]: https://github.com/driftsys/ridl/issues/1243
+[98a78b5]: https://github.com/driftsys/ridl/commit/98a78b5
+[#1238]: https://github.com/driftsys/ridl/issues/1238
+[4ea10ed]: https://github.com/driftsys/ridl/commit/4ea10ed
+[#1234]: https://github.com/driftsys/ridl/issues/1234
+[#526]: https://github.com/driftsys/ridl/issues/526
+[cad1eb0]: https://github.com/driftsys/ridl/commit/cad1eb0
+[#1233]: https://github.com/driftsys/ridl/issues/1233
+[a8bb865]: https://github.com/driftsys/ridl/commit/a8bb865
+[#1199]: https://github.com/driftsys/ridl/issues/1199
+[#1116]: https://github.com/driftsys/ridl/issues/1116
+[9168765]: https://github.com/driftsys/ridl/commit/9168765
+[#1169]: https://github.com/driftsys/ridl/issues/1169
+[1e73b92]: https://github.com/driftsys/ridl/commit/1e73b92
+[#1165]: https://github.com/driftsys/ridl/issues/1165
+[fe63b6e]: https://github.com/driftsys/ridl/commit/fe63b6e
+[#1145]: https://github.com/driftsys/ridl/issues/1145
+[968f72a]: https://github.com/driftsys/ridl/commit/968f72a
+[#1136]: https://github.com/driftsys/ridl/issues/1136
+[c78af6a]: https://github.com/driftsys/ridl/commit/c78af6a
+[#1125]: https://github.com/driftsys/ridl/issues/1125
+[55cb1e6]: https://github.com/driftsys/ridl/commit/55cb1e6
+[#1131]: https://github.com/driftsys/ridl/issues/1131
+[#1129]: https://github.com/driftsys/ridl/issues/1129
+[f556028]: https://github.com/driftsys/ridl/commit/f556028
+[#1130]: https://github.com/driftsys/ridl/issues/1130
+[3274b79]: https://github.com/driftsys/ridl/commit/3274b79
+[#1126]: https://github.com/driftsys/ridl/issues/1126
+[952ebb2]: https://github.com/driftsys/ridl/commit/952ebb2
+[#1119]: https://github.com/driftsys/ridl/issues/1119
+[c9bf466]: https://github.com/driftsys/ridl/commit/c9bf466
+[#1086]: https://github.com/driftsys/ridl/issues/1086
+[2f914fb]: https://github.com/driftsys/ridl/commit/2f914fb
+[#1008]: https://github.com/driftsys/ridl/issues/1008
+[#1007]: https://github.com/driftsys/ridl/issues/1007
+[58db427]: https://github.com/driftsys/ridl/commit/58db427
+[#1115]: https://github.com/driftsys/ridl/issues/1115
+[d600fab]: https://github.com/driftsys/ridl/commit/d600fab
+[#1109]: https://github.com/driftsys/ridl/issues/1109
+[d21725c]: https://github.com/driftsys/ridl/commit/d21725c
+[#1106]: https://github.com/driftsys/ridl/issues/1106
+[f37c337]: https://github.com/driftsys/ridl/commit/f37c337
+[#1094]: https://github.com/driftsys/ridl/issues/1094
+[7a432a3]: https://github.com/driftsys/ridl/commit/7a432a3
+[#1088]: https://github.com/driftsys/ridl/issues/1088
+[8d7d1e3]: https://github.com/driftsys/ridl/commit/8d7d1e3
+[#1241]: https://github.com/driftsys/ridl/issues/1241
+[6bcde57]: https://github.com/driftsys/ridl/commit/6bcde57
+[#1232]: https://github.com/driftsys/ridl/issues/1232
+[2feb58f]: https://github.com/driftsys/ridl/commit/2feb58f
+[#1222]: https://github.com/driftsys/ridl/issues/1222
+[70d7e7e]: https://github.com/driftsys/ridl/commit/70d7e7e
+[#1227]: https://github.com/driftsys/ridl/issues/1227
+[6446e43]: https://github.com/driftsys/ridl/commit/6446e43
+[#1220]: https://github.com/driftsys/ridl/issues/1220
+[063e155]: https://github.com/driftsys/ridl/commit/063e155
+[#1201]: https://github.com/driftsys/ridl/issues/1201
+[0b01461]: https://github.com/driftsys/ridl/commit/0b01461
+[#1179]: https://github.com/driftsys/ridl/issues/1179
+[fe60eee]: https://github.com/driftsys/ridl/commit/fe60eee
+[#1182]: https://github.com/driftsys/ridl/issues/1182
+[42d04b3]: https://github.com/driftsys/ridl/commit/42d04b3
+[#1178]: https://github.com/driftsys/ridl/issues/1178
+[82432db]: https://github.com/driftsys/ridl/commit/82432db
+[#1174]: https://github.com/driftsys/ridl/issues/1174
+[#1121]: https://github.com/driftsys/ridl/issues/1121
+[c3a449e]: https://github.com/driftsys/ridl/commit/c3a449e
+[#1171]: https://github.com/driftsys/ridl/issues/1171
+[e748a61]: https://github.com/driftsys/ridl/commit/e748a61
+[#1156]: https://github.com/driftsys/ridl/issues/1156
+[8e4fd01]: https://github.com/driftsys/ridl/commit/8e4fd01
+[#1155]: https://github.com/driftsys/ridl/issues/1155
+[ed336b9]: https://github.com/driftsys/ridl/commit/ed336b9
+[#1154]: https://github.com/driftsys/ridl/issues/1154
+[a244bda]: https://github.com/driftsys/ridl/commit/a244bda
+[#1152]: https://github.com/driftsys/ridl/issues/1152
+[f348240]: https://github.com/driftsys/ridl/commit/f348240
+[#1147]: https://github.com/driftsys/ridl/issues/1147
+[61eb885]: https://github.com/driftsys/ridl/commit/61eb885
+[#1149]: https://github.com/driftsys/ridl/issues/1149
+[#1123]: https://github.com/driftsys/ridl/issues/1123
+[202fc03]: https://github.com/driftsys/ridl/commit/202fc03
+[#1132]: https://github.com/driftsys/ridl/issues/1132
+[6c1d62c]: https://github.com/driftsys/ridl/commit/6c1d62c
+[#1097]: https://github.com/driftsys/ridl/issues/1097
+[bcca636]: https://github.com/driftsys/ridl/commit/bcca636
+[#1098]: https://github.com/driftsys/ridl/issues/1098
+[d5c9fe4]: https://github.com/driftsys/ridl/commit/d5c9fe4
+[#1248]: https://github.com/driftsys/ridl/issues/1248
+[5536249]: https://github.com/driftsys/ridl/commit/5536249
+[#1237]: https://github.com/driftsys/ridl/issues/1237
+[c98e934]: https://github.com/driftsys/ridl/commit/c98e934
+[#1230]: https://github.com/driftsys/ridl/issues/1230
+[#1211]: https://github.com/driftsys/ridl/issues/1211
+[df6fdc3]: https://github.com/driftsys/ridl/commit/df6fdc3
+[#1225]: https://github.com/driftsys/ridl/issues/1225
+[#1212]: https://github.com/driftsys/ridl/issues/1212
+[6ff3d21]: https://github.com/driftsys/ridl/commit/6ff3d21
+[#1223]: https://github.com/driftsys/ridl/issues/1223
+[#1207]: https://github.com/driftsys/ridl/issues/1207
+[bdacb3c]: https://github.com/driftsys/ridl/commit/bdacb3c
+[9dffb3a]: https://github.com/driftsys/ridl/commit/9dffb3a
+[#1164]: https://github.com/driftsys/ridl/issues/1164
+[c362dde]: https://github.com/driftsys/ridl/commit/c362dde
+[#1217]: https://github.com/driftsys/ridl/issues/1217
+[#1114]: https://github.com/driftsys/ridl/issues/1114
+[e2057aa]: https://github.com/driftsys/ridl/commit/e2057aa
+[#1214]: https://github.com/driftsys/ridl/issues/1214
+[#1120]: https://github.com/driftsys/ridl/issues/1120
+[d0626d1]: https://github.com/driftsys/ridl/commit/d0626d1
+[#1210]: https://github.com/driftsys/ridl/issues/1210
+[#1113]: https://github.com/driftsys/ridl/issues/1113
+[3c683ef]: https://github.com/driftsys/ridl/commit/3c683ef
+[#1209]: https://github.com/driftsys/ridl/issues/1209
+[#1160]: https://github.com/driftsys/ridl/issues/1160
+[27e3706]: https://github.com/driftsys/ridl/commit/27e3706
+[#1206]: https://github.com/driftsys/ridl/issues/1206
+[#1203]: https://github.com/driftsys/ridl/issues/1203
+[1aa9917]: https://github.com/driftsys/ridl/commit/1aa9917
+[#1200]: https://github.com/driftsys/ridl/issues/1200
+[2ef8941]: https://github.com/driftsys/ridl/commit/2ef8941
+[#1177]: https://github.com/driftsys/ridl/issues/1177
+[#1173]: https://github.com/driftsys/ridl/issues/1173
+[f023f50]: https://github.com/driftsys/ridl/commit/f023f50
+[#1175]: https://github.com/driftsys/ridl/issues/1175
+[e0d8abb]: https://github.com/driftsys/ridl/commit/e0d8abb
+[#1166]: https://github.com/driftsys/ridl/issues/1166
+[db21f81]: https://github.com/driftsys/ridl/commit/db21f81
+[#1161]: https://github.com/driftsys/ridl/issues/1161
+[beb9994]: https://github.com/driftsys/ridl/commit/beb9994
+[#1157]: https://github.com/driftsys/ridl/issues/1157
+[94b5273]: https://github.com/driftsys/ridl/commit/94b5273
+[#1148]: https://github.com/driftsys/ridl/issues/1148
+[8d758ce]: https://github.com/driftsys/ridl/commit/8d758ce
+[#1146]: https://github.com/driftsys/ridl/issues/1146
+[#1143]: https://github.com/driftsys/ridl/issues/1143
+[e5e3e7e]: https://github.com/driftsys/ridl/commit/e5e3e7e
+[#1140]: https://github.com/driftsys/ridl/issues/1140
+[#1133]: https://github.com/driftsys/ridl/issues/1133
+[e6c8842]: https://github.com/driftsys/ridl/commit/e6c8842
+[#1138]: https://github.com/driftsys/ridl/issues/1138
+[3b51d16]: https://github.com/driftsys/ridl/commit/3b51d16
+[#1135]: https://github.com/driftsys/ridl/issues/1135
+[8b20552]: https://github.com/driftsys/ridl/commit/8b20552
+[#1127]: https://github.com/driftsys/ridl/issues/1127
+[0b4d0d4]: https://github.com/driftsys/ridl/commit/0b4d0d4
+[#1118]: https://github.com/driftsys/ridl/issues/1118
+[#1107]: https://github.com/driftsys/ridl/issues/1107
+[#1102]: https://github.com/driftsys/ridl/issues/1102
+[079aac1]: https://github.com/driftsys/ridl/commit/079aac1
+[#1104]: https://github.com/driftsys/ridl/issues/1104
+[6d9903d]: https://github.com/driftsys/ridl/commit/6d9903d
+[#1111]: https://github.com/driftsys/ridl/issues/1111
+[#1103]: https://github.com/driftsys/ridl/issues/1103
+[1db5c7d]: https://github.com/driftsys/ridl/commit/1db5c7d
+
 ## [0.14.0] (2026-10-25)
 
 ### Refactoring
