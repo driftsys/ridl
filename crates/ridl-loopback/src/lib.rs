@@ -71,7 +71,7 @@
 //! `ServeError::NotOwner`. The raw loopback has no member table, and no ordinal
 //! it can call unknown, no member it can call unowned, and no timing
 //! annotation it can measure a value's freshness or a call's remaining time
-//! against. What it therefore never returns:
+//! against. The raw `Loopback` therefore never returns:
 //! `WriteError::NotOwner`, `RaiseError::NotOwner`, `ServeError::NotOwner`, any
 //! port error's `Contract` variant except
 //! [`FixedReader::read_fixed`]'s and the stream ports'

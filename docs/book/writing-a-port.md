@@ -188,7 +188,9 @@ runs on a thread of its own. The `streams` flag runs the tests of `StreamCaller`
 and `StreamHandler`, and requires that the runtime implements both and
 `Wakeable`. The working example is
 [`crates/ridl-loopback/tests/conformance.rs`][loopback-conformance], which runs
-every test of the suite, with all five flags, over `ridl-loopback`.
+the suite over `ridl-loopback` with its five base extension flags. Of the seven
+available flags, `identity` additionally runs with `node`, and `identity_debug`
+runs with `debug`.
 
 A runtime that attaches an instance identity to a catalog from a deployment
 descriptor can also run two opt-in groups. Implement

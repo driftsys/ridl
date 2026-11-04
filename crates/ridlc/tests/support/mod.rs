@@ -93,14 +93,12 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
 /// always second.
 ///
 /// One `rustc` call over its `lib.rs` is the whole build, for the same reason
-/// it is for `ridl-rt`: `ridl-rt` is `ridl-loopback`'s only dependency, and
-/// the crate declares no feature (ADR-0020 decision 6), so there is no
-/// `--cfg` to pass and nothing to resolve beyond that one `--extern`.
+/// it is for `ridl-rt`: without `node` or `debug`, `ridl-rt` is
+/// `ridl-loopback`'s only dependency (ADR-0020 decision 6), so this build
+/// needs no feature `--cfg` and only that one `--extern`.
 ///
-/// Edition 2024 is the workspace edition `crates/ridl-loopback/Cargo.toml`
-/// inherits, which differs from the 2021 `ridl-rt` declares for its own
-/// compatibility check (ADR-0021 decision 10). The two are independent, and
-/// each is built at the edition its manifest names.
+/// Both crates declare edition 2021 for their compatibility check
+/// (ADR-0021 decision 10); each is built at the edition its manifest names.
 #[allow(
     dead_code,
     reason = "every test target in this crate compiles this module, and only \

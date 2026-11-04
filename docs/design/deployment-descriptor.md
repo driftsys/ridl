@@ -166,8 +166,7 @@ does not interpret it (rsdl section 5).
 
 The loopback runtime reads a descriptor to decide what an attach may do
 ([the loopback record](ridl-loopback.md) describes the types). This section
-states the rules as built. Only the in-process node applies them: there is no
-shared-memory node and no listening gateway yet.
+states the rules applied by the in-process node.
 
 - **Construction.** `Node::from_descriptor(bytes, machine)` takes a `&'static`
   descriptor, because the catalog names borrow its bytes, and a machine name. It

@@ -978,13 +978,14 @@ to a node"; this section states how the crate carries them.
 ## It runs the port contract suite
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
-`ridl-rt-conformance` over this runtime, the tests of both signal extensions and
-of `Wakeable` included (driftsys/ridl#514). The factory it writes for the suite
-is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
-`Loopback::source`, `Loopback::caller` and `Loopback::handler` hand out,
-`Loopback::SLOTS` as the size of the call table the suite fills, and
-`Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
-and fault hook.
+`ridl-rt-conformance` over this runtime with the five base extension flags,
+including both signal extensions and `Wakeable` (driftsys/ridl#514). The two
+additional flags, `identity` and `identity_debug`, run with `node` and `debug`,
+respectively. The factory it writes for the suite is the aggregate, the
+`SourceHandle`, `CallerHandle` and `HandlerHandle` that `Loopback::source`,
+`Loopback::caller` and `Loopback::handler` hand out, `Loopback::SLOTS` as the
+size of the call table the suite fills, and `Loopback::advance` and
+`Loopback::fail_next_settle` as the suite's clock hook and fault hook.
 
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under

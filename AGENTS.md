@@ -177,8 +177,14 @@ member; rsdl is the apex.
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked), and
                          ridl-descriptor's tests with its default
-                         features off, and with only dedup on
-    just lint            cargo clippy --workspace --all-targets -- -D warnings
+                         features off, and with only dedup on; ridl-rt without
+                         default features and with all features; ridl-loopback
+                         with node alone and with debug; ridl-rt-conformance
+                         with debug; ridl-transport-ws with descriptor
+    just lint            workspace clippy --all-targets -- -D warnings, plus
+                         ridl-rt with all features, ridl-loopback with node
+                         alone and with debug, ridl-rt-conformance with debug,
+                         and ridl-transport-ws with descriptor
     just wasm-check      cargo check for wasm32 with --no-default-features,
                          and ridl-descriptor with its default features off,
                          and with only dedup on, for a

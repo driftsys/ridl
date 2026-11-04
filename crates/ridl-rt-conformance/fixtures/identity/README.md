@@ -5,12 +5,14 @@
 `alpha.Foreign/Unit` (2) runs on `Other`, offering `mapped` and `remote`. The
 local catalog union is therefore `alpha`, `beta`, `mapped`.
 
-From the repository root, regenerate into an ignored directory and copy the
+From the repository root, regenerate into a temporary directory and copy the
 verified descriptor:
 
 ```sh
-cargo run --locked -p ridl-cli -- build crates/ridl-rt-conformance/fixtures/identity --emit deployment --out-dir .superpowers/codex/identity-generated
-cp .superpowers/codex/identity-generated/alpha.Bench.deployment.binfb crates/ridl-rt-conformance/fixtures/identity/identity.deployment.binfb
+identity_output=$(mktemp -d)
+trap 'rm -rf "$identity_output"' EXIT
+cargo run --locked -p ridl-cli -- build crates/ridl-rt-conformance/fixtures/identity --emit deployment --out-dir "$identity_output"
+cp "$identity_output/alpha.Bench.deployment.binfb" crates/ridl-rt-conformance/fixtures/identity/identity.deployment.binfb
 ```
 
 The committed `interfaces.lock` files and `instances.lock` fix the numbers.
