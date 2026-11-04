@@ -16,7 +16,7 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, those of the four
+//! // Every test of the ports every runtime presents, those of the five
 //! // extension flags, and those of a runtime that carries the trace
 //! // context.
 //! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams);
