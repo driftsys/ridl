@@ -903,3 +903,29 @@ name it.
 - **R-DS-2.** Streams stage 5a is open as driftsys/ridl#1222 and stage 5b has
   not started, so PR C is built after PR B without waiting for stage 5b. Of PR C
   and stage 5b, the one that lands second rebases onto the other.
+- **R-DS-3 (Task 9 stop, 2026-11-04).** Writing a remote provider's frames
+  straight into `SignalWriter` and `EventSink` cannot follow the consumer rules
+  of §5 to §9 that the "Reversed role" section applies: the ports cannot restore
+  an `Init`, cannot carry a detected-invalid sample, and cannot carry a corrupt
+  occurrence or the remote envelope and sequence. So:
+  - The provided session is a full consumer. It applies §5 to §9 itself (the
+    `Init` rule, the length refusal before verification, `Invalid(Detected)`
+    samples that keep the last good value, `Err(Corrupt)` occurrences that are
+    delivered, sequence gaps) exactly as a consuming client does.
+  - `ProvidedBackend` receives what a consumer's application receives, not port
+    writes: one call per delivered sample (interface, ordinal, provenance,
+    validity with its cause, payload, the remote stamp), one per delivered
+    occurrence (interface, ordinal, the remote sequence and envelope, `Ok` with
+    the payload or `Err` with the cause, and a gap when one was detected), and
+    one at the end of each commit group (consecutive frames with the same remote
+    stamp). Its `Ports` keep `Attached + Encoded + Clock + Handler` for the
+    calls. The builder names the types; the plan's Names section records them.
+  - `Providing<P>` maps those deliveries onto local ports, and its rustdoc lists
+    what the ports cannot carry: `Init` writes nothing (the twin has not
+    published; the last value on the machine stays); a live value is `set`, and
+    `commit` runs at the end of each group, stamped by the node; a declared
+    invalid value is `invalidate`; a detected-invalid value is `invalidate` too
+    (the machine reports `Declared`) and records a `Note`; a corrupt occurrence
+    is not raised and records a `Note`; a gap records a `Note`. The loss is
+    confined to the debug path and is stated in the book page.
+  - No frozen port trait changes.
