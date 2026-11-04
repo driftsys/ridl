@@ -9,8 +9,8 @@
 //! diverge: the future is the one source of a call's behaviour, and this
 //! module adds the thread's wait and one timeout per client. A signal read
 //! and a `subscribe_*` never wait, and delegate to the async client
-//! unchanged. `serve` is emitted only when the interface declares a command
-//! or a query; an event-only interface gets the client alone.
+//! unchanged. `serve` is emitted for a command or a query with a plain reply,
+//! including one with an upload; an event-only interface gets the client alone.
 //!
 //! What the timeout does and does not bound: the member's `max` is measured
 //! by the future on the port's clock, and the future reads that clock only
@@ -21,13 +21,15 @@
 //! returns only at the client's timeout (the async face design, F-3 "A
 //! limit, stated" and F-11). The emitted rustdoc says the same.
 //!
-//! The module is emitted only when the interface declares something that
-//! waits — an event, a command or a query; a signal-only interface's `Client`
-//! never blocks, so it gets no `blocking` module. A query with a streamed
-//! reply adds no method to it: the stream's pull API has no blocking form
-//! yet, so an interface whose only waiting member is such a query gets no
-//! `blocking` module either. When the module is emitted for an interface
-//! that also has such a query, its `Client` repeats the async client's
+//! The module is emitted for an event, a command or a query with a plain
+//! reply; a signal-only interface gets no `blocking` module. An upload command
+//! or an upload query with a plain reply adds blocking `serve` but no blocking
+//! client method. When the module is emitted,
+//! a signal, event or plain call adds its `Client`. A query with a streamed
+//! reply, including a duplex query, adds neither blocking form, so an interface
+//! whose only waiting members are such queries gets no `blocking` module.
+//! When the module is emitted for an interface that also has such a query,
+//! its `Client` repeats the async client's
 //! bounds, the stream extension included, and its `serve` repeats `serve`'s
 //! bound on `StreamHandler`.
 

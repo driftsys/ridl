@@ -2,10 +2,11 @@
 
 The Rust backend's generated face over `ridl-rt`: per interface, an async
 `Client`, a `Publisher`, a `Provider` trait, `serve`, and a `blocking` module
-holding the supported blocking client methods and blocking `serve`. An
-upload-only interface has blocking `serve` and no blocking `Client`. The first
-form of it was an in-process-only MVP, ahead of the frame specification and the
-transport, so the team had a face to write against; ADR-0018 decision 15
+holding the supported blocking client methods and blocking `serve`. An interface
+with only upload commands or upload queries with plain replies has blocking
+`serve` and no blocking `Client`. A duplex query adds neither blocking form. The
+first form of it was an in-process-only MVP, ahead of the frame specification
+and the transport, so the team had a face to write against; ADR-0018 decision 15
 restores the face as the runtime layer's "phase 2". `ridl build --emit rust`
 then emitted it, and the call surface was reshaped: the poll face the MVP made
 public — a send that returns a correlation, a poll per outcome, a one-pass
@@ -493,23 +494,26 @@ The call and sink share `RefCell<P>` and inline upload state in the client; port
 borrows last one synchronous operation and the pair is not `Send`. Before
 admission, the call future waits for a slot; byte and text writes are pending,
 and a named sink may retain its checked element. Dropping a sink before the call
-is admitted cancels the retained request with `Interrupted`. A command's
-acknowledgment is independent of upload errors: a successful acknowledgment
-stays successful. Dropping an unfinished sink after admission settles a command
-future that has not yet resolved with `Transport::Interrupted`, then forgets the
-call. Cancellation records wake the sibling value that last returned `Pending`;
-shared state retains and takes its waker. An unfinished sink aborts and forgets
-its call once when dropped. An ended sink does not withdraw an unclaimed call;
-its call value retains ownership until acknowledgment or reply, or cancellation
-by drop.
+is admitted cancels the retained request with its recorded error, or
+`Transport::Interrupted` when no error is recorded. A command's acknowledgment
+is independent of upload errors: a successful acknowledgment stays successful.
+Dropping an unfinished sink after admission settles an unresolved command or
+query with the error the sink already recorded, or `Transport::Interrupted` when
+no error is recorded, then forgets the call. Cancellation records wake the
+sibling value that last returned `Pending`; shared state retains and takes its
+waker. An unfinished sink aborts and forgets its call once when dropped. An
+ended sink does not withdraw an unclaimed call; its call value retains ownership
+until acknowledgment or reply, or cancellation by drop.
 
 The upload driver pulls a terminal outcome without waiting for consumer
 readiness when it holds no earlier element. It can retain one pulled element
 while the consumer is not ready, and accepts that element before pulling the
-next outcome. End and failure notifications are delivered once, and release the
-member slot. The byte consumer receives every held suffix before the next pull.
-`serve` panics if `ByteConsumer::poll_write` returns zero or more than the
-offered length for a nonempty buffer.
+next outcome. End and failure notifications are delivered once. They release the
+member slot for a command or an upload query with a plain reply. A duplex query
+retains its slot after upload end until its reply source finishes; upload
+failure releases it. The byte consumer receives every held suffix before the
+next pull. `serve` panics if `ByteConsumer::poll_write` returns zero or more
+than the offered length for a nonempty buffer.
 
 A plain upload query retains ordinary arguments for `Query::ensure`, calls
 `q_reply` after notifying its consumer of end, and settles the reply then. The
@@ -746,9 +750,13 @@ value `serve` resolves to.
 
 ## The blocking module
 
-Under `#[cfg(feature = "std")]`, and only when the interface declares an event,
-a command or a query — a signal-only interface's `Client` never waits, so it has
-no blocking form — the face module holds `pub mod blocking`:
+Under `#[cfg(feature = "std")]`, an event, a command or a query with a plain
+reply adds `pub mod blocking`. Upload commands and upload queries with plain
+replies add blocking `serve`, with no blocking client method. The module has a
+`Client` when the interface also has a signal, an event or a plain call. A
+signal-only interface gets no blocking module; neither does one with only
+streamed replies, including duplex queries. The following illustration shows the
+module for an interface with plain calls, a signal and an event:
 
 ```rust,ignore
 pub struct Client<P: /* the async Client's bounds, Encoded first */> {
@@ -778,7 +786,7 @@ impl<P: ...> Client<P> {
     pub fn average(&mut self, window: Window) -> Result<Average, ClientError>;
 }
 pub fn serve<H: Encoded + Handler + Wakeable, P: Provider>(h: H, p: &mut P, timeout: Option<Duration>)
-    -> Result<(), ProviderError>;   // only when the interface declares a command or a query
+    -> Result<(), ProviderError>;   // for a command or a query with a plain reply
 ```
 
 **Every waiting method is `ridl_rt::task::block_on` over the async method's

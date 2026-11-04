@@ -110,23 +110,24 @@ The package module holds:
 
 Each interface module holds the parts its own interactions need:
 
-| Item                | Present when the interface carries | Used by                                           |
-| ------------------- | ---------------------------------- | ------------------------------------------------- |
-| `Client`            | any interaction                    | the consumer: reads, subscriptions, calls         |
-| `Publisher`         | a signal or an event               | the producer: publishes values, raises events     |
-| `Provider` (trait)  | a command or a query               | the provider: the application implements it       |
-| `serve`             | a command or a query               | the provider: settles the calls waiting on a port |
-| `Event` (enum)      | an event                           | the consumer: one variant per event               |
-| `blocking` (module) | an event, a command or a query     | a thread that waits: the available blocking calls |
+| Item                | Present when the interface carries                | Used by                                           |
+| ------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| `Client`            | any interaction                                   | the consumer: reads, subscriptions, calls         |
+| `Publisher`         | a signal or an event                              | the producer: publishes values, raises events     |
+| `Provider` (trait)  | a command or a query                              | the provider: the application implements it       |
+| `serve`             | a command or a query                              | the provider: settles the calls waiting on a port |
+| `Event` (enum)      | an event                                          | the consumer: one variant per event               |
+| `blocking` (module) | an event, a command or a query with a plain reply | a thread that waits: the available blocking calls |
 
 An interface that carries only `fixed` declarations gets no face module, and
 neither does an `internal` interface, whose descriptors are crate-visible (the
 [design record][consumer-face] gives the reason). A signal-only interface gets a
 `Client` and a `Publisher` and no `blocking` module, because a signal read
 returns at once. Stream members have no blocking client methods. An interface
-with only streamed replies gets no `blocking` module; an interface with an
-upload gets a blocking `serve`, but no blocking `Client` unless it also has an
-event or a plain call.
+with only streamed replies, including duplex queries, gets no `blocking` module.
+An upload command or an upload query with a plain reply adds blocking `serve`,
+but no blocking client method. Where the module is emitted, it has a blocking
+`Client` only when the interface also has a signal, an event or a plain call.
 
 An interface the face cannot carry gets none of these items and no interaction
 descriptor. In their place, the package module holds a `__RIDL_NO_FACE_<NAME>`
