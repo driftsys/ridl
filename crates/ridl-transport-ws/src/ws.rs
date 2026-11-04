@@ -85,10 +85,37 @@ pub(crate) fn handshake<S: Read + Write>(
     max_version: u32,
     accept_origin: impl FnOnce(Option<&str>) -> bool,
 ) -> io::Result<Upgrade> {
+    handshake_selected(stream, Role::Consuming, max_version, accept_origin, |_| {
+        Ok(())
+    })
+}
+
+/// The client role accepted by one entry point.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Role {
+    Consuming,
+    Providing,
+}
+
+/// An embedder refusal before the WebSocket upgrade.
+pub(crate) enum HttpRefusal {
+    NotFound,
+    Conflict,
+    Capacity,
+}
+
+/// Checks origin and selects the path's backend before writing 101.
+pub(crate) fn handshake_selected<S: Read + Write>(
+    stream: &mut S,
+    role: Role,
+    max_version: u32,
+    accept_origin: impl FnOnce(Option<&str>) -> bool,
+    select: impl FnOnce(&str) -> Result<(), HttpRefusal>,
+) -> io::Result<Upgrade> {
     let Some(head) = read_head(stream)? else {
         return reject(stream, BAD_REQUEST);
     };
-    let request = match upgrade_request(&head, max_version) {
+    let request = match upgrade_request(&head, role, max_version) {
         Ok(request) => request,
         Err(Reject::BadRequest) => return reject(stream, BAD_REQUEST),
         Err(Reject::Version) => return reject(stream, BAD_VERSION),
@@ -97,6 +124,18 @@ pub(crate) fn handshake<S: Read + Write>(
         stream.write_all(FORBIDDEN)?;
         stream.flush()?;
         return Ok(Upgrade::Forbidden);
+    }
+    if let Err(reason) = select(request.target) {
+        let response: &[u8] = match reason {
+            HttpRefusal::NotFound => {
+                b"HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+            }
+            HttpRefusal::Conflict => {
+                b"HTTP/1.1 409 Conflict\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+            }
+            HttpRefusal::Capacity => BAD_REQUEST,
+        };
+        return reject(stream, response);
     }
     let response = format!(
         "HTTP/1.1 101 Switching Protocols\r\n\
@@ -143,6 +182,8 @@ fn read_head<S: Read>(stream: &mut S) -> io::Result<Option<Vec<u8>>> {
 struct UpgradeRequest<'a> {
     /// The `Sec-WebSocket-Key`.
     key: &'a str,
+    /// The request target, unchanged.
+    target: &'a str,
     /// The `Origin`, when the request has one.
     origin: Option<&'a str>,
     /// The subprotocol selected.
@@ -162,7 +203,11 @@ enum Reject {
 
 /// Returns the key, the origin and the subprotocol selected of `head` when
 /// `head` is an upgrade request this server accepts, and why not otherwise.
-fn upgrade_request(head: &[u8], max_version: u32) -> Result<UpgradeRequest<'_>, Reject> {
+fn upgrade_request(
+    head: &[u8],
+    role: Role,
+    max_version: u32,
+) -> Result<UpgradeRequest<'_>, Reject> {
     let head = std::str::from_utf8(head).map_err(|_| Reject::BadRequest)?;
     let head = head.strip_suffix("\r\n\r\n").ok_or(Reject::BadRequest)?;
     let mut lines = head.split("\r\n");
@@ -204,11 +249,14 @@ fn upgrade_request(head: &[u8], max_version: u32) -> Result<UpgradeRequest<'_>, 
     let mut host = false;
     let mut upgrade = false;
     let mut connection = false;
-    // Each `Sec-WebSocket-Protocol` line is read by itself, so the offers of
-    // every line are collected before one is selected.
-    let mut offers_v3 = false;
-    let mut offers_v2 = false;
-    let mut offers_v1 = false;
+    // Only names for this entry point's role can be selected.
+    let protocols = [
+        (frame::SUBPROTOCOL_V3, 3, Role::Consuming),
+        (frame::SUBPROTOCOL, 2, Role::Consuming),
+        (frame::SUBPROTOCOL_V1, FRAME_VERSION_V1, Role::Consuming),
+        (frame::SUBPROTOCOL_PROVIDER, 2, Role::Providing),
+    ];
+    let mut selected = None;
     let mut key = None;
     let mut origin = None;
     for (name, value) in headers {
@@ -220,9 +268,15 @@ fn upgrade_request(head: &[u8], max_version: u32) -> Result<UpgradeRequest<'_>, 
             connection |= has_token(value, "upgrade");
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Protocol") {
             for offer in value.split(',').map(|p| p.trim_matches([' ', '\t'])) {
-                offers_v3 |= offer == frame::SUBPROTOCOL_V3;
-                offers_v2 |= offer == frame::SUBPROTOCOL;
-                offers_v1 |= offer == frame::SUBPROTOCOL_V1;
+                for &(name, version, client_role) in &protocols {
+                    if offer == name
+                        && client_role == role
+                        && version <= max_version
+                        && selected.is_none_or(|(_, previous)| version > previous)
+                    {
+                        selected = Some((name, version));
+                    }
+                }
             }
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Key") {
             // One key, of 16 bytes in base64 (RFC 6455 §4.2.1 item 5).
@@ -242,18 +296,11 @@ fn upgrade_request(head: &[u8], max_version: u32) -> Result<UpgradeRequest<'_>, 
     if !(host && upgrade && connection) {
         return Err(Reject::BadRequest);
     }
-    let (subprotocol, frame_version) = if offers_v3 && max_version >= frame::FRAME_VERSION_3 {
-        (frame::SUBPROTOCOL_V3, frame::FRAME_VERSION_3)
-    } else if offers_v2 {
-        (frame::SUBPROTOCOL, frame::FRAME_VERSION)
-    } else if offers_v1 {
-        (frame::SUBPROTOCOL_V1, FRAME_VERSION_V1)
-    } else {
-        return Err(Reject::BadRequest);
-    };
+    let (subprotocol, frame_version) = selected.ok_or(Reject::BadRequest)?;
     let key = key.ok_or(Reject::BadRequest)?;
     Ok(UpgradeRequest {
         key,
+        target,
         origin,
         subprotocol,
         frame_version,

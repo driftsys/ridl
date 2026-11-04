@@ -8,6 +8,8 @@ mod config;
 #[cfg(feature = "descriptor")]
 mod descriptor;
 mod members;
+mod provided;
+mod provided_backend;
 mod session;
 
 use std::io::{self, Read, Write};
@@ -22,6 +24,8 @@ pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
 #[cfg(feature = "descriptor")]
 pub use descriptor::DescriptorError;
 pub use members::MemberTable;
+pub use provided::{serve_provided, serve_provided_selected, SelectionError};
+pub use provided_backend::{ProvidedBackend, Providing};
 
 use crate::frame::{
     AttachOutcome, Frame, Reason, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
@@ -136,7 +140,8 @@ pub enum Ended {
     /// [`serve_selected`] only when the caller's `max_version` is 3);
     /// or `403 Forbidden`,
     /// because the check set by [`Config::with_origin_check`] refused its
-    /// `Origin`.
+    /// `Origin`; or 404/409 because a providing backend selector refused
+    /// the path.
     Rejected,
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
@@ -165,6 +170,10 @@ pub enum Ended {
     /// for message capacity. Capability takes precedence if both checks fail.
     /// When ordinary attach checks pass, insufficient message capacity records
     /// the same note with either reply.
+    /// for message capacity. A capacity refusal records the same note.
+    ///
+    /// With [`serve_provided_selected`], capacity is checked after selection
+    /// and before upgrade; a refusal answers HTTP 400 and records the note.
     ConfigRefused,
 }
 
@@ -544,6 +553,49 @@ where
         Err(e) if timed_out(&e) => return Ended::LivenessTimeout,
         Err(e) => return Ended::Io(e.kind()),
     }
+    run_upgraded(conn, session, config)
+}
+
+/// The shared WebSocket loop delegates only frame and tick dispositions.
+trait Driver {
+    fn on_message(
+        &mut self,
+        msg: &[u8],
+        now: Instant,
+        out: &mut Vec<Vec<u8>>,
+        config: &Config,
+    ) -> Step;
+    fn tick(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step;
+    fn config_refused(&self) -> bool {
+        false
+    }
+}
+
+impl<B, S> Driver for Selection<B, S>
+where
+    B: Backend,
+    S: for<'a> FnOnce(RequestedCatalog<'a>) -> Option<B>,
+{
+    fn on_message(
+        &mut self,
+        msg: &[u8],
+        now: Instant,
+        out: &mut Vec<Vec<u8>>,
+        config: &Config,
+    ) -> Step {
+        Selection::on_message(self, msg, now, out, config)
+    }
+    fn tick(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
+        self.session
+            .as_mut()
+            .map_or(Step::Continue, |inner| inner.tick(now, out))
+    }
+    fn config_refused(&self) -> bool {
+        self.config_refused
+    }
+}
+
+fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config: &Config) -> Ended {
     if let Err(e) = conn.set_read_timeout(Some(config.poll_interval)) {
         return Ended::Io(e.kind());
     }
@@ -590,7 +642,7 @@ where
             let ended = flush(conn, &mut writer, &mut out, step);
             heard += wrote.elapsed();
             if let Some(ended) = ended {
-                return if session.config_refused && ended == Ended::ServerClosed(1000) {
+                return if session.config_refused() && ended == Ended::ServerClosed(1000) {
                     Ended::ConfigRefused
                 } else {
                     ended
@@ -603,10 +655,7 @@ where
         let now = Instant::now();
         if now.duration_since(ticked) >= config.poll_interval {
             ticked = now;
-            let step = session
-                .session
-                .as_mut()
-                .map_or(Step::Continue, |inner| inner.tick(now, &mut out));
+            let step = session.tick(now, &mut out);
             let wrote = Instant::now();
             let ended = flush(conn, &mut writer, &mut out, step);
             heard += wrote.elapsed();
