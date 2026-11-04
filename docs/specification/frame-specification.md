@@ -224,9 +224,9 @@ and the three stream forms `chunk`, `stream_end` and `stream_credit`, with their
 fields `stream` and `credit`, and the two `outcome` values `end` and
 `interrupted`. Frame version 2 is frame version 1 and the `block` form with its
 two fields `total` and `index`. Frame version 1 is the same frame without them,
-ten forms and no `total` and no `index`. Every other field, code and rule is the
-same in all versions. A session carries one frame version, which its `attach`
-names (§6.1).
+ten forms and no `total` and no `index`. Every other field and code, and every
+rule but `Utf8` (§9.6), is the same in all versions. A session carries one frame
+version, which its `attach` names (§6.1).
 
 **The fourteen forms**, by plane and direction:
 
@@ -1660,9 +1660,9 @@ Each item is left out on purpose, with the record that takes it.
   "Later versions" states, so that a version 1 or a version 2 peer is unchanged.
   A parameter stream on a command or a query is not built: no frame direction
   carries a consumer's `chunk` yet, and a `chunk` from the consumer is refused.
-  A `<string>` stream has no UTF-8 check on the frame yet; the `Rule` that names
-  that check has code 7 from frame version 3 (§9.6). Frame version 2 holds the
-  blocks of a `fixed` (§4, §5.5).
+  A `<string>` stream has no UTF-8 check on the frame yet; §9.6 gives the code
+  of the `Rule` that names that check. Frame version 2 holds the blocks of a
+  `fixed` (§4, §5.5).
 - **The family.** Which of ridl §3.2's five boundaries an interaction sits on is
   not on the frame, because `ridl-rt` 0.1 carries no `Family` and the IR has no
   family field yet; it returns as a `Member` field, a breaking change under

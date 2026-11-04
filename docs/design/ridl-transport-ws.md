@@ -1387,9 +1387,8 @@ No frozen port trait changes.
   set (driftsys/ridl#1196): the instances of a set are all attached, and the
   node does not choose between them.
 - A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
-  of a `<string>` stream. A chunk from the client is refused (D-27).
-  `Rule::Utf8` has wire code 7 from frame version 3, but no frame checks a
-  `<string>` stream against it yet.
+  of a `<string>` stream. A chunk from the client is refused (D-27). No frame
+  checks a `<string>` stream against `Rule::Utf8` yet.
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
   `temperature` signal to a TypeScript client, with the member table read from
