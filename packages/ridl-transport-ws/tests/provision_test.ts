@@ -16,6 +16,7 @@ import type {
   Target,
 } from "../mod.ts";
 import { FakeSocket } from "./fake_socket.ts";
+import { FIXED_LARGE, IFACE, pattern } from "../e2e/catalog.ts";
 import { nextSequence } from "../src/provision_calls.ts";
 // alpha.Face in the committed identity fixture: signal 1, event 2, command 3, query 4.
 const S: Target = { kind: Kind.Signal, iface: 1, ord: 1 };
@@ -191,7 +192,14 @@ Deno.test("provide_requires_selected_provider_protocol", async () => {
   }
 });
 Deno.test("provide_subscription_and_initial_state", async () => {
-  const h = await open();
+  let clocks = 0;
+  const h = await open({ clock: () => BigInt(++clocks) * 77n });
+  h.socket.deliver({ form: "read", target: S });
+  exact(h.socket, 1, sample(S, 0n, 77n, { provenance: "init" }));
+  h.socket.deliver({ form: "read", target: S });
+  exact(h.socket, 2, sample(S, 0n, 77n, { provenance: "init" }));
+  assert.equal(clocks, 1);
+  h.socket.sent.splice(1);
   assert.throws(() => h.p.publish(1, 1, bytes, 10n), SessionError);
   assert.throws(() => h.p.raise(1, 2, bytes, 10n), SessionError);
   h.socket.deliver({ form: "subscribe", target: S });
@@ -200,7 +208,7 @@ Deno.test("provide_subscription_and_initial_state", async () => {
     target: S,
     outcome: { outcome: "accepted" },
   });
-  exact(h.socket, 2, sample(S, 0n, 0n, { provenance: "init" }));
+  exact(h.socket, 2, sample(S, 0n, 77n, { provenance: "init" }));
   const value = bytes.slice();
   h.p.publish(1, 1, value, 10n);
   value[0] = 99;
@@ -358,6 +366,28 @@ Deno.test("provide_bounds_and_bad_direction", async () => {
   for (
     const message of [
       accepted,
+      {
+        form: "block",
+        target: { kind: Kind.Fixed, iface: IFACE, ord: FIXED_LARGE },
+        envelope: { seq: 1n, stamp: 0n },
+        total: 65_280,
+        index: 0,
+        payload: pattern(4096),
+      },
+      {
+        form: "response",
+        target: C,
+        envelope: { seq: 1n, stamp: 0n },
+        correlation: 1n,
+        outcome: { outcome: "accepted" },
+      },
+      {
+        form: "occurrence",
+        target: E,
+        envelope: { seq: 1n, stamp: 0n },
+        payload: bytes,
+      },
+      { form: "answer", target: S, outcome: { outcome: "accepted" } },
       { form: "attach", frameVersion: 2, encoding: 1, ...catalog },
       sample(S, 1n, 0n, { provenance: "init" }),
       new Uint8Array([12]),
@@ -395,7 +425,7 @@ Deno.test("provide_close_settles_pending_operations", async () => {
     finish({ outcome: "accepted" });
     await tick();
     assert.equal(h.socket.sent.length, 1);
-    assert.equal(clocks, 0);
+    assert.equal(clocks, 1);
     assert.deepEqual(h.notes, []);
     assert.throws(() => h.p.publish(1, 1, bytes, 0n), SessionError);
     h.socket.serverClose(1000);
@@ -511,7 +541,7 @@ Deno.test("provide_event_limits_read_and_error_outcomes", async () => {
     assert.deepEqual(f.outcome, outcome);
   }
   h.socket.deliver({ form: "read", target: S });
-  exact(h.socket, 2, sample(S, 0n, 0n, { provenance: "init" }));
+  exact(h.socket, 2, sample(S, 0n, 77n, { provenance: "init" }));
   assert.throws(() => h.p.publish(1, 1, bytes, 0n), SessionError); // read did not subscribe
   h.socket.deliver({ form: "subscribe", target: S });
   h.p.invalidate(1, 1, 19n);
@@ -614,5 +644,40 @@ Deno.test("provide_refusal_closed_reports_platform_result", async () => {
     code: 1001,
     reason: "peer left",
     refused: "unknown-catalog",
+  });
+});
+
+Deno.test("provide_raised_limits_match_consumer_limits", async () => {
+  const h = start({ members: [{ ...members[0], limit: 4096 }] });
+  h.pending.catch(() => {});
+  assert(h.socket, "a raised member limit must allow socket creation");
+  h.socket.open("ridl-ws-v2-provider");
+  attach(h);
+  const p = await h.pending;
+  h.socket.deliver({ form: "subscribe", target: S });
+  const payload = new Uint8Array(4096);
+  p.publish(1, 1, payload, 10n);
+  exact(h.socket, 3, sample(S, 1n, 10n, { provenance: "live", payload }));
+  assert.throws(
+    () => p.publish(1, 1, new Uint8Array(4097), 11n),
+    SessionError,
+  );
+});
+Deno.test("provide_failed_clock_does_not_advance_response_sequence", async () => {
+  let time = 77n;
+  const h = await open({ clock: () => time });
+  time = 1n << 63n;
+  // Unknown targets settle synchronously inside the message handler.
+  assert.throws(() => h.socket.deliver(req(S, 1n)), RangeError);
+  assert.equal(h.socket.sent.length, 1);
+  time = 88n;
+  h.socket.deliver(req(C, 2n));
+  await tick();
+  exact(h.socket, 1, {
+    form: "response",
+    target: C,
+    envelope: { seq: 1n, stamp: 88n },
+    correlation: 2n,
+    outcome: { outcome: "accepted" },
   });
 });

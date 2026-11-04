@@ -48,7 +48,7 @@ export interface ProvideOptions {
   ) => Promise<ProvidedResult> | ProvidedResult;
   webSocket?: ConnectOptions["webSocket"];
   onNote?: ConnectOptions["onNote"];
-  /** Response stamp clock in microseconds; defaults to UTC, as in connect. */
+  /** Channel creation and response stamp clock in microseconds; defaults to UTC, as in connect. */
   clock?: ConnectOptions["clock"];
 }
 const kinds: Record<MemberEntry["kind"], Kind> = {
@@ -94,8 +94,7 @@ export function provide(
       if (
         !(m.kind in kinds) ||
         (m.limit !== undefined &&
-          (!Number.isInteger(m.limit) || m.limit < 0 ||
-            m.limit > defaultCeiling(kinds[m.kind])))
+          (!Number.isSafeInteger(m.limit) || m.limit < 0))
       ) throw new RangeError("invalid member kind or payload limit");
     }
     const socket = (options.webSocket ?? ((u, p) => new WebSocket(u, p)))(url, [
@@ -119,6 +118,7 @@ export class Provision {
   #resolveEnded!: (ended: Ended) => void;
   #ended = false;
   #attached = false;
+  #creationStamp = 0n;
   #resolve: ((p: Provision) => void) | null;
   #reject: ((e: unknown) => void) | null;
   #members = new Map<string, MemberEntry>();
@@ -235,7 +235,10 @@ export class Provision {
       form: "publish",
       target,
       ...(this.#states.get(key(target)) ??
-        { envelope: { stamp: 0n, seq: 0n }, state: { provenance: "init" } }),
+        {
+          envelope: { stamp: this.#creationStamp, seq: 0n },
+          state: { provenance: "init" },
+        }),
     });
   }
   #message(event: MessageEvent): void {
@@ -323,6 +326,11 @@ export class Provision {
       reason = "catalog-mismatch";
     } else if (f.encoding !== encodingTag(this.options.encoding)) {
       reason = "encoding-unsupported";
+    }
+    if (!reason) {
+      const creation = this.#clock();
+      stamp(creation);
+      this.#creationStamp = creation;
     }
     this.#send({
       form: "attached",

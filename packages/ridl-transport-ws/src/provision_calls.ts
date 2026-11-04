@@ -43,13 +43,14 @@ export class ProvidedCalls {
     this.#highest = seq;
     const settle = (outcome: ResponseOutcome) => {
       if (this.#ended) return;
+      const stamp = this.clock();
       this.#active.delete(seq);
       this.#sequence = nextSequence(this.#sequence);
       const bytes = encode({
         form: "response",
         target: frame.target,
         correlation: seq,
-        envelope: { seq: this.#sequence, stamp: this.clock() },
+        envelope: { seq: this.#sequence, stamp },
         outcome,
       });
       this.#kept.set(seq, bytes);
