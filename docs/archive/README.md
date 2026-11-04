@@ -845,7 +845,7 @@ provenance. Nothing here is normative — the current references live in
   Archived on 2026-11-04, with the pull request that builds the injection, after
   driftsys/ridl#1220 (identities and attach rules) and driftsys/ridl#1227
   (listening). The plan's "Delegated rulings" section records the decisions
-  taken during the build (R-DS-1 to R-DS-7). The durable records are
+  taken during the build and review (R-DS-1 to R-DS-11). The durable records are
   [the `ridl-transport-ws` design](../design/ridl-transport-ws.md) (D-16, D-19
   to D-23, D-28 and D-29),
   [the TypeScript client design](../design/ridl-transport-ws-ts.md) (D-21 and

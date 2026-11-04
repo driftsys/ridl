@@ -956,3 +956,22 @@ name it.
   client liveness timer, and the server's liveness check is the one that runs.
   driftsys/ridl#991 already asks the frame specification to state what such a
   client does; it covers the reversed role too.
+- **R-DS-8 (PR C review, 2026-11-04).** `serve` and `serve_selected` retain
+  their existing behavior: ping and pong traffic resets the liveness clock even
+  before `attach`. Only `serve_provided` and `serve_provided_selected` bound the
+  wait for `attached` by `liveness_timeout` after upgrade, regardless of ping
+  and pong traffic.
+- **R-DS-9 (PR C review, 2026-11-04).** Frame specification §11.1 item 4 allows
+  close code 1011 for an internal failure after acceptance. The provided session
+  uses it, including when the local `Handler` refuses to serve a member of the
+  table when the session starts.
+- **R-DS-10 (PR C review, 2026-11-04).** The TypeScript provider's `publish` and
+  `invalidate` store the current signal state before subscription; that state is
+  sent as the initial value after the subscription's `answer`. A `raise` without
+  a subscription is not delivered and is recorded through `onNote` as
+  `discarded` with reason `not-subscribed`.
+- **R-DS-11 (PR C review, 2026-11-04).** The injection path names a catalog by
+  name. When the descriptor holds two versions with that name, injection selects
+  the first in descriptor order, and the provider must match its hash. The URL
+  cannot select the other version. This limitation is documented; listening
+  selection still prefers a matching name and hash.
