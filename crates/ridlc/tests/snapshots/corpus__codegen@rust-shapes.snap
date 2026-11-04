@@ -3142,6 +3142,126 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
     },
     {
       "name": {
+        "rust": "StationDumpParams",
+        "wire": "StationDumpParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 31,
+      "interaction": {
+        "interface": 0,
+        "slot": 14,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationLoadParams",
+        "wire": "StationLoadParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 32,
+      "interaction": {
+        "interface": 0,
+        "slot": 15,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationFeedParams",
+        "wire": "StationFeedParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 33,
+      "interaction": {
+        "interface": 0,
+        "slot": 16,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "StationBlendParams",
+        "wire": "StationBlendParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 34,
+      "interaction": {
+        "interface": 0,
+        "slot": 17,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
         "rust": "ArchiveBoundsParams",
         "wire": "ArchiveBoundsParams"
       },
@@ -3161,7 +3281,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 31,
+      "flatbuffersTable": 35,
       "interaction": {
         "interface": 1,
         "slot": 2,
@@ -3254,7 +3374,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 32,
+      "flatbuffersTable": 36,
       "interaction": {
         "interface": 1,
         "slot": 2,
@@ -3284,7 +3404,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 33,
+      "flatbuffersTable": 37,
       "interaction": {
         "interface": 1,
         "slot": 4,
@@ -3314,7 +3434,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 34,
+      "flatbuffersTable": 38,
       "interaction": {
         "interface": 2,
         "slot": 1,
@@ -4642,6 +4762,509 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               }
             }
           }
+        },
+        {
+          "ordinal": 15,
+          "interaction": {
+            "name": {
+              "declared": "dump",
+              "snake": "dump",
+              "camel": "Dump",
+              "screaming": "DUMP",
+              "pascal": "Dump"
+            },
+            "kind": "KIND_QUERY",
+            "row": 13,
+            "doc": "Streams bytes.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "33"
+              },
+              "podbuf": {
+                "bytes": "8"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_BYTES",
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                    }
+                  },
+                  "podbuf": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                    }
+                  }
+                }
+              }
+            ],
+            "query": {
+              "params": [],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "primitive": "PRIMITIVE_TYPE_BYTES"
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "requestTuple": {
+                "index": 7
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 16,
+          "interaction": {
+            "name": {
+              "declared": "load",
+              "snake": "load",
+              "camel": "Load",
+              "screaming": "LOAD",
+              "pascal": "Load"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 14,
+            "doc": "Receives bytes.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "33"
+              },
+              "podbuf": {
+                "bytes": "8"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 1,
+                "form": "STREAM_FORM_BYTES",
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                    }
+                  },
+                  "podbuf": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                    }
+                  }
+                }
+              }
+            ],
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "data",
+                    "snake": "data",
+                    "camel": "Data",
+                    "screaming": "DATA",
+                    "pascal": "Data"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "primitive": "PRIMITIVE_TYPE_BYTES"
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
+                }
+              ],
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "shape": "SHAPE_NONE",
+              "requestTuple": {
+                "index": 8
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 17,
+          "interaction": {
+            "name": {
+              "declared": "feed",
+              "snake": "feed",
+              "camel": "Feed",
+              "screaming": "FEED",
+              "pascal": "Feed"
+            },
+            "kind": "KIND_COMMAND",
+            "row": 15,
+            "doc": "Receives inner elements.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "33"
+              },
+              "podbuf": {
+                "bytes": "8"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 1,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 137
+                  },
+                  "flatbuffers": {
+                    "bounded": 196
+                  },
+                  "podbuf": {
+                    "bounded": 153
+                  }
+                }
+              }
+            ],
+            "command": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "samples",
+                    "snake": "samples",
+                    "camel": "Samples",
+                    "screaming": "SAMPLES",
+                    "pascal": "Samples"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": {
+                        "reference": "Inner",
+                        "resolved": true,
+                        "package": "lint.shapes",
+                        "foreign": false,
+                        "index": 17,
+                        "kind": "DECL_KIND_STRUCT"
+                      }
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
+                }
+              ],
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "shape": "SHAPE_NONE",
+              "requestTuple": {
+                "index": 9
+              }
+            }
+          }
+        },
+        {
+          "ordinal": 18,
+          "interaction": {
+            "name": {
+              "declared": "blend",
+              "snake": "blend",
+              "camel": "Blend",
+              "screaming": "BLEND",
+              "pascal": "Blend"
+            },
+            "kind": "KIND_QUERY",
+            "row": 16,
+            "doc": "Transforms uploaded inner values.",
+            "labels": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "bytes": "0"
+              },
+              "flatbuffers": {
+                "bytes": "33"
+              },
+              "podbuf": {
+                "bytes": "8"
+              }
+            },
+            "family": "FAMILY_DISPATCH",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 1000000 us",
+                "responseBound": {
+                  "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 137
+                  },
+                  "flatbuffers": {
+                    "bounded": 196
+                  },
+                  "podbuf": {
+                    "bounded": 153
+                  }
+                }
+              },
+              {
+                "no": 1,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "Inner",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 17,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 137
+                  },
+                  "flatbuffers": {
+                    "bounded": 196
+                  },
+                  "podbuf": {
+                    "bounded": 153
+                  }
+                }
+              }
+            ],
+            "query": {
+              "params": [
+                {
+                  "name": {
+                    "declared": "samples",
+                    "snake": "samples",
+                    "camel": "Samples",
+                    "screaming": "SAMPLES",
+                    "pascal": "Samples"
+                  },
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": {
+                        "reference": "Inner",
+                        "resolved": true,
+                        "package": "lint.shapes",
+                        "foreign": false,
+                        "index": 17,
+                        "kind": "DECL_KIND_STRUCT"
+                      }
+                    }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
+                }
+              ],
+              "reply": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": {
+                      "reference": "Inner",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 17,
+                      "kind": "DECL_KIND_STRUCT"
+                    }
+                  }
+                }
+              },
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "bounded": 0
+                },
+                "flatbuffers": {
+                  "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "requestTuple": {
+                "index": 10
+              }
+            }
+          }
         }
       ],
       "tableBudget": {
@@ -4649,10 +5272,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           "bytes": "3672"
         },
         "flatbuffers": {
-          "bytes": "6226"
+          "bytes": "6358"
         },
         "podbuf": {
-          "bytes": "3992"
+          "bytes": "4024"
         }
       },
       "links": [],
@@ -5031,7 +5654,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 8
+                    "index": 12
                   }
                 }
               },
@@ -5069,10 +5692,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 7
+                "index": 11
               },
               "replyTuple": {
-                "index": 8
+                "index": 12
               }
             }
           }
@@ -5360,7 +5983,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               },
               "shape": "SHAPE_NONE",
               "requestTuple": {
-                "index": 9
+                "index": 13
               }
             }
           }
@@ -5625,7 +6248,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 10
+                "index": 14
               }
             }
           }
@@ -5658,7 +6281,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   "services": [],
   "catalog": {
     "package": "lint.shapes",
-    "hash": "nNAzO+s30I+RuCIZG5btr7vfMuoTaR7kj36Hiv1g2YA=",
+    "hash": "4pNulIezMScQ77wSQmfzfpIXNu3rUAebKpqnTzRUW8Q=",
     "retired": [],
     "compatible": []
   },
@@ -5815,7 +6438,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 8,
-        "maxSize": 53
+        "maxSize": 33
       },
       {
         "declaration": 0,
@@ -5827,6 +6450,30 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 10,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 11,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 12,
+        "maxSize": 53
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 13,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 14,
         "maxSize": 33
       }
     ],
@@ -6687,10 +7334,34 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "tuple": 6
       },
       {
-        "name": "ArchiveBoundsParams",
+        "name": "StationDumpParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 7
+      },
+      {
+        "name": "StationLoadParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 8
+      },
+      {
+        "name": "StationFeedParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 9
+      },
+      {
+        "name": "StationBlendParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 10
+      },
+      {
+        "name": "ArchiveBoundsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 11
       },
       {
         "name": "ArchiveBoundsReply",
@@ -6719,19 +7390,19 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         ],
         "vtableSlots": 2,
-        "tuple": 8
+        "tuple": 12
       },
       {
         "name": "ArchiveReplayParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 9
+        "tuple": 13
       },
       {
         "name": "ProbeSampleParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 10
+        "tuple": 14
       }
     ]
   },
@@ -7222,7 +7893,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "form": {
               "descriptor": {
                 "map": {
-                  "entryHead": 18,
+                  "entryHead": 22,
                   "elemSize": 16,
                   "min": "0",
                   "max": "3"
@@ -7423,15 +8094,15 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "arms": [
                     {
                       "ordinal": 1,
-                      "head": 19
+                      "head": 23
                     },
                     {
                       "ordinal": 2,
-                      "head": 20
+                      "head": 24
                     },
                     {
                       "ordinal": 3,
-                      "head": 21
+                      "head": 25
                     }
                   ]
                 }
@@ -7484,11 +8155,11 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "arms": [
                     {
                       "ordinal": 1,
-                      "head": 23
+                      "head": 27
                     },
                     {
                       "ordinal": 2,
-                      "head": 24
+                      "head": 28
                     }
                   ]
                 }
@@ -7727,6 +8398,34 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "tuple": 7
       },
       {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 8
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 9
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 10
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 11
+      },
+      {
         "size": 8,
         "align": 8,
         "fields": [
@@ -7767,21 +8466,21 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 6
           }
         ],
-        "tuple": 8
+        "tuple": 12
       },
       {
         "size": 0,
         "align": 8,
         "fields": [],
         "pads": [],
-        "tuple": 9
+        "tuple": 13
       },
       {
         "size": 0,
         "align": 8,
         "fields": [],
         "pads": [],
-        "tuple": 10
+        "tuple": 14
       },
       {
         "size": 16,
@@ -8265,7 +8964,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "form": {
               "descriptor": {
                 "map": {
-                  "entryHead": 22,
+                  "entryHead": 26,
                   "elemSize": 16,
                   "min": "0",
                   "max": "3"

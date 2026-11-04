@@ -18,8 +18,7 @@ Built: the stream port of `ridl-rt`, the `streams` entries of the catalog
 descriptor, frame version 3, which carries a query's streamed reply over
 WebSocket
 ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
-and the Rust face for a streamed reply of named elements. Not carried yet:
-parameter streams, byte streams and text streams (driftsys/ridl#1116).
+and the Rust face described in the 2026-11-04 amendment below.
 
 Amended 2026-10-31. Decision 10's example spelled the result union inline as
 `<DocChunk | DocError>`, which the grammar does not admit; the example now
@@ -30,6 +29,14 @@ as ridl §12.4 does. Decisions 9 and 11 are built as the stream port of `ridl-rt
 Amended 2026-11-02. The frame version and the Rust face for a streamed reply of
 named elements are built: frame version 3 carries a query's streamed reply over
 WebSocket. The other cases of this record are not carried by a transport yet.
+
+Amended 2026-11-04. Over `ridl-loopback`, the Rust face carries byte, text and
+named-element reply streams, commands with one parameter stream, and queries
+with one parameter stream and a plain or named-element streamed reply. The
+WebSocket upload direction, the corresponding TypeScript methods, and calls with
+two or more parameter streams are not built; the last omission is tracked as
+driftsys/ridl#1224. A query with an upload and a byte or text reply stream also
+remains outside the face.
 
 ## Context
 
@@ -277,7 +284,8 @@ order the questions were listed.
   accepted, so no deployed behaviour changed. Frame version 3 now carries a
   query's streamed reply over WebSocket
   ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3));
-  parameter, byte and text streams are not carried yet.
+  the Rust face carries the forms listed in the Status amendment of 2026-11-04
+  over `ridl-loopback`.
 - The stream port of `ridl-rt`, the WebSocket stream framing, and the codegen
   for `<T>` and `<bytes>` in the Rust and TypeScript backends are new work. The
   port adds fields to `Member` or `PayloadInfo`, so it is a breaking change of

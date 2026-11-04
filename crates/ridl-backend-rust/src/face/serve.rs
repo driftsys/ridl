@@ -28,12 +28,18 @@ pub(super) fn serve(
     queries: &[Call],
     streams: &[Call],
 ) -> TokenStream {
-    let number = interface_number(iface);
     let ordinals = commands
         .iter()
-        .chain(queries.iter())
-        .chain(streams.iter())
+        .chain(queries)
+        .chain(streams)
         .map(|call| &call.member.ordinal);
+    let all_streams: Vec<&Call> = streams
+        .iter()
+        .chain(commands.iter().filter(|call| call.upload()))
+        .chain(queries.iter().filter(|call| call.upload()))
+        .collect();
+    let streams = all_streams.as_slice();
+    let number = interface_number(iface);
     let budget = Literal::usize_unsuffixed(SERVE_BUDGET);
     // The handler is bound on `StreamHandler` only when the interface
     // declares a stream member, so an interface without one is served over
@@ -53,10 +59,20 @@ pub(super) fn serve(
     // impls, which are what encodes and decodes. The element buffers of the
     // stream slots project through each element's `Payload`, so the struct
     // carries those predicates as well.
-    let elements: Vec<&str> = streams
+    let mut elements: Vec<&str> = streams
         .iter()
-        .map(|call| call.reply_type.unwrap_or(call.arg_type))
+        .filter(|call| !call.raw_stream())
+        .map(|call| {
+            call.input
+                .unwrap_or_else(|| call.reply_type.unwrap_or(call.arg_type))
+        })
         .collect();
+    for call in streams.iter().filter(|call| call.duplex()) {
+        let reply = call.reply_type.unwrap();
+        if !elements.contains(&reply) {
+            elements.push(reply);
+        }
+    }
     let buffer_bound = encoding_bounds(&port, iface, &elements);
     let stream_items = stream_items(streams);
     let streams_field = (!streams.is_empty()).then(|| quote! { streams: Streams<H, P>, });
@@ -65,6 +81,7 @@ pub(super) fn serve(
         quote! {
             streams: Streams {
                 __started: false,
+                __port: ::core::marker::PhantomData,
                 #(#slots: None,)*
             },
         }
@@ -78,6 +95,20 @@ pub(super) fn serve(
     let drive = streams.iter().map(|call| {
         let method = &call.member.method;
         let source = ident(call.member.camel);
+        if call.upload() {
+            let driver = quote::format_ident!("drive_input_{}", method);
+            if call.query_upload(){return quote! {again |= #driver::<H,P>(&mut this.handler,&mut *this.provider,&mut this.streams.#method,cx,&mut budget);};}
+            return quote! { again |= #driver::<H,P>(&mut this.handler,&mut this.streams.#method,cx,&mut budget); };
+        }
+        if call.raw_stream() {
+            let limit = Literal::usize_unsuffixed(call.limit);
+            let text = call.stream_form == Some(ridl_ir::codegen::v1::StreamForm::Text);
+            return quote! {
+                again |= drive_bytes::<H, P::#source, #limit, #text>(
+                    &mut this.handler, &mut this.streams.#method, cx, &mut budget,
+                );
+            };
+        }
         let element = ty(call.reply_type.unwrap_or(call.arg_type));
         quote! {
             again |= drive_stream::<H, #element, P::#source>(
@@ -107,15 +138,26 @@ pub(super) fn serve(
     let serve_drop = (!streams.is_empty()).then(|| {
         let slots = streams.iter().map(|call| {
             let method = &call.member.method;
+            let stream_no = if call.upload() {
+                quote! { ::ridl_rt::contract::StreamNo(1) }
+            } else {
+                quote! { ::ridl_rt::port::REPLY_STREAM }
+            };
+            let binding=if call.upload() && !call.duplex(){quote! {mut stream}}else{quote! {stream}};
+            let notify=if call.query_upload(){
+                if call.duplex(){quote! {let _=self.handler.abort_claim(stream.claim,::ridl_rt::port::REPLY_STREAM,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}}
+                else {let consumer=if call.raw_stream(){quote! {::ridl_rt::face::ByteConsumer}}else{quote! {::ridl_rt::face::Consumer}};quote! {#consumer::failed(&mut stream.consumer,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));let _=self.handler.settle(stream.claim,Err(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted)));}}
+            }else if call.upload(){let consumer=if call.raw_stream(){quote! {::ridl_rt::face::ByteConsumer}}else{quote! {::ridl_rt::face::Consumer}};quote! {#consumer::failed(&mut stream.consumer,::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}}else{TokenStream::new()};
             quote! {
-                if let Some(stream) = self.streams.#method.take() {
+                if let Some(#binding) = self.streams.#method.take() {
                     let _ = self.handler.abort_claim(
                         stream.claim,
-                        ::ridl_rt::port::REPLY_STREAM,
+                        #stream_no,
                         ::ridl_rt::error::CallError::Transport(
                             ::ridl_rt::error::Transport::Interrupted,
                         ),
                     );
+                    #notify
                 }
             }
         });
@@ -157,7 +199,37 @@ pub(super) fn serve(
             "the comparison is made once, before `Handler::serve` is called",
         ),
     );
-    let serve_doc = if streams.is_empty() {
+    let serve_doc = if streams
+        .iter()
+        .any(|call| !call.upload() && call.raw_stream())
+    {
+        format!(
+            "{serve_doc}\n\n# Streamed replies\n\nEach query with a streamed reply and no upload returns \
+             its reply source after the arguments and require clauses pass. Each serve \
+             poll first drives running streams, then takes claims, sharing a budget of \
+             {SERVE_BUDGET}. A source is polled at most once for each running call and \
+             spends one budget unit. A chunk held while the port window is full is \
+             retried before another source poll.\n\nA named-element source uses \
+             Source::poll_next: each element is encoded and checked in an inline \
+             Payload buffer before transmission. Ready(None) ends it; \
+             Ready(Some(Err(Interrupted))) interrupts it. A byte or text source uses \
+             ByteSource::poll_read and fills an inline byte buffer without element \
+             encoding: Ready(Ok(0)) ends it and Ready(Err(Interrupted)) interrupts it. \
+             A partial buffer is pushed when the source is pending or ends. Text chunks \
+             preserve complete code points; invalid text or an incomplete code point at \
+             normal end is refused with Contract::InvalidValue and Rule::Utf8, after \
+             the valid prefix.\n\nAn end settles the reply claim successfully; an \
+             interruption stops it with Transport::Interrupted. PushError::TooLarge \
+             stops it with Transport::Interrupted, and PushError::Failed ends the claim \
+             with the caller's outcome. The source is dropped when its stream ends or \
+             stops. One stream runs per member; a concurrent call is settled \
+             Transport::Busy. A caller's forget is detected by the next push, so a \
+             pending source can keep its member busy until it yields again. Ready \
+             progress wakes serve for another poll; a pending source registers its own \
+             waker. Dropping serve interrupts every running stream and drops its \
+             source."
+        )
+    } else if !streams.iter().any(|call| !call.upload()) {
         serve_doc
     } else {
         format!(
@@ -190,6 +262,24 @@ pub(super) fn serve(
              stops every stream it still drives with `Transport::Interrupted` \
              and drops its source."
         )
+    };
+    let serve_doc = if streams.iter().any(|call| call.upload()) {
+        format!(
+            "{serve_doc}\n\n# Parameter streams\n\nCommands and queries with one \
+             parameter stream return a Consumer for named elements or a ByteConsumer \
+             for bytes and text. Commands acknowledge delivery before driving the \
+             consumer. A plain query reply is computed after the upload ends; a \
+             duplex query drives the consumer and its named-element reply Source \
+             concurrently. Each member has one active slot. Checked elements wait \
+             for readiness; a held element or byte suffix is offered before another \
+             pull. With nothing held, end and failure are delivered immediately, \
+             regardless of readiness. Terminal notifications occur once. Dropping \
+             serve interrupts unfinished uploads. ByteConsumer::poll_write must \
+             accept between one byte and the offered length for nonempty input; \
+             violating this contract panics."
+        )
+    } else {
+        serve_doc
     };
     let future_doc = format!(
         "The future `serve` returns over interface `{iface_name}`. It holds \
@@ -381,52 +471,67 @@ pub(super) fn serve(
 /// other refusal
 /// leaves nothing to settle. Either way the caller drops the slot, and the
 /// source with it.
-fn stream_items(streams: &[Call]) -> TokenStream {
+fn stream_items(streams: &[&Call]) -> TokenStream {
     if streams.is_empty() {
         return TokenStream::new();
     }
     let port = ident("H");
-    let elements: Vec<&str> = streams
+    let mut elements: Vec<&str> = streams
         .iter()
-        .map(|call| call.reply_type.unwrap_or(call.arg_type))
+        .filter(|call| !call.raw_stream())
+        .map(|call| {
+            call.input
+                .unwrap_or_else(|| call.reply_type.unwrap_or(call.arg_type))
+        })
         .collect();
+    for call in streams.iter().filter(|call| call.duplex()) {
+        let reply = call.reply_type.unwrap();
+        if !elements.contains(&reply) {
+            elements.push(reply);
+        }
+    }
     let element_bounds = elements.iter().map(|name| {
         let path = ty(name);
         quote! { #path: ::ridl_rt::payload::Payload<#port::Encoding>, }
     });
-    let slots = streams.iter().zip(&elements).map(|(call, element)| {
+    let slots = streams.iter().map(|call| {
         let method = &call.member.method;
         let source = ident(call.member.camel);
-        let path = ty(element);
-        quote! {
-            #method: ::core::option::Option<StreamSlot<P::#source, ElementBuffer<H, #path>>>,
+        if call.upload() { let slot=super::upload::slot_type(call); return quote! { #method: #slot, }; }
+        if call.raw_stream() {
+            let limit = Literal::usize_unsuffixed(call.limit);
+            quote! { #method: Option<ByteStreamSlot<P::#source, #limit>>, }
+        } else {
+            let path = ty(call.reply_type.unwrap_or(call.arg_type));
+            quote! { #method: ::core::option::Option<StreamSlot<P::#source, ElementBuffer<H, #path>>>, }
         }
     });
-    // `drive_stream` is generic over the element, so its failure arms name
-    // no type.
     let failures = encode_failure_arms("a stream element", "its buffer");
-    quote! {
-        type ElementBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
-            <H as ::ridl_rt::port::Encoded>::Encoding,
-        >>::Buffer;
+    let input_calls: Vec<&Call> = streams
+        .iter()
+        .copied()
+        .filter(|call| call.upload())
+        .collect();
+    let input_items = super::upload::slot_items(&input_calls);
+    let has_reply_elements = streams
+        .iter()
+        .any(|call| (call.duplex() || !call.upload()) && (!call.raw_stream() || call.duplex()));
+    let element_types = has_reply_elements.then(|| {
+        quote! {
+            type ElementBuffer<H, T> = <T as ::ridl_rt::payload::Payload<
+                <H as ::ridl_rt::port::Encoded>::Encoding,
+            >>::Buffer;
 
-        struct StreamSlot<S, B> {
-            claim: ::ridl_rt::port::ClaimId,
-            source: S,
-            buffer: B,
-            held: ::core::option::Option<(usize, usize)>,
+            struct StreamSlot<S, B> {
+                claim: ::ridl_rt::port::ClaimId,
+                source: S,
+                buffer: B,
+                held: ::core::option::Option<(usize, usize)>,
+            }
+
         }
-
-        pub(crate) struct Streams<H, P>
-        where
-            H: ::ridl_rt::port::Encoded,
-            P: Provider,
-            #(#element_bounds)*
-        {
-            __started: bool,
-            #(#slots)*
-        }
-
+    });
+    let element_driver = has_reply_elements.then(|| quote! {
         fn drive_stream<H, T, S>(
             h: &mut H,
             slot: &mut ::core::option::Option<StreamSlot<S, ElementBuffer<H, T>>>,
@@ -536,25 +641,144 @@ fn stream_items(streams: &[Call]) -> TokenStream {
             }
         }
 
-        fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
-            h: &mut H,
+    });
+    let byte_items = streams
+        .iter()
+        .any(|call| !call.upload() && call.raw_stream())
+        .then(byte_stream_items);
+    let stop = streams
+        .iter()
+        .any(|call| !call.upload() || call.duplex())
+        .then(|| {
+            quote! {
+                fn stop_stream<H: ::ridl_rt::port::StreamHandler>(
+                    h: &mut H,
+                    claim: ::ridl_rt::port::ClaimId,
+                    error: ::ridl_rt::port::PushError,
+                ) {
+                    match error {
+                        ::ridl_rt::port::PushError::Failed(_) => {
+                            let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+                        }
+                        ::ridl_rt::port::PushError::TooLarge { .. } => {
+                            let _ = h.abort_claim(
+                                claim,
+                                ::ridl_rt::port::REPLY_STREAM,
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Interrupted,
+                                ),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+    quote! {
+        #input_items
+        #element_types
+        #byte_items
+        pub(crate) struct Streams<H, P>
+        where
+            H: ::ridl_rt::port::Encoded,
+            P: Provider,
+            #(#element_bounds)*
+        {
+            __started: bool,
+            __port: ::core::marker::PhantomData<H>,
+            #(#slots)*
+        }
+        #element_driver
+        #stop
+    }
+}
+
+/// Byte sources are read within the shared claim budget. One staged chunk
+/// and up to three carried bytes remain inline while a push is blocked.
+fn byte_stream_items() -> TokenStream {
+    quote! {
+        struct ByteStreamSlot<S, const N: usize> {
             claim: ::ridl_rt::port::ClaimId,
-            error: ::ridl_rt::port::PushError,
-        ) {
-            match error {
-                ::ridl_rt::port::PushError::Failed(_) => {
-                    let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM);
+            source: S,
+            buffer: [u8; N],
+            len: usize,
+            held: Option<usize>,
+            terminal: Option<Result<(), ::ridl_rt::error::CallError>>,
+        }
+
+        fn drive_bytes<H, S, const N: usize, const TEXT: bool>(
+            h: &mut H,
+            slot: &mut Option<ByteStreamSlot<S, N>>,
+            cx: &mut ::core::task::Context<'_>,
+            budget: &mut usize,
+        ) -> bool
+        where
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamHandler + ::ridl_rt::port::Wakeable,
+            S: ::ridl_rt::face::ByteSource,
+        {
+            let Some(stream) = slot.as_mut() else { return false; };
+            let claim = stream.claim;
+            let interest = ::ridl_rt::port::Interest::ClaimStream(claim, ::ridl_rt::port::REPLY_STREAM);
+            let mut pending = false;
+            let mut polled = false;
+            loop {
+                if let Some(end) = stream.held {
+                    h.wake_on(interest, cx.waker());
+                    match h.push_claim(claim, ::ridl_rt::port::REPLY_STREAM, &stream.buffer[..end]) {
+                        Ok(taken) if taken == end => {
+                            stream.buffer.copy_within(end..stream.len, 0);
+                            stream.len -= end;
+                            stream.held = None;
+                        }
+                        Ok(_) => return false,
+                        Err(error) => { stop_stream(h, claim, error); *slot = None; return false; }
+                    }
+                    if pending { return false; }
                 }
-                ::ridl_rt::port::PushError::TooLarge { .. } => {
-                    let _ = h.abort_claim(
-                        claim,
-                        ::ridl_rt::port::REPLY_STREAM,
-                        ::ridl_rt::error::CallError::Transport(
-                            ::ridl_rt::error::Transport::Interrupted,
-                        ),
-                    );
+                if let (0, Some(terminal)) = (stream.len, stream.terminal) {
+                    match terminal {
+                        Ok(()) => { let _ = h.end_claim(claim, ::ridl_rt::port::REPLY_STREAM); }
+                        Err(error) => { let _ = h.abort_claim(claim, ::ridl_rt::port::REPLY_STREAM, error); }
+                    }
+                    *slot = None;
+                    return false;
                 }
-                _ => {}
+                if stream.len == N || pending || stream.terminal.is_some() {
+                    let mut end = stream.len;
+                    let text_error = if TEXT {
+                        ::core::str::from_utf8(&stream.buffer[..stream.len]).err()
+                    } else { None };
+                    if let Some(error) = text_error {
+                            end = error.valid_up_to();
+                            if error.error_len().is_some() || stream.terminal.is_some() {
+                                stream.terminal = Some(Err(::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::InvalidValue(::ridl_rt::payload::Violation {
+                                        type_name: Some("string"), rule: ::ridl_rt::payload::Rule::Utf8,
+                                    }),
+                                )));
+                                // Keep the valid prefix to send before refusing the suffix.
+                                stream.len = end;
+                            }
+                    }
+                    if end != 0 { stream.held = Some(end); continue; }
+                    if stream.terminal.is_some() { continue; }
+                    if pending { return false; }
+                }
+                // polled limits each call to one source poll; the debit shares the budget across claims.
+                if polled || *budget == 0 { return true; }
+                *budget -= 1;
+                polled = true;
+                match stream.source.poll_read(cx, &mut stream.buffer[stream.len..]) {
+                    ::core::task::Poll::Pending => pending = true,
+                    ::core::task::Poll::Ready(Ok(0)) => stream.terminal = Some(Ok(())),
+                    ::core::task::Poll::Ready(Ok(n)) => stream.len += n,
+                    ::core::task::Poll::Ready(Err(::ridl_rt::face::Interrupted)) => {
+                        let _ = h.abort_claim(claim, ::ridl_rt::port::REPLY_STREAM,
+                            ::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));
+                        *slot = None;
+                        return false;
+                    }
+                }
             }
         }
     }

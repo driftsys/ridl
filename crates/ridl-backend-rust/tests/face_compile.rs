@@ -255,11 +255,10 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
     assert!(!source.contains("pub struct Diagnostics"), "{source}");
 }
 
-/// A call with a stream parameter has no method on the face, but its
-/// descriptor is emitted: the interface is not skipped, so it leaves no skip
-/// note. An interface whose only calls take a stream has no face module.
+/// A command with one parameter stream has a descriptor, call/sink pair,
+/// and consumer even when it is the interface's only member.
 #[test]
-fn a_command_with_a_stream_parameter_has_a_descriptor_and_no_face_method() {
+fn a_command_with_a_stream_parameter_has_a_descriptor_and_a_call_sink_pair() {
     let source = r#"
 package face.shape
 
@@ -275,16 +274,16 @@ interface Wide {
     let text = generated.rust_source;
     assert!(!text.contains("__RIDL_NO_FACE_"), "{text}");
     assert!(text.contains("pub struct WideSet;"), "{text}");
-    assert!(!text.contains("pub mod wide"), "{text}");
+    assert!(text.contains("pub mod wide"), "{text}");
+    assert!(text.contains("pub struct SetSink<"), "{text}");
+    face_compiles("command_stream", source);
 }
 
-/// The same for a query that has a stream parameter: it has a descriptor and
-/// no method on the face. A query whose reply is a stream of named elements
-/// is the one stream form the face carries: its client method and its stream
-/// value are emitted beside the other members' methods, while a streamed
-/// reply of bytes or of text is still left out.
+/// A query with a stream parameter has a descriptor and a call/sink pair.
+/// Queries whose only stream is their reply have a
+/// face for named elements, bytes and text beside the other members.
 #[test]
-fn a_query_with_a_stream_has_a_descriptor_and_only_a_named_reply_stream_has_a_face_method() {
+fn upload_queries_and_reply_streams_have_their_own_face_values() {
     let source = r#"
 package face.query_shape
 
@@ -308,18 +307,20 @@ interface Wide {
     assert!(text.contains("pub struct WideDump;"), "{text}");
     assert!(text.contains("pub struct WideNotes;"), "{text}");
     assert!(text.contains("pub mod wide"), "{text}");
-    assert!(!text.contains("fn read("), "{text}");
+    assert!(text.contains("pub struct ReadCall<"), "{text}");
+    assert!(text.contains("pub struct ReadSink<"), "{text}");
     assert!(text.contains("fn history("), "{text}");
     assert!(text.contains("pub struct HistoryStream<"), "{text}");
-    assert!(!text.contains("fn dump("), "{text}");
-    assert!(!text.contains("fn notes("), "{text}");
+    assert!(text.contains("fn dump("), "{text}");
+    assert!(text.contains("pub struct DumpStream<"), "{text}");
+    assert!(text.contains("fn notes("), "{text}");
+    assert!(text.contains("pub struct NotesStream<"), "{text}");
     // The emitted face compiles with the std cfg on and off.
     face_compiles("query_shape", source);
 }
 
-/// A member with a stream is left out of the face, so it is never the call
-/// the skip note blames: beside a `fixed` that the face cannot carry, it leaves
-/// the note the `fixed` alone leaves.
+/// A streamed member beside an unsupported fixed payload does not change
+/// the interface's skip reason: the fixed payload is still the refusal.
 #[test]
 fn a_stream_member_does_not_change_the_skip_note_of_an_interface() {
     let note = |members: &str| {
@@ -1616,6 +1617,23 @@ pub mod consumer {
         clone::<super::blended::Event>();
         partial_eq::<super::blended::Event>();
     }
+}
+"#,
+    );
+}
+
+#[test]
+fn byte_and_text_upload_queries_compile_with_plain_and_distinct_streamed_replies() {
+    face_compiles(
+        "raw_upload_queries",
+        r#"
+package face.raw_upload_queries
+type Level : integer [0..100]
+interface Transform {
+ query sum(limit: Level, data: <bytes>): Level @[..100ms] [
+ ensure result <= 100
+]
+ query pipe(data: <string>): <Level> @[..1s]
 }
 "#,
     );

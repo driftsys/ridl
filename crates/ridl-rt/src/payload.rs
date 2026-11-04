@@ -319,9 +319,10 @@ pub struct Violation {
 
 /// The kind of typl constraint a [`Violation`] breaks.
 ///
-/// A variant is added only together with a new frame version, because a
-/// receiver cannot construct a variant it does not know (the frame
-/// specification §9.6); the enum stays `#[non_exhaustive]`.
+/// `Rule::Utf8` exists in `ridl-rt` without a wire code. A rule receives its
+/// wire code with the frame version that first carries it, because a receiver
+/// cannot construct a variant it does not know (the frame specification §9.6);
+/// the enum stays `#[non_exhaustive]`.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {
@@ -339,6 +340,9 @@ pub enum Rule {
     Variant,
     /// A map contains more than one entry with the same key.
     Unique,
+    /// A text chunk of a `<string>` stream is not valid UTF-8
+    /// (ADR-0032 decision 12).
+    Utf8,
 }
 
 /// Why a transcode failed.
@@ -441,7 +445,7 @@ mod tests {
     /// The match names every variant with no `_` arm, so a `Rule` variant
     /// added or removed fails this test to compile.
     #[test]
-    fn rule_is_exactly_these_six_variants() {
+    fn rule_is_exactly_these_seven_variants() {
         fn all(r: Rule) {
             match r {
                 Rule::Range => {}
@@ -450,10 +454,12 @@ mod tests {
                 Rule::Pattern => {}
                 Rule::Variant => {}
                 Rule::Unique => {}
+                Rule::Utf8 => {}
             }
         }
         all(Rule::Range);
         all(Rule::Unique);
+        all(Rule::Utf8);
     }
 
     /// The three variants the proto3 codec adds exist on every feature set:

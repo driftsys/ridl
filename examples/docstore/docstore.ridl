@@ -1,0 +1,39 @@
+package docstore
+
+/// The name used to find a document.
+type DocId: string [1..64] = "-"
+
+/// A nonnegative document length with an unsigned 64-bit wire representation.
+type DocSize: integer [0..9223372036854775807]
+
+/// A document's metadata.
+struct DocInfo {
+  /// The document's name and lookup identifier.
+  name: DocId
+  /// The document's length in bytes.
+  size: DocSize
+}
+
+/// A document lookup failure.
+error enum DocError {
+  /// No document has the requested identifier.
+  MISSING = 0
+}
+
+/// The metadata of a document, or its lookup failure.
+union DescribeResult {
+  /// The stored document's metadata.
+  info: DocInfo
+  /// The reason the lookup failed.
+  failure: DocError
+}
+
+/// Stores one document and transfers its contents as byte streams.
+interface DocStore {
+  /// Reads the contents of the named document.
+  query fetch(id: DocId): <bytes> @[..1s]
+  /// Stores the uploaded contents with their metadata.
+  command put(info: DocInfo, data: <bytes>) @[..1s]
+  /// Reads the metadata of the named document.
+  query describe(id: DocId): DescribeResult @[..1s]
+}

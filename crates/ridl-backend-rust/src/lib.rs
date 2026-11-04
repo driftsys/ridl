@@ -199,11 +199,12 @@ pub fn generate_with(
 /// than [`generate`]; the decision itself is not amended.
 ///
 /// **Why an interface is skipped and not refused** (design rule 2): the clause
-/// translator accepts one narrow form, and a multi-parameter call and a stream
-/// in a form other than a streamed reply of named elements have no face at
-/// all. Refusing would make `--emit rust` reject legal ridl
-/// over a gap with two follow-ups — driftsys/ridl#704 replaces the translator, and the
-/// multi-parameter argument struct is driftsys/ridl#713 — and would
+/// translator accepts one narrow form, and some call shapes still have no face.
+/// The face carries named-element, byte and text reply streams, commands with
+/// one parameter stream, and queries with one parameter stream and a plain or
+/// named-element streamed reply. Two or more parameter streams remain outside
+/// the face (driftsys/ridl#1224). Refusing unsupported interfaces would make
+/// `--emit rust` reject legal ridl over a backend gap and would
 /// put a codegen error where a source diagnostic belongs. So the package keeps
 /// its domain types and its codec, the interface loses its `Client`,
 /// `Publisher`, `Provider` and `dispatch`, and a note at that site names the
@@ -467,10 +468,10 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
         return FaceGap::Clause;
     }
     for (_, interaction) in descriptors::interactions(interface) {
-        // The face leaves a member with a stream out, in every form but a
-        // streamed reply of named elements, but its descriptor is still
-        // written, and refuses the same request and reply shapes as any
-        // other member's. A streamed reply's reply check is skipped: for a
+        // Every stream member keeps its descriptor row. Supported reply
+        // streams and single-parameter uploads also have face methods.
+        // Unsupported forms still undergo the request and plain-reply shape
+        // checks. A streamed reply's reply check is skipped: for a
         // stream of bytes or of text `query_reply_type` refuses the reply,
         // which names no type, and for a stream of named elements it returns
         // the element type. Only the request of such a query is checked.

@@ -790,11 +790,13 @@ fn a_module_with_no_payload_type_builds_without_warnings() {
     );
 }
 
-/// `WASM_RULES` names every variant of `ridl_rt::payload::Rule`, and no other,
+/// `WASM_RULES` names every payload rule variant of `ridl_rt::payload::Rule`,
 /// so a rule added to or removed from `ridl-rt` fails here until the list
 /// that fixes the rule codes is updated. `Rule` is `#[non_exhaustive]`, so an
 /// exhaustive match outside `ridl-rt` is not possible; the variants are read
-/// from its source instead.
+/// from its source instead. `Utf8` is excluded: invalid UTF-8 in a payload is
+/// `Malformed`, while only a text stream's chunk check produces `Rule::Utf8`.
+/// Keeping it outside this table preserves the existing payload rule codes.
 #[test]
 fn the_rule_list_matches_the_runtime_rule_enum() {
     let payload = std::fs::read_to_string(
@@ -811,6 +813,7 @@ fn the_rule_list_matches_the_runtime_rule_enum() {
         .map(str::trim)
         .filter(|line| !line.starts_with("//") && !line.starts_with('#') && !line.is_empty())
         .map(|line| line.trim_end_matches(',').to_lowercase())
+        .filter(|variant| variant != "utf8")
         .collect();
     variants.sort();
     let source = ridl_backend_rust::generate_wasm_module(&[0; 32], &[])

@@ -1119,14 +1119,11 @@ Rulings taken while the port was built. The source is the rustdoc of
 - A claim only offered through `ShortClaim` has no streams until it is taken.
 - The interaction's limit bounds every chunk in both directions.
 - A streamed reply reserves nothing in the codegen model.
-- No `Command` or `Query` impl is generated for a member that has a stream
-  parameter, in either position of the call. A query whose reply is a stream of
-  named elements and whose only stream is that reply gets a `Query` impl with
-  `type Reply = ()`: the face's send evaluates `require` through it as for every
-  query, its settlement carries no reply bytes, because the elements travel on
-  the reply stream, so no payload type is claimed for a reply, and `()`
-  implements no `Payload`, so a generic caller cannot decode one from it; its
-  `ensure` is always `Ok`, because the checker refuses `result` on a stream.
+- Supported members with a stream parameter get a `Command` or `Query` impl; a
+  query with a plain reply uses that reply type, and a streamed reply uses
+  `type Reply = ()` because its elements travel on the stream, its settlement
+  carries no payload, and the checker refuses `result` on a stream so its
+  `ensure` is `Ok` (amendment A-4, stage 5a).
 - Stage 3 scope (S3-1): no `blocking` method for a stream and no `futures-io` or
   `futures-core` feature. `async fn next` is emitted outside
   `cfg(feature = "std")`, because it needs only `core::future::poll_fn`.
@@ -1222,6 +1219,177 @@ The reply stream over WebSocket, in `ridl-transport-ws` and
   reachable through the port, so it is not built.
 - The binding row of the codegen model is version 3; its frame header stays at
   most 20 bytes, because the field bounds the messages that carry a payload.
+
+## As built (stage 5a)
+
+The Rust face over `ridl-loopback`, including all rows of section 7.3; these
+rulings override the earlier design where it differs.
+
+### Scope and generated surface
+
+- S5-1: Stage 5a builds the Rust face over `ridl-loopback`; stage 5b retains the
+  WebSocket upload direction, its UTF-8 frame code, and the corresponding
+  TypeScript client methods.
+- S5-2: Every stream value has `no_std` poll methods and async wrappers over
+  `core::future::poll_fn`, outside the `std` gate, with no blocking stream
+  methods or `futures-io` or `futures-core` feature.
+- S5-3: A call with two or more stream parameters remains outside the face
+  (driftsys/ridl#1116), while its descriptors are emitted.
+- S5-4: A text reply yields one checked `&str` chunk borrowed from inline
+  storage through `poll_next` and `next`, instead of reading into a caller's
+  byte buffer.
+- S5-5: A text sink accepts `&str` through `poll_write_str` and `write_str`,
+  sending the longest prefix within the member's limit that ends on a character
+  boundary.
+- S5-6: A named sink checks and encodes at most one held element, returns `Busy`
+  on another `send` while held without dropping it, flushes through `poll_ready`
+  and `poll_end`, aborts on a failed check, and exposes `ready`, `feed` and
+  `end` async wrappers.
+- S5-7: A byte sink pushes directly from the caller's buffer up to `LIMIT`
+  through `poll_write` and `write`, keeps no caller-side staging buffer,
+  registers stream interest when full, and ends through `poll_end` or `end`.
+- S5-8: A provider of a query with an upload and a plain reply returns a
+  `Consumer` or `ByteConsumer` and supplies `<name>_reply(upload)` after its end
+  to compute the ordinary reply synchronously.
+- S5-9: A duplex query returns one provider value implementing an upload
+  consumer (`Consumer` or `ByteConsumer`) and `Source`, which `serve` feeds and
+  drains in the same poll so the reply can start before upload end.
+- S5-10: The docstore example uses a named `DescribeResult` union with `info`
+  and `failure` arms because the face does not carry an inline `T | E` reply.
+- S5-11: `serve` keeps one active call per streamed member and settles a second
+  concurrent call of that member with `Transport::Busy`.
+- S5-12: Every byte or text stream and sink exposes a literal associated `LIMIT`
+  from the member's limit or its kind's default ceiling, 16,128 for a command or
+  query, and generation refuses limits below four while provider staging uses
+  the same value.
+- A-4: Supported upload commands get `Command` impls and upload queries get
+  `Query` impls with the plain reply type or `()` for a streamed reply, so their
+  clauses use the existing trait path and a generic call without its upload
+  stays open until its provider replies or the call is forgotten.
+- Client arguments are passed by value and provider arguments by reference,
+  stream-only requests use the induced empty parameter struct, and selecting the
+  ordinary argument name ignores stream positions.
+- Upload-only command interfaces emit `blocking::serve` without an empty
+  `blocking::Client`.
+- The supported stream selection is shared with name claiming and dispatch
+  initialization.
+- The derived `<name>_reply` callback is claimed in the Provider namespace after
+  existing type-name checks.
+- Raw replies use their stream form and limit to select inline byte storage
+  without inventing a named reply payload, while named replies retain their
+  `Payload` buffers.
+- The private stream-state wrapper uses `PhantomData<H>` when its raw buffers
+  otherwise leave `H` unused, preserving existing named-slot spelling and
+  emission order.
+
+### Consumer and provider progress
+
+- `ByteSource` requires a nonempty driver buffer so `Ok(0)` means end.
+- Each `Consumer` or `ByteConsumer` receives exactly one terminal `end` or
+  `failed` notification with no later calls.
+- Raw reply staging keeps filled length, held prefix and terminal outcome inline
+  in one array, pushes a valid text prefix before a malformed-text refusal even
+  under backpressure, and carries an incomplete suffix into the next read
+  without another buffer or allocation.
+- Each byte source is polled at most once per `serve` poll and debits the budget
+  shared with claims; ready partial progress wakes `serve` again, while
+  `Pending` leaves waking to the source.
+- A source interruption reports `Interrupted` immediately and discards unsent
+  staging, while chunks already pushed keep their port ordering.
+- The async text wrapper polls an owned chunk length before borrowing it as
+  `str`, sharing its length helper with `poll_next` without unsafe code.
+- Empty byte reads return zero without consuming the stream, and byte and text
+  reads skip empty wire chunks, superseding the initial ruling that exposed
+  empty text chunks while keeping call resolution on the first chunk or end.
+- A-15: Every face push accepts `n == chunk.len()`, including a zero-byte Proto3
+  element exactly once, treats zero as a full window only for a nonempty chunk,
+  and answers an empty byte or text write with zero without calling the port.
+- A-14: R-33 step 4 holds for `poll_ready` only while a sink holds an element to
+  push, because a sink with nothing held returns success without consulting the
+  port and learns a peer refusal only on its next push or end
+  (driftsys/ridl#1170).
+- A peer `PushError::Failed` preserves its `CallError`, while other push or end
+  refusals map to `Transport::Interrupted`.
+- Dispatch checks ordinary arguments and `require`, acknowledges a command, then
+  calls its provider.
+- Upload errors are stored separately so they cannot replace a successful
+  command acknowledgment.
+- A provider slot for a query with an upload and a plain reply retains decoded
+  ordinary arguments until reply computation so `Query::ensure` can evaluate
+  them after upload end.
+- A private duplex wrapper feeds the consumer before polling its source under
+  the shared budget, and a source ending or failing before upload end settles
+  the query, releases its parameter stream and notifies the unfinished consumer
+  with `Interrupted` without a separate half-close protocol.
+- Both upload-query refusal paths abort stream 1 before settling the claim with
+  the error, with a plain call returning the error directly and a duplex call
+  resolving to a reply stream that yields a refusal available before its first
+  element once.
+- Dropping `Serve` aborts an open upload through the port and notifies its
+  consumer with `failed(Interrupted)` before dropping it, while a locally failed
+  sink sends no second abort on drop.
+
+### Ownership, cancellation and timing
+
+- The call and sink share a client-owned `RefCell<P>` and inline `UploadState`
+  with one synchronous port borrow per operation, no allocation or new port API,
+  and the shared reference makes the pair non-`Send`, while ordinary futures
+  keep direct mutable port borrows.
+- One upload state per client suffices because its pair holds the mutable client
+  borrow, while concurrent calls through separate clients use the provider's
+  per-member Busy slot.
+- Before admission the acknowledgment future waits for a correlation, byte and
+  text writes wait with slot interest, and a named sink may retain its single
+  checked element.
+- Dropping a sink before its call is admitted cancels the call with
+  `Interrupted`, clears its retained request without retry, and reuses
+  `UploadState.call_error` as the cancellation marker.
+- An acknowledged open command upload stays owned by its sink, a pending call's
+  drop cancels it, and an unfinished sink aborts and forgets once.
+- A-9: An upload query's reply bound starts only when `poll_end` successfully
+  sends end through shared deadline state, including a duplex call resolving on
+  its first reply element or end, while command acknowledgment timing and
+  ordinary call deadlines stay measured from send.
+- A-10: Dropping an ended sink does not withdraw an unclaimed call, which its
+  call value retains until acknowledgment or reply or until the call itself is
+  dropped.
+- Dropping a `PipeSink` that has not ended interrupts and forgets the whole call
+  at once (the provider consumer receives `failed(Interrupted)` when `serve`
+  next observes the aborted upload), lets the caller's reply stream yield
+  elements it already received then `Interrupted` once, and makes an unresolved
+  reply future polled after that drop settle `Interrupted`.
+- Dropping an ended sink does not forget the call; the reply side forgets it
+  when the reply finishes or the reply value is dropped, and the common
+  forgotten flag prevents duplicate cleanup.
+- Known duplex errors are cached so consuming or dropping a reply cannot replace
+  an upload verdict with an unknown-correlation interruption, and a reply stream
+  or future of an already forgotten call reports the recorded error or
+  `Interrupted` without pulling the forgotten correlation (commits `34a73f94`
+  and `eab34817`).
+
+### Clauses, encodings and fixtures
+
+- The clause translator counts a stream parameter among the declared parameters,
+  so a `require` is translated only on a call with one non-stream parameter and
+  an upload beside another argument has two parameters and no face when such a
+  `require` is declared, as on main for any call with two parameters, while an
+  upload query's `ensure` is translated and enforced.
+- A-16: `Rule::Utf8` belongs to text-chunk checks, not payload checks, so the
+  wasm and TypeScript payload tables retain their six rules and existing codes
+  including `variant` at 7, and the completeness check excludes `Utf8` because
+  invalid payload UTF-8 is `Malformed` at 1.
+- The reply fixtures retain the default stream limits and `Id` bounded to
+  `[0..100]`, with transfer lengths derived from each emitted `LIMIT`.
+- The upload-query fixture's `Summary` has integer count and total fields to
+  show that the reply uses all uploaded readings.
+- The checked upload returns a `Level` of 60 against `ensure result <= 50` to
+  isolate ensure enforcement from payload range validation.
+- New Station members are appended to preserve existing corpus ordinals.
+- Negative fixtures use two stream parameters to retain an omitted form
+  (driftsys/ridl#1116) as single-upload commands become supported.
+- Generated serve documentation distinguishes raw byte and text sources from
+  named sources when needed while keeping the existing correct named-only
+  description unchanged.
 
 ## Trace
 

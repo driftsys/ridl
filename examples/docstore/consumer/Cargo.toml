@@ -1,0 +1,20 @@
+[package]
+name = "docstore-consumer"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# This example is built by the compiler integration test with plain rustc.
+# After generating ../generated, it can also be run as a separate workspace.
+[workspace]
+
+[dependencies]
+docstore = { path = "../generated", default-features = false, features = [
+  "std",
+] }
+ridl-loopback = { path = "../../../crates/ridl-loopback" }
+ridl-rt = { path = "../../../crates/ridl-rt", features = ["std"] }
+
+[patch.crates-io]
+ridl-rt = { path = "../../../crates/ridl-rt" }

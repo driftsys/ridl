@@ -17,13 +17,15 @@
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
-//!   A query whose reply is a stream of named elements, with no stream
-//!   parameter, has a `Query` impl whose `Reply` is `()`: its settlement
-//!   carries no reply bytes, because the elements travel on the reply
+//!   A supported query whose reply is a stream of named elements, bytes or text
+//!   has a `Query` impl whose `Reply` is `()`: its settlement
+//!   carries no reply bytes, because the chunks travel on the reply
 //!   stream, and its `ensure` is always `Ok` (ridl refuses `result` on a
-//!   stream). Every other member with a stream, as a parameter or as the
-//!   reply, has no `Command` or `Query` impl until the face carries that
-//!   form, so a generic caller cannot send it without its stream; its
+//!   stream). Commands with one parameter stream have a `Command` impl.
+//!   Queries with one parameter stream and a plain reply have a `Query` impl
+//!   with that reply type; duplex queries use `Reply = ()`.
+//!   Other members with streams have no `Command` or `Query` impl until
+//!   the face carries their form; their
 //!   `MEMBERS` row is written all the same, and every row lists the member's
 //!   streams.
 //!
@@ -473,18 +475,22 @@ fn interaction_item(
         // generic caller of such an impl could send the call without its
         // stream. Its row of `MEMBERS` and its size-table row are written all
         // the same; a streamed reply has no reply type and no row of the
-        // table. The one form the face carries, a query whose reply is a
-        // stream of named elements and nothing else, gets a `Query` impl
+        // table. A supported query with a streamed reply gets a `Query` impl
         // whose `Reply` is `()`: the face's send evaluates `require` through
         // it, and no payload type is claimed for a settlement that carries
         // no reply bytes.
-        Some(v1::interaction::Shape::Command(command)) if has_stream(interaction) => {
+        Some(v1::interaction::Shape::Command(command))
+            if has_stream(interaction) && !supported_stream_command(interaction) =>
+        {
             let arg_name = single_param_type(ctx, command, member)?;
             row.push(arg_name.to_string());
             sizes.calls.push(arg_name.to_string());
             TokenStream::new()
         }
-        Some(v1::interaction::Shape::Query(query)) if has_stream(interaction) => {
+        Some(v1::interaction::Shape::Query(query))
+            if has_stream(interaction)
+                && (has_stream_reply(interaction) || !supported_stream_query(interaction)) =>
+        {
             let arg_name = query_param_type(ctx, query, member)?;
             row.push(arg_name.to_string());
             sizes.calls.push(arg_name.to_string());
@@ -493,7 +499,7 @@ fn interaction_item(
                 row.push(reply_name.to_string());
                 sizes.calls.push(reply_name.to_string());
             }
-            if named_stream_reply(interaction) {
+            if supported_stream_reply(interaction) || supported_stream_query(interaction) {
                 let args = type_path(arg_name);
                 let require = clauses::translate(
                     ctx,
@@ -970,8 +976,9 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
 }
 
 /// Whether the interaction has a stream, as a parameter or as its reply. The
-/// face carries such a member only in the form [`named_stream_reply`] names;
-/// its descriptor row is written all the same.
+/// face carries the forms named by [`supported_stream_reply`],
+/// [`supported_stream_command`] and [`supported_stream_query`]. Every form
+/// retains its descriptor row.
 pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
     !interaction.streams.is_empty()
 }
@@ -981,15 +988,15 @@ pub(crate) fn has_stream_reply(interaction: &v1::Interaction) -> bool {
     stream_reply(interaction).is_some()
 }
 
-/// Whether the interaction is a query whose reply is a stream of named
-/// elements and whose only stream is that reply: `query f(..): <T>` with `T`
-/// a named type. It is the one stream form the face carries; the element is
-/// what [`query_reply_type`] returns for the query.
-pub(crate) fn named_stream_reply(interaction: &v1::Interaction) -> bool {
+/// Whether the only stream is the reply, in a form the Rust face carries.
+pub(crate) fn supported_stream_reply(interaction: &v1::Interaction) -> bool {
     interaction.streams.len() == 1
         && reply_stream(interaction).is_some_and(|stream| {
-            v1::StreamForm::try_from(stream.form) == Ok(v1::StreamForm::Elements)
-                && stream.element.is_some()
+            match v1::StreamForm::try_from(stream.form) {
+                Ok(v1::StreamForm::Elements) => stream.element.is_some(),
+                Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
+                _ => false,
+            }
         })
 }
 
@@ -1051,6 +1058,38 @@ fn not_an_interaction(member: &str) -> GenerateError {
     GenerateError {
         message: format!("declaration `{member}` is not an interaction"),
     }
+}
+
+/// A command with exactly one supported parameter stream.
+pub(crate) fn supported_stream_command(interaction: &v1::Interaction) -> bool {
+    matches!(interaction.shape, Some(v1::interaction::Shape::Command(_)))
+        && interaction.streams.len() == 1
+        && interaction.streams[0].no == 1
+        && match v1::StreamForm::try_from(interaction.streams[0].form) {
+            Ok(v1::StreamForm::Elements) => interaction.streams[0].element.is_some(),
+            Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
+            _ => false,
+        }
+}
+
+/// A query with one supported upload and a plain or named-element reply.
+pub(crate) fn supported_stream_query(interaction: &v1::Interaction) -> bool {
+    if !matches!(interaction.shape, Some(v1::interaction::Shape::Query(_))) {
+        return false;
+    }
+    let inputs: Vec<_> = interaction.streams.iter().filter(|s| s.no != 0).collect();
+    if inputs.len() != 1 || inputs[0].no != 1 {
+        return false;
+    }
+    let input = inputs[0];
+    let supported = match v1::StreamForm::try_from(input.form) {
+        Ok(v1::StreamForm::Elements) => input.element.is_some(),
+        Ok(v1::StreamForm::Bytes | v1::StreamForm::Text) => true,
+        _ => false,
+    };
+    supported
+        && reply_stream(interaction)
+            .is_none_or(|s| s.form == v1::StreamForm::Elements as i32 && s.element.is_some())
 }
 
 #[cfg(test)]

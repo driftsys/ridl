@@ -1,7 +1,7 @@
 //! The traits of the generated face: the fixed methods of the consumer and
 //! provider faces the Rust backend emits (ADR-0023 decision 7, ADR-0021
-//! decision 19), and [`Source`], which the application implements for a
-//! streamed reply.
+//! decision 19), and the stream traits an application implements for a
+//! streamed reply or parameter.
 //!
 //! A generated `Client` or `Publisher` has two kinds of method. A member
 //! method is derived from the interface — one per signal, event, command and
@@ -52,14 +52,19 @@
 //! implemented by a runtime: a runtime implements the [`port`](crate::port)
 //! traits, and generated code implements the traits of the fixed methods.
 //!
-//! [`Source`] is the one trait here that an application implements rather
-//! than generated code: a provider's method for a query whose reply is a
-//! stream of named elements returns a `Source` of those elements, and the
+//! An application implements [`Source`], [`ByteSource`], [`Consumer`] and
+//! [`ByteConsumer`] rather than generated code: a provider's method for a
+//! query whose reply is a stream of named elements returns a `Source` of
+//! those elements, and the
 //! generated `serve` drives it, one element per poll, over the
 //! [`StreamHandler`](crate::port::StreamHandler) port. [`Interrupted`] is the
-//! one way such a source stops its stream before the end.
+//! one way such a source stops its stream before the end. [`ByteSource`]
+//! produces bytes or text; [`Consumer`] and [`ByteConsumer`] receive a
+//! streamed parameter of named elements or bytes and text, respectively.
 
 use core::task::{Context, Poll};
+
+use crate::error::CallError;
 
 /// Binds a face to the port it holds: the `new` of a generated `Client`,
 /// `blocking::Client` and `Publisher`.
@@ -227,8 +232,98 @@ pub trait Source {
     fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Interrupted>>>;
 }
 
-/// A [`Source`] stopped its stream before the end. The generated `serve`
-/// reports it to the caller as
+/// A producer of bytes or text that the generated `serve` reads into a buffer.
+///
+/// The driver supplies a nonempty `buf`. `poll_read` writes at most
+/// `buf.len()` bytes and answers their count. `Ready(Ok(0))` is the end; the
+/// source is not polled again after the end or `Ready(Err(Interrupted))`.
+/// `Pending` takes no bytes and stores the waker of `cx` to wake when bytes
+/// or the end become available.
+///
+/// The trait is object safe and uses only `core`.
+///
+/// ```
+/// use core::task::{Context, Poll};
+/// use ridl_rt::face::{ByteSource, Interrupted};
+///
+/// struct Bytes<'a>(&'a [u8]);
+/// impl ByteSource for Bytes<'_> {
+///     fn poll_read(&mut self, _cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, Interrupted>> {
+///         let n = buf.len().min(self.0.len());
+///         buf[..n].copy_from_slice(&self.0[..n]);
+///         self.0 = &self.0[n..];
+///         Poll::Ready(Ok(n))
+///     }
+/// }
+///
+/// let mut source = Bytes(b"abc");
+/// let mut cx = Context::from_waker(core::task::Waker::noop());
+/// let mut buf = [0; 4];
+/// assert_eq!(source.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(3)));
+/// assert_eq!(&buf[..3], b"abc");
+/// assert_eq!(source.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(0)));
+/// ```
+pub trait ByteSource {
+    /// Reads bytes under the contract above; `Err(Interrupted)` stops the
+    /// stream before its end.
+    fn poll_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, Interrupted>>;
+}
+
+/// A receiver of named elements that the generated `serve` feeds.
+///
+/// The driver waits for readiness before accepting each checked element.
+/// The stream terminates with exactly one of `end` or `failed`; the driver
+/// calls no method after that notification. Terminal notifications do not wait
+/// for readiness when no earlier element is held. A held element is accepted
+/// before the driver reads the next outcome. The trait is object safe.
+pub trait Consumer {
+    /// The stream's declared element type in the generated crate.
+    type Item;
+
+    /// Answers `Ready(())` when one element can be accepted. `Pending`
+    /// stores the waker of `cx` to wake when the consumer becomes ready.
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
+
+    /// Takes one checked element after `poll_ready` answered `Ready(())`.
+    fn accept(&mut self, item: Self::Item);
+
+    /// The generated `serve` calls this when the producer ends the stream.
+    fn end(&mut self);
+
+    /// The generated `serve` calls this when the stream fails, including an
+    /// interruption or a refusal by its own check of a received element.
+    fn failed(&mut self, e: CallError);
+}
+
+/// A receiver of bytes or text that the generated `serve` feeds.
+///
+/// The driver offers any unconsumed suffix again before taking another
+/// chunk. The stream terminates with exactly one of `end` or `failed`,
+/// after which no method is called. Terminal notifications do not wait for
+/// readiness when no earlier bytes are held. The generated `serve` panics if
+/// `poll_write` returns zero or more than the offered length for a nonempty
+/// buffer. The trait is object safe.
+pub trait ByteConsumer {
+    /// Takes a prefix of `buf` and answers its length, at most `buf.len()`
+    /// and at least 1 when `buf` is nonempty. `Pending` takes nothing and
+    /// stores the waker of `cx` to wake when bytes can be taken.
+    fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<usize>;
+
+    /// The generated `serve` calls this when the producer ends the stream,
+    /// after every byte of the last chunk has been taken.
+    fn end(&mut self);
+
+    /// The generated `serve` calls this when the stream fails, including an
+    /// interruption or a refusal by its own check of a received chunk.
+    fn failed(&mut self, e: CallError);
+}
+
+/// A [`Source`] or [`ByteSource`] stopped its stream before the end. The
+/// generated `serve` reports it to the caller as
 /// [`Transport::Interrupted`](crate::error::Transport::Interrupted), the
 /// outcome a producer stops a stream with (ridl §12).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -236,7 +331,8 @@ pub struct Interrupted;
 
 #[cfg(test)]
 mod tests {
-    use super::{Interrupted, Source};
+    use super::{ByteConsumer, ByteSource, Consumer, Interrupted, Source};
+    use crate::error::CallError;
     use core::task::{Context, Poll};
 
     /// A source over a slice, written as a provider of a generated face
@@ -304,5 +400,135 @@ mod tests {
         let mut out = [0u8; 4];
         assert_eq!(drain(&mut source, &mut out), (2, Err(Interrupted)));
         assert_eq!(out, [1, 2, 0, 0]);
+    }
+
+    struct Bytes<'a>(&'a [u8]);
+
+    impl ByteSource for Bytes<'_> {
+        fn poll_read(
+            &mut self,
+            _cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<Result<usize, Interrupted>> {
+            let n = self.0.len().min(buf.len());
+            buf[..n].copy_from_slice(&self.0[..n]);
+            self.0 = &self.0[n..];
+            Poll::Ready(Ok(n))
+        }
+    }
+
+    #[test]
+    fn a_byte_source_is_read_until_ok_zero() {
+        let mut source = Bytes(b"abcdef");
+        let source: &mut dyn ByteSource = &mut source;
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        let mut buf = [0; 4];
+        assert_eq!(source.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(4)));
+        assert_eq!(&buf, b"abcd");
+        assert_eq!(source.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(2)));
+        assert_eq!(&buf[..2], b"ef");
+        assert_eq!(source.poll_read(&mut cx, &mut buf), Poll::Ready(Ok(0)));
+    }
+
+    #[derive(Default)]
+    struct Receiver {
+        bytes: [u8; 8],
+        len: usize,
+        ended: bool,
+        failure: Option<CallError>,
+    }
+
+    impl Consumer for Receiver {
+        type Item = u8;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<()> {
+            Poll::Ready(())
+        }
+
+        fn accept(&mut self, item: u8) {
+            assert!(!self.ended);
+            self.bytes[self.len] = item;
+            self.len += 1;
+        }
+
+        fn end(&mut self) {
+            self.ended = true;
+        }
+
+        fn failed(&mut self, e: CallError) {
+            self.failure = Some(e);
+        }
+    }
+
+    #[test]
+    fn a_consumer_is_fed_until_its_end() {
+        let mut receiver = Receiver::default();
+        let consumer: &mut dyn Consumer<Item = u8> = &mut receiver;
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        for item in [1, 2, 3] {
+            assert_eq!(consumer.poll_ready(&mut cx), Poll::Ready(()));
+            consumer.accept(item);
+        }
+        consumer.end();
+        assert_eq!(&receiver.bytes[..receiver.len], &[1, 2, 3]);
+        assert!(receiver.ended);
+    }
+
+    impl ByteConsumer for Receiver {
+        fn poll_write(&mut self, _cx: &mut Context<'_>, buf: &[u8]) -> Poll<usize> {
+            assert!(!self.ended);
+            let n = buf.len().min(3);
+            self.bytes[self.len..self.len + n].copy_from_slice(&buf[..n]);
+            self.len += n;
+            Poll::Ready(n)
+        }
+
+        fn end(&mut self) {
+            self.ended = true;
+        }
+
+        fn failed(&mut self, e: CallError) {
+            self.failure = Some(e);
+        }
+    }
+
+    fn feed_bytes(consumer: &mut dyn ByteConsumer, mut bytes: &[u8]) {
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        while !bytes.is_empty() {
+            match consumer.poll_write(&mut cx, bytes) {
+                Poll::Ready(n) => {
+                    assert!((1..=bytes.len()).contains(&n));
+                    bytes = &bytes[n..];
+                }
+                Poll::Pending => unreachable!("the test consumer is never pending"),
+            }
+        }
+        consumer.end();
+    }
+
+    #[test]
+    fn a_byte_consumer_that_takes_part_of_a_buffer_is_offered_the_rest() {
+        let mut receiver = Receiver::default();
+        feed_bytes(&mut receiver, b"abcdefgh");
+        assert_eq!(&receiver.bytes[..receiver.len], b"abcdefgh");
+        assert!(receiver.ended);
+    }
+
+    #[test]
+    fn a_consumer_records_failure_through_a_trait_object() {
+        let mut receiver = Receiver::default();
+        let consumer: &mut dyn Consumer<Item = u8> = &mut receiver;
+        let error = CallError::Transport(crate::error::Transport::Interrupted);
+        consumer.failed(error);
+        assert_eq!(receiver.failure, Some(error));
+    }
+
+    #[test]
+    fn a_byte_consumer_records_failure_through_a_trait_object() {
+        let mut receiver = Receiver::default();
+        let consumer: &mut dyn ByteConsumer = &mut receiver;
+        let error = CallError::Transport(crate::error::Transport::Down);
+        consumer.failed(error);
+        assert_eq!(receiver.failure, Some(error));
     }
 }
