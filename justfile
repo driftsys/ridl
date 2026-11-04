@@ -2955,11 +2955,12 @@ ts-npm-check:
         (cd "packages/$package" && deno run -A scripts/verify_npm.ts)
     done
 
-# Build the loopback server example of `ridl-transport-ws` and run the Deno
-# end-to-end test of packages/ridl-transport-ws against it. The test starts the
-# server from the path in RIDL_TRANSPORT_WS_SERVER. The example is reached
-# through `CARGO_TARGET_DIR` where it is set, as `demo` reads it, and passed as
-# an absolute path because the test runs from the package directory.
+# Build `ridl-transport-ws` examples loopback_server and debug_gateway_fixture
+# (the latter with descriptor), then run the package's Deno e2e/deno_test.ts
+# and e2e/provide_test.ts against them. Tests start the executables from
+# RIDL_TRANSPORT_WS_SERVER and RIDL_DEBUG_GATEWAY_FIXTURE respectively.
+# Resolve both through `CARGO_TARGET_DIR` where set and pass absolute paths
+# because the tests run from the package directory.
 ts-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
