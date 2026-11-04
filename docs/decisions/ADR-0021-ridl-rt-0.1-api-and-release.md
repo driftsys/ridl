@@ -224,7 +224,8 @@ amendment in place; the approval of the break is recorded in
 [ADR-0029](ADR-0029-stability-policy.md).
 
 **Amendment (2026-11-04) — decision 23** adds signal check registration and
-answers open item 4. It records the approved API and generated-crate break for
+answers open item 4. A note on decision 17 extends its zero-bytes rule to every
+`Invalid(_)` cause. It records the approved API and generated-crate break for
 driftsys/ridl#526.
 
 ## Context
@@ -997,7 +998,10 @@ trusted with no `unsafe` and no second verification pass.
     state it: a sample whose provenance is `Init` or `Invalid(Declared)` may
     carry zero bytes, because the runtime has no value to copy, and the
     generated face then returns the channel's init value under that provenance.
-    The doc comment says so since this amendment.
+    The doc comment says so since this amendment. Since decision 23
+    (2026-11-04), the rule covers every `Invalid(_)` cause: a runtime that runs
+    a registered check reports `Invalid(Detected(_))` with zero bytes when a
+    payload fails the check and no good value is held.
 
     **Amendment (2026-10-10) — the helpers move onto `Sizes<E>`.**
     `Encoding::max_size`, `Member::reservation::<E>()` and

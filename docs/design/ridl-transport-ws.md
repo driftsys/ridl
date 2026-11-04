@@ -1003,14 +1003,18 @@ All under `crates/ridl-transport-ws/`.
   provider, on accepting the command, sets the signal, commits, and raises the
   event with the argument, and the consumer reads the signal as `Live` and
   receives one occurrence; send the query and get the provider's function of its
-  argument. It runs twice: in process over `ridl-loopback` with no socket; and
-  across processes, where the test re-runs its own executable with the
-  environment variable `RIDL_TRANSPORT_WS_PROVIDER=1`, the child serves a
-  loopback, wrapped in `Described` with the hand-built member table of the test
-  catalog, on a port of `127.0.0.1` it prints, and the parent runs the scenario
-  over a test-only client in `tests/support/client.rs` — the consuming runtime
-  of §5 written once for the test over `tungstenite` and this crate's codec. It
-  is not published.
+  argument; register a check on the signal that rejects a payload whose first
+  byte is `0xFF`, send the command with that argument, and read the signal as
+  `Invalid(Detected)` with the previous bytes; send the command with the
+  previous argument and read the signal as `Live` again. It runs twice: in
+  process over `ridl-loopback` with no socket; and across processes, where the
+  test re-runs its own executable with the environment variable
+  `RIDL_TRANSPORT_WS_PROVIDER=1`, the child serves a loopback, wrapped in
+  `Described` with the hand-built member table of the test catalog, on a port of
+  `127.0.0.1` it prints, and the parent runs the scenario over a test-only
+  client in `tests/support/client.rs` — the consuming runtime of §5 written once
+  for the test over `tungstenite` and this crate's codec, which runs a
+  registered check on each `Live` signal payload. It is not published.
 
   "The same tests" of the done-when is read as this one scenario, not the
   `ridl-rt-conformance` suite, whose `Factory` requires `SignalWriter`,

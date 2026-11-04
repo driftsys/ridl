@@ -241,8 +241,8 @@ pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError> {
     let mut buf = [0u8; <Temperature as Payload<FlatBuffers>>::MAX_SIZE];
     let raw = self.port.read(Cabin::NUMBER, Ordinal(1u32), &mut buf)?;
     let (value, provenance) = match raw.provenance {
-        // No publication yet, or an invalidation before any: no bytes to check.
-        Provenance::Init | Provenance::Invalid(Cause::Declared) if raw.len == 0 => {
+        // No publication yet, or no good value held: no bytes to decode.
+        Provenance::Init | Provenance::Invalid(_) if raw.len == 0 => {
             (CabinTemperature::init(), raw.provenance)
         }
         _ => match Ref::<Temperature, FlatBuffers>::verify(&buf[..raw.len]) {
@@ -267,9 +267,10 @@ constants. There is no lookup at run time.
 **A payload that fails its check is not an error.** The read succeeded; the
 bytes were bad. Turning that into `Err` would force every consumer to handle a
 case the `Provenance` already models, so the generated code reports it as
-`Provenance::Invalid(Cause::Detected(..))` and gives you the init value to
-proceed with. The `ReadError` in the signature covers the read itself — the
-buffer was too short, or the runtime behind the port is gone.
+`Provenance::Invalid(Cause::Detected(..))` and gives you the last good value the
+runtime kept, or the init value when there is none. The `ReadError` in the
+signature covers the read itself — the buffer was too short, or the runtime
+behind the port is gone.
 
 The `Payload`, `Ref` and `FlatBuffers` names are the encoding machinery. Step 3
 covers them; for now, `verify` checks bytes and `decode` turns checked bytes
