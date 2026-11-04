@@ -927,6 +927,56 @@ fn a_query_upload_retention_runs_from_the_end() {
     }
 }
 
+// Mutation: drop the plain-reply guard on the upload-end clock reset.
+#[test]
+fn a_duplex_upload_keeps_the_request_clocks_and_retention() {
+    let mut r = query_rig(DUPLEX);
+    let claim = start(&mut r, None);
+    let request_call = r.s.calls.in_flight().pop().unwrap();
+    r.p.advance(ridl_rt::sample::Duration(5_000_000));
+    r.now += std::time::Duration::from_secs(5);
+    assert_eq!(
+        query_end(&mut r, 1, Timestamp(5_000_000)),
+        (Step::Continue, vec![])
+    );
+    let call = r.s.calls.in_flight().pop().unwrap();
+    pull(&mut r, claim, Pull::End);
+    r.p.end_claim(claim, REPLY_STREAM).unwrap();
+    let now = r.now;
+    let out = poll(&mut r, now).1;
+    assert_eq!(out.len(), 1);
+    assert!(matches!(
+        decode(&out[0]).unwrap(),
+        Frame::StreamEnd {
+            stream: 0,
+            outcome: StreamOutcome::End,
+            ..
+        }
+    ));
+    r.p.advance(ridl_rt::sample::Duration(500_000));
+    assert_eq!(
+        send_at(&mut r, &request(DUPLEX, 1, &[]), now),
+        (Step::Continue, vec![]),
+        "duplex retention expires from the request"
+    );
+    assert_eq!(
+        *r.notes.lock().unwrap(),
+        vec![Note::DuplicateDropped { seq: 1 }]
+    );
+    assert_eq!(
+        call.sent, request_call.sent,
+        "duplex sent stays at the request"
+    );
+    assert_eq!(
+        call.stamp, request_call.stamp,
+        "duplex stamp stays at the request"
+    );
+    assert_eq!(
+        call.receipt, request_call.receipt,
+        "duplex receipt stays at the request"
+    );
+}
+
 // Mutation: measure abandonment from the request's sent instant.
 #[test]
 fn a_query_upload_abandon_runs_from_the_end() {
@@ -1127,10 +1177,6 @@ fn progress_on_query_uploads_restarts_abandonment() {
             if !drain {
                 chunk(&mut r, 5, 1, &[1]);
             }
-            if target == DUPLEX {
-                // Keep the independent reply clock active.
-                r.p.push_claim(claim, REPLY_STREAM, &[2]).unwrap();
-            }
             let now = r.now;
             poll(&mut r, now);
             assert_eq!(
@@ -1139,13 +1185,164 @@ fn progress_on_query_uploads_restarts_abandonment() {
             );
             assert!(r.notes.lock().unwrap().is_empty());
             let out = poll(&mut r, t0 + std::time::Duration::from_secs(110)).1;
-            assert_eq!(out.len(), 1);
-            check_upload_end(&out[0], target, StreamOutcome::Interrupted);
-            assert_eq!(
-                *r.notes.lock().unwrap(),
-                vec![Note::CallAbandoned { seq: 1 }]
-            );
-            assert!(r.s.calls.in_flight().is_empty());
+            if target == DUPLEX {
+                check_duplex_abandoned(&mut r, &out);
+            } else {
+                assert_eq!(out.len(), 1);
+                check_upload_end(&out[0], target, StreamOutcome::Interrupted);
+                assert_eq!(
+                    *r.notes.lock().unwrap(),
+                    vec![Note::CallAbandoned { seq: 1 }]
+                );
+                assert!(r.s.calls.in_flight().is_empty());
+            }
         }
     }
+}
+
+fn check_duplex_abandoned(r: &mut Rig, out: &[Vec<u8>]) {
+    assert_eq!(out.len(), 2, "abandonment ends both duplex streams");
+    assert!(matches!(
+        decode(&out[0]).unwrap(),
+        Frame::StreamEnd {
+            target: DUPLEX,
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::Interrupted,
+            ..
+        }
+    ));
+    check_upload_end(&out[1], DUPLEX, StreamOutcome::Interrupted);
+    assert!(r.s.calls.in_flight().is_empty());
+    assert_eq!(
+        *r.notes.lock().unwrap(),
+        vec![Note::CallAbandoned { seq: 1 }]
+    );
+    let now = r.now;
+    assert_eq!(poll(r, now), (Step::Continue, vec![]));
+    assert_eq!(
+        *r.notes.lock().unwrap(),
+        vec![Note::CallAbandoned { seq: 1 }]
+    );
+}
+
+// Mutation: use only the reply clock for duplex abandonment.
+#[test]
+fn duplex_upload_progress_keeps_an_idle_reply_alive() {
+    for progress in ["receive", "drain", "end"] {
+        let mut r = query_rig(DUPLEX);
+        let claim = start(&mut r, None);
+        let t0 = r.now;
+        for seq in 1..=4 {
+            chunk(&mut r, seq, 1, &[1]);
+        }
+        if progress == "drain" {
+            chunk(&mut r, 5, 1, &[1]);
+            pull(&mut r, claim, Pull::Chunk(1));
+        }
+        r.now = t0 + std::time::Duration::from_secs(50);
+        match progress {
+            "receive" => {
+                chunk(&mut r, 5, 1, &[1]);
+            }
+            "end" => {
+                end(&mut r, 5, StreamOutcome::End);
+            }
+            _ => {}
+        }
+        let now = r.now;
+        assert_eq!(poll(&mut r, now).0, Step::Continue);
+        assert_eq!(
+            poll(&mut r, t0 + std::time::Duration::from_secs(100)),
+            (Step::Continue, vec![]),
+            "upload {progress} keeps the reply alive"
+        );
+        assert_eq!(r.s.calls.in_flight().len(), 1);
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+}
+
+// Mutation: use only the upload clock for duplex abandonment.
+#[test]
+fn duplex_reply_progress_keeps_an_idle_upload_open() {
+    for credit in [false, true] {
+        let mut r = query_rig(DUPLEX);
+        let claim = start(&mut r, None);
+        let t0 = r.now;
+        r.now = t0 + std::time::Duration::from_secs(50);
+        let now = r.now;
+        if credit {
+            let frame = msg(Frame::StreamCredit {
+                target: DUPLEX,
+                correlation: 1,
+                stream: 0,
+                credit: 1,
+            });
+            assert_eq!(send_at(&mut r, &frame, now), (Step::Continue, vec![]));
+        } else {
+            r.p.push_claim(claim, REPLY_STREAM, &[2]).unwrap();
+            let out = poll(&mut r, now).1;
+            assert_eq!(out.len(), 1);
+            assert!(matches!(
+                decode(&out[0]).unwrap(),
+                Frame::Chunk {
+                    target: DUPLEX,
+                    stream: 0,
+                    payload: [2],
+                    ..
+                }
+            ));
+        }
+        r.now = t0 + std::time::Duration::from_secs(100);
+        let now = r.now;
+        assert_eq!(
+            poll(&mut r, now),
+            (Step::Continue, vec![]),
+            "reply progress keeps the upload open"
+        );
+        pull(&mut r, claim, Pull::Pending);
+        let out = chunk(&mut r, 1, 1, &[9]).1;
+        assert_eq!(out.len(), 1);
+        assert!(matches!(
+            decode(&out[0]).unwrap(),
+            Frame::StreamCredit {
+                target: DUPLEX,
+                stream: 1,
+                credit: 1,
+                ..
+            }
+        ));
+        pull(&mut r, claim, Pull::Chunk(1));
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+}
+
+// Mutation: use only the upload clock for duplex abandonment.
+#[test]
+fn a_duplex_idle_on_both_streams_is_abandoned_once() {
+    let mut r = query_rig(DUPLEX);
+    let claim = start(&mut r, None);
+    let t0 = r.now;
+    r.now = t0 + std::time::Duration::from_secs(10);
+    chunk(&mut r, 1, 1, &[1]);
+    pull(&mut r, claim, Pull::Chunk(1));
+    r.now = t0 + std::time::Duration::from_secs(20);
+    r.p.push_claim(claim, REPLY_STREAM, &[2]).unwrap();
+    let now = r.now;
+    assert_eq!(poll(&mut r, now).1.len(), 1);
+    assert_eq!(
+        poll(&mut r, t0 + std::time::Duration::from_secs(79)),
+        (Step::Continue, vec![])
+    );
+    assert!(r.notes.lock().unwrap().is_empty());
+    r.now = t0 + std::time::Duration::from_secs(80);
+    let now = r.now;
+    let (step, out) = poll(&mut r, now);
+    assert_eq!(step, Step::Continue);
+    check_duplex_abandoned(&mut r, &out);
+    pull(
+        &mut r,
+        claim,
+        Pull::Failed(CallError::Transport(Transport::Interrupted)),
+    );
 }

@@ -91,8 +91,10 @@ pub enum Note {
     },
     /// A call was forgotten on the backend after no progress for
     /// [`Config::call_abandon_after`]. An open parameter stream uses its last
-    /// received chunk, its received end, or a backend drain; a reply stream uses its last sent
-    /// chunk or received credit. Other pending calls use their request.
+    /// received chunk, its received end, or a backend drain; a reply stream
+    /// uses its last sent chunk or received credit. A duplex call is abandoned
+    /// only when neither direction has progressed within the bound. A pending
+    /// plain reply uses its upload end when present, or its request otherwise.
     /// Open uploads are ended with `stream_end interrupted`, even after a
     /// command's acknowledgment; an abandoned reply stream is also ended
     /// with `stream_end interrupted`. Other calls send nothing.

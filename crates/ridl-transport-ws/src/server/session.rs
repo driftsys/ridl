@@ -537,8 +537,10 @@ impl<B: Backend> Session<B> {
     /// accepted command remains in flight until all its uploads ended or
     /// stopped. A refusing response covers the whole call. Open uploads are
     /// abandoned from their last receive or backend progress. A reply stream
-    /// uses its last sent chunk or received credit; other pending calls use
-    /// their request. Kept responses expire first.
+    /// uses its last sent chunk or received credit. A duplex call is abandoned
+    /// only when neither direction has progressed within the bound. A pending
+    /// plain reply uses its upload end when present, or its request otherwise.
+    /// Kept responses expire first.
     fn poll_calls(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
         let clock = self.backend.ports().now();
         self.calls.expire(clock);
@@ -549,10 +551,12 @@ impl<B: Backend> Session<B> {
                 out.extend(upload_out);
                 return step;
             }
-            if call.uploads.iter().any(|u| {
-                u.state == UploadState::Open
-                    && now.duration_since(u.last_activity) >= self.call_abandon_after
-            }) {
+            if call.stream.is_none()
+                && call.uploads.iter().any(|u| {
+                    u.state == UploadState::Open
+                        && now.duration_since(u.last_activity) >= self.call_abandon_after
+                })
+            {
                 out.extend(upload_out);
                 self.note(Note::CallAbandoned { seq: call.seq });
                 self.interrupt_uploads(&mut call, out);
@@ -1100,10 +1104,10 @@ impl<B: Backend> Session<B> {
     /// earlier of the request's `stamp` and `receipt`, when the member table
     /// gives one (frame specification §7), and as one of the last 64
     /// otherwise. For an upload query with a plain reply, the upload end's
-    /// stamp and receipt replace the request's. A `contract(InvalidValue)` whose rule the frame cannot
-    /// carry is sent as `corrupt` and recorded. Returns a close with 1008
-    /// when the kept responses then pass [`Config::max_retained_bytes`]; the
-    /// response is still sent.
+    /// stamp and receipt replace the request's. A `contract(InvalidValue)`
+    /// whose rule the frame cannot carry is sent as `corrupt` and recorded.
+    /// Returns a close with 1008 when the kept responses then pass
+    /// [`Config::max_retained_bytes`]; the response is still sent.
     fn respond(
         &mut self,
         target: Target,
@@ -1175,9 +1179,10 @@ impl<B: Backend> Session<B> {
     /// failure, is sent as one `stream_end` under the next `seq`, and the
     /// call is then forgotten; no `response` is sent for it. A chunk longer
     /// than its member's limit, or than one message carries, stops the
-    /// stream with `corrupt` and is recorded. A stream with no `chunk` sent
-    /// and no `stream_credit` received for `call_abandon_after` is ended
-    /// `interrupted`, forgotten and recorded.
+    /// stream with `corrupt` and is recorded. With no `chunk` sent, no
+    /// `stream_credit` received and no upload progress for `call_abandon_after`,
+    /// the call's open streams are ended `interrupted`. The call is forgotten
+    /// and recorded.
     fn poll_stream(
         &mut self,
         mut call: InFlight,
@@ -1237,7 +1242,11 @@ impl<B: Backend> Session<B> {
         };
         let outcome = match ended {
             Some(outcome) => outcome,
-            None if now.duration_since(stream.last_activity) >= self.call_abandon_after => {
+            None if now.duration_since(stream.last_activity) >= self.call_abandon_after
+                && call.uploads.iter().all(|upload| {
+                    now.duration_since(upload.last_activity) >= self.call_abandon_after
+                }) =>
+            {
                 self.note(Note::CallAbandoned { seq: call.seq });
                 StreamOutcome::Interrupted
             }

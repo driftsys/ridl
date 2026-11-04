@@ -22,9 +22,9 @@ pub const CATALOG: CatalogRef = CatalogRef {
 };
 /// The one interface of the catalog.
 pub const IFACE: InterfaceNo = InterfaceNo(1);
-/// The signal, which the provider sets to each accepted command's argument.
+/// The signal, which the provider sets to each accepted [`COMMAND`]'s argument.
 pub const SIGNAL: Ordinal = Ordinal(1);
-/// The event, which the provider raises with each accepted command's argument.
+/// The event, which the provider raises with each accepted [`COMMAND`]'s argument.
 pub const EVENT: Ordinal = Ordinal(2);
 /// The command.
 pub const COMMAND: Ordinal = Ordinal(3);
@@ -231,7 +231,11 @@ impl Streams {
                                     Rule::Utf8
                                 },
                             }));
-                            rt.abort_claim(upload.claim, StreamNo(1), error).unwrap();
+                            // The client may have ended while these chunks were queued.
+                            match rt.abort_claim(upload.claim, StreamNo(1), error) {
+                                Ok(()) | Err(PushError::Ended) => {}
+                                Err(e) => panic!("aborted upload: {e:?}"),
+                            }
                             if upload.ord == UPLOAD_QUERY {
                                 rt.settle(upload.claim, Err(error)).unwrap();
                             }
@@ -511,6 +515,52 @@ mod upload_tests {
                     Err(PushError::Failed(error))
                 );
                 assert_eq!(c.reply(call, &mut reply), Ok(Some(Err(error))));
+            }
+        }
+    }
+
+    // Mutation: unwrap the abort of an upload the client already ended.
+    #[test]
+    fn refusing_an_ended_upload_keeps_the_provider_serving() {
+        for mode in [MODE_REFUSE_RANGE, MODE_REFUSE_UTF8] {
+            for query in [false, true] {
+                let mut p = provider();
+                let mut c = p.attach();
+                let mut state = Streams::default();
+                let call = if query {
+                    c.query(IFACE, UPLOAD_QUERY, &[mode], None).unwrap()
+                } else {
+                    c.command(IFACE, UPLOAD, &[1, mode], None).unwrap()
+                };
+                for _ in 0..3 {
+                    assert_eq!(c.push(call, StreamNo(1), &[255, 2]), Ok(2));
+                }
+                assert_eq!(c.end(call, StreamNo(1)), Ok(()));
+                let stepped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    provider_step(&mut p, &mut state);
+                }));
+                assert!(stepped.is_ok(), "refusing an ended upload must not panic");
+                let error = CallError::Contract(Contract::InvalidValue(Violation {
+                    type_name: Some("Block"),
+                    rule: if mode == MODE_REFUSE_RANGE {
+                        Rule::Range
+                    } else {
+                        Rule::Utf8
+                    },
+                }));
+                if query {
+                    assert_eq!(c.reply(call, &mut [0; 12]), Ok(Some(Err(error))));
+                } else {
+                    assert_eq!(c.ack(call), Some(Ok(())));
+                    assert_eq!(state.store.get(&1), Some(&vec![255, 2, 255, 2]));
+                }
+                assert!(state.uploads.is_empty());
+                c.forget(call);
+                let next = c.query(IFACE, QUERY, &[9], None).unwrap();
+                provider_step(&mut p, &mut state);
+                let mut reply = [0; 1];
+                assert_eq!(c.reply(next, &mut reply), Ok(Some(Ok(1))));
+                assert_eq!(reply, [10]);
             }
         }
     }
