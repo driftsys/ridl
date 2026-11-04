@@ -42,7 +42,7 @@ ridl-descriptor = { workspace = true, optional = true }
 ridl-ir = { path = "../ridl-ir" }
 # The backend of every session test. Path only, with no version: the packaged
 # crate does not run its tests.
-ridl-loopback = { path = "../ridl-loopback" }
+ridl-loopback = { path = "../ridl-loopback", features = ["debug"] }
 # An independent WebSocket client, so that the hand-written server side of
 # RFC 6455 is tested against an implementation this repository did not write.
 # A dev-dependency does not reach the build of a crate that depends on this
@@ -68,3 +68,15 @@ required-features = ["descriptor"]
 [[example]]
 name = "loopback_server"
 required-features = ["server"]
+
+[[test]]
+name = "selected"
+required-features = ["server"]
+
+[[example]]
+name = "debug_gateway"
+required-features = ["descriptor"]
+
+[[test]]
+name = "debug_gateway"
+required-features = ["descriptor"]

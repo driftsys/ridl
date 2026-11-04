@@ -890,3 +890,13 @@ name it.
   C, because PRs B and C still build from them. PR A and PR B garden only their
   own content into the durable records; PR C archives the three files. Each PR
   body states this.
+- **R-DS-5 (PR B review, 2026-11-04).** Corrects P-1's "the selector compares
+  name and hash": a selector chooses the backend by catalog name only, and the
+  session's unchanged D-11 checks then compare the hash, so a known name with
+  another hash is refused `catalog_mismatch` (frame §6.1), not
+  `unknown_catalog`. `None` means the name is unknown.
+- **R-DS-5, amended (PR B pass 2, 2026-11-04).** A deployment descriptor may
+  embed two catalogs with one name and different hashes, so the gateway's
+  selector prefers the catalog whose name and hash both match and otherwise
+  chooses by name, where D-11 then answers `catalog_mismatch`. `None` still
+  means that no catalog of the machine has the name.

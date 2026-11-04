@@ -205,7 +205,8 @@ pub enum Reason {
     EncodingUnsupported,
     /// The provider does not speak the frame version.
     FrameVersionUnsupported,
-    /// A catalog number does not fit the binding's range.
+    /// A catalog number does not fit the binding's range, or the receiver's
+    /// configured message limit cannot carry a payload the catalog allows.
     Range,
 }
 
