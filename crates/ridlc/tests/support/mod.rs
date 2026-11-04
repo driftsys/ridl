@@ -98,7 +98,8 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
 /// needs no feature `--cfg` and only that one `--extern`.
 ///
 /// Both crates declare edition 2021 for their compatibility check
-/// (ADR-0021 decision 10); each is built at the edition its manifest names.
+/// (ADR-0021 decision 10). This helper builds the loopback as edition 2024;
+/// `ridl_rt_rlib` builds the runtime as edition 2021.
 #[allow(
     dead_code,
     reason = "every test target in this crate compiles this module, and only \
