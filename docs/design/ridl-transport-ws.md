@@ -25,7 +25,7 @@ contracts the server reads and calls. The wire rules are the frame specification
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions below keep their numbers D-1 to D-29, because comments in
+decisions below keep their numbers D-1 to D-30, because comments in
 `crates/ridl-transport-ws/src/server/session.rs` and in the `justfile` cite
 them. Read this record together with [the `ridl-rt` design record](ridl-rt.md),
 whose "The ports" section states the contract the server consumes.
@@ -627,15 +627,16 @@ responses kept for duplicates are `server/calls.rs`.
   and dropped.
 - **A streamed reply** is not answered by a `response`; D-27 states how the
   server serves it. The table above applies to every other call.
-- **Abandoned calls.** A call whose outcome is still unknown
-  `config.call_abandon_after` (default 60 s) after it was sent is forgotten on
-  the backend, noted as `CallAbandoned`, and nothing is sent: the client's own
-  response bound reports `Undelivered` or `Timeout` (§9.6). Without this, a
-  client that calls a member no handler serves holds backend call slots until it
-  disconnects; on `ridl-loopback` the call table is shared by the whole runtime
-  (16 slots), so sixteen such calls would make every caller of that runtime
-  `Busy`. A zero duration forgets every call whose outcome is not known on the
-  first poll after the request. Calls with uploads use the activity and
+- **Abandoned calls.** A call with no progress for `config.call_abandon_after`
+  (default 60 s) is forgotten on the backend and noted as `CallAbandoned`. Each
+  open upload is ended with `stream_end interrupted`, including after a
+  command's acknowledgment. A call without uploads or a reply stream sends
+  nothing: the client's own response bound reports `Undelivered` or `Timeout`
+  (§9.6). Without this, a client that calls a member no handler serves holds
+  backend call slots until it disconnects; on `ridl-loopback` the call table is
+  shared by the whole runtime (16 slots), so sixteen such calls would make every
+  caller of that runtime `Busy`. A zero duration abandons a pending plain call
+  on the first poll after the request. Calls with uploads use the activity and
   upload-end clocks of D-30 instead.
 - **Duplicates.** §11.1 item 5 says the binding never retransmits, so a
   duplicate `request` is a peer defect. The server still follows §7: a `request`
@@ -947,15 +948,16 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 `DuplicateDropped`, `CallAbandoned`, `StreamCreditExceeded` (a `chunk` from the
 client on a stream the server granted it no credit for; closes 1002),
 `StreamStopped` (the client stopped a reply stream), `RuleNotCarried` (a
-violation's rule the frame has no code for; the outcome is replaced),
-`UnknownInteraction` (an interaction the member table does not hold, or a stream
-target that mismatches its call; dropped or answered as D-12 and D-27 say),
-`ChunkTooLarge` (an upload chunk above its member's limit, D-30) and
-`MessageLimitTooSmall` (the member whose messages the `Config` cannot carry,
-with the limit it needs; `serve` records it before the handshake.
-`serve_selected` records it after selection when ordinary attach checks pass,
-with `refused(range)` or, when the capability check also fails,
-`refused(frame_version_unsupported)`. Both return `ConfigRefused`, D-26).
+violation's rule the frame has no code for, including `Rule::Utf8` on a session
+below frame version 3; the outcome is replaced), `UnknownInteraction` (an
+interaction the member table does not hold, or a stream target that mismatches
+its call; dropped or answered as D-12 and D-27 say), `ChunkTooLarge` (an upload
+chunk above its member's limit, D-30) and `MessageLimitTooSmall` (the member
+whose messages the `Config` cannot carry, with the limit it needs; `serve`
+records it before the handshake. `serve_selected` records it after selection
+when ordinary attach checks pass, with `refused(range)` or, when the capability
+check also fails, `refused(frame_version_unsupported)`. Both return
+`ConfigRefused`, D-26).
 
 ### `Config`
 

@@ -112,7 +112,7 @@ only if a Chromium-family browser is installed.
   it never learns of a refusal of the last chunks; and no frame confirms an
   upload's end. Recommendation: `close` resolves once `stream_end end` is sent
   (B-13); a refusal that the server sends before it receives the end still
-  rejects `close`. State the limit in D-28 and D-21 (ADR-0032 note (a)).
+  rejects `close`. State the limit in D-30 and D-23 (ADR-0032 note (a)).
 
 **Q5. How does `write` size a chunk?** The design is silent. Recommendation: one
 `write` is one `chunk`; a `write` longer than the member's limit rejects with
@@ -792,11 +792,11 @@ And the constraints of the binding:
   refusal before the reply); §11.1 "Binding version 3" (the credit of a stream
   parameter: initial 4, one per chunk taken); §13 "Streams" (the parameter
   streams and the UTF-8 rule are carried; keep the remaining omissions).
-- Modify: `docs/design/ridl-transport-ws.md` — new **D-28. A parameter stream
+- Modify: `docs/design/ridl-transport-ws.md` — new **D-30. A parameter stream
   over frame version 3**, recording B-4 to B-10, `Note::ChunkTooLarge`, the
   limit of Q4 (f), and the duplex call; update D-27's "What the client may send"
   and the "not built" list near the end of the record.
-- Modify: `docs/design/ridl-transport-ws-ts.md` — new **D-21. An upload**,
+- Modify: `docs/design/ridl-transport-ws-ts.md` — new **D-23. An upload**,
   recording B-12 to B-16 and the limit of Q4 (f); update the "not built" list
   and the end-to-end test list.
 - Modify: `docs/technotes/websocket-binding-rationale.md` (the version 3

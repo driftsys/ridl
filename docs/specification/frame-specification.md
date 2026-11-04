@@ -907,11 +907,13 @@ bound has not passed. The providing runtime keys each call it has presented on
 is the session's (the binding says what it derives it from; §10). A `request`
 under a key already presented is **not presented again**: the runtime re-sends
 the `response` it gave, when the claim has settled, and sends nothing when it
-has not. Two callers are never merged, even under one `seq`. A provider keeps a
-settled call's response for a call with a response bound until that bound has
-passed, measured from the request's `stamp`, with the plain-reply upload
-exception in [§5.4](#54-query). For a call with no response bound, the binding
-fixes the retention and states it.
+has not. An accepted command whose upload is still open is an exception: a
+retransmitted request is dropped without a response (`DuplicateDropped` in the
+WebSocket server). Two callers are never merged, even under one `seq`. A
+provider keeps a settled call's response for a call with a response bound until
+that bound has passed, measured from the request's `stamp`, with the plain-reply
+upload exception in [§5.4](#54-query). For a call with no response bound, the
+binding fixes the retention and states it.
 
 **A retransmitted `request` of a streamed reply** is answered, once the stream
 has ended, with one `stream_end` whose outcome is `interrupted` and whose `seq`

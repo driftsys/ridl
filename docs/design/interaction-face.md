@@ -457,7 +457,7 @@ runtime's finding, and carries no acceptance value.
 Every row below is built in the generated Rust face and exercised over
 `ridl-loopback`. The WebSocket server's upload support is recorded in
 [D-30](ridl-transport-ws.md); the TypeScript upload methods and their limits are
-recorded in [D-21](ridl-transport-ws-ts.md). The request argument excludes the
+recorded in [D-23](ridl-transport-ws-ts.md). The request argument excludes the
 stream: client methods take the ordinary argument by value and provider methods
 by reference; a stream-only request uses its induced empty parameter struct. The
 Rust face omits calls with a `require` clause beside an upload

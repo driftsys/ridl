@@ -353,10 +353,12 @@ timer would end healthy sessions. The session therefore ends on the platform's
 `close` and `error` events only, and the server's liveness check (the crate's
 D-22) is the one that runs. A server that is gone is detected when the
 platform's connection fails; a server host that vanished without a TCP reset is
-detected only at the operating system's timeout, and every call still ends at
-its bound. `connect`, `subscribe` and `read` have no bound: each waits until its
-answer arrives or the session ends. driftsys/ridl#991 also asks the
-specification to state what a client that cannot see pings does.
+detected only at the operating system's timeout. Each call ends at its bound
+once its timer starts; a `queryWithUpload` with an open upload has no reply
+timer until the upload closes (D-23). `connect`, `subscribe` and `read` have no
+bound: each waits until its answer arrives or the session ends.
+driftsys/ridl#991 also asks the specification to state what a client that cannot
+see pings does.
 
 **D-12. The default request stamp is wall-clock UTC in microseconds.** A
 `request`'s `stamp` is in the platform's synchronized time base, TAI (ridl
@@ -406,15 +408,17 @@ have a detected invalid value reported, so that nothing fails silently:
   `detected: "corrupt"`, with the envelope of the frame (§9.2); it counts in the
   event's sequence, so no loss is recorded for it.
 
-Nothing is sent back, and the session does not end. The one payload the client
-sends, the arguments of a `request`, is checked before it is sent: `command` and
-`query` reject with `corrupt` when the arguments are longer than the member's
-limit, and send nothing. That is the answer the provider gives a `request` above
-the limit (the crate's D-26), but only to arguments that one message carries; a
-larger message is above the provider's message limit, which closes the session
-with 1009 and rejects every call in flight with `down`. A `fixed` whose value is
-longer than one message arrives in `block` frames of at most 4,096 bytes, which
-the session reassembles.
+Nothing is sent back, and the session does not end. The client checks request
+arguments before sending: `command` and `query` reject with `corrupt` when the
+arguments are longer than the member's limit, and send nothing. That is the
+answer the provider gives a `request` above the limit (the crate's D-26), but
+only to arguments that one message carries; a larger message is above the
+provider's message limit, which closes the session with 1009 and rejects every
+call in flight with `down`. A `fixed` whose value is longer than one message
+arrives in `block` frames of at most 4,096 bytes, which the session reassembles.
+The client also sends upload chunk payloads through `commandStream` and
+`queryWithUpload`; their separate size refusal sends no chunk and interrupts the
+upload (D-23).
 
 **Blocks.** `src/reassembly.ts` holds the one payload in progress. The rules it
 applies, and the answers to each sequence error, are frame specification §5.5;
@@ -590,9 +594,11 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   limit, `corrupt`; and a request that arrives while 64 are in flight, `busy`.
   Otherwise `onRequest` receives a copy of the payload, may be asynchronous, and
   its outcome becomes the `response`: a reply longer than the limit is sent as
-  `corrupt`. The session keeps the last 64 settled responses, because it reads
-  no descriptor and so knows no bound, and a repeated `seq` is answered with the
-  kept response and not served again.
+  `corrupt`. An `invalid-value` violation with rule `utf8` is also sent as
+  `corrupt`, because this providing session uses frame version 2 (§9.6). The
+  session keeps the last 64 settled responses, because it reads no descriptor
+  and so knows no bound, and a repeated `seq` is answered with the kept response
+  and not served again.
 - **The difference from the Rust provided session.** The frame has no outcome
   for a defect of the provider, so the TypeScript provider sends **no
   `response`** when `onRequest` returns an outcome outside the call kind's set
@@ -666,9 +672,12 @@ parameter streams (driftsys/ridl#1224).
   `response accepted`, leaving its upload open. A plain reply within the
   member's limit resolves `reply` with its payload and forgets the query. If the
   upload is still open, that reply errors it and releases a write waiting for
-  credit with `interrupted`. A reply above the limit rejects both with
-  `corrupt`. An outcome that does not fit the call's kind is discarded and
-  recorded as `unexpected-outcome` without settling the call (D-9).
+  credit with `interrupted`. After an early plain reply, the server sends
+  `stream_end interrupted` on the upload. The client has already forgotten the
+  call and records that end as a discard with reason `unknown-correlation`. A
+  reply above the limit rejects both with `corrupt`. An outcome that does not
+  fit the call's kind is discarded and recorded as `unexpected-outcome` without
+  settling the call (D-9).
 - **Abort.** Aborting sends `stream_end interrupted` with the next sequence and
   releases a write waiting for credit. A query's `reply` rejects `interrupted`
   and the query is forgotten. A command retains a pending acknowledgment until

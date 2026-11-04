@@ -6,37 +6,61 @@ use ridl_rt::port::{Correlation, PushError, StreamCaller, StreamNo};
 use std::collections::VecDeque;
 use std::time::Instant;
 
+/// The receiving state of one parameter stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum UploadState {
+    /// The stream accepts chunks until the client's end arrives.
     Open,
+    /// The backend accepted the client's end after all queued chunks.
     Ended,
+    /// A refusal or interruption stopped the stream.
     Stopped,
 }
+/// One parameter stream and its bounded queue of chunks awaiting the backend.
 #[derive(Clone)]
 pub(super) struct Upload {
+    /// The parameter stream number within its call.
     pub(super) no: StreamNo,
+    /// The sequence of the last accepted chunk or end; 0 before either.
     pub(super) seq_in: u64,
+    /// The number of chunks the client may still send.
     pub(super) credit: u32,
+    /// Received chunks not yet accepted by the backend, in order.
     pub(super) queue: VecDeque<Vec<u8>>,
+    /// Whether the client sent an end after its final chunk.
     pub(super) end_received: bool,
+    /// Whether the stream is open, ended or stopped.
     pub(super) state: UploadState,
+    /// The last receive or backend progress, or the request time before either.
     pub(super) last_activity: Instant,
 }
+/// The result of receiving one parameter stream frame.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Receive {
+    /// The frame was accepted for delivery to the backend.
     Queued,
+    /// The frame did not carry the next expected sequence.
     Gap,
+    /// A chunk arrived without available credit.
     CreditExceeded,
+    /// The stream was stopped or had already received its end.
     Dropped,
 }
+/// Backend progress during one attempt to drain an upload.
 pub(super) struct Drain {
+    /// The number of queued chunks the backend accepted, returning this credit.
     pub(super) taken: u32,
+    /// The terminal result, or `None` while the stream remains open.
     pub(super) end: Option<DrainEnd>,
 }
+/// Why draining an upload reached a terminal state.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum DrainEnd {
+    /// The backend accepted the client's end.
     Ended,
+    /// The backend refused a chunk or end with this call error.
     Refused(CallError),
+    /// The backend no longer has an attached stream for this call.
     Detached,
 }
 impl Upload {

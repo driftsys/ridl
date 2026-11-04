@@ -39,7 +39,8 @@ pub(super) struct InFlight {
     pub(super) stream: Option<ReplyStream>,
     /// Parameter streams that remain owned after an accepted acknowledgment.
     pub(super) uploads: Vec<Upload>,
-    /// Whether the response was sent, or the reply stream ended.
+    /// Whether the response was sent, including an accepted command that
+    /// still owns uploads, or the reply stream ended.
     pub(super) settled: bool,
 }
 

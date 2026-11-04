@@ -1397,8 +1397,8 @@ The server, UTF-8 wire code and TypeScript upload API are built. The upload
 end-to-end tests are written and type-checked; their execution over TCP or in a
 browser is not verified by the available local results. These rulings supersede
 earlier sections where they differ. The implementation records are
-[the server design](../design/ridl-transport-ws.md), D-28, and
-[the client design](../design/ridl-transport-ws-ts.md), D-21; wire behavior
+[the server design](../design/ridl-transport-ws.md), D-30, and
+[the client design](../design/ridl-transport-ws-ts.md), D-23; wire behavior
 belongs to [the frame specification](../specification/frame-specification.md)
 §5.3, §5.4, §6.4, §9.6 and §11.1.
 
@@ -1485,9 +1485,9 @@ belongs to [the frame specification](../specification/frame-specification.md)
   and reads them back through `FETCH`; the browser test requires
   `upload: "200000:true"`. The extension is type-checked against DOM types; no
   browser execution result is available in the Task 5 report.
-- Q4(a–e): D-28 records direction-aware ends, `ChunkTooLarge`, silent drops
+- Q4(a–e): D-30 records direction-aware ends, `ChunkTooLarge`, silent drops
   after refusal or the client's end, upload-end clock inputs and the sender's
-  UTF-8 version gate. D-21 records the client's close limit for Q4(f).
+  UTF-8 version gate. D-23 records the client's close limit for Q4(f).
 - Task 5's catalog parity target passes 3/3. Six separate mutations of the three
   upload/fetch ordinals, fetch chunk size and two refusal modes each fail an
   equality assertion; the restored target passes. The Deno scenarios assert

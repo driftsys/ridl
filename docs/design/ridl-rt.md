@@ -143,7 +143,7 @@ with one stream parameter and a plain or named-element streamed reply run over
 `ridl-loopback`. Calls with two or more stream parameters remain outside the
 face (driftsys/ridl#1224). The WebSocket server's upload support is recorded in
 [D-30](ridl-transport-ws.md); the TypeScript upload methods and their limits are
-recorded in [D-21](ridl-transport-ws-ts.md).
+recorded in [D-23](ridl-transport-ws-ts.md).
 
 `Ready(Some(Ok(item)))` is the next element, `Ready(None)` the end,
 `Ready(Some(Err(Interrupted)))` stops the stream before its end, which the
@@ -1266,7 +1266,7 @@ with a plain or named-element streamed query reply over `ridl-loopback`. Calls
 with two or more stream parameters remain outside the face (driftsys/ridl#1224);
 the WebSocket server's upload support is recorded in
 [D-30](ridl-transport-ws.md), and the TypeScript upload methods and their limits
-are recorded in [D-21](ridl-transport-ws-ts.md).
+are recorded in [D-23](ridl-transport-ws-ts.md).
 
 Other omissions are `Inline` payloads; `Constrained` (nothing calls it in 0.1);
 `Family` (the IR carries no family field yet); `ServiceId` (dropped, ADR-0021

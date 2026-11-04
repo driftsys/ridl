@@ -103,7 +103,8 @@ pub enum Note {
         seq: u64,
     },
     /// A parameter stream chunk exceeded its member's payload limit.
-    /// The stream is answered `corrupt` and the call is forgotten.
+    /// The stream is answered `corrupt`, the other open uploads are ended
+    /// `interrupted`, and the call is forgotten.
     ChunkTooLarge {
         /// The request sequence number.
         seq: u64,
