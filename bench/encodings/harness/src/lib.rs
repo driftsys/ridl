@@ -4,6 +4,7 @@
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
+use std::hint::black_box;
 
 use ridl_rt::encoding::Encoding;
 use ridl_rt::payload::{Payload, Ref};
@@ -60,22 +61,25 @@ pub struct Counts {
 /// The binary that calls this installs `CountingAlloc` as its global
 /// allocator; without it every count is zero.
 pub fn measure_counts<T: Payload<E>, E: Encoding>(value: &T) -> Counts {
+    // Every result goes through `black_box` so that the optimizer cannot drop
+    // a step it sees no use for, which would also drop its allocations.
+    let value = black_box(value);
     let mut buf = T::BUFFER;
 
     CountingAlloc::reset();
-    let encoded = Ref::<T, E>::encode(value, buf.as_mut()).expect("encode");
+    let encoded = black_box(Ref::<T, E>::encode(value, buf.as_mut()).expect("encode"));
     let encode_allocs = CountingAlloc::count();
-    let bytes = encoded.bytes();
+    let bytes = black_box(encoded.bytes());
     let size = bytes.len();
 
     CountingAlloc::reset();
-    let verified = Ref::<T, E>::verify(bytes).expect("verify");
+    let verified = black_box(Ref::<T, E>::verify(bytes).expect("verify"));
     let verify_allocs = CountingAlloc::count();
     drop(verified);
 
     CountingAlloc::reset();
-    let verified = Ref::<T, E>::verify(bytes).expect("verify");
-    let decoded = verified.decode();
+    let verified = black_box(Ref::<T, E>::verify(bytes).expect("verify"));
+    let decoded = black_box(verified.decode());
     let decode_allocs = CountingAlloc::count();
     drop(decoded);
 

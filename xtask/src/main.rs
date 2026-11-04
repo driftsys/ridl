@@ -7,7 +7,6 @@
 //!   `crates/ridl-syntax/family.ungram` (ADR-0007 decision 1).
 //! - `descriptor-codegen` regenerates the catalog-descriptor accessors from
 //!   `crates/ridl-descriptor/schema/catalog.fbs`.
-//!
 //! - `bench gen` writes the generated crates of the encoding bench under
 //!   `bench/encodings/generated/`.
 //! - `calibrate` dumps corpus findings and derives levels from reviewed labels.

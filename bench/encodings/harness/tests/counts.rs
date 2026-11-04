@@ -1,5 +1,7 @@
 use encoding_bench::{measure_counts, CountingAlloc};
-use ridl_generated::veh::common::{Speed, SpeedLimitPayload};
+use ridl_generated::veh::common::{DriverProfile, Speed, SpeedLimitPayload};
+use ridl_generated::ridl::std::Name;
+use std::hint::black_box;
 use ridl_rt::encoding::{FlatBuffers, Podbuf, Proto3};
 
 #[global_allocator]
@@ -24,4 +26,41 @@ fn counts_for_one_veh_cluster_signal_are_nonzero_size_and_zero_podbuf_allocs() {
     assert!(p3.size > 0, "proto3 size {}", p3.size);
     assert!(pb.size > 0, "podbuf size {}", pb.size);
     assert_eq!(pb.decode_allocs, 0);
+}
+
+/// Positive control: the counter counts, and counts exactly.
+#[test]
+fn counting_alloc_counts_each_allocation_exactly() {
+    CountingAlloc::reset();
+    assert_eq!(CountingAlloc::count(), 0);
+    let a = black_box(Box::new(1u64));
+    assert_eq!(CountingAlloc::count(), 1);
+    let b = black_box(Box::new(2u64));
+    assert_eq!(CountingAlloc::count(), 2);
+    drop((a, b));
+    assert_eq!(CountingAlloc::count(), 2, "dealloc is not counted");
+}
+
+/// `DriverProfile` holds a string (`name`). Building the value from bytes
+/// copies the string into a `String`, so decode must allocate under every
+/// encoding; this proves `measure_counts` sees allocations. Podbuf encode
+/// and verify read and write in place, so they allocate nothing.
+#[test]
+fn counts_for_a_payload_with_a_string_see_decode_allocations() {
+    let value = DriverProfile {
+        name: Name::new("alice".to_string()).unwrap(),
+        speed: Speed::new(80.0).unwrap(),
+        r#override: None,
+        gears: 5,
+    };
+
+    let fb = measure_counts::<_, FlatBuffers>(&value);
+    let p3 = measure_counts::<_, Proto3>(&value);
+    let pb = measure_counts::<_, Podbuf>(&value);
+
+    assert!(fb.decode_allocs > 0, "flatbuffers {fb:?}");
+    assert!(p3.decode_allocs > 0, "proto3 {p3:?}");
+    assert!(pb.decode_allocs > 0, "podbuf {pb:?}");
+    assert_eq!(pb.encode_allocs, 0, "podbuf {pb:?}");
+    assert_eq!(pb.verify_allocs, 0, "podbuf {pb:?}");
 }
