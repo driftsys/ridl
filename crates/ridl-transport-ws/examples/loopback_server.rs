@@ -9,6 +9,8 @@
 //! It serves UPLOAD (store by key), UPLOAD_QUERY (count and sum), FETCH
 //! (stored bytes) and DUPLEX (stream echo), alongside the signal, event,
 //! ordinary command and queries, and fixed values.
+//! FETCH waits for all open uploads to its key to end or fail on the provider
+//! side, then snapshots the stored bytes on a later provider step.
 //! The process exits with status 0 when its standard input reaches the end.
 
 // The provider module is shared with the tests, and this example uses only

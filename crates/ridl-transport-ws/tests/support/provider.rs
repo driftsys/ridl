@@ -65,7 +65,8 @@ pub const STREAM_INTERRUPT: u8 = 0xff;
 pub const UPLOAD: Ordinal = Ordinal(11);
 /// A query that replies with the upload's byte count and wrapping sum.
 pub const UPLOAD_QUERY: Ordinal = Ordinal(12);
-/// A query that streams the stored bytes for its key.
+/// A query that snapshots and streams the stored bytes for its key after all
+/// open uploads to that key have ended or failed on the provider side.
 pub const FETCH: Ordinal = Ordinal(13);
 /// A query that echoes stream 1 on stream 0.
 pub const DUPLEX: Ordinal = Ordinal(14);
@@ -147,13 +148,14 @@ pub fn provider() -> Loopback {
     rt
 }
 
-/// The provider's open uploads and reply streams, stored values, and failures
-/// observed by [`STREAM_QUERY`]. State persists between [`provider_step`] calls
-/// when a stream is pending or its window is full.
+/// The provider's open uploads, pending fetches, reply streams, stored values,
+/// and failures observed by [`STREAM_QUERY`]. State persists between
+/// [`provider_step`] calls when a stream is pending or its window is full.
 #[derive(Default)]
 pub struct Streams {
     open: Vec<Open>,
     uploads: Vec<OpenUpload>,
+    pending_fetches: Vec<PendingFetch>,
     fetches: Vec<OpenFetch>,
     store: BTreeMap<u8, Vec<u8>>,
     /// Each `PushError::Failed` a push or an end of [`STREAM_QUERY`] answered,
@@ -182,6 +184,11 @@ struct OpenUpload {
     sum: u32,
     held: Option<Vec<u8>>,
     first: Option<Pull>,
+}
+
+struct PendingFetch {
+    claim: ClaimId,
+    key: u8,
 }
 
 struct OpenFetch {
@@ -280,10 +287,27 @@ impl Streams {
         });
     }
 
-    /// Advances uploads and fetches, then pushes the next elements of each
+    /// Snapshots pending fetches whose uploads finished in an earlier step,
+    /// advances uploads and fetches, then pushes the next elements of each
     /// open [`STREAM_QUERY`] until its window is full. It ends or interrupts
     /// completed streams and records their failures in [`Streams::failures`].
     fn advance(&mut self, rt: &mut Loopback) {
+        // Check before advancing uploads so a held fetch snapshots on a later step.
+        self.pending_fetches.retain(|fetch| {
+            if self
+                .uploads
+                .iter()
+                .any(|upload| upload.ord == UPLOAD && upload.key == fetch.key)
+            {
+                return true;
+            }
+            self.fetches.push(OpenFetch {
+                claim: fetch.claim,
+                bytes: self.store.get(&fetch.key).cloned().unwrap_or_default(),
+                offset: 0,
+            });
+            false
+        });
         self.advance_uploads(rt);
         self.fetches.retain_mut(|fetch| {
             while fetch.offset < fetch.bytes.len() {
@@ -332,8 +356,8 @@ impl Streams {
     }
 }
 
-/// Makes one pass over the claims waiting on `rt` and settles each, then
-/// moves every reply stream in `streams` forward.
+/// Makes one pass over the claims waiting on `rt`, then advances the uploads,
+/// pending fetches and reply streams in `streams`.
 ///
 /// - [`COMMAND`]: settles `Ok(&[])`, then sets [`SIGNAL`] to the argument,
 ///   commits, and raises [`EVENT`] with the argument. An argument longer
@@ -346,7 +370,9 @@ impl Streams {
 /// - [`UPLOAD`]: acknowledges, replaces the key's stored value, then stores chunks.
 /// - [`UPLOAD_QUERY`]: replies with the byte count and wrapping sum after upload end.
 ///   Both uploads refuse the third chunk in either refusing mode.
-/// - [`FETCH`]: streams a snapshot of the key's stored bytes.
+/// - [`FETCH`]: streams a snapshot of the key's stored bytes. A fetch claimed
+///   while uploads to its key are open waits for all of them to end or fail,
+///   then takes its snapshot on a later provider step.
 /// - [`DUPLEX`]: echoes each upload chunk, retaining it while the reply window is full.
 pub fn provider_step(rt: &mut Loopback, streams: &mut Streams) {
     // The arguments of a command or a query are at most the default ceiling
@@ -413,14 +439,23 @@ pub fn provider_step(rt: &mut Loopback, streams: &mut Streams) {
                 });
             }
             FETCH => {
-                // Consume earlier uploads before taking the stored value's snapshot.
-                streams.advance_uploads(rt);
                 let key = arg.first().copied().unwrap_or(0);
-                streams.fetches.push(OpenFetch {
-                    claim: claim.id,
-                    bytes: streams.store.get(&key).cloned().unwrap_or_default(),
-                    offset: 0,
-                });
+                if streams
+                    .uploads
+                    .iter()
+                    .any(|upload| upload.ord == UPLOAD && upload.key == key)
+                {
+                    streams.pending_fetches.push(PendingFetch {
+                        claim: claim.id,
+                        key,
+                    });
+                } else {
+                    streams.fetches.push(OpenFetch {
+                        claim: claim.id,
+                        bytes: streams.store.get(&key).cloned().unwrap_or_default(),
+                        offset: 0,
+                    });
+                }
             }
             _ => {
                 let unknown = Err(CallError::Contract(Contract::UnknownInteraction));
@@ -436,6 +471,106 @@ mod upload_tests {
     use super::*;
     use ridl_rt::payload::{Rule, Violation};
     use ridl_rt::port::{Caller, Pull, StreamCaller, StreamNo};
+
+    // Mutation: snapshot FETCH immediately while an upload for its key is open.
+    #[test]
+    fn fetch_waits_for_unread_upload_chunks_before_taking_its_snapshot() {
+        let mut p = provider();
+        let mut c = p.attach();
+        let mut state = Streams::default();
+        let bytes = pattern(200_000);
+        let call = c.command(IFACE, UPLOAD, &[1, 0], None).unwrap();
+        provider_step(&mut p, &mut state);
+        assert_eq!(c.ack(call), Some(Ok(())));
+
+        // The server has delivered twelve chunks, with the twelfth still unread.
+        // The final 6,464 bytes and the end are still waiting at the server.
+        for chunk in bytes[..193_536].chunks(FETCH_CHUNK) {
+            provider_step(&mut p, &mut state);
+            assert_eq!(c.push(call, StreamNo(1), chunk), Ok(chunk.len()));
+        }
+        let fetch = c.query(IFACE, FETCH, &[1], None).unwrap();
+        provider_step(&mut p, &mut state);
+        let mut buf = vec![0; FETCH_CHUNK];
+        assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::Pending));
+
+        assert_eq!(c.push(call, StreamNo(1), &bytes[193_536..]), Ok(6_464));
+        assert_eq!(c.end(call, StreamNo(1)), Ok(()));
+        let mut read = Vec::new();
+        for _ in 0..100 {
+            provider_step(&mut p, &mut state);
+            match c.pull(fetch, REPLY_STREAM, &mut buf).unwrap() {
+                Pull::Chunk(n) => read.extend_from_slice(&buf[..n]),
+                Pull::End => break,
+                Pull::Pending => continue,
+                other => panic!("unexpected fetch: {other:?}"),
+            }
+        }
+        assert_eq!(read.len(), 200_000);
+        assert_eq!(read, bytes);
+        assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::End));
+    }
+
+    // Mutation: release a fetch after only one upload finishes, ignore failures,
+    // or snapshot in the same step that the provider observes the final end.
+    #[test]
+    fn fetch_waits_for_every_upload_to_its_key_to_end_or_fail() {
+        for fail in [false, true] {
+            let mut p = provider();
+            let mut c = p.attach();
+            let mut state = Streams::default();
+            let first = c.command(IFACE, UPLOAD, &[1, 0], None).unwrap();
+            let second = c.command(IFACE, UPLOAD, &[1, 0], None).unwrap();
+            provider_step(&mut p, &mut state);
+            assert_eq!(c.ack(first), Some(Ok(())));
+            assert_eq!(c.ack(second), Some(Ok(())));
+            assert_eq!(c.push(first, StreamNo(1), &[1]), Ok(1));
+            assert_eq!(c.push(second, StreamNo(1), &[2]), Ok(1));
+            let fetch = c.query(IFACE, FETCH, &[1], None).unwrap();
+            provider_step(&mut p, &mut state);
+            let mut buf = [0; FETCH_CHUNK];
+            assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::Pending));
+
+            assert_eq!(c.end(first, StreamNo(1)), Ok(()));
+            provider_step(&mut p, &mut state);
+            provider_step(&mut p, &mut state);
+            assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::Pending));
+
+            if fail {
+                c.abort(
+                    second,
+                    StreamNo(1),
+                    CallError::Transport(Transport::Interrupted),
+                )
+                .unwrap();
+            } else {
+                assert_eq!(c.end(second, StreamNo(1)), Ok(()));
+            }
+            provider_step(&mut p, &mut state);
+            assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::Pending));
+            provider_step(&mut p, &mut state);
+            assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::Chunk(2)));
+            assert_eq!(&buf[..2], &[1, 2]);
+            assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::End));
+        }
+    }
+
+    // Mutation: hold a fetch for an unrelated key or for a non-storing upload.
+    #[test]
+    fn fetch_without_an_open_storing_upload_to_its_key_is_immediate() {
+        let mut p = provider();
+        let mut c = p.attach();
+        let mut state = Streams::default();
+        let upload = c.command(IFACE, UPLOAD, &[1, 0], None).unwrap();
+        let query_upload = c.query(IFACE, UPLOAD_QUERY, &[], None).unwrap();
+        provider_step(&mut p, &mut state);
+        assert_eq!(c.ack(upload), Some(Ok(())));
+        assert_eq!(c.reply(query_upload, &mut [0; 12]), Ok(None));
+        // UPLOAD_QUERY uses key 0 internally but never stores bytes there.
+        let fetch = c.query(IFACE, FETCH, &[0], None).unwrap();
+        provider_step(&mut p, &mut state);
+        assert_eq!(c.pull(fetch, REPLY_STREAM, &mut []), Ok(Pull::End));
+    }
 
     // Mutation: omit storing a chunk, or fail to replace a stored value.
     #[test]
