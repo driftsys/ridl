@@ -6,7 +6,11 @@ defines. It holds two things: a codec for the §11.1 header layout that needs
 `core` only, and a server that acts as the **providing side** of a frame session
 on one connection the embedder accepted, over a `ridl-rt` port set the embedder
 chose. The server forwards payload bytes without decoding them, and it maps each
-client request's `seq` to the correlation its backend `Caller` returned.
+client request's `seq` to the correlation its backend `Caller` returned. The
+server has a second role, the **provided session**, in which the WebSocket
+client provides and the server consumes: the client's signals and events are
+delivered into local ports, and the calls that the local ports receive are sent
+to the client (D-28).
 
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 6 names the crate and fixes `ridl-rt` as its only unconditional
@@ -21,7 +25,7 @@ contracts the server reads and calls. The wire rules are the frame specification
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions below keep their numbers D-1 to D-27, because comments in
+decisions below keep their numbers D-1 to D-29, because comments in
 `crates/ridl-transport-ws/src/server/session.rs` and in the `justfile` cite
 them. Read this record together with [the `ridl-rt` design record](ridl-rt.md),
 whose "The ports" section states the contract the server consumes.
@@ -52,12 +56,15 @@ must be right.
   from the catalog descriptor that `ridl build --emit catalog` writes, under the
   `descriptor` feature, off by default, so an embedder that passes no table
   links no planus (driftsys/ridl#985).
+- Consumes a remote provider on the subprotocol `ridl-ws-v2-provider`: the
+  client publishes the signals and raises the events of an interface that a
+  local instance offers, and answers the calls sent to that instance. The crate
+  delivers them into the instance's local ports (`SignalWriter`, `EventSink`,
+  `Handler`) and forwards the calls (D-28, D-29, and D-16 for the calls).
 
-**What it does not do.** It serves no stand-in port (`SignalWriter`,
-`EventSink`, `Handler`; see "Adding the stand-in ports later"). It ships no
-public Rust client. It has no TLS and authenticates no one. It reads a catalog
-descriptor only under the `descriptor` feature, and does no I/O: the embedder
-reads or embeds the file.
+**What it does not do.** It ships no public Rust client. It has no TLS and
+authenticates no one. It reads a catalog descriptor only under the `descriptor`
+feature, and does no I/O: the embedder reads or embeds the file.
 
 **What it must never do.** Bind a socket, spawn a thread or start a task on its
 own; pull a dependency into an embedder's build that is not justified in "The
@@ -82,21 +89,22 @@ written from the specification alone does not interoperate with this server.
 
 **D-1. One crate, two layers.**
 
-| Module                              | Needs                   | Feature           | Holds                                                                       |
-| ----------------------------------- | ----------------------- | ----------------- | --------------------------------------------------------------------------- |
-| `frame`                             | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`                         |
-| `ws` (private)                      | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping               |
-| `server`                            | `std`                   | `server`, default | the session core, the backend trait, `Config`, `serve` and `serve_selected` |
-| `descriptor` (private, in `server`) | `std`                   | `descriptor`, off | `MemberTable::from_descriptor` over `ridl-descriptor`                       |
+| Module                              | Needs                   | Feature           | Holds                                                                      |
+| ----------------------------------- | ----------------------- | ----------------- | -------------------------------------------------------------------------- |
+| `frame`                             | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`                        |
+| `ws` (private)                      | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping              |
+| `server`                            | `std`                   | `server`, default | the session cores, the backend traits, `Config`, and the four entry points |
+| `descriptor` (private, in `server`) | `std`                   | `descriptor`, off | `MemberTable::from_descriptor` over `ridl-descriptor`                      |
 
 `cargo add ridl-transport-ws --no-default-features` gives the codec alone, with
 `ridl-rt` at its default features (`no_std`). The `server` feature turns on
 `std` for this crate and nothing else; it turns on no `ridl-rt` feature. The
-crate root re-exports `serve`, `serve_selected`, `Backend`, `Config`,
+crate root re-exports `serve`, `serve_selected`, `serve_provided`,
+`serve_provided_selected`, `Backend`, `ProvidedBackend`, `Providing`, `Config`,
 `Connection`, `Described`, `Ended`, `LimitOutOfRange`, `MemberTable`, `Note`,
-`Polling`, `RequestedCatalog`, `RetainedTooSmall`, `Scanning` and
-`TableMismatch` under that feature, and `DescriptorError` under `descriptor`
-(`crates/ridl-transport-ws/src/lib.rs`).
+`Polling`, `RequestedCatalog`, `RetainedTooSmall`, `Scanning`, `SelectionError`,
+`Streaming` and `TableMismatch` under that feature, and `DescriptorError` under
+`descriptor` (`crates/ridl-transport-ws/src/lib.rs`).
 
 **D-2. No unconditional dependency but `ridl-rt`.** The WebSocket layer is
 written in this crate, and only its server side: parse one HTTP/1.1 upgrade
@@ -134,11 +142,12 @@ The codec is `crates/ridl-transport-ws/src/frame.rs`. It also defines the
 constants `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`), `FRAME_VERSION_3`
 (3), `SUBPROTOCOL_V3` (`ridl-ws-v3`), `INITIAL_CREDIT` (4, the chunks a sender
 of a stream may send before the first `stream_credit`), `SUBPROTOCOL_V1`
-(`ridl-ws-v1`, selected only to refuse an `attach`, D-20), `MIN_MESSAGE_LIMIT`
-(294, the largest `attach`), `MAX_MESSAGE_LIMIT`, `ENVELOPE_BYTES` (16) and
-`BLOCK_BYTES` (4,096, the payload bytes of every `block` but the last), and
-`encoding_tag`, which maps an encoding name to the tag of §3: `flatbuffers` 1,
-`proto3` 2, `podbuf` 3.
+(`ridl-ws-v1`, selected only to refuse an `attach`, D-20),
+`SUBPROTOCOL_PROVIDER` (`ridl-ws-v2-provider`, the reversed role of D-20 and
+D-28), `MIN_MESSAGE_LIMIT` (294, the largest `attach`), `MAX_MESSAGE_LIMIT`,
+`ENVELOPE_BYTES` (16) and `BLOCK_BYTES` (4,096, the payload bytes of every
+`block` but the last), and `encoding_tag`, which maps an encoding name to the
+tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
 
 **D-3. One borrowed `Frame` enum, with the payload rules in the types.** A
 decoded frame borrows its payload and its unit name from the message. The
@@ -223,13 +232,16 @@ item 2.
 
 **D-6. Every form in both directions.** The codec encodes and decodes all
 fourteen forms, whichever side calls it. The server uses half of each, and the
-test client uses the other half. "Adding the stand-in ports later" depends on
-this.
+test client uses the other half. The provided session (D-28) depends on this: it
+sends `attach`, `subscribe` and `request` and receives `attached`, `answer`,
+`publish`, `occurrence` and `response`.
 
 ## The server
 
 The server is `crates/ridl-transport-ws/src/server.rs` and its modules
-`backend.rs`, `config.rs`, `session.rs` and `calls.rs`.
+`backend.rs`, `config.rs`, `session.rs` and `calls.rs` for the providing role,
+and `provided.rs`, `provided_backend.rs`, `provided/signals.rs` and
+`provided/calls.rs` for the provided session (D-28).
 
 **D-7. The embedder owns sockets and threads.** The public entry points are
 blocking functions, `serve(conn, backend, &config) -> Ended` and
@@ -269,6 +281,13 @@ carries the backend's members (D-26). Either failure is answered with an
 `attached` refusal and close 1000, and `serve_selected` returns
 `Ended::ConfigRefused` (D-18). The Origin check of the `Config` runs before the
 selection.
+
+Two more entry points serve the provided session (D-28):
+`serve_provided(conn, backend, &config) -> Ended` and
+`serve_provided_selected(conn, select, &config) -> Ended`. They follow the same
+rules: the embedder owns the socket and the thread, both block until the session
+ends, and the backend is dropped on every exit. They take no `max_version`,
+because the provided role has the one subprotocol.
 
 `Connection` is `Read + Write` plus three methods: `set_read_timeout`,
 `set_write_timeout`, and `shutdown_write`, whose default does nothing. It is
@@ -648,6 +667,67 @@ responses kept for duplicates are `server/calls.rs`.
   before its `seq` is placed. Closing is observable, where dropping the oldest
   response would silently break item 6.
 
+**The provided direction.** In the provided session (D-28) the calls run the
+other way: the local ports receive a call, and the remote client answers it. The
+code is `server/provided/calls.rs`.
+
+- **Serving.** When `attached(accepted)` arrives, the session calls
+  `Handler::serve` once for each command and query of the backend's member table
+  (D-28). A refusal by the handler records `Note::PortRefused` and closes the
+  session with 1011. Each tick, the session first expires overdue calls, then
+  takes claims from `Handler::next_claim` into a buffer of the call ceiling
+  (16,128 bytes) while fewer than 64 calls are in flight, and sends one
+  `request` for each. The `seq` of the `request` is the session's counter from
+  1, the `stamp` is the claim's, and the payload is the claim's bytes.
+- **The cap of 64.** At most 64 calls are in flight. A claim beyond the cap is
+  not taken: it stays queued on the handler, so a caller waits as it waits for
+  any handler that serves slowly. The handler belongs to the embedder's ports
+  and not to the session. At the end of the session the session settles the
+  calls in flight as `Transport::Down` (the table below) and leaves the queued
+  claims untouched, because it never took them. The local ports are dedicated to
+  the session and serve no member outside its table when it starts (the rustdoc
+  of `serve_provided` says so).
+- **Refused at once.** A claim is settled locally, and no `request` is sent, in
+  these cases: the member is not a command or a query of the table, or its reply
+  is a stream (`contract(UnknownInteraction)`; a streamed reply is not served
+  over version 2); the claim's remaining time is negative, or the claim is older
+  than the member's bound (`Undelivered` for a command, `Timeout` for a query);
+  the arguments are longer than the member's limit (D-26) or the `request` does
+  not fit `max_message_bytes` (`Corrupt`); a claim longer than the buffer
+  (`ShortClaim`) is settled `Corrupt`.
+- **The deadline.** A call in flight is settled when its deadline passes: the
+  earlier of the claim's own remaining time and the member's bound measured from
+  the claim's stamp. A member with no bound and a claim with no remaining time
+  have `config.call_abandon_after` as the deadline, so a catalog built before
+  the default response bound still ends every call. A command that passes its
+  deadline is settled `Undelivered` and a query `Timeout`, the two outcomes that
+  §9.6 gives to the absence of a response.
+- **The outcome.** A `response` is matched by its `correlation` and its target.
+  One that matches no call in flight records `Note::UnknownCorrelation` and is
+  dropped.
+
+  | `response` outcome                              | Local claim settled as    |
+  | ----------------------------------------------- | ------------------------- |
+  | `accepted`, for a command                       | `Ok`, no bytes            |
+  | `reply`, for a query, within the member's limit | `Ok` with the bytes       |
+  | `contract(c)`                                   | `Err(Contract(c))`        |
+  | `busy`                                          | `Err(Transport::Busy)`    |
+  | `corrupt`                                       | `Err(Transport::Corrupt)` |
+  | an outcome outside the call kind's set (R-DS-6) | `Err(Transport::Corrupt)` |
+  | a `reply` longer than the member's limit        | `Err(Transport::Corrupt)` |
+  | the connection ends before any response         | `Err(Transport::Down)`    |
+
+  An outcome outside the set (`accepted` for a query, `reply` for a command;
+  frame specification §5.3 and §5.4) is settled `Corrupt` at once, so that the
+  call ends and no claim waits for its deadline. The two clients differ here:
+  the TypeScript consumer reports `unexpected-outcome` and leaves its call in
+  flight ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md), D-9), and the
+  TypeScript provider answers a handler that returns such an outcome, or that
+  fails, with no `response` at all (its D-21). Against the TypeScript provider
+  the Rust claim therefore ends at its deadline.
+- **No retransmit.** The session never sends a `request` twice, so it keeps no
+  settled responses.
+
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
 `stamp` = `Clock::now()`. An error `ReadError::Contract(c)` is answered
@@ -757,14 +837,14 @@ connection is dropped. A backend port that reports `Detached` from any call ends
 the session with close 1001, because the provider is going away. `serve` returns
 an `Ended`:
 
-| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                 |
-| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                          |
-| `Rejected`           | the handshake was answered `400` or `403` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                        |
-| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                        |
-| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                        |
-| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000 |
+| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, a provided session had not received `attached` that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                                                                           |
+| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000. From `serve_provided_selected`, a selected table exceeding message capacity or an unencodable attach answers HTTP 400 before upgrade |
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
@@ -818,6 +898,12 @@ bytes for a signal and an event, 16,128 for a command and a query, 65,280 for a
   The crate implements no sending port, so this is where its send side is. With
   a runtime that refuses a value above its member's limit on send, as
   `ridl-loopback` does, the path is reached only by a backend that does not.
+- In the provided session the same limits apply to what the client sends: a live
+  `publish` longer than its signal's limit is delivered as a detected-invalid
+  sample, an `occurrence` longer than its event's limit is delivered as a
+  corrupt occurrence, and a `reply` longer than a query's limit settles the call
+  `Corrupt` (D-29, D-16). The arguments of a local call longer than the member's
+  limit are refused to the local caller as `Corrupt`, and no `request` is sent.
 
 **The message limit.** `MAX_MESSAGE_LIMIT` is 36 + 16,128 = 16,164 bytes: the
 largest header with its envelope of a message that carries a payload, plus the
@@ -868,9 +954,25 @@ request line and headers are limited to 8 KiB; above that, or on any malformed
 request, the server answers `400 Bad Request` and closes. The version is checked
 before the other headers: when a well-formed request's version is not 13,
 whatever its other headers hold, the `400` carries `Sec-WebSocket-Version: 13`,
-the version the server speaks (RFC 6455 §4.2.2 item 4). The path, the query and
-other headers are ignored (§11.1 item 1: the binding places nothing there; the
-embedder's access policy runs before `serve` or `serve_selected`).
+the version the server speaks (RFC 6455 §4.2.2 item 4). Other headers are
+ignored, and so are the path and the query for `serve` and `serve_selected`
+(§11.1 item 1: the binding places nothing there; the embedder's access policy
+runs before them). `serve_provided_selected` does not ignore the request target:
+it gives it, unchanged, to the embedder's selector (D-28), after the version and
+`Origin` checks and before the `101`. The selector returns the backend, or a
+`SelectionError`: `NotFound` is answered `404 Not Found` and `Conflict` is
+answered `409 Conflict`, each with `Connection: close` and `Content-Length: 0`,
+and `serve_provided_selected` returns `Ended::Rejected`. The binding gives the
+target no meaning; the embedder does (the debug gateway reads
+`/<component>/<instance>/<catalog>`, see
+[the deployment descriptor record](deployment-descriptor.md#attaching-to-a-node)).
+
+**Gateway catalog selection (R-DS-11).** The injection URL names a catalog by
+name. If a machine embeds two versions with the same catalog name, the gateway
+selects the first in descriptor order. The URL cannot select the other version;
+the provider must match the selected hash. Listening selection instead prefers a
+matching name and hash. This is a limitation of the example gateway's injection
+selector, not a change to catalog compatibility.
 
 The `Origin` header is the one exception: it is read and given to a check the
 embedder sets with `Config::with_origin_check`, as `None` when the request has
@@ -896,11 +998,26 @@ handshake. When the client offers no subprotocol the server serves (`ridl-ws-v3`
 counts only when the applicable condition above holds), the server answers
 `400 Bad Request` and does not upgrade. §11.1 says that the client fails a
 connection on which the server selected none; answering 400 makes the failure
-visible at once, also to a client that does not check. The selection is three
-comparisons, with `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, and none selects
-a role: a table from subprotocol name to session role would have no row to hold,
-so it is left until the reversed role of "Adding the stand-in ports later" adds
-one.
+visible at once, also to a client that does not check. The selection is a table
+from subprotocol name to the role of the client, and each entry point selects
+only the names of its own role:
+
+| Subprotocol           | Frame version | The client is | Entry points                                |
+| --------------------- | ------------- | ------------- | ------------------------------------------- |
+| `ridl-ws-v3`          | 3             | the consumer  | `serve`, `serve_selected`                   |
+| `ridl-ws-v2`          | 2             | the consumer  | `serve`, `serve_selected`                   |
+| `ridl-ws-v1`          | 1             | the consumer  | `serve`, `serve_selected` (refused)         |
+| `ridl-ws-v2-provider` | 2             | the provider  | `serve_provided`, `serve_provided_selected` |
+
+An entry point ignores the names of the other role, and selects, among the names
+of its own role that the client offers and its version limit permits, the one
+with the highest frame version. So a mixed offer selects `ridl-ws-v2` at `serve`
+and `ridl-ws-v2-provider` at `serve_provided`, and an offer that holds no name
+of the entry point's role is answered `400`. A listener of an embedder that
+binds `serve` therefore refuses the reversed role, and a listener that binds
+`serve_provided` refuses the consuming roles, each at the handshake (frame
+specification §11.1, "Reversed role"). The provided role has no `attach` to
+refuse on a `ridl-ws-v1` connection: the client of that role does not exist.
 
 **D-21. Messages.** Binary messages only; a text message closes with 1003.
 Fragmented messages are reassembled, also when a frame is split across socket
@@ -923,29 +1040,42 @@ session when no message of any kind has arrived for `liveness_timeout`. The time
 the server spends writing the frames of one message's answer or of one poll is
 not counted, because it cannot read while it writes; a client that stops reading
 is ended by the write timeout (D-7). The time a client takes to read bytes the
-kernel has already accepted is still counted. A browser answers a ping
+kernel has already accepted is still counted.
+
+For `serve_provided` and `serve_provided_selected` only, the wait for `attached`
+is bounded by `liveness_timeout` after the upgrade, even while control frames
+arrive (R-DS-8). Both attach-wait checks enforce that deadline: one before
+handling each complete frame and one after a read with no complete frame.
+`serve` and `serve_selected` retain their prior behavior: any message resets
+their liveness clock, including before `attach`. Their first read uses
+`poll_interval` directly, so zero is refused as `Ended::Io(InvalidInput)`. The
+server sends pings from the upgrade in either role. A browser answers a ping
 automatically, so 5 s pings detect a dead client in 15 s at a cost of one small
 frame per 5 s.
 
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol
 violation, 1003 on a text message, 1009 on an oversized message, and 1008 when
-the retained responses pass `max_retained_bytes` (D-16). The server answers a
-client's close frame with a close frame that carries the same code. After every
-close frame it sends, the answer to the client's included, and after a handshake
-`400` or `403`, the server shuts down its write side and lingers for up to 100
-ms, reading and discarding what the client still sends, so that the close frame
-or the answer reaches the client instead of being lost to a reset of the
-connection. It waits no longer than that for the client to close the connection
-(RFC 6455 §7.1.1 has the client wait for the server to close it).
+the retained responses pass `max_retained_bytes` (D-16). The provided session
+uses 1011 for an internal failure after acceptance, as §11.1 item 4 allows
+(R-DS-9), including when the local `Handler` refuses to serve a member of the
+table when the session starts (D-16, "The provided direction"). The server
+answers a client's close frame with a close frame that carries the same code.
+After every close frame it sends, the answer to the client's included, and after
+a handshake `400`, `403`, `404` or `409`, the server shuts down its write side
+and lingers for up to 100 ms, reading and discarding what the client still
+sends, so that the close frame or the answer reaches the client instead of being
+lost to a reset of the connection. It waits no longer than that for the client
+to close the connection (RFC 6455 §7.1.1 has the client wait for the server to
+close it).
 
 ## Tests
 
 All under `crates/ridl-transport-ws/`.
 
 - **The vectors** (`tests/vectors.rs`). One test reads the binding version 1
-  test-vector table, one reads the binding version 2 table and one reads the
-  binding version 3 table, all out of
+  test-vector table, one reads the binding version 2 table, one reads the
+  binding version 3 table and one reads the "Reversed role" table, all out of
   `docs/specification/frame-specification.md`. Each decodes every `Hex` cell,
   checks that it decodes to the frame its `Vector` cell describes, and that
   encoding that frame gives the same bytes. Each fails on a row whose id it does
@@ -1029,20 +1159,60 @@ All under `crates/ridl-transport-ws/`.
   per catalog, observe the initial and later signal values and the events of
   every catalog the machine holds, including a mapped one, send a command and
   read its answer, are closed with 1002 when they publish, and release their
-  attachment when they disconnect.
+  attachment when they disconnect. For the injection listener the tests send raw
+  requests: every malformed path, an unknown component, instance or catalog, a
+  catalog the instance only maps, and a path with a query, a percent escape or
+  an extra segment, is answered `404`; a path whose instance is attached as
+  itself is answered `409`; the session subscribes only the members of the
+  interfaces that the instance offers; and a handshake that ends in any way
+  (origin refusal, wrong subprotocol, a refused `attached`, end of input, an
+  accepted session) releases the twin. The offered table preserves each member's
+  `max` and `limit`. The executable delegates to the tested support function
+  that binds both listeners before announcement and routes each connection to
+  its requested role.
+- **The provided session** (`tests/provided.rs`, `tests/provided_signals.rs`,
+  `tests/provided_calls.rs`, and the unit tests under `src/server/provided/`).
+  Each listener accepts only its role, and a mixed offer selects the role of the
+  entry point; the selector receives the exact request target, after the
+  `Origin` check; the server sends `attach` first, with the port's encoding; a
+  refused `attached`, a malformed one, a failed write and a failed upgrade
+  release the backend; the reversed vectors reach the backend after the
+  `subscribe` is answered; every consumer disposition of D-29 (the `Init` rule,
+  a duplicate or stale `seq`, a payload over the limit, an expired occurrence, a
+  gap of exactly one occurrence, exact rejection notes, second-answer handling,
+  the commit groups of R-DS-4); the calls of D-16 (every outcome, the deadline,
+  the cap of 64, `Down` at the end of the session); and the server's pings and
+  its close of a client that sends no messages.
 - **The debug gateway example** (`examples/debug_gateway.rs`, with
   `examples/support/debug_gateway.rs`; the `descriptor` feature). Reads a
   deployment descriptor and a machine name, builds an `ridl-loopback` `Node`,
   binds `127.0.0.1` on the port given (0 asks for any free port), prints
-  `port <n>`, and serves each connection on its own thread with
-  `serve_selected`. The selector finds the catalog the client names among the
-  node's catalogs and attaches to it as the listener (`InstanceNo::LISTENER`),
-  with the member table of the descriptor's embedded catalog. The listener reads
-  every signal and event of the machine's catalogs and may send commands and
-  queries; it writes nothing. The node lives in the gateway's own process, so
-  only components that run in that process are visible through it. The example
-  states `max_version` 2. The example has no access policy beyond the loopback
-  address (D-7).
+  `port <n>` after both requested ports have bound, and serves each connection
+  on its own thread with `serve_selected`. The selector finds the catalog the
+  client names among the node's catalogs and attaches to it as the listener
+  (`InstanceNo::LISTENER`), with the member table of the descriptor's embedded
+  catalog. The listener reads every signal and event of the machine's catalogs
+  and may send commands and queries; it writes nothing. With a fourth argument,
+  the injection port, the example binds a second listener on `127.0.0.1`, prints
+  `inject-port <n>`, and serves each connection with `serve_provided_selected`.
+  Its selector reads the request path `/<component>/<instance>/<catalog>`, finds
+  the instance on the machine that offers the catalog, and attaches to the node
+  as the twin of the instance (`InstanceNo::twin`). A path that names nothing,
+  or a catalog that the instance only maps, is `NotFound`; an instance that is
+  attached as itself makes the attach fail with `IdentityConflict`, which is
+  `Conflict`. The member table of the session holds only the interfaces the
+  instance offers. The node lives in the gateway's own process, so only
+  components that run in that process are visible through it. The example states
+  `max_version` 2 for the listener. The example has no access policy beyond the
+  loopback address (D-7). A gateway that does not bind the injection port cannot
+  inject.
+- **The debug gateway fixture** (`examples/debug_gateway_fixture.rs`, the
+  `descriptor` feature). The gateway of the previous item over the committed
+  identity deployment, with a control channel on standard input and output: the
+  Deno end-to-end test of the TypeScript `provide` drives it and reads the
+  node's own view of each value through local consumer ports, independently of
+  the gateway's buffers. `just ts-e2e` builds it and runs
+  `packages/ridl-transport-ws/e2e/provide_test.ts` against it.
 - **The loopback server** (`examples/loopback_server.rs`). Serves the scenario's
   test catalog and provider, with its member table, on `127.0.0.1:0`, one thread
   and one attachment per connection, prints `port <n>`, and exits when its
@@ -1080,36 +1250,135 @@ The test targets `serve` and `scenario` require the `server` feature, so
   its first release, and opts into the `cargo-semver-checks` lint metadata
   (ADR-0029).
 
-## Adding the stand-in ports later
+## The provided session
 
-The portal will later need to stand in for a component: publish signals, raise
-events and answer calls into the system, through `SignalWriter`, `EventSink` and
-`Handler` (driftsys/ridl#988). On the frame, those are the **providing** side of
-a session, and §11.1 item 1 makes the WebSocket client the consumer. So a
-stand-in client is a session in the other direction: the WebSocket client
-provides, and the server consumes and forwards what it receives into the
-backend's `SignalWriter`, `EventSink` and `Handler`. The server sends `attach`,
-`subscribe` and `request`; the client sends `attached`, `publish`, `occurrence`
-and `response`. All fourteen forms exist already, so the frame does not change.
-What changes is the binding's item 1, by a new subprotocol name that selects the
-reversed roles, offered beside `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, in
-an amendment of §11.1. The name is chosen with that amendment.
+The debug socket needs a WebSocket client to stand in for a component: publish
+its signals, raise its events and answer the calls that the machine's consumers
+send to it (driftsys/ridl#988). On the frame, those are the **providing** side
+of a session, and §11.1 item 1 makes the WebSocket client the consumer. So the
+stand-in is a session in the other direction, which the subprotocol
+`ridl-ws-v2-provider` selects (frame specification §11.1, "Reversed role"): the
+WebSocket client provides, and the server consumes and delivers what it receives
+into local ports. The frame does not change. The server sends `attach`,
+`subscribe` and `request`; the client sends `attached`, `answer`, `publish`,
+`occurrence` and `response`.
 
-What the crate already does so that the addition is local:
+**D-28. The provided session.** The code is `server/provided.rs`. The rulings
+R-DS-3, R-DS-4 and R-DS-6 that this decision, D-29 and D-16 hold are in the
+archived plan
+([`2026-11-03-debug-socket-plan.md`](../archive/2026-11-03-debug-socket-plan.md),
+"Delegated rulings"); this record states them as built.
 
-- the codec encodes and decodes every form in both directions (D-6);
-- the subprotocol selection is one comparison, which the reversed role replaces
-  with a table from name to session role (D-20);
-- the `Backend` trait is the providing role's alone; the reversed role gets its
-  own trait over `SignalWriter + EventSink + Handler`, so neither role's
-  embedder implements ports it does not serve.
+- **Entry points.** `serve_provided(conn, backend, &config) -> Ended` and
+  `serve_provided_selected(conn, select, &config) -> Ended`, where `select` is
+  `FnOnce(&str) -> Result<B, SelectionError>` and is called once with the
+  request target (D-19). `serve_provided` is `serve_provided_selected` with a
+  selector that returns the one backend and ignores the target. The `Origin`
+  check runs before the selector. After selection, the session checks the
+  message limit against the backend's table as D-26 does, and answers `400` and
+  returns `Ended::ConfigRefused`, before the upgrade, when the limit is too
+  small (it records `Note::MessageLimitTooSmall`) or when the catalog name or
+  the port's encoding cannot be put in an `attach` (no note). The backend is
+  dropped on every exit, selection and handshake failures included.
+- **The backend.** `ProvidedBackend` (`server/provided_backend.rs`) has
+  `Ports: Attached + Encoded + Clock + Handler`, `ports()`, and `members()`, the
+  `MemberTable` of the members **that this instance offers in this catalog**;
+  the embedder filters it before it builds the backend, and the session
+  subscribes, serves and accepts nothing outside it. It receives the deliveries
+  of a consumer, not port writes, through three methods: `sample` for each
+  accepted signal sample (interface, ordinal, provenance with its cause, the
+  last good value, freshness, the remote envelope), `occurrence` for each
+  accepted occurrence (the payload or the cause, the remote envelope, and the
+  count of occurrences missed since the last accepted one), and `commit` at the
+  end of a group of signal frames (D-29). `Providing<P>` adapts the local ports;
+  its constructor refuses ports and a table of different catalogs
+  (`TableMismatch`, as `Described` does). `MemberTable::iter` returns
+  `(Target, Option<Duration>, Option<u32>)` in interface and ordinal order. This
+  differs from the archived plan's Names signature: the as-built iterator
+  exposes the bound and limit needed to construct offered tables.
+- **The first messages.** The server writes `attach` right after the upgrade,
+  with frame version 2, the encoding of the ports, and the catalog of the ports.
+  It then waits for `attached`, for at most `liveness_timeout` (D-22). A message
+  of another form before `attached` closes with 1002; a discarded frame before
+  it is `Note::MessageBeforeAttach` and closes with 1002. `attached(refused)`
+  closes the session with 1000, and the backend is dropped: the client checks
+  the catalog and encoding of the `attach` (frame specification §6.1), as the
+  server does in the other role. `attached(accepted)` starts the session: the
+  handler serves the members (D-16), and the server sends one `subscribe` for
+  every signal and event of the table, with no `read`. A second `attached` and
+  every consumer form (`attach`, `subscribe`, `read`, `request`, `unsubscribe`),
+  and `chunk`, `stream_end` and `stream_credit`, close with 1002.
+- **The tick** is the one of D-8. In the provided session it closes a commit
+  group that has been idle for a `poll_interval` and settles the calls of D-16.
+  The WebSocket layer, the pings, the write timeout and the close codes are
+  those of the providing role (D-21 to D-23).
+
+**D-29. The provided session is a full consumer.** Writing a remote provider's
+frames straight into `SignalWriter` and `EventSink` cannot follow the consumer
+rules of frame specification §5 to §9, which the "Reversed role" section applies
+to the server: the ports cannot restore an `Init`, cannot carry a
+detected-invalid sample, and cannot carry a corrupt occurrence or a remote
+envelope and sequence (R-DS-3). So the session applies the rules itself, as a
+consuming client does (`server/provided/signals.rs`), and gives its backend the
+result:
+
+- **Channels.** A `publish` or an `occurrence` for a member that is not in the
+  table under that kind records `Note::UnknownInteraction` and is dropped. One
+  for a channel whose `subscribe` the client did not answer `accepted` records
+  `Note::NotSubscribed` and is dropped. A `seq` that is not greater than the
+  last one accepted on the channel records `Note::DuplicateDropped` and is
+  dropped. An `answer` for a member of the table under its kind settles the
+  subscription; any other records `Note::UnknownInteraction`.
+- **Signals.** `Init`, which the client sends after a `subscribe` when it has no
+  value yet (frame specification §5.1), clears the channel's last good value and
+  is delivered as `Init`. `InvalidDeclared` is delivered as `Invalid(Declared)`.
+  A live payload longer than the member's limit is delivered as
+  `Invalid(Detected(Corrupt))` before any verification (ADR-0030 decisions 15
+  and 19), and the last good value stays. Any other live payload is `Live` and
+  becomes the last good value. Freshness is computed against the local clock and
+  the member's bound from the remote stamp.
+- **Events.** A gap in the `seq` is counted and delivered with the next
+  occurrence, and recorded as `Note::EventGap`. An occurrence older than the
+  member's bound is not delivered, and its gap is still recorded, because the
+  sequence tracking sees it. A payload longer than the member's limit is
+  delivered as `Err(Corrupt)`.
+- **Commit groups (R-DS-4).** Only signal frames form a group: consecutive
+  accepted frames with the same remote `stamp`. An occurrence never opens,
+  extends or closes a group (frame specification §5.2: there is no staging and
+  no commit for an event), and no group holds only occurrences. A group closes
+  before a frame with another stamp, before a second accepted frame for a
+  channel already in the group, and after one idle `poll_interval`, so that one
+  local `commit` carries at most one frame per channel (§5.1) and a client that
+  keeps one stamp still commits. The group is not closed when the session ends:
+  the `Providing` adapter discards the writes it staged.
+
+`Providing<P>` maps these deliveries onto the local ports
+`P:
+Attached + Encoded + Clock + SignalWriter + EventSink + Handler`. Its
+rustdoc lists what the ports cannot carry, and the book states the loss for a
+user ([debugging a machine](../book/debugging.md)). The loss is confined to the
+debug path:
+
+| Delivery                      | What the ports receive                                        | What is lost                                                    |
+| ----------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------- |
+| `Init`                        | nothing                                                       | the twin has not published; the last value on the machine stays |
+| live value                    | `set`; `commit` at the end of each group, stamped by the node | the remote stamp: the node stamps with its own clock            |
+| declared invalid value        | `invalidate`                                                  | nothing                                                         |
+| detected invalid value        | `invalidate` and `Note::DetectedInvalid`                      | the cause: the machine reports `Declared`                       |
+| occurrence                    | `raise`, with a new local envelope and sequence               | the remote envelope and sequence                                |
+| corrupt occurrence            | not raised, `Note::CorruptOccurrence`                         | the occurrence                                                  |
+| gap in the sequence           | `Note::EventGap`                                              | the count, outside the note                                     |
+| a port that refuses the write | `Note::PortRefused`                                           | the delivery                                                    |
+
+No frozen port trait changes.
 
 ## What is not built
 
-- The injection side of the debug socket, in which the WebSocket client provides
-  through a reversed-role subprotocol (see the previous section). The debug
-  gateway only listens.
-- The stand-in ports (driftsys/ridl#988).
+- Streams on the provided session: it carries frame version 2 only, a query
+  whose reply is a stream is refused locally with `UnknownInteraction`, and a
+  later binding version would add them. The arbitration of a redundant provider
+  set (driftsys/ridl#1196): the instances of a set are all attached, and the
+  node does not choose between them.
 - A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
   of a `<string>` stream. A chunk from the client is refused (D-27).
   `Rule::Utf8` already exists in `ridl-rt`, without a wire code. A rule receives
@@ -1132,5 +1401,7 @@ What the crate already does so that the addition is local:
 | waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                           |
 | `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                           |
 | forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                   |
+| writing the remote provider's frames straight into the ports            | rejected | the ports cannot restore an `Init`, carry a detected-invalid sample, or carry a corrupt occurrence or a remote envelope; the session applies the consumer rules itself (D-29)                                                        |
+| a second `Backend`-like trait that implements the ports itself          | rejected | the embedder, not the crate, owns the local ports and their grant; `ProvidedBackend` hands over the deliveries and `Providing<P>` is the default adapter                                                                             |
 | a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                               |
 | accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                |

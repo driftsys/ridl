@@ -7,15 +7,17 @@ defines. It is the **consuming side** of a frame session, for Deno and for the
 browser: it opens one WebSocket offering the subprotocols `ridl-ws-v3`,
 `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`,
 `read`, `request` and the stream forms of a streamed reply, and applies the
-consumer's rules that need no payload decoding. It carries payload bytes without
-reading them: a payload is a `Uint8Array` that the package hands to its caller
-as it arrived, and sends as the caller gave it. The one thing it checks of a
-payload is its length, against the member's limit from the generated interface
-tables (D-19).
+consumer's rules that need no payload decoding. It is also the **providing
+side** of the reversed role, `provide`, in which the browser or Deno program
+stands in for a component (D-21). It carries payload bytes without reading them:
+a payload is a `Uint8Array` that the package hands to its caller as it arrived,
+and sends as the caller gave it. The one thing it checks of a payload is its
+length, against the member's limit from the generated interface tables (D-19).
 
-The Rust crate `ridl-transport-ws` is the providing side of the same binding;
-its as-built record is [`ridl-transport-ws.md`](ridl-transport-ws.md), which
-this record follows in structure. Verifying a payload is the wasm codec's, of
+The Rust crate `ridl-transport-ws` is the providing side of the same binding,
+and the consuming side of the reversed role; its as-built record is
+[`ridl-transport-ws.md`](ridl-transport-ws.md), which this record follows in
+structure. Verifying a payload is the wasm codec's, of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7, loaded by `@driftsys/ridl-runtime`, and decoding and encoding one is
 the generated codec module's, `<base>.codec.ts`
@@ -47,6 +49,9 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 - Opens a consuming session over one `WebSocket`: `attach`, `subscribe`,
   `unsubscribe`, `read` (signal and `fixed`), `command`, `query` and
   `queryStream` (a query whose reply is a stream), and the end of the session.
+- Opens a providing session over one `WebSocket` with `provide`: it offers only
+  `ridl-ws-v2-provider`, answers the server's `attach`, publishes signals,
+  raises events and answers requests (D-21).
 - Runs unchanged in Deno and in a browser: the package's own code uses only web
   platform APIs.
 
@@ -54,9 +59,9 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 no catalog descriptor: no `kind` check against a catalog, no response bound read
 from one, no compatible-hash list; the one fact of the catalog it uses, each
 member's payload limit, comes from the generated interface tables the caller
-passes (D-19). It is not the providing side, and it has no TLS or authentication
-of its own (`wss://` works because the platform's `WebSocket` supports it). It
-is not yet published to JSR (D-3).
+passes (D-19). It has no TLS or authentication of its own (`wss://` works
+because the platform's `WebSocket` supports it). It is not yet published to JSR
+(D-3).
 
 **What it must never do.** Differ from §11.1 on the wire, so that a client
 written from the specification alone and this one behave differently against the
@@ -511,6 +516,99 @@ is the following.
   selected and exposes no accessor for it; a caller learns that the server does
   not stream from `unsupported`.
 
+**D-21. The providing side, `provide`.** The code is `src/provision.ts` and
+`src/provision_calls.ts`. It is the client of the subprotocol
+`ridl-ws-v2-provider` (frame specification §11.1, "Reversed role"), additive to
+`connect`.
+
+```ts
+const provision = await provide(
+  "ws://127.0.0.1:9001/alpha.First/Unit/alpha", // the path is the gateway's
+  {
+    catalog: { name: "alpha", hash }, // hash: Uint8Array, 32 bytes
+    encoding: "flatbuffers", // required: there is no default
+    members: [{ iface: 1, ord: 1, kind: "signal" } /* ... */],
+    onRequest(request) {
+      return { outcome: "accepted" };
+    },
+    onNote(note) {},
+    clock: () => taiMicros(), // optional; the stamp of a response and the initial publish
+  },
+);
+// Update the initial state before the gateway subscribes (R-DS-10).
+provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
+```
+
+- **The options.** `encoding` is explicit, because the encoding that `connect`
+  defaults to is not the one the server necessarily serves: the debug gateway
+  serves FlatBuffers. `members` lists what the instance provides, as the
+  `MemberEntry` values of `connect` (kind, interface, ordinal and an optional
+  limit; D-19). `onRequest` answers each command and query. `provide` validates
+  the catalog, the encoding and the members before it creates a socket, and
+  rejects with the `AttachError` or `RangeError`, as `connect` does.
+- **The attach.** The package offers `ridl-ws-v2-provider` only and waits for
+  the server's `attach`. It accepts the `attach` when its frame version is 2,
+  its name equals the catalog name, its hash equals the catalog hash **exactly**
+  (the package reads no list of compatible hashes), and its encoding is the one
+  given; otherwise it answers `attached(refused)` with the first reason that
+  fails, in that order, closes with 1000 and rejects with `AttachRefused`. When
+  it accepts, it answers `attached(accepted)` and resolves the promise with a
+  `Provision`.
+- **The session.** `publish`, `invalidate` and `raise` take the stamp as an
+  argument, a `bigint` in microseconds that fits an `i64`, because the package
+  has no clock for the value's time. Under R-DS-10, `publish` and `invalidate`
+  update the current signal state even before subscription; the initial value is
+  sent after the `answer` when the subscription arrives (§5.1). A `raise`
+  without a subscription is not delivered and records a `discarded` note with
+  reason `not-subscribed`; it does not throw. It still advances the session's
+  event channel sequence counter (frame §7). After resubscription, the next
+  delivered occurrence can therefore show a gap, which the Rust consumer records
+  as loss (§5.2). Each operation is refused with a `SessionError` `contract`
+  `unknown-interaction` for an unlisted member, with `corrupt` when the payload
+  exceeds the member's limit, and with `down` after the session ended; an
+  interface or ordinal that is not a nonzero `u32`, or a stamp outside `i64`,
+  throws a `RangeError`. The session counts `seq` per channel from 1. A signal
+  keeps its last frame, so the first `subscribe` of a signal and each `read` of
+  it send that frame, or `init` (`seq` 0, stamped at the attach) when nothing
+  was published; an event is not kept. A `subscribe` of a member that the
+  options do not list, or of another kind, is answered
+  `contract(UnknownInteraction)`.
+- **Requests.** A `request` for a member that is not a listed command or query
+  is answered `contract(UnknownInteraction)`; arguments longer than the member's
+  limit, `corrupt`; and a request that arrives while 64 are in flight, `busy`.
+  Otherwise `onRequest` receives a copy of the payload, may be asynchronous, and
+  its outcome becomes the `response`: a reply longer than the limit is sent as
+  `corrupt`. The session keeps the last 64 settled responses, because it reads
+  no descriptor and so knows no bound, and a repeated `seq` is answered with the
+  kept response and not served again.
+- **The difference from the Rust provided session.** The frame has no outcome
+  for a defect of the provider, so the TypeScript provider sends **no
+  `response`** when `onRequest` returns an outcome outside the call kind's set
+  (`accepted` for a query, `reply` for a command), returns nothing, throws or
+  rejects; it records
+  `{ note: "discarded", reason: "unexpected-outcome", frame }` through `onNote`
+  and releases the slot. A clock or encoding failure while settling a request is
+  recorded in the same way and never escapes the message callback. A synchronous
+  refusal advances neither the replay high-water mark nor the response counter
+  until it is sent successfully, so a retry can settle it. The Rust provided
+  session, which is the consumer of these responses, settles an outcome outside
+  the set as `Corrupt` at once (the crate's D-16), so a call to a TypeScript
+  provider that failed ends at the Rust call's own deadline. A handler that
+  never settles holds its slot among the 64 until the session ends, and the
+  server's deadline reports the call.
+- **The limits of a browser (R-DS-7).** The platform's `WebSocket` closes with
+  no code except 1000 and 3000 to 4999, and shows no pings to the page, so the
+  providing side follows D-10 and D-11 exactly. On a violation (a text message,
+  a server that selected no subprotocol, a form the consumer must not send at
+  that point, and `chunk`, `stream_end` and `stream_credit`, which are not part
+  of the reversed role) it calls `close()` with no code, records the violation
+  through `onNote`, and ends the session. It has no liveness timer; the server's
+  check is the one that runs. `Provision.close()` closes with 1000, and
+  `Provision.closed` resolves on the platform's close or error event.
+  driftsys/ridl#991 asks the frame specification to state what such a client
+  does for `connect` and the consumer role. The reversed role has the same
+  specification gap; the issue should be widened to cover it.
+
 ## The end-to-end tests
 
 **D-13. The test server is a cargo example in the crate.**
@@ -526,6 +624,20 @@ leaves out `examples/`, as it leaves out `tests/`, because the example includes
 a file from `tests/` and uses the dev-dependency `ridl-loopback`. `serve` is
 unchanged; the example only wraps its backend in a member table and in
 `Streaming`. The crate's record lists the example under its tests.
+
+**D-22. The providing proof is a Deno test against the debug gateway.**
+`e2e/provide_test.ts` starts the cargo example `debug_gateway_fixture` of the
+crate from the path in `RIDL_DEBUG_GATEWAY_FIXTURE`, which serves the committed
+identity deployment of `ridl-rt-conformance` on a listening port and an
+injection port. The test connects a listener with `connect` and a provider with
+`provide` (`/alpha.First/Unit/alpha`, FlatBuffers), and, through the fixture's
+control channel on standard input, checks what a local consumer on the machine
+sees: a published value, a declared-invalid value, an event, and a command and a
+query that the provider answers; that the instance attached as itself is refused
+while the twin is attached; and that it is released after `close()`. The
+listener also receives each value. `just ts-e2e` runs it after
+`e2e/deno_test.ts`. It runs in Deno only: the browser proof of D-14 covers the
+consuming side.
 
 **D-14. How the proof runs.** "A Deno program and a browser page each receive a
 live signal from the Rust server" is read as: the client attaches, subscribes a
@@ -578,12 +690,12 @@ bytes are the value the provider set.
 
 **D-15. The unit tests.** All under `packages/ridl-transport-ws/tests/`.
 
-- **The vectors** (`vectors_test.ts`). Reads the three vector tables (binding
-  versions 1, 2 and 3) out of `docs/specification/frame-specification.md`, as
-  the crate's `tests/vectors.rs` does, decodes each row to the frame its
-  `Vector` cell describes, and encodes that frame back to the same bytes. It
-  fails on an unknown `Id` and on a known `Id` that its table lacks, so a new
-  vector cannot be skipped.
+- **The vectors** (`vectors_test.ts`). Reads the four vector tables (binding
+  versions 1, 2 and 3, and the reversed role) out of
+  `docs/specification/frame-specification.md`, as the crate's `tests/vectors.rs`
+  does, decodes each row to the frame its `Vector` cell describes, and encodes
+  that frame back to the same bytes. It fails on an unknown `Id` and on a known
+  `Id` that its table lacks, so a new vector cannot be skipped.
 - **Every code** (`codes_test.ts`). Every code of §4 and §9.6, written as bytes
   by hand, in both directions; signedness of extreme integers, a message at a
   nonzero byte offset, and payloads as views.
@@ -601,6 +713,16 @@ bytes are the value the provider set.
   after a chunk, the bound, the cancel, `unsupported` below version 3, and the
   offer of the three subprotocols. The vectors of binding version 3 are in
   `vectors_test.ts`.
+- **The providing side** (`provision_test.ts`). `provide` over the fake
+  `WebSocket`: the offer of the one subprotocol, the validation before any
+  socket, each refusal reason of the `attach` and the exact hash, the answers to
+  `subscribe`, `read` and `unsubscribe`, the initial and the kept `publish`, the
+  per-channel `seq`, every refusal of `publish`, `invalidate` and `raise`, the
+  requests (unknown member, over limit, the cap of 64, the kept responses, a
+  wrong-kind, empty, throwing and rejecting handler, and a handler that never
+  settles), each violation of D-21 through `onNote`, a clock that fails before
+  the attach is answered or while a response is built, and the absence of a
+  liveness timer. The vectors of the reversed role are in `vectors_test.ts`.
 - **The version** (`version_test.ts`). `deno.json`'s version equals the
   `[workspace.package]` version.
 
@@ -611,7 +733,7 @@ bytes are the value the provider set.
 | Recipe           | Runs                                                                                                                                                               | Needs                            | In `build` |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ---------- |
 | `ts-check`       | `deno fmt --check`, `deno lint`, `deno check mod.ts` for Deno and against the DOM library (`browser.deno.json`), `deno test` of `tests/`, `deno publish --dry-run` | Deno                             | yes        |
-| `ts-e2e`         | `cargo build` of the example, then `e2e/deno_test.ts` against it                                                                                                   | Deno, the pinned Rust            | yes        |
+| `ts-e2e`         | `cargo build` of the two examples, then `e2e/deno_test.ts` and `e2e/provide_test.ts` against them                                                                  | Deno, the pinned Rust            | yes        |
 | `ts-browser-e2e` | `cargo build` of the example, then `e2e/browser_test.ts` against it                                                                                                | Deno, the pinned Rust, a browser | no         |
 | `ts-npm-check`   | dnt build of the package into `npm/`, check of the built manifest and tarball, install of the tarball in a temporary directory, import by name from Node           | Deno, Node, npm, network access  | yes        |
 
@@ -644,12 +766,12 @@ for not forcing a global change. `just story-id-check` scans `packages/`.
 ## Records
 
 **D-18.** This record and the package's README state the two limits of D-10 and
-D-11, the UTC default stamp of D-12 with the `clock` option, and the size checks
-of D-19 with the `interfaces` option. The frame specification's "As built" note
-and §11 and §11.1 name the package and its path. ADR-0020 carries the dated
-amendment of decision 6 (D-4) and a note on open item 2 (D-1). The book has no
-chapter on the package: `npm-release.yml` publishes it on a `v*` tag, and no
-generated code uses it yet.
+D-11 (and, for `provide`, D-21), the UTC default stamp of D-12 with the `clock`
+option, and the size checks of D-19 with the `interfaces` option. The frame
+specification's "As built" note and §11 and §11.1 name the package and its path.
+ADR-0020 carries the dated amendment of decision 6 (D-4) and a note on open item
+2 (D-1). The book has no chapter on the package: `npm-release.yml` publishes it
+on a `v*` tag, and no generated code uses it yet.
 
 ## What is not built
 
@@ -660,8 +782,8 @@ generated code uses it yet.
   this package by hand.
 - A parameter stream on a command or a query, a byte stream, and the UTF-8 check
   of a `<string>` chunk. Only the reply stream of a query is built.
-- The providing side in TypeScript, an emulator (driftsys/ridl#290), and the
-  stand-in roles of the crate's "Adding the stand-in ports later".
+- An emulator (driftsys/ridl#290). The providing side offers no stream, and no
+  generated face over it.
 - Reading a catalog descriptor: the `kind` check, the response bound, the
   time-to-live discard of an occurrence, and compatible earlier hashes. The
   payload limits come from the generated tables instead (D-19).

@@ -304,6 +304,10 @@ foresees:
   - Consecutive frames that carry the same client stamp form one commit (frame
     §5.1, "a commit is a set of frames with one stamp"); the server calls
     `commit` when the stamp changes or when no frame arrives within one tick.
+- **(amended 2026-11-04, R-DS-3 in the plan)** The provided session applies the
+  consumer rules of §5 to §9 itself and hands its backend the consumer's
+  deliveries; the mapping onto `SignalWriter` and `EventSink` described above
+  moves into `Providing<P>`, which records what the ports cannot carry.
 - The server forwards an `occurrence` to `EventSink`, and serves calls that
   consumers on the machine send to N by sending `request` to the client and
   settling with its `response`. `Handler::serve` is given the command and query

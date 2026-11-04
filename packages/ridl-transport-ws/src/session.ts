@@ -44,6 +44,7 @@ import {
   SessionError,
   type SessionViolation,
 } from "./errors.ts";
+import { endViolation } from "./violation.ts";
 import { FORM_BLOCK } from "./blocks.ts";
 import { Calls, type Unused } from "./calls.ts";
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
@@ -1017,15 +1018,14 @@ export class Session {
    */
   #violate(violation: SessionViolation): void {
     this.#violation = violation;
-    if (!this.#closeSent) {
-      this.#closeSent = true;
-      this.#socket.close();
-    }
-    const opening = this.#opening;
-    this.#opening = null;
-    opening?.reject(new ProtocolError(violation));
-    this.#fail();
-    this.#note({ note: "violation", violation });
+    const socket = this.#closeSent ? null : this.#socket;
+    this.#closeSent = true;
+    endViolation(socket, violation, () => {
+      const opening = this.#opening;
+      this.#opening = null;
+      opening?.reject(new ProtocolError(violation));
+      this.#fail();
+    }, this.#options.onNote);
   }
 
   /**

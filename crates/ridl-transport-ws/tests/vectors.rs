@@ -372,3 +372,66 @@ fn the_stream_byte_of_each_stream_form_is_read_and_written() {
         assert_round_trip(id, got, &bytes);
     }
 }
+
+const REVERSED_IDS: [&str; 3] = [
+    "provider-attach-2",
+    "provider-attached-accepted",
+    "provider-publish-live",
+];
+
+fn reversed_vectors() -> Vec<(String, Vec<u8>)> {
+    let text = include_str!("../../../docs/specification/frame-specification.md");
+    let section = text
+        .split_once("### 11.1 WebSocket\n")
+        .unwrap()
+        .1
+        .split("\n### ")
+        .next()
+        .unwrap();
+    let reversed = section
+        .split_once("#### Reversed role\n")
+        .expect("reversed role section")
+        .1;
+    reversed
+        .lines()
+        .skip_while(|line| !line.starts_with('|'))
+        .take_while(|line| line.starts_with('|'))
+        .skip(2)
+        .map(|line| {
+            let cells: Vec<_> = line.split('|').map(str::trim).collect();
+            (cells[1].trim_matches('`').to_string(), hex(cells[3]))
+        })
+        .collect()
+}
+
+#[test]
+fn all_reversed_rows_are_read() {
+    let rows = reversed_vectors();
+    assert_eq!(
+        rows.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+        REVERSED_IDS
+    );
+}
+
+#[test]
+fn reversed_vectors_round_trip() {
+    let rows = reversed_vectors();
+    assert_eq!(rows.len(), 3);
+    for (id, bytes) in rows {
+        let want = match id.as_str() {
+            "provider-attach-2" => expected_2("attach-2").unwrap(),
+            "provider-attached-accepted" => expected("attached-accepted").unwrap(),
+            "provider-publish-live" => expected("publish-live").unwrap(),
+            _ => panic!("unknown reversed vector {id}"),
+        };
+        assert_round_trip(&id, want, &bytes);
+    }
+}
+
+#[test]
+fn provider_subprotocol_names_frame_version_2() {
+    assert_eq!(
+        ridl_transport_ws::frame::SUBPROTOCOL_PROVIDER,
+        "ridl-ws-v2-provider"
+    );
+}

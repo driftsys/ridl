@@ -34,13 +34,14 @@ removes a line. The FlatBuffers backend refuses the ros2 corpus, so ros2 has no
 `.fbs` line. A refresh of the veh-cluster copy for the `generated-crate` surface
 therefore also changes `wire.txt`. An edit to `examples/` or to `evals/corpus/`
 therefore changes no dump. The `wire` dump also holds the test vectors of the
-WebSocket binding: one `frame-vector <id> <hex>` line per row of the three
-vector tables (binding versions 1, 2 and 3) in
-`docs/specification/frame-specification.md` §11.1, read from that document by
-the row's `Id`, so an edit to a vector changes the dump. The checker also reads
-the payload that a row's `Vector` cell names as `` payload `<hex>` `` and fails
-a row whose bytes after the header differ from it, or from no bytes when the
-cell names none.
+WebSocket binding: one `frame-vector <id> <hex>` line per row of the four vector
+tables (binding versions 1, 2 and 3, and the "Reversed role" table, whose rows
+are frame version 2 messages) in `docs/specification/frame-specification.md`
+§11.1, read from that document by the row's `Id`, so an edit to a vector changes
+the dump. The heading `#### Reversed role` has to exist, and an `Id` that two
+tables share fails the check. The checker also reads the payload that a row's
+`Vector` cell names as `` payload `<hex>` `` and fails a row whose bytes after
+the header differ from it, or from no bytes when the cell names none.
 
 To refresh a copy on purpose, copy the package's files over it and run
 `cargo xtask freeze update`. A new copy adds lines and passes. A replaced copy

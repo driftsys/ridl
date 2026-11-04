@@ -347,6 +347,7 @@ struct Memory {
     input: io::Cursor<Vec<u8>>,
     output: std::rc::Rc<std::cell::RefCell<Vec<u8>>>,
     on_idle: Option<Box<dyn FnOnce()>>,
+    after_idle: Vec<u8>,
 }
 impl io::Read for Memory {
     fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
@@ -354,6 +355,9 @@ impl io::Read for Memory {
             if let Some(step) = self.on_idle.take() {
                 step();
                 return Err(io::ErrorKind::TimedOut.into());
+            }
+            if !self.after_idle.is_empty() {
+                self.input = io::Cursor::new(std::mem::take(&mut self.after_idle));
             }
         }
         io::Read::read(&mut self.input, out)
@@ -393,6 +397,7 @@ fn memory(cat: CatalogRef, messages: &[Frame<'_>]) -> Memory {
         input: io::Cursor::new(input),
         output: Default::default(),
         on_idle: None,
+        after_idle: Vec::new(),
     }
 }
 fn binary_frames(bytes: &[u8]) -> Vec<Frame<'_>> {
@@ -704,4 +709,534 @@ fn gateway_memory_selects_matching_hash_among_duplicate_names() {
             frame::Reason::CatalogMismatch
         ))]
     );
+}
+fn injection(path: &str, messages: &[Frame<'_>]) -> Memory {
+    let mut conn = memory(
+        CatalogRef {
+            name: "unused",
+            hash: ridl_rt::contract::CatalogHash([0; 32]),
+        },
+        &[],
+    );
+    let mut input = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: ridl-ws-v2-provider\r\n\r\n").into_bytes();
+    for frame in messages {
+        let mut bytes = vec![0; frame.encoded_len()];
+        frame.encode(&mut bytes).unwrap();
+        assert!(bytes.len() < 126);
+        input.extend([0x82, 0x80 | bytes.len() as u8, 0, 0, 0, 0]);
+        input.extend(bytes);
+    }
+    conn.input = io::Cursor::new(input);
+    conn
+}
+#[test]
+fn gateway_injection_path_statuses() {
+    let g = gateway();
+    for path in [
+        "/missing/Unit/alpha",
+        "/alpha.First/missing/alpha",
+        "/alpha.First/Unit/missing",
+        "/alpha.Foreign/Unit/mapped",
+        "/alpha.First/Unit/alpha/",
+        "/alpha.First/Unit/alpha?x",
+        "/alpha.First/Unit/%61lpha",
+        "/alpha.First//alpha",
+        "/alpha.First/Unit/alpha/extra",
+    ] {
+        let conn = injection(path, &[]);
+        let output = conn.output.clone();
+        assert_eq!(g.serve_injection(conn, &Config::default()), Ended::Rejected);
+        assert!(output.borrow().starts_with(b"HTTP/1.1 404"), "{path}");
+    }
+    let _positive = provider(&g, 1, catalog(&g, "alpha"));
+    let conn = injection("/alpha.First/Unit/alpha", &[]);
+    let output = conn.output.clone();
+    assert_eq!(g.serve_injection(conn, &Config::default()), Ended::Rejected);
+    assert!(output.borrow().starts_with(b"HTTP/1.1 409"));
+}
+#[test]
+fn gateway_path_selects_only_offered_members() {
+    let g = gateway();
+    for path in ["/alpha.First/Unit/mapped", "/alpha.Second/Unit/alpha"] {
+        let conn = injection(path, &[]);
+        let output = conn.output.clone();
+        assert_eq!(g.serve_injection(conn, &Config::default()), Ended::Rejected);
+        assert!(output.borrow().starts_with(b"HTTP/1.1 404"));
+    }
+    // Add a second, non-offered interface to the real alpha catalog. Its
+    // member kinds and ordinals remain those of alpha.Face.
+    let mut descriptor = ridl_descriptor::deployment::Deployment::try_from(
+        ridl_descriptor::deployment::verify(DESCRIPTOR).unwrap(),
+    )
+    .unwrap();
+    let embedded = descriptor
+        .catalogs
+        .iter_mut()
+        .find(|c| c.name == "alpha")
+        .unwrap();
+    let mut cat =
+        ridl_descriptor::Catalog::try_from(ridl_descriptor::verify(&embedded.bytes).unwrap())
+            .unwrap();
+    let mut extra = cat.interfaces[0].clone();
+    extra.number = 2;
+    extra.name = "alpha.NotOffered".into();
+    cat.interfaces.push(extra);
+    embedded.bytes = ridl_descriptor::finish(&cat);
+    let bytes = Box::leak(ridl_descriptor::deployment::finish(&descriptor).into_boxed_slice());
+    let g = Arc::new(Gateway::from_descriptor(bytes, "Local").unwrap());
+    let mut conn = injection(
+        "/alpha.First/Unit/alpha",
+        &[
+            Frame::Attached(AttachOutcome::Accepted),
+            Frame::Answer {
+                target: Target {
+                    iface: InterfaceNo(2),
+                    ..SIGNAL
+                },
+                outcome: AnswerOutcome::Accepted,
+            },
+            Frame::Publish {
+                target: Target {
+                    iface: InterfaceNo(2),
+                    ..SIGNAL
+                },
+                envelope: Envelope {
+                    stamp: Timestamp(1),
+                    seq: 1,
+                },
+                state: PublishState::Live(&[99]),
+            },
+        ],
+    );
+    let output = conn.output.clone();
+    let check = g.clone();
+    conn.on_idle = Some(Box::new(move || {
+        use ridl_rt::port::SignalReader;
+        let listener = check
+            .node()
+            .attach(InstanceNo::LISTENER, &catalog(&check, "alpha"))
+            .unwrap();
+        let mut out = [0; 8];
+        assert_eq!(
+            listener
+                .read(InterfaceNo(2), SIGNAL.ord, &mut out)
+                .unwrap()
+                .provenance,
+            ridl_rt::sample::Provenance::Init
+        );
+    }));
+    g.serve_injection(conn, &Config::default());
+    let output = output.borrow();
+    let frames = binary_frames(&output);
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|f| matches!(f, Frame::Subscribe(_)))
+            .count(),
+        2
+    );
+    assert!(frames
+        .iter()
+        .all(|f| !matches!(f, Frame::Subscribe(t) if t.iface == InterfaceNo(2))));
+}
+#[test]
+fn gateway_refused_handshake_releases_twin() {
+    let g = gateway();
+    let cat = catalog(&g, "alpha");
+    for mode in ["origin", "protocol", "refused", "eof", "accepted"] {
+        let messages = match mode {
+            "refused" => vec![Frame::Attached(AttachOutcome::Refused(
+                frame::Reason::UnknownCatalog,
+            ))],
+            "accepted" => vec![Frame::Attached(AttachOutcome::Accepted)],
+            _ => vec![],
+        };
+        let mut conn = injection("/alpha.First/Unit/alpha", &messages);
+        if mode == "protocol" {
+            conn.input = io::Cursor::new(
+                String::from_utf8(conn.input.into_inner())
+                    .unwrap()
+                    .replace("ridl-ws-v2-provider", "ridl-ws-v2")
+                    .into_bytes(),
+            );
+        }
+        if mode == "origin" {
+            conn.input = io::Cursor::new(
+                String::from_utf8(conn.input.into_inner())
+                    .unwrap()
+                    .replace(
+                        "Host: localhost",
+                        "Origin: https://untrusted.invalid\r\nHost: localhost",
+                    )
+                    .into_bytes(),
+            );
+        }
+        if mode == "accepted" {
+            let check = g.clone();
+            conn.on_idle = Some(Box::new(move || {
+                assert!(check
+                    .node()
+                    .attach(InstanceNo::new(1).unwrap(), &cat)
+                    .is_err());
+                assert!(check
+                    .node()
+                    .attach(InstanceNo::new(1).unwrap(), &catalog(&check, "mapped"))
+                    .is_err());
+            }));
+        }
+        let output = conn.output.clone();
+        let ended = g.serve_injection(
+            conn,
+            &Config::default().with_origin_check(|origin| origin.is_none()),
+        );
+        match mode {
+            "origin" => {
+                assert_eq!(ended, Ended::Rejected);
+                assert!(output.borrow().starts_with(b"HTTP/1.1 403"));
+            }
+            "protocol" => {
+                assert_eq!(ended, Ended::Rejected);
+                assert!(output.borrow().starts_with(b"HTTP/1.1 400"));
+            }
+            "refused" => assert_eq!(ended, Ended::ServerClosed(1000)),
+            _ => assert_eq!(ended, Ended::Io(io::ErrorKind::UnexpectedEof)),
+        }
+        drop(provider(&g, 1, cat));
+    }
+}
+#[test]
+fn gateway_listening_port_refuses_provider_protocol() {
+    use ridl_rt::port::SignalReader;
+    let g = gateway();
+    let conn = injection(
+        "/alpha.First/Unit/alpha",
+        &[
+            Frame::Attached(AttachOutcome::Accepted),
+            Frame::Publish {
+                target: SIGNAL,
+                envelope: Envelope {
+                    stamp: Timestamp(1),
+                    seq: 1,
+                },
+                state: PublishState::Live(&[99]),
+            },
+        ],
+    );
+    let output = conn.output.clone();
+    assert_eq!(g.serve(conn, &Config::default()), Ended::Rejected);
+    assert!(!output.borrow().starts_with(b"HTTP/1.1 101"));
+    let p = provider(&g, 1, catalog(&g, "alpha"));
+    assert_eq!(
+        p.read(SIGNAL.iface, SIGNAL.ord, &mut [0; 8])
+            .unwrap()
+            .provenance,
+        ridl_rt::sample::Provenance::Init
+    );
+}
+#[test]
+fn gateway_injection_is_absent_by_default() {
+    let options = options();
+    assert!(options.bind_injection().unwrap().is_none());
+}
+#[test]
+fn gateway_injection_binds_loopback() {
+    let options = Options::parse(["file", "Local", "0", "0"].map(str::to_owned)).unwrap();
+    let listener = options.bind_injection().unwrap().unwrap();
+    assert_eq!(
+        listener.local_addr().unwrap().ip(),
+        std::net::Ipv4Addr::LOCALHOST
+    );
+}
+
+#[test]
+fn gateway_memory_injection_reaches_local_ports() {
+    use ridl_rt::port::{Caller, EventSource, SignalReader};
+    use ridl_rt::sample::{Cause, Provenance};
+    let g = gateway();
+    let cat = catalog(&g, "alpha");
+    let mut local = g.node().attach(InstanceNo::LISTENER, &cat).unwrap();
+    local.subscribe(EVENT.iface, &[EVENT.ord]).unwrap();
+    let command = local
+        .command(COMMAND.iface, COMMAND.ord, &[11], None)
+        .unwrap();
+    let query = local.query(COMMAND.iface, Ordinal(4), &[13], None).unwrap();
+    let local = Arc::new(Mutex::new(local));
+    let mut conn = injection(
+        "/alpha.First/Unit/alpha",
+        &[
+            Frame::Attached(AttachOutcome::Accepted),
+            Frame::Answer {
+                target: SIGNAL,
+                outcome: AnswerOutcome::Accepted,
+            },
+            Frame::Answer {
+                target: EVENT,
+                outcome: AnswerOutcome::Accepted,
+            },
+            Frame::Publish {
+                target: SIGNAL,
+                envelope: Envelope {
+                    stamp: Timestamp(1),
+                    seq: 1,
+                },
+                state: PublishState::Live(&[42]),
+            },
+            Frame::Occurrence {
+                target: EVENT,
+                envelope: Envelope {
+                    stamp: Timestamp(1),
+                    seq: 1,
+                },
+                payload: &[7],
+            },
+        ],
+    );
+    // These frames arrive only after a tick has sent the two requests.
+    let responses = injection(
+        "/unused",
+        &[
+            Frame::Response {
+                target: COMMAND,
+                envelope: Envelope {
+                    stamp: Timestamp(2),
+                    seq: 1,
+                },
+                correlation: 1,
+                outcome: ResponseOutcome::Accepted,
+            },
+            Frame::Response {
+                target: Target {
+                    kind: Kind::Query,
+                    ord: Ordinal(4),
+                    ..COMMAND
+                },
+                envelope: Envelope {
+                    stamp: Timestamp(2),
+                    seq: 2,
+                },
+                correlation: 2,
+                outcome: ResponseOutcome::Reply(&[91]),
+            },
+            Frame::Publish {
+                target: SIGNAL,
+                envelope: Envelope {
+                    stamp: Timestamp(2),
+                    seq: 2,
+                },
+                state: PublishState::InvalidDeclared,
+            },
+        ],
+    )
+    .input
+    .into_inner();
+    let body = responses.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+    conn.after_idle = responses[body..].to_vec();
+    let output = conn.output.clone();
+    let observed = local.clone();
+    conn.on_idle = Some(Box::new(move || {
+        let mut local = observed.lock().unwrap();
+        let mut bytes = [0; 8];
+        let sample = local.read(SIGNAL.iface, SIGNAL.ord, &mut bytes).unwrap();
+        assert_eq!(
+            (sample.provenance, sample.len, bytes[0]),
+            (Provenance::Live, 1, 42)
+        );
+        let event = local.next(&mut bytes).unwrap().unwrap();
+        assert_eq!(
+            (event.iface, event.ord, event.len, bytes[0]),
+            (EVENT.iface, EVENT.ord, 1, 7)
+        );
+        let output = output.borrow();
+        let frames = binary_frames(&output);
+        for (kind, ord, seq, args) in [(Kind::Command, 3, 1, 11), (Kind::Query, 4, 2, 13)] {
+            assert!(frames.iter().any(|f| matches!(f, Frame::Request { target, envelope, payload } if target.kind == kind && target.iface == InterfaceNo(1) && target.ord == Ordinal(ord) && envelope.seq == seq && *payload == [args])));
+        }
+    }));
+    let mut config = Config::default();
+    config.poll_interval = Duration::ZERO;
+    assert_eq!(
+        g.serve_injection(conn, &config),
+        Ended::Io(io::ErrorKind::UnexpectedEof)
+    );
+    let mut local = local.lock().unwrap();
+    let mut bytes = [0; 8];
+    let sample = local.read(SIGNAL.iface, SIGNAL.ord, &mut bytes).unwrap();
+    assert_eq!(
+        (sample.provenance, sample.len, bytes[0]),
+        (Provenance::Invalid(Cause::Declared), 1, 42)
+    );
+    assert_eq!(local.ack(command), Some(Ok(())));
+    assert_eq!(local.reply(query, &mut bytes), Ok(Some(Ok(1))));
+    assert_eq!(bytes[0], 91);
+    drop(provider(&g, 1, cat));
+}
+
+#[test]
+fn gateway_injection_refuses_streamed_query_locally() {
+    use ridl_rt::error::{CallError, Contract};
+    use ridl_rt::port::Caller;
+    let mut descriptor = ridl_descriptor::deployment::Deployment::try_from(
+        ridl_descriptor::deployment::verify(DESCRIPTOR).unwrap(),
+    )
+    .unwrap();
+    let embedded = descriptor
+        .catalogs
+        .iter_mut()
+        .find(|c| c.name == "alpha")
+        .unwrap();
+    let mut cat =
+        ridl_descriptor::Catalog::try_from(ridl_descriptor::verify(&embedded.bytes).unwrap())
+            .unwrap();
+    let query = cat.interfaces[0]
+        .members
+        .iter_mut()
+        .find(|m| m.ordinal == 4)
+        .unwrap();
+    query.streams = Some(vec![ridl_descriptor::StreamPayload {
+        no: 0,
+        element: Some("u8".into()),
+        ..Default::default()
+    }]);
+    embedded.bytes = ridl_descriptor::finish(&cat);
+    let bytes = Box::leak(ridl_descriptor::deployment::finish(&descriptor).into_boxed_slice());
+    let g = Gateway::from_descriptor(bytes, "Local").unwrap();
+    let cat = catalog(&g, "alpha");
+    let mut local = g.node().attach(InstanceNo::LISTENER, &cat).unwrap();
+    let call = local
+        .query(InterfaceNo(1), Ordinal(4), &[13], None)
+        .unwrap();
+    let mut conn = injection(
+        "/alpha.First/Unit/alpha",
+        &[Frame::Attached(AttachOutcome::Accepted)],
+    );
+    let output = conn.output.clone();
+    // Observe settlement during the session, before EOF could interrupt it.
+    conn.on_idle = Some(Box::new(move || {
+        assert_eq!(
+            local.reply(call, &mut [0; 8]),
+            Ok(Some(Err(CallError::Contract(Contract::UnknownInteraction))))
+        );
+    }));
+    let mut config = Config::default();
+    config.poll_interval = Duration::ZERO;
+    assert_eq!(
+        g.serve_injection(conn, &config),
+        Ended::Io(io::ErrorKind::UnexpectedEof)
+    );
+    assert!(binary_frames(&output.borrow())
+        .iter()
+        .all(|f| !matches!(f, Frame::Request { .. })));
+    drop(provider(&g, 1, cat));
+}
+
+/// Captures complete startup announcements without sharing stdout with tests.
+struct Announcements {
+    bytes: Vec<u8>,
+    send: std::sync::mpsc::Sender<String>,
+}
+impl io::Write for Announcements {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.send
+            .send(String::from_utf8(std::mem::take(&mut self.bytes)).unwrap())
+            .map_err(|_| io::ErrorKind::BrokenPipe.into())
+    }
+}
+fn executable_options(injection: bool) -> Options {
+    let mut args = vec![
+        format!(
+            "{}/../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb",
+            env!("CARGO_MANIFEST_DIR")
+        ),
+        "Local".into(),
+        "0".into(),
+    ];
+    if injection {
+        args.push("0".into());
+    }
+    Options::parse(args).unwrap()
+}
+
+#[test]
+fn gateway_executable_wiring_negotiates_both_roles() {
+    let (announcements, receive) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        gateway::run(
+            executable_options(true),
+            &mut Announcements {
+                bytes: vec![],
+                send: announcements,
+            },
+        )
+        .unwrap();
+    });
+    let listening = receive.recv_timeout(LIMIT).unwrap();
+    let injection = receive.recv_timeout(LIMIT).unwrap();
+    let port = |line: &str, prefix: &str| -> SocketAddr {
+        format!("127.0.0.1:{}", line.trim().strip_prefix(prefix).unwrap())
+            .parse()
+            .unwrap()
+    };
+    let g = gateway();
+    let mut listen = connect(port(&listening, "port "), catalog(&g, "alpha"));
+    subscribe(&mut listen, SIGNAL);
+    let addr = port(&injection, "inject-port ");
+    let stream = TcpStream::connect_timeout(&addr, LIMIT).unwrap();
+    stream.set_read_timeout(Some(LIMIT)).unwrap();
+    let mut request = format!("ws://{addr}/alpha.First/Unit/alpha")
+        .into_client_request()
+        .unwrap();
+    request.headers_mut().insert(
+        "Sec-WebSocket-Protocol",
+        "ridl-ws-v2-provider".parse().unwrap(),
+    );
+    let (mut provider, _) = tungstenite::client(request, stream).unwrap();
+    assert!(matches!(
+        frame::decode(&read(&mut provider)).unwrap(),
+        Frame::Attach(_)
+    ));
+    send(&mut provider, Frame::Attached(AttachOutcome::Accepted));
+    assert!(matches!(
+        frame::decode(&read(&mut provider)).unwrap(),
+        Frame::Subscribe(_)
+    ));
+}
+
+#[test]
+fn gateway_executable_without_injection_announces_only_listening() {
+    let (announcements, receive) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        gateway::run(
+            executable_options(false),
+            &mut Announcements {
+                bytes: vec![],
+                send: announcements,
+            },
+        )
+        .unwrap();
+    });
+    let listening = receive.recv_timeout(LIMIT).unwrap();
+    assert!(listening.starts_with("port "));
+    assert!(receive.recv_timeout(Duration::from_millis(50)).is_err());
+}
+
+#[test]
+fn gateway_failed_injection_bind_announces_nothing() {
+    let busy = options().bind().unwrap();
+    let options = Options::parse([
+        format!(
+            "{}/../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb",
+            env!("CARGO_MANIFEST_DIR")
+        ),
+        "Local".into(),
+        "0".into(),
+        busy.local_addr().unwrap().port().to_string(),
+    ])
+    .unwrap();
+    let mut output = vec![];
+    assert!(gateway::run(options, &mut output).is_err());
+    assert!(output.is_empty());
 }

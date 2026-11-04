@@ -59,7 +59,9 @@
 //! - It has no TLS. A `wss://` deployment ends TLS in front of the server, or
 //!   gives [`serve`] a TLS stream that implements [`Connection`].
 //! - It authenticates no one. The path and the query of the upgrade request
-//!   are ignored, and so is every header other than the ones the handshake
+//!   are ignored by [`serve`] and [`serve_selected`];
+//!   [`serve_provided_selected`] passes the request target to its selector.
+//!   The crate ignores every header other than the ones the handshake
 //!   reads (`Host`, `Upgrade`, `Connection`, `Sec-WebSocket-Key`,
 //!   `Sec-WebSocket-Version` and `Sec-WebSocket-Protocol`; §11.1 item 1, and
 //!   `Origin`, which it gives to the check that
@@ -92,9 +94,9 @@ mod server;
 pub use server::DescriptorError;
 #[cfg(feature = "server")]
 pub use server::{
-    serve, serve_selected, Backend, Config, Connection, Described, Ended, LimitOutOfRange,
-    MemberTable, Note, Polling, RequestedCatalog, RetainedTooSmall, Scanning, Streaming,
-    TableMismatch,
+    serve, serve_provided, serve_provided_selected, serve_selected, Backend, Config, Connection,
+    Described, Ended, LimitOutOfRange, MemberTable, Note, Polling, ProvidedBackend, Providing,
+    RequestedCatalog, RetainedTooSmall, Scanning, SelectionError, Streaming, TableMismatch,
 };
 
 #[cfg(feature = "server")]

@@ -92,6 +92,14 @@ impl MemberTable {
             .and_then(|entry| entry.limit)
     }
 
+    /// The member limit, or the default ceiling of the target kind.
+    pub(crate) fn payload_limit(&self, target: Target) -> usize {
+        self.limit(target.iface, target.ord)
+            .map_or(ridl_rt::contract::default_ceiling(target.kind), |n| {
+                n as usize
+            })
+    }
+
     /// Marks the member under `(iface, ord)` as one whose reply is a stream;
     /// stores nothing when the table holds no entry under the key. A later
     /// [`insert`](Self::insert) under the same key clears the mark.
@@ -145,16 +153,24 @@ impl MemberTable {
             .map(|entry| (entry.kind, entry.max))
     }
 
+    /// Every member in interface and ordinal order, with its bound and limit.
+    pub fn iter(&self) -> impl Iterator<Item = (Target, Option<Duration>, Option<u32>)> + '_ {
+        self.members.iter().map(|(&(iface, ord), entry)| {
+            (
+                Target {
+                    kind: entry.kind,
+                    iface,
+                    ord,
+                },
+                entry.max,
+                entry.limit,
+            )
+        })
+    }
+
     /// Every member, in key order, with its payload limit when it has one.
     pub(crate) fn entries(&self) -> impl Iterator<Item = (Target, Option<u32>)> + '_ {
-        self.members.iter().map(|(&(iface, ord), entry)| {
-            let target = Target {
-                kind: entry.kind,
-                iface,
-                ord,
-            };
-            (target, entry.limit)
-        })
+        self.iter().map(|(target, _, limit)| (target, limit))
     }
 
     /// The number of members.

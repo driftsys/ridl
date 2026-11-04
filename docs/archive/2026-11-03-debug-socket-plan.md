@@ -93,10 +93,16 @@ These are the names chosen here; subsequent tasks refer to this section.
   the handshake. Selection occurs once after parsing attach, before normal
   catalog/encoding checks.
 - `server::ProvidedBackend` has
-  `type Ports: Attached + Encoded + Clock + SignalWriter + EventSink + Handler`,
+  `type Ports: Attached + Encoded + Clock + Handler`,
   `fn ports(&mut self) -> &mut Self::Ports`, and
   `fn members(&self) -> &MemberTable`. Its table contains only the offered
-  members of this instance in this catalog.
+  members of this instance in this catalog. Under R-DS-3 its delivery methods
+  are `sample(target: Target, sample: Sample<Option<&[u8]>>, config: &Config)`,
+  `occurrence(target: Target, occurrence: Occurrence<&[u8]>, gap: Option<u64>, config: &Config)`
+  and `commit(remote_stamp: Timestamp)`, each with `&mut self` and no return
+  value. These reuse the runtime's sample, provenance, detection, freshness and
+  envelope types. A sample's `None` means the catalog init value; `Some` holds
+  the last good bytes. `gap` counts missing event occurrences.
   `server::Providing<P>::new(ports: P, members: MemberTable) -> Result<Self, TableMismatch>`
   is the standard adapter, validating table identity.
 - `server::serve_provided<C: Connection, B: ProvidedBackend>(conn: C, backend: B, config: &Config) -> Ended`;
@@ -900,3 +906,72 @@ name it.
   selector prefers the catalog whose name and hash both match and otherwise
   chooses by name, where D-11 then answers `catalog_mismatch`. `None` still
   means that no catalog of the machine has the name.
+- **R-DS-2.** Streams stage 5a is open as driftsys/ridl#1222 and stage 5b has
+  not started, so PR C is built after PR B without waiting for stage 5b. Of PR C
+  and stage 5b, the one that lands second rebases onto the other.
+- **R-DS-3 (Task 9 stop, 2026-11-04).** Writing a remote provider's frames
+  straight into `SignalWriter` and `EventSink` cannot follow the consumer rules
+  of §5 to §9 that the "Reversed role" section applies: the ports cannot restore
+  an `Init`, cannot carry a detected-invalid sample, and cannot carry a corrupt
+  occurrence or the remote envelope and sequence. So:
+  - The provided session is a full consumer. It applies §5 to §9 itself (the
+    `Init` rule, the length refusal before verification, `Invalid(Detected)`
+    samples that keep the last good value, `Err(Corrupt)` occurrences that are
+    delivered, sequence gaps) exactly as a consuming client does.
+  - `ProvidedBackend` receives what a consumer's application receives, not port
+    writes: one call per delivered sample (interface, ordinal, provenance,
+    validity with its cause, payload, the remote stamp), one per delivered
+    occurrence (interface, ordinal, the remote sequence and envelope, `Ok` with
+    the payload or `Err` with the cause, and a gap when one was detected), and
+    one at the end of each commit group (consecutive frames with the same remote
+    stamp). Its `Ports` keep `Attached + Encoded + Clock + Handler` for the
+    calls. The builder names the types; the plan's Names section records them.
+  - `Providing<P>` maps those deliveries onto local ports, and its rustdoc lists
+    what the ports cannot carry: `Init` writes nothing (the twin has not
+    published; the last value on the machine stays); a live value is `set`, and
+    `commit` runs at the end of each group, stamped by the node; a declared
+    invalid value is `invalidate`; a detected-invalid value is `invalidate` too
+    (the machine reports `Declared`) and records a `Note`; a corrupt occurrence
+    is not raised and records a `Note`; a gap records a `Note`. The loss is
+    confined to the debug path and is stated in the book page.
+  - No frozen port trait changes.
+- **R-DS-4 (Task 9 review, 2026-11-04).** Clarifies R-DS-3: only signal frames
+  form commit groups. An occurrence never opens, extends or closes a group
+  (frame §5.2: "There is no staging and no commit"), so an event interleaved in
+  a signal group does not split it, and no group holds only occurrences. A group
+  also closes before a second accepted frame for a channel already in it, so one
+  local `commit` carries at most one frame per channel (§5.1) and a client that
+  keeps one stamp still commits.
+- **R-DS-6 (Task 10 review, 2026-11-04).** On the provided session, a `response`
+  whose outcome is outside its call kind's set (`accepted` for a query, `reply`
+  for a command; frame §5.3 and §5.4) settles the local claim as
+  `Transport::Corrupt`, so the call ends and no claim waits for its deadline.
+  The TypeScript consumer returns `unexpected-outcome` and leaves its call
+  unsettled; the two consumers differ, and the design record states both.
+- **R-DS-7 (Task 11 stop, 2026-11-04).** A browser's or Deno's `WebSocket`
+  cannot close with 1002 or 1003 and does not show pings to the page. The
+  TypeScript providing side therefore follows the TypeScript consumer's D-10 and
+  D-11 (`docs/design/ridl-transport-ws-ts.md`) exactly: on a violation it calls
+  `close()` with no code and records the violation through `onNote`; it has no
+  client liveness timer, and the server's liveness check is the one that runs.
+  driftsys/ridl#991 already asks the frame specification to state what such a
+  client does; it covers the reversed role too.
+- **R-DS-8 (PR C review, 2026-11-04).** `serve` and `serve_selected` retain
+  their existing behavior: ping and pong traffic resets the liveness clock even
+  before `attach`. Only `serve_provided` and `serve_provided_selected` bound the
+  wait for `attached` by `liveness_timeout` after upgrade, regardless of ping
+  and pong traffic.
+- **R-DS-9 (PR C review, 2026-11-04).** Frame specification §11.1 item 4 allows
+  close code 1011 for an internal failure after acceptance. The provided session
+  uses it, including when the local `Handler` refuses to serve a member of the
+  table when the session starts.
+- **R-DS-10 (PR C review, 2026-11-04).** The TypeScript provider's `publish` and
+  `invalidate` store the current signal state before subscription; that state is
+  sent as the initial value after the subscription's `answer`. A `raise` without
+  a subscription is not delivered and is recorded through `onNote` as
+  `discarded` with reason `not-subscribed`.
+- **R-DS-11 (PR C review, 2026-11-04).** The injection path names a catalog by
+  name. When the descriptor holds two versions with that name, injection selects
+  the first in descriptor order, and the provider must match its hash. The URL
+  cannot select the other version. This limitation is documented; listening
+  selection still prefers a matching name and hash.
