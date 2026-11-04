@@ -4,8 +4,8 @@
 // promise of what it received: the provenance and the payload, as hex, of
 // the signal's first publish and of its publish after the command, the length
 // and the byte-for-byte match of each large `fixed`, the count and the match
-// of the chunks of a streamed reply of 64 elements, and the count of discard
-// notes.
+// of the chunks of a streamed reply of 64 elements, the length and match of
+// an upload read back through a streamed reply, and the count of discard notes.
 
 import { connect, Kind } from "../mod.ts";
 import type { Sample } from "../mod.ts";
@@ -20,6 +20,8 @@ export interface Result {
   fixed: Record<string, string>;
   /** The streamed reply of 64 elements: `<count>:<match>`. */
   stream: string;
+  /** The upload read back through FETCH: `<length>:<match>`. */
+  upload: string;
   /** The count of `discarded` notes. */
   discarded: number;
 }
@@ -90,11 +92,29 @@ async function run(): Promise<Result> {
         { bound: 2000 },
       ),
     );
+    const bytes = catalog.pattern(catalog.UPLOAD_LEN);
+    const { upload, accepted } = session.commandStream(
+      catalog.IFACE,
+      catalog.UPLOAD,
+      Uint8Array.of(3, 0),
+      { bound: 2000 },
+    );
+    await accepted;
+    await catalog.writeAll(upload, bytes, catalog.FETCH_CHUNK);
+    const fetched = await catalog.readAll(session.queryStream(
+      catalog.IFACE,
+      catalog.FETCH,
+      Uint8Array.of(3),
+      { bound: 2000 },
+    ));
+    const match = fetched.length === bytes.length &&
+      fetched.every((byte, i) => byte === bytes[i]);
     return {
       init: describe(first),
       live: describe(second),
       fixed,
       stream: `${elements.count}:${elements.match}`,
+      upload: `${fetched.length}:${match}`,
       discarded,
     };
   } finally {
