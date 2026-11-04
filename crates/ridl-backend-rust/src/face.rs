@@ -650,8 +650,9 @@ fn client(
              is the channel's init value, under `Provenance::Init` or \
              `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, \
              §4.5). A payload that fails its check is reported as \
-             `Provenance::Invalid` with the detection, and the value is the \
-             channel's init value.",
+             `Provenance::Invalid` with the detection; the runtime keeps the \
+             last good value, or the init value when there is none \
+             (`SignalReader::check_with`).",
             member.declared
         );
         let doc = member_doc(member, &doc);
@@ -669,9 +670,7 @@ fn client(
                 let raw = #read_port.read(#number, #ordinal, buf)?;
                 let (value, provenance) = match raw.provenance {
                     ::ridl_rt::sample::Provenance::Init
-                    | ::ridl_rt::sample::Provenance::Invalid(
-                        ::ridl_rt::sample::Cause::Declared,
-                    ) if raw.len == 0 => {
+                    | ::ridl_rt::sample::Provenance::Invalid(_) if raw.len == 0 => {
                         (<#descriptor as ::ridl_rt::contract::Signal>::init(), raw.provenance)
                     }
                     _ => match ::ridl_rt::payload::Ref::<#path, P::Encoding>::verify(
@@ -815,6 +814,16 @@ fn client(
     } else {
         quote! { P }
     };
+    let checks = signals.iter().map(|(member, payload)| {
+        let ordinal = &member.ordinal;
+        let path = ty(payload);
+        quote! {
+            ::ridl_rt::port::SignalReader::check_with(
+                &port, #number, #ordinal,
+                ::ridl_rt::payload::check::<#path, P::Encoding>,
+            );
+        }
+    });
     let extra_field = shared.then(|| quote! { upload: UploadState, });
     let init = if shared {
         quote! { port: ::core::cell::RefCell::new(port), upload: UploadState::new() }
@@ -840,6 +849,7 @@ fn client(
             #[track_caller]
             fn new(port: P) -> Self {
                 check_catalog(::ridl_rt::port::Attached::catalog(&port));
+                #(#checks)*
                 Client { #init }
             }
         }

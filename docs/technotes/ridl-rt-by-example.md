@@ -159,17 +159,19 @@ you read it, three questions are open that a bare value cannot answer.
 **Has anyone published yet, and is the channel healthy?** That is `Provenance`
 (ridl §4.5):
 
-| `Provenance`     | Meaning                                                                    |
-| ---------------- | -------------------------------------------------------------------------- |
-| `Init`           | No publication yet. `value` is the channel's init value.                   |
-| `Live`           | `value` is the latest publication.                                         |
-| `Invalid(Cause)` | The channel is invalid. `value` is the last good value, or the init value. |
+| `Provenance`     | Meaning                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `Init`           | No publication yet. `value` is the channel's init value.                                      |
+| `Live`           | `value` is the latest publication.                                                            |
+| `Invalid(Cause)` | The channel is invalid. `value` is the last good value, or the init value when there is none. |
 
 `value` is never absent. That is deliberate: a consumer that wants to proceed
 with the init value can ignore the provenance, and one that must not proceed
 reads the provenance. A `Cause` is either `Declared` — the provider called
-`invalidate` — or `Detected(Detection)`, which is the consumer's own binding
-reporting that the bytes it received did not pass their check.
+`invalidate` — or `Detected(Detection)`, which reports a failed check that the
+binding registered on the runtime. The runtime keeps the last good bytes;
+[the port contract](../design/ridl-rt.md#the-ports) defines registration and
+receipt, including the case with no good value yet.
 
 **Is the value too old?** That is `Freshness`, measured against the staleness
 bound the `@` annotation sets (ridl §9): `Fresh`, `Stale { by: Duration }`, or
@@ -192,14 +194,22 @@ That is the whole of `Sample::usable`: provenance is `Live` and freshness is not
 ### The first port: `SignalReader`
 
 For `Client::temperature` to exist, the port must be able to read a signal. That
-is the first trait, and it is one method:
+is the first trait:
 
 ```rust
+pub type Check = fn(&[u8]) -> Result<(), Detection>;
+
 pub trait SignalReader: Attached {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check);
     fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8])
         -> Result<RawSample, ReadError>;
 }
 ```
+
+`Client::new` registers `payload::check::<Temperature, P::Encoding>` for the
+signal before storing its port. A read decodes the runtime's held good bytes;
+when `Init` or `Invalid(_)` carries zero bytes, it supplies the init value and
+preserves the runtime's cause. It still verifies nonempty bytes defensively.
 
 Three things about it explain most of the rest of the port module.
 

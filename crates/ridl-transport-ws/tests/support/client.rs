@@ -4,8 +4,10 @@
 //!
 //! It applies the consumer rules of the frame specification §5 and §6: one
 //! held sample per subscribed signal, replaced only by a `publish` with a
-//! greater `seq` (§5.1, §7); one queue of occurrences in the order received
-//! (§5.2); and a map of calls in flight keyed by the request's own `seq`,
+//! greater `seq` (§5.1, §7). Registered checks run on `Live` payloads before
+//! replacing the last good bytes; a failure keeps those bytes and reports the
+//! detection with the rejected envelope. It keeps one queue of occurrences in
+//! the order received (§5.2), and a map of calls in flight keyed by the request's own `seq`,
 //! which each `response` names as its correlation (§5.3, §5.4). A `fixed` is
 //! read once and cached for the session (§5.5).
 //!
@@ -53,7 +55,7 @@ pub struct WsClient {
 struct Held {
     envelope: Envelope,
     provenance: Provenance,
-    /// The last good value: the init value (no bytes, here) until a `Live`.
+    /// The last value that passed its check; no bytes until one passes.
     value: Vec<u8>,
 }
 
@@ -86,6 +88,7 @@ struct Inner {
     /// The `seq` of the next request: one counter over every call (§7).
     next_seq: u64,
     signals: HashMap<(InterfaceNo, Ordinal), Option<Held>>,
+    checks: HashMap<(InterfaceNo, Ordinal), ridl_rt::port::Check>,
     events: HashSet<(InterfaceNo, Ordinal)>,
     queue: VecDeque<Queued>,
     calls: HashMap<u64, InFlight>,
@@ -123,6 +126,7 @@ impl WsClient {
             start: Instant::now(),
             next_seq: 1,
             signals: HashMap::new(),
+            checks: HashMap::new(),
             events: HashSet::new(),
             queue: VecDeque::new(),
             calls: HashMap::new(),
@@ -313,7 +317,14 @@ impl Inner {
         }
         let last_good = slot.take().map(|h| h.value).unwrap_or_default();
         let (provenance, value) = match state {
-            PublishState::Live(bytes) => (Provenance::Live, bytes.to_vec()),
+            PublishState::Live(bytes) => match self
+                .checks
+                .get(&(target.iface, target.ord))
+                .map_or(Ok(()), |check| check(bytes))
+            {
+                Ok(()) => (Provenance::Live, bytes.to_vec()),
+                Err(detection) => (Provenance::Invalid(Cause::Detected(detection)), last_good),
+            },
             // The init value: the test catalog's is no bytes.
             PublishState::Init => (Provenance::Init, Vec::new()),
             PublishState::InvalidDeclared => (Provenance::Invalid(Cause::Declared), last_good),
@@ -363,6 +374,18 @@ impl Attached for WsClient {
 }
 
 impl SignalReader for WsClient {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: ridl_rt::port::Check) {
+        let mut inner = self.inner.borrow_mut();
+        inner.checks.insert((iface, ord), check);
+        if let Some(Some(held)) = inner.signals.get_mut(&(iface, ord)) {
+            if held.provenance == Provenance::Live {
+                if let Err(detection) = check(&held.value) {
+                    held.value.clear();
+                    held.provenance = Provenance::Invalid(Cause::Detected(detection));
+                }
+            }
+        }
+    }
     /// Local: answers from the held sample. A signal not subscribed has none
     /// and answers `UnknownInteraction`.
     fn read(

@@ -204,8 +204,18 @@ marker, leaving the package's domain types and its other interfaces unaffected
 (`tests/induced_call_refusals.rs`).
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
-one member the face covers, one `pub mod` named after the interface. Its
-consumer side is:
+one member the face covers, one `pub mod` named after the interface.
+
+`Bind::new` registers `payload::check::<T, P::Encoding>` through
+`SignalReader::check_with` once per signal, before storing the port (before
+wrapping it in a `RefCell` when uploads need one). An interface without signals
+emits no registration. The runtime's [check contract](ridl-rt.md#the-ports)
+keeps the last good value. A signal read uses the init value when `Init` or
+`Invalid(_)` carries zero bytes and preserves the runtime's provenance. Other
+bytes are verified before decoding; a runtime that returns bytes that fail
+verification still gets the init value under `Invalid(Detected(_))`.
+
+Its consumer side is:
 
 - **`Client<P: ...>`** — one read method per signal, returning
   `Result<Sample<T>, ReadError>` at once; a `subscribe_<event>` per event and

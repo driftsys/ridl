@@ -369,13 +369,14 @@ plus the last good value. On receiving a `publish` for a subscribed signal it:
 
 1. discards the frame when it already holds a sample for that channel and the
    frame's `seq` is not greater than that sample's (a duplicate, or a
-   reordering; §7); an `unsubscribe` drops the held sample, so a later
-   `subscribe` starts again from the first frame it receives;
+   reordering; §7); an `unsubscribe` drops the held sample and its last good
+   value, so a later `subscribe` starts again from the first frame it receives;
 2. replaces the sample's envelope and provenance with the frame's;
 3. under `Live`, hands the payload bytes to the generated binding, which runs
    `Payload::verify`. On success the sample's value is the decoded value and its
-   provenance stays `Live`. On failure the value stays the **last good value**
-   and the provenance becomes `Invalid(Detected(_))` (§9.1);
+   provenance stays `Live`. On failure the value stays the **last good value** —
+   or the init value, when there is none — and the provenance becomes
+   `Invalid(Detected(_))` (§9.1);
 4. under `Init`, sets the value to the **init value**, which the generated
    binding supplies from the catalog — the init value is a fact both sides hold,
    so it never crosses;
@@ -942,12 +943,13 @@ are **not a well-formed encoding** — `VerifyError::Structure(Malformed)`, a
 Stratum 3 serialization failure (ridl §10.3) — or they are well formed and hold
 a **value that breaks a typl constraint** — `VerifyError::Contract(Violation)`,
 `INVALID_VALUE`, Stratum 2 (ridl §10.2). The two are never collapsed into one,
-because they sit in different strata. A runtime never verifies: a port carries
-bytes and names no payload type, so verification is the generated binding's on
-both sides, and a runtime that verified would need the generated types below the
-port, which the layering forbids
-([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6).
+because they sit in different strata. A runtime never verifies on its own: a
+port carries bytes and names no payload type. The generated binding registers a
+check per signal (`SignalReader::check_with`), which runs `Payload::verify`, and
+the consuming runtime calls it on each `Live` payload it receives (§5.1 step 3).
+The runtime names no type, so the layering of
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 6 holds.
 
 **A receiver refuses a payload for its length before `verify`.** The size of a
 payload is the transport's to refuse, against the interaction's limit from the
@@ -961,12 +963,12 @@ structure failure of the kind in §9.1 to §9.4: a signal's sample is
 `Invalid(Detected(Corrupt))`, an event's occurrence carries `Err(Corrupt)`, a
 `request` is answered `corrupt`, a reply is `CallError::Transport(Corrupt)`, and
 a `fixed`'s read reports the detection. The check is of length, not a
-verification, so the rule above that a runtime never verifies is unchanged.
-`Payload::verify` itself refuses no buffer for its length: it reads what the
-structure references and ignores the bytes past it. The providing endpoint also
-sends no value longer than its interaction's limit: it holds one only from a
-runtime that does not refuse on send, and what it does instead is the binding's
-(§11.1 for the WebSocket provider).
+verification, so the rule above that a runtime never verifies on its own is
+unchanged. `Payload::verify` itself refuses no buffer for its length: it reads
+what the structure references and ignores the bytes past it. The providing
+endpoint also sends no value longer than its interaction's limit: it holds one
+only from a runtime that does not refuse on send, and what it does instead is
+the binding's (§11.1 for the WebSocket provider).
 
 **A sender does not verify its encoded bytes.** `Ref::encode` calls
 `Payload::encode` without running `Payload::verify` on the result

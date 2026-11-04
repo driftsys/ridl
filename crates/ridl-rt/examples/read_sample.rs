@@ -218,6 +218,14 @@ impl Clock for Memory {
 }
 
 impl SignalReader for Memory {
+    fn check_with(
+        &self,
+        _: ridl_rt::contract::InterfaceNo,
+        _: ridl_rt::contract::Ordinal,
+        _: ridl_rt::port::Check,
+    ) {
+        // This double receives no payload from a peer.
+    }
     fn read(
         &self,
         iface: InterfaceNo,

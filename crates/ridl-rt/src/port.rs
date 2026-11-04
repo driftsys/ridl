@@ -75,21 +75,41 @@ pub trait Clock {
     fn now(&self) -> Timestamp;
 }
 
+/// A payload check registered by a generated binding.
+pub type Check = fn(&[u8]) -> Result<(), crate::sample::Detection>;
+
 /// Signals, consumer side.
 ///
 /// A generated `Client` has one method per signal over this port. It reads
 /// into a stack buffer sized from the payload's
 /// [`MAX_SIZE`](crate::payload::Payload::MAX_SIZE), checks the bytes, and
-/// returns a [`Sample`](crate::sample::Sample). Bytes that fail their check
-/// are not an error there: the sample carries the channel's init value and a
-/// provenance of [`Invalid`](crate::sample::Provenance::Invalid), so the
-/// [`ReadError`] here reports the read itself.
+/// returns a [`Sample`](crate::sample::Sample). The binding registers a check
+/// through [`SignalReader::check_with`], so the runtime keeps the last good
+/// bytes when a payload fails. The [`ReadError`] here reports the read itself.
 pub trait SignalReader: Attached {
+    /// Registers or replaces the check for one signal.
+    ///
+    /// From this call on, the runtime calls `check` on every payload it receives
+    /// for this signal under `Live`, before replacing its held value. On `Ok`,
+    /// the payload becomes the value. On `Err(d)`, it keeps the last good bytes
+    /// (zero bytes when there are none), reports `Invalid(Cause::Detected(d))`,
+    /// and takes the rejected publication's envelope. A later passing `Live`
+    /// payload restores `Live`.
+    ///
+    /// A held `Live` value is checked immediately. If it fails, its bytes are
+    /// cleared and its provenance becomes `Invalid(Cause::Detected(d))` with
+    /// the held envelope. Registration is not a publication: it advances no
+    /// generation and changes no `seq`. A second call replaces the check.
+    ///
+    /// The check is a plain function and calls no port, so the runtime may call
+    /// it while holding its own lock.
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check);
+
     /// Copies the signal's current value into the front of `out` and returns
     /// its provenance, its freshness and its envelope. The runtime resolves
     /// both the provenance and the freshness.
     ///
-    /// A sample whose provenance is `Init` or `Invalid(Declared)` may carry
+    /// A sample whose provenance is `Init` or `Invalid(_)` may carry
     /// zero bytes, because the runtime has no value to copy; `len` is then 0,
     /// and a generated face returns the channel's init value under that
     /// provenance (ADR-0021 decision 17).
@@ -1073,6 +1093,9 @@ impl<P: Clock + ?Sized> Clock for &mut P {
 }
 
 impl<P: SignalReader + ?Sized> SignalReader for &P {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check) {
+        (**self).check_with(iface, ord, check);
+    }
     fn read(
         &self,
         iface: InterfaceNo,
@@ -1084,6 +1107,9 @@ impl<P: SignalReader + ?Sized> SignalReader for &P {
 }
 
 impl<P: SignalReader + ?Sized> SignalReader for &mut P {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check) {
+        (**self).check_with(iface, ord, check);
+    }
     fn read(
         &self,
         iface: InterfaceNo,

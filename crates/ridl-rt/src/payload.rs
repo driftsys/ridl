@@ -11,6 +11,17 @@ use core::marker::PhantomData;
 
 use crate::encoding::Encoding;
 
+/// Checks received bytes for a payload type, preserving contract violations
+/// and reporting every other verification error as corruption.
+pub fn check<T: Payload<E>, E: Encoding>(bytes: &[u8]) -> Result<(), crate::sample::Detection> {
+    Ref::<T, E>::verify(bytes)
+        .map(|_| ())
+        .map_err(|error| match error {
+            VerifyError::Contract(violation) => crate::sample::Detection::InvalidValue(violation),
+            _ => crate::sample::Detection::Corrupt,
+        })
+}
+
 /// A type that can be carried as a payload in the encoding `E`.
 ///
 /// Generated code implements this trait and never calls its methods directly:

@@ -100,4 +100,49 @@ pub fn run<R: Rig>(rig: &mut R) {
     let n = reply.expect("the query is answered");
     assert_eq!(&out[..n], Y_REPLY);
     rig.ports().forget(c);
+    // 7. A rejected payload keeps X, and a later good payload restores Live.
+    fn reject_ff(bytes: &[u8]) -> Result<(), ridl_rt::sample::Detection> {
+        if bytes.first() == Some(&0xFF) {
+            Err(ridl_rt::sample::Detection::InvalidValue(
+                ridl_rt::payload::Violation {
+                    type_name: Some("Conformance"),
+                    rule: ridl_rt::payload::Rule::Range,
+                },
+            ))
+        } else {
+            Ok(())
+        }
+    }
+    rig.ports().check_with(IFACE, SIGNAL, reject_ff);
+    let c = rig
+        .ports()
+        .command(IFACE, COMMAND, &[0xFF], None)
+        .expect("command sent");
+    assert_eq!(
+        wait(rig, "the bad command's acknowledgment", |p| p.ack(c)),
+        Ok(())
+    );
+    rig.ports().forget(c);
+    let detection = Provenance::Invalid(ridl_rt::sample::Cause::Detected(
+        reject_ff(&[0xFF]).unwrap_err(),
+    ));
+    let sample = wait(rig, "the rejected signal is Invalid(Detected)", |p| {
+        let s = p.read(IFACE, SIGNAL, &mut out).expect("read");
+        (s.provenance == detection).then_some(s)
+    });
+    assert_eq!(&out[..sample.len], X);
+    let c = rig
+        .ports()
+        .command(IFACE, COMMAND, X, None)
+        .expect("command sent");
+    assert_eq!(
+        wait(rig, "the good command's acknowledgment", |p| p.ack(c)),
+        Ok(())
+    );
+    rig.ports().forget(c);
+    let sample = wait(rig, "the signal recovers to Live", |p| {
+        let s = p.read(IFACE, SIGNAL, &mut out).expect("read");
+        (s.provenance == Provenance::Live).then_some(s)
+    });
+    assert_eq!(&out[..sample.len], X);
 }

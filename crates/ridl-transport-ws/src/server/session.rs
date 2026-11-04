@@ -2773,6 +2773,14 @@ mod tests {
     }
 
     impl SignalReader for Fixed {
+        fn check_with(
+            &self,
+            _: ridl_rt::contract::InterfaceNo,
+            _: ridl_rt::contract::Ordinal,
+            _: ridl_rt::port::Check,
+        ) {
+            // This double receives no payload from a peer.
+        }
         fn read(&self, _: InterfaceNo, _: Ordinal, out: &mut [u8]) -> Result<RawSample, ReadError> {
             out[0] = 1;
             Ok(RawSample {
@@ -3364,6 +3372,14 @@ mod tests {
     }
 
     impl SignalReader for Counted {
+        fn check_with(
+            &self,
+            _: ridl_rt::contract::InterfaceNo,
+            _: ridl_rt::contract::Ordinal,
+            _: ridl_rt::port::Check,
+        ) {
+            // This double receives no payload from a peer.
+        }
         fn read(
             &self,
             iface: InterfaceNo,
@@ -4231,6 +4247,14 @@ mod tests {
     }
 
     impl SignalReader for Faulty {
+        fn check_with(
+            &self,
+            _: ridl_rt::contract::InterfaceNo,
+            _: ridl_rt::contract::Ordinal,
+            _: ridl_rt::port::Check,
+        ) {
+            // This double receives no payload from a peer.
+        }
         fn read(
             &self,
             iface: InterfaceNo,
@@ -6387,6 +6411,14 @@ mod tests {
     }
 
     impl SignalReader for CountingPorts {
+        fn check_with(
+            &self,
+            _: ridl_rt::contract::InterfaceNo,
+            _: ridl_rt::contract::Ordinal,
+            _: ridl_rt::port::Check,
+        ) {
+            // This double receives no payload from a peer.
+        }
         fn read(
             &self,
             iface: InterfaceNo,

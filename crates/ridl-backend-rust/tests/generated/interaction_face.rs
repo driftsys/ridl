@@ -6087,7 +6087,7 @@ pub mod cabin {
     {
         /// The cabin temperature, read from [Cabin.average](crate::face::demo::cabin::Client::average)'s source sensor.
         ///
-        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection; the runtime keeps the last good value, or the init value when there is none (`SignalReader::check_with`).
         ///
         /// # Rules
         ///
@@ -6113,9 +6113,7 @@ pub mod cabin {
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
-                | ::ridl_rt::sample::Provenance::Invalid(
-                    ::ridl_rt::sample::Cause::Declared,
-                ) if raw.len == 0 => {
+                | ::ridl_rt::sample::Provenance::Invalid(_) if raw.len == 0 => {
                     (
                         <super::CabinTemperature as ::ridl_rt::contract::Signal>::init(),
                         raw.provenance,
@@ -6244,6 +6242,12 @@ pub mod cabin {
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            ::ridl_rt::port::SignalReader::check_with(
+                &port,
+                <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                ::ridl_rt::payload::check::<super::Temperature, P::Encoding>,
+            );
             Client { port }
         }
     }
@@ -7758,7 +7762,7 @@ pub mod horn {
         super::Horn: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
-        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection; the runtime keeps the last good value, or the init value when there is none (`SignalReader::check_with`).
         ///
         /// # Rules
         ///
@@ -7784,9 +7788,7 @@ pub mod horn {
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
-                | ::ridl_rt::sample::Provenance::Invalid(
-                    ::ridl_rt::sample::Cause::Declared,
-                ) if raw.len == 0 => {
+                | ::ridl_rt::sample::Provenance::Invalid(_) if raw.len == 0 => {
                     (
                         <super::HornActive as ::ridl_rt::contract::Signal>::init(),
                         raw.provenance,
@@ -7840,6 +7842,12 @@ pub mod horn {
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            ::ridl_rt::port::SignalReader::check_with(
+                &port,
+                <super::Horn as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                ::ridl_rt::payload::check::<super::Health, P::Encoding>,
+            );
             Client { port }
         }
     }
@@ -10329,7 +10337,7 @@ pub mod wiper {
         super::Wiper: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
     {
-        ///Reads signal `speed` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `speed` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection; the runtime keeps the last good value, or the init value when there is none (`SignalReader::check_with`).
         ///
         /// # Rules
         ///
@@ -10355,9 +10363,7 @@ pub mod wiper {
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
-                | ::ridl_rt::sample::Provenance::Invalid(
-                    ::ridl_rt::sample::Cause::Declared,
-                ) if raw.len == 0 => {
+                | ::ridl_rt::sample::Provenance::Invalid(_) if raw.len == 0 => {
                     (
                         <super::WiperSpeed as ::ridl_rt::contract::Signal>::init(),
                         raw.provenance,
@@ -10411,6 +10417,12 @@ pub mod wiper {
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            ::ridl_rt::port::SignalReader::check_with(
+                &port,
+                <super::Wiper as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(2u32),
+                ::ridl_rt::payload::check::<super::Level, P::Encoding>,
+            );
             Client { port }
         }
     }
@@ -10565,7 +10577,7 @@ pub mod zone {
     {
         /// The zone level.
         ///
-        ///Reads signal `level` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `level` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection; the runtime keeps the last good value, or the init value when there is none (`SignalReader::check_with`).
         ///
         /// # Rules
         ///
@@ -10592,9 +10604,7 @@ pub mod zone {
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
-                | ::ridl_rt::sample::Provenance::Invalid(
-                    ::ridl_rt::sample::Cause::Declared,
-                ) if raw.len == 0 => {
+                | ::ridl_rt::sample::Provenance::Invalid(_) if raw.len == 0 => {
                     (
                         <super::ZoneLevel as ::ridl_rt::contract::Signal>::init(),
                         raw.provenance,
@@ -10718,6 +10728,12 @@ pub mod zone {
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            ::ridl_rt::port::SignalReader::check_with(
+                &port,
+                <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                ::ridl_rt::payload::check::<super::Level, P::Encoding>,
+            );
             Client { port }
         }
     }
@@ -11928,7 +11944,7 @@ pub mod zone_log {
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Tally: ::ridl_rt::payload::Payload<P::Encoding>,
     {
-        ///Reads signal `recent` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///Reads signal `recent` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection; the runtime keeps the last good value, or the init value when there is none (`SignalReader::check_with`).
         ///
         /// # Rules
         ///
@@ -11954,9 +11970,7 @@ pub mod zone_log {
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
-                | ::ridl_rt::sample::Provenance::Invalid(
-                    ::ridl_rt::sample::Cause::Declared,
-                ) if raw.len == 0 => {
+                | ::ridl_rt::sample::Provenance::Invalid(_) if raw.len == 0 => {
                     (
                         <super::ZoneLogRecent as ::ridl_rt::contract::Signal>::init(),
                         raw.provenance,
@@ -12103,6 +12117,12 @@ pub mod zone_log {
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            ::ridl_rt::port::SignalReader::check_with(
+                &port,
+                <super::ZoneLog as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                ::ridl_rt::payload::check::<super::Log, P::Encoding>,
+            );
             Client { port }
         }
     }

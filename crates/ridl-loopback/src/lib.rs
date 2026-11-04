@@ -473,6 +473,9 @@ impl<E: Encoding> Clock for Loopback<E> {
 }
 
 impl<E: Encoding> SignalReader for Loopback<E> {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: ridl_rt::port::Check) {
+        self.handles.reader.check_with(iface, ord, check);
+    }
     fn read(
         &self,
         iface: InterfaceNo,
