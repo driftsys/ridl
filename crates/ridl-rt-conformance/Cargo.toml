@@ -20,6 +20,10 @@ rust-version = "1.88"
 # at the same version, so a runtime outside this repository pins both crates to
 # one version.
 
+[features]
+# Enables the twin and listener tests selected by `identity_debug`.
+debug = ["ridl-rt/debug"]
+
 # `ridl-rt` is its only dependency: the suite drives a runtime through the
 # port traits and through the hooks of its own `Factory` trait.
 [dependencies]

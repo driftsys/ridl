@@ -306,12 +306,14 @@ from a podbuf source in key order.
 
 ## Cargo features
 
-The generated `Cargo.toml` declares two features, both on by default:
+The generated `Cargo.toml` declares three features; `std` and `validate-pattern`
+are on by default and `debug` is off:
 
 | Feature            | Enables                                                                                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `std`              | The `blocking` module of every face, the `Timeout` trait in the prelude of each interface that has a `blocking` module, and `ridl-rt/std`. With it off, only the async face remains.                                     |
 | `validate-pattern` | The check of a typl `match` pattern in a constructor, through the `regex` crate. With it on, the crate links the standard library. With it off, `new` does not check patterns; range and length checks are not affected. |
+| `debug`            | `ridl-rt/debug`, and nothing else: the twin and the listener identities of `ridl_rt::contract::InstanceNo`. The generated constants stay positive.                                                                       |
 
 With `std` and `validate-pattern` both off, the generated crate and `ridl-rt`
 are both `no_std` and build for a target that has no standard library. Its

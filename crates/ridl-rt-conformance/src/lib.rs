@@ -16,9 +16,10 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, those of the four
-//! // extension flags, and those of a runtime that carries the trace
-//! // context.
+//! // Every test of the ports every runtime presents, and those of the five
+//! // extension flags named here; `trace` is the flag of a runtime that
+//! // carries the trace context. The `identity` and `identity_debug` flags
+//! // need `IdentityFactory` as well (see the `identity` module).
 //! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams);
 //! ```
 //!
@@ -27,6 +28,12 @@
 //! crate's `tests/ports.rs` (driftsys/ridl#514), which keeps
 //! the tests only the loopback can express, each listed with its reason in
 //! that file's module documentation.
+//!
+//! The opt-in `identity` flag uses [`identity::IdentityFactory`] and the packaged
+//! deployment fixture instead of the base factory's descriptor-free runtime.
+//! `identity_debug` adds twin exclusion, reservation lifetime and listener
+//! permissions; enable this crate's `debug` feature to select it. Both flags
+//! leave the original [`Factory`] hooks unchanged.
 //!
 //! # What the suite leaves out
 //!
@@ -58,10 +65,12 @@
 //!   learns the limit a `[limits.interaction]` entry gives a member, a
 //!   descriptor's limit column or its own API (`Loopback::set_limit`), is the
 //!   runtime's.
-//! - **Anything a runtime reports from a catalog descriptor**: an unknown
+//! - **Descriptor details beyond identity grants and listener permissions**:
+//!   an unknown
 //!   ordinal, an unowned member, a freshness of `Fresh` or `Stale` measured
 //!   against a staleness bound. The suite attaches to a catalog with no
-//!   descriptor, and a runtime with none reports `Freshness::Unbounded`.
+//!   descriptor in the base tests, and a runtime with none reports
+//!   `Freshness::Unbounded`.
 //! - **A stream number beyond the first two stream parameters, and the size
 //!   of a stream's window.** The suite attaches to a catalog with no
 //!   descriptor, so a runtime under test holds no member table. Such a
@@ -100,7 +109,8 @@
 //!   slot is back once it is withdrawn or settled. It does not assert when a
 //!   forgotten call that a handler has claimed gives its slot back, only
 //!   that it is back once the call is settled.
-//! - **The drop of a handle.** No test drops a handle to observe the
+//! - **The drop of a base-port handle.** The identity extension checks
+//!   reservation release; the base suite does not drop a handle to observe the
 //!   effect: what becomes of a dropped handler's claims or a dropped
 //!   caller's calls, and of their waiters, is not tested here.
 //! - **A runtime's own API beyond the factory**, such as how it hands out all
@@ -220,6 +230,10 @@ pub trait Factory {
 /// `coherent`, the two signal extensions, `wakeable`, `trace`, and
 /// `streams`, the two stream extensions, in any combination, as in
 /// `suite!(F; scannable, coherent, wakeable, trace, streams)`.
+/// `identity` requires [`identity::IdentityFactory`]. `identity_debug` requires
+/// the same hook and this crate's `debug` feature; selection uses this crate's
+/// feature, regardless of features declared by the calling crate.
+///
 /// Each requires what that extension's tests ask for: `scannable` and
 /// `coherent` that `F::Runtime` implements the extension named,
 /// `wakeable` that `F::Runtime` and the three role handles `F` makes
@@ -380,6 +394,14 @@ macro_rules! suite {
             streams::a_receivers_abort_of_an_ended_stream_drops_its_unread_chunks,
         );
     };
+    (@identity $factory:ty) => {
+        $crate::suite!(@tests $factory;
+            identity::identity_positive_grants,
+        );
+    };
+    (@identity_debug $factory:ty) => {
+        $crate::__identity_debug_suite!($factory);
+    };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
         $(
             #[test]
@@ -508,6 +530,8 @@ mod tests {
         Wakeable,
         Trace,
         Streams,
+        Identity,
+        IdentityDebug,
     }
 
     /// Whether a function's text names a trace constant (`TRACE_A`,
@@ -541,6 +565,7 @@ mod tests {
             ("clock", include_str!("clock.rs")),
             ("coherent", include_str!("coherent.rs")),
             ("events", include_str!("events.rs")),
+            ("identity", include_str!("identity.rs")),
             ("scannable", include_str!("scannable.rs")),
             ("signals", include_str!("signals.rs")),
             ("streams", include_str!("streams.rs")),
@@ -579,6 +604,13 @@ mod tests {
                 if carries_trace(text) {
                     asked.push(Arm::Trace);
                 }
+                if module == "identity" {
+                    asked.push(if name == "identity_positive_grants" {
+                        Arm::Identity
+                    } else {
+                        Arm::IdentityDebug
+                    });
+                }
                 let arm = match asked[..] {
                     [] => Arm::Base,
                     [arm] => arm,
@@ -591,7 +623,7 @@ mod tests {
     }
 
     /// The text of each arm of `suite!` that lists tests.
-    fn macro_arms() -> [(Arm, &'static str); 6] {
+    fn macro_arms() -> [(Arm, &'static str); 8] {
         let lib = include_str!("lib.rs");
         let between = |from: &str, to: &str| {
             let start = lib.find(from).expect("the arm's opening") + from.len();
@@ -618,7 +650,18 @@ mod tests {
             ),
             (
                 Arm::Streams,
-                between("(@streams $factory:ty) => {", "(@tests $factory:ty"),
+                between("(@streams $factory:ty) => {", "(@identity $factory:ty"),
+            ),
+            (
+                Arm::Identity,
+                between("(@identity $factory:ty) => {", "(@identity_debug"),
+            ),
+            (
+                Arm::IdentityDebug,
+                between(
+                    "macro_rules! __identity_debug_suite {",
+                    "#[cfg(not(feature = \"debug\"))]",
+                ),
             ),
         ]
     }
@@ -667,4 +710,37 @@ mod tests {
         assert!(!carries_trace("/// see TRACE_A\n// and TRACE_B\nNone"));
         assert!(!carries_trace("    // TRACE_A\n    None"));
     }
+}
+
+/// Descriptor fixture catalog identities for attachment tests.
+pub mod identity;
+
+// Select in this crate, so expansion does not inspect the caller's features.
+#[cfg(feature = "debug")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __identity_debug_suite {
+    ($factory:ty) => {
+        $crate::suite!(@tests $factory;
+            identity::identity_twin_grants,
+            identity::identity_exclusion_both_orders,
+            identity::identity_last_drop,
+            identity::identity_listener_all_catalogs,
+            identity::identity_listener_write_refusals_set,
+            identity::identity_listener_write_refusals_invalidate,
+            identity::identity_listener_write_refusals_touch,
+            identity::identity_listener_write_refusals_raise,
+            identity::identity_listener_write_refusals_serve,
+            identity::identity_listener_can_call,
+        );
+    };
+}
+
+#[cfg(not(feature = "debug"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __identity_debug_suite {
+    ($factory:ty) => {
+        compile_error!("identity_debug requires ridl-rt-conformance's debug feature");
+    };
 }

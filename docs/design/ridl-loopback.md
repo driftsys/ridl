@@ -5,11 +5,12 @@ fourteen port traits of `ridl-rt`'s `port` module over one in-memory store, so a
 generated interaction face can be built over a runtime rather than over a test
 double.
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6 names the crate and fixes `ridl-rt` as its only dependency;
-[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 11
-and 12 fix the forwarding impls it relies on and the handle model it presents;
-[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
-fixes that a face holds its port by value, which is what a handle is passed to.
+decision 6 names the crate and fixes `ridl-rt` as its only dependency without
+`node`; [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
+decisions 11 and 12 fix the forwarding impls it relies on and the handle model
+it presents; [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
+decision 5 fixes that a face holds its port by value, which is what a handle is
+passed to.
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. Read it
@@ -35,12 +36,12 @@ product ships.
 
 ## The crate and its dependencies
 
-**`crates/ridl-loopback/` is a `std` crate depending on `ridl-rt` alone, and it
-declares no cargo feature.** It is a runtime: it owns a store, hands out
-handles, and runs on a host, so `no_std` buys it nothing that a consumer of it
-could use. A feature would have nothing to gate — the crate implements the port
-traits and nothing else, and every port trait is implemented, so there is no
-subset for a consumer to turn off.
+**`crates/ridl-loopback/` is a `std` crate depending on `ridl-rt` alone without
+`node`.** The optional `node` feature adds `ridl-descriptor` to read verified
+deployment descriptors. The `debug` feature enables `node` and `ridl-rt/debug`
+for twins and listeners. Both features are off by default. It is a runtime: it
+owns a store, hands out handles, and runs on a host, so `no_std` buys it nothing
+that a consumer of it could use.
 
 The alternative rejected is a `no_std`, single-threaded loopback, over `Cell`
 and `RefCell` rather than a mutex. ADR-0021 decision 12 keeps that shape
@@ -852,8 +853,9 @@ there is no member table, and therefore:
   a port, so an ordinal with no provisioned value is a read the store cannot
   serve at all, where an unpublished signal is one it serves as `Init`.
 - **no unowned member.** `WriteError::NotOwner`, `RaiseError::NotOwner` and
-  `ServeError::NotOwner` are never returned: a provider's ownership is a fact of
-  the descriptor.
+  `ServeError::NotOwner` are never returned by raw loopback handles. A `Node`
+  attachment for the debug listener refuses publishing, raising and serving with
+  those errors. Other attachments have no per-member write ownership check.
 - **no freshness and no remaining time.** Every sample reads
   `Freshness::Unbounded` and every claim reads `remaining: None`, because both
   are measured against a member's timing annotation.
@@ -941,16 +943,49 @@ absences:
   claim that does not exist answers `UnknownClaim` and leaves the injection
   armed for the next real settlement.
 
+## The node and its attachments
+
+With the `node` feature, `Node` holds the catalog stores of one machine and
+`Attachment` is a handle on one of them. `Node::from_descriptor(bytes, machine)`
+verifies a `&'static` deployment descriptor and builds one `Loopback` store for
+each distinct catalog that an instance of the machine offers or maps. `attach`
+takes an `InstanceNo` and a `CatalogRef` and returns an `Attachment` or an
+`AttachError`. The rules of the grant, of the twin and of the exclusion between
+`N` and `-N` are those of
+[the deployment descriptor record](deployment-descriptor.md), section "Attaching
+to a node"; this section states how the crate carries them.
+
+- **One reservation table for the node.** A map from signed instance number to
+  the count of live attachments sits behind one mutex, shared by every
+  attachment of the node. The conflict check and the increment happen under one
+  lock, so two simultaneous attaches of `N` and `-N` have exactly one winner. A
+  reservation is released by the `Drop` of the attachment, after its ports, so a
+  replacement attach cannot overlap them. The stores and the table outlive the
+  `Node` while an attachment lives.
+- **An attachment has no raw handle.** It implements the port traits by
+  delegating to its store, and offers no way to extract or copy the store
+  handle, so the grant cannot be bypassed.
+- **The listener's permissions.** An attachment of the listener delegates every
+  read, subscription and call. `set`, `invalidate` and `touch` return
+  `WriteError::NotOwner`, `raise` returns `RaiseError::NotOwner`, `serve`
+  returns `ServeError::NotOwner`, `next_claim` returns no claim, and `commit`
+  does nothing.
+- **The descriptor dependency is optional.** Without `node`, the crate does not
+  link `ridl-descriptor`. The packaged crate leaves out `tests/node.rs`, which
+  reads the conformance fixture from outside the package; it runs in the
+  workspace.
+
 ## It runs the port contract suite
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
-`ridl-rt-conformance` over this runtime, the tests of both signal extensions and
-of `Wakeable` included (driftsys/ridl#514). The factory it writes for the suite
-is the aggregate, the `SourceHandle`, `CallerHandle` and `HandlerHandle` that
-`Loopback::source`, `Loopback::caller` and `Loopback::handler` hand out,
-`Loopback::SLOTS` as the size of the call table the suite fills, and
-`Loopback::advance` and `Loopback::fail_next_settle` as the suite's clock hook
-and fault hook.
+`ridl-rt-conformance` over this runtime with the five base extension flags,
+including both signal extensions and `Wakeable` (driftsys/ridl#514). The two
+additional flags, `identity` and `identity_debug`, run with `node` and `debug`,
+respectively. The factory it writes for the suite is the aggregate, the
+`SourceHandle`, `CallerHandle` and `HandlerHandle` that `Loopback::source`,
+`Loopback::caller` and `Loopback::handler` hand out, `Loopback::SLOTS` as the
+size of the call table the suite fills, and `Loopback::advance` and
+`Loopback::fail_next_settle` as the suite's clock hook and fault hook.
 
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under
@@ -958,10 +993,11 @@ before they take a claim, so the deviation from `Handler::serve` recorded under
 allows but does not require: because a spurious wake is allowed, it asserts that
 a change leaves a waker unwoken only where the contract rules the wake out — a
 refresh, or a waker already woken or displaced and so cleared — and it never
-asserts that a registration whose key already holds is woken at once. It drops
-no handle, and it accepts either result for a forgotten call no handler has
-claimed. What the suite leaves out, and why, is listed once, in the crate
-documentation of `crates/ridl-rt-conformance/src/lib.rs`.
+asserts that a registration whose key already holds is woken at once. The base
+suite drops no handle (the `identity` group drops attachments, to check that an
+identity is released), and it accepts either result for a forgotten call no
+handler has claimed. What the suite leaves out, and why, is listed once, in the
+crate documentation of `crates/ridl-rt-conformance/src/lib.rs`.
 `crates/ridl-loopback/tests/ports.rs` keeps the tests of this runtime's own
 choices — its narrower wakes, its wakes at once, its `Drop`, its withdrawal, and
 its own numbers — some of which fall under that list and some of which are this

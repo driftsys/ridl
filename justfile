@@ -120,6 +120,9 @@ test:
         # of `wasm-check` show that they need no `std`.
         cargo test --locked -p ridl-descriptor --no-default-features
         cargo test --locked -p ridl-descriptor --no-default-features --features dedup
+        # Run without debug in a separate process: workspace feature unification
+        # can otherwise omit the compile-fail tests of the debug identity API.
+        cargo test -p ridl-rt --no-default-features --locked
         # The workspace build resolves `ridl-rt` with default features, so the
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds
@@ -128,6 +131,9 @@ test:
         # same line is what builds the `task` module under the `std` feature
         # and runs crates/ridl-rt/tests/task.rs.
         cargo test -p ridl-rt --all-features --locked
+        cargo test --locked -p ridl-loopback --no-default-features --features node
+        cargo test --locked -p ridl-loopback --features debug
+        cargo test --locked -p ridl-rt-conformance --features debug
         # No workspace member turns on the `descriptor` feature of
         # `ridl-transport-ws`, so its test target `descriptor`, which requires
         # the feature, runs only from this line.
@@ -194,6 +200,7 @@ wasm-check:
         # crate is linked without `dedup` is checked by
         # `xtask/tests/oracle_boundary.rs`.
         rustup target add thumbv7em-none-eabihf
+        cargo check -p ridl-rt --no-default-features --features debug --target thumbv7em-none-eabihf
         cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features
         cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features --features dedup
         # `ridl-descriptor` with its `std` feature on, so that the half of it
@@ -647,8 +654,9 @@ compat-check: toolchain-check
     # dev-dependency has no version, so packaging drops it), so the test is
     # copied in from the source tree and the packaged ridl-rt-conformance is
     # added as a path dev-dependency, with a test target for the copy. The test
-    # expands `suite!` with every extension flag. Compile only: the pin runs
-    # this test in the workspace.
+    # expands `suite!` with every extension flag. Optional descriptor
+    # dependencies are patched, resolved and fetched as in the transport cell.
+    # Compile only: the pin runs this test in the workspace.
     #
     # `cargo package` leaves an empty [dev-dependencies] table as the last
     # table of the manifest, where the dropped dependency was. The dependency
@@ -662,11 +670,14 @@ compat-check: toolchain-check
     fi
     mkdir -p "$pkg_loopback/tests"
     cp crates/ridl-loopback/tests/conformance.rs "$pkg_loopback/tests/conformance.rs"
-    printf 'ridl-rt-conformance = { path = "%s" }\n' "$pkg_conformance" >> "$pkg_loopback/Cargo.toml"
+    printf 'ridl-rt-conformance = { path = "%s", features = ["debug"] }\n' "$pkg_conformance" >> "$pkg_loopback/Cargo.toml"
     printf '\n[[test]]\nname = "conformance"\npath = "tests/conformance.rs"\n' >> "$pkg_loopback/Cargo.toml"
-    append_tables "$pkg_loopback/Cargo.toml" "ridl-rt=$pkg"
+    append_tables "$pkg_loopback/Cargo.toml" "ridl-rt=$pkg" "ridl-descriptor=$pkg_descriptor" "ridl-ir=$pkg_ir"
+    resolve_for "$descriptor_home" "$pkg_loopback/Cargo.toml" "$minimum" ridl-loopback
+    CARGO_HOME="$descriptor_home" \
+        cargo "+$minimum" fetch --locked --manifest-path "$pkg_loopback/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-loopback, suite! expanded)"
-    cargo "+$minimum" test --no-run --offline --manifest-path "$pkg_loopback/Cargo.toml"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" test --no-run --offline --locked --all-features --manifest-path "$pkg_loopback/Cargo.toml"
 
     # ridl-transport-ws as published, except that its tungstenite
     # dev-dependency table is removed and the tables below are appended. Its
@@ -1088,6 +1099,11 @@ lint:
         # As in `just test`: the workspace resolves `ridl-rt` with default
         # features, so its feature-gated modules are otherwise never linted.
         cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
+        # Build only the library: dev-dependencies otherwise unify ridl-rt/debug.
+        cargo clippy --locked -p ridl-loopback --no-default-features --features node --lib -- -D warnings
+        cargo clippy -p ridl-loopback --no-default-features --features node --all-targets -- -D warnings
+        cargo clippy -p ridl-loopback --features debug --all-targets -- -D warnings
+        cargo clippy -p ridl-rt-conformance --features debug --all-targets -- -D warnings
         # As in `just test`: no workspace member turns on the `descriptor`
         # feature of `ridl-transport-ws`.
         cargo clippy -p ridl-transport-ws --features descriptor --all-targets -- -D warnings

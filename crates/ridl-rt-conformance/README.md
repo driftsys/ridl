@@ -63,6 +63,51 @@ The reference runtime
 [`ridl-loopback`](https://github.com/driftsys/ridl/blob/main/crates/ridl-loopback/tests/conformance.rs)
 runs the suite this way.
 
+## Identity tests for a runtime with descriptor attachments
+
+A runtime that attaches an instance identity to a catalog from a deployment
+descriptor can run two more groups. They are opt-in and leave `Factory`
+unchanged: a runtime that does not name them runs the same tests as before.
+
+Implement `ridl_rt_conformance::identity::IdentityFactory` on the same type as
+`Factory`. It adds a `Node` type, an `Attachment` type and an `Error` type, and
+two functions: `node(bytes, machine)` builds the named machine from a deployment
+descriptor, and `attach(node, who, catalog)` reserves an identity on a catalog
+or refuses it. The tests use the descriptor that this crate packages as
+`identity::DESCRIPTOR`, with the catalogs
+`identity::{ALPHA, BETA, MAPPED,
+REMOTE}`, so a runtime needs no compiler
+dependency. Then add a flag to `suite!`:
+
+- `identity` checks that a positive instance receives the catalogs it offers and
+  maps, and no other.
+- `identity_debug` adds the twin's grant, the exclusion of `N` and `-N` in both
+  orders, the release of an identity on the last drop, the listener's read of
+  every catalog, and the refusal of every write by the listener. It requires
+  this crate's `debug` feature, which enables `ridl-rt/debug`; without the
+  feature, `suite!` stops with a compile error that names the feature.
+
+```rust,ignore
+use ridl_rt_conformance::identity::IdentityFactory;
+
+impl IdentityFactory for MyFactory {
+    type Node = MyNode;
+    type Attachment = MyAttachment;
+    type Error = MyAttachError;
+
+    fn node(bytes: &'static [u8], machine: &str) -> MyNode { /* ... */ }
+    fn attach(
+        node: &MyNode,
+        who: ridl_rt::contract::InstanceNo,
+        catalog: &CatalogRef,
+    ) -> Result<MyAttachment, MyAttachError> { /* ... */ }
+}
+
+ridl_rt_conformance::suite!(MyFactory; identity, identity_debug);
+```
+
+`ridl-loopback` runs both groups with its `node` and `debug` features.
+
 ## What the suite does not check
 
 The crate documentation lists, in one place, what the suite leaves out:

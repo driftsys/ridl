@@ -13,6 +13,7 @@ default = ["validate-pattern", "std"]
 # regex dependency; range and length checks are unaffected.
 validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
+debug = ["ridl-rt/debug"]
 
 [dependencies]
 ridl-rt = { version = "0.14", features = ["flatbuffers", "proto3", "podbuf"] }

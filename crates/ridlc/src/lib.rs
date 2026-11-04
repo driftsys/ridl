@@ -2241,6 +2241,7 @@ default = ["validate-pattern", "std"]
 # regex dependency; range and length checks are unaffected.
 validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
+debug = ["ridl-rt/debug"]
 {wasm_feature}
 [dependencies]
 {ridl_rt}

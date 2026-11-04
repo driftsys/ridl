@@ -188,7 +188,19 @@ runs on a thread of its own. The `streams` flag runs the tests of `StreamCaller`
 and `StreamHandler`, and requires that the runtime implements both and
 `Wakeable`. The working example is
 [`crates/ridl-loopback/tests/conformance.rs`][loopback-conformance], which runs
-every test of the suite, with all five flags, over `ridl-loopback`.
+the suite over `ridl-loopback` with its five base extension flags. Of the seven
+available flags, `identity` additionally runs with `node`, and `identity_debug`
+runs with `debug`.
+
+A runtime that attaches an instance identity to a catalog from a deployment
+descriptor can also run two opt-in groups. Implement
+`ridl_rt_conformance::identity::IdentityFactory` on the same type, which adds
+the `Node`, `Attachment` and `Error` types and the functions `node` and
+`attach`, and name a flag: `identity` checks the grant of a positive instance,
+and `identity_debug` checks the twin, the exclusion of `N` and `-N`, and the
+listener's read-only access. `identity_debug` requires the `debug` feature of
+`ridl-rt-conformance`. The suite supplies the descriptor, so the runtime needs
+no compiler dependency. The original `Factory` is unchanged.
 
 The suite does not test every case. The one list of what it leaves out is the
 section [What the suite leaves out][leaves-out] of the crate documentation; a

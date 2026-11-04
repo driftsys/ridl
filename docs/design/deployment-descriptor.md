@@ -162,6 +162,40 @@ positive as `DeploymentLowerError::Internal`. A backend key on the placement
 line stays what it was: the toolchain carries it as declared in `attributes` and
 does not interpret it (rsdl section 5).
 
+## Attaching to a node
+
+The loopback runtime reads a descriptor to decide what an attach may do
+([the loopback record](ridl-loopback.md) describes the types). This section
+states the rules applied by the in-process node.
+
+- **Construction.** `Node::from_descriptor(bytes, machine)` takes a `&'static`
+  descriptor, because the catalog names borrow its bytes, and a machine name. It
+  verifies the descriptor first, then refuses a machine the descriptor does not
+  hold (`UnknownMachine`) and an offer or map that names a catalog the
+  descriptor does not embed (`MissingCatalog`).
+- **The grant.** The grant of an instance placed on the machine is the set of
+  catalogs it offers plus the catalogs it maps. The node creates one store for
+  each distinct catalog name and hash that some local instance is granted.
+  Attaching an instance that is not placed on the machine fails with
+  `UnknownInstance`, a catalog with no local store fails with `UnknownCatalog`,
+  and a catalog outside the grant fails with `CatalogNotGranted`.
+- **The twin.** With the `debug` feature, the twin `-N` of a placed instance `N`
+  receives exactly the grant of `N`. Without the feature, a negative number is
+  an unknown instance.
+- **The exclusion.** `N` and `-N` are never attached at the same time, in any
+  catalog of the node: the node counts the live attachments of each identity
+  across catalogs, and an attach whose opposite identity has a live attachment
+  fails with `IdentityConflict`. Several attachments of the same identity may
+  coexist. Dropping the last attachment of an identity releases it.
+- **The listener.** With the `debug` feature, the listener `i32::MIN` has no
+  grant and attaches to every catalog of the machine. It can read, subscribe and
+  send a call. It writes nothing: setting, invalidating or touching a signal,
+  raising an event and serving fail with `NotOwner`, and it takes no claim.
+
+Not built: a check that only the instance that offers an interface writes it
+(the grant stops at the catalog and does not name interfaces), and the
+arbitration of a redundant provider set, which is driftsys/ridl#1196.
+
 ## Verification before access
 
 `ridl_descriptor::deployment::verify` is the reader's first call. It checks the
@@ -264,11 +298,11 @@ reason. They bind later changes to the artifact.
   never reported.
 - **The constants are an integer, from the system artifact, with no constants
   for a bare file.** The type is `i32`, the type of the attach field; a newtype
-  is left to the runtime work that defines the debug twin on it
-  (driftsys/ridl#1176). A single-file build writes no crate `lib.rs`, so it gets
-  no `instances` module; its numbers still reach the IR and the codegen section.
-  A single-file build writes no deployment descriptor (see "The artifact"). A
-  workspace with no `system` gets no module.
+  has since been added in `ridl-rt` as `InstanceNo` (see "Attaching to a node");
+  the generated constants stay `i32`. A single-file build writes no crate
+  `lib.rs`, so it gets no `instances` module; its numbers still reach the IR and
+  the codegen section. A single-file build writes no deployment descriptor (see
+  "The artifact"). A workspace with no `system` gets no module.
 - **The codegen deployment section carries the placement's backend keys**
   (`Instance.attributes`) and the instance's number and provisional flag
   (`Instance.number`, `Instance.provisional`), so that a plugin generates a

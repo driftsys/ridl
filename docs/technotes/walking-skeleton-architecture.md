@@ -331,9 +331,10 @@ crate the workspace holds — see `AGENTS.md` for that.
   runtime implementing `ridl-rt`'s ports in this workspace (ADR-0020 decision
   6). It carries values between a provider and a consumer in one program, over
   one store behind one lock, with a clock a test advances by hand; it has no
-  frame, no socket and no wire format, and `ridl-rt` is its only dependency. It
-  is typed by the encoding its ports carry: `Loopback<E>` and all six role
-  handles implement `ridl-rt`'s `Encoded`, with FlatBuffers by default, and
+  frame, no socket and no wire format. Without `node`, `ridl-rt` is its only
+  dependency; `node` adds `ridl-descriptor` for deployment grants. It is typed
+  by the encoding its ports carry: `Loopback<E>` and all six role handles
+  implement `ridl-rt`'s `Encoded`, with FlatBuffers by default, and
   `Loopback::<E>::with_encoding(catalog)` names another. The Rust backend's
   round-trip tests build their generated face over it, and it runs the suite of
   `ridl-rt-conformance`. See [the design record](../design/ridl-loopback.md).
@@ -346,7 +347,10 @@ crate the workspace holds — see `AGENTS.md` for that.
   clock and a settlement fault injected once. A runtime runs the whole suite
   from its own tests with the crate's `suite!` macro, naming the extensions it
   implements — the two signal extensions and `Wakeable` — and `trace` when it
-  carries the trace context; `ridl-loopback` is the one runtime that does.
+  carries the trace context. The `identity` flag checks descriptor-based grants;
+  `identity_debug` adds twins and listeners and requires the crate's `debug`
+  feature. `ridl-loopback` runs these groups with `node` and `debug`,
+  respectively.
 
 - **`crates/ridl-transport-ws`** — the WebSocket binding of the frame. A
   `no_std` codec for the frame (`frame`) and, under the default `server`

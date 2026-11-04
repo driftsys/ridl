@@ -636,6 +636,26 @@ waker over `alloc::task::Wake` on an `Arc` when it has an allocator; one without
 an allocator needs a hand-written `RawWaker`, which needs `unsafe`. ADR-0021
 decision 8 carries the dated note.
 
+**A fifth feature, `debug`, exists, off by default.** It gates the debug
+identities of `contract::InstanceNo`, the type of an instance number. The type
+wraps an `i32` in a private field, so every value is built through
+`InstanceNo::new(n)`, which returns `Some` for a positive `n` and `None` for 0
+and for a negative `n`, and `get()` returns the signed number. Without the
+feature, a value is always positive. With it, `InstanceNo::twin()` returns the
+debug twin of a positive instance, the number `-N`, and `None` for a twin or the
+listener; `is_twin()` tests for a twin; the constant `InstanceNo::LISTENER` is
+`i32::MIN`, and `is_listener()` tests for it. The listener is not the twin of
+any instance: `is_twin()` is false for it. Without the feature, none of
+`LISTENER`, `twin`, `is_twin` and `is_listener` exists, and a doc test pins that
+each fails to compile. The feature implies no other feature: it needs no
+allocation, no standard library and no encoding, so a `no_std` crate can enable
+it. A generated package has a `debug` feature that forwards `ridl-rt/debug` and
+nothing else. What a runtime does with the twin and the listener is the
+runtime's: [`ridl-loopback`](ridl-loopback.md) is the one runtime that
+implements them, and
+[the deployment descriptor record](deployment-descriptor.md) states the attach
+rules it applies.
+
 **The Rust codec emitter added one helper and corrected one sentence.**
 `Builder::push_offset_vector` writes a vector of `uoffset_t`s naming objects
 already written, which is what a vector of strings or of tables needs and what

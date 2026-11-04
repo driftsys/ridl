@@ -18,9 +18,10 @@
 //! [`proto3`] module, the varint, tag, reader and writer helpers a generated
 //! `Payload<Proto3>` implementation shares; `podbuf` enables the [`podbuf`]
 //! module, the preamble, descriptor, load and writer helpers a generated
-//! `Payload<Podbuf>` implementation shares. A fourth feature, `std`, off by default, is not an
-//! encoding: it links the standard library and enables the [`task`] module —
-//! `block_on`, which waits on a future by parking the thread until a deadline,
+//! `Payload<Podbuf>` implementation shares. The `debug` feature adds twin and
+//! listener identities without requiring `std`. The `std` feature, off by
+//! default, is not an encoding: it links the standard library and enables the
+//! [`task`] module — `block_on`, which waits on a future by parking the thread until a deadline,
 //! `noop_waker`, and `flag_waker`, whose wake sets a flag the caller reads —
 //! for a blocking client built over an async one and for a frame loop that
 //! polls a future once per frame, or again in the same frame when the future

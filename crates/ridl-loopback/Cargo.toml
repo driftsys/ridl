@@ -10,15 +10,22 @@ repository.workspace = true
 description = "The in-process reference runtime: an implementation of ridl-rt's port traits over one in-memory store."
 # The package leaves out `tests/conformance.rs`: the dev-dependency below has
 # no version, so `cargo package` drops it from the packaged manifest, and the
-# test would be a test target that cannot compile. The test runs here, in the
-# workspace.
-exclude = ["tests/conformance.rs"]
+# test would be a test target that cannot compile. The node test also reads
+# the conformance fixture outside this package. Both run in the workspace.
+exclude = ["tests/conformance.rs", "tests/node.rs"]
 
-# The in-process reference runtime (ADR-0020 decision 6). `ridl-rt` is its only
-# dependency, and it declares no feature: the crate implements the port traits
-# and nothing else, so there is nothing for a consumer to turn off.
+[features]
+node = ["dep:ridl-descriptor"]
+debug = ["node", "ridl-rt/debug"]
+
 [dependencies]
 ridl-rt.workspace = true
+ridl-descriptor = { workspace = true, optional = true }
+
+[[test]]
+name = "node"
+path = "tests/node.rs"
+required-features = ["node"]
 
 # The port contract suite, which `tests/conformance.rs` runs
 # over this runtime. A plain path with no version, so that packaging this crate
@@ -26,7 +33,7 @@ ridl-rt.workspace = true
 # exists only after the release has published it. `cargo package` drops a
 # dev-dependency that has no version.
 [dev-dependencies]
-ridl-rt-conformance = { path = "../ridl-rt-conformance" }
+ridl-rt-conformance = { path = "../ridl-rt-conformance", features = ["debug"] }
 
 # The freeze check denies the major-level lints that cargo-semver-checks only
 # warns about by default (`[workspace.metadata.cargo-semver-checks.lints]`).

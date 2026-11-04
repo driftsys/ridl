@@ -177,15 +177,26 @@ member; rsdl is the apex.
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked), and
                          ridl-descriptor's tests with its default
-                         features off, and with only dedup on
-    just lint            cargo clippy --workspace --all-targets -- -D warnings
+                         features off, and with only dedup on; ridl-rt without
+                         default features and with all features; ridl-loopback
+                         with node (conformance dev-dependencies enable ridl-rt
+                         debug) and with debug; ridl-rt-conformance
+                         with debug; ridl-transport-ws with descriptor
+    just lint            workspace clippy --all-targets -- -D warnings, plus
+                         ridl-rt with all features; ridl-loopback library alone
+                         with node and ridl-rt debug off, all targets with node
+                         (conformance dev-dependencies enable ridl-rt debug),
+                         and all targets with debug; ridl-rt-conformance with debug,
+                         and ridl-transport-ws with descriptor
     just wasm-check      cargo check for wasm32 with --no-default-features,
                          and ridl-descriptor with its default features off,
                          and with only dedup on, for a
                          target with no standard library, and with its
                          features on for wasm32, and the ridl-transport-ws
                          codec (default features off) for wasm32 and for
-                         thumbv7em-none-eabihf
+                         thumbv7em-none-eabihf; and cargo check -p ridl-rt
+                         --no-default-features --features debug
+                         --target thumbv7em-none-eabihf
     just compat-check    build and test the packaged ridl-rt and
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
