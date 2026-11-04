@@ -1293,7 +1293,10 @@ at least 294 bytes, is closed with 1009. Either side ends the session on purpose
 with 1000, the provider with 1001 when it shuts down; after `attached(refused)`
 the provider closes with 1000, and the reason is in the frame. A provider may
 close with 1008 when a session passes a resource limit it states, such as a cap
-on the responses it keeps for §7. The binding defines no close code of its own.
+on the responses it keeps for §7. Either side may close with 1011 when it
+accepted the session but an internal failure keeps it from serving it, such as a
+local port that refuses to serve the members of the catalog. The binding defines
+no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls
