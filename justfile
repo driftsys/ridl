@@ -1099,6 +1099,8 @@ lint:
         # As in `just test`: the workspace resolves `ridl-rt` with default
         # features, so its feature-gated modules are otherwise never linted.
         cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
+        # Build only the library: dev-dependencies otherwise unify ridl-rt/debug.
+        cargo clippy --locked -p ridl-loopback --no-default-features --features node --lib -- -D warnings
         cargo clippy -p ridl-loopback --no-default-features --features node --all-targets -- -D warnings
         cargo clippy -p ridl-loopback --features debug --all-targets -- -D warnings
         cargo clippy -p ridl-rt-conformance --features debug --all-targets -- -D warnings
