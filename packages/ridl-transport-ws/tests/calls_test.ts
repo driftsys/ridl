@@ -1083,3 +1083,489 @@ test("queryStream with a bound of 0 errors with RangeError and sends nothing", a
   await assert.rejects(reader.read(), RangeError);
   assert.equal(socket.sent.length, sent);
 });
+
+const UPLOAD: Target = { kind: Kind.Command, iface: 1, ord: 11 };
+const UPLOAD_QUERY: Target = { kind: Kind.Query, iface: 1, ord: 12 };
+
+function credit(
+  target = UPLOAD,
+  stream = 1,
+): Extract<Frame, { form: "stream_credit" }> {
+  return { form: "stream_credit", target, correlation: 1n, stream, credit: 1 };
+}
+
+function watch<T>(promise: Promise<T>) {
+  const state: { status: string; value?: T; error?: unknown } = {
+    status: "pending",
+  };
+  promise.then(
+    (value) => Object.assign(state, { status: "resolved", value }),
+    (error) => Object.assign(state, { status: "rejected", error }),
+  );
+  return state;
+}
+
+async function resolved<T>(promise: Promise<T>): Promise<T> {
+  const state = watch(promise);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  for (let i = 0; i < 20 && state.status === "pending"; i++) await settled();
+  assert.equal(state.status, "resolved", String(state.error));
+  return state.value as T;
+}
+
+async function rejected(promise: Promise<unknown>, category: string) {
+  const state = watch(promise);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  for (let i = 0; i < 20 && state.status === "pending"; i++) await settled();
+  assert.equal(state.status, "rejected", "operation must reject promptly");
+  assert.ok(isFailure(category)(state.error), String(state.error));
+  return state.error as SessionError;
+}
+
+type UploadFixture = Awaited<ReturnType<typeof attachedV3>>;
+function uploadTest(name: string, fn: (f: UploadFixture) => Promise<void>) {
+  test(name, async () => {
+    const fixture = await attachedV3();
+    try {
+      await fn(fixture);
+    } finally {
+      fixture.session.close();
+      await settled();
+    }
+  });
+}
+
+function uploading(session: Session, query = false) {
+  const call = query
+    ? session.queryWithUpload(1, 12, Uint8Array.of(0), BOUND)
+    : session.commandStream(1, 11, Uint8Array.of(1, 0), BOUND);
+  const promise: Promise<void | Uint8Array> = "reply" in call
+    ? call.reply
+    : call.accepted;
+  const state = watch(promise);
+  const writer = call.upload.getWriter();
+  watch(writer.closed);
+  return { writer, promise, state };
+}
+
+async function spend(writer: WritableStreamDefaultWriter<Uint8Array>) {
+  for (let i = 0; i < 4; i++) await resolved(writer.write(Uint8Array.of(i)));
+}
+
+uploadTest(
+  "commandStream_sends_the_request_then_chunks_on_stream_1_from_seq_1",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session);
+    await resolved(writer.write(Uint8Array.of(2, 3)));
+    await resolved(writer.write(Uint8Array.of(4)));
+    assert.deepEqual(frames(socket).slice(1), [
+      {
+        form: "request",
+        target: UPLOAD,
+        envelope: { stamp: STAMP, seq: 1n },
+        payload: Uint8Array.of(1, 0),
+      },
+      {
+        form: "chunk",
+        target: UPLOAD,
+        envelope: { stamp: STAMP, seq: 1n },
+        correlation: 1n,
+        stream: 1,
+        payload: Uint8Array.of(2, 3),
+      },
+      {
+        form: "chunk",
+        target: UPLOAD,
+        envelope: { stamp: STAMP, seq: 2n },
+        correlation: 1n,
+        stream: 1,
+        payload: Uint8Array.of(4),
+      },
+    ]);
+    socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
+    await resolved(promise);
+  },
+);
+
+uploadTest(
+  "commandStream_accepted_resolves_and_the_upload_stays_open",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session);
+    socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
+    await resolved(promise);
+    await spend(writer);
+    socket.deliver(credit());
+    await resolved(writer.write(Uint8Array.of(9)));
+    assert.equal(sentOf(socket, "chunk").length, 5);
+  },
+);
+
+uploadTest(
+  "a_write_waits_while_the_credit_is_spent_and_resumes_on_stream_credit",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    await spend(writer);
+    const fifth = writer.write(Uint8Array.of(5));
+    const state = watch(fifth);
+    await settled();
+    assert.equal(state.status, "pending");
+    assert.equal(sentOf(socket, "chunk").length, 4);
+    socket.deliver(credit());
+    await resolved(fifth);
+    assert.equal(sentOf(socket, "chunk").length, 5);
+  },
+);
+
+uploadTest(
+  "close_sends_stream_end_end_with_the_next_seq",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    for (let i = 0; i < 3; i++) await resolved(writer.write(Uint8Array.of(i)));
+    await resolved(writer.close());
+    assert.deepEqual(lastSent(socket), {
+      form: "stream_end",
+      target: UPLOAD,
+      envelope: { stamp: STAMP, seq: 4n },
+      correlation: 1n,
+      stream: 1,
+      outcome: { kind: "end" },
+    });
+  },
+);
+
+uploadTest(
+  "abort_sends_stream_end_interrupted",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    await resolved(writer.write(Uint8Array.of(1)));
+    await resolved(writer.abort());
+    assert.deepEqual(lastSent(socket), {
+      form: "stream_end",
+      target: UPLOAD,
+      envelope: { stamp: STAMP, seq: 2n },
+      correlation: 1n,
+      stream: 1,
+      outcome: { kind: "interrupted" },
+    });
+  },
+);
+
+uploadTest(
+  "a_stream_end_contract_on_stream_1_rejects_the_next_write_and_accepted_stays_resolved",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session);
+    socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
+    await resolved(promise);
+    const contract = { category: "invalid-value", rule: "range" } as const;
+    socket.deliver(
+      streamEnd(1n, 1n, { kind: "contract", contract }, UPLOAD, 1),
+    );
+    const error = await rejected(writer.write(Uint8Array.of(1)), "contract");
+    assert.deepEqual(error.failure, { category: "contract", contract });
+    await resolved(promise);
+  },
+);
+
+uploadTest(
+  "a_refusal_rejects_a_write_waiting_for_credit",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    await spend(writer);
+    const pending = writer.write(Uint8Array.of(5));
+    watch(pending);
+    await settled();
+    socket.deliver(streamEnd(1n, 1n, { kind: "corrupt" }, UPLOAD, 1));
+    await rejected(pending, "corrupt");
+  },
+);
+
+uploadTest(
+  "queryWithUpload_reply_rejects_with_the_upload_refusal",
+  async ({ session, socket }) => {
+    const { promise, writer } = uploading(session, true);
+    const contract = { category: "invalid-value", rule: "utf8" } as const;
+    socket.deliver(
+      streamEnd(1n, 1n, { kind: "contract", contract }, UPLOAD_QUERY, 1),
+    );
+    assert.deepEqual((await rejected(promise, "contract")).failure, {
+      category: "contract",
+      contract,
+    });
+    await rejected(writer.write(new Uint8Array()), "contract");
+  },
+);
+
+uploadTest("queryWithUpload_bound_runs_from_close", async ({ session }) => {
+  const { writer, promise, state } = uploading(session, true);
+  await sleep(60);
+  assert.equal(state.status, "pending");
+  await resolved(writer.close());
+  await sleep(60);
+  await rejected(promise, "timeout");
+});
+
+uploadTest("commandStream_bound_runs_from_the_request", async ({ session }) => {
+  const { promise, writer } = uploading(session);
+  await sleep(60);
+  await rejected(promise, "undelivered");
+  await rejected(writer.write(new Uint8Array()), "undelivered");
+});
+
+uploadTest(
+  "a_write_longer_than_the_member_limit_rejects_corrupt_and_sends_stream_end_interrupted",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    await rejected(writer.write(new Uint8Array(16_129)), "corrupt");
+    assert.equal(sentOf(socket, "chunk").length, 0);
+    assert.deepEqual(lastSent(socket), {
+      form: "stream_end",
+      target: UPLOAD,
+      envelope: { stamp: STAMP, seq: 1n },
+      correlation: 1n,
+      stream: 1,
+      outcome: { kind: "interrupted" },
+    });
+  },
+);
+
+test("commandStream_on_a_v2_session_is_unsupported_and_sends_nothing", async () => {
+  const { session, socket } = await attached();
+  try {
+    const { writer, promise } = uploading(session);
+    await rejected(promise, "unsupported");
+    await rejected(writer.write(new Uint8Array()), "unsupported");
+    assert.equal(socket.sent.length, 1);
+  } finally {
+    session.close();
+  }
+});
+
+uploadTest(
+  "a_chunk_or_a_frame_on_stream_0_for_an_upload_is_unexpected_form",
+  async ({ session, socket, notes }) => {
+    const { writer } = uploading(session);
+    socket.deliver(chunk(1n, 1n, [1], 1, UPLOAD));
+    assert.deepEqual(notes, [{
+      note: "violation",
+      violation: "unexpected-form",
+    }]);
+    await rejected(writer.write(new Uint8Array()), "down");
+    const other = await attachedV3();
+    try {
+      uploading(other.session);
+      other.socket.deliver(credit(UPLOAD, 0));
+      assert.deepEqual(other.notes, [{
+        note: "violation",
+        violation: "unexpected-form",
+      }]);
+    } finally {
+      other.session.close();
+    }
+  },
+);
+
+uploadTest(
+  "a_refusing_response_errors_the_upload",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session);
+    socket.deliver(response(UPLOAD, 1n, { outcome: "busy" }));
+    await rejected(promise, "busy");
+    await rejected(writer.write(new Uint8Array()), "busy");
+  },
+);
+
+uploadTest(
+  "aborting_queryWithUpload_rejects_reply_interrupted",
+  async ({ session, socket, notes }) => {
+    const { writer, promise } = uploading(session, true);
+    await resolved(writer.abort());
+    await rejected(promise, "interrupted");
+    socket.deliver(
+      response(UPLOAD_QUERY, 1n, {
+        outcome: "reply",
+        payload: Uint8Array.of(9),
+      }),
+    );
+    assert.equal(notes.length, 1);
+    assert.equal(
+      notes[0].note === "discarded" && notes[0].reason,
+      "unknown-correlation",
+    );
+  },
+);
+
+uploadTest(
+  "the_session_ending_errors_the_upload_and_rejects_with_down",
+  async ({ session }) => {
+    const { writer, promise } = uploading(session, true);
+    await spend(writer);
+    const fifth = writer.write(new Uint8Array());
+    watch(fifth);
+    await settled();
+    session.close();
+    await rejected(promise, "down");
+    await rejected(fifth, "down");
+    await rejected(writer.closed, "down");
+  },
+);
+
+uploadTest(
+  "a_stream_credit_on_stream_1_for_a_streamed_reply_is_unexpected_form",
+  async ({ session, socket, notes }) => {
+    const reader = session.queryStream(1, 10, new Uint8Array(), BOUND)
+      .getReader();
+    const pending = reader.read();
+    watch(pending);
+    socket.deliver(credit(STREAMED));
+    assert.deepEqual(notes, [{
+      note: "violation",
+      violation: "unexpected-form",
+    }]);
+    await rejected(pending, "down");
+  },
+);
+
+uploadTest(
+  "empty_writes_each_consume_one_credit",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    for (let i = 0; i < 4; i++) await resolved(writer.write(new Uint8Array()));
+    const fifth = writer.write(new Uint8Array());
+    const state = watch(fifth);
+    await settled();
+    assert.equal(state.status, "pending");
+    assert.equal(sentOf(socket, "chunk").length, 4);
+    socket.deliver(credit());
+    await resolved(fifth);
+  },
+);
+
+uploadTest(
+  "stream_frames_with_another_target_are_discarded_without_credit_or_delivery",
+  async ({ session, socket, notes }) => {
+    const { writer } = uploading(session);
+    await spend(writer);
+    const fifth = writer.write(Uint8Array.of(5));
+    const state = watch(fifth);
+    const wrong = [{ ...UPLOAD, iface: 2 }, { ...UPLOAD, ord: 13 }, {
+      ...UPLOAD,
+      kind: Kind.Query,
+    }];
+    for (const target of wrong) {
+      for (
+        const frame of [
+          credit(target),
+          chunk(1n, 1n, [9], 1, target),
+          streamEnd(1n, 1n, { kind: "corrupt" }, target, 1),
+        ]
+      ) socket.deliver(frame);
+    }
+    await settled();
+    assert.equal(state.status, "pending");
+    assert.equal(sentOf(socket, "chunk").length, 4);
+    assert.equal(notes.length, 9);
+    assert.ok(
+      notes.every((n) =>
+        n.note === "discarded" && n.reason === "unknown-correlation"
+      ),
+    );
+    socket.deliver(credit());
+    await resolved(fifth);
+    const reader = session.queryStream(1, 10, new Uint8Array(), BOUND)
+      .getReader();
+    const read = reader.read();
+    const readState = watch(read);
+    const sent = socket.sent.length;
+    socket.deliver(chunk(2n, 1n, [9], 0, { ...STREAMED, ord: 99 }));
+    socket.deliver(
+      streamEnd(2n, 1n, { kind: "end" }, { ...STREAMED, iface: 99 }),
+    );
+    await settled();
+    assert.equal(readState.status, "pending");
+    assert.equal(socket.sent.length, sent);
+    socket.deliver(chunk(2n, 1n, [7]));
+    assert.deepEqual((await resolved(read)).value, Uint8Array.of(7));
+    await reader.cancel();
+  },
+);
+
+uploadTest(
+  "credit_followed_by_refusal_in_the_same_turn_sends_no_chunk",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session, true);
+    await spend(writer);
+    const fifth = writer.write(Uint8Array.of(5));
+    watch(fifth);
+    await settled();
+    socket.deliver(credit(UPLOAD_QUERY));
+    socket.deliver(streamEnd(1n, 1n, { kind: "corrupt" }, UPLOAD_QUERY, 1));
+    await rejected(fifth, "corrupt");
+    await rejected(promise, "corrupt");
+    assert.equal(sentOf(socket, "chunk").length, 4);
+  },
+);
+
+uploadTest(
+  "query_reply_before_close_releases_a_write_waiting_for_credit",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session, true);
+    await spend(writer);
+    const fifth = writer.write(Uint8Array.of(5));
+    watch(fifth);
+    await settled();
+    socket.deliver(
+      response(UPLOAD_QUERY, 1n, {
+        outcome: "reply",
+        payload: Uint8Array.of(8),
+      }),
+    );
+    assert.deepEqual(await resolved(promise), Uint8Array.of(8));
+    await rejected(fifth, "interrupted");
+    assert.equal(sentOf(socket, "chunk").length, 4);
+  },
+);
+
+uploadTest(
+  "abort_while_a_write_waits_for_credit_interrupts_the_query",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session, true);
+    await spend(writer);
+    const fifth = writer.write(Uint8Array.of(5));
+    watch(fifth);
+    await settled();
+    await resolved(writer.abort());
+    await rejected(fifth, "interrupted");
+    await rejected(promise, "interrupted");
+    const end = lastSent(socket);
+    assert.ok(end.form === "stream_end" && end.outcome.kind === "interrupted");
+  },
+);
+
+uploadTest(
+  "an_upload_refusal_with_the_wrong_seq_is_interrupted",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session, true);
+    socket.deliver(streamEnd(1n, 2n, { kind: "corrupt" }, UPLOAD_QUERY, 1));
+    await rejected(promise, "interrupted");
+    await rejected(writer.write(new Uint8Array()), "interrupted");
+  },
+);
+
+uploadTest(
+  "command_close_and_abort_keep_only_the_pending_acknowledgment",
+  async ({ session, socket, notes }) => {
+    for (const abort of [false, true]) {
+      const { writer, promise } = uploading(session);
+      await resolved(abort ? writer.abort() : writer.close());
+      const seq = abort ? 2n : 1n;
+      socket.deliver(response(UPLOAD, seq, { outcome: "accepted" }));
+      await resolved(promise);
+      socket.deliver({ ...credit(), correlation: seq });
+      assert.ok(
+        notes.some((n) =>
+          n.note === "discarded" && n.reason === "unknown-correlation"
+        ),
+      );
+    }
+  },
+);
