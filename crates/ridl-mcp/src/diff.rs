@@ -531,6 +531,31 @@ mod tests {
         assert_eq!(cache_before, inventory(&cache));
     }
 
+    // Removing the shared directory guard returns a verdict for interrupted files.
+    #[test]
+    fn diff_with_an_interrupted_baseline_publication_is_a_tool_error() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
+        let baseline = copy.0.join(".ridl/baseline");
+        remote_baseline(&copy.0, &baseline, false);
+        let input = remote_input(&baseline, &copy.0);
+        assert_eq!(diff(&input).unwrap()["verdict"], "identical");
+        let backup = copy.0.join(".ridl/baseline.previous.1");
+        std::fs::create_dir(&backup).unwrap();
+        let marker = copy.0.join(".ridl/.baseline.transaction");
+        std::fs::write(&marker, backup.to_str().unwrap()).unwrap();
+        match diff(&input).unwrap_err() {
+            ToolError::Request(message) => assert_eq!(
+                message,
+                format!(
+                    "interrupted baseline publication; backup directory: {}; restore the prior files from the backup, or remove the marker {} after inspecting it",
+                    backup.display(),
+                    marker.display()
+                )
+            ),
+            _ => panic!("interrupted publication must use the existing request error"),
+        }
+    }
+
     #[test]
     fn remote_legacy_context_is_a_tool_error_with_recovery_guidance() {
         let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
