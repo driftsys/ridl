@@ -170,7 +170,6 @@ pub enum Ended {
     /// for message capacity. Capability takes precedence if both checks fail.
     /// When ordinary attach checks pass, insufficient message capacity records
     /// the same note with either reply.
-    /// for message capacity. A capacity refusal records the same note.
     ///
     /// With [`serve_provided_selected`], capacity is checked after selection
     /// and before upgrade; a refusal answers HTTP 400 and records the note.
@@ -778,11 +777,11 @@ fn timed_out(e: &io::Error) -> bool {
     )
 }
 
-/// After a handshake `400` or `403`, or a close frame the server sent: ends the write
-/// side, then reads and drops what the client still sends, until the client
-/// closes or [`LINGER`] passes. Closing a connection with unread bytes in its
-/// receive buffer resets it, and a client may then lose the `400` or the
-/// close frame it has not read yet.
+/// After a handshake `400`, `403`, `404` or `409`, or a close frame the server
+/// sent: ends the write side, then reads and drops what the client still sends,
+/// until the client closes or [`LINGER`] passes. Closing a connection with
+/// unread bytes in its receive buffer resets it, and a client may then lose the
+/// refusal or the close frame it has not read yet.
 fn linger<C: Connection>(conn: &mut C) {
     let _ = conn.shutdown_write();
     let until = Instant::now() + LINGER;

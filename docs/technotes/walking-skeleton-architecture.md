@@ -363,10 +363,14 @@ crate the workspace holds — see `AGENTS.md` for that.
   unless the embedder gives it a member table with the compatible hashes, and
   keeps each settled response until its bound when that table gives one, the
   last 64 otherwise. `serve_selected` picks the backend from the catalog the
-  client names in its `attach`, and the `debug_gateway` example uses it to serve
-  a loopback node's catalogs to a listener. Its tests run it against
-  `tungstenite` as the client and over `ridl-loopback`. See frame specification
-  §11.1 and [its design record](../design/ridl-transport-ws.md).
+  client names in its `attach`. A second role, selected by the subprotocol
+  `ridl-ws-v2-provider`, reverses the session: `serve_provided` and
+  `serve_provided_selected` take a `ProvidedBackend` (`Providing<P>` over local
+  `SignalWriter`, `EventSink` and `Handler` ports), consume what the WebSocket
+  client provides and forward the calls to it. The `debug_gateway` example uses
+  both roles to serve a loopback node to a listener and to a provider. Its tests
+  run it against `tungstenite` as the client and over `ridl-loopback`. See frame
+  specification §11.1 and [its design record](../design/ridl-transport-ws.md).
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract
@@ -398,13 +402,16 @@ crate the workspace holds — see `AGENTS.md` for that.
   consuming side of a frame session: it opens one WebSocket offering the
   subprotocols `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`,
   `subscribe`, `unsubscribe`, `read`, `request` and the stream forms of a
-  streamed reply, and applies the consumer's rules that need no catalog. It has
-  no dependency, and `.github/workflows/npm-release.yml` publishes it to npm on
-  a `v*` tag. It carries a payload as bytes and does not decode it. `packages/`
-  is not a Cargo workspace member and holds TypeScript only; Deno builds and
-  tests it (`just ts-check`, `just ts-e2e`, and `just ts-browser-e2e` in CI), at
-  the version `.deno-version` pins. The version in its `deno.json` follows the
-  workspace version. See [its design record](../design/ridl-transport-ws-ts.md).
+  streamed reply, and applies the consumer's rules that need no catalog. Its
+  `provide` function is the reversed role: it offers only `ridl-ws-v2-provider`
+  and publishes signals, raises events and answers requests for an instance of a
+  machine. It has no dependency, and `.github/workflows/npm-release.yml`
+  publishes it to npm on a `v*` tag. It carries a payload as bytes and does not
+  decode it. `packages/` is not a Cargo workspace member and holds TypeScript
+  only; Deno builds and tests it (`just ts-check`, `just ts-e2e`, and
+  `just ts-browser-e2e` in CI), at the version `.deno-version` pins. The version
+  in its `deno.json` follows the workspace version. See
+  [its design record](../design/ridl-transport-ws-ts.md).
 
 - **`packages/ridl-runtime`** — the loader of the wasm codec module,
   `@driftsys/ridl-runtime`, for Deno, Bun, Node and the browser. `loadCodec`

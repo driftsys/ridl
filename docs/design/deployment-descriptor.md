@@ -166,10 +166,12 @@ does not interpret it (rsdl section 5).
 
 The loopback runtime reads a descriptor to decide what an attach may do
 ([the loopback record](ridl-loopback.md) describes the types). This section
-states the rules applied by the in-process node. A gateway that attaches to the
-in-process node as the listener and serves it over WebSocket exists as an
-example of `ridl-transport-ws` ([its design record](ridl-transport-ws.md)); it
-only listens, and nothing injects through it yet.
+states the rules applied by the in-process node. The debug gateway is an example
+of `ridl-transport-ws` ([its design record](ridl-transport-ws.md)) that serves
+the node over WebSocket on two listeners: a connection to the listening listener
+attaches as the listener, and a connection to the injection listener attaches as
+the twin of one instance. The gateway runs in the process of the node, so it
+reaches only the components that share that node.
 
 - **Construction.** `Node::from_descriptor(bytes, machine)` takes a `&'static`
   descriptor, because the catalog names borrow its bytes, and a machine name. It
@@ -194,6 +196,29 @@ only listens, and nothing injects through it yet.
   grant and attaches to every catalog of the machine. It can read, subscribe and
   send a call. It writes nothing: setting, invalidating or touching a signal,
   raising an event and serving fail with `NotOwner`, and it takes no claim.
+
+- **The injection path.** An injection connection names the instance it replaces
+  in the request path, `/<component>/<instance>/<catalog>`: the qualified name
+  of the component, the name of the instance and the name of the catalog, each
+  as the descriptor holds them. The binding gives the path no meaning
+  ([the frame specification](../specification/frame-specification.md) §11.1);
+  only the gateway reads it. The gateway lists one path for each instance placed
+  on its machine and each catalog that the instance **offers**; a catalog that
+  the instance only maps has no path. Its member table for a path holds only the
+  interfaces that the instance offers in that catalog, so the session
+  subscribes, serves and accepts nothing else. A path that does not match a
+  listed one exactly is refused with `404`, including a path with a query, a
+  fragment, a percent escape, an empty segment or an extra segment. For a listed
+  path the gateway attaches to the node as the twin of the instance's number, in
+  that catalog; `IdentityConflict`, which means the instance is attached as
+  itself, is refused with `409`, and any other attach error with `404`. Both
+  answers come before the WebSocket upgrade. The twin is released when the
+  session ends, and also when the handshake or the first messages fail.
+- **A redundant provider set.** The twin replaces the one instance its path
+  names. The other instances of the set stay attached, and the node chooses
+  between them for no one, so every attached instance of the set can still write
+  until the active rule exists (driftsys/ridl#1196). Injecting on such a set
+  needs the other instances stopped.
 
 Not built: a check that only the instance that offers an interface writes it
 (the grant stops at the catalog and does not name interfaces), and the

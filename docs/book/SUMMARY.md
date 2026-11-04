@@ -9,7 +9,7 @@
 - [Remote units and `ridl vendor`](remote-units.md)
 - [Using the generated Rust code](generated-code.md)
 - [Writing a port](writing-a-port.md)
-- [Debugging a machine by listening](debugging.md)
+- [Debugging a machine](debugging.md)
 - [The catalog descriptor](catalog-descriptor.md)
 - [Evolving an interface](evolving-an-interface.md)
 - [Documenting your API](documenting.md)

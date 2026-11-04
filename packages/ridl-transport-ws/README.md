@@ -4,6 +4,8 @@ The client side of the WebSocket binding of the ridl frame. The package opens a
 WebSocket that offers the subprotocols `ridl-ws-v3`, `ridl-ws-v2` and
 `ridl-ws-v1`, in that order, sends and receives frames, and carries each payload
 as bytes without reading them. The caller encodes and decodes payloads.
+`provide` opens the reversed role, in which the program stands in for a
+component and the server consumes (see "A providing session").
 
 The session speaks the frame version of the subprotocol the server selects: 3 on
 `ridl-ws-v3`, 2 on `ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also
@@ -108,13 +110,65 @@ stream errors with a `SessionError` whose category is `contract`, `corrupt`,
 2, `unsupported`, in which case nothing is sent. The rules are in
 [the package's design record](../../docs/design/ridl-transport-ws-ts.md), D-20.
 
+## A providing session
+
+`provide(url, options)` is the reversed role of the binding: the program stands
+in for a component, and the server consumes (frame specification §11.1,
+"Reversed role"). It offers only the subprotocol `ridl-ws-v2-provider`, waits
+for the server's `attach`, answers `attached`, and resolves with a `Provision`.
+The `encoding` option is required, as there is no default: the debug gateway of
+`ridl-transport-ws` serves `"flatbuffers"`. The `members` option lists what the
+instance provides, as `MemberEntry` values (kind, interface, ordinal and an
+optional payload limit).
+
+```ts
+const provision = await provide(
+  `ws://127.0.0.1:${port}/alpha.First/Unit/alpha`,
+  {
+    catalog: { name: "alpha", hash },
+    encoding: "flatbuffers",
+    members: [
+      { iface: 1, ord: 1, kind: "signal" },
+      { iface: 1, ord: 3, kind: "command" },
+    ],
+    onRequest: () => ({ outcome: "accepted" }),
+  },
+);
+provision.publish(1, 1, new Uint8Array([42]), BigInt(Date.now()) * 1000n);
+```
+
+The path of the URL is the gateway's: the binding gives it no meaning.
+
+- The package accepts the server's `attach` only when the catalog name and the
+  catalog hash equal the options exactly; it reads no list of compatible hashes.
+  Otherwise it answers `attached(refused)`, closes with 1000 and rejects with
+  `AttachRefused`.
+- `publish`, `invalidate` and `raise` take the stamp as a `bigint` in
+  microseconds. Each throws a `SessionError` `contract` `unknown-interaction`
+  until the server has subscribed the member, `corrupt` when the payload is
+  longer than the member's limit, and `down` after the session ended.
+- `onRequest` answers each command and query and may be asynchronous. The
+  package answers a request for an unlisted member with
+  `contract(UnknownInteraction)`, arguments over the limit with `corrupt`, and a
+  request that arrives while 64 are in flight with `busy`. A handler that
+  returns an outcome the call kind does not allow (`accepted` for a query,
+  `reply` for a command), returns nothing, throws or rejects, gets **no
+  response**: the frame has no outcome for it, so the package records
+  `{ note: "discarded", reason: "unexpected-outcome" }` through `onNote` and the
+  server's own bound ends the call. (The Rust provided session settles the same
+  mistake of the other side as `Corrupt` at once.) A handler that never settles
+  holds one of the 64 slots until the session ends.
+- No stream form crosses the reversed role. `provide` has the limits below.
+
 ## Limits
 
 - On a protocol violation, the client closes the socket without a close code,
-  because the platform cannot send the codes 1002, 1003 or 1009.
+  because the platform cannot send the codes 1002, 1003 or 1009. `provide` does
+  the same and records the violation through `onNote`.
 - The client has no liveness timer, because a page cannot see the pings of the
   server. `connect`, `subscribe` and `read` have no time limit: each waits until
-  its answer arrives or the session ends.
+  its answer arrives or the session ends. `provide` has no timer either, and the
+  server's liveness check is the one that runs.
 - When the server selects no subprotocol, `connect` rejects with
   `ProtocolError('no-subprotocol')` in Deno. In a browser, the platform fails
   the handshake itself, so `connect` rejects with `SessionError` `down` (close
