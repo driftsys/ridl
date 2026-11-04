@@ -29,7 +29,8 @@ type StreamFrame = Extract<
 
 /**
  * Why the session did not use a frame: it names no call in flight
- * (`unknown-correlation`, a discard), or a stream frame's target differs
+ * (`unknown-correlation`, a discard, except that `stream_credit` is silently
+ * ignored), or a stream frame's target differs
  * from its call's target (also `unknown-correlation`, frame specification
  * §6.4), or a call whose shape the frame does
  * not fit (`unexpected-outcome`, a discard; `unexpected-form`, a violation
@@ -411,14 +412,19 @@ export class Calls {
   /**
    * Applies a `chunk`, a `stream_end` or a `stream_credit` from the server,
    * and returns `null`, or why the frame was not used: `unknown-correlation`
-   * when it names no call in flight or its target differs from the call;
+   * when it names no call in flight (except `stream_credit`, which is silently
+   * ignored and returns `null`) or its target differs from the call;
    * `unexpected-form` for a form or stream the call does not support, or a
    * reply chunk beyond its granted credit. Uploads accept credit and an end
    * on stream 1; streamed replies accept chunks and an end on stream 0.
    */
   onStream(frame: StreamFrame): Unused | null {
     const call = this.#inFlight.get(frame.correlation);
-    if (!call) return "unknown-correlation";
+    // A credit the provider sent before it received our `stream_end` can
+    // arrive after the upload closed and its call was forgotten.
+    if (!call) {
+      return frame.form === "stream_credit" ? null : "unknown-correlation";
+    }
     if (
       call.target && (frame.target.iface !== call.target.iface ||
         frame.target.ord !== call.target.ord ||

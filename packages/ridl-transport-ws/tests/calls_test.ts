@@ -1560,7 +1560,7 @@ uploadTest(
       const seq = abort ? 2n : 1n;
       socket.deliver(response(UPLOAD, seq, { outcome: "accepted" }));
       await resolved(promise);
-      socket.deliver({ ...credit(), correlation: seq });
+      socket.deliver(streamEnd(seq, 1n, { kind: "end" }, UPLOAD, 1));
       assert.ok(
         notes.some((n) =>
           n.note === "discarded" && n.reason === "unknown-correlation"
@@ -1615,7 +1615,7 @@ for (const query of [false, true]) {
               (e) => e === error,
             );
           }
-          const late = credit(target);
+          const late = streamEnd(1n, 1n, { kind: "end" }, target, 1);
           socket.deliver(late);
           assert.deepEqual(notes, [{
             note: "discarded",
@@ -1672,7 +1672,7 @@ for (const abort of [false, true]) {
       socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
       await resolved(promise);
       await resolved(abort ? writer.abort() : writer.close());
-      const late = credit();
+      const late = streamEnd(1n, 1n, { kind: "end" }, UPLOAD, 1);
       socket.deliver(late);
       assert.deepEqual(notes, [{
         note: "discarded",
@@ -1683,3 +1683,32 @@ for (const abort of [false, true]) {
     },
   );
 }
+
+uploadTest(
+  "command_upload_credit_after_accepted_and_close_is_ignored_without_a_note",
+  async ({ session, socket, notes }) => {
+    const { writer, promise } = uploading(session);
+    await spend(writer);
+    socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
+    await resolved(promise);
+    await resolved(writer.close());
+    const sent = socket.sent.length;
+
+    // Credit for chunks taken before the provider received our end can arrive late.
+    assert.doesNotThrow(() => socket.deliver(credit()));
+    await resolved(writer.closed);
+    await resolved(promise);
+    assert.deepEqual(notes, []);
+    assert.deepEqual(socket.closes, []);
+    assert.equal(socket.sent.length, sent);
+
+    const late = streamEnd(1n, 1n, { kind: "end" }, UPLOAD, 1);
+    socket.deliver(late);
+    assert.deepEqual(notes, [{
+      note: "discarded",
+      reason: "unknown-correlation",
+      frame: late,
+    }]);
+    assert.deepEqual(socket.closes, []);
+  },
+);
