@@ -493,13 +493,15 @@ fn selected_backend_released_on_session_exits() {
 
 #[test]
 fn none_selection_with_wrong_attach_version_refuses_version() {
-    let conn = connection("ridl-ws-v2", vec![attach(FIRST, 3, 1)]);
-    let output = conn.output.clone();
-    assert_eq!(
-        serve_selected::<_, Polling<Loopback>, _>(conn, 2, |_| None, &Config::default()),
-        Ended::ServerClosed(1000)
-    );
-    refused(&output.borrow(), Reason::FrameVersionUnsupported);
+    for version in [1, 3] {
+        let conn = connection("ridl-ws-v2", vec![attach(FIRST, version, 1)]);
+        let output = conn.output.clone();
+        assert_eq!(
+            serve_selected::<_, Polling<Loopback>, _>(conn, 2, |_| None, &Config::default()),
+            Ended::ServerClosed(1000)
+        );
+        refused(&output.borrow(), Reason::FrameVersionUnsupported);
+    }
 }
 
 #[test]
@@ -597,4 +599,87 @@ fn selected_first_message_records_exact_note() {
         );
         assert_eq!(*notes.lock().unwrap(), [note]);
     }
+}
+
+#[test]
+fn ordinary_refusal_precedes_short_limit_and_records_no_limit_note() {
+    let wrong = CatalogRef {
+        hash: SECOND.hash,
+        ..FIRST
+    };
+    let conn = connection("ridl-ws-v2", vec![attach(wrong, 2, 1)]);
+    let output = conn.output.clone();
+    let notes = Arc::new(Mutex::new(Vec::new()));
+    let sink = notes.clone();
+    let config = Config::default()
+        .with_max_message_bytes(294)
+        .unwrap()
+        .with_record(move |note| sink.lock().unwrap().push(*note));
+    let backend = Described::new(Polling(store(FIRST, 11)), Arc::new(table())).unwrap();
+    assert_eq!(
+        serve_selected(conn, 2, |_| Some(backend), &config),
+        Ended::ServerClosed(1000)
+    );
+    refused(&output.borrow(), Reason::CatalogMismatch);
+    assert!(
+        notes.lock().unwrap().is_empty(),
+        "ordinary refusal must not record a limit failure"
+    );
+}
+
+#[test]
+fn selected_v3_stream_before_attach_records_message_before_attach() {
+    let message = wire(Frame::StreamCredit {
+        target: Target {
+            kind: Kind::Command,
+            ..SIGNAL
+        },
+        correlation: 1,
+        stream: 0,
+        credit: 1,
+    });
+    assert_first_note("ridl-ws-v3", message, Note::MessageBeforeAttach);
+}
+
+#[test]
+fn selected_discard_before_attach_records_message_before_attach() {
+    use ridl_rt::sample::{Envelope, Timestamp};
+    let frame = Frame::Publish {
+        target: SIGNAL,
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq: 1,
+        },
+        state: PublishState::Init,
+    };
+    let mut bytes = vec![0; frame.encoded_len()];
+    frame.encode(&mut bytes).unwrap();
+    // An Init publication may not carry a payload.
+    bytes.push(99);
+    assert_eq!(
+        frame::decode(&bytes),
+        Err(frame::DecodeError::Discard(
+            frame::Discarded::UnexpectedPayload
+        ))
+    );
+    let mut message = vec![0x82, 0x80 | bytes.len() as u8, 0, 0, 0, 0];
+    message.extend(bytes);
+    assert_first_note("ridl-ws-v2", message, Note::MessageBeforeAttach);
+}
+
+fn assert_first_note(protocol: &str, message: Vec<u8>, note: Note) {
+    let conn = connection(protocol, vec![message]);
+    let output = conn.output.clone();
+    let notes = Arc::new(Mutex::new(Vec::new()));
+    let sink = notes.clone();
+    let config = Config::default().with_record(move |note| sink.lock().unwrap().push(*note));
+    assert_eq!(
+        serve_selected::<_, Polling<Loopback>, _>(conn, 3, |_| panic!("must not select"), &config),
+        Ended::ServerClosed(1002)
+    );
+    assert_eq!(
+        frames(&output.borrow()),
+        [(8, 1002u16.to_be_bytes().to_vec())]
+    );
+    assert_eq!(*notes.lock().unwrap(), [note]);
 }
