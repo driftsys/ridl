@@ -942,3 +942,9 @@ name it.
   also closes before a second accepted frame for a channel already in it, so one
   local `commit` carries at most one frame per channel (§5.1) and a client that
   keeps one stamp still commits.
+- **R-DS-6 (Task 10 review, 2026-11-04).** On the provided session, a `response`
+  whose outcome is outside its call kind's set (`accepted` for a query, `reply`
+  for a command; frame §5.3 and §5.4) settles the local claim as
+  `Transport::Corrupt`, so the call ends and no claim waits for its deadline.
+  The TypeScript consumer returns `unexpected-outcome` and leaves its call
+  unsettled; the two consumers differ, and the design record states both.
