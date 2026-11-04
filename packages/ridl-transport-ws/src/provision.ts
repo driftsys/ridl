@@ -328,9 +328,17 @@ export class Provision {
       reason = "encoding-unsupported";
     }
     if (!reason) {
-      const creation = this.#clock();
-      stamp(creation);
-      this.#creationStamp = creation;
+      try {
+        const creation = this.#clock();
+        stamp(creation);
+        this.#creationStamp = creation;
+      } catch (error) {
+        this.#reject?.(error);
+        this.#reject = null;
+        this.#fail();
+        this.socket.close();
+        return;
+      }
     }
     this.#send({
       form: "attached",

@@ -681,3 +681,62 @@ Deno.test("provide_failed_clock_does_not_advance_response_sequence", async () =>
     outcome: { outcome: "accepted" },
   });
 });
+
+for (const mode of ["throw", "above-i64", "below-i64"] as const) {
+  Deno.test(`provide_rejects_attach_clock_${mode}`, async () => {
+    const failure = new Error("clock failed");
+    let clocks = 0;
+    const h = start({
+      clock: () => {
+        clocks++;
+        if (mode === "throw") throw failure;
+        return mode === "above-i64" ? 1n << 63n : -(1n << 63n) - 1n;
+      },
+    });
+    let result: unknown = "pending";
+    const done = h.pending.then(
+      () => {
+        result = "resolved";
+      },
+      (error) => {
+        result = error;
+      },
+    );
+    h.socket.open("ridl-ws-v2-provider");
+    assert.doesNotThrow(() => attach(h));
+    await tick();
+    if (mode === "throw") assert.equal(result, failure);
+    else {assert(
+        result instanceof RangeError,
+        "provide must reject an invalid attach stamp",
+      );}
+    await done;
+    assert.deepEqual(h.socket.closes, [{}]);
+    assert.equal(h.socket.sent.length, 0);
+    // Closing need not produce a platform close event before sends stop.
+    attach(h);
+    h.socket.deliver({ form: "subscribe", target: S });
+    h.socket.deliver(req(C, 1n));
+    await tick();
+    assert.equal(clocks, 1);
+    assert.equal(h.socket.sent.length, 0);
+    assert.equal(h.requests.length, 0);
+  });
+}
+Deno.test("provide_rejects_unsafe_integer_limit_before_socket_creation", async () => {
+  let created = false;
+  await assert.rejects(
+    provide("ws://fixture", {
+      catalog,
+      encoding: "flatbuffers",
+      members: [{ ...members[0], limit: Number.MAX_SAFE_INTEGER + 1 }],
+      onRequest: () => ({ outcome: "accepted" }),
+      webSocket: () => {
+        created = true;
+        throw Error("socket created");
+      },
+    }),
+    RangeError,
+  );
+  assert.equal(created, false);
+});
