@@ -864,3 +864,16 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
   [the frame specification](../specification/frame-specification.md). Stage 5b
   continues from `docs/wip/2026-10-31-streams-design.md`.
+- **2026-11-04-streams-stage-5b-plan.md** — the plan for stage 5b of the streams
+  work: the upload direction of a stream over the WebSocket binding (the server
+  in `ridl-transport-ws` receives `chunk` frames on a parameter stream under a
+  per-stream credit and reports a provider's refusal on the stream, the
+  TypeScript client gains `commandStream` and `queryWithUpload`, and
+  `Rule::Utf8` gets wire code 7 in frame version 3). Archived verbatim, on
+  2026-11-04, once the work landed in driftsys/ridl#1241 (squash `8d7d1e38`).
+  The durable records are
+  [the `ridl-transport-ws` design](../design/ridl-transport-ws.md),
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md),
+  [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
+  [the frame specification](../specification/frame-specification.md). Stage 6
+  continues from `docs/wip/2026-10-31-streams-design.md`.
