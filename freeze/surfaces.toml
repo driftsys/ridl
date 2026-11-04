@@ -44,6 +44,14 @@ name = "codegen-protocol"
 baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
+name = "generated-crate"
+baseline = "5536249f7abe6299408192fd2c13c79b7f72119f"
+
+[[surface]]
+name = "runtime-crates"
+baseline = "5536249f7abe6299408192fd2c13c79b7f72119f"
+
+[[surface]]
 name = "keywords"
 baseline = "v0.10.0"
 
