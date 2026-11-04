@@ -5,7 +5,9 @@
 //! port. The functions are generic over a [`Factory`], the one thing a runtime
 //! crate writes to run them: how to build a runtime, how to get a second
 //! handle of three port roles on it, the size of its call table
-//! ([`Factory::SLOTS`]), and two hooks the port traits do not offer. A
+//! ([`Factory::SLOTS`]), and two hooks the port traits do not offer. The
+//! functions of the `identity` module are generic over
+//! [`identity::IdentityFactory`] instead. A
 //! runtime runs the whole suite from its own test suite with the [`suite!`]
 //! macro, which writes one `#[test]` per function:
 //!
