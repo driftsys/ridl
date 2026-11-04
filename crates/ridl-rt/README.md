@@ -58,11 +58,11 @@ pinned toolchain.
 
 ## What 0.1 leaves out
 
-- the WebSocket upload direction and the corresponding TypeScript methods; the
-  Rust face now carries named-element, byte and text reply streams and commands
-  and queries with one parameter stream over `ridl-loopback`. Queries with
-  uploads have plain or named-element streamed replies. Calls with two or more
-  parameter streams remain outside the face (driftsys/ridl#1224)
+- calls with two or more parameter streams on the generated Rust face
+  (driftsys/ridl#1224). The WebSocket server's upload support is recorded in
+  [D-28](../../docs/design/ridl-transport-ws.md); the TypeScript upload methods
+  and their limits are recorded in
+  [D-21](../../docs/design/ridl-transport-ws-ts.md)
 - `Inline`
 - the three payload codecs (proto3, FlatBuffers, `podbuf`)
 - `Encoding::FORMAT`

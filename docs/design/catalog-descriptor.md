@@ -654,17 +654,17 @@ For these, the archived design note is the record of the agreed direction.
 
 ## Open items and debt
 
-| Item                                                                                                                                                                                  | Issue              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                                                                                                          | driftsys/ridl#665  |
-| Streams (ridl §12): the WebSocket upload direction and the corresponding TypeScript client methods are not built yet; the Rust face carries the stream forms below over ridl-loopback | driftsys/ridl#1116 |
-| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling                                                                                               | driftsys/ridl#670  |
-| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                                                                                                               | driftsys/ridl#679  |
-| debt: review follow-ups — one name resolver, one proto3 width table                                                                                                                   | driftsys/ridl#684  |
-| debt: review follow-ups — shared proto3 refusal rules (all but `optional_repeated`), agreement tests                                                                                  | driftsys/ridl#690  |
-| debt: deferred review items from PR #692 (the lowering and the catalog check)                                                                                                         | driftsys/ridl#693  |
-| debt: deferred review items from PR #696 (ridl describe)                                                                                                                              | driftsys/ridl#697  |
-| debt: deferred review items from PR #699 (the catalog hash per region)                                                                                                                | driftsys/ridl#701  |
+| Item                                                                                                                                                                                                                                          | Issue              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                                                                                                                                                                  | driftsys/ridl#665  |
+| Streams (ridl §12): [D-28](ridl-transport-ws.md) records the WebSocket server's upload support; [D-21](ridl-transport-ws-ts.md) records the TypeScript methods and their limits. The Rust face omits calls with two or more stream parameters | driftsys/ridl#1224 |
+| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling                                                                                                                                                       | driftsys/ridl#670  |
+| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                                                                                                                                                                       | driftsys/ridl#679  |
+| debt: review follow-ups — one name resolver, one proto3 width table                                                                                                                                                                           | driftsys/ridl#684  |
+| debt: review follow-ups — shared proto3 refusal rules (all but `optional_repeated`), agreement tests                                                                                                                                          | driftsys/ridl#690  |
+| debt: deferred review items from PR #692 (the lowering and the catalog check)                                                                                                                                                                 | driftsys/ridl#693  |
+| debt: deferred review items from PR #696 (ridl describe)                                                                                                                                                                                      | driftsys/ridl#697  |
+| debt: deferred review items from PR #699 (the catalog hash per region)                                                                                                                                                                        | driftsys/ridl#701  |
 
 The stream port and descriptors cover every stream form. Over `ridl-loopback`,
 the Rust face carries reply streams of named elements, bytes and text, commands

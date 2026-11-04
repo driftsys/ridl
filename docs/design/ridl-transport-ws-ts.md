@@ -28,8 +28,8 @@ row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions keep their numbers D-1 to D-18 from the design they were taken in,
-which is archived as
+decisions are numbered D-1 to D-21. D-1 to D-18 retain their numbers from the
+original design, archived as
 [`2026-10-20-ts-transport-ws-design.md`](../archive/2026-10-20-ts-transport-ws-design.md),
 with its plan beside it.
 
@@ -634,7 +634,10 @@ Both send a `request` that opens parameter stream 1. Its chunks and end carry
 the request's caller number as `correlation`, the same target and a stream `seq`
 starting at 1. Upload state belongs to `src/calls.ts`; `src/session.ts` encodes
 and sends its frames. The server's receiving rules are in
-[the server record](ridl-transport-ws.md), D-28.
+[the server record](ridl-transport-ws.md), D-28. These methods each carry one
+upload and an acknowledgment or plain reply. No TypeScript method combines an
+upload with a streamed reply (driftsys/ridl#1240) or carries two or more
+parameter streams (driftsys/ridl#1224).
 
 - **Writes and credit.** One `write` sends one `chunk`, including an empty
   write, and consumes one credit. The initial credit is 4 chunks; each server
@@ -655,8 +658,10 @@ and sends its frames. The server's receiving rules are in
   cannot confirm acceptance of the final chunks or detect every late refusal. A
   refusal the client has already processed errors the upload and rejects a
   pending write or close. An acknowledged command is forgotten when its upload
-  closes; a command still waiting for acknowledgment remains until its response
-  or bound. A query remains for its plain reply.
+  closes, and a `stream_credit` that arrives for it afterwards is ignored
+  without a note (frame specification §11.1); a command still waiting for
+  acknowledgment remains until its response or bound. A query remains for its
+  plain reply.
 - **Acknowledgment and reply.** `accepted` resolves on the command's
   `response accepted`, leaving its upload open. A plain reply within the
   member's limit resolves `reply` with its payload and forgets the query. If the
@@ -906,10 +911,9 @@ on a `v*` tag, and no generated code uses it yet.
   it, and the generated codec module that decodes and encodes a payload are
   built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
   this package by hand.
-- A method combining an upload with a streamed reply, or carrying more than one
-  parameter stream. The two upload methods carry opaque byte chunks on stream 1
-  (D-21); the package checks no named-element payload or UTF-8 text boundary.
-  Rule code 7 decodes as `"utf8"` and reaches callers in a refusal.
+- The upload method limits are recorded in D-23. The package checks no
+  named-element payload or UTF-8 text boundary. Rule code 7 decodes as `"utf8"`
+  and reaches callers in a refusal.
 - An emulator (driftsys/ridl#290). The providing side offers no stream, and no
   generated face over it.
 - Reading a catalog descriptor: the `kind` check, the response bound, the

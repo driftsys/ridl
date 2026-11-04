@@ -29,7 +29,7 @@ choices, see [`../decisions/`](../decisions/).
   sans-IO session core that serves a backend's observe-and-call ports, the
   blocking `serve` over a connection the embedder accepted, the session sequence
   numbers, the correlation map and its duplicate retention, the tests, and the
-  design's decisions D-1 to D-25 with what is not built. The decisions behind
+  design's decisions D-1 to D-28 with what is not built. The decisions behind
   its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 6 as amended 2026-10-19, and
@@ -41,7 +41,7 @@ choices, see [`../decisions/`](../decisions/).
   codec, the consumer's rules it applies without a catalog, the two limits the
   platform sets (no close code on a violation, no client liveness timer), the
   end-to-end tests against the crate's example server, the gates, and the
-  design's decisions D-1 to D-18 with what is not built. The decisions behind
+  design's decisions D-1 to D-21 with what is not built. The decisions behind
   its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 6 and 7, with decision 6 as amended 2026-10-20, and

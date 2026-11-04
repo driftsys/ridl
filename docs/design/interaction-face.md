@@ -455,10 +455,13 @@ runtime's finding, and carries no acceptance value.
 ## Stream forms
 
 Every row below is built in the generated Rust face and exercised over
-`ridl-loopback`. The WebSocket upload direction and the corresponding TypeScript
-client methods are not built yet. The request argument excludes the stream:
-client methods take the ordinary argument by value and provider methods by
-reference; a stream-only request uses its induced empty parameter struct.
+`ridl-loopback`. The WebSocket server's upload support is recorded in
+[D-28](ridl-transport-ws.md); the TypeScript upload methods and their limits are
+recorded in [D-21](ridl-transport-ws-ts.md). The request argument excludes the
+stream: client methods take the ordinary argument by value and provider methods
+by reference; a stream-only request uses its induced empty parameter struct. The
+Rust face omits calls with a `require` clause beside an upload
+(driftsys/ridl#1221).
 
 | Declaration                        | Caller value and methods                                                   | Provider value                                    |
 | ---------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |

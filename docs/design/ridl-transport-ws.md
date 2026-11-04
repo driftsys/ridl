@@ -48,8 +48,8 @@ must be right.
   out, and reproduces every test vector of §11.1 byte for byte.
 - Serves the observe-and-call ports — `SignalReader`, `EventSource`, `Caller` —
   plus `FixedReader` for a `read` of a `fixed`, over WebSocket, and, through
-  `StreamCaller`, the reply stream of a query on a session of frame version 3
-  (D-27).
+  `StreamCaller`, the reply stream of a query (D-27) and parameter streams on
+  commands and queries (D-28) on a session of frame version 3.
 - Detects changed signals with `ScannableSignals` when the backend has it, and
   by reading each subscribed signal when it does not.
 - Builds the member table, which checks `kind` and gives the response bounds,
@@ -648,22 +648,23 @@ responses kept for duplicates are `server/calls.rs`.
   member's bound from the member table (D-10); the `min` keeps §7's "measured
   from the request's `stamp`" when the client's clock is behind, and caps the
   retention when a client stamps ahead, so stamping requests in the future holds
-  no response. A plain-reply query with an upload substitutes the upload end's
-  stamp and receipt as D-28 states. The bound is taken only when the table holds
-  the request's identity as a command or query under the request's `kind`: a
-  request the table refuses (D-12) takes no bound from a member of another kind
-  and is kept as one of the last 64. Expired responses go on each tick. The kept
-  responses are indexed by `seq` and, for those with a bound, by the bound, so a
-  repeat and an expiry pass cost no scan of the kept set (up to the cap, a
-  session may keep hundreds of thousands of small responses). For a member the
-  table gives no bound (a catalog built before the default response bound), or
-  with no table, the server keeps the last 64 as before: a stated deviation from
-  §11.1 item 6 (driftsys/ridl#986, ruled a deviation of this crate on
-  2026-10-23). The retained bytes of a session are capped by
-  `Config::max_retained_bytes` (16 MiB by default, and never below 16,164 bytes,
-  the largest message limit); when a response makes the kept bytes pass the cap,
-  the response is sent, then the session closes with 1008, which `serve` returns
-  as `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
+  no response. A plain-reply query with an upload follows
+  [frame specification §5.4](../specification/frame-specification.md#54-query).
+  The bound is taken only when the table holds the request's identity as a
+  command or query under the request's `kind`: a request the table refuses
+  (D-12) takes no bound from a member of another kind and is kept as one of the
+  last 64. Expired responses go on each tick. The kept responses are indexed by
+  `seq` and, for those with a bound, by the bound, so a repeat and an expiry
+  pass cost no scan of the kept set (up to the cap, a session may keep hundreds
+  of thousands of small responses). For a member the table gives no bound (a
+  catalog built before the default response bound), or with no table, the server
+  keeps the last 64 as before: a stated deviation from §11.1 item 6
+  (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
+  retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
+  by default, and never below 16,164 bytes, the largest message limit); when a
+  response makes the kept bytes pass the cap, the response is sent, then the
+  session closes with 1008, which `serve` returns as
+  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
   server with no table, or one whose members have no bound, closes with 1008
   when its replies are large enough to pass the cap before the ring holds 64. At
   the default message limit, 64 replies are at most 64 × 16,164 = 1,034,496
@@ -893,19 +894,20 @@ chooses.
   polling pass are discarded. An early plain reply interrupts open uploads after
   the response. A reply stream's end interrupts them after that end. Timeout,
   undelivered or down outcomes send no response but interrupt open uploads
-  before forgetting. A session's end forgets all calls and the backend releases
-  their streams with `Transport::Interrupted`.
+  before forgetting. A session's end forgets all calls; the backend's `forget`
+  rules determine stream state and slot release
+  ([the loopback record](ridl-loopback.md#a-claim-is-not-a-correlation)).
 - **Abandonment and retention.** An upload's activity clock restarts on a
   received chunk, a valid normal end, and a drain that pushes a chunk to the
   backend. For a call without a reply stream, an open upload idle for
   `call_abandon_after` is interrupted; the server forgets the call and records
   one `CallAbandoned`. When a command's uploads have ended or stopped but its
   acknowledgment is pending, abandonment is measured from the request's
-  monotonic send time. For a plain-reply query, receipt of the valid upload end
-  replaces that time with the end's monotonic receipt and sets retention to
-  `min(end.stamp, end receipt) + max`, using the backend clock for the latter. A
-  retransmitted request while the upload is in flight is `DuplicateDropped` and
-  leaves it running.
+  monotonic send time. A plain-reply query uses the abandonment and retention
+  origins in
+  [frame specification §5.4](../specification/frame-specification.md#54-query).
+  A retransmitted request while the upload is in flight is `DuplicateDropped`
+  and leaves it running.
 - **Duplex.** Stream 0 is polled while parameter streams remain open, so a reply
   chunk can precede the client's end. Retention stays measured from the request.
   The call is abandoned only when neither the reply stream nor any upload has
@@ -922,11 +924,11 @@ chooses.
 ### The end of a session
 
 **D-18. The session's end.** At every end, in-flight backend calls are forgotten
-(the provider of a streamed reply reads `Transport::Interrupted`, D-27), and
-every backend subscription is dropped with the `Backend` value; then the
-connection is dropped. A backend port that reports `Detached` from any call ends
-the session with close 1001, because the provider is going away. `serve` returns
-an `Ended`:
+(the provider of an unfinished reply stream reads `Transport::Interrupted`,
+D-27), and every backend subscription is dropped with the `Backend` value; then
+the connection is dropped. A backend port that reports `Detached` from any call
+ends the session with close 1001, because the provider is going away. `serve`
+returns an `Ended`:
 
 | `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1199,8 +1201,7 @@ All under `crates/ridl-transport-ws/`.
 - **TypeScript fixture parity** (`tests/ts_ceilings.rs`). The catalog parity
   test compares `UPLOAD`, `UPLOAD_QUERY`, `FETCH`, `FETCH_CHUNK` and both
   refusal modes in `e2e/catalog.ts` with the Rust provider, alongside the fixed
-  ordinals and lengths. Each of the six upload-related comparisons has a
-  recorded assertion-failure mutation and a passing restored run.
+  ordinals and lengths.
 - **TypeScript upload scenarios** (`packages/ridl-transport-ws/e2e/`). The Deno
   tests assert a 200,000-byte command upload and byte-for-byte `FETCH`
   read-back, a query upload's little-endian count and wrapping sum, a range
@@ -1331,12 +1332,12 @@ All under `crates/ridl-transport-ws/`.
   package leaves it out. Its additional stream members are listed below; each
   has a 1 s bound and a 16,128-byte payload limit.
 
-  | Ordinal | Member         | Behavior                                                                                                                                                                                                                                                                           |
-  | ------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | 11      | `UPLOAD`       | Command with arguments `[key, mode]`, accepted at claim; consumes stream 1 into the byte-keyed store, replacing the value at claim. Mode 0 stores; modes 1 and 2 refuse the third chunk with `InvalidValue(Range)` and `InvalidValue(Utf8)` respectively.                          |
-  | 12      | `UPLOAD_QUERY` | Query with argument `[mode]`; consumes stream 1 to its end, then replies with the byte count as little-endian `u64` followed by the wrapping byte sum as little-endian `u32`. Modes 1 and 2 abort the upload as above and settle with the same error.                              |
-  | 13      | `FETCH`        | Query with argument `[key]`; sends the stored value on stream 0 in chunks of `FETCH_CHUNK` (16,128 bytes), then ends. An empty or unknown key ends at once. Pending uploads are consumed before the snapshot; an unfinished upload contributes only bytes available at claim time. |
-  | 14      | `DUPLEX`       | Query that echoes each chunk of stream 1 unchanged on stream 0, respecting backpressure, then ends the reply when the upload ends.                                                                                                                                                 |
+  | Ordinal | Member         | Behavior                                                                                                                                                                                                                                                                                                                                                                    |
+  | ------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 11      | `UPLOAD`       | Command with arguments `[key, mode]`, accepted at claim; consumes stream 1 into the byte-keyed store, replacing the value at claim. Mode 0 stores; modes 1 and 2 refuse the third chunk with `InvalidValue(Range)` and `InvalidValue(Utf8)` respectively.                                                                                                                   |
+  | 12      | `UPLOAD_QUERY` | Query with argument `[mode]`; consumes stream 1 to its end, then replies with the byte count as little-endian `u64` followed by the wrapping byte sum as little-endian `u32`. Modes 1 and 2 abort the upload as above and settle with the same error.                                                                                                                       |
+  | 13      | `FETCH`        | Query with argument `[key]`; sends the stored value on stream 0 in chunks of `FETCH_CHUNK` (16,128 bytes), then ends. If an `UPLOAD` to the key is open when `FETCH` is claimed, the provider holds the fetch until every such upload ends or fails, then snapshots on a later provider step. An empty or unknown key ends at once only when no upload to that key is open. |
+  | 14      | `DUPLEX`       | Query that echoes each chunk of stream 1 unchanged on stream 0, respecting backpressure, then ends the reply when the upload ends.                                                                                                                                                                                                                                          |
 
   Refusals use type name `Block` locally; the frame carries only the rule. The
   provider preserves the first empty chunk, end or failure observed while naming

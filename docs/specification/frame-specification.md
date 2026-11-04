@@ -593,13 +593,15 @@ chunks. It interrupts any open parameter stream as described below.
 **A query with a parameter stream** uploads as a command does (§5.3). For a
 plain reply, its response bound starts at the consumer's `stream_end end`, not
 at the request ([ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 13).
-The WebSocket server also measures retention and abandonment from that end; the
-clock formulas are in [its design record](../design/ridl-transport-ws.md), D-28.
-A provider can refuse an upload before the reply. When discovered before
-settlement, the refusal crosses on stream `k`; a query settled with that error
-also sends its refusing `response`. A refusing response discards upload frames
-queued during that polling pass and terminates the call without an additional
-upload `stream_end`.
+For this plain-reply query, the WebSocket server retains the settled response
+until `min(end.stamp, end receipt) + max`, where `end receipt` is the backend's
+clock when the valid normal upload end arrives. Its abandonment clock also
+restarts at that end's monotonic receipt; open uploads use the activity rules in
+[the server record](../design/ridl-transport-ws.md), D-28. A provider can refuse
+an upload before the reply. When discovered before settlement, the refusal
+crosses on stream `k`; a query settled with that error also sends its refusing
+`response`. A refusing response discards upload frames queued during that
+polling pass and terminates the call without an additional upload `stream_end`.
 
 A query with both an upload and a streamed reply carries both directions
 concurrently. Reply chunks on stream 0 can precede the end of stream `k`. When
@@ -907,9 +909,9 @@ under a key already presented is **not presented again**: the runtime re-sends
 the `response` it gave, when the claim has settled, and sends nothing when it
 has not. Two callers are never merged, even under one `seq`. A provider keeps a
 settled call's response for a call with a response bound until that bound has
-passed, measured from the request's `stamp` (or the upload end for the
-plain-reply query of §5.4); for a call with no response bound, the binding fixes
-the retention and states it.
+passed, measured from the request's `stamp`, with the plain-reply upload
+exception in [§5.4](#54-query). For a call with no response bound, the binding
+fixes the retention and states it.
 
 **A retransmitted `request` of a streamed reply** is answered, once the stream
 has ended, with one `stream_end` whose outcome is `interrupted` and whose `seq`
@@ -932,11 +934,11 @@ nothing in a process is lost. `ridl-transport-ws` suppresses a duplicate
 `request` and keeps each settled response until the request's bound has passed,
 measured from the request's `stamp` or from the provider's clock at receipt,
 whichever is earlier, when its member table gives the member a bound. For a
-plain-reply query with an upload, the end's stamp and receipt replace the
-request's (§5.4). For a member the table gives no bound, or when the embedder
-gives it no table, it keeps the last 64 settled responses of the session
-instead. That fallback is a deviation of this crate, stated here and in its
-design record, and not a rule of the binding (driftsys/ridl#986).
+plain-reply query with an upload, [§5.4](#54-query) gives the retention rule.
+For a member the table gives no bound, or when the embedder gives it no table,
+it keeps the last 64 settled responses of the session instead. That fallback is
+a deviation of this crate, stated here and in its design record, and not a rule
+of the binding (driftsys/ridl#986).
 
 ## 8. Timing
 
@@ -952,8 +954,7 @@ failure outside this document (ridl §10.4).
 | `max`, staleness bound | the **consuming** runtime computes `Freshness` on every read: `Fresh` while `now − stamp ≤ max`, else `Stale { by: now − stamp − max }`; `Unbounded` with no `max` | the **consuming** runtime discards an occurrence with `now − stamp > max` inside `EventSource::next` | the **calling** runtime reports `Transport::Undelivered` (command) or `Transport::Timeout` (query) through `ack` or `reply` once `now − request stamp > max` with no `response`; the **providing** runtime presents `Claim.remaining = max − (now − request stamp)`, `None` with no `max` |
 | `min`, rate floor      | the **providing** runtime coalesces a faster `set` into the next publication                                                                                       | the **providing** runtime refuses a faster `raise` with `RaiseError::Busy`, or delays it             | the **providing** runtime may refuse a faster call at admission, and answers with `busy`                                                                                                                                                                                                  |
 
-The plain-reply query with an upload uses the upload end as the response-bound
-origin (§5.4).
+The plain-reply upload exception is in [§5.4](#54-query).
 
 **A streamed reply.** The response bound of a query whose reply is a stream
 covers the start of the reply and not the whole stream
@@ -1352,9 +1353,10 @@ call has an outcome, because every call has a response bound
 the `response`, `Undelivered` or `Timeout` at the bound (§8), or `Down` at the
 session's end (§3).
 
-**6. Retention.** The provider keeps a settled response until the request's
-bound has passed, as §7 states; no call is without a bound, so the binding
-states no further retention.
+**6. Retention.** The provider keeps a settled response until the call's bound
+has passed, as §7 states, with the plain-reply upload exception in
+[§5.4](#54-query). No call is without a bound, so the binding states no further
+retention.
 
 **7. Grouping.** None. The frames of one commit cross as separate messages, and
 a runtime over this binding does not present `CoherentSignals`.
@@ -1506,11 +1508,13 @@ For a parameter stream, the consumer is the sender and the provider grants one
 credit per chunk taken by its backend, combining the credits from one drain into
 one frame, unless it has received the consumer's `stream_end` for that stream.
 After that end, queued chunks still reach the backend but return no credit
-because the consumer sends no more chunks. An empty chunk is one chunk and
-consumes one credit; it returns credit under the same rule. The provider holds
-at most 4 queued chunks per parameter stream and pushes the end only after those
-chunks. Exceeding credit closes the session with 1002; a chunk above the
-member's limit ends the stream as `corrupt` and forgets the call
+because the consumer sends no more chunks. A `stream_credit` the provider sent
+before it received that end can reach the consumer after the consumer has
+forgotten the call; the consumer ignores it and records nothing. An empty chunk
+is one chunk and consumes one credit; it returns credit under the same rule. The
+provider holds at most 4 queued chunks per parameter stream and pushes the end
+only after those chunks. Exceeding credit closes the session with 1002; a chunk
+above the member's limit ends the stream as `corrupt` and forgets the call
 ([the server design](../design/ridl-transport-ws.md), D-28).
 
 **Framing.** A stream frame that is wrong by itself (§4, "The stream forms") is
