@@ -408,6 +408,12 @@ The streams stage 4 plan (`2026-11-01-streams-stage-4-plan.md`) was archived on
 durable records. The streams design stays here, because stages 5 and 6 build on
 it.
 
+The streams stage 5a plan (`2026-11-02-streams-stage-5a-plan.md`) was archived
+on 2026-11-04, once the work landed (driftsys/ridl#1222);
+[`../design/interaction-face.md`](../design/interaction-face.md) and
+[`../design/ridl-rt.md`](../design/ridl-rt.md) are its durable records. The
+streams design stays here, because stages 5b and 6 build on it.
+
 ## Files that stay after the 0.10.0 gardening pass (2026-10-13)
 
 Each file below was read against the code and the issue tracker on 2026-10-13

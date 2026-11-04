@@ -835,3 +835,14 @@ provenance. Nothing here is normative — the current references live in
   [the CLI reference](../book/cli-reference.md#baseline-context), and
   [the stability policy](../decisions/ADR-0029-stability-policy.md). The target
   and minimum supporting tool release is 0.15.0; publication is separate work.
+
+- **2026-11-02-streams-stage-5a-plan.md** — the plan for stage 5a of the streams
+  work: the Rust face of every stream form over `ridl-loopback` (byte and text
+  reply streams, commands and queries with one parameter stream, the `pipe`
+  form, and the docstore example). Archived verbatim, on 2026-11-04, once the
+  work landed in driftsys/ridl#1222 (squash `2feb58f7`). The durable records are
+  [the interaction face design](../design/interaction-face.md),
+  [the ridl-rt design](../design/ridl-rt.md),
+  [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
+  [the frame specification](../specification/frame-specification.md). Stage 5b
+  continues from `docs/wip/2026-10-31-streams-design.md`.
