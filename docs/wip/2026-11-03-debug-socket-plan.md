@@ -948,3 +948,11 @@ name it.
   `Transport::Corrupt`, so the call ends and no claim waits for its deadline.
   The TypeScript consumer returns `unexpected-outcome` and leaves its call
   unsettled; the two consumers differ, and the design record states both.
+- **R-DS-7 (Task 11 stop, 2026-11-04).** A browser's or Deno's `WebSocket`
+  cannot close with 1002 or 1003 and does not show pings to the page. The
+  TypeScript providing side therefore follows the TypeScript consumer's D-10 and
+  D-11 (`docs/design/ridl-transport-ws-ts.md`) exactly: on a violation it calls
+  `close()` with no code and records the violation through `onNote`; it has no
+  client liveness timer, and the server's liveness check is the one that runs.
+  driftsys/ridl#991 already asks the frame specification to state what such a
+  client does; it covers the reversed role too.
