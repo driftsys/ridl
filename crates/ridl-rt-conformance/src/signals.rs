@@ -268,3 +268,92 @@ pub fn a_value_longer_than_the_signal_limit_is_refused_and_not_staged<F: Factory
     rt.set(IFACE, ORD, &[0u8; 3_840])
         .expect("a value of exactly the default ceiling is accepted");
 }
+
+fn reject_ff(bytes: &[u8]) -> Result<(), ridl_rt::sample::Detection> {
+    if bytes.first() == Some(&0xFF) {
+        Err(ridl_rt::sample::Detection::InvalidValue(
+            ridl_rt::payload::Violation {
+                type_name: Some("Conformance"),
+                rule: ridl_rt::payload::Rule::Range,
+            },
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// A rejected publication keeps the good bytes and takes the rejected envelope;
+/// a later good publication clears the detection.
+pub fn a_payload_that_fails_its_check_keeps_the_last_good_value<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.check_with(IFACE, ORD, reject_ff);
+    rt.set(IFACE, ORD, &[7]).expect("set");
+    rt.commit();
+    rt.set(IFACE, ORD, &[0xFF]).expect("set");
+    rt.commit();
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(
+        raw.provenance,
+        Provenance::Invalid(Cause::Detected(reject_ff(&[0xFF]).unwrap_err()))
+    );
+    assert_eq!(&out[..raw.len], &[7]);
+    assert_eq!(raw.envelope.seq, 2);
+    rt.set(IFACE, ORD, &[8]).expect("set");
+    rt.commit();
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(raw.provenance, Provenance::Live);
+    assert_eq!(&out[..raw.len], &[8]);
+}
+
+/// A rejected first publication has no value to copy.
+pub fn a_payload_that_fails_its_check_before_any_good_value_copies_nothing<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.check_with(IFACE, ORD, reject_ff);
+    rt.set(IFACE, ORD, &[0xFF]).expect("set");
+    rt.commit();
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(
+        raw.provenance,
+        Provenance::Invalid(Cause::Detected(reject_ff(&[0xFF]).unwrap_err()))
+    );
+    assert_eq!(raw.len, 0);
+    assert_eq!(raw.envelope.seq, 1);
+}
+
+/// Registering checks a held Live value without publishing a new envelope.
+pub fn a_check_registered_over_a_held_value_checks_it<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.set(IFACE, ORD, &[0xFF]).expect("set");
+    rt.commit();
+    rt.check_with(IFACE, ORD, reject_ff);
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(
+        raw.provenance,
+        Provenance::Invalid(Cause::Detected(reject_ff(&[0xFF]).unwrap_err()))
+    );
+    assert_eq!(raw.len, 0);
+    assert_eq!(raw.envelope.seq, 1);
+}
+
+/// A touch keeps both the last good bytes and the detection.
+pub fn a_touch_after_a_failed_check_keeps_the_detection<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.check_with(IFACE, ORD, reject_ff);
+    rt.set(IFACE, ORD, &[7]).expect("set");
+    rt.commit();
+    rt.set(IFACE, ORD, &[0xFF]).expect("set");
+    rt.commit();
+    rt.touch(IFACE, ORD).expect("touch");
+    rt.commit();
+    let mut out = [0u8; 8];
+    let raw = rt.read(IFACE, ORD, &mut out).expect("read");
+    assert_eq!(
+        raw.provenance,
+        Provenance::Invalid(Cause::Detected(reject_ff(&[0xFF]).unwrap_err()))
+    );
+    assert_eq!(&out[..raw.len], &[7]);
+    assert_eq!(raw.envelope.seq, 3);
+}

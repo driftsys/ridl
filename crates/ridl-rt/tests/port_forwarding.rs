@@ -57,6 +57,7 @@ const TRACE: TraceContext = TraceContext {
 /// trace context its send methods receive.
 #[derive(Default)]
 struct Stub {
+    checks: std::cell::RefCell<Vec<(InterfaceNo, Ordinal, ridl_rt::port::Check)>>,
     raised: Option<TraceContext>,
     commanded: Option<TraceContext>,
     queried: Option<TraceContext>,
@@ -77,6 +78,9 @@ impl Clock for Stub {
 }
 
 impl SignalReader for Stub {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: ridl_rt::port::Check) {
+        self.checks.borrow_mut().push((iface, ord, check));
+    }
     fn read(&self, _: InterfaceNo, _: Ordinal, _: &mut [u8]) -> Result<RawSample, ReadError> {
         Ok(RAW)
     }
@@ -472,4 +476,24 @@ fn stream_caller_and_stream_handler_forward_through_mut_ref() {
         [0, 1, 2, 3, 4, 5, 0, 6].map(StreamNo),
         "every stream number arrives unchanged"
     );
+}
+
+/// Both reference impls pass the signal key and check to the inner port.
+#[test]
+fn check_with_through_references_reaches_the_inner_port() {
+    fn reject(_: &[u8]) -> Result<(), ridl_rt::sample::Detection> {
+        Err(ridl_rt::sample::Detection::Corrupt)
+    }
+    fn register<P: SignalReader>(port: P) {
+        port.check_with(IFACE, ORD, reject);
+    }
+    let mut port = Stub::default();
+    register(&port);
+    register(&mut port);
+    let checks = port.checks.borrow();
+    assert_eq!(checks.len(), 2);
+    for (iface, ord, check) in checks.iter() {
+        assert_eq!((*iface, *ord), (IFACE, ORD));
+        assert_eq!(check(&[7]), Err(ridl_rt::sample::Detection::Corrupt));
+    }
 }

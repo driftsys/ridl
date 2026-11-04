@@ -31,10 +31,10 @@ adds:
 | Module        | Contents                                                                                                                                                                                                                                                                                                                                                       |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `Podbuf`                                                                                                                                                                                                                                                                                                         |
-| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                                                                                                      |
+| `payload`     | `Payload<E>`, `check`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                                                                                             |
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                                                                                                   |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`; `SIGNAL_EVENT_CEILING`, `CALL_CEILING`, `FIXED_CEILING` and `default_ceiling`, the default ceilings of the catalog rule |
-| `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                                |
+| `port`        | `Attached`, `Encoded`, `Clock`, `Check`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                       |
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                                                                          |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                                                                           |
 | `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements; `Source`, `ByteSource`, `Consumer`, `ByteConsumer` and `Interrupted`, the stream traits and interruption an application supplies — the section "The face traits" below                                          |
@@ -719,7 +719,10 @@ pub trait Clock { fn now(&self) -> Timestamp; }   // one per runtime; not Attach
 
 pub trait Encoded { type Encoding: Encoding; }    // the bytes' encoding; not a supertrait of Attached
 
+pub type Check = fn(&[u8]) -> Result<(), Detection>;
+
 pub trait SignalReader: Attached {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check);
     fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8]) -> Result<RawSample, ReadError>;
 }
 pub struct RawSample { pub provenance: Provenance, pub freshness: Freshness, pub envelope: Envelope, pub len: usize }
@@ -874,8 +877,22 @@ working spec used does not compile, and `generation` also matches the name of
 
 Semantics each implementation presents:
 
+- **`SignalReader::check_with`** registers or replaces a `Check` for a signal.
+  From registration on, the runtime calls it on each received `Live` payload
+  before replacing the held bytes. A failure keeps the last good bytes (zero
+  bytes when there are none), reports `Invalid(Detected(d))`, and takes the
+  rejected publication's envelope. A later passing payload restores `Live`.
+  Registration also checks a held `Live` value immediately: failure clears its
+  bytes and records the detection with its held envelope. Registration advances
+  neither the generation nor the sequence number. The function calls no port, so
+  the runtime may invoke it while holding its own lock. `payload::check::<T, E>`
+  supplies this function from `Ref::<T, E>::verify`: `VerifyError::Contract(v)`
+  becomes `Detection::InvalidValue(v)` and every other error becomes
+  `Detection::Corrupt`.
 - **`SignalReader::read`** copies the slot into `out` and returns the
-  provenance, the freshness and the envelope; the runtime resolves both.
+  provenance, the freshness and the envelope; the runtime resolves both. A
+  sample under `Init` or `Invalid(_)` may carry zero bytes; the generated face
+  supplies the init value and preserves that provenance.
 - **`SignalWriter`**: `set` stages a value, `invalidate` stages the ridl §4.5
   invalid transition with `Cause::Declared`, `touch` re-affirms without a new
   value, and `commit` publishes everything staged under one generation increment

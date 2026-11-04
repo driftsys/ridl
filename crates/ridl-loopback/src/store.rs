@@ -51,8 +51,9 @@ use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal, StreamNo};
 use ridl_rt::correlate::{Forgotten, Settled, Table, Waiters};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
-    Changed, Claim, ClaimId, Correlation, Interest, Pull, PushError, RaiseError, RawOccurrence,
-    RawSample, ReadError, SendError, SettleError, Watermark, WriteError, REPLY_STREAM,
+    Changed, Check, Claim, ClaimId, Correlation, Interest, Pull, PushError, RaiseError,
+    RawOccurrence, RawSample, ReadError, SendError, SettleError, Watermark, WriteError,
+    REPLY_STREAM,
 };
 use ridl_rt::sample::{Cause, Envelope, Freshness, Provenance, Timestamp};
 use ridl_rt::trace::TraceContext;
@@ -165,8 +166,8 @@ impl StreamState {
 struct SignalEntry {
     bytes: Vec<u8>,
     envelope: Envelope,
-    /// `true` after `invalidate`, cleared by the next `set`.
-    invalid: bool,
+    /// The provenance of the last publication, including a rejected set.
+    provenance: Provenance,
     /// The interface generation this entry last changed at, which is what
     /// [`Store::scan`] selects on.
     changed_at: u64,
@@ -364,6 +365,7 @@ impl CallEntry {
 pub(crate) struct Store {
     now: Timestamp,
     signals: BTreeMap<Key, SignalEntry>,
+    checks: BTreeMap<Key, Check>,
     generations: BTreeMap<InterfaceNo, u64>,
     fixed: BTreeMap<Key, Vec<u8>>,
     /// The limit of each member `set_limit` was given, in bytes. A member
@@ -399,6 +401,7 @@ impl Store {
         Store {
             now: Timestamp(0),
             signals: BTreeMap::new(),
+            checks: BTreeMap::new(),
             generations: BTreeMap::new(),
             fixed: BTreeMap::new(),
             limits: BTreeMap::new(),
@@ -457,6 +460,19 @@ impl Store {
 
     // -- signals -----------------------------------------------------------
 
+    pub(crate) fn check_with(&mut self, iface: InterfaceNo, ord: Ordinal, check: Check) {
+        let key = (iface, ord);
+        self.checks.insert(key, check);
+        if let Some(entry) = self.signals.get_mut(&key) {
+            if entry.provenance == Provenance::Live {
+                if let Err(detection) = check(&entry.bytes) {
+                    entry.bytes.clear();
+                    entry.provenance = Provenance::Invalid(Cause::Detected(detection));
+                }
+            }
+        }
+    }
+
     pub(crate) fn read(
         &self,
         iface: InterfaceNo,
@@ -504,12 +520,23 @@ impl Store {
             let changed_at = self.generations[&key.0];
             let envelope = Envelope { stamp, seq };
             let previous = self.signals.get(&key);
-            let (bytes, invalid) = match op {
-                Staged::Set(bytes) => (bytes, false),
-                Staged::Invalidate => (previous.map(|e| e.bytes.clone()).unwrap_or_default(), true),
+            let (bytes, provenance) = match op {
+                Staged::Set(bytes) => {
+                    match self.checks.get(&key).map_or(Ok(()), |check| check(&bytes)) {
+                        Ok(()) => (bytes, Provenance::Live),
+                        Err(detection) => (
+                            previous.map(|e| e.bytes.clone()).unwrap_or_default(),
+                            Provenance::Invalid(Cause::Detected(detection)),
+                        ),
+                    }
+                }
+                Staged::Invalidate => (
+                    previous.map(|e| e.bytes.clone()).unwrap_or_default(),
+                    Provenance::Invalid(Cause::Declared),
+                ),
                 Staged::Touch => {
                     let entry = previous.expect("an unpublished touch was dropped above");
-                    (entry.bytes.clone(), entry.invalid)
+                    (entry.bytes.clone(), entry.provenance)
                 }
             };
             self.signals.insert(
@@ -517,7 +544,7 @@ impl Store {
                 SignalEntry {
                     bytes,
                     envelope,
-                    invalid,
+                    provenance,
                     changed_at,
                 },
             );
@@ -1910,11 +1937,7 @@ fn unpublished() -> RawSample {
 
 fn sample_of(entry: &SignalEntry) -> RawSample {
     RawSample {
-        provenance: if entry.invalid {
-            Provenance::Invalid(Cause::Declared)
-        } else {
-            Provenance::Live
-        },
+        provenance: entry.provenance,
         // Every value is `Unbounded`: freshness is measured against a member's
         // staleness bound, and the loopback has no member table to read one
         // from.

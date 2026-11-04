@@ -844,10 +844,10 @@ When accepted, these records gain a dated note or are changed in place:
     `Invalid(Detected(Corrupt))`, an event's occurrence carries `Err(Corrupt)`,
     a request is answered `corrupt`, a reply is `CallError::Transport(Corrupt)`,
     and a fixed's read reports the detection. This is a check of length, not a
-    verification, so the rule that a runtime never verifies (frame specification
-    §9) is unchanged. An embedder that calls `verify` on bytes that no binding
-    has checked, such as the gate of the podbuf trust model (ADR-0031), checks
-    the length against the interaction's limit itself.
+    verification, so the rule that a runtime never verifies on its own (frame
+    specification §9) is unchanged. An embedder that calls `verify` on bytes
+    that no binding has checked, such as the gate of the podbuf trust model
+    (ADR-0031), checks the length against the interaction's limit itself.
 
     Before this decision was built, the codecs differed: the generated
     FlatBuffers and podbuf `verify` refused a buffer longer than the type's

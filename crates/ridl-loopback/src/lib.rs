@@ -14,9 +14,11 @@
 //! - **Not the engine.** The store below is a map and a queue, not the seqlock
 //!   store, the sans-IO session, the platform traits and the scheduler, which
 //!   are outside this repository.
-//! - **Not a checker.** Payload bytes are opaque to it: it carries them and
-//!   never verifies one. `Payload::verify` is the generated face's, on both
-//!   sides.
+//! - **Not a payload type owner.** Payload bytes are opaque to it: it names no
+//!   payload type and never verifies a payload on its own. It calls the check
+//!   the generated binding registers for a signal
+//!   (`ridl_rt::port::SignalReader::check_with`) on each payload it commits for
+//!   that signal.
 //!
 //! # The handles
 //!
@@ -473,6 +475,9 @@ impl<E: Encoding> Clock for Loopback<E> {
 }
 
 impl<E: Encoding> SignalReader for Loopback<E> {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: ridl_rt::port::Check) {
+        self.handles.reader.check_with(iface, ord, check);
+    }
     fn read(
         &self,
         iface: InterfaceNo,

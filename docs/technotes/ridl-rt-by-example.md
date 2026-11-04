@@ -159,17 +159,19 @@ you read it, three questions are open that a bare value cannot answer.
 **Has anyone published yet, and is the channel healthy?** That is `Provenance`
 (ridl §4.5):
 
-| `Provenance`     | Meaning                                                                    |
-| ---------------- | -------------------------------------------------------------------------- |
-| `Init`           | No publication yet. `value` is the channel's init value.                   |
-| `Live`           | `value` is the latest publication.                                         |
-| `Invalid(Cause)` | The channel is invalid. `value` is the last good value, or the init value. |
+| `Provenance`     | Meaning                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `Init`           | No publication yet. `value` is the channel's init value.                                      |
+| `Live`           | `value` is the latest publication.                                                            |
+| `Invalid(Cause)` | The channel is invalid. `value` is the last good value, or the init value when there is none. |
 
 `value` is never absent. That is deliberate: a consumer that wants to proceed
 with the init value can ignore the provenance, and one that must not proceed
 reads the provenance. A `Cause` is either `Declared` — the provider called
-`invalidate` — or `Detected(Detection)`, which is the consumer's own binding
-reporting that the bytes it received did not pass their check.
+`invalidate` — or `Detected(Detection)`, which reports a failed check that the
+binding registered on the runtime. The runtime keeps the last good bytes;
+[the port contract](../design/ridl-rt.md#the-ports) defines registration and
+receipt, including the case with no good value yet.
 
 **Is the value too old?** That is `Freshness`, measured against the staleness
 bound the `@` annotation sets (ridl §9): `Fresh`, `Stale { by: Duration }`, or
@@ -192,14 +194,22 @@ That is the whole of `Sample::usable`: provenance is `Live` and freshness is not
 ### The first port: `SignalReader`
 
 For `Client::temperature` to exist, the port must be able to read a signal. That
-is the first trait, and it is one method:
+is the first trait:
 
 ```rust
+pub type Check = fn(&[u8]) -> Result<(), Detection>;
+
 pub trait SignalReader: Attached {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check);
     fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8])
         -> Result<RawSample, ReadError>;
 }
 ```
+
+`Client::new` registers `payload::check::<Temperature, P::Encoding>` for the
+signal before storing its port. A read decodes the runtime's held good bytes;
+when `Init` or `Invalid(_)` carries zero bytes, it supplies the init value and
+preserves the runtime's cause. It still verifies nonempty bytes defensively.
 
 Three things about it explain most of the rest of the port module.
 
@@ -231,8 +241,8 @@ pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError> {
     let mut buf = [0u8; <Temperature as Payload<FlatBuffers>>::MAX_SIZE];
     let raw = self.port.read(Cabin::NUMBER, Ordinal(1u32), &mut buf)?;
     let (value, provenance) = match raw.provenance {
-        // No publication yet, or an invalidation before any: no bytes to check.
-        Provenance::Init | Provenance::Invalid(Cause::Declared) if raw.len == 0 => {
+        // No publication yet, or no good value held: no bytes to decode.
+        Provenance::Init | Provenance::Invalid(_) if raw.len == 0 => {
             (CabinTemperature::init(), raw.provenance)
         }
         _ => match Ref::<Temperature, FlatBuffers>::verify(&buf[..raw.len]) {
@@ -257,9 +267,10 @@ constants. There is no lookup at run time.
 **A payload that fails its check is not an error.** The read succeeded; the
 bytes were bad. Turning that into `Err` would force every consumer to handle a
 case the `Provenance` already models, so the generated code reports it as
-`Provenance::Invalid(Cause::Detected(..))` and gives you the init value to
-proceed with. The `ReadError` in the signature covers the read itself — the
-buffer was too short, or the runtime behind the port is gone.
+`Provenance::Invalid(Cause::Detected(..))` and gives you the last good value the
+runtime kept, or the init value when there is none. The `ReadError` in the
+signature covers the read itself — the buffer was too short, or the runtime
+behind the port is gone.
 
 The `Payload`, `Ref` and `FlatBuffers` names are the encoding machinery. Step 3
 covers them; for now, `verify` checks bytes and `decode` turns checked bytes

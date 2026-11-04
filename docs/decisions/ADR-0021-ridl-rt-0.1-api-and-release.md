@@ -223,6 +223,11 @@ keeps the two equal.
 amendment in place; the approval of the break is recorded in
 [ADR-0029](ADR-0029-stability-policy.md).
 
+**Amendment (2026-11-04) — decision 23** adds signal check registration and
+answers open item 4. A note on decision 17 extends its zero-bytes rule to every
+`Invalid(_)` cause. It records the approved API and generated-crate break for
+driftsys/ridl#526.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -993,7 +998,10 @@ trusted with no `unsafe` and no second verification pass.
     state it: a sample whose provenance is `Init` or `Invalid(Declared)` may
     carry zero bytes, because the runtime has no value to copy, and the
     generated face then returns the channel's init value under that provenance.
-    The doc comment says so since this amendment.
+    The doc comment says so since this amendment. Since decision 23
+    (2026-11-04), the rule covers every `Invalid(_)` cause: a runtime that runs
+    a registered check reports `Invalid(Detected(_))` with zero bytes when a
+    payload fails the check and no good value is held.
 
     **Amendment (2026-10-10) — the helpers move onto `Sizes<E>`.**
     `Encoding::max_size`, `Member::reservation::<E>()` and
@@ -1232,6 +1240,21 @@ trusted with no `unsafe` and no second verification pass.
     - **Generated code.** This decision adds the hook and does not call it. The
       generated face still passes `None` until generated observation lands.
 
+23. **Amendment (2026-11-04) — the runtime keeps a signal's last good bytes
+    through a check registered by the binding.** `SignalReader` gains the
+    required `check_with(&self, iface: InterfaceNo, ord: Ordinal, check: Check)`
+    method, and `port::Check` is `fn(&[u8]) -> Result<(), Detection>`.
+    `payload::check::<T, E>` adapts `Ref::<T, E>::verify` to that function. The
+    [port design record](../design/ridl-rt.md#the-ports) states its receipt and
+    registration contract. The generated binding registers one check per signal
+    at binding, and the runtime keeps the bytes. No face-side cache or
+    allocation is needed. This answers open item 4 and preserves ADR-0020
+    decision 6: the runtime names no payload type. The required method breaks
+    external runtime implementations, and generated crates need this version of
+    `ridl-rt`. The `runtime-crates` and `generated-crate` baseline rows are
+    removed under [the approved-break procedure](../../freeze/README.md), with
+    both surfaces still required for a release. Refs driftsys/ridl#526.
+
 ## Alternatives considered
 
 | Question                    | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
@@ -1328,7 +1351,8 @@ trusted with no `unsafe` and no second verification pass.
    without a break, as inherent methods of a generated type that does not exist
    yet ([the proto3 codec design record](../design/proto3-codec.md)).
 4. **How a generated binding keeps a signal's last good value with no `alloc`**
-   — the Rust codegen's question, once it starts consuming this crate.
+   — answered 2026-11-04 by decision 23: the runtime keeps the bytes; the
+   binding registers the check.
 5. **`Box<P>` forwarding** (decision 11), deferred until a cargo feature brings
    `alloc` into this crate and something needs a boxed port.
 
@@ -1401,6 +1425,12 @@ trusted with no `unsafe` and no second verification pass.
 | `crates/ridl-rt-conformance/src/scannable.rs`                                                    | the scan contract tests no longer build or assert `Watermark::seq` (decision 10's 2026-10-12 amendment)                                                                                                                                                                                                                          |
 | `crates/ridl-rt/README.md`                                                                       | the README says that the API questions the reviews of 0.1 raised are settled and links driftsys/ridl#350 (decision 10's 2026-10-12 amendment)                                                                                                                                                                                    |
 | [the `ridl-rt` design record](../design/ridl-rt.md), "Versioning"                                | the section points to this decision's 2026-10-12 amendment as the record that settled driftsys/ridl#350's API questions                                                                                                                                                                                                          |
+| [frame-specification.md](../specification/frame-specification.md)                                | Section 9 states registration without runtime type knowledge; section 5.1 covers init on rejection and dropping the last good value on unsubscribe. (2026-11-04, decision 23)                                                                                                                                                    |
+| [ridl-rt.md](../design/ridl-rt.md)                                                               | The ports define Check and check_with; payload::check adapts verification. (2026-11-04, decision 23)                                                                                                                                                                                                                             |
+| [interaction-face.md](../design/interaction-face.md)                                             | Bind::new registers signal checks; reads preserve zero-byte invalid causes. (2026-11-04, decision 23)                                                                                                                                                                                                                            |
+| [ridl-loopback.md](../design/ridl-loopback.md)                                                   | Commit calls the shared check; touch preserves detections and invalidate declares invalidity. (2026-11-04, decision 23)                                                                                                                                                                                                          |
+| [ridl-transport-ws.md](../design/ridl-transport-ws.md)                                           | D-13 covers a backend check reporting Detected. (2026-11-04, decision 23)                                                                                                                                                                                                                                                        |
+| [ridl-rt-by-example.md](../technotes/ridl-rt-by-example.md)                                      | The signal sketch includes registration and the invalid-value rule. (2026-11-04, decision 23)                                                                                                                                                                                                                                    |
 
 ## References
 

@@ -163,6 +163,9 @@ impl<E: Encoding> Wakeable for ReaderHandle<E> {
 }
 
 impl<E: Encoding> SignalReader for ReaderHandle<E> {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: ridl_rt::port::Check) {
+        lock(&self.shared).check_with(iface, ord, check);
+    }
     fn read(
         &self,
         iface: InterfaceNo,

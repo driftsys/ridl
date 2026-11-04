@@ -651,8 +651,10 @@ bytes are the value the provider set.
   `2a 07` and gets `accepted`, receives the `live` publish whose payload is
   `2a 07` and the occurrence with the same payload, sends the query and checks
   the reply, and closes with 1000 with no violation recorded. This is the
-  sequence of the crate's scenario, so the two clients are checked against one
-  provider behaviour. Between the `fixed` and the signal, the test also reads
+  sequence of the crate's scenario without its last step, so the two clients are
+  checked against one provider behaviour. The last step registers a signal
+  check, which the package does not take because it verifies no payload
+  (driftsys/ridl#1236). Between the `fixed` and the signal, the test also reads
   the three large `fixed` values (ordinals 7 to 9 of `e2e/catalog.ts`, 65,280,
   16,137 and 16,138 bytes) and compares every byte with the pattern. A second
   test opens a raw socket without the package's `Session`, sends `attach` and

@@ -35,6 +35,9 @@ impl Clock for Attachment {
 }
 
 impl SignalReader for Attachment {
+    fn check_with(&self, iface: InterfaceNo, ord: Ordinal, check: ridl_rt::port::Check) {
+        self.ports.check_with(iface, ord, check);
+    }
     fn read(
         &self,
         iface: InterfaceNo,

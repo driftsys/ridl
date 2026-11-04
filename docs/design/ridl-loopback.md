@@ -27,7 +27,8 @@ Three things this crate is not.
 - **Not the engine.** The store here is a map and a queue behind one lock. The
   seqlock store, the sans-IO session, the platform traits and the scheduler are
   outside this repository (the 2026-09-12 re-scope, section 3.7).
-- **Not a checker.** Payload bytes are opaque to it.
+- **Not a payload type owner.** It calls checks the generated binding registers.
+  Payload bytes remain opaque to it.
 
 What it is for: the round trips of the generated face, an example a reader can
 run, and a single-process application. It is a reference in the sense that a
@@ -278,12 +279,21 @@ value under `Provenance::Invalid(Cause::Declared)`, the provider's own
 provenance, the same way it reports an unpublished read as the init value under
 `Provenance::Init`: the accessor checks the port's reported provenance and
 length before running `Payload::verify`, and skips it only when the provenance
-is `Init` or `Invalid(Declared)` and the length is zero (driftsys/ridl#517).
-Under every other provenance, `verify` still runs, including over zero bytes: a
+is `Init` or `Invalid(_)` and the length is zero (driftsys/ridl#517). Under
+every other provenance, `verify` still runs, including over zero bytes: a
 zero-length `Live` sample, for instance, runs `verify` and is reported as
 `Invalid(Detected(Corrupt))`, not as the init value. The generated `Publisher`
 does emit `invalidate_<name>`, so a provider that invalidates before its first
 `set` reaches this path.
+
+A `Check` registered through `Loopback`, `ReaderHandle` or `Attachment` lives in
+the shared store and applies to every reader of that store. At commit a `set`
+runs it before replacing the bytes, following the
+[port contract](ridl-rt.md#the-ports). A rejected set keeps the last good bytes
+and the check's detection, while taking the new sequence number, timestamp and
+interface generation. A later passing set returns to `Live`. A `touch` keeps the
+bytes and provenance, including a detection; `invalidate` keeps the bytes and
+changes the cause to `Declared`.
 
 ## Waking
 
@@ -767,40 +777,19 @@ number unique per channel, which is the reading ADR-0021 decision 5 replaces.
 
 ## Payload bytes are opaque
 
-**The runtime carries bytes and never verifies a payload** (driftsys/ridl#309).
-`Payload::verify` belongs to the generated face, on both sides: the consumer
-checks what it reads, and the provider's `dispatch` checks the argument bytes it
-is handed.
+**The runtime carries bytes and names no payload type.** A signal's check is
+registered by the generated binding and called by the store, as described under
+[State on a handle, state in the store](#state-on-a-handle-state-in-the-store).
+Other payload verification stays in the generated face: event reads and provider
+dispatch verify the bytes they receive. Argument bytes that fail the structure
+check settle `CallError::Transport(Transport::Corrupt)`, pinned by
+`round_trip_malformed_argument_bytes_settle_transport_corrupt`.
 
-So what happens to an invalid event payload is decided entirely by the generated
-face, not here. On the provider side a round trip over this crate pins it:
-argument bytes that fail the structure check settle
-`CallError::Transport(Transport::Corrupt)`
-(`round_trip_malformed_argument_bytes_settle_transport_corrupt`). On the
-consumer side, a signal payload that fails its check reports
-`Provenance::Invalid(Cause::Detected(Detection::Corrupt))`, which is pinned as
-an assertion on the emitted text
-(`crates/ridl-backend-rust/tests/face_generation.rs`) and by a round trip over
-this crate (`round_trip_signal_with_malformed_bytes_settles_detected_corrupt`,
-which writes the malformed bytes directly through `SignalWriter`, bypassing the
-generated `Publisher`'s encoder). Two cases have no payload to check at all, and
-the face returns the init value under the port's own provenance without running
-`Payload::verify`, rather than treating the empty bytes as corrupt
-(driftsys/ridl#517): a never-published signal, where the port reports
-`Provenance::Init` with zero bytes, pinned by
-`round_trip_signal_reads_as_init_before_any_publication` over this crate and by
-`ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` over a
-hand-written port; and a signal invalidated with no prior publication, where the
-port reports `Provenance::Invalid(Cause::Declared)` with zero bytes, pinned by
-`round_trip_signal_reads_as_init_when_invalidated_before_any_publication` over
-this crate. Nothing here depends on how the reference words the rule, because
-this crate never looks; the ridl reference states the event rule (ridl §5.1)
-since driftsys/ridl#544, matching frame specification §9.2.
-
-The alternative rejected is a runtime that verifies. It cannot: a port carries
-interface numbers, ordinals and bytes and names no payload type, so the runtime
-has no `Payload` implementation to call. Giving it one would put the generated
-types below the port, which is the layering ADR-0020 decision 6 fixes.
+Signal round trips in `crates/ridl-backend-rust/tests/interaction_face.rs` pin
+retention of a good value after rejection, detection during binding over a held
+malformed value, and preservation of a runtime's exact cause when no bytes are
+held. The [face record](interaction-face.md) owns the read rule. Event
+verification still follows ridl §5.1 and frame specification §9.2.
 
 ## Member limits
 

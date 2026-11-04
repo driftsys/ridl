@@ -258,6 +258,10 @@ macro_rules! suite {
         $crate::suite!(@tests $factory;
             attached::the_catalog_is_the_one_the_runtime_was_built_with,
             clock::the_clock_is_hand_driven_not_wall_clock,
+            signals::a_payload_that_fails_its_check_keeps_the_last_good_value,
+            signals::a_payload_that_fails_its_check_before_any_good_value_copies_nothing,
+            signals::a_check_registered_over_a_held_value_checks_it,
+            signals::a_touch_after_a_failed_check_keeps_the_detection,
             signals::a_signal_publish_and_read_round_trips,
             signals::a_signal_with_no_publication_reads_as_init_and_copies_nothing,
             signals::a_staged_value_is_not_visible_until_commit,

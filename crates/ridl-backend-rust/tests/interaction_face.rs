@@ -291,13 +291,9 @@ fn round_trip_signal_keeps_the_last_good_value_when_declared_invalid_after_publi
     );
 }
 
-/// A live publication whose bytes the accessor cannot decode is a separate
-/// case from a never-published or never-set-then-invalidated channel: there is
-/// a payload, and it fails its check, so the accessor reports the detected
-/// cause and substitutes the init value, over real (malformed) bytes rather
-/// than an empty buffer. Written directly through the raw `SignalWriter` port,
-/// bypassing the generated `Publisher`'s encoder, which takes a typed
-/// `Temperature` and always encodes it, so it cannot produce malformed bytes.
+/// Binding over an already held malformed publication checks it immediately.
+/// With no good value to keep, the runtime reports the detection with zero
+/// bytes and the face supplies init. The raw writer bypasses the encoder.
 #[test]
 fn round_trip_signal_with_malformed_bytes_settles_detected_corrupt() {
     use ridl_rt::contract::Interaction;
@@ -330,19 +326,8 @@ fn round_trip_signal_with_malformed_bytes_settles_detected_corrupt() {
     );
 }
 
-/// A live publication of zero bytes is a fourth, narrower case than the
-/// malformed-bytes one above: `SignalWriter::set` accepts an empty payload,
-/// and `ridl-loopback`'s `commit` publishes it as `Provenance::Live`, not
-/// `Provenance::Init` or `Invalid(Declared)` — a channel with no publication
-/// at all is a different state, reported as `Provenance::Init` directly
-/// (`round_trip_signal_reads_as_init_before_any_publication` above). The
-/// accessor's `Init`-or-`Invalid(Declared)`-and-`len == 0` guard therefore
-/// does not match here on provenance, so `verify` runs over the empty buffer
-/// and reports it corrupt, the same as any other malformed payload. This
-/// pins the guard's provenance condition: a guard that matched on length
-/// alone, regardless of provenance, would route this zero-length `Live`
-/// sample to the init value under `Provenance::Live` instead, and this test
-/// would fail on the provenance assertion below (driftsys/ridl#519).
+/// Binding checks an already held zero-length Live payload and reports it
+/// corrupt. With no good bytes, the face returns init under that detection.
 #[test]
 fn round_trip_signal_with_zero_length_live_bytes_settles_detected_corrupt() {
     use ridl_rt::contract::Interaction;
@@ -396,6 +381,14 @@ impl ridl_rt::port::Encoded for ReportsInitOverRealBytes {
 }
 
 impl ridl_rt::port::SignalReader for ReportsInitOverRealBytes {
+    fn check_with(
+        &self,
+        _: ridl_rt::contract::InterfaceNo,
+        _: ridl_rt::contract::Ordinal,
+        _: ridl_rt::port::Check,
+    ) {
+        // This double receives no payload from a peer.
+    }
     fn read(
         &self,
         iface: InterfaceNo,
@@ -2615,6 +2608,14 @@ impl ridl_rt::port::Encoded for MinimalSignalOnlyPort {
 }
 
 impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
+    fn check_with(
+        &self,
+        _: ridl_rt::contract::InterfaceNo,
+        _: ridl_rt::contract::Ordinal,
+        _: ridl_rt::port::Check,
+    ) {
+        // This double receives no payload from a peer.
+    }
     fn read(
         &self,
         _iface: InterfaceNo,
@@ -2688,6 +2689,14 @@ impl ridl_rt::port::Encoded for DistinctiveInitPort {
 }
 
 impl ridl_rt::port::SignalReader for DistinctiveInitPort {
+    fn check_with(
+        &self,
+        _: ridl_rt::contract::InterfaceNo,
+        _: ridl_rt::contract::Ordinal,
+        _: ridl_rt::port::Check,
+    ) {
+        // This double receives no payload from a peer.
+    }
     fn read(
         &self,
         _iface: InterfaceNo,
@@ -3958,4 +3967,86 @@ fn inline_query_reply_lengths_settle_invalid_value_without_panicking() {
             )))),
         );
     }
+}
+
+/// Binding registers the check before any read, so an unread good publication
+/// remains the value when a later malformed publication is rejected.
+#[test]
+fn round_trip_signal_keeps_the_last_good_value_when_a_payload_fails_its_check() {
+    use ridl_rt::contract::{Interaction, Interface};
+    use ridl_rt::port::SignalWriter;
+    let mut writer = loopback();
+    let client = generated::cabin::Client::new(writer.attach());
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut writer);
+        publisher
+            .temperature(generated::Temperature::new_unchecked(21))
+            .expect("set");
+        publisher.commit();
+    }
+    writer
+        .set(
+            <generated::Cabin as Interface>::NUMBER,
+            <generated::CabinTemperature as Interaction>::MEMBER.ordinal,
+            &[1, 2, 3],
+        )
+        .expect("set");
+    writer.commit();
+    let sample = client.temperature().expect("read");
+    assert_eq!(sample.value.get(), 21);
+    assert_eq!(
+        sample.provenance,
+        Provenance::Invalid(ridl_rt::sample::Cause::Detected(
+            ridl_rt::sample::Detection::Corrupt
+        ))
+    );
+}
+
+/// A detected sample without bytes uses init and preserves the runtime's exact
+/// detection instead of verifying an empty buffer and reporting corruption.
+#[test]
+fn a_detected_sample_with_no_bytes_reads_as_init_with_the_runtime_cause() {
+    struct DetectedPort;
+    impl ridl_rt::port::Attached for DetectedPort {
+        fn catalog(&self) -> &CatalogRef {
+            &CATALOG
+        }
+    }
+    impl ridl_rt::port::Encoded for DetectedPort {
+        type Encoding = ridl_rt::encoding::FlatBuffers;
+    }
+    const DETECTED: Provenance = Provenance::Invalid(ridl_rt::sample::Cause::Detected(
+        ridl_rt::sample::Detection::InvalidValue(ridl_rt::payload::Violation {
+            type_name: Some("boolean"),
+            rule: ridl_rt::payload::Rule::Range,
+        }),
+    ));
+    impl ridl_rt::port::SignalReader for DetectedPort {
+        fn check_with(&self, _: InterfaceNo, _: Ordinal, _: ridl_rt::port::Check) {
+            // This double receives no payload from a peer.
+        }
+        fn read(
+            &self,
+            _: InterfaceNo,
+            _: Ordinal,
+            _: &mut [u8],
+        ) -> Result<ridl_rt::port::RawSample, ReadError> {
+            Ok(ridl_rt::port::RawSample {
+                provenance: DETECTED,
+                freshness: ridl_rt::sample::Freshness::Unbounded,
+                envelope: ridl_rt::sample::Envelope {
+                    stamp: ridl_rt::sample::Timestamp(7),
+                    seq: 1,
+                },
+                len: 0,
+            })
+        }
+    }
+    let client = generated::horn::Client::new(DetectedPort);
+    let sample = client.active().expect("read");
+    assert_eq!(
+        sample.value,
+        <generated::HornActive as ridl_rt::contract::Signal>::init()
+    );
+    assert_eq!(sample.provenance, DETECTED);
 }
