@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { decode, encode, Kind } from "../mod.ts";
+import { decode, encode, Kind, SUBPROTOCOL_PROVIDER } from "../mod.ts";
 import type { Frame, Target } from "../mod.ts";
 import {
   BLOCK_LAST,
@@ -412,4 +412,54 @@ Deno.test("the stream byte of each stream form is read and written at its place"
     assert.equal(got.frame.stream, 7, id);
     assert.deepEqual(encode(got.frame), bytes, `encoding of ${id}`);
   }
+});
+
+const REVERSED_IDS = [
+  "provider-attach-2",
+  "provider-attached-accepted",
+  "provider-publish-live",
+];
+
+async function reversedVectors(): Promise<[string, Uint8Array][]> {
+  const text = await Deno.readTextFile(
+    new URL(
+      "../../../docs/specification/frame-specification.md",
+      import.meta.url,
+    ),
+  );
+  const section = text.split("### 11.1 WebSocket\n")[1].split("\n### ")[0];
+  const reversed = section.split("#### Reversed role\n")[1];
+  assert.ok(reversed, "no reversed role section");
+  const lines = reversed.split("\n");
+  const first = lines.findIndex((line) => line.startsWith("|"));
+  assert.ok(first >= 0, "no reversed role table");
+  const rows: [string, Uint8Array][] = [];
+  for (let i = first + 2; i < lines.length && lines[i].startsWith("|"); i++) {
+    const cells = lines[i].split("|").map((cell) => cell.trim());
+    rows.push([cells[1].replace(/`/g, ""), hex(cells[3])]);
+  }
+  return rows;
+}
+
+Deno.test("all_reversed_rows_are_read", async () => {
+  assert.deepEqual((await reversedVectors()).map(([id]) => id), REVERSED_IDS);
+});
+
+Deno.test("reversed_vectors_round_trip", async () => {
+  const rows = await reversedVectors();
+  assert.equal(rows.length, 3);
+  for (const [id, bytes] of rows) {
+    const want = id === "provider-attach-2"
+      ? expected2("attach-2")
+      : expected(id.replace("provider-", ""));
+    assert.ok(want, `unknown reversed vector ${id}`);
+    const got = decode(bytes);
+    assert.ok(got.ok, `vector ${id} did not decode`);
+    assert.deepEqual(got.frame, want, `vector ${id}`);
+    assert.deepEqual(encode(want), bytes, `encoding of ${id}`);
+  }
+});
+
+Deno.test("provider_subprotocol_names_frame_version_2", () => {
+  assert.equal(SUBPROTOCOL_PROVIDER, "ridl-ws-v2-provider");
 });

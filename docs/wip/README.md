@@ -136,6 +136,19 @@ The deployment descriptor design and plan
 decision 12 of [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) are
 their durable records.
 
+The debug socket design, plan and Codex handoff
+(`2026-11-03-debug-socket-{design,plan,codex-handoff}.md`) were archived on
+2026-11-04, once the last of its three pull requests built the injection
+(driftsys/ridl#1220, driftsys/ridl#1227 and the pull request that follows them);
+[`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md),
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
+[`../design/deployment-descriptor.md`](../design/deployment-descriptor.md),
+[the frame specification](../specification/frame-specification.md) §11.1 and
+[the debugging chapter](../book/debugging.md) are their durable records. The
+behavior rulings R-DS-3 to R-DS-11 are stated as built in the applicable
+records; R-DS-5 belongs to the gateway selection description. R-DS-1 and R-DS-2
+are process rulings retained in the archived plan.
+
 The release 0.11 plan (`2026-10-15-release-0.11-plan.md`) was archived on
 2026-10-19, once 0.11.0 was released and every issue it names was closed (#880,
 #884, #925, #919, #863, #874, #864, #877). Its durable records are the pull

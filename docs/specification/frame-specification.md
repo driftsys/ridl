@@ -1149,14 +1149,16 @@ carries frame version 2, and **version 3**, under `ridl-ws-v3`, carries frame
 version 3. Items 1 to 9 hold for all versions, item 10 holds for versions 2 and
 3 (version 1 has no `block` form), the test vectors below are version 1's, and
 versions 2 and 3 add what "Binding version 2" and "Binding version 3", at the
-end of this section, state. The reasoning behind each rule, with the
+end of this section, state. "Reversed role", after them, states a subprotocol of
+version 2 in which the client provides. The reasoning behind each rule, with the
 alternatives considered, is in
 [the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
 **1. The transport and the session.** One WebSocket connection carries one
 session. The client is the consumer and sends `attach` as its first message; the
-server is the provider and sends `attached` as its first message. The URL is the
-deployment's; the binding places nothing in the path, the query or a header;
+server is the provider and sends `attached` as its first message ("Reversed
+role" states the subprotocol in which the two roles are exchanged). The URL is
+the deployment's; the binding places nothing in the path, the query or a header;
 `ws://` and `wss://` are both allowed, and what `wss://` provides is the
 security the deployment relies on (§13). The session ends when either side sends
 a close frame, when the connection fails, or when the liveness check fails: the
@@ -1294,7 +1296,10 @@ at least 294 bytes, is closed with 1009. Either side ends the session on purpose
 with 1000, the provider with 1001 when it shuts down; after `attached(refused)`
 the provider closes with 1000, and the reason is in the frame. A provider may
 close with 1008 when a session passes a resource limit it states, such as a cap
-on the responses it keeps for §7. The binding defines no close code of its own.
+on the responses it keeps for §7. Either side may close with 1011 when it
+accepted the session but an internal failure keeps it from serving it, such as a
+local port that refuses to serve the members of the catalog. The binding defines
+no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls
@@ -1331,14 +1336,14 @@ the first such version; binding version 3 adds the stream forms the same way.
 **Test vectors.** Each line is one complete message in hexadecimal, spaces for
 reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
 column, which is stable and never renamed, and it reads the tables of "Binding
-version 2" and "Binding version 3" the same way. The stamp in every data-plane
-vector is `0x0123456789AB` microseconds (and `0x0123456789AC` on the responses),
-chosen to show the byte order; the hash in `attach` is the bytes `00` to `1f`;
-the unit name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell
-names as `` payload `<hex>` `` and fails a row whose bytes after the header
-differ from it, or from no bytes when the cell names none; it decides from the
-header whether a frame carries a payload, by the rule "Whether a frame carries a
-payload" above.
+version 2", "Binding version 3" and "Reversed role" the same way. The stamp in
+every data-plane vector is `0x0123456789AB` microseconds (and `0x0123456789AC`
+on the responses), chosen to show the byte order; the hash in `attach` is the
+bytes `00` to `1f`; the unit name is `veh.cabin`. `xtask` also reads the payload
+a `Vector` cell names as `` payload `<hex>` `` and fails a row whose bytes after
+the header differ from it, or from no bytes when the cell names none; it decides
+from the header whether a frame carries a payload, by the rule "Whether a frame
+carries a payload" above.
 
 | Id                   | Vector                                                          | Hex                                                                                                     |
 | -------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -1474,6 +1479,48 @@ their stamp is `0x0123456789AC`.
 | `chunk-reply`    | `chunk` query, interface 1, ordinal 4, seq 1, correlation 2, stream 0, payload `ff01` | `0c 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 00 ff01`                    |
 | `stream-end-end` | `stream_end` `end`, query, interface 1, ordinal 4, seq 2, correlation 2, stream 0     | `0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00`                   |
 | `stream-credit`  | `stream_credit` 4, query, interface 1, ordinal 4, correlation 2, stream 0             | `0e 04 01000000 04000000 0200000000000000 00 04000000`                                                  |
+
+#### Reversed role
+
+The subprotocol `ridl-ws-v2-provider` carries frame version 2 with the client as
+the provider and the server as the consumer. Every rule of §5 to §9, and of
+items 2 to 10 of this section, applies to this connection with every "provider"
+read as the client and every "consumer" read as the server; item 1 applies with
+the changes below. On this connection, the server sends `attach` as its first
+message and the client answers `attached` as its first message. The `attach`
+carries `frame_version` 2; the client refuses any other frame version with
+`frame_version_unsupported`. The client checks the catalog and encoding of
+`attach` and answers with the outcome under §6.1, and after `attached(refused)`
+the client closes with 1000 (item 4). After acceptance, the client sends the
+provider's forms (`answer`, `publish`, `occurrence`, `block` and `response`) and
+the server sends the consumer's forms; the client publishes a signal or raises
+an event only after the server's `subscribe` (§5.1, §5.2). The server checks
+received provider frames as a consumer does. No `chunk`, `stream_end` or
+`stream_credit` crosses this connection; receiving one is a protocol violation
+and closes with 1002 under item 4. The server still sends WebSocket pings,
+because a browser client cannot; either end applies item 1's liveness timeout.
+The frame layouts, codes and payload rules of binding version 2 remain
+unchanged.
+
+A client offers only provider-role names or only consuming-role names, never
+both, and lists them newest first, as item 1 states. A server that serves one
+role selects, among the names of that role it serves, the newest offered, and
+ignores the names of the other role: a mixed offer to a server that provides
+(its clients consume) selects `ridl-ws-v2`, and the same offer to a server that
+consumes (its clients provide) selects `ridl-ws-v2-provider`. A server that
+consumes selects only a name whose frame version it serves, because on this
+connection the client, not the server, refuses an `attach`. When no name for the
+server's role matches, the handshake fails under item 1. The binding assigns no
+meaning to the URL path for either role; the deployment chooses it under item 1.
+
+**Reversed role test vectors.** These are frame version 2 messages, with the
+catalog, envelope and payload of the corresponding consuming-role vectors.
+
+| Id                           | Vector                                                                 | Hex                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `provider-attach-2`          | server `attach` frame 2, FlatBuffers, `veh.cabin`                      | `01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `provider-attached-accepted` | client `attached` accepted                                             | `02 01 00`                                                                                              |
+| `provider-publish-live`      | client `publish` `Live`, interface 1, ordinal 2, seq 7, payload `ff01` | `07 01 01000000 02000000 ab89674523010000 0700000000000000 02 ff01`                                     |
 
 ### 11.2 Binder on Android
 

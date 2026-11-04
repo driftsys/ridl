@@ -233,6 +233,10 @@ impl<B: Backend> Session<B> {
         }
     }
 
+    pub(super) fn attached(&self) -> bool {
+        self.attached
+    }
+
     /// Records the frame version of the subprotocol the handshake selected.
     /// A new session assumes `FRAME_VERSION`.
     pub(crate) fn upgraded(&mut self, frame_version: u32) {
@@ -1317,8 +1321,9 @@ impl<B: Backend> Session<B> {
     fn limit(&self, target: Target) -> usize {
         self.backend
             .members()
-            .and_then(|table| table.limit(target.iface, target.ord))
-            .map_or(default_ceiling(target.kind), |limit| limit as usize)
+            .map_or(default_ceiling(target.kind), |table| {
+                table.payload_limit(target)
+            })
     }
 
     /// Reads a signal into the session's buffer, growing it on `Short` up to

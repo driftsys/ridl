@@ -253,9 +253,10 @@ member; rsdl is the apex.
                          and against the DOM library, the unit tests under
                          tests/, and deno publish --dry-run. The Deno version
                          is pinned in .deno-version
-    just ts-e2e          build the loopback_server example of
-                         ridl-transport-ws and run the package's Deno
-                         end-to-end test against it
+    just ts-e2e          build the ridl-transport-ws examples loopback_server
+                         and debug_gateway_fixture (with descriptor), then run
+                         the package's Deno e2e/deno_test.ts and
+                         e2e/provide_test.ts against them respectively
     just cabin-ws-demo   generate cabin's crate, its TypeScript codec module and
                          its FlatBuffers schema with ridl build, run flatc
                          over the schema, check the
@@ -282,11 +283,11 @@ member; rsdl is the apex.
                          rejects -41 and 86 with the range rule; it then
                          verifies every received payload with the codec.
                          Needs Deno and flatc at the version in .flatc-version
-    just ts-browser-e2e  the same build, then the package's end-to-end test
-                         in a headless browser; needs a Chromium-family
-                         browser (RIDL_BROWSER names one). Runs in CI; not a
-                         member of build, so a contributor's build needs no
-                         browser
+    just ts-browser-e2e  build the ridl-transport-ws example loopback_server,
+                         then run the package's end-to-end test in a headless
+                         Chromium-family browser (RIDL_BROWSER names one).
+                         Runs in CI; not a member of build, so a
+                         contributor's build needs no browser
     just cabin-browser-demo
                          the generation and server build of cabin-ws-demo,
                          then the same codec self-test, payload verification
