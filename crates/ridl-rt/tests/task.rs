@@ -11,7 +11,10 @@
 //! in the same way: a parked wait polls once before the wait and once per wake
 //! or timeout, so a ceiling of eight catches a wait that spins, and tolerates
 //! the few extra wakes a platform may deliver. That each park is given only
-//! the time left until the deadline is not pinned by any test here. The
+//! the time left until the deadline is pinned only in part: a park with a fixed
+//! timeout of 10 ms polls more than eight times in the 100 ms wait of
+//! `waking_a_noop_waker_from_another_thread_does_not_poll_the_future`, so its
+//! ceiling fails it, but a fixed timeout of 30 ms passes every test here. The
 //! spurious-wake test asserts that at least one such wake polled the future,
 //! not how many did, because the thread that sends them is not scheduled at a
 //! fixed cadence.
@@ -381,6 +384,9 @@ fn waking_a_noop_waker_from_another_thread_does_not_poll_the_future() {
     // pending future under a 100 ms deadline. A waker that unparked this
     // thread would add a poll per wake; a no-op one adds none, so the wait
     // polls only before the park and at the deadline.
+    // The waker is made on this thread, the one that then waits, so the test
+    // catches a waker that unparks the thread it was made on; a waker that
+    // unparked some other thread would pass it.
     let gate = Gate::new();
     let bound = Duration::from_millis(100);
     let stop = Arc::new(AtomicBool::new(false));

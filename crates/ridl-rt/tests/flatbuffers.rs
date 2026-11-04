@@ -10,6 +10,17 @@ use ridl_rt::flatbuffers::{
 };
 use ridl_rt::payload::{EncodeError, Malformed};
 
+/// A boolean is read as `false` for a zero byte and `true` for any other
+/// byte, not only for 1, as the FlatBuffers reference readers read it.
+#[test]
+fn read_bool_reads_any_non_zero_byte_as_true() {
+    let bytes = [0u8, 1, 2, 0xff];
+    assert!(!read_bool(&bytes, 0).expect("reads"));
+    assert!(read_bool(&bytes, 1).expect("reads"));
+    assert!(read_bool(&bytes, 2).expect("reads"), "2 reads as true");
+    assert!(read_bool(&bytes, 3).expect("reads"), "0xff reads as true");
+}
+
 /// The table every test here encodes:
 ///
 /// ```text

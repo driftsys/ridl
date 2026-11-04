@@ -159,10 +159,10 @@ pub(crate) fn classify_in(
         // The encoding rules read compatible appends and inline growth, so
         // the verdict is the encoding's alone: an inline copy cannot grow
         // under podbuf, and a wider integer moves every head that holds it.
-        // FlatBuffers has its own scalar-width rule below; proto3 has no
-        // fixed layout for these types. `PodbufStrictEnumAppend` is
-        // superseded by `StrictEnumAppend` and is no longer emitted; it keeps
-        // its old verdict for a report that still names it.
+        // FlatBuffers and proto3 each have their own scalar-width rule below.
+        // `PodbufStrictEnumAppend` is superseded by `StrictEnumAppend` and is no
+        // longer emitted; it keeps its old verdict for a report that still names
+        // it.
         Category::PodbufInlineAppend
         | Category::PodbufRemoteInlineGrowth
         | Category::PodbufWidthChange
@@ -175,6 +175,13 @@ pub(crate) fn classify_in(
         }
         Category::FlatbuffersWidthChange => {
             if encodings.contains(&"flatbuffers") {
+                Verdict::Breaking
+            } else {
+                Verdict::Compatible
+            }
+        }
+        Category::Proto3WidthChange => {
+            if encodings.contains(&"proto3") {
                 Verdict::Breaking
             } else {
                 Verdict::Compatible
@@ -1583,11 +1590,13 @@ pub fn explain(category: Category) -> &'static str {
             "  breaking    with `--encoding podbuf`: every head that holds the enum,\n",
             "              the enum set or the union lays out a different integer,\n",
             "              and an older reader misreads the value\n",
-            "  compatible  otherwise, which holds under proto3; listed under the\n",
+            "  compatible  otherwise; listed under the\n",
             "              heading \"breaking under podbuf\", so that a workspace\n",
             "              that builds podbuf sees it. An enum-set flag that widens\n",
             "              the integer also widens the enum set's FlatBuffers\n",
-            "              scalar, which `flatbuffers_width_change` reports"
+            "              scalar, which `flatbuffers_width_change` reports, and a\n",
+            "              flag at bit 32 also widens the proto3 field, which\n",
+            "              `proto3_width_change` reports"
         ),
         Category::PodbufStrictEnumAppend => concat!(
             "Superseded by `strict_enum_append`, which is breaking for every\n",
@@ -1647,6 +1656,23 @@ pub fn explain(category: Category) -> &'static str {
             "  compatible  otherwise; listed under the heading \"breaking under\n",
             "              flatbuffers\", so that a workspace that builds\n",
             "              FlatBuffers sees it"
+        ),
+        Category::Proto3WidthChange => concat!(
+            "An enum-set flag appended, compatible under the generic rule, after\n",
+            "which the proto3 scalar of the enum set is a different scalar. proto3\n",
+            "has no 8-bit or 16-bit integer, so an enum set of width `u8`, `u16`\n",
+            "or `u32` is a `uint32` field and one of width `u64` is a `uint64`\n",
+            "field: a flag at bit 32 above a highest bit of 31 or below widens\n",
+            "`uint32` to `uint64`, and a flag at bit 8 or 16 keeps `uint32`. Every\n",
+            "enum is a proto3 `enum`, an `int32`, and the proto3 backend refuses a\n",
+            "value outside `int32`, so an appended enum value never changes it.\n",
+            "The line is reported once per declaration and carries the old and the\n",
+            "new scalar. An append that keeps the scalar draws no such line.\n",
+            "  breaking    with `--encoding proto3`: a reader of the old schema\n",
+            "              refuses the value (the generated Rust codec) or truncates\n",
+            "              it to 32 bits and drops the flag\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              proto3\", so that a workspace that builds proto3 sees it"
         ),
     }
 }

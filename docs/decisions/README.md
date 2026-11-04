@@ -212,7 +212,9 @@ other entry below is Accepted.
   `message <Name>Box { <type> value = 1; }`, an optional tuple field takes
   `optional`, and a bare `integer` projects to `sint64`. Amended 2026-10-20 on
   decision 7: the proto3 payload codec is built and refuses an optional array
-  element and an optional map value, as decision 7 said it would.
+  element and an optional map value, as decision 7 said it would. Amended
+  2026-11-04, adding decision 9 from driftsys/ridl#1212: an enum-set append that
+  changes the proto3 scalar is `proto3_width_change`, breaking under proto3.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and

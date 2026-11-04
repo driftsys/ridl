@@ -737,3 +737,102 @@ fn interrupted_publication_refuses_before_staging_and_names_recovery() {
         "a backup without a marker permits publication"
     );
 }
+
+// Removing the directory guard accepts interrupted files; checking after context
+// loading reports a context error instead of the publication recovery message.
+#[test]
+fn interrupted_publication_refuses_diff_against_the_baseline() {
+    let dir = TempDir::new("interrupted-diff");
+    let home = TempDir::new("interrupted-diff-home");
+    local_workspace(&dir);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    command(dir.path(), home.path(), &["diff", ".ridl/baseline", "."], 0);
+    let backup = dir.path().join(".ridl/baseline.previous.1");
+    std::fs::create_dir(&backup).unwrap();
+    let marker = dir.write(".ridl/.baseline.transaction", backup.to_str().unwrap());
+    for broken_context in [false, true] {
+        if broken_context {
+            dir.write(".ridl/baseline/context.json", "{broken");
+        }
+        let (code, stdout, stderr) =
+            ridl(dir.path(), home.path(), &["diff", ".ridl/baseline", "."]);
+        assert_eq!(code, 2, "{stderr}");
+        assert!(stdout.is_empty(), "{stdout}");
+        for expected in [
+            "interrupted baseline publication",
+            backup.to_str().unwrap(),
+            marker.to_str().unwrap(),
+        ] {
+            assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+        }
+        assert!(!stderr.contains("invalid baseline context"), "{stderr}");
+    }
+}
+
+// Removing the guard accepts interrupted files; checking after snapshot loading
+// reports a parse error instead of the publication recovery message.
+#[test]
+fn interrupted_publication_refuses_the_desk_check() {
+    let dir = TempDir::new("interrupted-check");
+    let home = TempDir::new("interrupted-check-home");
+    local_workspace(&dir);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    command(dir.path(), home.path(), &["check"], 0);
+    let backup = dir.path().join(".ridl/baseline.previous.1");
+    std::fs::create_dir(&backup).unwrap();
+    let marker = dir.write(".ridl/.baseline.transaction", backup.to_str().unwrap());
+    for broken_snapshot in [false, true] {
+        if broken_snapshot {
+            dir.write(".ridl/baseline/app.ir.json", "{broken");
+        }
+        for args in [vec!["check"], vec!["check", "--baseline", ".ridl/baseline"]] {
+            let stderr = command(dir.path(), home.path(), &args, 2);
+            for expected in [
+                "interrupted baseline publication",
+                backup.to_str().unwrap(),
+                marker.to_str().unwrap(),
+            ] {
+                assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+            }
+            assert!(!stderr.contains("cannot parse"), "{stderr}");
+        }
+    }
+}
+
+// Removing the shared directory guard permits catalog generation from an
+// interrupted baseline that still has catalog history and snapshots.
+#[test]
+fn interrupted_publication_refuses_the_catalog_build() {
+    let dir = TempDir::new("interrupted-build");
+    let home = TempDir::new("interrupted-build-home");
+    local_workspace(&dir);
+    std::fs::remove_file(dir.path().join("app.typl")).unwrap();
+    dir.write(
+        "app.ridl",
+        "package app\ntype Value: integer [0..10]\ninterface Probe { signal level: Value @10ms }\n",
+    );
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    assert!(
+        std::fs::read_dir(dir.path().join(".ridl/baseline"))
+            .unwrap()
+            .any(|entry| entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|ext| ext == "catalogs"))
+    );
+    let args = ["build", "--emit", "catalog", "--out-dir", "built"];
+    command(dir.path(), home.path(), &args, 0);
+    let backup = dir.path().join(".ridl/baseline.previous.1");
+    std::fs::create_dir(&backup).unwrap();
+    let marker = dir.write(".ridl/.baseline.transaction", backup.to_str().unwrap());
+    let stderr = command(dir.path(), home.path(), &args, 2);
+    for expected in [
+        "interrupted baseline publication",
+        backup.to_str().unwrap(),
+        marker.to_str().unwrap(),
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
+}

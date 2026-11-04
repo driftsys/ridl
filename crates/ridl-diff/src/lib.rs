@@ -314,6 +314,14 @@ declare_categories! {
         /// is judged for, compatible otherwise. Reported once per declaration,
         /// at `<package>/<decl>`, with the old and the new integer.
         FlatbuffersWidthChange,
+        /// An enum-set flag appended, compatible under the generic rule,
+        /// after which the proto3 scalar of the enum set is a different
+        /// scalar (ADR-0017 decision 9;
+        /// `ridl diff --explain proto3_width_change` states it in full).
+        /// Breaking when `proto3` is among the encodings the comparison is
+        /// judged for, compatible otherwise. Reported once per declaration,
+        /// at `<package>/<decl>`, with the old and the new proto3 scalar.
+        Proto3WidthChange,
     }
 }
 
@@ -500,20 +508,23 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
 /// does not carry the encodings a workspace builds, so the caller names them.
 ///
-/// `podbuf` and `flatbuffers` have rules of their own: a struct field appended that does not
-/// fit inside the old head of a struct another head of the old side holds
-/// inline is [`Category::PodbufInlineAppend`], and an enum value, an enum-set
-/// flag or a union arm appended that changes the integer of the enum or the
-/// enum set or the union's tag is [`Category::PodbufWidthChange`]; each is
+/// Each of the three names has rules of its own: a struct field appended that
+/// does not fit inside the old head of a struct another head of the old
+/// side holds inline is [`Category::PodbufInlineAppend`], and an enum value,
+/// an enum-set flag or a union arm appended that changes the integer of the
+/// enum or the enum set or the union's tag is [`Category::PodbufWidthChange`];
+/// each is
 /// breaking when `podbuf` is in `encodings` and compatible otherwise. An enum
 /// value or an enum-set flag appended to a declaration that is not `open` is
 /// [`Category::StrictEnumAppend`], breaking under every list. An enum value or
 /// an enum-set flag appended that changes the FlatBuffers integer is
 /// [`Category::FlatbuffersWidthChange`], breaking when `flatbuffers` is in
-/// `encodings` and compatible otherwise. Every other category is judged the
-/// same under every list, and a name other than `podbuf` or `flatbuffers` adds
-/// no rule. The CLI and the MCP tool refuse a name that is
-/// not one of the three before calling this; the engine does not check it.
+/// `encodings` and compatible otherwise. An enum-set flag appended that
+/// changes the proto3 scalar is [`Category::Proto3WidthChange`], breaking
+/// when `proto3` is in `encodings` and compatible otherwise. Every other
+/// category is judged the same under every list. The CLI and the MCP tool
+/// refuse a name that is not one of the three before calling this; the engine
+/// does not check it.
 /// The podbuf rule lays the old side out over `old` and the context packages
 /// `old` does not name, and the new side over `new` and `context`; a package
 /// in both `new` and `context` is read at its first occurrence.
@@ -691,6 +702,7 @@ fn diff_refs_scoped(
                 encoding_changes.append(&mut walk::flatbuffers_width_changes(
                     &pair, old_pkg, new_pkg,
                 ));
+                encoding_changes.append(&mut walk::proto3_width_changes(&pair, old_pkg, new_pkg));
                 classify_all(&mut encoding_changes, old_pkg, new_pkg, &scope, encodings);
                 pair.append(&mut encoding_changes);
                 changes.append(&mut pair);
@@ -883,11 +895,12 @@ pub fn category_word(category: Category) -> &'static str {
         Category::EnumOpened => "enum_opened",
         Category::EnumClosed => "enum_closed",
         Category::FlatbuffersWidthChange => "flatbuffers_width_change",
+        Category::Proto3WidthChange => "proto3_width_change",
     }
 }
 
 /// The heading a category's changes are grouped under in the text report, or
-/// `None` for a category listed plainly. Four headings exist. "compatible on
+/// `None` for a category listed plainly. Five headings exist. "compatible on
 /// the wire, visible in source" is for a change that exits 0 but that a
 /// consumer sees in its source — an interface renamed on its number changes
 /// the generated identity-table names in both wire backends, and an interface
@@ -901,9 +914,9 @@ pub fn category_word(category: Category) -> &'static str {
 /// under podbuf" is for a change whose verdict depends on the encodings the
 /// comparison is judged for ([`diff_refs_with`]): it exits 0 unless `podbuf`
 /// is among them. "breaking under flatbuffers" follows the same rule for
-/// `flatbuffers`. Each such category's `--explain` text states its own
-/// consequence; the JSON report carries the category word and no heading
-/// field.
+/// `flatbuffers`, and "breaking under proto3" for `proto3`. Each such
+/// category's `--explain` text states its own consequence; the JSON report
+/// carries the category word and no heading field.
 ///
 /// Wildcard arms are denied for the reason `category_word` gives.
 #[deny(
@@ -923,6 +936,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => Some("breaking under podbuf"),
         Category::FlatbuffersWidthChange => Some("breaking under flatbuffers"),
+        Category::Proto3WidthChange => Some("breaking under proto3"),
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired

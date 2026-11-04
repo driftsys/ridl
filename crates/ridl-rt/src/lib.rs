@@ -429,5 +429,20 @@ pub mod trace;
 ///     }
 /// }
 /// ```
+///
+/// `sample::Continuity` is exhaustive too, because a caller is meant to handle
+/// every case it names (`docs/design/ridl-rt.md`): a match naming every
+/// variant, with no `_` arm, compiles.
+///
+/// ```
+/// fn continuity(x: ridl_rt::sample::Continuity) {
+///     match x {
+///         ridl_rt::sample::Continuity::First => {}
+///         ridl_rt::sample::Continuity::Next => {}
+///         ridl_rt::sample::Continuity::Lost { .. } => {}
+///         ridl_rt::sample::Continuity::NotNewer { .. } => {}
+///     }
+/// }
+/// ```
 #[cfg(doctest)]
 mod exhaustiveness {}

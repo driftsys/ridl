@@ -114,11 +114,12 @@ The behaviour that is not in the README:
   (`ridl_core::manifest::ENCODING_NAMES`). With `podbuf` among them a
   `podbuf_inline_append`, `podbuf_remote_inline_growth` or `podbuf_width_change`
   change is breaking; without it, compatible. With `flatbuffers` among them a
-  `flatbuffers_width_change` change is breaking; without it, compatible. Missing
-  or unusable inline evidence for an explicit podbuf comparison is a request
-  error (§5.2), with repair/reset guidance, rather than a diff report. A
-  `strict_enum_append` change is breaking for every list. A name outside the
-  encoding list is a request error naming the three encodings.
+  `flatbuffers_width_change` change is breaking; without it, compatible. With
+  `proto3` among them a `proto3_width_change` change is breaking; without it,
+  compatible. Missing or unusable inline evidence for an explicit podbuf
+  comparison is a request error (§5.2), with repair/reset guidance, rather than
+  a diff report. A `strict_enum_append` change is breaking for every list. A
+  name outside the encoding list is a request error naming the three encodings.
 - **`ridl_explain`** reports, for a diagnostic code, `lint` and `default_level`
   when the code is a lint (ADR-0024 decision 15 and its Consequences). It never
   carries a link to a document.
@@ -238,9 +239,11 @@ workspace package (the message lists the packages); a declaration with no kind
 (the message advises `ridl_check`); an unknown code or category (the five
 namespaces, and that diff category words are accepted); a `ridl_diff`
 `encodings` name outside the three (the message lists them); a `ridl_diff` side
-that cannot be loaded (the `DiffSideError` message, the text the CLI prints);
-and a `ridl_diff` source side that does not compile (the message identifies the
-old or new side, and the diagnostics are in the error's structured content).
+that cannot be loaded (the `DiffSideError` message, the text the CLI prints) —
+among them a snapshot directory whose publication by `ridl baseline` was
+interrupted —; and a `ridl_diff` source side that does not compile (the message
+identifies the old or new side, and the diagnostics are in the error's
+structured content).
 
 ### 5.3 Notes
 

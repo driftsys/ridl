@@ -12,7 +12,7 @@ pub struct DiffInput {
     pub new: String,
     /// Optional unsaved source files applied to the new source side only.
     pub overlays: Option<Vec<OverlayInput>>,
-    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). podbuf and flatbuffers have rules of their own: with podbuf, a podbuf_inline_append, podbuf_width_change or podbuf_remote_inline_growth change is breaking; without it, compatible. With flatbuffers, a flatbuffers_width_change change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.
+    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). podbuf, flatbuffers and proto3 have rules of their own: with podbuf, a podbuf_inline_append, podbuf_width_change or podbuf_remote_inline_growth change is breaking; without it, compatible. With flatbuffers, a flatbuffers_width_change change is breaking; without it, compatible. With proto3, a proto3_width_change change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.
     pub encodings: Option<Vec<String>>,
 }
 pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
@@ -529,6 +529,31 @@ mod tests {
         );
         assert_eq!(before, inventory(&copy.0));
         assert_eq!(cache_before, inventory(&cache));
+    }
+
+    // Removing the shared directory guard returns a verdict for interrupted files.
+    #[test]
+    fn diff_with_an_interrupted_baseline_publication_is_a_tool_error() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
+        let baseline = copy.0.join(".ridl/baseline");
+        remote_baseline(&copy.0, &baseline, false);
+        let input = remote_input(&baseline, &copy.0);
+        assert_eq!(diff(&input).unwrap()["verdict"], "identical");
+        let backup = copy.0.join(".ridl/baseline.previous.1");
+        std::fs::create_dir(&backup).unwrap();
+        let marker = copy.0.join(".ridl/.baseline.transaction");
+        std::fs::write(&marker, backup.to_str().unwrap()).unwrap();
+        match diff(&input).unwrap_err() {
+            ToolError::Request(message) => assert_eq!(
+                message,
+                format!(
+                    "interrupted baseline publication; backup directory: {}; restore the prior files from the backup, or remove the marker {} after inspecting it",
+                    backup.display(),
+                    marker.display()
+                )
+            ),
+            _ => panic!("interrupted publication must use the existing request error"),
+        }
     }
 
     #[test]

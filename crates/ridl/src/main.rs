@@ -197,8 +197,8 @@ enum Command {
         explain: Option<String>,
         /// An encoding the change is judged for, as `[backend.<name>]
         /// encodings` names it; repeat the flag for several. A snapshot does
-        /// not record the encodings a workspace builds. `podbuf` and
-        /// `flatbuffers` have rules of their own: with one of them, a change
+        /// not record the encodings a workspace builds. `podbuf`,
+        /// `flatbuffers` and `proto3` each have rules of their own: with one of them, a change
         /// under the heading "breaking under <that name>" is breaking;
         /// without it, compatible.
         #[arg(long, value_enum, value_name = "ENCODING")]
@@ -925,7 +925,7 @@ fn run_baseline(
             return ExitCode::from(2);
         }
     };
-    if let Err(err) = baseline::refuse_interrupted(&out_dir) {
+    if let Err(err) = ridlc::baseline_context::refuse_interrupted_publication(&out_dir) {
         eprintln!("error: {err}");
         return ExitCode::from(2);
     }
@@ -2559,6 +2559,8 @@ fn baseline_position(change: &ridl_diff::Change, word: &str) -> String {
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
 /// order, or the single file `location` names.
 ///
+/// An active or interrupted publication marker is refused before reading directory contents.
+///
 /// Three directory shapes are refused rather than read as an *empty*
 /// baseline, because skipping any of them silently would report a clean desk
 /// check that ran against nothing: one holding IR artifacts but no `.ir.json`
@@ -2573,6 +2575,10 @@ fn baseline_position(change: &ridl_diff::Change, word: &str) -> String {
 /// yet" state, and [`desk_check`] skips it silently.
 fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
+        if let Err(err) = ridlc::baseline_context::refuse_interrupted_publication(location) {
+            eprintln!("error: {err}");
+            return Err(ExitCode::from(2));
+        }
         let snapshots = snapshot_files(location).map_err(report_diff_side_error)?;
         if snapshots.is_empty() {
             // What is directly inside is the more specific complaint, so it

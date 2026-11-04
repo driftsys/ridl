@@ -230,14 +230,17 @@ This is `Client::temperature`, with the error handling summarised:
 pub fn temperature(&self) -> Result<Sample<Temperature>, ReadError> {
     let mut buf = [0u8; <Temperature as Payload<FlatBuffers>>::MAX_SIZE];
     let raw = self.port.read(Cabin::NUMBER, Ordinal(1u32), &mut buf)?;
-    match Ref::<Temperature, FlatBuffers>::verify(&buf[..raw.len]) {
-        Ok(checked) => Ok(Sample { value: checked.decode(), /* raw's three fields */ }),
-        Err(error)  => Ok(Sample {
-            value: CabinTemperature::init(),
-            provenance: Provenance::Invalid(Cause::Detected(/* from error */)),
-            /* raw's freshness and envelope */
-        }),
-    }
+    let (value, provenance) = match raw.provenance {
+        // No publication yet, or an invalidation before any: no bytes to check.
+        Provenance::Init | Provenance::Invalid(Cause::Declared) if raw.len == 0 => {
+            (CabinTemperature::init(), raw.provenance)
+        }
+        _ => match Ref::<Temperature, FlatBuffers>::verify(&buf[..raw.len]) {
+            Ok(checked) => (checked.decode(), raw.provenance),
+            Err(error) => (CabinTemperature::init(), Provenance::Invalid(Cause::Detected(/* error */))),
+        },
+    };
+    Ok(Sample { value, provenance, freshness: raw.freshness, envelope: raw.envelope })
 }
 ```
 

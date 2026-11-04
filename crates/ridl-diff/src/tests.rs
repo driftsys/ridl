@@ -5847,6 +5847,191 @@ mod flatbuffers_width {
     }
 }
 
+mod proto3_width {
+    use ridl_ir::v2;
+
+    use crate::{Category, Change, DiffReport, Verdict, diff_refs_with, render_text};
+
+    fn package(name: &str, kind: v2::decl::Kind) -> v2::Package {
+        v2::Package {
+            name: "veh.cluster".to_string(),
+            decls: vec![v2::Decl {
+                name: name.to_string(),
+                kind: Some(kind),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn values(count: i64) -> Vec<v2::EnumValue> {
+        (0..count)
+            .map(|value| v2::EnumValue {
+                name: format!("V{value}"),
+                value,
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    fn enum_set_of(highest_bit: i64, open: bool) -> v2::Package {
+        let width = match highest_bit {
+            0..=7 => v2::IntWidth::U8,
+            8..=15 => v2::IntWidth::U16,
+            16..=31 => v2::IntWidth::U32,
+            _ => v2::IntWidth::U64,
+        };
+        package(
+            "Flags",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                bits: values(highest_bit + 1),
+                width: width as i32,
+                open,
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn enum_of(count: i64, open: bool) -> v2::Package {
+        package(
+            "Mode",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: values(count),
+                open,
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn of_category(report: &DiffReport, category: Category) -> Vec<&Change> {
+        report
+            .changes
+            .iter()
+            .filter(|change| change.category == category)
+            .collect()
+    }
+
+    #[test]
+    fn an_open_enum_set_flag_at_bit_32_is_a_proto3_width_change() {
+        let (old, new) = (enum_set_of(31, true), enum_set_of(32, true));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["proto3"]);
+        let lines = of_category(&report, Category::Proto3WidthChange);
+        assert_eq!(lines.len(), 1, "{}", render_text(&report));
+        assert_eq!(lines[0].path, "veh.cluster/Flags");
+        assert_eq!(lines[0].verdict, Verdict::Breaking);
+        assert_eq!(lines[0].before.as_deref(), Some("uint32"));
+        assert_eq!(lines[0].after.as_deref(), Some("uint64"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+
+        let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+        let lines = of_category(&report, Category::Proto3WidthChange);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].verdict, Verdict::Compatible);
+        assert_eq!(report.verdict, Verdict::Compatible);
+        assert!(render_text(&report).contains("breaking under proto3:\n  [compatible] proto3_width_change veh.cluster/Flags: uint32 -> uint64"), "{}", render_text(&report));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
+        let lines = of_category(&report, Category::Proto3WidthChange);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].verdict, Verdict::Compatible);
+
+        let (old, new) = (enum_set_of(7, true), enum_set_of(40, true));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["proto3"]);
+        let lines = of_category(&report, Category::Proto3WidthChange);
+        assert_eq!(lines.len(), 1, "{}", render_text(&report));
+        assert_eq!(lines[0].before.as_deref(), Some("uint32"));
+        assert_eq!(lines[0].after.as_deref(), Some("uint64"));
+    }
+
+    #[test]
+    fn an_open_enum_set_flag_below_bit_32_draws_no_proto3_line() {
+        for highest_bit in [7, 15, 30] {
+            let (old, new) = (
+                enum_set_of(highest_bit, true),
+                enum_set_of(highest_bit + 1, true),
+            );
+            let report = diff_refs_with(&[&old], &[&new], &[], &["proto3"]);
+            assert!(
+                of_category(&report, Category::Proto3WidthChange).is_empty(),
+                "{}",
+                render_text(&report)
+            );
+            assert_eq!(report.verdict, Verdict::Compatible);
+        }
+    }
+
+    #[test]
+    fn an_open_enum_value_never_draws_a_proto3_line() {
+        let (old, new) = (enum_of(256, true), enum_of(257, true));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["proto3"]);
+        assert!(
+            of_category(&report, Category::Proto3WidthChange).is_empty(),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(report.verdict, Verdict::Compatible);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["proto3", "podbuf"]);
+        assert_eq!(of_category(&report, Category::PodbufWidthChange).len(), 1);
+        assert!(of_category(&report, Category::Proto3WidthChange).is_empty());
+    }
+
+    #[test]
+    fn a_strict_enum_set_append_at_bit_32_is_a_strict_enum_append_only() {
+        let (old, new) = (enum_set_of(31, false), enum_set_of(32, false));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["proto3"]);
+        assert_eq!(of_category(&report, Category::StrictEnumAppend).len(), 1);
+        assert!(
+            of_category(&report, Category::Proto3WidthChange).is_empty(),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(report.changes.len(), 1);
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn the_proto3_width_rule_reads_only_compatible_appends() {
+        let (old, new) = (enum_set_of(31, false), enum_set_of(32, false));
+        let mut pair = vec![Change {
+            path: "veh.cluster/Flags/V32".to_string(),
+            category: Category::DeclAdded,
+            verdict: Verdict::Breaking,
+            before: None,
+            after: Some("32".to_string()),
+        }];
+        let changes = crate::walk::proto3_width_changes(&pair, &old, &new);
+        assert!(changes.is_empty(), "{changes:?}");
+        pair[0].verdict = Verdict::Compatible;
+        let changes = crate::walk::proto3_width_changes(&pair, &old, &new);
+        assert_eq!(changes.len(), 1, "{changes:?}");
+        assert_eq!(changes[0].category, Category::Proto3WidthChange);
+    }
+
+    #[test]
+    fn all_three_width_rules_report_under_their_own_headings() {
+        let (old, new) = (enum_set_of(31, true), enum_set_of(32, true));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf", "flatbuffers", "proto3"]);
+        for category in [
+            Category::PodbufWidthChange,
+            Category::FlatbuffersWidthChange,
+            Category::Proto3WidthChange,
+        ] {
+            let lines = of_category(&report, category);
+            assert_eq!(lines.len(), 1);
+            assert_eq!(lines[0].verdict, Verdict::Breaking);
+        }
+        assert_eq!(
+            crate::heading(Category::Proto3WidthChange),
+            Some("breaking under proto3")
+        );
+        let text = render_text(&report);
+        assert!(
+            text.find("breaking under flatbuffers:").unwrap()
+                < text.find("breaking under proto3:").unwrap(),
+            "{text}"
+        );
+    }
+}
+
 mod enum_open {
     use ridl_ir::v2;
 
