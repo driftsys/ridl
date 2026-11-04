@@ -153,7 +153,7 @@ impl<B: ProvidedBackend> Provided<B> {
 }
 
 impl<B: ProvidedBackend> Driver for Provided<B> {
-    fn bounded_attach_wait(&self) -> bool {
+    fn clamps_zero_poll(&self) -> bool {
         true
     }
     fn attached(&self) -> bool {

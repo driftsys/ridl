@@ -1139,16 +1139,18 @@ not counted, because it cannot read while it writes; a client that stops reading
 is ended by the write timeout (D-7). The time a client takes to read bytes the
 kernel has already accepted is still counted.
 
-For `serve_provided` and `serve_provided_selected` only, the wait for `attached`
-is bounded by `liveness_timeout` after the upgrade, even while control frames
-arrive (R-DS-8). Both attach-wait checks enforce that deadline: one before
-handling each complete frame and one after a read with no complete frame.
-`serve` and `serve_selected` retain their prior behavior: any message resets
-their liveness clock, including before `attach`. Their first read uses
-`poll_interval` directly, so zero is refused as `Ended::Io(InvalidInput)`. The
-server sends pings from the upgrade in either role. A browser answers a ping
-automatically, so 5 s pings detect a dead client in 15 s at a cost of one small
-frame per 5 s.
+The wait for `attach` (or for `attached` in a provided session) is bounded by
+`liveness_timeout` after the upgrade, even while control frames arrive, in every
+entry point, so a client that answers pings but never attaches does not keep a
+session. Both attach-wait checks enforce that deadline: one before handling each
+complete frame and one after a read with no complete frame. Ruling R-DS-8 first
+limited this bound to the provided entry points, because it changes what `serve`
+and `serve_selected` do; it was extended to them in a breaking release. A zero
+`poll_interval` is still refused as `Ended::Io(InvalidInput)` by `serve` and
+`serve_selected` and raised to the shortest read timeout by the provided entry
+points. The server sends pings from the upgrade in either role. A browser
+answers a ping automatically, so 5 s pings detect a dead client in 15 s at a
+cost of one small frame per 5 s.
 
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol

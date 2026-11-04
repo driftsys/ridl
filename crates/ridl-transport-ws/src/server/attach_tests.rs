@@ -67,7 +67,7 @@ pub(super) fn assert_pong_end(session: &mut impl Driver, expected: Ended, reads:
     assert_eq!(n.get(), reads, "attach deadline must ignore pongs");
 }
 #[test]
-fn consuming_attach_wait_keeps_prior_pong_liveness() {
+fn consuming_attach_wait_ends_at_liveness_timeout_despite_pongs() {
     let rt = Loopback::new(CatalogRef {
         name: "test",
         hash: CatalogHash([7; 32]),
@@ -78,7 +78,7 @@ fn consuming_attach_wait_keeps_prior_pong_liveness() {
         frame_version: 2,
         config_refused: false,
     };
-    assert_pong_end(&mut selection, Ended::Io(io::ErrorKind::UnexpectedEof), 5);
+    assert_attach_timeout(&mut selection);
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn consuming_acceptance_cancels_attach_deadline() {
 fn consuming_zero_poll_interval_is_invalid_input() {
     struct Unattached(bool);
     impl Driver for Unattached {
-        fn bounded_attach_wait(&self) -> bool {
+        fn clamps_zero_poll(&self) -> bool {
             self.0
         }
         fn attached(&self) -> bool {
@@ -150,26 +150,23 @@ fn consuming_zero_poll_interval_is_invalid_input() {
     }
     let mut config = Config::default();
     config.poll_interval = Duration::ZERO;
-    for (bounded, error) in [
+    for (clamps, error) in [
         (false, io::ErrorKind::InvalidInput),
         (true, io::ErrorKind::UnexpectedEof),
     ] {
         assert_eq!(
-            run_upgraded(&mut RejectZero, &mut Unattached(bounded), &config),
+            run_upgraded(&mut RejectZero, &mut Unattached(clamps), &config),
             Ended::Io(error)
         );
     }
 }
 
 #[test]
-fn provided_attach_deadline_checks_events_and_idle_reads_independently() {
+fn attach_deadline_checks_events_and_idle_reads_independently() {
     struct Attaching {
         attached: bool,
     }
     impl Driver for Attaching {
-        fn bounded_attach_wait(&self) -> bool {
-            true
-        }
         fn attached(&self) -> bool {
             self.attached
         }

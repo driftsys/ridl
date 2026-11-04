@@ -234,11 +234,8 @@ pub struct Config {
     /// pinged sends nothing (a browser sends no ping of its own).
     pub ping_interval: Duration,
     /// How long without any message from the client before the session is
-    /// closed. For [`super::serve_provided`] and
-    /// [`super::serve_provided_selected`] only, also bounds the wait for
-    /// `attached` after upgrade, regardless of ping and pong traffic. For
-    /// [`super::serve`] and [`super::serve_selected`], ping and pong traffic
-    /// still resets the liveness clock before `attach`.
+    /// closed. Also bounds the wait after upgrade for `attach` (or for
+    /// `attached` in a provided session), regardless of ping and pong traffic.
     pub liveness_timeout: Duration,
     /// How long a call whose outcome stays unknown is kept on the backend
     /// before it is forgotten.
