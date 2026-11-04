@@ -46,7 +46,7 @@ import {
 } from "./errors.ts";
 import { endViolation } from "./violation.ts";
 import { FORM_BLOCK } from "./blocks.ts";
-import { Calls, type Unused } from "./calls.ts";
+import { Calls, type Unused, UPLOAD_STREAM, type UploadSend } from "./calls.ts";
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
 /** The state of a signal or a `fixed`, as one `publish` carried it. */
@@ -506,6 +506,7 @@ export class Session {
     return this.#calls.command(
       opts.bound,
       (seq) => this.#request(Kind.Command, iface, ord, seq, args),
+      { kind: Kind.Command, iface, ord },
     );
   }
 
@@ -533,6 +534,7 @@ export class Session {
       opts.bound,
       this.#limitOf(target),
       (seq) => this.#request(Kind.Query, iface, ord, seq, args),
+      target,
     );
   }
 
@@ -563,8 +565,10 @@ export class Session {
    * category and leaves the session open. A `response` after a chunk, a
    * `response` with `reply` or `accepted`, a `stream_credit`
    * for the call, a chunk beyond the granted credit, a stream frame
-   * on a stream other than 0, or a stream frame for a call that is not a
-   * streamed reply, ends the session with the violation `unexpected-form`.
+   * on a stream other than 0 ends the session with `unexpected-form`. A
+   * stream frame whose target differs from its call is discarded and recorded.
+   * A stream frame with a matching target for a plain command or query, with
+   * neither an upload nor a streamed reply, also ends the session.
    */
   queryStream(
     iface: number,
@@ -595,7 +599,107 @@ export class Session {
           credit,
         }),
       stop: (seq, outcome) => this.#stop(target, seq, outcome),
+    }, target);
+  }
+
+  /**
+   * Sends a command with parameter stream 1. One write sends one chunk and
+   * waits while its credit is spent. The acknowledgment is bounded from the
+   * request and leaves the upload open. Close resolves when its end is sent;
+   * it cannot confirm that the provider accepted the last chunks. Abort sends
+   * interrupted and leaves the acknowledgment waiting for its response.
+   * Invalid arguments, bounds or numbers reject both operations with the
+   * same error, as in {@link Session.command}; versions below 3 reject unsupported.
+   */
+  commandStream(
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: { bound: number },
+  ): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+    const target = { kind: Kind.Command, iface, ord };
+    try {
+      const send = this.#uploadSend(target, args);
+      return this.#calls.commandUpload(
+        opts.bound,
+        this.#limitOf(target),
+        send,
+        target,
+      );
+    } catch (error) {
+      return { upload: failedUpload(error), accepted: Promise.reject(error) };
+    }
+  }
+
+  /**
+   * Sends a query with parameter stream 1. The reply bound starts when close
+   * sends the upload's end. Abort rejects the reply with interrupted. Upload
+   * failures reject the reply and every waiting write with the same error.
+   * A plain reply while the upload is open errors the upload with interrupted
+   * and resolves the reply. Writes and close behave as in
+   * {@link Session.commandStream}.
+   */
+  queryWithUpload(
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: { bound: number },
+  ): { upload: WritableStream<Uint8Array>; reply: Promise<Uint8Array> } {
+    const target = { kind: Kind.Query, iface, ord };
+    try {
+      const send = this.#uploadSend(target, args);
+      return this.#calls.queryUpload(
+        opts.bound,
+        this.#limitOf(target),
+        send,
+        target,
+      );
+    } catch (error) {
+      return { upload: failedUpload(error), reply: Promise.reject(error) };
+    }
+  }
+
+  #uploadSend(
+    target: Target & { kind: typeof Kind.Command | typeof Kind.Query },
+    args: Uint8Array,
+  ): UploadSend {
+    checkNumbers(target.iface, target.ord);
+    if (!this.#ended && this.#frameVersion < FRAME_VERSION_3) {
+      throw new SessionError({ category: "unsupported" });
+    }
+    this.#checkArgs(target, args);
+    const envelope = (seq: bigint) => ({
+      stamp: (this.#options.clock ?? (() => BigInt(Date.now()) * 1000n))(),
+      seq,
     });
+    return {
+      request: (seq) =>
+        this.#request(
+          target.kind,
+          target.iface,
+          target.ord,
+          seq,
+          args,
+        ),
+      chunk: (seq, streamSeq, payload) =>
+        this.#send({
+          form: "chunk",
+          target,
+          envelope: envelope(streamSeq),
+          correlation: seq,
+          stream: UPLOAD_STREAM,
+          payload,
+        }),
+      end: (seq, streamSeq, outcome) =>
+        this.#send({
+          form: "stream_end",
+          target,
+          envelope: envelope(streamSeq),
+          correlation: seq,
+          stream: UPLOAD_STREAM,
+          outcome,
+        }),
+    };
   }
 
   /**
@@ -625,8 +729,8 @@ export class Session {
     args: Uint8Array,
   ): void {
     const clock = this.#options.clock ?? (() => BigInt(Date.now()) * 1000n);
-    // `encode` copies `args` into the message it allocates; the session keeps
-    // no reference to `args`.
+    // `encode` copies `args` into the message it allocates. The upload's
+    // send callbacks may retain the original arguments.
     this.#send({
       form: "request",
       target: { kind, iface, ord },
@@ -1059,4 +1163,9 @@ export class Session {
     if (this.#violation !== undefined) ended.violation = this.#violation;
     resolve(ended);
   }
+}
+
+/** An upload refused before its request can be sent. */
+function failedUpload(error: unknown): WritableStream<Uint8Array> {
+  return new WritableStream({ start: (controller) => controller.error(error) });
 }

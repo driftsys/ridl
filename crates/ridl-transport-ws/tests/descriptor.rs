@@ -253,3 +253,33 @@ fn the_table_reads_a_reply_stream() {
         );
     }
 }
+
+#[test]
+fn the_table_reads_a_parameter_stream() {
+    for (numbers, expected) in [(vec![0, 1], 1), (vec![1, 2], 2), (vec![2], 2)] {
+        let bytes = descriptor_with(|c| {
+            c.interfaces[0].members[3].streams = Some(
+                numbers
+                    .iter()
+                    .map(|&no| StreamPayload {
+                        no,
+                        form: StreamForm::Bytes,
+                        element: None,
+                        max_sizes: vec![],
+                    })
+                    .collect(),
+            );
+        });
+        let mut t = MemberTable::from_descriptor(&bytes).unwrap();
+        assert_eq!(
+            t.reply_stream(InterfaceNo(1), Ordinal(4)),
+            numbers.contains(&0)
+        );
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(4)), expected);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(99)), 0);
+        t.set_parameter_streams(InterfaceNo(1), Ordinal(99), 2);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(99)), 0);
+        t.insert(InterfaceNo(1), Ordinal(4), Kind::Query, None);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(4)), 0);
+    }
+}

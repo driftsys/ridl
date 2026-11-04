@@ -13,8 +13,9 @@ attaches to a server that serves frame version 1 only. Frame version 2 is frame
 version 1 plus the `block` form, which carries a `fixed` payload that does not
 fit one message in parts (frame specification §11.1, binding version 2). Frame
 version 3 is frame version 2 plus the forms `chunk`, `stream_end` and
-`stream_credit`, which carry the reply stream of a query (binding version 3). On
-a session of frame version 1, a `block` is a protocol violation.
+`stream_credit`, which carry the reply stream of a query and the parameter
+stream of a command or a query (binding version 3). On a session of frame
+version 1, a `block` is a protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
 `WebSocket`, so it needs no other runtime. The npm release workflow
@@ -109,6 +110,26 @@ stream errors with a `SessionError` whose category is `contract`, `corrupt`,
 `busy`, `interrupted`, `timeout`, `down` or, on a session of frame version 1 or
 2, `unsupported`, in which case nothing is sent. The rules are in
 [the package's design record](../../docs/design/ridl-transport-ws-ts.md), D-20.
+
+## Uploading a parameter stream
+
+On a session of frame version 3,
+`session.commandStream(iface, ord, args, { bound })` returns
+`{ upload, accepted }`, and
+`session.queryWithUpload(iface, ord, args, { bound })` returns
+`{ upload, reply }`. The upload is a `WritableStream<Uint8Array>` on stream 1:
+each write sends one chunk, up to the member's payload limit, and waits while
+its credit is spent. Closing the writer sends the end; it does not confirm that
+the provider accepted the last chunks.
+
+A command's `accepted` promise resolves on acknowledgment and leaves the upload
+open; its bound runs from the request. A query's reply bound starts when the
+upload closes. A plain reply received while the upload is open resolves `reply`
+and errors the upload with `interrupted`. Aborting sends `interrupted`: it
+leaves a command's acknowledgment waiting, and rejects a query's reply. A send
+exception errors the upload, forgets the call and rejects its pending `accepted`
+or `reply` promise with the same error. Frame versions 1 and 2 reject both
+operations with `unsupported` and send nothing.
 
 ## A providing session
 

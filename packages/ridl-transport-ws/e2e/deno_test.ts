@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { connect, Kind } from "../mod.ts";
+import { connect, Kind, SessionError } from "../mod.ts";
 import {
   attach,
   decode,
@@ -9,7 +9,7 @@ import {
   SUBPROTOCOL,
 } from "../src/frame.ts";
 import type { Frame } from "../src/frame.ts";
-import type { Note, Occurrence, Sample } from "../mod.ts";
+import type { Note, Occurrence, Sample, Session } from "../mod.ts";
 import * as catalog from "./catalog.ts";
 import { startServer } from "./server.ts";
 import { waiter } from "./waiter.ts";
@@ -161,6 +161,157 @@ Deno.test("queryStream_receives_64_elements_over_loopback_server", async () => {
   } finally {
     await server.stop();
   }
+});
+
+/** Runs one upload scenario with a time limit and closes its session on failure. */
+async function withUploadSession(
+  run: (session: Session) => Promise<void>,
+): Promise<void> {
+  const server = await startServer();
+  try {
+    const notes: Note[] = [];
+    const session = await connect(`ws://127.0.0.1:${server.port}`, {
+      catalog: { name: catalog.NAME, hash: catalog.HASH },
+      encoding: catalog.ENCODING,
+      onNote(note) {
+        notes.push(note);
+      },
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new Error("the upload scenario did not finish within 5 s")),
+        5000,
+      );
+    });
+    try {
+      await Promise.race([run(session), late]);
+      // A query refusal can send both a stream end and a response; the
+      // client discards the latter after settling on the stream end.
+      assert.deepEqual(notes.filter((note) => note.note === "violation"), []);
+    } finally {
+      clearTimeout(timer);
+      session.close();
+      await session.closed;
+    }
+  } finally {
+    await server.stop();
+  }
+}
+
+Deno.test("commandStream_uploads_200_000_bytes_and_fetch_reads_them_back", async () => {
+  await withUploadSession(async (session) => {
+    const bytes = catalog.pattern(catalog.UPLOAD_LEN);
+    const { upload, accepted } = session.commandStream(
+      catalog.IFACE,
+      catalog.UPLOAD,
+      Uint8Array.of(1, 0),
+      { bound: 2000 },
+    );
+    await accepted;
+    await catalog.writeAll(upload, bytes, catalog.FETCH_CHUNK);
+    const fetched = await catalog.readAll(session.queryStream(
+      catalog.IFACE,
+      catalog.FETCH,
+      Uint8Array.of(1),
+      { bound: 2000 },
+    ));
+    assert.equal(fetched.length, 200_000);
+    assert.deepEqual(fetched, bytes);
+  });
+});
+
+Deno.test("queryWithUpload_replies_the_count_and_the_sum_of_200_000_bytes", async () => {
+  await withUploadSession(async (session) => {
+    const bytes = catalog.pattern(catalog.UPLOAD_LEN);
+    const { upload, reply } = session.queryWithUpload(
+      catalog.IFACE,
+      catalog.UPLOAD_QUERY,
+      Uint8Array.of(0),
+      { bound: 2000 },
+    );
+    // Observe a refusal even if it arrives before writeAll finishes.
+    reply.catch(() => {});
+    await catalog.writeAll(upload, bytes, catalog.FETCH_CHUNK);
+    const result = await reply;
+    assert.equal(result.length, 12);
+    const view = new DataView(
+      result.buffer,
+      result.byteOffset,
+      result.byteLength,
+    );
+    assert.equal(view.getBigUint64(0, true), 200_000n);
+    const sum = bytes.reduce((sum, byte) => (sum + byte) >>> 0, 0);
+    assert.equal(view.getUint32(8, true), sum);
+  });
+});
+
+Deno.test("a_refused_third_block_rejects_the_next_write_with_contract_and_accepted_stays_resolved", async () => {
+  await withUploadSession(async (session) => {
+    const { upload, accepted } = session.commandStream(
+      catalog.IFACE,
+      catalog.UPLOAD,
+      Uint8Array.of(2, catalog.MODE_REFUSE_RANGE),
+      { bound: 2000 },
+    );
+    await accepted;
+    const writer = upload.getWriter();
+    let written = 0;
+    try {
+      await assert.rejects(async () => {
+        // Keep writing without closing: a refusal of the third chunk must
+        // reach a later write, including one waiting for credit.
+        for (; written < 16; written++) {
+          await writer.write(catalog.pattern(1024));
+        }
+      }, (error: unknown) => {
+        assert.ok(error instanceof SessionError);
+        assert.deepEqual(error.failure, {
+          category: "contract",
+          contract: { category: "invalid-value", rule: "range" },
+        });
+        return true;
+      });
+      assert.ok(written >= 3, `${written} writes succeeded before the refusal`);
+      await accepted;
+    } finally {
+      writer.releaseLock();
+    }
+  });
+});
+
+Deno.test("a_utf8_refusal_crosses_with_rule_utf8", async () => {
+  await withUploadSession(async (session) => {
+    const { upload, reply } = session.queryWithUpload(
+      catalog.IFACE,
+      catalog.UPLOAD_QUERY,
+      Uint8Array.of(catalog.MODE_REFUSE_UTF8),
+      { bound: 2000 },
+    );
+    const isUtf8Refusal = (error: unknown): boolean => {
+      assert.ok(error instanceof SessionError);
+      assert.deepEqual(error.failure, {
+        category: "contract",
+        contract: { category: "invalid-value", rule: "utf8" },
+      });
+      return true;
+    };
+    // Register both rejection observers before writing. Do not close the
+    // upload: sending the end may stop the server observing a late refusal.
+    const refusedReply = assert.rejects(reply, isUtf8Refusal);
+    const writer = upload.getWriter();
+    try {
+      const refusedWrite = assert.rejects(async () => {
+        for (let i = 0; i < 16; i++) {
+          await writer.write(catalog.pattern(1024));
+        }
+      }, isUtf8Refusal);
+      await Promise.all([refusedReply, refusedWrite]);
+    } finally {
+      writer.releaseLock();
+    }
+  });
 });
 
 Deno.test("the server answers a read of a fixed in one publish up to 16,137 bytes and in blocks above", async () => {

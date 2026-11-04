@@ -657,8 +657,11 @@ other entry below is Accepted.
   and, as amended 2026-11-04, the Rust face over `ridl-loopback` for byte, text
   and named-element reply streams and commands and queries with one parameter
   stream. An upload query has a plain or named-element streamed reply. The
-  WebSocket upload direction, the corresponding TypeScript methods, and calls
-  with two or more parameter streams are not built (driftsys/ridl#1224).
+  WebSocket server carries uploads as
+  [D-30 records](../design/ridl-transport-ws.md). The TypeScript upload methods
+  and their limits are recorded in [D-23](../design/ridl-transport-ws-ts.md).
+  Calls with two or more parameter streams remain outside the Rust face
+  (driftsys/ridl#1224).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

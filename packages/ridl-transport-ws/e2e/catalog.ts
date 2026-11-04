@@ -1,8 +1,8 @@
 // The test catalog that the example server provides. These values are defined
 // in crates/ridl-transport-ws/tests/support/provider.rs; keep them equal to it.
 // The test `the_e2e_catalog_holds_the_ordinals_and_lengths_of_the_test_provider`
-// in crates/ridl-transport-ws/tests/ts_ceilings.rs fails when the ordinals 7 to
-// 9 or their three lengths differ.
+// in crates/ridl-transport-ws/tests/ts_ceilings.rs checks the fixed and upload
+// ordinals, the fixed lengths, the fetch chunk size and the refusal modes.
 
 /** The unit name of the test catalog. */
 export const NAME = "test.ws";
@@ -42,6 +42,20 @@ export const FIXED_SPLIT = 9;
 export const STREAM_QUERY = 10;
 /** The length of each chunk of the reply of {@link STREAM_QUERY}. */
 export const ELEMENT_LEN = 1024;
+/** The command that stores stream 1 under its argument's key. */
+export const UPLOAD = 11;
+/** The query that replies with the upload's byte count and wrapping sum. */
+export const UPLOAD_QUERY = 12;
+/** The query that streams the stored bytes for its argument's key. */
+export const FETCH = 13;
+/** Refuses the third chunk with the range rule. */
+export const MODE_REFUSE_RANGE = 1;
+/** Refuses the third chunk with the UTF-8 rule. */
+export const MODE_REFUSE_UTF8 = 2;
+/** The largest chunk of a fetched value. */
+export const FETCH_CHUNK = 16_128;
+/** The byte count of an end-to-end upload. */
+export const UPLOAD_LEN = 200_000;
 /** The length of each large `fixed`, by ordinal. */
 export const FIXED_LENGTHS: ReadonlyMap<number, number> = new Map([
   [FIXED_LARGE, 65_280],
@@ -66,6 +80,45 @@ export async function readElements(
     count += 1;
   }
   return { count, match };
+}
+
+/** Writes `bytes` in pieces of `chunk`, waiting for each write, then closes. */
+export async function writeAll(
+  upload: WritableStream<Uint8Array>,
+  bytes: Uint8Array,
+  chunk: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(chunk) || chunk <= 0) {
+    throw new RangeError("chunk must be a positive safe integer");
+  }
+  const writer = upload.getWriter();
+  try {
+    for (let offset = 0; offset < bytes.length; offset += chunk) {
+      await writer.write(bytes.subarray(offset, offset + chunk));
+    }
+    await writer.close();
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+/** Reads all chunks through the end and concatenates them without changing order. */
+export async function readAll(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+    length += chunk.length;
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
 }
 
 /** The `n` bytes whose byte `i` is `i mod 251`. */

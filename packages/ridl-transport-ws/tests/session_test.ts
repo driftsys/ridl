@@ -12,6 +12,7 @@ import {
   SessionError,
   SUBPROTOCOL,
   SUBPROTOCOL_V1,
+  SUBPROTOCOL_V3,
 } from "../mod.ts";
 import type {
   ConnectOptions,
@@ -1854,4 +1855,91 @@ Deno.test("a publish of a signal above its limit keeps its report and records no
     reason: "not-subscribed",
     frame: unsolicited,
   }]);
+});
+
+Deno.test("upload_preflight_rejects_both_operations_with_the_same_error_and_sends_nothing", async () => {
+  for (const query of [false, true]) {
+    for (
+      const c of [
+        {
+          protocol: SUBPROTOCOL_V1,
+          iface: 1,
+          ord: 11,
+          bound: 20,
+          args: 0,
+          failure: "unsupported",
+        },
+        {
+          protocol: SUBPROTOCOL,
+          iface: 1,
+          ord: 11,
+          bound: 20,
+          args: 0,
+          failure: "unsupported",
+        },
+        ...[0, -1, 0.5, 4294967296, NaN, Infinity].flatMap((number) => [
+          {
+            protocol: SUBPROTOCOL_V3,
+            iface: number,
+            ord: 11,
+            bound: 20,
+            args: 0,
+            failure: "range",
+          },
+          {
+            protocol: SUBPROTOCOL_V3,
+            iface: 1,
+            ord: number,
+            bound: 20,
+            args: 0,
+            failure: "range",
+          },
+        ]),
+        ...[0, -1, NaN, Infinity, 2147483648].map((bound) => ({
+          protocol: SUBPROTOCOL_V3,
+          iface: 1,
+          ord: 11,
+          bound,
+          args: 0,
+          failure: "range",
+        })),
+        {
+          protocol: SUBPROTOCOL_V3,
+          iface: 1,
+          ord: 11,
+          bound: 20,
+          args: 16129,
+          failure: "corrupt",
+        },
+      ]
+    ) {
+      const { session, socket } = await attached(c.protocol);
+      try {
+        const call = query
+          ? session.queryWithUpload(c.iface, c.ord, new Uint8Array(c.args), {
+            bound: c.bound,
+          })
+          : session.commandStream(c.iface, c.ord, new Uint8Array(c.args), {
+            bound: c.bound,
+          });
+        const promise = "reply" in call ? call.reply : call.accepted;
+        const writer = call.upload.getWriter();
+        void writer.closed.catch(() => {});
+        let error: unknown;
+        await assert.rejects(promise, (e) => {
+          error = e;
+          return c.failure === "range"
+            ? e instanceof RangeError
+            : e instanceof SessionError && e.failure.category === c.failure;
+        });
+        await assert.rejects(
+          writer.write(new Uint8Array()),
+          (e) => e === error,
+        );
+        assert.equal(socket.sent.length, 1);
+      } finally {
+        session.close();
+      }
+    }
+  }
 });

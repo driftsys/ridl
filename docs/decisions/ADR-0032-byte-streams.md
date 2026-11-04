@@ -14,11 +14,8 @@ Written from the owner's decisions of 2026-10-28 (decisions 1 to 8) and of
 2026-10-31 (decisions 9 to 14, which answer the six open questions the record
 was proposed with). It adds no syntax, no interaction kind and no diagnostic
 code. The documents in "Documents amended" are changed with the acceptance.
-Built: the stream port of `ridl-rt`, the `streams` entries of the catalog
-descriptor, frame version 3, which carries a query's streamed reply over
-WebSocket
-([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
-and the Rust face described in the 2026-11-04 amendment below.
+Built: the current implementation and its remaining limits are recorded in the
+[2026-11-04 amendment](#amended-2026-11-04).
 
 Amended 2026-10-31. Decision 10's example spelled the result union inline as
 `<DocChunk | DocError>`, which the grammar does not admit; the example now
@@ -26,17 +23,23 @@ declares a named union (`union DocChunkResult`) and writes `<DocChunkResult>`,
 as ridl §12.4 does. Decisions 9 and 11 are built as the stream port of `ridl-rt`
 0.x (the signatures are in [the ridl-rt design](../design/ridl-rt.md)).
 
-Amended 2026-11-02. The frame version and the Rust face for a streamed reply of
-named elements are built: frame version 3 carries a query's streamed reply over
-WebSocket. The other cases of this record are not carried by a transport yet.
+Amended 2026-11-02. Frame version 3 and the Rust face for a streamed reply of
+named elements were built by this date. The current transport coverage is
+recorded in the [2026-11-04 amendment](#amended-2026-11-04).
 
-Amended 2026-11-04. Over `ridl-loopback`, the Rust face carries byte, text and
-named-element reply streams, commands with one parameter stream, and queries
-with one parameter stream and a plain or named-element streamed reply. The
-WebSocket upload direction, the corresponding TypeScript methods, and calls with
-two or more parameter streams are not built; the last omission is tracked as
-driftsys/ridl#1224. A query with an upload and a byte or text reply stream also
-remains outside the face.
+### Amended 2026-11-04
+
+Over `ridl-loopback`, the Rust face carries byte, text and named-element reply
+streams, commands with one parameter stream, and queries with one parameter
+stream and a plain or named-element streamed reply. The WebSocket server also
+receives parameter streams on commands and queries, including a query with an
+upload and a reply stream ([the server record](../design/ridl-transport-ws.md),
+D-30). Frame version 3 carries `Utf8` as rule code 7 (frame specification §9.6).
+The TypeScript client's upload methods and the missing duplex query method
+(driftsys/ridl#1240) are recorded in [D-23](../design/ridl-transport-ws-ts.md).
+Calls with two or more parameter streams remain outside the Rust face
+(driftsys/ridl#1224). A query with an upload and a byte or text reply stream
+also remains outside the face.
 
 ## Context
 

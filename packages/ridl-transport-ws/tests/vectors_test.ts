@@ -328,7 +328,13 @@ async function specVersion3Vectors(): Promise<[string, Uint8Array][]> {
   return rows;
 }
 
-const KNOWN_3 = ["attach-3", "chunk-reply", "stream-end-end", "stream-credit"];
+const KNOWN_3 = [
+  "attach-3",
+  "chunk-reply",
+  "stream-end-end",
+  "stream-credit",
+  "stream-end-utf8",
+];
 
 function expected3(id: string): Frame | undefined {
   const hash = new Uint8Array(32);
@@ -360,6 +366,18 @@ function expected3(id: string): Frame | undefined {
         correlation: 2n,
         stream: 0,
         outcome: { kind: "end" },
+      };
+    case "stream-end-utf8":
+      return {
+        form: "stream_end",
+        target: target(Kind.Command, 1, 3),
+        envelope: { stamp: 0x0123456789ACn, seq: 1n },
+        correlation: 2n,
+        stream: 1,
+        outcome: {
+          kind: "contract",
+          contract: { category: "invalid-value", rule: "utf8" },
+        },
       };
     case "stream-credit":
       return {

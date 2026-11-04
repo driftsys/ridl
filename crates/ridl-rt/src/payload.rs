@@ -330,8 +330,8 @@ pub struct Violation {
 
 /// The kind of typl constraint a [`Violation`] breaks.
 ///
-/// `Rule::Utf8` exists in `ridl-rt` without a wire code. A rule receives its
-/// wire code with the frame version that first carries it, because a receiver
+/// `Rule::Utf8` has wire code 7 from frame version 3. A rule receives its wire
+/// code with the frame version that first carries it, because a receiver
 /// cannot construct a variant it does not know (the frame specification §9.6);
 /// the enum stays `#[non_exhaustive]`.
 #[non_exhaustive]
@@ -352,7 +352,7 @@ pub enum Rule {
     /// A map contains more than one entry with the same key.
     Unique,
     /// A text chunk of a `<string>` stream is not valid UTF-8
-    /// (ADR-0032 decision 12).
+    /// (ADR-0032 decision 12). Its wire code is 7 from frame version 3.
     Utf8,
 }
 

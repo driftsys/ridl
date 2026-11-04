@@ -119,7 +119,19 @@ fn the_e2e_catalog_holds_the_ordinals_and_lengths_of_the_test_provider() {
     let ts = std::fs::read_to_string(CATALOG_TS)
         .expect("read packages/ridl-transport-ws/e2e/catalog.ts");
     let rs = std::fs::read_to_string(PROVIDER_RS).expect("read tests/support/provider.rs");
-    for name in ["FIXED_LARGE", "FIXED_WHOLE", "FIXED_SPLIT"] {
+    for name in [
+        "FIXED_LARGE",
+        "FIXED_WHOLE",
+        "FIXED_SPLIT",
+        "UPLOAD",
+        "UPLOAD_QUERY",
+        "FETCH",
+    ] {
+        assert!(
+            ts.lines()
+                .any(|line| line.starts_with(&format!("export const {name} = "))),
+            "catalog.ts declares {name}"
+        );
         assert_eq!(
             number_after(&ts, "catalog.ts", &format!("export const {name} = ")),
             number_after(
@@ -129,6 +141,8 @@ fn the_e2e_catalog_holds_the_ordinals_and_lengths_of_the_test_provider() {
             ),
             "ordinal of {name}"
         );
+    }
+    for name in ["FIXED_LARGE", "FIXED_WHOLE", "FIXED_SPLIT"] {
         assert_eq!(
             number_after(&ts, "catalog.ts", &format!("[{name}, ")),
             number_after(
@@ -137,6 +151,22 @@ fn the_e2e_catalog_holds_the_ordinals_and_lengths_of_the_test_provider() {
                 &format!("pub const {name}_LEN: usize = ")
             ),
             "length of {name}"
+        );
+    }
+    for (name, ty) in [
+        ("FETCH_CHUNK", "usize"),
+        ("MODE_REFUSE_RANGE", "u8"),
+        ("MODE_REFUSE_UTF8", "u8"),
+    ] {
+        assert!(
+            ts.lines()
+                .any(|line| line.starts_with(&format!("export const {name} = "))),
+            "catalog.ts declares {name}"
+        );
+        assert_eq!(
+            number_after(&ts, "catalog.ts", &format!("export const {name} = ")),
+            number_after(&rs, "provider.rs", &format!("pub const {name}: {ty} = ")),
+            "value of {name}"
         );
     }
 }

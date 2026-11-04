@@ -500,10 +500,14 @@ fn check_in(value: u8, range: std::ops::RangeInclusive<u8>, field: &str) -> Resu
 /// An `outcome` code and its `detail`: the `Rule` code with outcome 3, the
 /// refusal reason with outcome 9, and 0 with every other outcome (frame
 /// specification §4, §9.6, §11.1 item 2).
-fn check_outcome(outcome: u8, detail: u8) -> Result<(), String> {
+fn check_outcome(outcome: u8, detail: u8, version: u32) -> Result<(), String> {
     check_in(outcome, 1..=9, "outcome")?;
     match outcome {
-        3 => check_in(detail, 1..=6, "the `Rule` detail"),
+        3 => check_in(
+            detail,
+            1..=if version >= 3 { 7 } else { 6 },
+            "the `Rule` detail",
+        ),
         9 => check_in(detail, 1..=5, "the refusal detail"),
         _ if detail == 0 => Ok(()),
         _ => Err(format!(
@@ -583,7 +587,7 @@ fn check_vector(bytes: &[u8], payload: &[u8], version: u32) -> Result<(), String
             bytes.len()
         ));
     }
-    check_codes(form, bytes)?;
+    check_codes(form, bytes, version)?;
     // `Live` is provenance 2 and `reply` is outcome 2 (§4).
     let carries = may_carry
         && match form {
@@ -609,9 +613,9 @@ fn check_vector(bytes: &[u8], payload: &[u8], version: u32) -> Result<(), String
 }
 
 /// The codes of a header of `form`, which is 2 to 11, against their tables.
-fn check_codes(form: u8, bytes: &[u8]) -> Result<(), String> {
+fn check_codes(form: u8, bytes: &[u8], version: u32) -> Result<(), String> {
     if form == 2 {
-        return check_outcome(bytes[1], bytes[2]);
+        return check_outcome(bytes[1], bytes[2], version);
     }
     check_in(bytes[1], 1..=5, "kind")?;
     if u32_le(bytes, 2) == 0 {
@@ -621,11 +625,11 @@ fn check_codes(form: u8, bytes: &[u8]) -> Result<(), String> {
         return Err("ordinal 0".to_string());
     }
     match form {
-        4 => check_outcome(bytes[10], bytes[11]),
+        4 => check_outcome(bytes[10], bytes[11], version),
         7 => check_in(bytes[26], 1..=3, "provenance"),
-        10 => check_outcome(bytes[34], bytes[35]),
+        10 => check_outcome(bytes[34], bytes[35], version),
         11 => check_block(bytes),
-        12..=14 => check_stream(form, bytes),
+        12..=14 => check_stream(form, bytes, version),
         _ => Ok(()),
     }
 }
@@ -634,13 +638,13 @@ fn check_codes(form: u8, bytes: &[u8]) -> Result<(), String> {
 /// version 3): `kind` is `Command` (3) or `Query` (4); a `stream_end` has
 /// one of the outcomes 3 to 8, 10 and 11, with the `Rule` detail under
 /// outcome 3 and 0 otherwise; a `stream_credit` grants at least 1 chunk.
-fn check_stream(form: u8, bytes: &[u8]) -> Result<(), String> {
+fn check_stream(form: u8, bytes: &[u8], version: u32) -> Result<(), String> {
     check_in(bytes[1], 3..=4, "kind of a stream form")?;
     match form {
         13 => {
             let (outcome, detail) = (bytes[35], bytes[36]);
             match outcome {
-                3..=8 => check_outcome(outcome, detail),
+                3..=8 => check_outcome(outcome, detail, version),
                 10 | 11 if detail == 0 => Ok(()),
                 10 | 11 => Err(format!(
                     "detail {detail} with outcome {outcome}, which takes 0"
@@ -1468,6 +1472,18 @@ mod tests {
     }
 
     #[test]
+    fn rule_detail_7_is_allowed_in_version_3_only() {
+        for hex in [
+            "04 01 01000000 02000000 03 07",
+            "0a 04 01000000 04000000 ac89674523010000 0100000000000000 0200000000000000 03 07",
+        ] {
+            assert!(one_row_3("utf8", "x", hex).is_ok(), "version 3: {hex}");
+            assert!(one_row("utf8", "x", hex).is_err(), "version 1: {hex}");
+            assert!(one_row_2("utf8", "x", hex).is_err(), "version 2: {hex}");
+        }
+    }
+
+    #[test]
     fn a_stream_form_is_checked_by_itself() {
         let chunk = |kind: &str| {
             format!(
@@ -1499,7 +1515,8 @@ mod tests {
             ("00", "00", false),
             ("0a", "01", false),
             ("0b", "01", false),
-            ("03", "07", false),
+            ("03", "07", true),
+            ("03", "08", false),
             ("07", "01", false),
         ] {
             assert_eq!(

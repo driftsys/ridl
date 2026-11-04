@@ -1391,6 +1391,121 @@ rulings override the earlier design where it differs.
   named sources when needed while keeping the existing correct named-only
   description unchanged.
 
+## As built (stage 5b)
+
+The server, UTF-8 wire code and TypeScript upload API are built. The upload
+end-to-end tests are written and type-checked; their execution over TCP or in a
+browser is not verified by the available local results. These rulings supersede
+earlier sections where they differ. The implementation records are
+[the server design](../design/ridl-transport-ws.md), D-30, and
+[the client design](../design/ridl-transport-ws-ts.md), D-23; wire behavior
+belongs to [the frame specification](../specification/frame-specification.md)
+§5.3, §5.4, §6.4, §9.6 and §11.1.
+
+### Server rulings
+
+- B-4: Parameter chunks are admitted by the member's stream count, credit,
+  sequence and payload limit. Unknown correlations are ignored; stopped streams
+  and streams whose client end has arrived drop later chunks silently.
+  `ChunkTooLarge` ends the offending upload as `corrupt` and forgets the call.
+- B-5: Ends are direction-aware. A client ends or interrupts its parameter
+  stream; only a receiver can send a verdict. The server pushes a normal end
+  after its queued chunks. Repeated ends after the client's end are ignored.
+- B-6: An accepted command remains in flight until its uploads end or stop.
+  Refusing responses discard queued upload frames and forget without another
+  upload end. Other terminal call paths interrupt open uploads.
+- B-7: Upload activity includes received chunks, valid normal ends and chunks
+  taken by the backend. The owner-approved duplex amendment abandons a duplex
+  call only after neither direction has progressed for `call_abandon_after`;
+  upload activity remains relevant after its end. Calls without a reply stream
+  retain their upload abandonment checks.
+- B-8: Only a query with a plain reply resets its monotonic abandonment origin
+  and its backend-clock retention inputs at the upload end. Retention is
+  `min(end.stamp, end receipt) + max`. A duplex query keeps request-based
+  retention.
+- B-9: Credit is granted for chunks taken by the backend, not merely received.
+  One empty chunk consumes and returns one credit, even when `push` returns 0.
+- B-10: A parameter-stream member on a session below version 3 is answered
+  `contract(UnknownInteraction)`.
+- B-11: Rule code 7 is `Utf8`. The codecs decode it without session state;
+  senders carry it only from version 3, using `corrupt` and `RuleNotCarried`
+  below that version. Invalid UTF-8 inside an ordinary payload remains a
+  structural failure.
+- Target validation precedes dispatch of all three client stream forms. The
+  interface, ordinal and kind must match the call named by correlation. A
+  mismatch is discarded with `Note::UnknownInteraction`, sends nothing and
+  changes no stream or credit (frame specification §6.4).
+
+### Client rulings
+
+- B-12 and Q5: `commandStream` and `queryWithUpload` each send one `chunk` per
+  write on stream 1, with sequences from 1. Each write, including an empty one,
+  spends one of the four initial credits; later server grants release a waiting
+  write. A write above the member limit interrupts and errors the upload as
+  `corrupt` instead of splitting; a write at the limit is accepted.
+- B-13 and Q4(f): Close resolves when the client sends `stream_end end` with the
+  next sequence. It confirms local sending only, because no frame confirms
+  consumption of the upload end. A processed refusal errors a pending write or
+  close; close cannot detect every late refusal. An acknowledged command is
+  forgotten at close, while a pending acknowledgment stays in flight.
+- B-14: A refusal on stream 1 errors the upload and rejects a pending result
+  with the same error, without changing a resolved `accepted`. Refusal releases
+  a write waiting for credit, and a same-turn credit grant cannot cause a write
+  after refusal. A refusing response has the same failure behavior. A server end
+  with sequence other than 1 or outcome `end` is `interrupted`. Abort sends
+  `interrupted`; a query rejects its reply and is forgotten, while a command
+  keeps any pending acknowledgment. Session end errors an upload still in flight
+  and its pending result with `down`.
+- B-15: A command's acknowledgment bound starts at the request and expires as
+  `undelivered`. A query's reply bound starts when close sends the upload end
+  and expires as `timeout`; it has no client timer while the upload is open.
+  Both expiries error the upload and forget the call.
+- A plain query reply within the member limit while the upload is open resolves
+  the reply, errors the upload with `interrupted`, releases a waiting write and
+  forgets the call. An oversized reply rejects both as `corrupt`.
+- A request, chunk or end send that throws forgets the call and rejects its
+  pending reply or acknowledgment with that exact error. A failed chunk or end
+  also rejects the writer operation with that error, including an attempted
+  interruption for an oversized write.
+- Client target validation precedes direction handling for every call shape. A
+  stream frame whose interface, ordinal or kind differs from its call is
+  discarded and recorded as `unknown-correlation`, without changing credit,
+  timers, sequences or stream state (frame specification §6.4). This preserves
+  the existing note vocabulary.
+
+### Accepted plan choices and verification
+
+- Q1: The server carries duplex queries. No TypeScript duplex method is built;
+  no tracking issue number is present in the available records. Filing its
+  tracking issue remains for the driver at PR time.
+- Q2: The loopback test provider has `UPLOAD` (11), `UPLOAD_QUERY` (12), `FETCH`
+  (13) and `DUPLEX` (14). Their behavior and the late-refusal handling are
+  recorded in the server design's "The loopback server" entry.
+- Q3: The browser page uploads 200,000 bytes through `commandStream` to key 3
+  and reads them back through `FETCH`; the browser test requires
+  `upload: "200000:true"`. The extension is type-checked against DOM types; no
+  browser execution result is available in the Task 5 report.
+- Q4(a–e): D-30 records direction-aware ends, `ChunkTooLarge`, silent drops
+  after refusal or the client's end, upload-end clock inputs and the sender's
+  UTF-8 version gate. D-23 records the client's close limit for Q4(f).
+- Task 5's catalog parity target passes 3/3. Six separate mutations of the three
+  upload/fetch ordinals, fetch chunk size and two refusal modes each fail an
+  equality assertion; the restored target passes. The Deno scenarios assert
+  200,000-byte command upload/read-back, query count/sum, a refused third
+  command chunk and a UTF-8 query refusal. Their code and finite limits are
+  recorded in D-14 of the client design. Deno and DOM type checks pass; these
+  scenarios have not run against TCP in the available Task 5 evidence.
+- The Task 4 report records 267 passing package unit tests and 27 detected
+  mutations. Its fix report records 278 passing unit tests and six mutation
+  variants producing 27 assertion failures, followed by restored passing runs.
+  These results cover the send-exception fix and command cleanup; they do not
+  establish execution of the upload end-to-end scenarios.
+- B-16: The plan specifies per-task mutation review and whole-branch review.
+  Implementation and fix reports contain assertion-failure evidence, but do not
+  establish completion of the independent per-task and whole-branch review
+  process. No review completion is claimed here. Server TCP tests remain
+  compiled but unexecuted in the available sandbox reports.
+
 ## Trace
 
 - Issues: driftsys/ridl#1116, driftsys/ridl#336, driftsys/ridl#943.
