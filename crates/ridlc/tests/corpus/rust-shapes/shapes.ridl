@@ -192,6 +192,14 @@ interface Station {
   fixed serial : Label
   /// @deprecated "use `read`"
   query old(): Count @[..50ms]
+  /// Streams bytes.
+  query dump(): <bytes> @[..1s]
+  /// Receives bytes.
+  command load(data: <bytes>) @[..1s]
+  /// Receives inner elements.
+  command feed(samples: <Inner>) @[..1s]
+  /// Transforms uploaded inner values.
+  query blend(samples: <Inner>): <Inner> @[..1s]
 }
 
 /// The call shapes the interaction face refuses: the payload and codec items

@@ -452,7 +452,7 @@ fn pipeline_source(label: &str, text: &str) -> String {
 
 /// A link to an interface whose face module the output does not hold
 /// renders as a code span: `Wide` has no face module, because its only call
-/// takes a stream, which the face carries no method for, and `Provisioned`
+/// takes two streams, which the face carries no method for, and `Provisioned`
 /// declares only a `fixed` member, which the face carries no method for
 /// either. A link to `Panel`, which has a face module, is a link.
 #[test]
@@ -465,9 +465,9 @@ package veh.faces
 /// A level, in percent.
 type Level: integer [0..100]
 
-/// No face module: a call with a stream parameter has no face method.
+/// No face module: calls with two stream parameters remain unsupported.
 interface Wide {
-  command set(samples: <Level>) @[..50ms]
+  command set(left: <Level>, right: <Level>) @[..50ms]
 }
 
 /// Only a fixed member, so no face module.

@@ -151,6 +151,13 @@ generated `blocking::Client` and `blocking::serve` — over the in-process
 and nothing of the compiler that produced them, so it shows what a RIDL
 interface becomes for the application that uses one.
 
+The [docstore schema](examples/docstore/docstore.ridl) and its
+[consumer](examples/docstore/consumer/src/main.rs) show a 204,800-byte upload, a
+metadata query and a byte-stream download through the Rust face over
+`ridl-loopback`. `cargo test -p ridlc --test docstore_example --locked` builds
+the emitted crate and runs the consumer with a 1,000-byte read buffer, checking
+every returned byte. This example is separate from `just demo`.
+
 ## Development
 
 This repository follows the driftsys house style. After cloning, run

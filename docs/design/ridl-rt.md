@@ -37,7 +37,7 @@ adds:
 | `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                                |
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                                                                          |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                                                                           |
-| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements; `Source` and `Interrupted`, the producer of a streamed reply an application implements — the section "The face traits" below                                                                                    |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements; `Source`, `ByteSource`, `Consumer`, `ByteConsumer` and `Interrupted`, the stream traits and interruption an application supplies — the section "The face traits" below                                          |
 | `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                                                                                                    |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                                                                                                       |
 | `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                                                                                                   |
@@ -99,18 +99,50 @@ preludes already bring every item it would add. No runtime implements anything
 here, so `ridl-rt-conformance` does not test it; the generated face's own tests
 do (`crates/ridl-backend-rust/tests/face_compile.rs` and `face_generation.rs`).
 
-`Source` is the one trait of the module an application implements. A `Provider`
-method for a query whose reply is a stream of named elements returns a `Source`
-of those elements, and the generated `serve` drives it over the `StreamHandler`
-port, one element per poll:
+`Source`, `ByteSource`, `Consumer` and `ByteConsumer` are the traits of the
+module an application implements. A `Provider` method for a query whose reply is
+a stream of named elements returns a `Source` of those elements, and the
+generated `serve` drives it over the `StreamHandler` port, one element per poll:
 
 ```rust,ignore
 pub trait Source {
     type Item;
     fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Interrupted>>>;
 }
+pub trait ByteSource {
+    fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, Interrupted>>;
+}
+pub trait Consumer {
+    type Item;
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
+    fn accept(&mut self, item: Self::Item);
+    fn end(&mut self);
+    fn failed(&mut self, e: CallError);
+}
+pub trait ByteConsumer {
+    fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<usize>;
+    fn end(&mut self);
+    fn failed(&mut self, e: CallError);
+}
 pub struct Interrupted;
 ```
+
+`ByteSource` produces bytes or text into a nonempty buffer supplied by the
+driver; `Ready(Ok(0))` ends the stream and `Err(Interrupted)` interrupts it.
+`Consumer` takes one checked element after `poll_ready` answers `Ready(())`.
+`ByteConsumer` takes a prefix of the bytes offered, at least one when the buffer
+is nonempty, and the driver offers the remainder before the next chunk. A
+pending poll takes nothing and stores the waker to wake when progress is
+possible. The generated `serve` notifies a consumer with `end` when the producer
+ends, or `failed` when the stream fails, including an interruption or a refusal
+by its own checks. No method is called after either notification. These traits
+use only `core` and are object safe. The generated face drives `ByteSource` for
+byte and text reply streams, and feeds `Consumer` and `ByteConsumer` for named,
+byte and text parameter streams. Commands with one stream parameter and queries
+with one stream parameter and a plain or named-element streamed reply run over
+`ridl-loopback`. Calls with two or more stream parameters remain outside the
+face (driftsys/ridl#1224). The WebSocket upload direction and the corresponding
+TypeScript client methods are not built yet.
 
 `Ready(Some(Ok(item)))` is the next element, `Ready(None)` the end,
 `Ready(Some(Err(Interrupted)))` stops the stream before its end, which the
@@ -465,13 +497,14 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     Preamble, Stride, Terminator, KeyOrder, // the podbuf codec's
 }
 pub struct Violation { pub type_name: Option<&'static str>, pub rule: Rule }
-#[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant, Unique }
+#[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant, Unique, Utf8 }
 ```
 
 `Rule::Unique` reports duplicate map keys (typl §12.2). It was added on
 2026-10-02 with driftsys/ridl#469. `Rule` remains `#[non_exhaustive]`; consumers
 must retain a fallback arm when matching it. Step failures use `Rule::Step` and
-NaN in a declared range uses `Rule::Range`.
+NaN in a declared range uses `Rule::Range`. `Rule::Utf8` reports a text chunk of
+a `<string>` stream that is not valid UTF-8 (ADR-0032 decision 12).
 
 `Malformed::Varint`, `WireType` and `Duplicate` were added on 2026-10-20 with
 the proto3 codec (ADR-0021 decision 10 as amended); they are not gated by a
@@ -1208,17 +1241,24 @@ Generated code returns both since the async client: a call future's output is
 
 ## What 0.1 leaves out
 
-The frame framing of a stream and the generated face of a stream parameter, of a
-byte stream and of a text stream (driftsys/ridl#1116); `Inline` payloads;
-`Constrained` (nothing calls it in 0.1); `Family` (the IR carries no family
-field yet); `ServiceId` (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the
-frame specification's wire tag values — the frame specification fixed the
-values, 1 FlatBuffers, 2 proto3, 3 `podbuf`; the constant itself is a later 0.x
-minor); `Access` (the trust constant the Rust codegen generates once the rsdl
-lowering exists); the three payload codecs; the runtimes — `ridl-loopback` is
-its own crate ([its design record](ridl-loopback.md)) and `ridl-transport-ws` is
-its own crate, built; and the engine. `Family` returns as a `Member` field,
-which is a breaking change (ADR-0021 decision 10).
+The original stream gaps are now partly closed: the stream port and WebSocket
+reply framing are built, and the generated Rust face carries named, byte and
+text reply streams, one stream parameter on a command, and one stream parameter
+with a plain or named-element streamed query reply over `ridl-loopback`. Calls
+with two or more stream parameters remain outside the face (driftsys/ridl#1224);
+the WebSocket upload direction and the corresponding TypeScript client methods
+are not built yet.
+
+Other omissions are `Inline` payloads; `Constrained` (nothing calls it in 0.1);
+`Family` (the IR carries no family field yet); `ServiceId` (dropped, ADR-0021
+decision 1); `Encoding::FORMAT` (the frame specification's wire tag values — the
+frame specification fixed the values, 1 FlatBuffers, 2 proto3, 3 `podbuf`; the
+constant itself is a later 0.x minor); `Access` (the trust constant the Rust
+codegen generates once the rsdl lowering exists); the three payload codecs; the
+runtimes — `ridl-loopback` is its own crate
+([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own
+crate, built; and the engine. `Family` returns as a `Member` field, which is a
+breaking change (ADR-0021 decision 10).
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 9 fixes the principle
 of the stream port — a pull API over caller-supplied buffers that never waits,
 keyed by the call — and the port is built to it: `StreamCaller` and

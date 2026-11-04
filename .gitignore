@@ -10,6 +10,7 @@
 # `examples/cabin/cabin.ridl`, never edited and never committed. What is in
 # git is the schema it is generated from and the program that links it.
 /examples/cabin/generated/
+/examples/docstore/generated/
 
 # The crate `just demo` generates from `crates/ridlc/tests/corpus/veh-cluster`
 # for its `no_std` check, which cabin's schema alone cannot reach: it has no

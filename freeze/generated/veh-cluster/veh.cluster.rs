@@ -14203,6 +14203,7 @@ pub mod fault_log {
         super::FaultResult: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         __started: bool,
+        __port: ::core::marker::PhantomData<H>,
         faults: ::core::option::Option<
             StreamSlot<P::Faults, ElementBuffer<H, super::FaultResult>>,
         >,
@@ -14394,6 +14395,7 @@ pub mod fault_log {
             state,
             streams: Streams {
                 __started: false,
+                __port: ::core::marker::PhantomData,
                 faults: None,
             },
         }

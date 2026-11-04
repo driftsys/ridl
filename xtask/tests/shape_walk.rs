@@ -157,6 +157,13 @@ const ALLOWED: &[Allowed] = &[
               interface in it to check a streamed reply's reservation",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/tests/face_generation.rs",
+        lines: 4,
+        why: "a test fixture: each test finds the named `Docs` interface of \
+              a compiled package and sets the limit of one stream member, to \
+              check the stream limit the face emits",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/tests/induced_call_refusals.rs",
         lines: 1,
         why: "a test fixture: a compiled package's named interface is moved \

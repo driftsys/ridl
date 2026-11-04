@@ -58,8 +58,11 @@ pinned toolchain.
 
 ## What 0.1 leaves out
 
-- the frame framing of a stream, and the generated face of a stream parameter,
-  of a byte stream and of a text stream (driftsys/ridl#1116)
+- the WebSocket upload direction and the corresponding TypeScript methods; the
+  Rust face now carries named-element, byte and text reply streams and commands
+  and queries with one parameter stream over `ridl-loopback`. Queries with
+  uploads have plain or named-element streamed replies. Calls with two or more
+  parameter streams remain outside the face (driftsys/ridl#1224)
 - `Inline`
 - the three payload codecs (proto3, FlatBuffers, `podbuf`)
 - `Encoding::FORMAT`

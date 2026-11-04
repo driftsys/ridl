@@ -26,15 +26,17 @@ fn dense(source: &str) -> String {
 /// The source of one generated top-level `pub mod`, so a per-interface
 /// assertion cannot be satisfied by another interface's module.
 fn module(source: &str, name: &str) -> String {
-    let header = format!("pub mod {name} {{");
-    let start = source.find(&header).unwrap_or_else(|| {
-        panic!("generated source has no `{header}`:\n{source}");
-    });
-    let rest = &source[start..];
-    let end = rest[1..]
-        .find("\npub mod ")
-        .map_or(rest.len(), |index| index + 1);
-    rest[..end].to_string()
+    let file = syn::parse_file(source).expect("generated source parses");
+    let item = file
+        .items
+        .into_iter()
+        .find(|item| matches!(item, syn::Item::Mod(m) if m.ident == name))
+        .expect("generated module");
+    prettyplease::unparse(&syn::File {
+        shebang: None,
+        attrs: Vec::new(),
+        items: vec![item],
+    })
 }
 
 /// The slice of `source` from `from` up to `to`, so an assertion about one
@@ -1123,7 +1125,15 @@ fn stream_face() -> String {
 /// bound per payload type the interface uses, the stream's element included.
 fn log_where() -> String {
     let mut clause = "super::Log:::ridl_rt::contract::Sizes<P::Encoding>,".to_string();
-    for payload in ["Level", "Reading"] {
+    for payload in [
+        "Level",
+        "LogUploadParams",
+        "Reading",
+        "LogSummarizeParams",
+        "Summary",
+        "LogCheckedParams",
+        "LogPipeParams",
+    ] {
         clause.push_str(&format!(
             "super::{payload}:::ridl_rt::payload::Payload<P::Encoding>,"
         ));
@@ -1265,7 +1275,7 @@ fn a_streamed_reply_of_named_elements_gets_a_provider_source_and_a_serve_arm() {
     assert!(
         log.contains(
             "h.serve(<super::Logas::ridl_rt::contract::Interface>::NUMBER,\
-                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(1u32)],)"
+                      &[::ridl_rt::contract::Ordinal(2u32),::ridl_rt::contract::Ordinal(3u32),::ridl_rt::contract::Ordinal(4u32),::ridl_rt::contract::Ordinal(6u32),::ridl_rt::contract::Ordinal(1u32),::ridl_rt::contract::Ordinal(5u32),],)"
         ),
         "serve registers the stream query beside the command:\n{log}"
     );
@@ -1362,5 +1372,440 @@ fn the_event_enum_is_not_non_exhaustive() {
     assert!(
         !dense(&events_face()).contains("#[non_exhaustive]pubenumEvent"),
         "the Event enum is not non_exhaustive",
+    );
+}
+
+#[test]
+fn byte_and_text_reply_streams_get_their_consumer_and_provider_faces() {
+    let source = stream_face();
+    assert!(
+        source.contains("pub mod docs"),
+        "byte and text queries get a face"
+    );
+    let docs = dense(&module(&source, "docs"));
+    for item in [
+        "pubstructFetchStream",
+        "pubfnpoll_read(",
+        "pubasyncfnread(",
+        "pubstructTextStream",
+        "pubfnpoll_next(",
+        "pubasyncfnnext(",
+        "typeFetch:::ridl_rt::face::ByteSource;",
+        "typeText:::ridl_rt::face::ByteSource;",
+    ] {
+        assert!(docs.contains(item), "missing {item}");
+    }
+    assert!(
+        docs.contains("Result<&str,::ridl_rt::error::ClientError>"),
+        "text is borrowed from its staging buffer"
+    );
+}
+
+#[test]
+fn byte_stream_limit_literal_matches_the_runtime_default() {
+    let source = stream_face();
+    let limit = ridl_rt::contract::default_ceiling(ridl_rt::contract::Kind::Query);
+    for stream in ["FetchStream", "TextStream"] {
+        assert_eq!(stream_limit_and_capacity(&source, stream), (limit, limit));
+    }
+    let command_limit = ridl_rt::contract::default_ceiling(ridl_rt::contract::Kind::Command);
+    let file = syn::parse_file(&module(&source, "docs")).unwrap();
+    let syn::Item::Mod(docs) = &file.items[0] else {
+        panic!("module");
+    };
+    for sink in ["PutSink", "NoteSink"] {
+        let limit = docs
+            .content
+            .as_ref()
+            .unwrap()
+            .1
+            .iter()
+            .find_map(|item| {
+                let syn::Item::Impl(item) = item else {
+                    return None;
+                };
+                let syn::Type::Path(path) = item.self_ty.as_ref() else {
+                    return None;
+                };
+                if path.path.segments.last()?.ident != sink {
+                    return None;
+                }
+                item.items.iter().find_map(|item| match item {
+                    syn::ImplItem::Const(c) if c.ident == "LIMIT" => Some(c.expr.clone()),
+                    _ => None,
+                })
+            })
+            .expect("sink's own limit");
+        let syn::Expr::Lit(literal) = limit else {
+            panic!("literal");
+        };
+        let syn::Lit::Int(value) = literal.lit else {
+            panic!("integer");
+        };
+        assert_eq!(value.base10_parse::<usize>().unwrap(), command_limit);
+    }
+}
+
+#[test]
+fn byte_and_text_streams_reject_limits_below_four_and_keep_explicit_limits() {
+    for member in ["fetch", "text"] {
+        for limit in [0, 1, 2, 3, 4, 64] {
+            let mut package = ir::compile_fixture("stream_face.ridl");
+            let docs = package
+                .interfaces
+                .iter_mut()
+                .find(|i| i.name == "Docs")
+                .unwrap();
+            docs.interactions
+                .iter_mut()
+                .find(|i| i.name == member)
+                .unwrap()
+                .limit = Some(limit);
+            let result = generate_face_with(&package, &[WireEncoding::FlatBuffers]);
+            if limit < 4 {
+                let error = result.expect_err("a byte or text stream needs at least four bytes");
+                assert!(error.message.contains(member));
+            } else {
+                let source = result.unwrap().rust_source;
+                let stream = if member == "fetch" {
+                    "FetchStream"
+                } else {
+                    "TextStream"
+                };
+                assert_eq!(
+                    stream_limit_and_capacity(&source, stream),
+                    (limit as usize, limit as usize)
+                );
+            }
+        }
+    }
+}
+
+/// Reads the constant and array from the named stream's own items, so the
+/// other member's constant cannot satisfy a check for this stream.
+fn stream_limit_and_capacity(source: &str, stream: &str) -> (usize, usize) {
+    fn literal(expr: &syn::Expr) -> usize {
+        let syn::Expr::Lit(expr) = expr else {
+            panic!("expected a literal limit");
+        };
+        let syn::Lit::Int(value) = &expr.lit else {
+            panic!("expected an integer limit");
+        };
+        value.base10_parse().unwrap()
+    }
+    let syntax = syn::parse_file(source).unwrap();
+    let docs = syntax
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == "docs" => {
+                module.content.as_ref().map(|(_, items)| items)
+            }
+            _ => None,
+        })
+        .expect("Docs module");
+    let limit = docs
+        .iter()
+        .find_map(|item| {
+            let syn::Item::Impl(item) = item else {
+                return None;
+            };
+            let syn::Type::Path(path) = item.self_ty.as_ref() else {
+                return None;
+            };
+            if path.path.segments.last().unwrap().ident != stream {
+                return None;
+            }
+            item.items.iter().find_map(|item| match item {
+                syn::ImplItem::Const(value) if value.ident == "LIMIT" => Some(literal(&value.expr)),
+                _ => None,
+            })
+        })
+        .expect("the stream's own LIMIT");
+    let capacity = docs
+        .iter()
+        .find_map(|item| {
+            let syn::Item::Struct(item) = item else {
+                return None;
+            };
+            if item.ident != stream {
+                return None;
+            }
+            item.fields.iter().find_map(|field| {
+                if field.ident.as_ref().is_none_or(|name| name != "buffer") {
+                    return None;
+                }
+                let syn::Type::Array(array) = &field.ty else {
+                    panic!("inline byte array");
+                };
+                Some(literal(&array.len))
+            })
+        })
+        .expect("the stream's own buffer");
+    (limit, capacity)
+}
+
+#[test]
+fn distinct_byte_and_text_limits_belong_to_their_own_streams() {
+    for (fetch, text) in [(32, 64), (64, 32)] {
+        let mut package = ir::compile_fixture("stream_face.ridl");
+        let docs = package
+            .interfaces
+            .iter_mut()
+            .find(|i| i.name == "Docs")
+            .unwrap();
+        for interaction in &mut docs.interactions {
+            interaction.limit = Some(if interaction.name == "fetch" {
+                fetch
+            } else {
+                text
+            });
+        }
+        let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+            .unwrap()
+            .rust_source;
+        assert_eq!(
+            stream_limit_and_capacity(&source, "FetchStream"),
+            (fetch as usize, fetch as usize)
+        );
+        assert_eq!(
+            stream_limit_and_capacity(&source, "TextStream"),
+            (text as usize, text as usize)
+        );
+    }
+}
+
+#[test]
+fn parameter_commands_expose_paired_calls_sinks_and_consumer_types() {
+    let package = ir::compile_fixture("stream_face.ridl");
+    let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .unwrap()
+        .rust_source;
+    let docs = dense(&module(&source, "docs"));
+    let log = dense(&module(&source, "log"));
+    assert!(
+        docs.contains("->(PutCall<'_,P>,PutSink<'_,P>)"),
+        "put pair missing"
+    );
+    assert!(docs.contains("typePut:::ridl_rt::face::ByteConsumer;"));
+    assert!(docs.contains("typeNote:::ridl_rt::face::ByteConsumer;"));
+    assert!(log.contains("typeUpload:::ridl_rt::face::Consumer<Item=super::Reading>;"));
+    assert!(
+        docs.contains("impl::ridl_rt::contract::Commandforsuper::DocsPut")
+            || source.contains("Command for DocsPut")
+    );
+}
+
+#[test]
+fn each_upload_sink_uses_its_members_limit_without_byte_staging() {
+    for (put, note) in [(32, 64), (64, 32)] {
+        let mut package = ir::compile_fixture("stream_face.ridl");
+        let docs = package
+            .interfaces
+            .iter_mut()
+            .find(|i| i.name == "Docs")
+            .unwrap();
+        for member in &mut docs.interactions {
+            if member.name == "put" {
+                member.limit = Some(put);
+            }
+            if member.name == "note" {
+                member.limit = Some(note);
+            }
+        }
+        let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+            .unwrap()
+            .rust_source;
+        let file = syn::parse_file(&module(&source, "docs")).unwrap();
+        let syn::Item::Mod(module) = &file.items[0] else {
+            panic!("module")
+        };
+        let items = &module.content.as_ref().unwrap().1;
+        for (name, expected) in [("PutSink", put), ("NoteSink", note)] {
+            let structure = items
+                .iter()
+                .find_map(|item| match item {
+                    syn::Item::Struct(s) if s.ident == name => Some(s),
+                    _ => None,
+                })
+                .unwrap();
+            assert!(
+                structure
+                    .fields
+                    .iter()
+                    .all(|field| field.ident.as_ref().is_none_or(|id| id != "buffer")),
+                "raw sinks have no staging buffer"
+            );
+            let value = items
+                .iter()
+                .find_map(|item| {
+                    let syn::Item::Impl(item) = item else {
+                        return None;
+                    };
+                    let syn::Type::Path(path) = item.self_ty.as_ref() else {
+                        return None;
+                    };
+                    if path.path.segments.last()?.ident != name {
+                        return None;
+                    }
+                    item.items.iter().find_map(|item| match item {
+                        syn::ImplItem::Const(c) if c.ident == "LIMIT" => Some(c.expr.clone()),
+                        _ => None,
+                    })
+                })
+                .unwrap();
+            let syn::Expr::Lit(value) = value else {
+                panic!("literal")
+            };
+            let syn::Lit::Int(value) = value.lit else {
+                panic!("integer")
+            };
+            assert_eq!(
+                value.base10_parse::<u32>().unwrap(),
+                expected,
+                "{name}'s own limit"
+            );
+            let member = if name == "PutSink" { "put" } else { "note" };
+            let consumer = if name == "PutSink" { "Put" } else { "Note" };
+            let generated = dense(&source);
+            assert!(
+                generated.contains(&format!(
+                    "{member}:Option<ByteInputSlot<P::{consumer},[u8;{expected}]>>,"
+                )),
+                "{member}'s provider slot uses its own limit"
+            );
+            let initializer = between(
+                &generated,
+                &format!("streams.{member}=Some(ByteInputSlot{{"),
+                "streams.__started=true;",
+            );
+            assert!(
+                initializer.contains(&format!("buffer:[0u8;{expected}],")),
+                "{member}'s provider buffer initializer uses its own limit"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_stream_before_a_plain_argument_keeps_the_plain_argument_name() {
+    let source = "package face.order\ntype Info : integer [0..100]\ninterface Store { command put(data: <bytes>, info: Info) @[..1s] }\n";
+    let output = ridlc::compile("order.ridl", source);
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == ridl_core::diag::Severity::Error)
+    );
+    let source = generate_face_with(&output.package, &[WireEncoding::FlatBuffers])
+        .unwrap()
+        .rust_source;
+    let d = dense(&module(&source, "store"));
+    assert!(
+        d.contains("pubfnput(&mutself,info:super::Info)"),
+        "the plain parameter keeps its name"
+    );
+}
+
+#[test]
+fn byte_and_text_uploads_reject_limits_below_four_and_accept_four() {
+    for member in ["put", "note"] {
+        for limit in 0..=4 {
+            let mut package = ir::compile_fixture("stream_face.ridl");
+            let docs = package
+                .interfaces
+                .iter_mut()
+                .find(|i| i.name == "Docs")
+                .unwrap();
+            docs.interactions
+                .iter_mut()
+                .find(|i| i.name == member)
+                .unwrap()
+                .limit = Some(limit);
+            let result = generate_face_with(&package, &[WireEncoding::FlatBuffers]);
+            if limit < 4 {
+                let error = result.expect_err("an upload chunk must hold at least four bytes");
+                assert!(
+                    error.message.contains(&format!("`{member}`")),
+                    "the error must name {member}: {}",
+                    error.message
+                );
+            } else {
+                assert!(
+                    result.is_ok(),
+                    "limit four is valid for {member}: {result:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn upload_queries_expose_plain_and_streamed_replies() {
+    let package = ir::compile_fixture("stream_face.ridl");
+    let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .unwrap()
+        .rust_source;
+    let log = dense(&module(&source, "log"));
+    assert!(
+        log.contains("->(SummarizeCall<'_,P>,SummarizeSink<'_,P>)"),
+        "summarize pair missing"
+    );
+    assert!(
+        log.contains("->(PipeCall<'_,P>,PipeSink<'_,P>)"),
+        "pipe pair missing"
+    );
+    assert!(log.contains("typeSummarize:::ridl_rt::face::Consumer<Item=super::Reading>;"));
+    assert!(log.contains("fnsummarize_reply(&mutself,upload:Self::Summarize)->super::Summary;"));
+    assert!(log.contains("typePipe:::ridl_rt::face::Consumer<Item=super::Reading>+::ridl_rt::face::Source<Item=super::Reading>;"));
+    assert!(log.contains("pubstructPipeStream<"));
+    let d = dense(&source);
+    assert!(d.contains("impl::ridl_rt::contract::QueryforLogSummarize{typeArgs=LogSummarizeParams;typeReply=Summary;"));
+    assert!(
+        d.contains("impl::ridl_rt::contract::QueryforLogPipe{typeArgs=LogPipeParams;typeReply=();")
+    );
+}
+
+#[test]
+fn an_upload_reply_provider_method_collision_is_refused() {
+    let source = "package face.collision\ntype Value : integer [0..100]\ninterface Api { query aggregate(samples: <Value>): Value @[..1s]\n command aggregateReply(value: Value) @[..1s] }\n";
+    let output = ridlc::compile("collision.ridl", source);
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == ridl_core::diag::Severity::Error)
+    );
+    match generate_face_with(&output.package, &[WireEncoding::FlatBuffers]) {
+        Err(e) => assert!(e.message.contains("aggregate_reply")),
+        Ok(_) => panic!("derived provider reply method must not collide with a declared member"),
+    }
+}
+
+#[test]
+fn a_query_with_two_parameter_streams_has_no_face_method() {
+    let output = ridlc::compile(
+        "multiple.ridl",
+        "package face.multiple\ntype Level : integer [0..100]\ninterface Multiple {\n query combine(left: <Level>, right: <Level>): Level @[..1s]\n}\n",
+    );
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| matches!(d.severity, ridl_core::diag::Severity::Error)),
+        "{:?}",
+        output.diagnostics
+    );
+    let source = generate_face_with(&output.package, &[WireEncoding::FlatBuffers])
+        .unwrap()
+        .rust_source;
+    assert!(
+        !source.contains("fn combine("),
+        "two parameter streams must have no face method"
+    );
+    assert!(!source.contains("impl ::ridl_rt::contract::Query for MultipleCombine"));
+    assert!(
+        source.contains("struct MultipleCombine"),
+        "the descriptor row remains"
     );
 }

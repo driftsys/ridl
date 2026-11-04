@@ -47,8 +47,16 @@ a `&mut self` method, and checks this itself.
 | `ScannableSignals` | walks the signals that changed since a mark (extension)          | a consumer that scans a store; no generated face calls it               |
 | `CoherentSignals`  | reads several signals from one publication (extension)           | a consumer that needs one coherent set; no generated face calls it      |
 | `Wakeable`         | wakes a waiting task when a port may have changed (extension)    | a `Client` with events or calls, and `serve`                            |
-| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a `Client` with a query whose reply is a stream of named elements       |
-| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | `serve`, for a query whose reply is a stream of named elements          |
+| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a `Client` with a supported reply or parameter stream                   |
+| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | `serve`, for a supported reply or parameter stream                      |
+
+The Rust face carries named-element, byte and text reply streams, commands with
+one parameter stream, and queries with one parameter stream and a plain or
+named-element streamed reply. Every such client needs `StreamCaller` and every
+such `serve` needs `StreamHandler`, in addition to the call ports. Providers use
+`Source` or `ByteSource` for replies and `Consumer` or `ByteConsumer` for
+parameter streams; a duplex provider also implements `Source`. Calls with two or
+more parameter streams remain outside the face (driftsys/ridl#1224).
 
 **`Attached` and `Clock`.** `Attached` has one method, `catalog`, which returns
 the `CatalogRef` the port serves; every interaction port has it as a supertrait.

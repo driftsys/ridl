@@ -1661,9 +1661,10 @@ fn a_member_row_lists_its_streams() {
     assert!(!source.contains("type_name:\"<veh.hvac"), "{face}");
 
     // A member with a stream has its row and its `Interaction` impl, and no
-    // `Command` or `Query` impl, whichever position the stream is in — except
-    // the one form the face carries, a streamed reply of named elements with
-    // no stream parameter, whose `Query` impl names no reply payload.
+    // kind impl for an unsupported form. Supported uploads have Command or
+    // Query impls. A supported query with a streamed reply has a `Query` impl
+    // with no reply payload, for
+    // named elements, bytes and text alike.
     for streamed in [
         "CabinReplayTrace",
         "CabinPutBlob",
@@ -1681,7 +1682,15 @@ fn a_member_row_lists_its_streams() {
         for kind in ["Command", "Query"] {
             let has_impl =
                 source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{"));
-            let expected = kind == "Query" && streamed == "CabinStreamFilterHistory";
+            let expected = kind == "Query"
+                && matches!(
+                    streamed,
+                    "CabinStreamFilterHistory"
+                        | "CabinReadNotes"
+                        | "CabinLookup"
+                        | "CabinRebalance"
+                )
+                || kind == "Command" && matches!(streamed, "CabinReplayTrace" | "CabinPutBlob");
             assert_eq!(
                 has_impl,
                 expected,

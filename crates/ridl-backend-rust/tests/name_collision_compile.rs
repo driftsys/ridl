@@ -454,11 +454,11 @@ struct Both {
 }
 
 interface XMLParser {
-  command set(samples: <Level>) @[..50ms]
+  command set(left: <Level>, right: <Level>) @[..50ms]
 }
 
 interface XmlParser {
-  command set(samples: <Level>) @[..50ms]
+  command set(left: <Level>, right: <Level>) @[..50ms]
 }
 "#,
     );
