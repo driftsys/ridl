@@ -48,8 +48,8 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
   same table the crate's tests read.
 - Opens a consuming session over one `WebSocket`: `attach`, `subscribe`,
   `unsubscribe`, `read` (signal and `fixed`), `command`, `query`, `queryStream`
-  (a query whose reply is a stream), `commandStream` and `queryWithUpload`
-  (calls with parameter stream 1), and the end of the session.
+  (a query whose reply is a stream), `commandStream`, `queryWithUpload` and
+  `queryDuplex` (calls with parameter stream 1), and the end of the session.
 - Opens a providing session over one `WebSocket` with `provide`: it offers only
   `ridl-ws-v2-provider`, answers the server's `attach`, publishes signals,
   raises events and answers requests (D-21).
@@ -628,23 +628,26 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   does for `connect` and the consumer role. The reversed role has the same
   specification gap; the issue should be widened to cover it.
 
-**D-23. An upload.** The two methods return platform streams and promises:
+**D-23. An upload.** The upload methods return platform streams and, for
+non-streamed outcomes, promises:
 
 ```ts
 commandStream(iface: number, ord: number, args: Uint8Array, opts: { bound: number }):
   { upload: WritableStream<Uint8Array>; accepted: Promise<void> };
 queryWithUpload(iface: number, ord: number, args: Uint8Array, opts: { bound: number }):
   { upload: WritableStream<Uint8Array>; reply: Promise<Uint8Array> };
+queryDuplex(iface: number, ord: number, args: Uint8Array, opts: { bound: number }):
+  { upload: WritableStream<Uint8Array>; stream: ReadableStream<Uint8Array> };
 ```
 
-Both send a `request` that opens parameter stream 1. Its chunks and end carry
-the request's caller number as `correlation`, the same target and a stream `seq`
-starting at 1. Upload state belongs to `src/calls.ts`; `src/session.ts` encodes
-and sends its frames. The server's receiving rules are in
-[the server record](ridl-transport-ws.md), D-30. These methods each carry one
-upload and an acknowledgment or plain reply. No TypeScript method combines an
-upload with a streamed reply (driftsys/ridl#1240) or carries two or more
-parameter streams (driftsys/ridl#1224).
+All three send a `request` that opens parameter stream 1. Its chunks and end
+carry the request's caller number as `correlation`, the same target and a stream
+`seq` starting at 1. Upload state belongs to `src/calls.ts`; `src/session.ts`
+encodes and sends its frames. The server's receiving rules are in
+[the server record](ridl-transport-ws.md), D-30. Each method carries one upload.
+`commandStream` returns an acknowledgment, `queryWithUpload` a plain reply, and
+`queryDuplex` a concurrent reply stream (added 2026-11-04). No method carries
+two or more parameter streams (driftsys/ridl#1224).
 
 - **Writes and credit.** One `write` sends one `chunk`, including an empty
   write, and consumes one credit. The initial credit is 4 chunks; each server
@@ -714,6 +717,35 @@ parameter streams (driftsys/ridl#1224).
   interface numbers, ordinals or bounds reject both operations with the same
   `RangeError` as D-9. Arguments above the member's limit reject both with the
   same `SessionError` `corrupt`. An ended session rejects with `down`.
+
+**Duplex queries.** `queryDuplex` combines stream 1's upload rules above with
+D-20's reply stream 0 under one correlation. Each direction has its own initial
+credit of 4, credit counter and sequence counter. The target check precedes both
+directions' processing. Reply chunks can arrive before upload close; normal
+upload close leaves the reply open. A normal reply end closes the reply and
+errors an upload still open with `interrupted`. Reply cancel sends one stream-0
+interruption and errors the upload; upload abort sends one stream-1 interruption
+and errors the reply. Either releases a write waiting for credit, including
+abort before the sink can process it. A refusal of either stream, a refusing
+response before the first reply frame, or session end fails both streams with
+the same error object. A plain response, a response after the reply begins,
+inbound reply credit or inbound upload chunks violates the protocol as in D-20.
+Send exceptions release the call and fail both directions with the original
+exception.
+
+The duplex first-reply-frame bound runs from the request and stops at the first
+reply chunk or end; upload progress and close neither stop nor restart it. The
+server's shared abandonment rule (D-30 in
+[the server record](ridl-transport-ws.md)) abandons only when neither direction
+has progressed within `call_abandon_after`. This client adds no inactivity
+timer. These rules follow frame specification §5.4 and §11.1; upload close does
+not confirm provider consumption. `src/duplex.ts` owns the two stream states;
+`src/calls.ts` retains the shared call and checks its target. The socket-free
+`tests/duplex_test.ts` covers credit, close, cancellation, abort, refusal,
+bounds, preflight, malformed replies and send exceptions. The loopback e2e cases
+`queryDuplex_echoes_64_chunks` and `queryDuplex_cancel_and_abort` cover
+concurrent echo and interruption followed by an ordinary call on the same
+session. TCP execution is required to establish interoperability.
 
 ## The end-to-end tests
 

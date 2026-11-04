@@ -659,6 +659,49 @@ export class Session {
     }
   }
 
+  /**
+   * Opens parameter stream 1 and reply stream 0 under one query. Both directions
+   * have independent credit. Upload close leaves the reply open; reply end
+   * interrupts an upload still open. Reply cancel or upload abort interrupts
+   * the whole call, including writes waiting for credit. Refusal errors both
+   * streams with the same error. The first-reply-frame bound starts at the
+   * request, as in {@link Session.queryStream}. Preflight failures error both
+   * streams and send nothing, as in {@link Session.queryWithUpload}.
+   */
+  queryDuplex(
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: { bound: number },
+  ): {
+    upload: WritableStream<Uint8Array>;
+    stream: ReadableStream<Uint8Array>;
+  } {
+    const target = { kind: Kind.Query, iface, ord };
+    try {
+      const send = this.#uploadSend(target, args);
+      return this.#calls.duplex(opts.bound, this.#limitOf(target), {
+        ...send,
+        credit: (seq, credit) =>
+          this.#send({
+            form: "stream_credit",
+            target,
+            correlation: seq,
+            stream: 0,
+            credit,
+          }),
+        stop: (seq, outcome) => this.#stop(target, seq, outcome),
+      }, target);
+    } catch (error) {
+      return {
+        upload: failedUpload(error),
+        stream: new ReadableStream({
+          start: (controller) => controller.error(error),
+        }),
+      };
+    }
+  }
+
   #uploadSend(
     target: Target & { kind: typeof Kind.Command | typeof Kind.Query },
     args: Uint8Array,

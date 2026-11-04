@@ -131,6 +131,16 @@ exception errors the upload, forgets the call and rejects its pending `accepted`
 or `reply` promise with the same error. Frame versions 1 and 2 reject both
 operations with `unsupported` and send nothing.
 
+`session.queryDuplex(iface, ord, args, { bound })` returns `{ upload, stream }`:
+a `WritableStream<Uint8Array>` for parameter stream 1 and a concurrent
+`ReadableStream<Uint8Array>` for reply stream 0. Each direction has its own
+credit. Upload close leaves the reply open. Cancelling the reply or aborting the
+upload interrupts the whole call; refusals error both sides. The bound runs from
+the request until the first reply chunk or end. See D-23 in
+[the design record](../../docs/design/ridl-transport-ws-ts.md) for the full
+contract, including the distinction between upload close and provider
+consumption.
+
 ## A providing session
 
 `provide(url, options)` is the reversed role of the binding: the program stands
