@@ -1101,3 +1101,67 @@ fn wrong_kind_answer_does_not_accept_or_consume_signal_subscription() {
     );
     assert_eq!(s.backend.seen.samples[0].2, Some(vec![2]));
 }
+
+fn ready_second_signal(s: &mut Provided<Capture>, now: Instant) -> Target {
+    let second = Target {
+        ord: Ordinal(5),
+        ..SIGNAL
+    };
+    s.backend
+        .table
+        .insert(second.iface, second.ord, second.kind, None);
+    ready(s, now);
+    send(
+        s,
+        Frame::Answer {
+            target: second,
+            outcome: AnswerOutcome::Accepted,
+        },
+        now,
+    );
+    second
+}
+
+#[test]
+fn different_channel_stamp_change_flushes_without_tick() {
+    let mut s = session();
+    let now = Instant::now();
+    let second = ready_second_signal(&mut s, now);
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 900, PublishState::Live(&[1])),
+        now,
+    );
+    send(
+        &mut s,
+        publish(second, 1, 901, PublishState::Live(&[2])),
+        now,
+    );
+    assert_eq!(s.backend.seen.groups, [Timestamp(900)]);
+}
+
+#[test]
+fn stamp_flush_clears_previous_group_channels() {
+    let mut s = session();
+    let now = Instant::now();
+    let second = ready_second_signal(&mut s, now);
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 900, PublishState::Live(&[1])),
+        now,
+    );
+    send(
+        &mut s,
+        publish(second, 1, 901, PublishState::Live(&[2])),
+        now,
+    );
+    assert_eq!(s.backend.seen.groups, [Timestamp(900)]);
+    send(
+        &mut s,
+        publish(SIGNAL, 2, 901, PublishState::Live(&[3])),
+        now,
+    );
+    assert_eq!(s.backend.seen.groups, [Timestamp(900)]);
+    s.tick(now + Config::default().poll_interval, &mut vec![]);
+    assert_eq!(s.backend.seen.groups, [Timestamp(900), Timestamp(901)]);
+}
