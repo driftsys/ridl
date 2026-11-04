@@ -6,7 +6,7 @@ TypeScript side of the WebSocket binding that
 defines. It is the **consuming side** of a frame session, for Deno and for the
 browser: it opens one WebSocket offering the subprotocols `ridl-ws-v3`,
 `ridl-ws-v2` and `ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`,
-`read`, `request` and the stream forms of a streamed reply, and applies the
+`read`, `request` and the stream forms of a reply or an upload, and applies the
 consumer's rules that need no payload decoding. It is also the **providing
 side** of the reversed role, `provide`, in which the browser or Deno program
 stands in for a component (D-21). It carries payload bytes without reading them:
@@ -28,8 +28,8 @@ row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions keep their numbers D-1 to D-18 from the design they were taken in,
-which is archived as
+decisions are numbered D-1 to D-23. D-1 to D-18 retain their numbers from the
+original design, archived as
 [`2026-10-20-ts-transport-ws-design.md`](../archive/2026-10-20-ts-transport-ws-design.md),
 with its plan beside it.
 
@@ -47,8 +47,9 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
   out, and reproduces every test vector of §11.1 byte for byte, read from the
   same table the crate's tests read.
 - Opens a consuming session over one `WebSocket`: `attach`, `subscribe`,
-  `unsubscribe`, `read` (signal and `fixed`), `command`, `query` and
-  `queryStream` (a query whose reply is a stream), and the end of the session.
+  `unsubscribe`, `read` (signal and `fixed`), `command`, `query`, `queryStream`
+  (a query whose reply is a stream), `commandStream` and `queryWithUpload`
+  (calls with parameter stream 1), and the end of the session.
 - Opens a providing session over one `WebSocket` with `provide`: it offers only
   `ridl-ws-v2-provider`, answers the server's `attach`, publishes signals,
   raises events and answers requests (D-21).
@@ -90,16 +91,17 @@ source with explicit `.ts` import specifiers and a `deno.json`; the source needs
 no build step, and a dnt build step produces the npm package (D-3). Its own code
 (`mod.ts` and `src/`) uses only `WebSocket`, `Uint8Array`, `DataView`,
 `ArrayBuffer`, `TextEncoder`, `TextDecoder`, `setTimeout`, `clearTimeout`,
-`BigInt` and `globalThis.reportError`, which Deno and browsers both provide; no
-`Deno.*`. The source toolchain is Deno: `deno fmt`, `deno lint`, `deno check`,
-`deno test`, `deno bundle` (in the browser test) and `deno publish --dry-run`.
-The source tree has no `package.json`; the build generates an `npm/` directory,
-which git ignores and which holds the `package.json` of the npm package. Node 22
-or later is a tested target: Node 22 has a global `WebSocket`, and
-`ts-npm-check` installs the built package in a temporary directory and imports
-it by name from Node. The editor extension keeps its own npm toolchain.
-`deno fmt` and `deno lint` cover `.ts` files only (`deno.json` `include`), so
-prim stays the formatter of the Markdown and the JSON.
+`BigInt`, `ReadableStream`, `WritableStream`, `CountQueuingStrategy` and
+`globalThis.reportError`, which Deno and browsers both provide; no `Deno.*`. The
+source toolchain is Deno: `deno fmt`, `deno lint`, `deno check`, `deno test`,
+`deno bundle` (in the browser test) and `deno publish --dry-run`. The source
+tree has no `package.json`; the build generates an `npm/` directory, which git
+ignores and which holds the `package.json` of the npm package. Node 22 or later
+is a tested target: Node 22 has a global `WebSocket`, and `ts-npm-check`
+installs the built package in a temporary directory and imports it by name from
+Node. The editor extension keeps its own npm toolchain. `deno fmt` and
+`deno lint` cover `.ts` files only (`deno.json` `include`), so prim stays the
+formatter of the Markdown and the JSON.
 
 **D-3. Publication is to npm; JSR is later.** `deno.json` carries `name`,
 `version`, `license`, `exports` and the `publish` file list, so
@@ -177,7 +179,8 @@ caller is trusted, as the crate's newtypes trust theirs.
 `binaryType = "arraybuffer"`; each message arrives as its own `ArrayBuffer`,
 which nothing else holds, so a decoded payload is a `Uint8Array` view over the
 bytes after the header. A payload the caller passes to a call is copied once
-into the message, and the session keeps no reference to it.
+into the message. An upload's send callbacks can retain its original arguments
+while the call remains in flight.
 
 ## The session (`src/session.ts`, `src/calls.ts`)
 
@@ -350,8 +353,11 @@ timer would end healthy sessions. The session therefore ends on the platform's
 `close` and `error` events only, and the server's liveness check (the crate's
 D-22) is the one that runs. A server that is gone is detected when the
 platform's connection fails; a server host that vanished without a TCP reset is
-detected only at the operating system's timeout, and every call still ends at
-its bound. `connect`, `subscribe` and `read` have no bound: each waits until its
+detected only at the operating system's timeout. A call ends at its bound if no
+answer arrives while its timer runs; a streamed reply clears that timer at its
+first chunk and then ends only with its stream end or the session. A
+`queryWithUpload` with an open upload has no reply timer until the upload closes
+(D-23). `connect`, `subscribe` and `read` have no bound: each waits until its
 answer arrives or the session ends. driftsys/ridl#991 also asks the
 specification to state what a client that cannot see pings does.
 
@@ -403,15 +409,17 @@ have a detected invalid value reported, so that nothing fails silently:
   `detected: "corrupt"`, with the envelope of the frame (§9.2); it counts in the
   event's sequence, so no loss is recorded for it.
 
-Nothing is sent back, and the session does not end. The one payload the client
-sends, the arguments of a `request`, is checked before it is sent: `command` and
-`query` reject with `corrupt` when the arguments are longer than the member's
-limit, and send nothing. That is the answer the provider gives a `request` above
-the limit (the crate's D-26), but only to arguments that one message carries; a
-larger message is above the provider's message limit, which closes the session
-with 1009 and rejects every call in flight with `down`. A `fixed` whose value is
-longer than one message arrives in `block` frames of at most 4,096 bytes, which
-the session reassembles.
+Nothing is sent back, and the session does not end. The client checks request
+arguments before sending: `command` and `query` reject with `corrupt` when the
+arguments are longer than the member's limit, and send nothing. That is the
+answer the provider gives a `request` above the limit (the crate's D-26), but
+only to arguments that one message carries; a larger message is above the
+provider's message limit, which closes the session with 1009 and rejects every
+call in flight with `down`. A `fixed` whose value is longer than one message
+arrives in `block` frames of at most 4,096 bytes, which the session reassembles.
+The client also sends upload chunk payloads through `commandStream` and
+`queryWithUpload`; their separate size refusal sends no chunk and interrupts the
+upload (D-23).
 
 **Blocks.** `src/reassembly.ts` holds the one payload in progress. The rules it
 applies, and the answers to each sequence error, are frame specification §5.5;
@@ -470,6 +478,14 @@ in order; the stream machinery is in `src/calls.ts`. The rules of the wire are
 frame specification §5.4 and §11.1 "Binding version 3". What the client decides
 is the following.
 
+- **Stream targets (§6.4).** Each call retains its target. Before applying a
+  `chunk`, `stream_end` or `stream_credit`, the client compares the interface,
+  ordinal and kind with the call named by `correlation`. A mismatch is discarded
+  and recorded through `onNote` as `unknown-correlation`, without changing
+  credit, sequence, timers or streams. This check applies to plain calls,
+  streamed replies and uploads, before checking the frame's direction. A
+  matching stream frame for a plain call with neither an upload nor a streamed
+  reply is `unexpected-form`.
 - **The credit is the stream's `pull`.** The stream has a high-water mark of 4
   chunks, the initial credit. The session tracks `granted`, the chunks it has
   granted, and `received`. On each `pull` it computes
@@ -509,9 +525,10 @@ is the following.
   §5.4), so one wrong ordinal must not end a session. After a `chunk`, the same
   `response` is the violation `unexpected-form`, because the reason holds only
   before the reply starts. A `response` with `reply` or `accepted`, a
-  `stream_credit` from the server, a chunk beyond the credit granted, and a
-  stream frame on a stream other than 0 are the violation `unexpected-form` as
-  well, and a violation errors every open stream with `down`.
+  `stream_credit` from the server for this reply stream, a chunk beyond the
+  credit granted, and a stream frame on a stream other than 0 are the violation
+  `unexpected-form` as well, and a violation errors every open stream with
+  `down`.
 - **The frame version is private.** The session holds the version the server
   selected and exposes no accessor for it; a caller learns that the server does
   not stream from `unsupported`.
@@ -578,9 +595,11 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   limit, `corrupt`; and a request that arrives while 64 are in flight, `busy`.
   Otherwise `onRequest` receives a copy of the payload, may be asynchronous, and
   its outcome becomes the `response`: a reply longer than the limit is sent as
-  `corrupt`. The session keeps the last 64 settled responses, because it reads
-  no descriptor and so knows no bound, and a repeated `seq` is answered with the
-  kept response and not served again.
+  `corrupt`. An `invalid-value` violation with rule `utf8` is also sent as
+  `corrupt`, because this providing session uses frame version 2 (§9.6). The
+  session keeps the last 64 settled responses, because it reads no descriptor
+  and so knows no bound, and a repeated `seq` is answered with the kept response
+  and not served again.
 - **The difference from the Rust provided session.** The frame has no outcome
   for a defect of the provider, so the TypeScript provider sends **no
   `response`** when `onRequest` returns an outcome outside the call kind's set
@@ -608,6 +627,93 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   driftsys/ridl#991 asks the frame specification to state what such a client
   does for `connect` and the consumer role. The reversed role has the same
   specification gap; the issue should be widened to cover it.
+
+**D-23. An upload.** The two methods return platform streams and promises:
+
+```ts
+commandStream(iface: number, ord: number, args: Uint8Array, opts: { bound: number }):
+  { upload: WritableStream<Uint8Array>; accepted: Promise<void> };
+queryWithUpload(iface: number, ord: number, args: Uint8Array, opts: { bound: number }):
+  { upload: WritableStream<Uint8Array>; reply: Promise<Uint8Array> };
+```
+
+Both send a `request` that opens parameter stream 1. Its chunks and end carry
+the request's caller number as `correlation`, the same target and a stream `seq`
+starting at 1. Upload state belongs to `src/calls.ts`; `src/session.ts` encodes
+and sends its frames. The server's receiving rules are in
+[the server record](ridl-transport-ws.md), D-30. These methods each carry one
+upload and an acknowledgment or plain reply. No TypeScript method combines an
+upload with a streamed reply (driftsys/ridl#1240) or carries two or more
+parameter streams (driftsys/ridl#1224).
+
+- **Writes and credit.** One `write` sends one `chunk`, including an empty
+  write, and consumes one credit. The initial credit is 4 chunks; each server
+  `stream_credit` on stream 1 adds its grant. A write waits when the credit is
+  spent and resolves when its chunk is sent. The sink uses the platform's
+  default queuing strategy, with high-water mark 1, and has at most one active
+  write waiting for credit. Queued writes remain in the platform stream. A
+  resumed write checks for failure again before sending, so a credit followed by
+  refusal in the same turn sends no extra chunk. A write longer than the
+  member's limit sends no chunk: it sends `stream_end interrupted`, errors the
+  upload, rejects any pending result with `corrupt` and forgets the call. A
+  write exactly at the limit sends one whole chunk. The
+  [binding rationale](../technotes/websocket-binding-rationale.md#streams-arrive-as-frame-version-3-and-binding-version-3)
+  explains why the client preserves write boundaries.
+- **Close.** After the queued writes complete, `close` sends `stream_end end`
+  with the next sequence and resolves. There is no acknowledgment of provider
+  consumption of the upload end. Close therefore confirms local sending only; it
+  cannot confirm acceptance of the final chunks or detect every late refusal. A
+  refusal the client has already processed errors the upload and rejects a
+  pending write or close. An acknowledged command is forgotten when its upload
+  closes, and a `stream_credit` that arrives for it afterwards is ignored
+  without a note (frame specification §11.1); a command still waiting for
+  acknowledgment remains until its response or bound. A query remains for its
+  plain reply.
+- **Acknowledgment and reply.** `accepted` resolves on the command's
+  `response accepted`, leaving its upload open. A plain reply within the
+  member's limit resolves `reply` with its payload and forgets the query. If the
+  upload is still open, that reply errors it and releases a write waiting for
+  credit with `interrupted`. After an early plain reply, the server sends
+  `stream_end interrupted` on the upload. The client has already forgotten the
+  call and records that end as a discard with reason `unknown-correlation`. A
+  reply above the limit rejects both with `corrupt`. An outcome that does not
+  fit the call's kind is discarded and recorded as `unexpected-outcome` without
+  settling the call (D-9).
+- **Abort.** Aborting sends `stream_end interrupted` with the next sequence and
+  releases a write waiting for credit. A query's `reply` rejects `interrupted`
+  and the query is forgotten. A command retains a pending acknowledgment until
+  its response or bound; an already acknowledged command is forgotten. A
+  resolved `accepted` stays resolved.
+- **Refusals and direction.** A server `stream_end` on stream 1 with `seq` 1
+  errors the upload with its category (`contract`, including the rule under
+  `invalid-value`, `corrupt`, `busy` or `interrupted`), rejects a pending
+  `accepted` or `reply` with the same error and forgets the call. A server end
+  with another sequence, or with outcome `end`, is treated as `interrupted`: it
+  is not a successful upload acknowledgment. A refusing `response` also errors
+  the upload and rejects its pending result with the same failure. A resolved
+  `accepted` stays resolved. Refusal rejects a write waiting for credit at once.
+  For an upload call, an inbound `chunk` on any stream or any stream frame on a
+  stream other than 1 is `unexpected-form`; the target check above precedes this
+  rule. D-20's prohibition on inbound credit still applies to a streamed reply.
+- **Send exceptions and session end.** If sending the request, a chunk or an end
+  throws, the client forgets the call, clears its timer and rejects its pending
+  `accepted` or `reply` with that exact error object. A failed chunk or end send
+  also rejects the writer operation with that error. This includes the
+  interruption sent for an oversized write: the send exception takes precedence
+  over the local `corrupt` error. The send failure alone does not close the
+  session. When the session ends, an upload still in flight errors with `down`
+  and its pending result rejects with `down`.
+- **Bounds.** A command's acknowledgment timer starts after its request is sent;
+  expiry rejects `accepted` and errors its upload with `undelivered`. A query
+  starts its reply timer only when `close` sends `stream_end end`; expiry
+  rejects `reply` and errors the upload with `timeout`. Before close the query
+  has no client timer; the server bounds inactivity through abandonment (D-30).
+  Both timer expiries forget the call.
+- **Preflight.** On a session below version 3 both methods return an errored
+  upload and a rejected result with `unsupported`, sending nothing. Invalid
+  interface numbers, ordinals or bounds reject both operations with the same
+  `RangeError` as D-9. Arguments above the member's limit reject both with the
+  same `SessionError` `corrupt`. An ended session rejects with `down`.
 
 ## The end-to-end tests
 
@@ -666,18 +772,42 @@ bytes are the value the provider set.
   chunks of 1,024 bytes of the value `i`) with `n` 64, which is more than the
   initial credit of 4, so the reply arrives in full only if the credit the
   reader grants reaches the server. It checks the count and the bytes of each
-  chunk, with a time limit of 5 s, and that no note was recorded.
+  chunk, with a time limit of 5 s, and that no note was recorded. Four upload
+  scenarios additionally assert the following, each with a 5 s limit and session
+  and server cleanup:
+  - `commandStream` is acknowledged before writing 200,000 bytes in pieces of
+    16,128 bytes to key 1; `FETCH` must return exactly those bytes.
+  - `queryWithUpload` consumes 200,000 bytes, then returns exactly 12 bytes:
+    little-endian `u64` count 200,000 followed by the independently computed
+    wrapping `u32` byte sum.
+  - Refusing the third 1,024-byte command chunk with `InvalidValue(Range)` must
+    reject a later write as `contract / invalid-value / range`, while `accepted`
+    remains resolved.
+  - A query upload refused with `InvalidValue(Utf8)` must reject both a later
+    write and `reply` as `contract / invalid-value / utf8`.
+
+  The refusal tests keep writing, at most sixteen chunks, without closing, so
+  closing cannot hide a refusal of the last chunks. The upload harness permits
+  discard notes but asserts no violation: after a refusal settles and forgets a
+  query, its later response may be discarded as `unknown-correlation`. These
+  four upload scenarios are written and type-checked; their TCP execution is not
+  verified by the available local results.
 - **The browser** (`e2e/browser_test.ts`, `e2e/page.ts`, `e2e/browser.ts`). The
   test bundles `e2e/page.ts` with `deno bundle --platform=browser`, serves the
   bundle and a page from `Deno.serve` on `127.0.0.1`, starts a headless
   Chromium-family browser with a temporary profile and a DevTools port, opens
   the page through the DevTools Protocol, and evaluates the promise the page
   exposes. The page runs the signal half of the sequence (attach, subscribe,
-  command, `live` publish with `2a 07`) and the streamed reply of 64 elements,
-  and resolves with what it received. The browser is `RIDL_BROWSER`, then
-  `google-chrome`, `google-chrome-stable`, `chromium` and `chromium-browser` on
-  `PATH`, then the Google Chrome application on macOS. On Linux,
-  `RIDL_BROWSER_NO_SANDBOX=1` adds `--no-sandbox`.
+  command, `live` publish with `2a 07`), the large fixed values and the streamed
+  reply of 64 elements. It then uploads 200,000 bytes to key 3 through
+  `commandStream` and reads them back through `FETCH`. The test requires the
+  page's `upload` result to be `"200000:true"` in addition to its earlier
+  results. The upload extension is written and type-checked against DOM types;
+  its execution in a browser is not verified by the available local results. The
+  browser is `RIDL_BROWSER`, then `google-chrome`, `google-chrome-stable`,
+  `chromium` and `chromium-browser` on `PATH`, then the Google Chrome
+  application on macOS. On Linux, `RIDL_BROWSER_NO_SANDBOX=1` adds
+  `--no-sandbox`.
 - **The encoding.** The tests attach with `flatbuffers`, because the example
   serves `ridl-loopback`, whose encoding is FlatBuffers, and the server refuses
   any other tag with `encoding-unsupported` (the crate's D-11). The client's
@@ -685,7 +815,7 @@ bytes are the value the provider set.
 - **One server per test.** The provider's signal and event are one shared store,
   and a command changes the signal for every later connection, so each
   end-to-end test starts its own server process and stops it at its end; both
-  tests can then expect `init` first, in any order.
+  signal scenarios can then expect `init` first, in any order.
 - **Time limits.** A wait (`e2e/waiter.ts`) is registered with the listener
   before the action that produces its value, and its time limit counts from that
   action, so a slow server start does not use up the limit.
@@ -725,6 +855,15 @@ bytes are the value the provider set.
   settles), each violation of D-21 through `onNote`, a clock that fails before
   the attach is answered or while a response is built, and the absence of a
   liveness timer. The vectors of the reversed role are in `vectors_test.ts`.
+- **Uploads** (`calls_test.ts`, `session_test.ts`). D-23's one chunk per write,
+  empty-chunk credit, credit waits, close and abort sequences, acknowledgment
+  lifetime, request and close timers, refusals, early replies, invalid
+  directions and preflight errors. Send-exception tests cover chunk, close,
+  abort and over-limit interruption for both methods, checking exact error
+  identity, prompt result rejection and forgetting through a late frame's
+  `unknown-correlation` note. Exact-limit writes and close or abort after an
+  acknowledgment have separate tests. Stream-target tests vary interface,
+  ordinal and kind for all three forms and assert no delivery or credit change.
 - **The version** (`version_test.ts`). `deno.json`'s version equals the
   `[workspace.package]` version.
 
@@ -782,8 +921,9 @@ on a `v*` tag, and no generated code uses it yet.
   it, and the generated codec module that decodes and encodes a payload are
   built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
   this package by hand.
-- A parameter stream on a command or a query, a byte stream, and the UTF-8 check
-  of a `<string>` chunk. Only the reply stream of a query is built.
+- The upload method limits are recorded in D-23. The package checks no
+  named-element payload or UTF-8 text boundary. Rule code 7 decodes as `"utf8"`
+  and reaches callers in a refusal.
 - An emulator (driftsys/ridl#290). The providing side offers no stream, and no
   generated face over it.
 - Reading a catalog descriptor: the `kind` check, the response bound, the

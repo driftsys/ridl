@@ -2685,3 +2685,290 @@ fn a_chunk_restarts_the_abandon_bound() {
     assert_eq!(*notes.lock().unwrap(), vec![Note::CallAbandoned { seq: 1 }]);
     close(ws, handle);
 }
+
+const UPLOAD: Target = Target {
+    kind: Kind::Command,
+    iface: provider::IFACE,
+    ord: provider::UPLOAD,
+};
+const UPLOAD_QUERY: Target = Target {
+    kind: Kind::Query,
+    iface: provider::IFACE,
+    ord: provider::UPLOAD_QUERY,
+};
+const FETCH: Target = Target {
+    kind: Kind::Query,
+    iface: provider::IFACE,
+    ord: provider::FETCH,
+};
+
+fn upload_chunk(ws: &mut WebSocket<TcpStream>, target: Target, seq: u64, payload: &[u8]) {
+    send(
+        ws,
+        Frame::Chunk {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq,
+            },
+            correlation: 1,
+            stream: 1,
+            payload,
+        },
+    );
+}
+fn upload_end(ws: &mut WebSocket<TcpStream>, target: Target, seq: u64) {
+    send(
+        ws,
+        Frame::StreamEnd {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq,
+            },
+            correlation: 1,
+            stream: 1,
+            outcome: StreamOutcome::End,
+        },
+    );
+}
+
+/// One chunk at a time, waiting for its returned credit before the next one.
+fn write_upload(ws: &mut WebSocket<TcpStream>, target: Target, bytes: &[u8]) {
+    let mut seq = 1;
+    for chunk in bytes.chunks(provider::FETCH_CHUNK) {
+        upload_chunk(ws, target, seq, chunk);
+        assert_eq!(
+            decode(&recv(ws)).unwrap(),
+            Frame::StreamCredit {
+                target,
+                correlation: 1,
+                stream: 1,
+                credit: 1,
+            }
+        );
+        seq += 1;
+    }
+    upload_end(ws, target, seq);
+}
+
+fn assert_accepted(ws: &mut WebSocket<TcpStream>) {
+    assert!(matches!(
+        decode(&recv(ws)).unwrap(),
+        Frame::Response {
+            target: UPLOAD,
+            correlation: 1,
+            outcome: ResponseOutcome::Accepted,
+            ..
+        }
+    ));
+}
+
+// Mutation: drop a stored chunk, or fetch before draining the preceding upload.
+#[test]
+fn an_upload_of_200_000_bytes_is_stored_and_fetched_back() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, UPLOAD, 1, &[1, 0]);
+    assert_accepted(&mut ws);
+    let bytes = provider::pattern(200_000);
+    write_upload(&mut ws, UPLOAD, &bytes);
+    request(&mut ws, FETCH, 2, &[1]);
+    let mut received = Vec::new();
+    let mut seq = 1;
+    loop {
+        let raw = recv(&mut ws);
+        match decode(&raw).unwrap() {
+            Frame::Chunk {
+                target,
+                correlation,
+                stream,
+                envelope,
+                payload,
+            } => {
+                assert_eq!(
+                    (target, correlation, stream, envelope.seq),
+                    (FETCH, 2, 0, seq)
+                );
+                assert!(payload.len() <= 16_128);
+                received.extend_from_slice(payload);
+                send(
+                    &mut ws,
+                    Frame::StreamCredit {
+                        target: FETCH,
+                        correlation: 2,
+                        stream: 0,
+                        credit: 1,
+                    },
+                );
+            }
+            Frame::StreamEnd {
+                target,
+                correlation,
+                stream,
+                envelope,
+                outcome,
+            } => {
+                assert_eq!(
+                    (target, correlation, stream, envelope.seq, outcome),
+                    (FETCH, 2, 0, seq, StreamOutcome::End)
+                );
+                break;
+            }
+            other => panic!("unexpected fetch frame: {other:?}"),
+        }
+        seq += 1;
+    }
+    assert_eq!(received, bytes);
+    close(ws, handle);
+}
+
+// Mutation: do not refuse the third block, or close the session on refusal.
+#[test]
+fn a_refused_third_block_sends_stream_end_contract_on_stream_1() {
+    let (mut ws, handle, p) = stream_session(config(), SUBPROTOCOL_V3, false);
+    request(&mut ws, UPLOAD, 1, &[2, provider::MODE_REFUSE_RANGE]);
+    // A fixed read is a barrier proving that the request reached the backend.
+    send(&mut ws, Frame::Read(FIXED));
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Publish { target: FIXED, .. }
+    ));
+    p.step();
+    assert_accepted(&mut ws);
+    for seq in 1..=3 {
+        upload_chunk(&mut ws, UPLOAD, seq, &[1]);
+        assert!(matches!(
+            decode(&recv(&mut ws)).unwrap(),
+            Frame::StreamCredit { credit: 1, .. }
+        ));
+        p.step();
+    }
+    upload_chunk(&mut ws, UPLOAD, 4, &[1]);
+    let raw = recv(&mut ws);
+    assert!(matches!(
+        decode(&raw).unwrap(),
+        Frame::StreamEnd {
+            target: UPLOAD,
+            correlation: 1,
+            stream: 1,
+            outcome: StreamOutcome::Contract(Contract::InvalidValue(ridl_rt::payload::Violation {
+                type_name: None,
+                rule: ridl_rt::payload::Rule::Range,
+            })),
+            ..
+        }
+    ));
+    upload_chunk(&mut ws, UPLOAD, 5, &[1]);
+    request(&mut ws, PLAIN_QUERY, 2, &[9]);
+    // A fixed read gives a barrier before explicitly stepping the provider.
+    send(&mut ws, Frame::Read(FIXED));
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Publish { target: FIXED, .. }
+    ));
+    p.step();
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Response {
+            correlation: 2,
+            outcome: ResponseOutcome::Reply([10]),
+            ..
+        }
+    ));
+    close(ws, handle);
+}
+
+// Mutation: accept a chunk one byte above the member limit.
+#[test]
+fn an_oversized_chunk_is_answered_stream_end_corrupt() {
+    let (config, notes) = recording();
+    let (mut ws, handle, _p) = v3_session(config);
+    request(&mut ws, UPLOAD, 1, &[3, 0]);
+    assert_accepted(&mut ws);
+    upload_chunk(&mut ws, UPLOAD, 1, &vec![0; 16_129]);
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::StreamEnd {
+            target: UPLOAD,
+            correlation: 1,
+            stream: 1,
+            outcome: StreamOutcome::Corrupt,
+            ..
+        }
+    ));
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::ChunkTooLarge {
+            seq: 1,
+            stream: 1,
+            len: 16_129
+        }]
+    );
+    close(ws, handle);
+}
+
+// Mutation: settle the upload query before consuming every chunk.
+#[test]
+fn a_query_upload_replies_the_count_and_the_sum() {
+    let (mut ws, handle, _p) = v3_session(config());
+    request(&mut ws, UPLOAD_QUERY, 1, &[0]);
+    let bytes = provider::pattern(200_000);
+    write_upload(&mut ws, UPLOAD_QUERY, &bytes);
+    let mut expected = 200_000u64.to_le_bytes().to_vec();
+    let sum = bytes
+        .iter()
+        .fold(0u32, |sum, b| sum.wrapping_add(u32::from(*b)));
+    expected.extend_from_slice(&sum.to_le_bytes());
+    assert!(matches!(decode(&recv(&mut ws)).unwrap(), Frame::Response {
+        target: UPLOAD_QUERY, correlation: 1, outcome: ResponseOutcome::Reply(payload), ..
+    } if payload == expected));
+    close(ws, handle);
+}
+
+// Mutation: block session dispatch while an upload queue cannot drain.
+#[test]
+fn a_stalled_upload_does_not_block_a_signal() {
+    let (mut ws, handle, p) = stream_session(config(), SUBPROTOCOL_V3, false);
+    request(&mut ws, UPLOAD, 1, &[4, 0]);
+    for seq in 1..=4 {
+        upload_chunk(&mut ws, UPLOAD, seq, &[1]);
+        assert_eq!(
+            decode(&recv(&mut ws)).unwrap(),
+            Frame::StreamCredit {
+                target: UPLOAD,
+                correlation: 1,
+                stream: 1,
+                credit: 1,
+            }
+        );
+    }
+    for seq in 5..=8 {
+        upload_chunk(&mut ws, UPLOAD, seq, &[1]);
+    }
+    send(&mut ws, Frame::Subscribe(SIGNAL));
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Answer {
+            target: SIGNAL,
+            outcome: AnswerOutcome::Accepted,
+        }
+    ));
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Publish {
+            target: SIGNAL,
+            state: PublishState::Init,
+            ..
+        }
+    ));
+    p.set_signal(&[42]);
+    assert!(matches!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Publish {
+            target: SIGNAL,
+            state: PublishState::Live([42]),
+            ..
+        }
+    ));
+    close(ws, handle);
+}

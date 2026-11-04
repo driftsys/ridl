@@ -1,5 +1,5 @@
 /** Request dispatch and bounded replay for the providing session. */
-import { encode, Kind } from "./frame.ts";
+import { encode, FRAME_VERSION, Kind } from "./frame.ts";
 import type { Frame, ResponseOutcome } from "./frame.ts";
 import type { ProvidedRequest, ProvidedResult } from "./provision.ts";
 import type { Note } from "./session.ts";
@@ -58,7 +58,7 @@ export class ProvidedCalls {
           correlation: seq,
           envelope: { seq: sequence, stamp },
           outcome,
-        });
+        }, FRAME_VERSION);
         this.send(bytes);
         this.#highest = seq > this.#highest ? seq : this.#highest;
         this.#sequence = sequence;

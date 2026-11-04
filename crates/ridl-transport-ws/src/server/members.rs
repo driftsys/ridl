@@ -38,6 +38,7 @@ struct Entry {
     max: Option<Duration>,
     limit: Option<u32>,
     reply_stream: bool,
+    parameter_streams: u8,
 }
 
 impl MemberTable {
@@ -66,6 +67,7 @@ impl MemberTable {
             max,
             limit: None,
             reply_stream: false,
+            parameter_streams: 0,
         };
         self.members
             .insert((iface, ord), entry)
@@ -115,6 +117,21 @@ impl MemberTable {
         self.members
             .get(&(iface, ord))
             .is_some_and(|entry| entry.reply_stream)
+    }
+
+    /// Sets the number of parameter streams on an existing member.
+    /// A later insertion under the same key clears the count.
+    pub fn set_parameter_streams(&mut self, iface: InterfaceNo, ord: Ordinal, count: u8) {
+        if let Some(entry) = self.members.get_mut(&(iface, ord)) {
+            entry.parameter_streams = count;
+        }
+    }
+
+    /// The parameter stream count, or 0 for an unknown member.
+    pub fn parameter_streams(&self, iface: InterfaceNo, ord: Ordinal) -> u8 {
+        self.members
+            .get(&(iface, ord))
+            .map_or(0, |entry| entry.parameter_streams)
     }
 
     /// Adds an earlier catalog hash this catalog is compatible with (§6.1).

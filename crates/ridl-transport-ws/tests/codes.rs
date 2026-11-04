@@ -233,11 +233,9 @@ fn every_code_decodes_and_encodes_as_written() {
     }
 }
 
-/// Every `Rule` of this `ridl-rt` has a tag: the six of frame specification
-/// §9.6, in its order.
+/// The seven rules have distinct wire codes in declaration order.
 #[test]
-fn every_rule_has_its_tag() {
-    use ridl_rt::payload::Rule;
+fn the_rule_codes_are_1_to_7() {
     use ridl_transport_ws::frame::rule_tag;
     let rules = [
         Rule::Range,
@@ -246,10 +244,21 @@ fn every_rule_has_its_tag() {
         Rule::Pattern,
         Rule::Variant,
         Rule::Unique,
+        Rule::Utf8,
     ];
     for (i, rule) in rules.into_iter().enumerate() {
         assert_eq!(rule_tag(rule), Some(i as u8 + 1), "{rule:?}");
     }
+    check(
+        "response utf8",
+        &response(4, 3, 7, &[]),
+        Frame::Response {
+            target: target(Kind::Query),
+            envelope: envelope(),
+            correlation: 5,
+            outcome: ResponseOutcome::Contract(invalid(Rule::Utf8)),
+        },
+    );
 }
 
 /// Every `StreamOutcome` as bytes written by hand: the `outcome` and `detail`

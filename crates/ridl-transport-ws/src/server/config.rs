@@ -89,33 +89,48 @@ pub enum Note {
         /// The repeated `seq`.
         seq: u64,
     },
-    /// A call whose outcome stayed unknown for [`Config::call_abandon_after`]
-    /// was forgotten on the backend. Nothing is sent for it, except for a
-    /// call whose reply is a stream: its bound is measured from the last
-    /// `chunk` sent or `stream_credit` received, and the stream is ended
-    /// with a `stream_end interrupted`.
+    /// A call was forgotten on the backend after no progress for
+    /// [`Config::call_abandon_after`]. An open parameter stream uses its last
+    /// received chunk, its received end, or a backend drain; a reply stream
+    /// uses its last sent chunk or received credit. A duplex call is abandoned
+    /// only when neither direction has progressed within the bound. A pending
+    /// plain reply uses its upload end when present, or its request otherwise.
+    /// Open uploads are ended with `stream_end interrupted`, even after a
+    /// command's acknowledgment; an abandoned reply stream is also ended
+    /// with `stream_end interrupted`. Other calls send nothing.
     CallAbandoned {
         /// The `seq` of the abandoned request.
         seq: u64,
     },
-    /// A `chunk` arrived from the client on a stream for which the server
-    /// granted it no credit: a stream parameter, which no member the server
-    /// serves over frame version 3 has. The session closes with 1002.
+    /// A parameter stream chunk exceeded its member's payload limit.
+    /// The stream is answered `corrupt`, the other open uploads are ended
+    /// `interrupted`, and the call is forgotten.
+    ChunkTooLarge {
+        /// The request sequence number.
+        seq: u64,
+        /// The parameter stream number.
+        stream: u8,
+        /// The payload length in bytes.
+        len: usize,
+    },
+    /// A `chunk` exceeded the credit granted on a parameter stream, or
+    /// named a stream the member does not declare. The session closes with 1002.
     StreamCreditExceeded {
         /// The `correlation` of the `chunk`: the `seq` of the request it
         /// names.
         seq: u64,
     },
     /// The client stopped the reply stream of a call with a `stream_end`.
-    /// The call was forgotten on the backend, and nothing more is sent for
-    /// it.
+    /// The call was forgotten on the backend. Each open parameter stream is
+    /// ended with `stream_end interrupted`; no more reply chunks are sent.
     StreamStopped {
         /// The `seq` of the request whose reply stream was stopped.
         seq: u64,
     },
     /// The backend reported a `contract(InvalidValue)` whose `Rule` the
-    /// frame has no code for (frame specification §9.6), from a `ridl-rt`
-    /// newer than this crate. A `response` is sent as `corrupt` and an
+    /// session's frame version does not carry (frame specification §9.6): a
+    /// rule from a `ridl-rt` newer than this crate, or `Rule::Utf8` on a
+    /// session below frame version 3. A `response` is sent as `corrupt` and an
     /// `answer` as `contract(ContractBroken)` instead.
     RuleNotCarried {
         /// The interaction answered.
@@ -129,10 +144,13 @@ pub enum Note {
         correlation: u64,
     },
     /// A `subscribe`, `read`, `request` or `unsubscribe` named an interaction
-    /// the member table does not hold, or holds under another kind (frame
-    /// specification §6.4). An `unsubscribe` is dropped; the other three are
-    /// answered `contract(UnknownInteraction)`. In the reversed role, an
-    /// unknown or wrong-kind `answer`, `publish` or `occurrence` is dropped.
+    /// the member table does not hold, or holds under another kind, or a
+    /// `chunk`, `stream_end` or `stream_credit` named a target other than the
+    /// call its correlation names (frame specification §6.4). An
+    /// `unsubscribe` or stream form is discarded without an answer; the
+    /// other three are answered `contract(UnknownInteraction)`. In the
+    /// reversed role, an unknown or wrong-kind `answer`, `publish` or
+    /// `occurrence` is dropped.
     UnknownInteraction {
         /// The interaction named.
         target: Target,
