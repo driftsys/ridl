@@ -12,10 +12,44 @@ use crate::frame::{ProtocolViolation, Target, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIM
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Note {
+    /// A malformed payload form was discarded without closing the session.
+    Discarded(crate::frame::Discarded),
+    /// A reversed-role value arrived before its subscription was accepted.
+    NotSubscribed {
+        /// The interaction named.
+        target: Target,
+    },
+    /// Debug injection converted detected invalidity into declared invalidity.
+    DetectedInvalid {
+        /// The interaction named.
+        target: Target,
+        /// The detection the local signal port cannot carry.
+        cause: ridl_rt::sample::Detection,
+    },
+    /// Debug injection could not raise an invalid occurrence on a byte port.
+    CorruptOccurrence {
+        /// The interaction named.
+        target: Target,
+        /// The detection the event port cannot carry.
+        cause: ridl_rt::sample::Detection,
+    },
+    /// A remote event sequence skipped occurrences.
+    EventGap {
+        /// The interaction named.
+        target: Target,
+        /// The number of missing occurrences.
+        count: u64,
+    },
+    /// A local debug port refused a delivered sample or occurrence.
+    PortRefused {
+        /// The interaction named.
+        target: Target,
+    },
     /// A message the codec could not read. The session closes with 1002.
     Violation(ProtocolViolation),
     /// A message that is not an `attach` arrived before the `attach`. The
-    /// session closes with 1002.
+    /// session closes with 1002. In the reversed role, this also covers a
+    /// discarded data frame before `attached`.
     MessageBeforeAttach,
     /// A second `attach` arrived on an open session. The session closes
     /// with 1002.

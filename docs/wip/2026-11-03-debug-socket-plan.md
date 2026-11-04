@@ -93,10 +93,16 @@ These are the names chosen here; subsequent tasks refer to this section.
   the handshake. Selection occurs once after parsing attach, before normal
   catalog/encoding checks.
 - `server::ProvidedBackend` has
-  `type Ports: Attached + Encoded + Clock + SignalWriter + EventSink + Handler`,
+  `type Ports: Attached + Encoded + Clock + Handler`,
   `fn ports(&mut self) -> &mut Self::Ports`, and
   `fn members(&self) -> &MemberTable`. Its table contains only the offered
-  members of this instance in this catalog.
+  members of this instance in this catalog. Under R-DS-3 its delivery methods
+  are `sample(target: Target, sample: Sample<Option<&[u8]>>, config: &Config)`,
+  `occurrence(target: Target, occurrence: Occurrence<&[u8]>, gap: Option<u64>, config: &Config)`
+  and `commit(remote_stamp: Timestamp)`, each with `&mut self` and no return
+  value. These reuse the runtime's sample, provenance, detection, freshness and
+  envelope types. A sample's `None` means the catalog init value; `Some` holds
+  the last good bytes. `gap` counts missing event occurrences.
   `server::Providing<P>::new(ports: P, members: MemberTable) -> Result<Self, TableMismatch>`
   is the standard adapter, validating table identity.
 - `server::serve_provided<C: Connection, B: ProvidedBackend>(conn: C, backend: B, config: &Config) -> Ended`;

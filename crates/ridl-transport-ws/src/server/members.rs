@@ -145,6 +145,21 @@ impl MemberTable {
             .map(|entry| (entry.kind, entry.max))
     }
 
+    /// Every member in interface and ordinal order, with its bound and limit.
+    pub fn iter(&self) -> impl Iterator<Item = (Target, Option<Duration>, Option<u32>)> + '_ {
+        self.members.iter().map(|(&(iface, ord), entry)| {
+            (
+                Target {
+                    kind: entry.kind,
+                    iface,
+                    ord,
+                },
+                entry.max,
+                entry.limit,
+            )
+        })
+    }
+
     /// Every member, in key order, with its payload limit when it has one.
     pub(crate) fn entries(&self) -> impl Iterator<Item = (Target, Option<u32>)> + '_ {
         self.members.iter().map(|(&(iface, ord), entry)| {

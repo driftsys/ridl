@@ -124,6 +124,26 @@ impl ProvidedBackend for Tracked {
     fn members(&self) -> &MemberTable {
         self.inner.members()
     }
+    fn sample(
+        &mut self,
+        t: ridl_transport_ws::frame::Target,
+        s: ridl_rt::sample::Sample<Option<&[u8]>>,
+        c: &Config,
+    ) {
+        self.inner.sample(t, s, c);
+    }
+    fn occurrence(
+        &mut self,
+        t: ridl_transport_ws::frame::Target,
+        e: ridl_rt::sample::Occurrence<&[u8]>,
+        g: Option<u64>,
+        c: &Config,
+    ) {
+        self.inner.occurrence(t, e, g, c);
+    }
+    fn commit(&mut self, s: ridl_rt::sample::Timestamp) {
+        self.inner.commit(s);
+    }
 }
 #[test]
 fn listeners_accept_only_their_role() {
@@ -269,7 +289,7 @@ fn provider_server_attaches_first() {
         Ended::Io(io::ErrorKind::UnexpectedEof)
     );
     let messages = messages(&output.borrow());
-    assert_eq!(messages.len(), 1);
+    assert_eq!(messages.len(), 2);
     assert_eq!(
         frame::decode(&messages[0].1).unwrap(),
         Frame::Attach(Attach::new(2, 1, CATALOG.hash, CATALOG.name).unwrap())
@@ -467,7 +487,7 @@ fn provider_ignores_ping_before_attached_and_answers_it() {
         Ended::Io(io::ErrorKind::UnexpectedEof)
     );
     let messages = messages(&output.borrow());
-    assert_eq!(messages.len(), 2);
+    assert_eq!(messages.len(), 3);
     assert_eq!(messages[1], (10, b"ping".to_vec()));
 }
 

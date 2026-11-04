@@ -84,3 +84,7 @@ required-features = ["descriptor"]
 [[test]]
 name = "provided"
 required-features = ["server"]
+
+[[test]]
+name = "provided_signals"
+required-features = ["server"]

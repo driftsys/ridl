@@ -1,4 +1,6 @@
-//! Reversed-role negotiation and attach.
+//! Reversed-role negotiation, attach and consumer deliveries.
+
+mod signals;
 
 use ridl_rt::encoding::Encoding;
 use ridl_rt::port::{Attached, Encoded};
@@ -29,8 +31,8 @@ pub enum SelectionError {
 ///
 /// Accepts only `ridl-ws-v2-provider`, ignores the URL path, and sends
 /// `attach` first. The peer must answer `attached`. The blocking, timeout,
-/// framing and cleanup rules of [`serve`](super::serve) apply. This entry point currently
-/// negotiates and attaches only; it forwards no session data.
+/// framing and cleanup rules of [`serve`](super::serve) apply. After acceptance
+/// the session subscribes to every offered signal and event.
 pub fn serve_provided<C: Connection, B: ProvidedBackend>(
     conn: C,
     backend: B,
@@ -108,10 +110,7 @@ where
     if let Err(e) = FrameWriter::default().binary(&mut conn, &bytes) {
         return write_failed(&e);
     }
-    let mut session = Provided {
-        _backend: backend.expect("upgrade selected a backend"),
-        attached: false,
-    };
+    let mut session = Provided::new(backend.expect("upgrade selected a backend"), config);
     run_upgraded(&mut conn, &mut session, config)
 }
 
@@ -125,24 +124,75 @@ fn configured_attach(
 }
 
 struct Provided<B> {
-    _backend: B,
+    backend: B,
+    consumer: signals::Consumer,
     attached: bool,
+}
+
+impl<B: ProvidedBackend> Provided<B> {
+    fn new(backend: B, config: &Config) -> Self {
+        Self {
+            backend,
+            attached: false,
+            consumer: signals::Consumer::new(config.poll_interval),
+        }
+    }
 }
 
 impl<B: ProvidedBackend> Driver for Provided<B> {
     fn on_message(
         &mut self,
         msg: &[u8],
-        _: Instant,
-        _: &mut Vec<Vec<u8>>,
+        now: Instant,
+        out: &mut Vec<Vec<u8>>,
         config: &Config,
     ) -> Step {
         match frame::decode(msg) {
             Ok(Frame::Attached(AttachOutcome::Accepted)) if !self.attached => {
                 self.attached = true;
+                self.consumer.subscribe(&self.backend, out);
                 Step::Continue
             }
             Ok(Frame::Attached(AttachOutcome::Refused(_))) if !self.attached => Step::Close(1000),
+            Ok(Frame::Answer { target, outcome }) if self.attached => {
+                if self
+                    .backend
+                    .members()
+                    .member(target.iface, target.ord)
+                    .is_some_and(|(kind, _)| kind == target.kind)
+                {
+                    self.consumer.answer(target, outcome);
+                } else {
+                    signals::record(config, Note::UnknownInteraction { target });
+                }
+                Step::Continue
+            }
+            Ok(Frame::Publish {
+                target,
+                envelope,
+                state,
+            }) if self.attached => {
+                self.consumer
+                    .publication(&mut self.backend, target, envelope, state, now, config);
+                Step::Continue
+            }
+            Ok(Frame::Occurrence {
+                target,
+                envelope,
+                payload,
+            }) if self.attached => {
+                self.consumer
+                    .occurrence(&mut self.backend, target, envelope, payload, now, config);
+                Step::Continue
+            }
+            Err(frame::DecodeError::Discard(_)) if !self.attached => {
+                signals::record(config, Note::MessageBeforeAttach);
+                Step::Close(1002)
+            }
+            Err(frame::DecodeError::Discard(reason)) => {
+                signals::record(config, Note::Discarded(reason));
+                Step::Continue
+            }
             other => {
                 if let Some(record) = config.record() {
                     record(&match other {
@@ -154,7 +204,8 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
             }
         }
     }
-    fn tick(&mut self, _: Instant, _: &mut Vec<Vec<u8>>) -> Step {
+    fn tick(&mut self, now: Instant, _: &mut Vec<Vec<u8>>) -> Step {
+        self.consumer.tick(&mut self.backend, now);
         Step::Continue
     }
 }
@@ -183,3 +234,7 @@ mod tests {
         .is_ok());
     }
 }
+
+#[cfg(test)]
+#[path = "provided/tests.rs"]
+mod consumer_tests;
