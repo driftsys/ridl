@@ -23,7 +23,8 @@ members = ["crates/*", "xtask"]
 # `cargo semver-checks` on copies under the cargo target directory, each with
 # an empty `[workspace]` table, so the copies are outside this workspace. They
 # are never built as members here.
-exclude = ["examples", "freeze/generated"]
+# `bench/encodings` is its own workspace, like `examples/cabin`.
+exclude = ["examples", "bench", "freeze/generated"]
 
 # The lints of cargo-semver-checks whose required update is major but whose
 # default level is `warn`, raised to `deny` so that `cargo xtask freeze check`

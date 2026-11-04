@@ -61,3 +61,6 @@ evals/results/*/transcripts/
 /packages/ridl-transport-ws/deno.lock
 /packages/ridl-runtime/npm/
 /packages/ridl-runtime/deno.lock
+
+# Written by `cargo xtask bench gen`.
+/bench/encodings/generated/

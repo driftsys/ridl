@@ -8,6 +8,8 @@
 //! - `descriptor-codegen` regenerates the catalog-descriptor accessors from
 //!   `crates/ridl-descriptor/schema/catalog.fbs`.
 //!
+//! - `bench gen` writes the generated crates of the encoding bench under
+//!   `bench/encodings/generated/`.
 //! - `calibrate` dumps corpus findings and derives levels from reviewed labels.
 //! - `freeze update|check` writes or checks the dumps of the frozen surfaces
 //!   under `freeze/`.
@@ -17,6 +19,7 @@
 //! The code generation drift tests fail whenever the committed output is
 //! stale, so a generated file can never silently diverge from its source.
 
+mod bench;
 mod calibrate;
 mod codegen;
 mod descriptor;
@@ -52,6 +55,13 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        Some("bench") => match bench::run(&std::env::args().skip(2).collect::<Vec<_>>()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("bench: {error}");
+                ExitCode::from(2)
+            }
+        },
         Some("eval") => match eval::run(&std::env::args().skip(2).collect::<Vec<_>>()) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
@@ -60,7 +70,9 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            eprintln!("usage: cargo xtask <codegen|descriptor-codegen|calibrate|freeze|eval>");
+            eprintln!(
+                "usage: cargo xtask <codegen|descriptor-codegen|calibrate|freeze|eval|bench>"
+            );
             ExitCode::from(2)
         }
     }
