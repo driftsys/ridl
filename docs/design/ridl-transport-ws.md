@@ -233,10 +233,11 @@ this.
 The server is `crates/ridl-transport-ws/src/server.rs` and its modules
 `backend.rs`, `config.rs`, `session.rs` and `calls.rs`.
 
-**D-7. The embedder owns sockets and threads.** The public entry point is one
-blocking function, `serve(conn, backend, &config) -> Ended`. The embedder binds
-a listener, applies its access policy to each accepted connection, chooses a
-thread, builds one `Backend` value for the connection, and calls `serve`.
+**D-7. The embedder owns sockets and threads.** The public entry points are
+blocking functions, `serve(conn, backend, &config) -> Ended` and
+`serve_selected(conn, max_version, select, &config) -> Ended`. The embedder
+binds a listener, applies its access policy to each accepted connection, chooses
+a thread, builds one `Backend` value for the connection, and calls `serve`.
 `serve` returns when the session ends, with why. The crate rustdoc carries an
 embedding example. Nothing in the crate calls `bind`, `listen`, `spawn` or
 `connect`.
@@ -249,7 +250,8 @@ named in the client's `attach`.
 entry point for that case. It takes no backend; it takes `select`, a closure
 that is called at most once, when the first `attach` has been parsed, with a
 `RequestedCatalog` that borrows the name and the hash from that message. The
-closure returns the backend for that catalog, or `None`. Everything else in this
+closure selects by catalog name and returns the backend, or `None` for an
+unknown name; the session checks the hash (D-11). Everything else in this
 section applies to both functions: the embedder owns the socket and the thread,
 and the backend is dropped on every exit.
 
@@ -382,8 +384,11 @@ acceptance, because the backend is known only after the `attach` is read. A
 backend that cannot serve the negotiated version (version 3 needs streams and a
 member table) is refused `frame_version_unsupported`. A selected backend whose
 member table needs a larger message limit than the `Config` allows is refused
-`range` (frame specification §11.1, "The sizes"), and the server records
-`Note::MessageLimitTooSmall`. In both cases no session data has been sent.
+`range` (frame specification §11.1, "The sizes"). The capability reason wins
+when both checks fail. Whenever ordinary attach checks pass and the message
+limit is too small, the server records `Note::MessageLimitTooSmall`, with either
+`refused(range)` or `refused(frame_version_unsupported)`. In both cases no
+session data has been sent.
 
 After a refusal the server closes with 1000. The checks run in the order above,
 so one reason is given. A second `attach` on an open session closes with 1002.
@@ -771,8 +776,10 @@ client on a stream the server granted it no credit for; closes 1002),
 violation's rule the frame has no code for; the outcome is replaced),
 `UnknownInteraction` (an interaction the member table does not hold; dropped or
 answered as D-12 says) and `MessageLimitTooSmall` (the member whose messages the
-`Config` cannot carry, with the limit it needs; `serve` returns `ConfigRefused`,
-D-26).
+`Config` cannot carry, with the limit it needs; `serve` records it before the
+handshake. `serve_selected` records it after selection when ordinary attach
+checks pass, with `refused(range)` or, when the capability check also fails,
+`refused(frame_version_unsupported)`. Both return `ConfigRefused`, D-26).
 
 ### `Config`
 
@@ -818,26 +825,27 @@ carries (ADR-0030 decision 10). It is the default of `max_message_bytes` and the
 largest value accepted, and the smallest `max_retained_bytes` accepted.
 
 **The `Config` check.** `serve_selected` runs the same check after selection, as
-D-11 says: it answers `refused(range)` with close 1000 instead of returning
-before the handshake, because the backend is not known earlier. `range` is the
-reason for a limit the receiving side cannot carry, here the message limit of
-the `Config` (frame specification §6.1). With a member table, `serve` first
-checks that `max_message_bytes` is at least 36 plus the largest limit over the
-members of what one message carries: each member's limit, and for a `fixed` at
-most 4,130 bytes minus 36, because a `fixed` that one message cannot carry
-crosses in blocks and a block message is at most 4,130 bytes (frame
-specification §11.1, "Binding version 2"). So a `fixed` counts the smaller of 36
-plus its limit and 4,130. A limit below that cannot carry a payload the catalog
-allows, which is a configuration error, not a session event: `serve` records
-`MessageLimitTooSmall` with the member and the limit it needs, returns
-`Ended::ConfigRefused` before the opening handshake without reading the
-connection, and the connection closes when it is dropped. No `attached` reason
-is added, because the frame has none for a configuration error and a new reason
-would change the frozen `wire` surface. The default `Config` carries every
-catalog, a catalog with a large `fixed` included, so a binding never refuses an
-allowed interaction at attach (ADR-0030 decision 20). Without a member table
-there is no `Config` check: the default ceiling of the frame's `kind`, under the
-message limit, bounds what the session sends and what a `request` carries.
+D-11 says: it answers `refused(range)` (or `frame_version_unsupported` if the
+capability check also fails) with close 1000 instead of returning before the
+handshake, because the backend is not known earlier. `range` is the reason for a
+limit the receiving side cannot carry, here the message limit of the `Config`
+(frame specification §6.1). With a member table, `serve` first checks that
+`max_message_bytes` is at least 36 plus the largest limit over the members of
+what one message carries: each member's limit, and for a `fixed` at most 4,130
+bytes minus 36, because a `fixed` that one message cannot carry crosses in
+blocks and a block message is at most 4,130 bytes (frame specification §11.1,
+"Binding version 2"). So a `fixed` counts the smaller of 36 plus its limit and
+4,130. A limit below that cannot carry a payload the catalog allows, which is a
+configuration error, not a session event: `serve` records `MessageLimitTooSmall`
+with the member and the limit it needs, returns `Ended::ConfigRefused` before
+the opening handshake without reading the connection, and the connection closes
+when it is dropped. This preflight sends no `attached` reply. The selected path
+uses the existing `range` reason; no new wire reason is added. The default
+`Config` carries every catalog, a catalog with a large `fixed` included, so a
+binding never refuses an allowed interaction at attach (ADR-0030 decision 20).
+Without a member table there is no `Config` check: the default ceiling of the
+frame's `kind`, under the message limit, bounds what the session sends and what
+a `request` carries.
 
 The check uses one header size for every member, 36 bytes, the largest
 data-plane header with its envelope. A `fixed` crosses only in a `publish`,
@@ -875,20 +883,23 @@ browser-facing embedder should set the check; the crate rustdoc says so, and
 that the crate authenticates no one.
 
 **D-20. The subprotocol.** The server selects `ridl-ws-v3` when the client
-offers it, in any position of `Sec-WebSocket-Protocol`, and the session serves
-streams (D-27). Otherwise it selects `ridl-ws-v2` when the client offers it.
-When the client offers `ridl-ws-v1` and not `ridl-ws-v2`, the server selects
-`ridl-ws-v1`, refuses every `attach` on that connection
-`frame_version_unsupported` (D-11) and closes with 1000, so that a version 1
-client learns the reason instead of a failed handshake. When the client offers
-no subprotocol the server serves (`ridl-ws-v3` counts only when D-27's condition
-holds), the server answers `400 Bad Request` and does not upgrade. §11.1 says
-that the client fails a connection on which the server selected none; answering
-400 makes the failure visible at once, also to a client that does not check. The
-selection is three comparisons, with `ridl-ws-v3`, `ridl-ws-v2` and
-`ridl-ws-v1`, and none selects a role: a table from subprotocol name to session
-role would have no row to hold, so it is left until the reversed role of "Adding
-the stand-in ports later" adds one.
+offers it, in any position of `Sec-WebSocket-Protocol`, and, for `serve`, the
+backend serves streams and holds a member table (D-27). For `serve_selected`,
+version selection uses the caller's `max_version`: 3 permits `ridl-ws-v3`, while
+2 permits at most `ridl-ws-v2`, before the backend is known. Otherwise it
+selects `ridl-ws-v2` when the client offers it. When the client offers
+`ridl-ws-v1` and not `ridl-ws-v2`, the server selects `ridl-ws-v1`, refuses
+every `attach` on that connection `frame_version_unsupported` (D-11) and closes
+with 1000, so that a version 1 client learns the reason instead of a failed
+handshake. When the client offers no subprotocol the server serves (`ridl-ws-v3`
+counts only when the applicable condition above holds), the server answers
+`400 Bad Request` and does not upgrade. §11.1 says that the client fails a
+connection on which the server selected none; answering 400 makes the failure
+visible at once, also to a client that does not check. The selection is three
+comparisons, with `ridl-ws-v3`, `ridl-ws-v2` and `ridl-ws-v1`, and none selects
+a role: a table from subprotocol name to session role would have no row to hold,
+so it is left until the reversed role of "Adding the stand-in ports later" adds
+one.
 
 **D-21. Messages.** Binary messages only; a text message closes with 1003.
 Fragmented messages are reassembled, also when a frame is split across socket

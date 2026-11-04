@@ -131,8 +131,10 @@ pub enum Ended {
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
     /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it offered
-    /// no subprotocol this server serves (`ridl-ws-v3` counts only when the
-    /// backend serves streams and holds a member table); or `403 Forbidden`,
+    /// no subprotocol this server serves (`ridl-ws-v3` counts for [`serve`]
+    /// only when the backend serves streams and holds a member table, and for
+    /// [`serve_selected`] only when the caller's `max_version` is 3);
+    /// or `403 Forbidden`,
     /// because the check set by [`Config::with_origin_check`] refused its
     /// `Origin`.
     Rejected,
@@ -160,7 +162,9 @@ pub enum Ended {
     /// negotiated capability or message capacity. Selected-backend refusals
     /// answer `attach` with `attached(refused)` and close 1000 before any
     /// session data: `frame_version_unsupported` for capability and `range`
-    /// for message capacity. A capacity refusal records the same note.
+    /// for message capacity. Capability takes precedence if both checks fail.
+    /// When ordinary attach checks pass, insufficient message capacity records
+    /// the same note with either reply.
     ConfigRefused,
 }
 
@@ -288,6 +292,7 @@ pub fn serve<C: Connection, B: Backend>(conn: C, mut backend: B, config: &Config
 
 /// A client's catalog identity, borrowed only for backend selection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RequestedCatalog<'a> {
     /// The catalog name in the client's `attach`.
     pub name: &'a str,
@@ -303,7 +308,10 @@ pub struct RequestedCatalog<'a> {
 /// 1 is negotiated only to refuse attach, as in [`serve`].
 ///
 /// After parsing `attach`, `select` receives its borrowed name and hash.
-/// `None` refuses with `unknown_catalog`. A selected backend undergoes the
+/// Select by catalog name; the session checks the hash. `None` means an unknown
+/// name and refuses with `unknown_catalog`, except that a wrong attach version
+/// or a version 1 connection is refused with `frame_version_unsupported`.
+/// A selected backend undergoes the
 /// ordinary version, name, hash and encoding checks. Before accepting attach,
 /// it must also support the negotiated capability and message capacity;
 /// otherwise the server sends `attached(refused)` and close 1000 and returns
@@ -407,6 +415,7 @@ where
             }
             return refuse_selected(
                 out,
+                // Capability takes precedence; a short limit is still recorded.
                 if capability_short {
                     Reason::FrameVersionUnsupported
                 } else {

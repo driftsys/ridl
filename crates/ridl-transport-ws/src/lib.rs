@@ -4,9 +4,10 @@
 //! needs `core` only: no `alloc` and no standard library.
 //!
 //! With the `server` feature, which is on by default, the crate also serves a
-//! [`Backend`] to one WebSocket client per connection. [`serve`] answers the
-//! opening handshake on a [`Connection`] the embedder has accepted, runs the
-//! session until it ends, and returns why, as an [`Ended`]. The embedder gives
+//! [`Backend`] to one WebSocket client per connection. [`serve`] takes a backend
+//! chosen before the handshake; [`serve_selected`] chooses it from `attach`. Both
+//! answer the opening handshake on a [`Connection`] the embedder has accepted,
+//! run the session until it ends, and return why, as an [`Ended`]. The embedder gives
 //! [`Polling`] or [`Scanning`] a port set, and a [`Config`] whose [`Note`]s
 //! report what the server drops.
 //!
@@ -63,7 +64,7 @@
 //!   `Sec-WebSocket-Version` and `Sec-WebSocket-Protocol`; §11.1 item 1, and
 //!   `Origin`, which it gives to the check that
 //!   [`Config::with_origin_check`] sets): the access policy is the
-//!   embedder's, and runs before [`serve`].
+//!   embedder's, and runs before [`serve`] or [`serve_selected`].
 //! - It checks no `Origin` unless the embedder sets a check. Any web page a
 //!   browser loads can open a WebSocket to a local address, such as
 //!   `ws://127.0.0.1:9000`, and the embedder's access policy sees the same

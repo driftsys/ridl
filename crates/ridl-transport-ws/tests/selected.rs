@@ -490,3 +490,111 @@ fn selected_backend_released_on_session_exits() {
         assert_eq!(drops.get(), 1);
     }
 }
+
+#[test]
+fn none_selection_with_wrong_attach_version_refuses_version() {
+    let conn = connection("ridl-ws-v2", vec![attach(FIRST, 3, 1)]);
+    let output = conn.output.clone();
+    assert_eq!(
+        serve_selected::<_, Polling<Loopback>, _>(conn, 2, |_| None, &Config::default()),
+        Ended::ServerClosed(1000)
+    );
+    refused(&output.borrow(), Reason::FrameVersionUnsupported);
+}
+
+#[test]
+fn selected_max_version_controls_handshake() {
+    for (offer, accepted) in [("ridl-ws-v3, ridl-ws-v2", true), ("ridl-ws-v3", false)] {
+        let conn = connection(offer, vec![attach(FIRST, 2, 1)]);
+        let output = conn.output.clone();
+        let ended = serve_selected(
+            conn,
+            2,
+            |_| Some(Polling(store(FIRST, 11))),
+            &Config::default(),
+        );
+        let bytes = output.borrow();
+        if accepted {
+            assert_eq!(ended, Ended::Io(io::ErrorKind::UnexpectedEof));
+            assert!(
+                String::from_utf8_lossy(&bytes).contains("Sec-WebSocket-Protocol: ridl-ws-v2\r\n")
+            );
+            assert_eq!(
+                frame::decode(&frames(&bytes)[0].1).unwrap(),
+                Frame::Attached(AttachOutcome::Accepted)
+            );
+        } else {
+            assert_eq!(ended, Ended::Rejected);
+            assert!(bytes.starts_with(b"HTTP/1.1 400"));
+        }
+    }
+}
+
+#[test]
+fn selected_capability_refusal_wins_over_limit_but_records_limit() {
+    let conn = connection("ridl-ws-v3", vec![attach(FIRST, 3, 1)]);
+    let output = conn.output.clone();
+    let notes = Arc::new(Mutex::new(Vec::new()));
+    let sink = notes.clone();
+    let config = Config::default()
+        .with_max_message_bytes(294)
+        .unwrap()
+        .with_record(move |note| sink.lock().unwrap().push(*note));
+    let backend = Described::new(Polling(store(FIRST, 11)), Arc::new(table())).unwrap();
+    assert_eq!(
+        serve_selected(conn, 3, |_| Some(backend), &config),
+        Ended::ConfigRefused
+    );
+    refused(&output.borrow(), Reason::FrameVersionUnsupported);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        [Note::MessageLimitTooSmall {
+            target: SIGNAL,
+            needed: 3876
+        }]
+    );
+}
+
+#[test]
+fn selected_first_message_records_exact_note() {
+    use frame::ProtocolViolation;
+    let stream = Frame::StreamCredit {
+        target: Target {
+            kind: Kind::Command,
+            ..SIGNAL
+        },
+        correlation: 1,
+        stream: 0,
+        credit: 1,
+    };
+    for (message, note) in [
+        (wire(Frame::Subscribe(SIGNAL)), Note::MessageBeforeAttach),
+        (
+            vec![0x82, 0x80, 0, 0, 0, 0],
+            Note::Violation(ProtocolViolation::TooShort),
+        ),
+        (
+            vec![0x82, 0x81, 0, 0, 0, 0, 0xff],
+            Note::Violation(ProtocolViolation::UnknownCode),
+        ),
+        (
+            wire(stream),
+            Note::Violation(ProtocolViolation::UnknownCode),
+        ),
+    ] {
+        let conn = connection("ridl-ws-v2", vec![message]);
+        let notes = Arc::new(Mutex::new(Vec::new()));
+        let sink = notes.clone();
+        let config = Config::default().with_record(move |note| sink.lock().unwrap().push(*note));
+        assert_eq!(
+            serve_selected::<_, Polling<Loopback>, _>(
+                conn,
+                2,
+                |_| panic!("must not select"),
+                &config
+            ),
+            Ended::ServerClosed(1002)
+        );
+        assert_eq!(*notes.lock().unwrap(), [note]);
+    }
+}

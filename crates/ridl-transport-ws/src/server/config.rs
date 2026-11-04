@@ -97,9 +97,11 @@ pub enum Note {
     /// plus the member's limit, and for a `fixed` the smaller of that and
     /// one block message, 4,130 bytes. The
     /// configuration cannot carry a payload the catalog allows, so
-    /// [`serve`](crate::serve) returned
-    /// [`Ended::ConfigRefused`](crate::Ended::ConfigRefused) before the
-    /// opening handshake.
+    /// [`serve`](crate::serve) records this before the opening handshake.
+    /// [`serve_selected`](crate::serve_selected) records it after selection,
+    /// when ordinary attach checks pass, with `refused(range)` or, if the
+    /// capability check also fails, `refused(frame_version_unsupported)`.
+    /// Both return [`Ended::ConfigRefused`](crate::Ended::ConfigRefused).
     MessageLimitTooSmall {
         /// The member whose messages need the most bytes.
         target: Target,
