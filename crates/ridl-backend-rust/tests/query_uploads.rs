@@ -35,6 +35,7 @@ struct State {
     finished: bool,
     starts: usize,
     blocked: bool,
+    callbacks: Vec<&'static str>,
     waker: Option<Waker>,
 }
 #[derive(Clone)]
@@ -50,6 +51,7 @@ impl Consumer for Upload {
     }
     fn accept(&mut self, item: Self::Item) {
         let mut s = self.0.borrow_mut();
+        s.callbacks.push("accept");
         s.accepted.push(item);
         s.queued.push_back(item);
         if let Some(w) = s.waker.take() {
@@ -58,6 +60,7 @@ impl Consumer for Upload {
     }
     fn end(&mut self) {
         let mut s = self.0.borrow_mut();
+        s.callbacks.push("end");
         s.ends += 1;
         s.finished = true;
         if let Some(w) = s.waker.take() {
@@ -66,6 +69,7 @@ impl Consumer for Upload {
     }
     fn failed(&mut self, e: CallError) {
         let mut s = self.0.borrow_mut();
+        s.callbacks.push("failed");
         s.failures.push(e);
         s.finished = true;
     }
@@ -865,6 +869,7 @@ fn validation_before_admission_cancels_the_query_and_wakes_once() {
     );
     count.0.store(0, std::sync::atomic::Ordering::SeqCst);
     let error = sink.send(&reading(200)).unwrap_err();
+    drop(sink);
     assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(poll(&mut call), Poll::Ready(Err(error)));
     assert_eq!(
@@ -875,7 +880,6 @@ fn validation_before_admission_cancels_the_query_and_wakes_once() {
         2
     );
     drop(call);
-    drop(sink);
     assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
 #[derive(Default)]
@@ -905,7 +909,14 @@ fn a_blocked_query_consumer_receives_terminal_outcomes_and_releases_busy() {
             pending(&mut serve);
         }
         assert_eq!(s.borrow().ends, usize::from(!abort));
-        assert_eq!(s.borrow().failures.len(), usize::from(abort));
+        assert_eq!(
+            s.borrow().failures,
+            if abort {
+                vec![CallError::Transport(Transport::Interrupted)]
+            } else {
+                vec![]
+            }
+        );
         drop(call);
         let (mut next, mut sink) = client.summarize(generated::LogSummarizeParams {});
         pending(&mut serve);
@@ -926,15 +937,19 @@ fn a_held_query_element_precedes_end() {
     pending(&mut serve);
     sink.send(&reading(7)).unwrap();
     assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
-    pending(&mut serve);
-    assert_eq!(s.borrow().ends, 0);
-    assert!(s.borrow().accepted.is_empty());
+    for _ in 0..3 {
+        pending(&mut serve);
+        assert_eq!(s.borrow().ends, 0);
+        assert!(s.borrow().accepted.is_empty());
+        assert!(s.borrow().callbacks.is_empty());
+    }
     s.borrow_mut().blocked = false;
     for _ in 0..4 {
         pending(&mut serve);
     }
     assert_eq!(s.borrow().accepted, vec![reading(7)]);
     assert_eq!(s.borrow().ends, 1);
+    assert_eq!(s.borrow().callbacks, vec!["accept", "end"]);
     assert_eq!(
         poll(&mut call),
         Poll::Ready(Ok(generated::Summary { count: 1, total: 7 }))
@@ -971,4 +986,40 @@ fn dropping_either_query_value_wakes_its_pending_sibling_once() {
         }
         assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
+}
+
+#[test]
+fn dropping_a_locally_refused_admitted_sink_preserves_the_query_validation_error() {
+    let (rt, _, mut provider) = setup();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.summarize(generated::LogSummarizeParams {});
+    pending(&mut serve);
+    let error = sink.send(&reading(200)).unwrap_err();
+    assert!(matches!(error, ClientError::Call(CallError::Contract(_))));
+    drop(sink);
+    assert_eq!(poll(&mut call), Poll::Ready(Err(error)));
+}
+
+#[test]
+fn cancelling_a_query_wakes_a_named_sink_holding_an_element_before_admission() {
+    let (rt, _, _) = setup();
+    let ports = RecordingPorts::new(&rt);
+    ports.faults().send.set(Some(SendError::Busy));
+    let mut client = generated::log::Client::new(ports);
+    let (call, mut sink) = client.summarize(generated::LogSummarizeParams {});
+    sink.send(&reading(7)).unwrap();
+    let count = std::sync::Arc::new(WakeCount::default());
+    let waker = Waker::from(count.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert!(sink.poll_ready(&mut cx).is_pending());
+    count.0.store(0, std::sync::atomic::Ordering::SeqCst);
+    drop(call);
+    assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        sink.poll_ready(&mut cx),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Interrupted
+        ))))
+    );
 }

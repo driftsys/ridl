@@ -484,7 +484,8 @@ pub(crate) fn one_interface(
     }
 
     // The prelude follows every trait it re-exports, and the blocking module
-    // stays the module's last item. A stream member adds nothing to it.
+    // stays the module's last item. Upload commands and upload queries with
+    // plain replies add blocking serve; streamed replies add no blocking form.
     let blocking = blocking(
         &iface, iface_name, &payloads, &signals, &events, &commands, &queries, &streams,
     );

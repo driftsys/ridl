@@ -204,11 +204,11 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         call_items
     };
     let sink_doc = if call.duplex() {
-        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped."
+        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended cancels the whole call, even while the reply stream is alive. An unresolved call returns the sink's recorded error, or Transport::Interrupted when no error is recorded. Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped."
     } else if call.query_upload() {
-        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply."
+        "The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload and resolves the call with the sink's recorded error, or Transport::Interrupted when no error is recorded. An ended sink preserves the pending reply."
     } else {
-        "The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload."
+        "The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload and resolves an unresolved acknowledgment with the sink's recorded error, or Transport::Interrupted when no error is recorded."
     };
     quote! {
         #call_items
@@ -245,7 +245,7 @@ pub(super) fn items(call: &Call, encoding: &TokenStream) -> TokenStream {
         impl<P:#bounds> ::core::ops::Drop for #sink<'_,P> where #element_bound {
             fn drop(&mut self) {
                 if !self.state.ended.get() {
-                    let error=::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));
+                    let error=self.state.error.get().unwrap_or(::ridl_rt::error::ClientError::Call(::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted)));
                     if let (true,Some(c))=(self.state.error.get().is_none() && !self.state.forgotten.get(), self.state.correlation.get()) {let _=self.port.borrow_mut().abort(c,::ridl_rt::contract::StreamNo(1),::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted));}
                     if self.state.error.get().is_none(){self.state.error.set(Some(error));}
                     if self.state.call_error.get().is_none(){self.state.call_error.set(Some(error));}

@@ -319,9 +319,10 @@ pub struct Violation {
 
 /// The kind of typl constraint a [`Violation`] breaks.
 ///
-/// A variant is added only together with a new frame version, because a
-/// receiver cannot construct a variant it does not know (the frame
-/// specification §9.6); the enum stays `#[non_exhaustive]`.
+/// `Rule::Utf8` exists in `ridl-rt` without a wire code. A rule receives its
+/// wire code with the frame version that first carries it, because a receiver
+/// cannot construct a variant it does not know (the frame specification §9.6);
+/// the enum stays `#[non_exhaustive]`.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {

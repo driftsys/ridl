@@ -4660,7 +4660,7 @@ pub mod log {
             }
         }
     }
-    ///The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload.
+    ///The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload and resolves an unresolved acknowledgment with the sink's recorded error, or Transport::Interrupted when no error is recorded.
     pub struct UploadSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -4911,11 +4911,17 @@ pub mod log {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -5100,7 +5106,7 @@ pub mod log {
             }
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload and resolves the call with the sink's recorded error, or Transport::Interrupted when no error is recorded. An ended sink preserves the pending reply.
     pub struct SummarizeSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -5351,11 +5357,17 @@ pub mod log {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -5540,7 +5552,7 @@ pub mod log {
             }
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload and resolves the call with the sink's recorded error, or Transport::Interrupted when no error is recorded. An ended sink preserves the pending reply.
     pub struct CheckedSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -5791,11 +5803,17 @@ pub mod log {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -6599,7 +6617,7 @@ pub mod log {
             self.shared.forget(self.port);
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended cancels the whole call, even while the reply stream is alive. An unresolved call returns the sink's recorded error, or Transport::Interrupted when no error is recorded. Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped.
     pub struct PipeSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -6850,11 +6868,17 @@ pub mod log {
     {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -12283,7 +12307,7 @@ pub mod docs {
             }
         }
     }
-    ///The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload.
+    ///The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload and resolves an unresolved acknowledgment with the sink's recorded error, or Transport::Interrupted when no error is recorded.
     pub struct PutSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -12431,11 +12455,17 @@ pub mod docs {
     > ::core::ops::Drop for PutSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -12593,7 +12623,7 @@ pub mod docs {
             }
         }
     }
-    ///The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload.
+    ///The command's parameter sink. It shares the call's port without allocating. Empty writes are local no-ops; peer refusal is learned from a push or end. Dropping it before end interrupts the upload and resolves an unresolved acknowledgment with the sink's recorded error, or Transport::Interrupted when no error is recorded.
     pub struct NoteSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -12744,11 +12774,17 @@ pub mod docs {
     > ::core::ops::Drop for NoteSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -15200,7 +15236,7 @@ pub mod raw_queries {
             }
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload; an ended sink preserves the pending reply.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping an unfinished sink cancels the upload and resolves the call with the sink's recorded error, or Transport::Interrupted when no error is recorded. An ended sink preserves the pending reply.
     pub struct SumSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -15349,11 +15385,17 @@ pub mod raw_queries {
     > ::core::ops::Drop for SumSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),
@@ -15765,7 +15807,7 @@ pub mod raw_queries {
             self.shared.forget(self.port);
         }
     }
-    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended immediately interrupts the whole call, even while the reply stream is alive; the provider's consumer receives failed(Interrupted). Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped.
+    ///The query's parameter sink. It shares the call's port and starts the reply deadline after a successful end. Dropping a sink that has not ended cancels the whole call, even while the reply stream is alive. An unresolved call returns the sink's recorded error, or Transport::Interrupted when no error is recorded. Dropping an ended sink does not forget the call: the reply side forgets it when the reply finishes or the reply value is dropped.
     pub struct PipeSink<
         'a,
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::StreamCaller
@@ -15917,11 +15959,17 @@ pub mod raw_queries {
     > ::core::ops::Drop for PipeSink<'_, P> {
         fn drop(&mut self) {
             if !self.state.ended.get() {
-                let error = ::ridl_rt::error::ClientError::Call(
-                    ::ridl_rt::error::CallError::Transport(
-                        ::ridl_rt::error::Transport::Interrupted,
-                    ),
-                );
+                let error = self
+                    .state
+                    .error
+                    .get()
+                    .unwrap_or(
+                        ::ridl_rt::error::ClientError::Call(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
                 if let (true, Some(c)) = (
                     self.state.error.get().is_none() && !self.state.forgotten.get(),
                     self.state.correlation.get(),

@@ -27,12 +27,18 @@ struct State {
     failed: Vec<CallError>,
     partial: usize,
     blocked: bool,
+    callbacks: Vec<&'static str>,
+    invalid_write: Option<usize>,
 }
 #[derive(Clone)]
 struct Receiver(Rc<RefCell<State>>);
 impl ByteConsumer for Receiver {
     fn poll_write(&mut self, _: &mut Context<'_>, bytes: &[u8]) -> Poll<usize> {
         let mut state = self.0.borrow_mut();
+        if let Some(n) = state.invalid_write {
+            return Poll::Ready(n);
+        }
+        state.callbacks.push("write");
         let n = if state.partial == 0 {
             bytes.len()
         } else {
@@ -43,10 +49,14 @@ impl ByteConsumer for Receiver {
         Poll::Ready(n)
     }
     fn end(&mut self) {
-        self.0.borrow_mut().ends += 1;
+        let mut state = self.0.borrow_mut();
+        state.callbacks.push("end");
+        state.ends += 1;
     }
     fn failed(&mut self, e: CallError) {
-        self.0.borrow_mut().failed.push(e);
+        let mut state = self.0.borrow_mut();
+        state.callbacks.push("failed");
+        state.failed.push(e);
     }
 }
 impl Consumer for Receiver {
@@ -59,13 +69,19 @@ impl Consumer for Receiver {
         }
     }
     fn accept(&mut self, item: Self::Item) {
-        self.0.borrow_mut().readings.push(item);
+        let mut state = self.0.borrow_mut();
+        state.callbacks.push("accept");
+        state.readings.push(item);
     }
     fn end(&mut self) {
-        self.0.borrow_mut().ends += 1;
+        let mut state = self.0.borrow_mut();
+        state.callbacks.push("end");
+        state.ends += 1;
     }
     fn failed(&mut self, e: CallError) {
-        self.0.borrow_mut().failed.push(e);
+        let mut state = self.0.borrow_mut();
+        state.callbacks.push("failed");
+        state.failed.push(e);
     }
 }
 struct Provider(Receiver);
@@ -758,6 +774,7 @@ fn validation_before_admission_cancels_the_command() {
     let mut client = generated::log::Client::new(ports);
     let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
     let error = sink.send(&reading(200)).unwrap_err();
+    drop(sink);
     assert_eq!(poll(&mut call), Poll::Ready(Err(error)));
     assert_eq!(
         ops.borrow()
@@ -882,7 +899,14 @@ fn a_blocked_command_consumer_receives_terminal_outcomes_and_releases_busy() {
             pending(&mut serve);
         }
         assert_eq!(s.borrow().ends, usize::from(!abort));
-        assert_eq!(s.borrow().failed.len(), usize::from(abort));
+        assert_eq!(
+            s.borrow().failed,
+            if abort {
+                vec![CallError::Transport(Transport::Interrupted)]
+            } else {
+                vec![]
+            }
+        );
         drop(call);
         let (mut next, _sink) = client.upload(generated::LogUploadParams {});
         pending(&mut serve);
@@ -901,34 +925,83 @@ fn a_held_command_element_precedes_end() {
     pending(&mut serve);
     sink.send(&reading(7)).unwrap();
     assert_eq!(cx_write(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
-    pending(&mut serve);
-    assert_eq!(s.borrow().ends, 0);
-    assert!(s.borrow().readings.is_empty());
+    for _ in 0..3 {
+        pending(&mut serve);
+        assert_eq!(s.borrow().ends, 0);
+        assert!(s.borrow().readings.is_empty());
+        assert!(s.borrow().callbacks.is_empty());
+    }
     s.borrow_mut().blocked = false;
     for _ in 0..4 {
         pending(&mut serve);
     }
     assert_eq!(s.borrow().readings, vec![reading(7)]);
     assert_eq!(s.borrow().ends, 1);
+    assert_eq!(s.borrow().callbacks, vec!["accept", "end"]);
 }
 
 #[test]
-fn dropping_a_locally_refused_admitted_sink_interrupts_the_unresolved_command() {
+fn dropping_a_locally_refused_admitted_sink_preserves_the_command_error() {
     let rt = log_rt();
     let (_, mut provider) = state();
     let mut serve = generated::log::serve(rt.handler(), &mut provider);
     let mut client = generated::log::Client::new(rt.caller());
     let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
     pending(&mut serve);
-    assert!(matches!(
-        sink.send(&reading(200)),
-        Err(ClientError::Call(CallError::Contract(_)))
-    ));
+    let error = sink.send(&reading(200)).unwrap_err();
+    assert!(matches!(error, ClientError::Call(CallError::Contract(_))));
     drop(sink);
+    assert_eq!(poll(&mut call), Poll::Ready(Err(error)));
+}
+
+#[test]
+fn cancelling_a_command_wakes_a_named_sink_holding_an_element_before_admission() {
+    let rt = log_rt();
+    let ports = RecordingPorts::new(&rt);
+    ports
+        .faults()
+        .send
+        .set(Some(ridl_rt::port::SendError::Busy));
+    let mut client = generated::log::Client::new(ports);
+    let (call, mut sink) = client.upload(generated::LogUploadParams {});
+    sink.send(&reading(7)).unwrap();
+    let count = std::sync::Arc::new(WakeCount::default());
+    let waker = std::task::Waker::from(count.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert!(sink.poll_ready(&mut cx).is_pending());
+    count.0.store(0, std::sync::atomic::Ordering::SeqCst);
+    drop(call);
+    assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(
-        poll(&mut call),
+        sink.poll_ready(&mut cx),
         Poll::Ready(Err(ClientError::Call(CallError::Transport(
             Transport::Interrupted
         ))))
     );
+}
+
+fn serve_with_invalid_byte_consumer_length(n: usize) {
+    let rt = docs();
+    let (s, mut provider) = state();
+    s.borrow_mut().invalid_write = Some(n);
+    let mut serve = generated::docs::serve(rt.handler(), &mut provider);
+    let mut client = generated::docs::Client::new(rt.caller());
+    let (_call, mut sink) = client.put(info());
+    pending(&mut serve);
+    assert_eq!(cx_write(|cx| sink.poll_write(cx, b"x")), Poll::Ready(Ok(1)));
+    for _ in 0..3 {
+        pending(&mut serve);
+    }
+}
+
+#[test]
+#[should_panic(expected = "ByteConsumer returned invalid length")]
+fn serve_panics_when_a_byte_consumer_returns_zero_for_nonempty_input() {
+    serve_with_invalid_byte_consumer_length(0);
+}
+
+#[test]
+#[should_panic(expected = "ByteConsumer returned invalid length")]
+fn serve_panics_when_a_byte_consumer_returns_more_than_offered() {
+    serve_with_invalid_byte_consumer_length(2);
 }
