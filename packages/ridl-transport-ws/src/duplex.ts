@@ -68,6 +68,9 @@ export class DuplexCall {
             this.#send(() =>
               send.end(seq, this.#uploadSeq, { kind: "interrupted" })
             );
+            this.#send(() => send.stop(seq, { kind: "interrupted" }));
+            // The platform abort errors the writer; do not error it first.
+            this.#open = false;
             this.reject(new SessionError({ category: "interrupted" }));
           } catch {
             // #send has already failed both sides with the exact send error.

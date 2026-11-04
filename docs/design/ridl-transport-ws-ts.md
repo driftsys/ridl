@@ -417,9 +417,9 @@ only to arguments that one message carries; a larger message is above the
 provider's message limit, which closes the session with 1009 and rejects every
 call in flight with `down`. A `fixed` whose value is longer than one message
 arrives in `block` frames of at most 4,096 bytes, which the session reassembles.
-The client also sends upload chunk payloads through `commandStream` and
-`queryWithUpload`; their separate size refusal sends no chunk and interrupts the
-upload (D-23).
+The client also sends upload chunk payloads through `commandStream`,
+`queryWithUpload` and `queryDuplex`; their separate size refusal sends no chunk
+and interrupts the upload (D-23).
 
 **Blocks.** `src/reassembly.ts` holds the one payload in progress. The rules it
 applies, and the answers to each sequence error, are frame specification §5.5;
@@ -642,12 +642,13 @@ queryDuplex(iface: number, ord: number, args: Uint8Array, opts: { bound: number 
 
 All three send a `request` that opens parameter stream 1. Its chunks and end
 carry the request's caller number as `correlation`, the same target and a stream
-`seq` starting at 1. Upload state belongs to `src/calls.ts`; `src/session.ts`
-encodes and sends its frames. The server's receiving rules are in
-[the server record](ridl-transport-ws.md), D-30. Each method carries one upload.
-`commandStream` returns an acknowledgment, `queryWithUpload` a plain reply, and
-`queryDuplex` a concurrent reply stream (added 2026-11-04). No method carries
-two or more parameter streams (driftsys/ridl#1224).
+`seq` starting at 1. Upload state belongs to `src/calls.ts` for `commandStream`
+and `queryWithUpload`, and to `src/duplex.ts` for `queryDuplex`;
+`src/session.ts` encodes and sends their frames. The server's receiving rules
+are in [the server record](ridl-transport-ws.md), D-30. Each method carries one
+upload. `commandStream` returns an acknowledgment, `queryWithUpload` a plain
+reply, and `queryDuplex` a concurrent reply stream (added 2026-11-04). No method
+carries two or more parameter streams (driftsys/ridl#1224).
 
 - **Writes and credit.** One `write` sends one `chunk`, including an empty
   write, and consumes one credit. The initial credit is 4 chunks; each server
@@ -671,7 +672,7 @@ two or more parameter streams (driftsys/ridl#1224).
   closes, and a `stream_credit` that arrives for it afterwards is ignored
   without a note (frame specification §11.1); a command still waiting for
   acknowledgment remains until its response or bound. A query remains for its
-  plain reply.
+  plain or streamed reply.
 - **Acknowledgment and reply.** `accepted` resolves on the command's
   `response accepted`, leaving its upload open. A plain reply within the
   member's limit resolves `reply` with its payload and forgets the query. If the
@@ -682,11 +683,12 @@ two or more parameter streams (driftsys/ridl#1224).
   reply above the limit rejects both with `corrupt`. An outcome that does not
   fit the call's kind is discarded and recorded as `unexpected-outcome` without
   settling the call (D-9).
-- **Abort.** Aborting sends `stream_end interrupted` with the next sequence and
-  releases a write waiting for credit. A query's `reply` rejects `interrupted`
-  and the query is forgotten. A command retains a pending acknowledgment until
-  its response or bound; an already acknowledged command is forgotten. A
-  resolved `accepted` stays resolved.
+- **Abort.** Aborting sends `stream_end interrupted` on stream 1 with the next
+  sequence and releases a write waiting for credit. For `queryWithUpload`,
+  `reply` rejects `interrupted` and the query is forgotten. For `queryDuplex`,
+  abort also stops stream 0 as described below. A command retains a pending
+  acknowledgment until its response or bound; an already acknowledged command is
+  forgotten. A resolved `accepted` stays resolved.
 - **Refusals and direction.** A server `stream_end` on stream 1 with `seq` 1
   errors the upload with its category (`contract`, including the rule under
   `invalid-value`, `corrupt`, `busy` or `interrupted`), rejects a pending
@@ -695,9 +697,11 @@ two or more parameter streams (driftsys/ridl#1224).
   is not a successful upload acknowledgment. A refusing `response` also errors
   the upload and rejects its pending result with the same failure. A resolved
   `accepted` stays resolved. Refusal rejects a write waiting for credit at once.
-  For an upload call, an inbound `chunk` on any stream or any stream frame on a
-  stream other than 1 is `unexpected-form`; the target check above precedes this
-  rule. D-20's prohibition on inbound credit still applies to a streamed reply.
+  For `commandStream` and `queryWithUpload`, an inbound `chunk` on any stream or
+  any stream frame on a stream other than 1 is `unexpected-form`. `queryDuplex`
+  also accepts reply chunks and ends on stream 0 as described below. The target
+  check above precedes these rules. D-20's prohibition on inbound credit still
+  applies to a streamed reply.
 - **Send exceptions and session end.** If sending the request, a chunk or an end
   throws, the client forgets the call, clears its timer and rejects its pending
   `accepted` or `reply` with that exact error object. A failed chunk or end send
@@ -707,16 +711,20 @@ two or more parameter streams (driftsys/ridl#1224).
   session. When the session ends, an upload still in flight errors with `down`
   and its pending result rejects with `down`.
 - **Bounds.** A command's acknowledgment timer starts after its request is sent;
-  expiry rejects `accepted` and errors its upload with `undelivered`. A query
-  starts its reply timer only when `close` sends `stream_end end`; expiry
-  rejects `reply` and errors the upload with `timeout`. Before close the query
-  has no client timer; the server bounds inactivity through abandonment (D-30).
-  Both timer expiries forget the call.
-- **Preflight.** On a session below version 3 both methods return an errored
-  upload and a rejected result with `unsupported`, sending nothing. Invalid
-  interface numbers, ordinals or bounds reject both operations with the same
-  `RangeError` as D-9. Arguments above the member's limit reject both with the
-  same `SessionError` `corrupt`. An ended session rejects with `down`.
+  expiry rejects `accepted` and errors its upload with `undelivered`.
+  `queryWithUpload` starts its reply timer only when `close` sends
+  `stream_end end`; expiry rejects `reply` and errors the upload with `timeout`.
+  Before close, `queryWithUpload` has no client timer; the server bounds
+  inactivity through abandonment (D-30). Both timer expiries forget the call.
+  `queryDuplex` starts its first-reply-frame bound at the request, as described
+  below.
+- **Preflight.** On a session below version 3 all three methods return an
+  errored upload with `unsupported`, sending nothing. `commandStream` and
+  `queryWithUpload` also return a rejected result promise; `queryDuplex` returns
+  an errored reply `ReadableStream`. Invalid interface numbers, ordinals or
+  bounds fail both returned operations with the same `RangeError` as D-9.
+  Arguments above the member's limit fail both with the same `SessionError`
+  `corrupt`. An ended session fails both with `down`.
 
 **Duplex queries.** `queryDuplex` combines stream 1's upload rules above with
 D-20's reply stream 0 under one correlation. Each direction has its own initial
@@ -724,14 +732,16 @@ credit of 4, credit counter and sequence counter. The target check precedes both
 directions' processing. Reply chunks can arrive before upload close; normal
 upload close leaves the reply open. A normal reply end closes the reply and
 errors an upload still open with `interrupted`. Reply cancel sends one stream-0
-interruption and errors the upload; upload abort sends one stream-1 interruption
-and errors the reply. Either releases a write waiting for credit, including
-abort before the sink can process it. A refusal of either stream, a refusing
-response before the first reply frame, or session end fails both streams with
-the same error object. A plain response, a response after the reply begins,
-inbound reply credit or inbound upload chunks violates the protocol as in D-20.
-Send exceptions release the call and fail both directions with the original
-exception.
+interruption and errors the upload. Upload abort sends `stream_end interrupted`
+on stream 1 and then on stream 0, errors the reply and forgets the call. Abort
+resolves once both interruptions are sent; a write waiting for credit rejects
+with `interrupted`. Either cancellation releases a write waiting for credit,
+including abort before the sink can process it. A refusal of either stream, a
+refusing response before the first reply frame, or session end fails both
+streams with the same error object. A plain response, a response after the reply
+begins, inbound reply credit or inbound upload chunks violates the protocol as
+in D-20. Send exceptions release the call and fail both directions with the
+original exception.
 
 The duplex first-reply-frame bound runs from the request and stops at the first
 reply chunk or end; upload progress and close neither stop nor restart it. The

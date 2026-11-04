@@ -192,6 +192,38 @@ Deno.test("duplex_target_check", async () => {
   }
 });
 
+Deno.test("duplex_upload_abort_stops_both_streams", async () => {
+  const { session, socket, notes } = await rig();
+  try {
+    const { writer, reader } = open(session, socket);
+    await writer.write(bytes);
+    const read = observe(reader.read());
+    const abort = observe(writer.abort());
+    await tick();
+    assert.equal(abort.settled, true);
+    const stops = sent(socket).filter((f) => f.form === "stream_end");
+    assert.deepEqual(
+      stops.map((f) => [f.stream, f.envelope.seq, f.outcome.kind]),
+      [[1, 2n, "interrupted"], [0, 1n, "interrupted"]],
+      "upload abort must stop the upload before the reply",
+    );
+    for (const stop of stops) {
+      assert.deepEqual(stop.target, TARGET);
+      assert.equal(stop.correlation, 1n);
+    }
+    assert.equal(read.settled, true);
+    category(read.error, "interrupted");
+    chunk(socket);
+    assert.ok(
+      notes.some((n) =>
+        n.note === "discarded" && n.reason === "unknown-correlation"
+      ),
+    );
+  } finally {
+    session.close();
+  }
+});
+
 Deno.test("duplex_cancel_and_abort", async () => {
   for (const action of ["cancel", "abort"] as const) {
     const { session, socket } = await rig();
@@ -210,14 +242,18 @@ Deno.test("duplex_cancel_and_abort", async () => {
         true,
         "interrupt must release a blocked write",
       );
+      assert.equal(stopping.error, undefined, "interruption must resolve");
       assert.equal(fifth.settled, true);
       category(fifth.error, "interrupted");
       assert.equal(other.settled, true);
       category(other.error, "interrupted");
       const stops = sent(socket).filter((f) => f.form === "stream_end");
-      assert.equal(stops.length, 1);
-      assert.equal(stops[0].stream, action === "cancel" ? 0 : 1);
-      assert.equal(stops[0].outcome.kind, "interrupted");
+      assert.deepEqual(
+        stops.map((f) => [f.stream, f.outcome.kind]),
+        action === "cancel"
+          ? [[0, "interrupted"]]
+          : [[1, "interrupted"], [0, "interrupted"]],
+      );
       credit(socket);
       await tick();
       assert.equal(sent(socket).filter((f) => f.form === "chunk").length, 4);
@@ -467,6 +503,31 @@ Deno.test("duplex_bound", async () => {
     } finally {
       session.close();
     }
+  }
+});
+
+Deno.test("duplex_bound_after_upload_close", async () => {
+  const { session, socket } = await rig();
+  try {
+    const { writer, reader } = open(session, socket, 20);
+    const read = observe(reader.read());
+    await writer.close();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(
+      read.settled,
+      true,
+      "upload close must preserve the first-reply bound",
+    );
+    category(read.error, "timeout");
+    assert.deepEqual(
+      sent(socket).filter((f) => f.form === "stream_end").map((f) => [
+        f.stream,
+        f.outcome.kind,
+      ]),
+      [[1, "end"], [0, "interrupted"]],
+    );
+  } finally {
+    session.close();
   }
 });
 
