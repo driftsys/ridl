@@ -194,9 +194,10 @@ member; rsdl is the apex.
                          target with no standard library, and with its
                          features on for wasm32, and the ridl-transport-ws
                          codec (default features off) for wasm32 and for
-                         thumbv7em-none-eabihf; and cargo check -p ridl-rt
+                         thumbv7em-none-eabihf; cargo check -p ridl-rt
                          --no-default-features --features debug
-                         --target thumbv7em-none-eabihf
+                         --target thumbv7em-none-eabihf; and cargo check
+                         -p ridl-rt --all-features for wasm32
     just compat-check    build and test the packaged ridl-rt and
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
