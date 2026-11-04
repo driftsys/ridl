@@ -149,9 +149,12 @@ The path of the URL is the gateway's: the binding gives it no meaning.
   before subscription, and the server receives that state after the
   subscription's `answer`. A `raise` without a subscription sends nothing and
   records `{ note: "discarded", reason: "not-subscribed", frame }` through
-  `onNote`. Each throws a `SessionError` `contract` `unknown-interaction` for an
-  unlisted member, `corrupt` when the payload exceeds its limit, and `down`
-  after the session ended.
+  `onNote`. It still advances the session's event channel sequence counter
+  (frame §7). After resubscription, the next delivered occurrence can therefore
+  show a gap, which the Rust consumer records as loss (§5.2). Each throws a
+  `SessionError` `contract` `unknown-interaction` for an unlisted member,
+  `corrupt` when the payload exceeds its limit, and `down` after the session
+  ended.
 - `onRequest` answers each command and query and may be asynchronous. The
   package answers a request for an unlisted member with
   `contract(UnknownInteraction)`, arguments over the limit with `corrupt`, and a

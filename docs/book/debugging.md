@@ -148,7 +148,10 @@ given hash exactly. `members` names what the instance provides. `publish` and
 `invalidate` update the current signal state even before subscription. After its
 `answer`, the provider sends that state as the initial value (§5.1). A `raise`
 without a subscription is dropped and recorded through `onNote`; it does not
-throw (R-DS-10). The payload bytes are encoded by the caller, as for `connect`.
+throw (R-DS-10). It still advances the session's event channel sequence counter
+(frame §7). After resubscription, the next delivered occurrence can therefore
+show a gap, which the Rust consumer records as loss (§5.2). The payload bytes
+are encoded by the caller, as for `connect`.
 
 The gateway answers the handshake before it upgrades the connection:
 

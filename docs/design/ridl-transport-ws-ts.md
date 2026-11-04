@@ -560,15 +560,18 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   update the current signal state even before subscription; the initial value is
   sent after the `answer` when the subscription arrives (§5.1). A `raise`
   without a subscription is not delivered and records a `discarded` note with
-  reason `not-subscribed`; it does not throw. Each operation is refused with a
-  `SessionError` `contract` `unknown-interaction` for an unlisted member, with
-  `corrupt` when the payload exceeds the member's limit, and with `down` after
-  the session ended; an interface or ordinal that is not a nonzero `u32`, or a
-  stamp outside `i64`, throws a `RangeError`. The session counts `seq` per
-  channel from 1. A signal keeps its last frame, so the first `subscribe` of a
-  signal and each `read` of it send that frame, or `init` (`seq` 0, stamped at
-  the attach) when nothing was published; an event is not kept. A `subscribe` of
-  a member that the options do not list, or of another kind, is answered
+  reason `not-subscribed`; it does not throw. It still advances the session's
+  event channel sequence counter (frame §7). After resubscription, the next
+  delivered occurrence can therefore show a gap, which the Rust consumer records
+  as loss (§5.2). Each operation is refused with a `SessionError` `contract`
+  `unknown-interaction` for an unlisted member, with `corrupt` when the payload
+  exceeds the member's limit, and with `down` after the session ended; an
+  interface or ordinal that is not a nonzero `u32`, or a stamp outside `i64`,
+  throws a `RangeError`. The session counts `seq` per channel from 1. A signal
+  keeps its last frame, so the first `subscribe` of a signal and each `read` of
+  it send that frame, or `init` (`seq` 0, stamped at the attach) when nothing
+  was published; an event is not kept. A `subscribe` of a member that the
+  options do not list, or of another kind, is answered
   `contract(UnknownInteraction)`.
 - **Requests.** A `request` for a member that is not a listed command or query
   is answered `contract(UnknownInteraction)`; arguments longer than the member's
