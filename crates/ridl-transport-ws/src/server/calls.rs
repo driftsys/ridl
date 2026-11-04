@@ -25,13 +25,14 @@ pub(super) struct InFlight {
     pub(super) target: Target,
     /// The client's `seq`, which the response echoes as its correlation.
     pub(super) seq: u64,
-    /// When the request arrived, which the abandon bound is measured from.
+    /// When the request arrived, or the upload end arrived for a query with
+    /// a plain reply; the abandon bound is measured from this instant.
     pub(super) sent: Instant,
-    /// The request's `stamp`, which the retention of its response is
-    /// measured from (frame specification §7).
+    /// The request's stamp, replaced by the upload end's stamp for a query
+    /// with a plain reply; response retention is measured from it.
     pub(super) stamp: Timestamp,
-    /// The backend's clock when the request arrived; caps the retention when
-    /// `stamp` is ahead of it.
+    /// The backend's clock at the same receipt as `stamp`; caps retention
+    /// when the sender's stamp is ahead of it.
     pub(super) receipt: Timestamp,
     /// The state of the reply stream, for a query whose reply is a stream;
     /// `None` for a call answered by one `response`.

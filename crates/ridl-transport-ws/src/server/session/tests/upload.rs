@@ -13,6 +13,7 @@ struct Rig {
     notes: Notes,
     now: Instant,
     fail: Rc<Cell<Fail>>,
+    target: Target,
 }
 
 fn rig(version: u32, limit: u32) -> Rig {
@@ -20,19 +21,26 @@ fn rig(version: u32, limit: u32) -> Rig {
 }
 
 fn rig_with_streams(version: u32, limit: u32, count: u8) -> Rig {
+    rig_target(version, limit, count, UPLOAD)
+}
+
+fn rig_target(version: u32, limit: u32, count: u8, target: Target) -> Rig {
     let rt = Loopback::new(CATALOG);
     let mut p = rt.attach();
-    p.serve(IFACE, &[UPLOAD.ord, COMMAND.ord]).unwrap();
+    p.serve(IFACE, &[target.ord, COMMAND.ord]).unwrap();
     let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
     table.insert(
         IFACE,
-        UPLOAD.ord,
-        Kind::Command,
+        target.ord,
+        target.kind,
         Some(std::time::Duration::from_secs(1)),
     );
     table.insert(IFACE, COMMAND.ord, Kind::Command, None);
-    table.set_parameter_streams(IFACE, UPLOAD.ord, count);
-    table.set_limit(IFACE, UPLOAD.ord, limit);
+    table.set_parameter_streams(IFACE, target.ord, count);
+    table.set_limit(IFACE, target.ord, limit);
+    if target == DUPLEX {
+        table.set_reply_stream(IFACE, target.ord);
+    }
     let notes = Notes::default();
     let fail = Rc::new(Cell::new(Fail::None));
     let backend = FaultyBackend(Faulty {
@@ -62,10 +70,11 @@ fn rig_with_streams(version: u32, limit: u32, count: u8) -> Rig {
         notes,
         now,
         fail,
+        target,
     }
 }
 fn start(r: &mut Rig, outcome: Option<Result<&[u8], CallError>>) -> ClaimId {
-    let (step, out) = send_at(r, &request(UPLOAD, 1, &[]), r.now);
+    let (step, out) = send_at(r, &request(r.target, 1, &[]), r.now);
     assert_eq!(step, Step::Continue);
     assert!(out.is_empty());
     let claim = r.p.next_claim(&mut []).unwrap().unwrap().id;
@@ -86,7 +95,7 @@ fn send_at(r: &mut Rig, bytes: &[u8], now: Instant) -> (Step, Vec<Vec<u8>>) {
 }
 fn chunk(r: &mut Rig, seq: u64, stream: u8, payload: &[u8]) -> (Step, Vec<Vec<u8>>) {
     let bytes = msg(Frame::Chunk {
-        target: UPLOAD,
+        target: r.target,
         envelope: Envelope {
             stamp: Timestamp(0),
             seq,
@@ -101,7 +110,7 @@ fn end(r: &mut Rig, seq: u64, outcome: StreamOutcome) -> (Step, Vec<Vec<u8>>) {
     send_at(
         r,
         &msg(Frame::StreamEnd {
-            target: UPLOAD,
+            target: r.target,
             envelope: Envelope {
                 stamp: Timestamp(0),
                 seq,
@@ -819,5 +828,324 @@ fn a_mismatched_stream_end_does_not_end_an_upload() {
         pull(&mut r, claim, Pull::Chunk(1));
         assert_eq!(end(&mut r, 2, StreamOutcome::End), (Step::Continue, vec![]));
         pull(&mut r, claim, Pull::End);
+    }
+}
+
+const UPLOAD_QUERY: Target = Target {
+    kind: Kind::Query,
+    iface: IFACE,
+    ord: Ordinal(12),
+};
+const DUPLEX: Target = Target {
+    kind: Kind::Query,
+    iface: IFACE,
+    ord: Ordinal(14),
+};
+
+fn query_rig(target: Target) -> Rig {
+    rig_target(3, 16_128, 1, target)
+}
+
+fn query_end(r: &mut Rig, seq: u64, stamp: Timestamp) -> (Step, Vec<Vec<u8>>) {
+    send_at(
+        r,
+        &msg(Frame::StreamEnd {
+            target: r.target,
+            envelope: Envelope { stamp, seq },
+            correlation: 1,
+            stream: 1,
+            outcome: StreamOutcome::End,
+        }),
+        r.now,
+    )
+}
+fn check_upload_end(bytes: &[u8], target: Target, outcome: StreamOutcome) {
+    assert!(matches!(decode(bytes).unwrap(), Frame::StreamEnd {
+        target: actual_target, envelope: Envelope { seq: 1, .. },
+        correlation: 1, stream: 1, outcome: actual_outcome,
+    } if actual_target == target && actual_outcome == outcome));
+}
+fn check_reply(out: &[Vec<u8>], payload: &[u8]) {
+    assert_eq!(out.len(), 1);
+    assert!(matches!(decode(&out[0]).unwrap(), Frame::Response {
+        target: UPLOAD_QUERY, correlation: 1, outcome: ResponseOutcome::Reply(p), ..
+    } if p == payload));
+}
+
+// Mutation: forget a drained upload before its query settles.
+#[test]
+fn a_query_upload_replies_after_the_end() {
+    let mut r = query_rig(UPLOAD_QUERY);
+    let claim = start(&mut r, None);
+    chunk(&mut r, 1, 1, &[9]);
+    let now = r.now;
+    assert_eq!(poll(&mut r, now), (Step::Continue, vec![]));
+    assert_eq!(end(&mut r, 2, StreamOutcome::End), (Step::Continue, vec![]));
+    pull(&mut r, claim, Pull::Chunk(1));
+    pull(&mut r, claim, Pull::End);
+    r.p.settle(claim, Ok(&[9, 8])).unwrap();
+    check_reply(&poll(&mut r, now).1, &[9, 8]);
+    assert!(r.s.calls.in_flight().is_empty());
+
+    // A provider may also settle early; that reply must stop the open upload.
+    let mut r = query_rig(UPLOAD_QUERY);
+    let claim = start(&mut r, None);
+    r.p.settle(claim, Ok(&[9, 8])).unwrap();
+    let now = r.now;
+    let out = poll(&mut r, now).1;
+    assert_eq!(out.len(), 2);
+    check_reply(&out[..1], &[9, 8]);
+    check_upload_end(&out[1], UPLOAD_QUERY, StreamOutcome::Interrupted);
+}
+
+// Mutation: retain the request stamp or receipt instead of the end's.
+#[test]
+fn a_query_upload_retention_runs_from_the_end() {
+    for future_stamp in [false, true] {
+        let mut r = query_rig(UPLOAD_QUERY);
+        let claim = start(&mut r, None);
+        r.p.advance(ridl_rt::sample::Duration(5_000_000));
+        let stamp = Timestamp(if future_stamp { 50_000_000 } else { 5_000_000 });
+        assert_eq!(query_end(&mut r, 1, stamp), (Step::Continue, vec![]));
+        r.p.settle(claim, Ok(&[4])).unwrap();
+        let now = r.now;
+        let response = poll(&mut r, now).1;
+        check_reply(&response, &[4]);
+        r.p.advance(ridl_rt::sample::Duration(500_000));
+        assert_eq!(
+            send_at(&mut r, &request(UPLOAD_QUERY, 1, &[]), now).1,
+            response
+        );
+        r.p.advance(ridl_rt::sample::Duration(600_000));
+        assert!(send_at(&mut r, &request(UPLOAD_QUERY, 1, &[]), now)
+            .1
+            .is_empty());
+        assert_eq!(
+            *r.notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+}
+
+// Mutation: measure abandonment from the request's sent instant.
+#[test]
+fn a_query_upload_abandon_runs_from_the_end() {
+    let mut r = query_rig(UPLOAD_QUERY);
+    let claim = start(&mut r, None);
+    let t0 = r.now;
+    for seq in 1..=2 {
+        r.now = t0 + std::time::Duration::from_secs(seq * 50);
+        chunk(&mut r, seq, 1, &[1]);
+        pull(&mut r, claim, Pull::Chunk(1));
+        let now = r.now;
+        assert_eq!(poll(&mut r, now), (Step::Continue, vec![]));
+    }
+    end(&mut r, 3, StreamOutcome::End);
+    assert_eq!(
+        poll(&mut r, t0 + std::time::Duration::from_secs(159)),
+        (Step::Continue, vec![])
+    );
+    assert!(r.notes.lock().unwrap().is_empty());
+    assert_eq!(
+        poll(&mut r, t0 + std::time::Duration::from_secs(160)),
+        (Step::Continue, vec![])
+    );
+    assert_eq!(
+        *r.notes.lock().unwrap(),
+        vec![Note::CallAbandoned { seq: 1 }]
+    );
+    assert!(r.s.calls.in_flight().is_empty());
+}
+
+// Mutation: forget the query when its upload is refused.
+#[test]
+fn a_query_upload_refusal_reaches_the_upload_and_the_reply() {
+    let mut r = query_rig(UPLOAD_QUERY);
+    let claim = start(&mut r, None);
+    let error = CallError::Contract(Contract::InvalidValue(Violation {
+        type_name: Some("Text"),
+        rule: Rule::Utf8,
+    }));
+    r.p.abort_claim(claim, StreamNo(1), error).unwrap();
+    r.p.settle(claim, Err(error)).unwrap();
+    let (step, out) = chunk(&mut r, 1, 1, &[0xff]);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 1);
+    let contract = Contract::InvalidValue(Violation {
+        type_name: None,
+        rule: Rule::Utf8,
+    });
+    check_upload_end(&out[0], UPLOAD_QUERY, StreamOutcome::Contract(contract));
+    assert_eq!(out[0][36], 7);
+    let now = r.now;
+    let (step, out) = poll(&mut r, now);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 1);
+    assert!(matches!(decode(&out[0]).unwrap(), Frame::Response {
+        outcome: ResponseOutcome::Contract(c), .. } if c == contract));
+    assert_eq!(*out[0].last().unwrap(), 7);
+    assert!(r.s.calls.in_flight().is_empty());
+}
+
+// Mutation: classify a successful reply as a refusal when forgetting.
+#[test]
+fn a_query_upload_reply_before_the_end_interrupts_the_upload() {
+    let mut r = query_rig(UPLOAD_QUERY);
+    let claim = start(&mut r, None);
+    r.p.settle(claim, Ok(&[7])).unwrap();
+    let now = r.now;
+    let (step, out) = poll(&mut r, now);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 2);
+    check_reply(&out[..1], &[7]);
+    check_upload_end(&out[1], UPLOAD_QUERY, StreamOutcome::Interrupted);
+    assert!(r.s.calls.in_flight().is_empty());
+}
+
+// Mutation: wait for the upload end before polling the reply stream.
+#[test]
+fn a_duplex_reply_starts_before_the_upload_ends() {
+    let mut r = query_rig(DUPLEX);
+    let claim = start(&mut r, None);
+    chunk(&mut r, 1, 1, &[9]);
+    let mut buf = [0; 8];
+    assert_eq!(
+        r.p.pull_claim(claim, StreamNo(1), &mut buf),
+        Ok(Pull::Chunk(1))
+    );
+    assert_eq!(buf[0], 9);
+    r.p.push_claim(claim, REPLY_STREAM, &buf[..1]).unwrap();
+    let now = r.now;
+    let (step, out) = poll(&mut r, now);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 1);
+    assert!(matches!(
+        decode(&out[0]).unwrap(),
+        Frame::Chunk {
+            target: DUPLEX,
+            correlation: 1,
+            stream: 0,
+            envelope: Envelope { seq: 1, .. },
+            payload: [9],
+            ..
+        }
+    ));
+    assert_eq!(r.s.calls.in_flight().len(), 1);
+}
+
+// Mutation: forget the duplex query without interrupting its open upload.
+#[test]
+fn a_duplex_reply_end_with_the_upload_open_interrupts_the_upload() {
+    let mut r = query_rig(DUPLEX);
+    let claim = start(&mut r, None);
+    r.p.end_claim(claim, REPLY_STREAM).unwrap();
+    let now = r.now;
+    let (step, out) = poll(&mut r, now);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 2);
+    assert!(matches!(
+        decode(&out[0]).unwrap(),
+        Frame::StreamEnd {
+            target: DUPLEX,
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::End,
+            ..
+        }
+    ));
+    check_upload_end(&out[1], DUPLEX, StreamOutcome::Interrupted);
+    assert!(r.s.calls.in_flight().is_empty());
+}
+
+// Mutation: accept a wrong upload end sequence in either query form.
+#[test]
+fn query_upload_end_gaps_interrupt_both_query_forms() {
+    for target in [UPLOAD_QUERY, DUPLEX] {
+        let mut r = query_rig(target);
+        let claim = start(&mut r, None);
+        chunk(&mut r, 1, 1, &[1]);
+        pull(&mut r, claim, Pull::Chunk(1));
+        let (step, out) = end(&mut r, 3, StreamOutcome::End);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        check_upload_end(&out[0], target, StreamOutcome::Interrupted);
+        pull(
+            &mut r,
+            claim,
+            Pull::Failed(CallError::Transport(Transport::Interrupted)),
+        );
+    }
+}
+
+// Mutation: forget the duplex query when its upload ends.
+#[test]
+fn a_duplex_reply_can_end_after_the_upload() {
+    let mut r = query_rig(DUPLEX);
+    let claim = start(&mut r, None);
+    assert_eq!(end(&mut r, 1, StreamOutcome::End), (Step::Continue, vec![]));
+    pull(&mut r, claim, Pull::End);
+    assert_eq!(r.p.push_claim(claim, REPLY_STREAM, &[3]), Ok(1));
+    r.p.end_claim(claim, REPLY_STREAM).unwrap();
+    let now = r.now;
+    let out = poll(&mut r, now).1;
+    assert_eq!(out.len(), 2);
+    assert!(matches!(
+        decode(&out[0]).unwrap(),
+        Frame::Chunk {
+            stream: 0,
+            payload: [3],
+            ..
+        }
+    ));
+    assert!(matches!(
+        decode(&out[1]).unwrap(),
+        Frame::StreamEnd {
+            stream: 0,
+            outcome: StreamOutcome::End,
+            ..
+        }
+    ));
+    assert!(r.s.calls.in_flight().is_empty());
+}
+
+// Mutation: do not restart upload activity on receipt or backend drain.
+#[test]
+fn progress_on_query_uploads_restarts_abandonment() {
+    for target in [UPLOAD_QUERY, DUPLEX] {
+        for drain in [false, true] {
+            let mut r = query_rig(target);
+            let claim = start(&mut r, None);
+            let t0 = r.now;
+            for seq in 1..=4 {
+                chunk(&mut r, seq, 1, &[1]);
+            }
+            if drain {
+                chunk(&mut r, 5, 1, &[1]);
+                pull(&mut r, claim, Pull::Chunk(1));
+            }
+            r.now = t0 + std::time::Duration::from_secs(50);
+            if !drain {
+                chunk(&mut r, 5, 1, &[1]);
+            }
+            if target == DUPLEX {
+                // Keep the independent reply clock active.
+                r.p.push_claim(claim, REPLY_STREAM, &[2]).unwrap();
+            }
+            let now = r.now;
+            poll(&mut r, now);
+            assert_eq!(
+                poll(&mut r, t0 + std::time::Duration::from_secs(100)),
+                (Step::Continue, vec![])
+            );
+            assert!(r.notes.lock().unwrap().is_empty());
+            let out = poll(&mut r, t0 + std::time::Duration::from_secs(110)).1;
+            assert_eq!(out.len(), 1);
+            check_upload_end(&out[0], target, StreamOutcome::Interrupted);
+            assert_eq!(
+                *r.notes.lock().unwrap(),
+                vec![Note::CallAbandoned { seq: 1 }]
+            );
+            assert!(r.s.calls.in_flight().is_empty());
+        }
     }
 }

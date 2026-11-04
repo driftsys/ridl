@@ -1,15 +1,17 @@
 //! The test catalog and its provider: one interface with a signal, an event,
-//! a command, a query, a query whose reply is a stream and a `fixed`, served
+//! commands, queries, upload and reply streams, and fixed values, served
 //! by a `ridl-loopback` runtime.
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::error::{CallError, Contract, Transport};
+use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::port::{
-    ClaimId, EventSink, Handler, PushError, RaiseError, SignalWriter, StreamHandler, WriteError,
-    REPLY_STREAM,
+    ClaimId, EventSink, Handler, Pull, PushError, RaiseError, SignalWriter, StreamHandler,
+    StreamNo, WriteError, REPLY_STREAM,
 };
 use ridl_transport_ws::MemberTable;
 
@@ -59,6 +61,21 @@ pub const ELEMENT_LEN: usize = 1024;
 /// interrupts after 3 elements.
 pub const STREAM_INTERRUPT: u8 = 0xff;
 
+/// A command that stores stream 1 under the argument's key.
+pub const UPLOAD: Ordinal = Ordinal(11);
+/// A query that replies with the upload's byte count and wrapping sum.
+pub const UPLOAD_QUERY: Ordinal = Ordinal(12);
+/// A query that streams the stored bytes for its key.
+pub const FETCH: Ordinal = Ordinal(13);
+/// A query that echoes stream 1 on stream 0.
+pub const DUPLEX: Ordinal = Ordinal(14);
+/// Refuses the third chunk with the range rule.
+pub const MODE_REFUSE_RANGE: u8 = 1;
+/// Refuses the third chunk with the UTF-8 rule.
+pub const MODE_REFUSE_UTF8: u8 = 2;
+/// The largest chunk of a fetched value.
+pub const FETCH_CHUNK: usize = 16_128;
+
 /// The `n` bytes whose byte `i` is `i mod 251`, so that a block placed at a
 /// wrong offset changes the bytes.
 pub fn pattern(n: usize) -> Vec<u8> {
@@ -66,8 +83,8 @@ pub fn pattern(n: usize) -> Vec<u8> {
 }
 
 /// The member table of [`CATALOG`]: the signal, the event, the command, the
-/// query, four `fixed` members and the query whose reply is a stream, the
-/// command and the two queries with a bound of 1 s. Ordinal 6 is reserved
+/// queries, four `fixed` members, uploads, fetch and duplex echo. All commands
+/// and queries have a bound of 1 s. Ordinal 6 is reserved
 /// and has no entry.
 pub fn member_table() -> MemberTable {
     let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
@@ -82,16 +99,41 @@ pub fn member_table() -> MemberTable {
     table.insert(IFACE, FIXED_SPLIT, Kind::Fixed, None);
     table.insert(IFACE, STREAM_QUERY, Kind::Query, bound);
     table.set_reply_stream(IFACE, STREAM_QUERY);
+    for (ord, kind) in [
+        (UPLOAD, Kind::Command),
+        (UPLOAD_QUERY, Kind::Query),
+        (FETCH, Kind::Query),
+        (DUPLEX, Kind::Query),
+    ] {
+        table.insert(IFACE, ord, kind, bound);
+    }
+    for ord in [UPLOAD, UPLOAD_QUERY, DUPLEX] {
+        table.set_parameter_streams(IFACE, ord, 1);
+    }
+    for ord in [FETCH, DUPLEX] {
+        table.set_reply_stream(IFACE, ord);
+    }
     table
 }
 
 /// The provider's runtime: a loopback on [`CATALOG`] that serves the command
-/// and the two queries, with [`FIXED`] provisioned to [`FIXED_VALUE`] and the three
+/// and the queries, including uploads, fetch and duplex echo, with [`FIXED`] provisioned to [`FIXED_VALUE`] and the three
 /// large `fixed` members provisioned to their patterns.
 pub fn provider() -> Loopback {
     let mut rt = Loopback::new(CATALOG);
-    rt.serve(IFACE, &[COMMAND, QUERY, STREAM_QUERY])
-        .expect("the loopback serves");
+    rt.serve(
+        IFACE,
+        &[
+            COMMAND,
+            QUERY,
+            STREAM_QUERY,
+            UPLOAD,
+            UPLOAD_QUERY,
+            FETCH,
+            DUPLEX,
+        ],
+    )
+    .expect("the loopback serves");
     rt.provision_fixed(IFACE, FIXED, FIXED_VALUE)
         .expect("the loopback stores the fixed");
     for (ord, len) in [
@@ -105,13 +147,16 @@ pub fn provider() -> Loopback {
     rt
 }
 
-/// The reply streams of [`STREAM_QUERY`] the provider has not finished, kept
-/// from one [`provider_step`] to the next because a push answers 0 when the
-/// stream's window is full, and the failures its pushes read.
+/// The provider's open uploads and reply streams, stored values, and failures
+/// observed by [`STREAM_QUERY`]. State persists between [`provider_step`] calls
+/// when a stream is pending or its window is full.
 #[derive(Default)]
 pub struct Streams {
     open: Vec<Open>,
-    /// Each `PushError::Failed` a push or an end of a reply stream answered,
+    uploads: Vec<OpenUpload>,
+    fetches: Vec<OpenFetch>,
+    store: BTreeMap<u8, Vec<u8>>,
+    /// Each `PushError::Failed` a push or an end of [`STREAM_QUERY`] answered,
     /// in the order the provider read them.
     pub failures: Vec<CallError>,
 }
@@ -127,12 +172,130 @@ struct Open {
     interrupt: bool,
 }
 
+struct OpenUpload {
+    claim: ClaimId,
+    ord: Ordinal,
+    key: u8,
+    mode: u8,
+    chunks: usize,
+    count: u64,
+    sum: u32,
+    held: Option<Vec<u8>>,
+    first: Option<Pull>,
+}
+
+struct OpenFetch {
+    claim: ClaimId,
+    bytes: Vec<u8>,
+    offset: usize,
+}
+
 impl Streams {
-    /// Pushes the next elements of every open stream until its window is
-    /// full, then ends or interrupts each stream whose elements are all
-    /// pushed. A stream whose push or end answers `PushError::Failed` is
-    /// recorded in [`Streams::failures`] and dropped.
+    fn advance_uploads(&mut self, rt: &mut Loopback) {
+        let store = &mut self.store;
+        self.uploads.retain_mut(|upload| {
+            let mut buf = vec![0; FETCH_CHUNK];
+            loop {
+                if let Some(bytes) = &upload.held {
+                    match rt.push_claim(upload.claim, REPLY_STREAM, bytes) {
+                        Ok(0) if !bytes.is_empty() => return true,
+                        Ok(_) => upload.held = None,
+                        Err(_) => {
+                            let _ = rt.abort_claim(
+                                upload.claim,
+                                StreamNo(1),
+                                CallError::Transport(Transport::Interrupted),
+                            );
+                            let _ = rt.end_claim(upload.claim, REPLY_STREAM);
+                            return false;
+                        }
+                    }
+                }
+                match upload
+                    .first
+                    .take()
+                    .map(Ok)
+                    .unwrap_or_else(|| rt.pull_claim(upload.claim, StreamNo(1), &mut buf))
+                {
+                    Ok(Pull::Pending) => return true,
+                    Ok(Pull::Chunk(n)) => {
+                        upload.chunks += 1;
+                        if upload.chunks == 3
+                            && matches!(upload.mode, MODE_REFUSE_RANGE | MODE_REFUSE_UTF8)
+                        {
+                            let error = CallError::Contract(Contract::InvalidValue(Violation {
+                                type_name: Some("Block"),
+                                rule: if upload.mode == MODE_REFUSE_RANGE {
+                                    Rule::Range
+                                } else {
+                                    Rule::Utf8
+                                },
+                            }));
+                            rt.abort_claim(upload.claim, StreamNo(1), error).unwrap();
+                            if upload.ord == UPLOAD_QUERY {
+                                rt.settle(upload.claim, Err(error)).unwrap();
+                            }
+                            return false;
+                        }
+                        if upload.ord == UPLOAD {
+                            store
+                                .entry(upload.key)
+                                .or_default()
+                                .extend_from_slice(&buf[..n]);
+                        } else if upload.ord == DUPLEX {
+                            upload.held = Some(buf[..n].to_vec());
+                        } else {
+                            upload.count += n as u64;
+                            for byte in &buf[..n] {
+                                upload.sum = upload.sum.wrapping_add(u32::from(*byte));
+                            }
+                        }
+                    }
+                    Ok(Pull::End) => {
+                        if upload.ord == DUPLEX {
+                            let _ = rt.end_claim(upload.claim, REPLY_STREAM);
+                        } else if upload.ord == UPLOAD_QUERY {
+                            let mut reply = [0; 12];
+                            reply[..8].copy_from_slice(&upload.count.to_le_bytes());
+                            reply[8..].copy_from_slice(&upload.sum.to_le_bytes());
+                            rt.settle(upload.claim, Ok(&reply)).unwrap();
+                        }
+                        return false;
+                    }
+                    Ok(Pull::Failed(e)) => {
+                        if upload.ord == DUPLEX {
+                            let _ = rt.abort_claim(upload.claim, REPLY_STREAM, e);
+                        } else if upload.ord == UPLOAD_QUERY {
+                            let _ = rt.settle(upload.claim, Err(e));
+                        }
+                        return false;
+                    }
+                    Err(e) => panic!("pulled upload: {e:?}"),
+                }
+            }
+        });
+    }
+
+    /// Advances uploads and fetches, then pushes the next elements of each
+    /// open [`STREAM_QUERY`] until its window is full. It ends or interrupts
+    /// completed streams and records their failures in [`Streams::failures`].
     fn advance(&mut self, rt: &mut Loopback) {
+        self.advance_uploads(rt);
+        self.fetches.retain_mut(|fetch| {
+            while fetch.offset < fetch.bytes.len() {
+                let end = (fetch.offset + FETCH_CHUNK).min(fetch.bytes.len());
+                match rt.push_claim(fetch.claim, REPLY_STREAM, &fetch.bytes[fetch.offset..end]) {
+                    Ok(0) => return true,
+                    Ok(_) => fetch.offset = end,
+                    Err(_) => {
+                        let _ = rt.end_claim(fetch.claim, REPLY_STREAM);
+                        return false;
+                    }
+                }
+            }
+            let _ = rt.end_claim(fetch.claim, REPLY_STREAM);
+            false
+        });
         let failures = &mut self.failures;
         self.open.retain_mut(|open| {
             while open.next < open.count {
@@ -176,6 +339,11 @@ impl Streams {
 ///   1, wrapping at 256.
 /// - [`STREAM_QUERY`]: opens the reply stream its argument names, which
 ///   [`Streams`] pushes over this step and the next ones.
+/// - [`UPLOAD`]: acknowledges, replaces the key's stored value, then stores chunks.
+/// - [`UPLOAD_QUERY`]: replies with the byte count and wrapping sum after upload end.
+///   Both uploads refuse the third chunk in either refusing mode.
+/// - [`FETCH`]: streams a snapshot of the key's stored bytes.
+/// - [`DUPLEX`]: echoes each upload chunk, retaining it while the reply window is full.
 pub fn provider_step(rt: &mut Loopback, streams: &mut Streams) {
     // The arguments of a command or a query are at most the default ceiling
     // of their kind, so every claim fits.
@@ -208,6 +376,48 @@ pub fn provider_step(rt: &mut Loopback, streams: &mut Streams) {
                     interrupt,
                 });
             }
+            UPLOAD | UPLOAD_QUERY | DUPLEX => {
+                // Name stream 1 before acknowledging a command so the runtime retains it.
+                // An empty buffer leaves a queued nonempty chunk untouched.
+                let first = match rt.pull_claim(claim.id, StreamNo(1), &mut []) {
+                    Ok(Pull::Pending) | Err(ridl_rt::port::ReadError::Short { .. }) => None,
+                    Ok(pull) => Some(pull),
+                    Err(e) => panic!("opened upload: {e:?}"),
+                };
+                let (key, mode) = if claim.ord == UPLOAD {
+                    (
+                        arg.first().copied().unwrap_or(0),
+                        arg.get(1).copied().unwrap_or(0),
+                    )
+                } else {
+                    (0, arg.first().copied().unwrap_or(0))
+                };
+                if claim.ord == UPLOAD {
+                    streams.store.insert(key, Vec::new());
+                    rt.settle(claim.id, Ok(&[])).unwrap();
+                }
+                streams.uploads.push(OpenUpload {
+                    claim: claim.id,
+                    ord: claim.ord,
+                    key,
+                    mode,
+                    chunks: 0,
+                    count: 0,
+                    sum: 0,
+                    held: None,
+                    first,
+                });
+            }
+            FETCH => {
+                // Consume earlier uploads before taking the stored value's snapshot.
+                streams.advance_uploads(rt);
+                let key = arg.first().copied().unwrap_or(0);
+                streams.fetches.push(OpenFetch {
+                    claim: claim.id,
+                    bytes: streams.store.get(&key).cloned().unwrap_or_default(),
+                    offset: 0,
+                });
+            }
             _ => {
                 let unknown = Err(CallError::Contract(Contract::UnknownInteraction));
                 rt.settle(claim.id, unknown).expect("settled");
@@ -215,4 +425,121 @@ pub fn provider_step(rt: &mut Loopback, streams: &mut Streams) {
         }
     }
     streams.advance(rt);
+}
+
+#[cfg(test)]
+mod upload_tests {
+    use super::*;
+    use ridl_rt::payload::{Rule, Violation};
+    use ridl_rt::port::{Caller, Pull, StreamCaller, StreamNo};
+
+    // Mutation: omit storing a chunk, or fail to replace a stored value.
+    #[test]
+    fn stored_uploads_are_fetched_byte_for_byte_and_replaced() {
+        let mut p = provider();
+        let mut c = p.attach();
+        let mut state = Streams::default();
+        for bytes in [pattern(200_000), vec![8, 7], vec![]] {
+            let call = c.command(IFACE, UPLOAD, &[1, 0], None).unwrap();
+            if bytes.is_empty() {
+                c.push(call, StreamNo(1), &[]).unwrap();
+                c.end(call, StreamNo(1)).unwrap();
+            }
+            provider_step(&mut p, &mut state);
+            assert_eq!(c.ack(call), Some(Ok(())));
+            for (i, chunk) in bytes.chunks(FETCH_CHUNK).enumerate() {
+                assert_eq!(c.push(call, StreamNo(1), chunk), Ok(chunk.len()));
+                if (i + 1) * FETCH_CHUNK < bytes.len() {
+                    provider_step(&mut p, &mut state);
+                }
+            }
+            if !bytes.is_empty() {
+                assert_eq!(c.end(call, StreamNo(1)), Ok(()));
+            }
+            let fetch = c.query(IFACE, FETCH, &[1], None).unwrap();
+            let mut read = Vec::new();
+            let mut buf = vec![0; FETCH_CHUNK];
+            for _ in 0..100 {
+                provider_step(&mut p, &mut state);
+                match c.pull(fetch, REPLY_STREAM, &mut buf).unwrap() {
+                    Pull::Chunk(n) => read.extend_from_slice(&buf[..n]),
+                    Pull::End => break,
+                    Pull::Pending => continue,
+                    other => panic!("unexpected fetch: {other:?}"),
+                }
+            }
+            assert_eq!(read, bytes);
+            assert_eq!(c.pull(fetch, REPLY_STREAM, &mut buf), Ok(Pull::End));
+            c.forget(fetch);
+            c.forget(call);
+        }
+    }
+
+    // Mutation: settle before upload end, corrupt the count, or omit stream abort.
+    #[test]
+    fn upload_queries_count_sum_and_refuse_both_rules() {
+        for mode in [0, MODE_REFUSE_RANGE, MODE_REFUSE_UTF8] {
+            let mut p = provider();
+            let mut c = p.attach();
+            let mut state = Streams::default();
+            let call = c.query(IFACE, UPLOAD_QUERY, &[mode], None).unwrap();
+            provider_step(&mut p, &mut state);
+            let mut reply = [0; 12];
+            assert_eq!(c.reply(call, &mut reply), Ok(None));
+            for _ in 0..3 {
+                assert_eq!(c.push(call, StreamNo(1), &[255, 2]), Ok(2));
+                provider_step(&mut p, &mut state);
+            }
+            if mode == 0 {
+                assert_eq!(c.reply(call, &mut reply), Ok(None));
+                c.end(call, StreamNo(1)).unwrap();
+                provider_step(&mut p, &mut state);
+                assert_eq!(c.reply(call, &mut reply), Ok(Some(Ok(12))));
+                assert_eq!(&reply[..8], &6u64.to_le_bytes());
+                assert_eq!(&reply[8..], &771u32.to_le_bytes());
+            } else {
+                let error = CallError::Contract(Contract::InvalidValue(Violation {
+                    type_name: Some("Block"),
+                    rule: if mode == MODE_REFUSE_RANGE {
+                        Rule::Range
+                    } else {
+                        Rule::Utf8
+                    },
+                }));
+                assert_eq!(
+                    c.push(call, StreamNo(1), &[1]),
+                    Err(PushError::Failed(error))
+                );
+                assert_eq!(c.reply(call, &mut reply), Ok(Some(Err(error))));
+            }
+        }
+    }
+
+    // Mutation: discard an echo when the reply window is full.
+    #[test]
+    fn duplex_echo_preserves_chunks_under_backpressure() {
+        let mut p = provider();
+        let mut c = p.attach();
+        let mut state = Streams::default();
+        let call = c.query(IFACE, DUPLEX, &[], None).unwrap();
+        provider_step(&mut p, &mut state);
+        for n in 1..=8 {
+            assert_eq!(c.push(call, StreamNo(1), &[n]), Ok(1));
+            provider_step(&mut p, &mut state);
+        }
+        c.end(call, StreamNo(1)).unwrap();
+        let mut read = Vec::new();
+        for _ in 0..30 {
+            provider_step(&mut p, &mut state);
+            let mut buf = [0; 8];
+            match c.pull(call, REPLY_STREAM, &mut buf).unwrap() {
+                Pull::Chunk(n) => read.extend_from_slice(&buf[..n]),
+                Pull::End => break,
+                Pull::Pending => continue,
+                other => panic!("unexpected echo: {other:?}"),
+            }
+        }
+        assert_eq!(read, [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(c.pull(call, REPLY_STREAM, &mut []), Ok(Pull::End));
+    }
 }

@@ -380,7 +380,7 @@ impl<B: Backend> Session<B> {
                 stream,
                 outcome,
                 ..
-            } => self.stop_stream(correlation, stream, envelope.seq, outcome, now, out),
+            } => self.stop_stream(correlation, stream, envelope, outcome, now, out),
             Frame::StreamCredit {
                 correlation,
                 stream,
@@ -1099,7 +1099,8 @@ impl<B: Backend> Session<B> {
     /// the request: until the request's bound has passed, measured from the
     /// earlier of the request's `stamp` and `receipt`, when the member table
     /// gives one (frame specification §7), and as one of the last 64
-    /// otherwise. A `contract(InvalidValue)` whose rule the frame cannot
+    /// otherwise. For an upload query with a plain reply, the upload end's
+    /// stamp and receipt replace the request's. A `contract(InvalidValue)` whose rule the frame cannot
     /// carry is sent as `corrupt` and recorded. Returns a close with 1008
     /// when the kept responses then pass [`Config::max_retained_bytes`]; the
     /// response is still sent.
@@ -1245,9 +1246,9 @@ impl<B: Backend> Session<B> {
                 return Step::Continue;
             }
         };
+        self.send_stream_end(call.target, call.seq, stream.seq_out + 1, outcome, out);
         self.interrupt_uploads(&mut call, out);
         self.forget(call.correlation);
-        self.send_stream_end(call.target, call.seq, stream.seq_out + 1, outcome, out);
         let until = self.retention(call.target, call.stamp, call.receipt);
         self.keep_stream_end(call.target, call.seq, until)
     }
@@ -1351,13 +1352,13 @@ impl<B: Backend> Session<B> {
         &mut self,
         correlation: u64,
         stream: u8,
-        seq: u64,
+        envelope: Envelope,
         outcome: StreamOutcome,
         now: Instant,
         out: &mut Vec<Vec<u8>>,
     ) -> Step {
         if stream != 0 {
-            return self.end_upload(correlation, stream, seq, outcome, now, out);
+            return self.end_upload(correlation, stream, envelope, outcome, now, out);
         }
         let e = match outcome {
             StreamOutcome::Interrupted => CallError::Transport(Transport::Interrupted),
@@ -1476,7 +1477,7 @@ impl<B: Backend> Session<B> {
         &mut self,
         correlation: u64,
         stream: u8,
-        seq: u64,
+        envelope: Envelope,
         outcome: StreamOutcome,
         now: Instant,
         out: &mut Vec<Vec<u8>>,
@@ -1494,6 +1495,7 @@ impl<B: Backend> Session<B> {
             self.note(Note::Violation(ProtocolViolation::OutcomeNotAllowed));
             return Step::Close(CloseCode::PROTOCOL.0);
         }
+        let seq = envelope.seq;
         if upload.seq_in.checked_add(1) != Some(seq) {
             self.interrupt_upload(&call, stream, out);
         } else if outcome == StreamOutcome::Interrupted {
@@ -1506,6 +1508,12 @@ impl<B: Backend> Session<B> {
             }
         } else {
             upload.receive_end(seq, now);
+            // A plain reply's retention and abandonment run from upload end.
+            if call.target.kind == Kind::Query && call.stream.is_none() {
+                call.sent = now;
+                call.stamp = envelope.stamp;
+                call.receipt = self.backend.ports().now();
+            }
             let step = self.drain_uploads(&mut call, now, out);
             if step != Step::Continue {
                 return step;

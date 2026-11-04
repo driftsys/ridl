@@ -6,6 +6,9 @@
 //! new attachment to one shared provider. The provider is the test catalog of
 //! `tests/support/provider.rs`, stepped every 5 ms. The backend carries
 //! streams, so a client that offers `ridl-ws-v3` is served frame version 3.
+//! It serves UPLOAD (store by key), UPLOAD_QUERY (count and sum), FETCH
+//! (stored bytes) and DUPLEX (stream echo), alongside the signal, event,
+//! ordinary command and queries, and fixed values.
 //! The process exits with status 0 when its standard input reaches the end.
 
 // The provider module is shared with the tests, and this example uses only
