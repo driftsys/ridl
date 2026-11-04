@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::io::{self, Cursor, Read, Write};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ridl_loopback::Loopback;
@@ -11,8 +11,8 @@ use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
 use ridl_rt::port::SignalWriter;
 use ridl_transport_ws::frame::{self, Attach, AttachOutcome, Frame, PublishState, Reason, Target};
 use ridl_transport_ws::{
-    serve, serve_selected, Backend, Config, Connection, Described, Ended, MemberTable, Polling,
-    Streaming,
+    serve, serve_selected, Backend, Config, Connection, Described, Ended, MemberTable, Note,
+    Polling, Streaming,
 };
 
 const FIRST: CatalogRef = CatalogRef {
@@ -180,6 +180,37 @@ fn unknown_catalog_calls_selector_once_and_refuses() {
 }
 
 #[test]
+fn unknown_catalog_on_version_one_refuses_version() {
+    let conn = connection("ridl-ws-v1", vec![attach(FIRST, 1, 1)]);
+    let output = conn.output.clone();
+    assert_eq!(
+        serve_selected::<_, Polling<Loopback>, _>(conn, 2, |_| None, &Config::default()),
+        Ended::ServerClosed(1000)
+    );
+    refused(&output.borrow(), Reason::FrameVersionUnsupported);
+}
+
+#[test]
+fn ordinary_attach_refusal_precedes_configuration_refusal() {
+    let wrong = CatalogRef {
+        hash: SECOND.hash,
+        ..FIRST
+    };
+    let conn = connection("ridl-ws-v3", vec![attach(wrong, 3, 1)]);
+    let output = conn.output.clone();
+    assert_eq!(
+        serve_selected(
+            conn,
+            3,
+            |_| Some(Polling(store(FIRST, 11))),
+            &Config::default()
+        ),
+        Ended::ServerClosed(1000)
+    );
+    refused(&output.borrow(), Reason::CatalogMismatch);
+}
+
+#[test]
 fn selection_preserves_attach_checks() {
     let rt = store(FIRST, 11);
     for (catalog, version, encoding, protocol, reason) in [
@@ -265,7 +296,12 @@ fn selected_limit_failure_releases_backend() {
     );
     let output = conn.output.clone();
     let drops = Rc::new(Cell::new(0));
-    let config = Config::default().with_max_message_bytes(294).unwrap();
+    let notes = Arc::new(Mutex::new(Vec::new()));
+    let sink = notes.clone();
+    let config = Config::default()
+        .with_max_message_bytes(294)
+        .unwrap()
+        .with_record(move |note| sink.lock().unwrap().push(*note));
     let ended = serve_selected(
         conn,
         2,
@@ -281,6 +317,13 @@ fn selected_limit_failure_releases_backend() {
     assert_eq!(ended, Ended::ConfigRefused);
     assert_eq!(drops.get(), 1);
     refused(&output.borrow(), Reason::Range);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::MessageLimitTooSmall {
+            target: SIGNAL,
+            needed: 36 + ridl_rt::contract::SIGNAL_EVENT_CEILING,
+        }]
+    );
 }
 #[test]
 fn serve_preflight_still_reads_nothing() {
