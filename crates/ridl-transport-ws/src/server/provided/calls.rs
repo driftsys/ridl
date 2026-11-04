@@ -25,6 +25,7 @@ pub(super) struct Calls {
     next: u64,
     short: Option<ClaimId>,
     pub(super) capacity: usize,
+    bytes: Vec<u8>,
     config: Config,
 }
 impl Calls {
@@ -34,6 +35,7 @@ impl Calls {
             next: 0,
             short: None,
             capacity: 64,
+            bytes: vec![0; CALL_CEILING],
             config: config.clone(),
         }
     }
@@ -59,9 +61,8 @@ impl Calls {
         out: &mut Vec<Vec<u8>>,
     ) {
         self.expire(backend, now);
-        let mut bytes = vec![0; CALL_CEILING];
         while self.pending.len() < self.capacity && self.next < u64::MAX {
-            let claim = match backend.ports().next_claim(&mut bytes) {
+            let claim = match backend.ports().next_claim(&mut self.bytes) {
                 Ok(Some(claim)) => claim,
                 Err(ReadError::ShortClaim { claim, .. }) => {
                     // ShortClaim remains queued until settled; stop if the port refuses.
@@ -123,7 +124,7 @@ impl Calls {
                     stamp: claim.envelope.stamp,
                     seq,
                 },
-                payload: &bytes[..claim.len],
+                payload: &self.bytes[..claim.len],
             };
             let error = if !matches!(kind, Kind::Command | Kind::Query)
                 || member.is_none()
@@ -178,7 +179,13 @@ impl Calls {
             .get(&correlation)
             .is_some_and(|p| p.target == target)
         {
-            record(&self.config, Note::UnknownInteraction { target });
+            record(
+                &self.config,
+                Note::UnknownCorrelation {
+                    target,
+                    correlation,
+                },
+            );
             return;
         }
         let limit = backend
@@ -253,6 +260,41 @@ impl Calls {
             let _ = backend
                 .ports()
                 .settle(claim, Err(CallError::Transport(Transport::Down)));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::server::{MemberTable, Providing};
+    use ridl_loopback::Loopback;
+    use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
+    use ridl_rt::port::Caller;
+
+    #[test]
+    fn ticks_read_claims_into_the_same_owned_buffer() {
+        let config = Config::default();
+        let ports = Loopback::new(CatalogRef {
+            name: "calls",
+            hash: CatalogHash([7; 32]),
+        });
+        let mut caller = ports.attach();
+        let mut members = MemberTable::new("calls", CatalogHash([7; 32]));
+        members.insert(InterfaceNo(1), Ordinal(3), Kind::Command, None);
+        let mut backend = Providing::new(ports, members).unwrap();
+        let mut calls = Calls::new(&config);
+        assert!(calls.start(&mut backend));
+        let allocation = calls.bytes.as_ptr();
+        for value in [73, 91] {
+            caller
+                .command(InterfaceNo(1), Ordinal(3), &[value], None)
+                .unwrap();
+            let mut out = vec![];
+            calls.tick(&mut backend, Instant::now(), &mut out);
+            assert_eq!(out.len(), 1);
+            assert_eq!(calls.bytes.as_ptr(), allocation);
+            assert_eq!(calls.bytes[0], value);
         }
     }
 }

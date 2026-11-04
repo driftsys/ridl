@@ -118,6 +118,13 @@ pub enum Note {
         /// The interaction answered.
         target: Target,
     },
+    /// A response named no matching call in flight and was discarded (§5.3).
+    UnknownCorrelation {
+        /// The interaction named by the response.
+        target: Target,
+        /// The response correlation.
+        correlation: u64,
+    },
     /// A `subscribe`, `read`, `request` or `unsubscribe` named an interaction
     /// the member table does not hold, or holds under another kind (frame
     /// specification §6.4). An `unsubscribe` is dropped; the other three are

@@ -486,3 +486,85 @@ fn provider_failed_short_claim_settlement_is_owned_until_disconnect() {
         Some(Err(CallError::Transport(Transport::Down)))
     );
 }
+
+#[test]
+fn provider_wrong_outcome_settles_corrupt() {
+    let config = Config::default();
+    let now = Instant::now();
+    let (mut s, mut c) = setup(&config);
+    let q = c.query(QUERY.iface, QUERY.ord, &[], None).unwrap();
+    let a = c.command(COMMAND.iface, COMMAND.ord, &[], None).unwrap();
+    let r = requests(&mut s, now);
+    for (target, envelope, _) in r {
+        let outcome = if target == QUERY {
+            ResponseOutcome::Accepted
+        } else {
+            ResponseOutcome::Reply(&[1])
+        };
+        response(&mut s, target, envelope.seq, outcome, now, &config);
+    }
+    assert_eq!(
+        c.reply(q, &mut []),
+        Ok(Some(Err(CallError::Transport(Transport::Corrupt))))
+    );
+    assert_eq!(
+        c.ack(a),
+        Some(Err(CallError::Transport(Transport::Corrupt)))
+    );
+}
+
+#[test]
+fn provider_unbounded_call_uses_abandon_deadline() {
+    let mut config = Config::default();
+    config.call_abandon_after = Duration::from_millis(17);
+    let now = Instant::now();
+    let (mut s, mut c) = setup(&config);
+    let mut table = s.backend.members().clone();
+    for t in [COMMAND, QUERY] {
+        table.insert(t.iface, t.ord, t.kind, None);
+    }
+    let ports = s.backend.ports().attach();
+    s.backend = Providing::new(ports, table).unwrap();
+    assert!(s.calls.start(&mut s.backend));
+    let a = c.command(COMMAND.iface, COMMAND.ord, &[], None).unwrap();
+    let q = c.query(QUERY.iface, QUERY.ord, &[], None).unwrap();
+    assert_eq!(requests(&mut s, now).len(), 2);
+    requests(&mut s, now + config.call_abandon_after);
+    assert_eq!(c.ack(a), None);
+    assert_eq!(c.reply(q, &mut []), Ok(None));
+    requests(
+        &mut s,
+        now + config.call_abandon_after + Duration::from_nanos(1),
+    );
+    assert_eq!(
+        c.ack(a),
+        Some(Err(CallError::Transport(Transport::Undelivered)))
+    );
+    assert_eq!(
+        c.reply(q, &mut []),
+        Ok(Some(Err(CallError::Transport(Transport::Timeout))))
+    );
+}
+
+#[test]
+fn provider_unknown_correlation_has_own_note() {
+    let notes = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+    let captured = notes.clone();
+    let config = Config::default().with_record(move |note| captured.lock().unwrap().push(*note));
+    let (mut s, _) = setup(&config);
+    response(
+        &mut s,
+        COMMAND,
+        999,
+        ResponseOutcome::Accepted,
+        Instant::now(),
+        &config,
+    );
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::UnknownCorrelation {
+            target: COMMAND,
+            correlation: 999
+        }]
+    );
+}
