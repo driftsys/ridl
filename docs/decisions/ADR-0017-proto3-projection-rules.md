@@ -46,6 +46,11 @@ It does not supersede [ADR-0013](ADR-0013-codegen-backend-scope.md) or
 what a backend may emit, ADR-0016 fixes how identity projects, and this record
 fills three gaps both leave open.
 
+**Amended 2026-11-04 — decision 9, remote declarations reached through an import
+pin, from driftsys/ridl#1211.** A remote declaration reached by a surviving old
+consumer use is compared at both pins; a changed proto3 scalar is reported at
+the consumer path.
+
 ## Context
 
 ADR-0016 decision 6 ratified four properties every projection must satisfy, all
@@ -270,6 +275,16 @@ distinct reachable cases.
    always `int32`, and the backend refuses a value outside `int32`, so an
    appended enum value never changes its scalar. Unions are not read: a union is
    a `oneof` message.
+
+   The per-side context comparison also reads a remote declaration reached by a
+   surviving old consumer use when an import pin changes, at every position
+   including a producer-sized position; it reports `proto3_width_change` once
+   per consumer path and remote declaration, at `<package>/<decl>/<field>` or
+   `<package>/<interface>/<interaction>`, with `<remote declaration>: <scalar>`
+   before and after values and the same encoding-dependent verdict. A dropped or
+   retyped holder draws no such line. Only the per-side context entry points
+   report these remote widths; a side without remote context draws no such line,
+   including plain IR snapshots and legacy baselines without `context.json`.
 
 ## Alternatives considered
 

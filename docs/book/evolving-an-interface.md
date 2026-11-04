@@ -203,8 +203,9 @@ cases:
   `ridl diff --encoding
   flatbuffers`: breaking with it, compatible without it,
   under the heading `breaking under flatbuffers` either way. The rule is stated
-  in [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md)
-  decision 10.
+  in [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision
+  10, including a remote integer change through an import pin at a surviving old
+  consumer path.
 
 - **Breaking under proto3**: an enum-set flag appended after which the proto3
   scalar differs (`proto3_width_change`, once per declaration with the old and
@@ -213,7 +214,9 @@ cases:
   `int32`, so an appended enum value never changes its scalar. The verdict
   follows `ridl diff --encoding proto3`: breaking with it, compatible without
   it, under the heading `breaking under proto3` either way. The rule is stated
-  in [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) decision 9.
+  in [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) decision 9,
+  including a remote scalar change through an import pin at a surviving old
+  consumer path.
 
 An interface that joins the list of a service with a named interface list, or
 leaves it, is not part of the hash input, because the list is not hashed. Such a

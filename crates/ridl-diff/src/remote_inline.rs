@@ -1,13 +1,21 @@
-//! Remote layout growth attributed to published consumer uses.
+//! Remote layout growth and integer widths attributed to published consumer uses.
+//!
+//! Reports `podbuf_remote_inline_growth`, `flatbuffers_width_change` and
+//! `proto3_width_change` at consumer paths.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use ridl_ir::{
-    projection::{flatbuffers::Packages, podbuf},
+    projection::{
+        flatbuffers::{self, Packages},
+        podbuf, proto3,
+    },
     v2,
 };
 
-use crate::{Category, Change, ContextIssue, ContextIssueReason, ContextSide, Verdict};
+use crate::{
+    Category, Change, ContextIssue, ContextIssueReason, ContextSide, Verdict, category_word,
+};
 
 pub(crate) fn compare(
     old_holders: &[&v2::Package],
@@ -22,7 +30,11 @@ pub(crate) fn compare(
         locals: BTreeSet::new(),
         require_new: true,
         changes: BTreeMap::new(),
+        width_changes: BTreeMap::new(),
         issues: BTreeSet::new(),
+        flatbuffers: encodings.contains(&"flatbuffers"),
+        proto3: encodings.contains(&"proto3"),
+        widths_only: false,
         verdict: if encodings.contains(&"podbuf") {
             Verdict::Breaking
         } else {
@@ -47,7 +59,10 @@ pub(crate) fn compare(
         });
     }
     (
-        pass.changes.into_values().collect(),
+        pass.changes
+            .into_values()
+            .chain(pass.width_changes.into_values())
+            .collect(),
         pass.issues.into_iter().collect(),
     )
 }
@@ -90,6 +105,20 @@ fn walk_holders(
         for shape in home.shapes() {
             for interaction in &shape.interface.interactions {
                 let mut roots = crate::walk::interaction_payloads(interaction);
+                let params = match &interaction.kind {
+                    Some(v2::decl::Kind::CommandDef(def)) => &def.params[..],
+                    Some(v2::decl::Kind::QueryDef(def)) => &def.params[..],
+                    _ => &[],
+                };
+                // Streams are excluded from request heads. Visit their elements
+                // only for integer widths, at the interaction's consumer path.
+                roots.extend(params.iter().filter_map(|param| {
+                    param
+                        .r#type
+                        .as_ref()
+                        .filter(|ty| matches!(ty.kind, Some(v2::field_type::Kind::Stream(_))))
+                        .cloned()
+                }));
                 let payload = match &interaction.kind {
                     Some(v2::decl::Kind::SignalDef(def)) => Some(&def.payload),
                     Some(v2::decl::Kind::EventDef(def)) => Some(&def.payload),
@@ -129,8 +158,12 @@ struct Pass<'a> {
     locals: BTreeSet<&'a str>,
     require_new: bool,
     changes: BTreeMap<(String, String), Change>,
+    width_changes: BTreeMap<(String, String, &'static str), Change>,
     issues: BTreeSet<ContextIssue>,
     verdict: Verdict,
+    flatbuffers: bool,
+    proto3: bool,
+    widths_only: bool,
 }
 
 impl Pass<'_> {
@@ -189,7 +222,10 @@ impl Pass<'_> {
                 if !active.insert(identity.clone()) {
                     return;
                 }
-                if fixed && side == ContextSide::Old {
+                if side == ContextSide::Old && self.require_new {
+                    self.widths(declaring, decl, path, &identity);
+                }
+                if fixed && side == ContextSide::Old && !self.widths_only {
                     let old_size = self.head_size(
                         self.old,
                         declaring,
@@ -287,7 +323,82 @@ impl Pass<'_> {
                     self.visit(home, ty, path, false, side, active);
                 }
             }
+            Some(Kind::Stream(stream)) => {
+                if let Some(v2::stream_type::Element::Named(reference)) = &stream.element {
+                    let ty = v2::FieldType {
+                        optional: false,
+                        kind: Some(Kind::Named(reference.clone())),
+                    };
+                    // Neither an element nor its nested members participates in
+                    // the podbuf growth rule for a stream.
+                    let widths_only = self.widths_only;
+                    self.widths_only = true;
+                    self.visit(home, &ty, path, false, side, active);
+                    self.widths_only = widths_only;
+                }
+            }
             _ => {}
+        }
+    }
+
+    fn widths(&mut self, declaring: &v2::Package, decl: &v2::Decl, path: &str, identity: &str) {
+        use crate::walk::int_width_name;
+        use v2::decl::Kind;
+
+        let Some(new_decl) = self
+            .new
+            .iter()
+            .copied()
+            .find(|p| p.name == declaring.name)
+            .and_then(|p| p.decls.iter().find(|d| d.name == decl.name))
+        else {
+            return;
+        };
+        let facts = match (&decl.kind, &new_decl.kind) {
+            (Some(Kind::EnumSetDef(old)), Some(Kind::EnumSetDef(new))) => vec![
+                (
+                    Category::FlatbuffersWidthChange,
+                    int_width_name(flatbuffers::enum_set_integer(old) as i32),
+                    int_width_name(flatbuffers::enum_set_integer(new) as i32),
+                    self.flatbuffers,
+                ),
+                (
+                    Category::Proto3WidthChange,
+                    proto3::enum_set_scalar(old.width).as_str(),
+                    proto3::enum_set_scalar(new.width).as_str(),
+                    self.proto3,
+                ),
+            ],
+            (Some(Kind::EnumDef(old)), Some(Kind::EnumDef(new))) => vec![(
+                Category::FlatbuffersWidthChange,
+                int_width_name(flatbuffers::enum_integer(old) as i32),
+                int_width_name(flatbuffers::enum_integer(new) as i32),
+                self.flatbuffers,
+            )],
+            _ => return,
+        };
+        for (category, before, after, breaking) in facts {
+            if before == after {
+                continue;
+            }
+            self.width_changes.insert(
+                (
+                    path.to_string(),
+                    identity.to_string(),
+                    category_word(category),
+                ),
+                Change {
+                    path: path.to_string(),
+                    category,
+                    verdict: if breaking {
+                        Verdict::Breaking
+                    } else {
+                        Verdict::Compatible
+                    },
+                    before: Some(format!("{identity}: {before}")),
+                    after: Some(format!("{identity}: {after}")),
+                },
+            );
         }
     }
 

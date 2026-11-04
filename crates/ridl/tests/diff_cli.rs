@@ -1529,6 +1529,39 @@ fn remote_inline_source(dir: &TempDir, side: &str, grown: bool, inline: bool) ->
     root
 }
 
+fn remote_flags_source(dir: &TempDir, side: &str, widened: bool) -> PathBuf {
+    let root = dir.path().join(side);
+    let vendor = root.join("vendor/dep");
+    dir.write(
+        &format!("{side}/vendor/dep/ridl.toml"),
+        "[package]\nname = \"dep\"\nversion = \"1.0.0\"\n",
+    );
+    let extra = if widened { "  C = 32\n" } else { "" };
+    dir.write(
+        &format!("{side}/vendor/dep/types.typl"),
+        &format!("package dep\nopen enumset Flags {{\n  A = 0\n  B = 31\n{extra}}}\n"),
+    );
+    dir.write(&format!("{side}/ridl.toml"),
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n[imports]\ndep = \"https://example.invalid/dep.tar\"\n");
+    dir.write(
+        &format!("{side}/app.typl"),
+        "package app\nimport dep.Flags\nstruct Sample {\n flags: Flags\n}\n",
+    );
+    let lock = ridl_core::lock::Lockfile {
+        entries: [(
+            "https://example.invalid/dep.tar".into(),
+            ridl_core::lock::LockEntry {
+                sha256: "a".repeat(64),
+                tree: Some(ridl_core::tree_hash(&vendor).unwrap()),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+    ridl_core::lock::write_lockfile(&root.join("ridl.lock"), &lock).unwrap();
+    root
+}
+
 /// Build historical fixtures independently of baseline publication/recovery.
 fn remote_inline_baseline(source: &Path, out: &Path, enriched: bool) {
     let output = ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), source).unwrap();
@@ -1601,6 +1634,100 @@ fn remote_pin_only_inline_growth_exits_one_for_sources_and_enriched_baselines() 
             "{stdout}"
         );
     }
+    assert_eq!(before, remote_input_inventory(dir.path()));
+    assert_eq!(cache_before, remote_input_inventory(&cache));
+}
+
+#[test]
+fn remote_pin_only_enum_set_widening_is_a_flatbuffers_and_proto3_break() {
+    // Mutation: discard width changes returned by the remote comparison.
+    let dir = TempDir::new("remote-enum-set-width");
+    let old = remote_flags_source(&dir, "old", false);
+    let new = remote_flags_source(&dir, "new", true);
+    let baseline = dir.path().join("baseline");
+    remote_inline_baseline(&old, &baseline, true);
+    let legacy = dir.path().join("legacy");
+    remote_inline_baseline(&old, &legacy, false);
+    let before = remote_input_inventory(dir.path());
+    let cache = ridl_core::Cache::user_default()
+        .root
+        .join("83d8e8e1b5362aa8d63beac38c539cc1aabdb41d0e7257a3fde21269afedfebd");
+    let cache_before = remote_input_inventory(&cache);
+    for old in [&old, &baseline] {
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            old.as_os_str(),
+            new.as_os_str(),
+            "--encoding".as_ref(),
+            "flatbuffers".as_ref(),
+            "--format".as_ref(),
+            "json".as_ref(),
+        ]);
+        assert_eq!(code, 1, "{stdout}\n{stderr}");
+        let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(report["verdict"], "breaking");
+        let changes = report["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 3, "{report}");
+        for (category, before, after, verdict) in [
+            (
+                "flatbuffers_width_change",
+                "dep.Flags: u32",
+                "dep.Flags: u64",
+                "breaking",
+            ),
+            (
+                "proto3_width_change",
+                "dep.Flags: uint32",
+                "dep.Flags: uint64",
+                "compatible",
+            ),
+            (
+                "podbuf_remote_inline_growth",
+                "dep.Flags: 4",
+                "dep.Flags: 8",
+                "compatible",
+            ),
+        ] {
+            let matching: Vec<_> = changes
+                .iter()
+                .filter(|c| c["category"] == category)
+                .collect();
+            assert_eq!(matching.len(), 1, "{report}");
+            assert_eq!(matching[0]["path"], "app/Sample/flags");
+            assert_eq!(matching[0]["before"], before);
+            assert_eq!(matching[0]["after"], after);
+            assert_eq!(matching[0]["verdict"], verdict);
+        }
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            old.as_os_str(),
+            new.as_os_str(),
+            "--encoding".as_ref(),
+            "proto3".as_ref(),
+        ]);
+        assert_eq!(code, 1, "{stdout}\n{stderr}");
+        let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+        assert_eq!(code, 0, "{stdout}\n{stderr}");
+    }
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        legacy.as_os_str(),
+        new.as_os_str(),
+        "--encoding".as_ref(),
+        "flatbuffers".as_ref(),
+        "--format".as_ref(),
+        "json".as_ref(),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        !report["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["category"] == "flatbuffers_width_change"),
+        "{report}"
+    );
     assert_eq!(before, remote_input_inventory(dir.path()));
     assert_eq!(cache_before, remote_input_inventory(&cache));
 }
