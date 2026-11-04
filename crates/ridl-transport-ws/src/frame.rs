@@ -37,6 +37,8 @@ use ridl_rt::sample::{Envelope, Timestamp};
 pub const FRAME_VERSION: u32 = 2;
 /// The WebSocket subprotocol name of binding version 2.
 pub const SUBPROTOCOL: &str = "ridl-ws-v2";
+/// The WebSocket subprotocol with a version 2 provider client.
+pub const SUBPROTOCOL_PROVIDER: &str = "ridl-ws-v2-provider";
 /// The frame version that adds the stream forms.
 pub const FRAME_VERSION_3: u32 = 3;
 /// The WebSocket subprotocol name of binding version 3.
