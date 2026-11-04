@@ -9,8 +9,8 @@
 //!
 //! The vectors are read from the frame specification itself
 //! (`docs/specification/frame-specification.md` §11.1), because its four
-//! tables are their source. Each is checked against the binding's header layout before it becomes a
-//! line.
+//! tables are their source. Each is checked against the binding's header
+//! layout before it becomes a line.
 
 use super::bin;
 use ridl_core::manifest::ENCODING_NAMES;

@@ -840,8 +840,9 @@ provenance. Nothing here is normative — the current references live in
   **2026-11-03-debug-socket-codex-handoff.md** — the debug socket (E19.7,
   driftsys/ridl#1191): the twin and the listener in `ridl-rt` and
   `ridl-loopback`, listening through a debug gateway, and injection through the
-  reversed-role subprotocol `ridl-ws-v2-provider`. Archived verbatim, on
-  2026-11-04, with the pull request that builds the injection, after
+  reversed-role subprotocol `ridl-ws-v2-provider`. The design and plan were
+  edited before archiving to record the build rulings and Names changes.
+  Archived on 2026-11-04, with the pull request that builds the injection, after
   driftsys/ridl#1220 (identities and attach rules) and driftsys/ridl#1227
   (listening). The plan's "Delegated rulings" section records the decisions
   taken during the build (R-DS-1 to R-DS-7). The durable records are

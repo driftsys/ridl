@@ -145,8 +145,9 @@ The debug socket design, plan and Codex handoff
 [`../design/deployment-descriptor.md`](../design/deployment-descriptor.md),
 [the frame specification](../specification/frame-specification.md) §11.1 and
 [the debugging chapter](../book/debugging.md) are their durable records. The
-rulings R-DS-1 to R-DS-7 that the plan records are held by those design records
-as built.
+behavior rulings R-DS-3 to R-DS-7 are stated as built in the applicable records;
+R-DS-5 belongs to the gateway selection description. R-DS-1 and R-DS-2 are
+process rulings retained in the archived plan.
 
 The release 0.11 plan (`2026-10-15-release-0.11-plan.md`) was archived on
 2026-10-19, once 0.11.0 was released and every issue it names was closed (#880,
