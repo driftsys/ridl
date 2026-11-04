@@ -4,8 +4,8 @@ Loads the wasm codec module that `ridl build` generates and verifies encoded
 payloads with it. A payload is checked against the structure and the typl rules
 of its type before the caller uses it.
 
-The package has no dependency. It uses only the platform `WebAssembly`, so it
-runs in Deno, Bun, Node 22 or later, and in a browser.
+The package has no dependency. It uses the platform `WebAssembly`, streams and
+text decoder APIs, so it runs in Deno, Bun, Node 22 or later, and in a browser.
 
 ## API
 
@@ -61,6 +61,46 @@ is read with `arrayBuffer()` and compiled with `WebAssembly.instantiate`. A
 `file:` URL is read with `Deno.readFile` when `Deno` exists and is fetched
 otherwise. Any other URL is fetched.
 
+## Stream decoding
+
+`StreamSession` holds `{ transport, codec }`. Its `codec` is the loaded wasm
+`Codec`; its `transport` implements the structural `StreamTransport` interface,
+with `queryStream`, `commandStream` and `queryWithUpload` byte-stream methods.
+`StreamOptions` requires `bound`, the response bound in milliseconds. The
+runtime has no dependency on a transport package.
+
+Resolve named payload types with `codec.typeId` before making a request, and
+load the codec with the expected catalog hash. An unknown name throws
+`UnknownPayloadType`; a mismatched hash rejects loading with `CatalogMismatch`.
+Supply the generated module's `RULES` to `loadCodec` as `ruleText` so that
+verification failures include their rule text.
+
+`decodeStream(decode, verify)` returns a `TransformStream` that checks each
+whole payload before decoding it. For example, after resolving `typeId`, pipe a
+byte stream through
+`decodeStream(payload.decode, bytes => codec.verify(typeId, bytes))`. Each chunk
+produces one decoded value. Native stream queues preserve backpressure; reader
+cancellation and transform errors propagate upstream through `pipeThrough`.
+Transport failures propagate unchanged.
+
+`decodeTextStream()` returns a `TransformStream<Uint8Array, string>` that
+decodes each chunk independently with fatal UTF-8 checking. A chunk must contain
+complete code points. Empty chunks produce empty strings, and a leading BOM
+remains content.
+
+Local payload failures throw `StreamError`, whose `failure` is either
+`{ category: "corrupt" }` for malformed payloads, or
+`{ category: "contract", contract: { category: "invalid-value", rule } }` for
+rule failures, including invalid UTF-8. `PayloadRule` names `length`, `pattern`,
+`range`, `step`, `unique`, `utf8` and `variant`. A missing or unknown
+verification rule text, or an unknown-type verification result, throws
+`CodecError`. Local errors do not require a transport-specific error class.
+
+The generated TypeScript and wasm codecs must be regenerated together. The
+sorted payload rule table assigns `utf8` code 7 and `variant` code 8; the
+addition of `utf8` widens the generated rule union and changes the previous
+`variant` code.
+
 ## Limits
 
 - The module must export `memory`, `ridl_alloc`, `ridl_free`,
@@ -68,6 +108,7 @@ otherwise. Any other URL is fetched.
   read other exports.
 - `verify` is synchronous and copies the payload into the module memory on each
   call. It frees the copy before it returns, also when the call throws.
-- The package does not decode a payload. It reports whether the payload is
-  valid.
+- The package verifies named payloads with wasm; stream decoding uses the
+  decoder supplied by the caller. It decodes raw text streams with the platform
+  text decoder.
 - The package is not yet published.

@@ -35,7 +35,9 @@ use crate::{GenerateError, GeneratedTs};
 
 /// The text of the rule codes the wasm module reports, rule code `n` at
 /// index `n - 2`: the order of `WASM_RULES` in the generated crate.
-const RULES: [&str; 6] = ["length", "pattern", "range", "step", "unique", "variant"];
+const RULES: [&str; 7] = [
+    "length", "pattern", "range", "step", "unique", "utf8", "variant",
+];
 
 /// The largest integer a TypeScript number holds exactly.
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
