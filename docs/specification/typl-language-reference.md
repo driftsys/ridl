@@ -1075,9 +1075,10 @@ place of values: appending a bit to an open enumset is compatible (except under
 the podbuf encoding when the bit changes the integer width, which is breaking
 and reported by `ridl diff` as `podbuf_width_change`, and under the FlatBuffers
 encoding when the bit changes the FlatBuffers scalar
-(`flatbuffers_width_change`)), appending a bit to a strict enumset is breaking
-for every encoding, and removing a bit or moving it to another position is
-breaking.
+(`flatbuffers_width_change`), and under the proto3 encoding when a bit at
+position 32 changes the field from `uint32` to `uint64`
+(`proto3_width_change`)), appending a bit to a strict enumset is breaking for
+every encoding, and removing a bit or moving it to another position is breaking.
 
 ### 9.1 Standalone Form
 

@@ -33,6 +33,11 @@ proto3 codec of the Rust backend (driftsys/ridl#264) now refuses what decision 7
 said it would refuse, and it changed no emitted line. Decision 7 carries the
 amendment in place.
 
+**Amended 2026-11-04 — decision 9, from driftsys/ridl#1212.** An enum-set append
+that changes its proto3 scalar is breaking under proto3. The new
+`proto3_width_change` category reports the old and the new scalar once per
+declaration; appends that keep the scalar draw no such line.
+
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model.
 
@@ -235,6 +240,37 @@ distinct reachable cases.
    way, so no size bound changes. The fallback for an integer width the IR does
    not define stays `int64`; the compiler produces no such width.
 
+9. **An append that changes the proto3 scalar of an enum set is breaking under
+   proto3** — added 2026-11-04, from driftsys/ridl#1212. The frozen scalar table
+   ([ADR-0019](ADR-0019-flatbuffers-projection-rules.md) decision 8) maps the
+   unsigned widths as follows:
+
+   | Enum-set width | proto3 scalar |
+   | -------------- | ------------- |
+   | `u8`           | `uint32`      |
+   | `u16`          | `uint32`      |
+   | `u32`          | `uint32`      |
+   | `u64`          | `uint64`      |
+
+   Only a flag at bit 32 above a highest bit of 31 or below changes the scalar;
+   a flag at bit 8 or 16 keeps `uint32`. A reader of the old schema refuses a
+   value beyond `u32::MAX` (the generated Rust codec) or truncates it to the low
+   32 bits and drops the flag. The change is therefore breaking.
+
+   `ridl diff` reports it as `proto3_width_change`, under the heading
+   `breaking under proto3`, once per declaration at `<package>/<decl>` with the
+   old and the new scalar. The rule reads only compatible appends: an append to
+   a strict enum set is `strict_enum_append`, breaking for every encoding, and
+   draws no width line. The verdict is breaking only with `--encoding proto3`,
+   compatible otherwise. `ridl build` and `ridl baseline` judge it with the root
+   manifest's encodings.
+
+   The scalar is read through `ridl_ir::projection::proto3::enum_set_scalar`,
+   the projection fact the emitter uses. Enums are not read: a proto3 enum is
+   always `int32`, and the backend refuses a value outside `int32`, so an
+   appended enum value never changes its scalar. Unions are not read: a union is
+   a `oneof` message.
+
 ## Alternatives considered
 
 | Candidate                                                       | Verdict                                                                                                            | Reason                                                                                                                                                                                                                           |
@@ -247,6 +283,7 @@ distinct reachable cases.
 | A proto3 root only for the declarations an interaction carries  | rejected                                                                                                           | the projection would depend on which interactions exist, against ADR-0016 decision 6's totality — the reason ADR-0019 decision 8 gives for FlatBuffers (decision 6)                                                              |
 | Leaving the proto3 root to the payload codec, after the freeze  | rejected                                                                                                           | the box adds a name to each package scope, so adding it later refuses a package 0.10 accepts and changes a frozen schema (decision 6)                                                                                            |
 | Refusing an optional array element or map value in the schema   | rejected                                                                                                           | no program this toolchain builds writes the shape, because the codecs refuse it; a refusal in the schema emitter would reject a package for a schema-only consumer and gain nothing (decision 7)                                 |
+| Judge it under FlatBuffers' or podbuf's category                | rejected                                                                                                           | a build of one encoding would be told another encoding's break, and the widths differ: bit 8 and bit 16 widen FlatBuffers and podbuf but not proto3 (decision 9)                                                                 |
 
 ## Consequences
 

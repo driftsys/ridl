@@ -2235,6 +2235,55 @@ pub(crate) fn flatbuffers_width_changes(
     changes
 }
 
+/// The [`Category::Proto3WidthChange`] changes of one walked and classified
+/// package pair: one per enum set with a compatible flag append whose proto3
+/// scalar differs. The scalar is read from the projection fact the emitter
+/// uses. Enums are skipped: a proto3 enum is `int32`, and the backend refuses
+/// a value outside it. Unions are skipped: a union is a `oneof` message. The
+/// classifier settles the verdict from the encodings.
+pub(crate) fn proto3_width_changes(
+    pair: &[Change],
+    old: &v2::Package,
+    new: &v2::Package,
+) -> Vec<Change> {
+    use ridl_ir::projection::proto3::enum_set_scalar;
+
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    let mut changes = Vec::new();
+    for (name, _) in compatible_member_appends(pair, new) {
+        if !seen.insert(name) {
+            continue;
+        }
+        fn find<'p>(pkg: &'p v2::Package, name: &str) -> Option<&'p v2::Decl> {
+            pkg.decls.iter().find(|decl| decl.name == name)
+        }
+        let (Some(old_decl), Some(new_decl)) = (find(old, name), find(new, name)) else {
+            continue;
+        };
+        let widths = match (&old_decl.kind, &new_decl.kind) {
+            (
+                Some(v2::decl::Kind::EnumSetDef(old_def)),
+                Some(v2::decl::Kind::EnumSetDef(new_def)),
+            ) => (
+                enum_set_scalar(old_def.width),
+                enum_set_scalar(new_def.width),
+            ),
+            _ => continue,
+        };
+        if widths.0 == widths.1 {
+            continue;
+        }
+        emit(
+            &mut changes,
+            format!("{}/{name}", new.name),
+            Category::Proto3WidthChange,
+            Some(widths.0.as_str().to_string()),
+            Some(widths.1.as_str().to_string()),
+        );
+    }
+    changes
+}
+
 /// Replaces the [`Category::DeclAdded`] lines of the values or flags appended
 /// to a strict enum or enum set of `new` (one that is not `open`) with one
 /// [`Category::StrictEnumAppend`] line per declaration, at the position of the

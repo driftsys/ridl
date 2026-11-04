@@ -175,11 +175,11 @@ cases:
 - **Compatible, for an `open` declaration**: an enum value or an enum-set flag
   appended (no category of its own: the append is a compatible `decl_added`),
   under every encoding, podbuf included, when the podbuf integer of the
-  declaration and the FlatBuffers scalar stay the same (the next items give the
-  cases where they change), and the `open` keyword gained (`enum_opened`).
-  Opening is a source break for Rust callers: the generated enum gains an
-  unknown variant and `#[non_exhaustive]`, so a `match` over it needs a wildcard
-  arm.
+  declaration, the FlatBuffers scalar and the proto3 scalar stay the same (the
+  next items give the cases where they change), and the `open` keyword gained
+  (`enum_opened`). Opening is a source break for Rust callers: the generated
+  enum gains an unknown variant and `#[non_exhaustive]`, so a `match` over it
+  needs a wildcard arm.
 - **Breaking under podbuf**: a struct field appended that grows the podbuf head
   of a struct another head of the old side holds inline (`podbuf_inline_append`;
   the line names each inline use); growth of a remote declaration held inline by
@@ -205,6 +205,15 @@ cases:
   under the heading `breaking under flatbuffers` either way. The rule is stated
   in [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md)
   decision 10.
+
+- **Breaking under proto3**: an enum-set flag appended after which the proto3
+  scalar differs (`proto3_width_change`, once per declaration with the old and
+  the new scalar). A flag at bit 32 above a highest bit of 31 or below widens
+  `uint32` to `uint64`; a flag at bit 8 or 16 keeps `uint32`. Every enum uses
+  `int32`, so an appended enum value never changes its scalar. The verdict
+  follows `ridl diff --encoding proto3`: breaking with it, compatible without
+  it, under the heading `breaking under proto3` either way. The rule is stated
+  in [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) decision 9.
 
 An interface that joins the list of a service with a named interface list, or
 leaves it, is not part of the hash input, because the list is not hashed. Such a

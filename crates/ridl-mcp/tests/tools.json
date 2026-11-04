@@ -444,7 +444,7 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "encodings": {
-          "description": "Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). podbuf and flatbuffers have rules of their own: with podbuf, a podbuf_inline_append, podbuf_width_change or podbuf_remote_inline_growth change is breaking; without it, compatible. With flatbuffers, a flatbuffers_width_change change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.",
+          "description": "Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). podbuf, flatbuffers and proto3 have rules of their own: with podbuf, a podbuf_inline_append, podbuf_width_change or podbuf_remote_inline_growth change is breaking; without it, compatible. With flatbuffers, a flatbuffers_width_change change is breaking; without it, compatible. With proto3, a proto3_width_change change is breaking; without it, compatible. A strict_enum_append change is breaking for every list. The same as `ridl diff --encoding`.",
           "items": {
             "type": "string"
           },
