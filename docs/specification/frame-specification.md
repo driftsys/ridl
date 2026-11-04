@@ -1472,6 +1472,39 @@ their stamp is `0x0123456789AC`.
 | `stream-end-end` | `stream_end` `end`, query, interface 1, ordinal 4, seq 2, correlation 2, stream 0     | `0d 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 00 0a 00`                   |
 | `stream-credit`  | `stream_credit` 4, query, interface 1, ordinal 4, correlation 2, stream 0             | `0e 04 01000000 04000000 0200000000000000 00 04000000`                                                  |
 
+#### Reversed role
+
+The subprotocol `ridl-ws-v2-provider` carries frame version 2 with the client as
+the provider and the server as the consumer. On this connection, the server
+sends `attach` as its first message and the client answers `attached` as its
+first message. The `attach` carries `frame_version` 2; the client refuses any
+other frame version with `frame_version_unsupported`. The client checks the
+catalog and encoding of `attach` and answers with the outcome under §6.1. After
+acceptance, the client sends `publish`, `occurrence` and `response` as the
+provider, and the server sends the consumer's frames, under the existing rules
+of §5 to §9 with these roles. The server checks received provider frames as a
+consumer does. No `chunk`, `stream_end` or `stream_credit` crosses this
+connection; receiving one is a protocol violation and closes with 1002 under
+item 4. The server still sends WebSocket pings, because a browser client cannot;
+either end applies item 1's liveness timeout. The frame layouts, codes and
+payload rules of binding version 2 remain unchanged.
+
+A client offers only provider-role names or only consuming-role names, never
+both. A server that serves one role selects only names for that role and ignores
+names for the other role; a mixed offer to a consuming server can therefore
+select `ridl-ws-v2`. When no name for the server's role matches, the handshake
+fails under item 1. The binding assigns no meaning to the URL path for either
+role; the deployment chooses it under item 1.
+
+**Reversed role test vectors.** These are frame version 2 messages, with the
+catalog, envelope and payload of the corresponding consuming-role vectors.
+
+| Id                           | Vector                                                                 | Hex                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `provider-attach-2`          | server `attach` frame 2, FlatBuffers, `veh.cabin`                      | `01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `provider-attached-accepted` | client `attached` accepted                                             | `02 01 00`                                                                                              |
+| `provider-publish-live`      | client `publish` `Live`, interface 1, ordinal 2, seq 7, payload `ff01` | `07 01 01000000 02000000 ab89674523010000 0700000000000000 02 ff01`                                     |
+
 ### 11.2 Binder on Android
 
 On Android, a runtime binds the ports over its own binder contract, which may be
