@@ -835,3 +835,20 @@ provenance. Nothing here is normative — the current references live in
   [the CLI reference](../book/cli-reference.md#baseline-context), and
   [the stability policy](../decisions/ADR-0029-stability-policy.md). The target
   and minimum supporting tool release is 0.15.0; publication is separate work.
+
+- **2026-11-03-debug-socket-design.md**, **2026-11-03-debug-socket-plan.md** and
+  **2026-11-03-debug-socket-codex-handoff.md** — the debug socket (E19.7,
+  driftsys/ridl#1191): the twin and the listener in `ridl-rt` and
+  `ridl-loopback`, listening through a debug gateway, and injection through the
+  reversed-role subprotocol `ridl-ws-v2-provider`. Archived verbatim, on
+  2026-11-04, with the pull request that builds the injection, after
+  driftsys/ridl#1220 (identities and attach rules) and driftsys/ridl#1227
+  (listening). The plan's "Delegated rulings" section records the decisions
+  taken during the build (R-DS-1 to R-DS-7). The durable records are
+  [the `ridl-transport-ws` design](../design/ridl-transport-ws.md) (D-16, D-19
+  to D-23, D-28 and D-29),
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md) (D-21 and
+  D-22), [the deployment descriptor design](../design/deployment-descriptor.md),
+  [the frame specification](../specification/frame-specification.md) §11.1,
+  [the debugging chapter](../book/debugging.md) and
+  [`freeze/README.md`](../../freeze/README.md).
