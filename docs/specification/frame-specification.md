@@ -1146,14 +1146,16 @@ carries frame version 2, and **version 3**, under `ridl-ws-v3`, carries frame
 version 3. Items 1 to 9 hold for all versions, item 10 holds for versions 2 and
 3 (version 1 has no `block` form), the test vectors below are version 1's, and
 versions 2 and 3 add what "Binding version 2" and "Binding version 3", at the
-end of this section, state. The reasoning behind each rule, with the
+end of this section, state. "Reversed role", after them, states a subprotocol of
+version 2 in which the client provides. The reasoning behind each rule, with the
 alternatives considered, is in
 [the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
 **1. The transport and the session.** One WebSocket connection carries one
 session. The client is the consumer and sends `attach` as its first message; the
-server is the provider and sends `attached` as its first message. The URL is the
-deployment's; the binding places nothing in the path, the query or a header;
+server is the provider and sends `attached` as its first message ("Reversed
+role" states the subprotocol in which the two roles are exchanged). The URL is
+the deployment's; the binding places nothing in the path, the query or a header;
 `ws://` and `wss://` are both allowed, and what `wss://` provides is the
 security the deployment relies on (§13). The session ends when either side sends
 a close frame, when the connection fails, or when the liveness check fails: the
@@ -1328,14 +1330,14 @@ the first such version; binding version 3 adds the stream forms the same way.
 **Test vectors.** Each line is one complete message in hexadecimal, spaces for
 reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
 column, which is stable and never renamed, and it reads the tables of "Binding
-version 2" and "Binding version 3" the same way. The stamp in every data-plane
-vector is `0x0123456789AB` microseconds (and `0x0123456789AC` on the responses),
-chosen to show the byte order; the hash in `attach` is the bytes `00` to `1f`;
-the unit name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell
-names as `` payload `<hex>` `` and fails a row whose bytes after the header
-differ from it, or from no bytes when the cell names none; it decides from the
-header whether a frame carries a payload, by the rule "Whether a frame carries a
-payload" above.
+version 2", "Binding version 3" and "Reversed role" the same way. The stamp in
+every data-plane vector is `0x0123456789AB` microseconds (and `0x0123456789AC`
+on the responses), chosen to show the byte order; the hash in `attach` is the
+bytes `00` to `1f`; the unit name is `veh.cabin`. `xtask` also reads the payload
+a `Vector` cell names as `` payload `<hex>` `` and fails a row whose bytes after
+the header differ from it, or from no bytes when the cell names none; it decides
+from the header whether a frame carries a payload, by the rule "Whether a frame
+carries a payload" above.
 
 | Id                   | Vector                                                          | Hex                                                                                                     |
 | -------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -1475,26 +1477,35 @@ their stamp is `0x0123456789AC`.
 #### Reversed role
 
 The subprotocol `ridl-ws-v2-provider` carries frame version 2 with the client as
-the provider and the server as the consumer. On this connection, the server
-sends `attach` as its first message and the client answers `attached` as its
-first message. The `attach` carries `frame_version` 2; the client refuses any
-other frame version with `frame_version_unsupported`. The client checks the
-catalog and encoding of `attach` and answers with the outcome under §6.1. After
-acceptance, the client sends `publish`, `occurrence` and `response` as the
-provider, and the server sends the consumer's frames, under the existing rules
-of §5 to §9 with these roles. The server checks received provider frames as a
-consumer does. No `chunk`, `stream_end` or `stream_credit` crosses this
-connection; receiving one is a protocol violation and closes with 1002 under
-item 4. The server still sends WebSocket pings, because a browser client cannot;
-either end applies item 1's liveness timeout. The frame layouts, codes and
-payload rules of binding version 2 remain unchanged.
+the provider and the server as the consumer. Every rule of §5 to §9, and of
+items 2 to 10 of this section, applies to this connection with every "provider"
+read as the client and every "consumer" read as the server; item 1 applies with
+the changes below. On this connection, the server sends `attach` as its first
+message and the client answers `attached` as its first message. The `attach`
+carries `frame_version` 2; the client refuses any other frame version with
+`frame_version_unsupported`. The client checks the catalog and encoding of
+`attach` and answers with the outcome under §6.1, and after `attached(refused)`
+the client closes with 1000 (item 4). After acceptance, the client sends the
+provider's forms (`answer`, `publish`, `occurrence`, `block` and `response`) and
+the server sends the consumer's forms; the client publishes a signal or raises
+an event only after the server's `subscribe` (§5.1, §5.2). The server checks
+received provider frames as a consumer does. No `chunk`, `stream_end` or
+`stream_credit` crosses this connection; receiving one is a protocol violation
+and closes with 1002 under item 4. The server still sends WebSocket pings,
+because a browser client cannot; either end applies item 1's liveness timeout.
+The frame layouts, codes and payload rules of binding version 2 remain
+unchanged.
 
 A client offers only provider-role names or only consuming-role names, never
-both. A server that serves one role selects only names for that role and ignores
-names for the other role; a mixed offer to a consuming server can therefore
-select `ridl-ws-v2`. When no name for the server's role matches, the handshake
-fails under item 1. The binding assigns no meaning to the URL path for either
-role; the deployment chooses it under item 1.
+both, and lists them newest first, as item 1 states. A server that serves one
+role selects, among the names of that role it serves, the newest offered, and
+ignores the names of the other role: a mixed offer to a server that provides
+(its clients consume) selects `ridl-ws-v2`, and the same offer to a server that
+consumes (its clients provide) selects `ridl-ws-v2-provider`. A server that
+consumes selects only a name whose frame version it serves, because on this
+connection the client, not the server, refuses an `attach`. When no name for the
+server's role matches, the handshake fails under item 1. The binding assigns no
+meaning to the URL path for either role; the deployment chooses it under item 1.
 
 **Reversed role test vectors.** These are frame version 2 messages, with the
 catalog, envelope and payload of the corresponding consuming-role vectors.
