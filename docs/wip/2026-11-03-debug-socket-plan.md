@@ -900,3 +900,6 @@ name it.
   selector prefers the catalog whose name and hash both match and otherwise
   chooses by name, where D-11 then answers `catalog_mismatch`. `None` still
   means that no catalog of the machine has the name.
+- **R-DS-2.** Streams stage 5a is open as driftsys/ridl#1222 and stage 5b has
+  not started, so PR C is built after PR B without waiting for stage 5b. Of PR C
+  and stage 5b, the one that lands second rebases onto the other.
