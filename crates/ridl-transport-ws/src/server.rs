@@ -148,9 +148,9 @@ pub enum Ended {
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
     /// control, arrived for that long after it, or a write waited that long
-    /// for the client to read. For provided entry points, this also covers
-    /// waiting that long after upgrade for `attached`, even while control
-    /// messages arrive. No close frame is sent.
+    /// for the client to read. This also covers waiting that long after
+    /// upgrade for `attach` (or `attached` in a provided session), even while
+    /// control messages arrive. No close frame is sent.
     LivenessTimeout,
     /// A read or a write of the connection failed with this kind of error.
     /// `UnexpectedEof` is a client that closed the connection without a
@@ -562,7 +562,9 @@ where
 /// The shared WebSocket loop delegates only frame and tick dispositions.
 trait Driver {
     fn attached(&self) -> bool;
-    fn bounded_attach_wait(&self) -> bool {
+    /// Whether a zero `poll_interval` is raised to the shortest read timeout
+    /// instead of being refused with `Ended::Io(InvalidInput)`.
+    fn clamps_zero_poll(&self) -> bool {
         false
     }
     fn on_message(
@@ -615,13 +617,14 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
     config: &Config,
     clock: impl Fn() -> Instant,
 ) -> Ended {
-    let first_wait = if session.bounded_attach_wait() {
+    // The first read also waits no longer than the deadline for `attach`.
+    let first_wait = if config.poll_interval.is_zero() && !session.clamps_zero_poll() {
+        config.poll_interval
+    } else {
         config
             .poll_interval
             .min(config.liveness_timeout)
             .max(MIN_READ_TIMEOUT)
-    } else {
-        config.poll_interval
     };
     if let Err(e) = conn.set_read_timeout(Some(first_wait)) {
         return Ended::Io(e.kind());
@@ -648,10 +651,7 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
 
         while let Some(event) = parser.next() {
             let now = clock();
-            if session.bounded_attach_wait()
-                && !session.attached()
-                && now.duration_since(opened) >= config.liveness_timeout
-            {
+            if !session.attached() && now.duration_since(opened) >= config.liveness_timeout {
                 return Ended::LivenessTimeout;
             }
             heard = now;
@@ -686,10 +686,7 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
         // A message is handled as soon as it is read, but the backend is
         // polled at most once per poll interval, whatever the client's rate.
         let now = clock();
-        if session.bounded_attach_wait()
-            && !session.attached()
-            && now.duration_since(opened) >= config.liveness_timeout
-        {
+        if !session.attached() && now.duration_since(opened) >= config.liveness_timeout {
             return Ended::LivenessTimeout;
         }
         if now.duration_since(ticked) >= config.poll_interval {
@@ -708,7 +705,7 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
         let mut wait = (ticked + config.poll_interval)
             .saturating_duration_since(clock())
             .max(MIN_READ_TIMEOUT);
-        if session.bounded_attach_wait() && !session.attached() {
+        if !session.attached() {
             wait = wait.min(
                 (opened + config.liveness_timeout)
                     .saturating_duration_since(clock())
