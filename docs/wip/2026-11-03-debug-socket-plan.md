@@ -935,3 +935,10 @@ name it.
     is not raised and records a `Note`; a gap records a `Note`. The loss is
     confined to the debug path and is stated in the book page.
   - No frozen port trait changes.
+- **R-DS-4 (Task 9 review, 2026-11-04).** Clarifies R-DS-3: only signal frames
+  form commit groups. An occurrence never opens, extends or closes a group
+  (frame §5.2: "There is no staging and no commit"), so an event interleaved in
+  a signal group does not split it, and no group holds only occurrences. A group
+  also closes before a second accepted frame for a channel already in it, so one
+  local `commit` carries at most one frame per channel (§5.1) and a client that
+  keeps one stamp still commits.
