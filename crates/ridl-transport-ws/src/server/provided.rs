@@ -82,13 +82,9 @@ where
             }
             let catalog = *selected.ports().catalog();
             let encoding = frame::encoding_tag(<B::Ports as Encoded>::Encoding::NAME);
-            attach = encoding.and_then(|encoding| {
-                Attach::new(FRAME_VERSION, encoding, catalog.hash, catalog.name).ok()
-            });
-            if attach.is_none() {
+            attach = Some(configured_attach(catalog, encoding).inspect_err(|_| {
                 config_refused = true;
-                return Err(HttpRefusal::Capacity);
-            }
+            })?);
             backend = Some(selected);
             Ok(())
         },
@@ -117,6 +113,15 @@ where
         attached: false,
     };
     run_upgraded(&mut conn, &mut session, config)
+}
+
+fn configured_attach(
+    catalog: ridl_rt::contract::CatalogRef,
+    encoding: Option<u8>,
+) -> Result<Attach<'static>, HttpRefusal> {
+    encoding
+        .and_then(|encoding| Attach::new(FRAME_VERSION, encoding, catalog.hash, catalog.name).ok())
+        .ok_or(HttpRefusal::Config)
 }
 
 struct Provided<B> {
@@ -151,5 +156,30 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
     }
     fn tick(&mut self, _: Instant, _: &mut Vec<Vec<u8>>) -> Step {
         Step::Continue
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ridl_rt::contract::{CatalogHash, CatalogRef};
+
+    #[test]
+    fn unencodable_attach_is_a_configuration_refusal() {
+        let hash = CatalogHash([7; 32]);
+        for (name, encoding) in [("", Some(1)), ("valid", None)] {
+            assert!(matches!(
+                configured_attach(CatalogRef { name, hash }, encoding),
+                Err(HttpRefusal::Config)
+            ));
+        }
+        assert!(configured_attach(
+            CatalogRef {
+                name: "valid",
+                hash
+            },
+            Some(1)
+        )
+        .is_ok());
     }
 }

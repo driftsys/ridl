@@ -102,6 +102,7 @@ pub(crate) enum HttpRefusal {
     NotFound,
     Conflict,
     Capacity,
+    Config,
 }
 
 /// Checks origin and selects the path's backend before writing 101.
@@ -133,7 +134,7 @@ pub(crate) fn handshake_selected<S: Read + Write>(
             HttpRefusal::Conflict => {
                 b"HTTP/1.1 409 Conflict\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
             }
-            HttpRefusal::Capacity => BAD_REQUEST,
+            HttpRefusal::Capacity | HttpRefusal::Config => BAD_REQUEST,
         };
         return reject(stream, response);
     }

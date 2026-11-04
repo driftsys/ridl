@@ -174,6 +174,8 @@ pub enum Ended {
     ///
     /// With [`serve_provided_selected`], capacity is checked after selection
     /// and before upgrade; a refusal answers HTTP 400 and records the note.
+    /// An unencodable catalog name or an encoding without a frame tag also
+    /// answers HTTP 400 and returns this variant; no matching `Note` exists.
     ConfigRefused,
 }
 

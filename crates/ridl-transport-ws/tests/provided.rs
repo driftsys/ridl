@@ -470,3 +470,24 @@ fn provider_ignores_ping_before_attached_and_answers_it() {
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[1], (10, b"ping".to_vec()));
 }
+
+#[test]
+fn provider_unencodable_catalog_refuses_before_upgrade_without_capacity_note() {
+    for name in ["", "x".repeat(256).leak()] {
+        let catalog = CatalogRef {
+            name,
+            hash: CATALOG.hash,
+        };
+        let backend =
+            Providing::new(Loopback::new(catalog), MemberTable::new(name, catalog.hash)).unwrap();
+        let conn = connection(frame::SUBPROTOCOL_PROVIDER, "/", &[]);
+        let output = conn.output.clone();
+        let notes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = notes.clone();
+        let config = Config::default().with_record(move |note| sink.lock().unwrap().push(*note));
+        assert_eq!(serve_provided(conn, backend, &config), Ended::ConfigRefused);
+        assert!(output.borrow().starts_with(b"HTTP/1.1 400"));
+        assert!(messages(&output.borrow()).is_empty());
+        assert!(notes.lock().unwrap().is_empty());
+    }
+}
