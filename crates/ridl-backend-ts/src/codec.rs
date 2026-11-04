@@ -17,6 +17,9 @@
 //! and hash, the qualified names of the payload types, the text of the rule
 //! codes of the wasm module, and one member table per declared interface,
 //! whose entry carries the member's payload limit when the model records one.
+//! Reply-only stream queries get typed functions over a runtime `StreamSession`:
+//! they verify requests before sending, verify named elements before decoding,
+//! decode raw text as UTF-8, and preserve raw byte streams.
 //!
 //! A named scalar of another package converts by a type assertion, an enum set
 //! of another package by a checking function of the module, and a payload type
@@ -123,9 +126,22 @@ struct RecordField {
 }
 
 /// A payload type of another package, encoded by that package's codec module.
+#[derive(Clone)]
 struct ForeignPayload {
     package: String,
     name: String,
+}
+
+/// A reply-only stream whose request and element codecs were resolved during discovery.
+struct ReplyStream<'a> {
+    interaction: &'a v1::Interaction,
+    query: &'a v1::QueryShape,
+    request: String,
+    element: Option<String>,
+    element_type: String,
+    form: &'static str,
+    bindings: Vec<String>,
+    param_types: Vec<String>,
 }
 
 struct Codec<'a> {
@@ -166,6 +182,9 @@ struct Codec<'a> {
     /// qualified name: each gets a function that checks a value against the
     /// declared bits.
     foreign_strict_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
+    reply_streams: BTreeMap<(u32, u32), ReplyStream<'a>>,
+    stream_omissions: BTreeMap<(u32, u32), String>,
+    needs_domain: bool,
 }
 
 impl<'a> Codec<'a> {
@@ -225,6 +244,9 @@ impl<'a> Codec<'a> {
             foreign_open_sets: BTreeMap::new(),
             reached_strict: BTreeSet::new(),
             foreign_strict_sets: BTreeMap::new(),
+            reply_streams: BTreeMap::new(),
+            stream_omissions: BTreeMap::new(),
+            needs_domain: false,
         };
         let roots = model
             .flatbuffers
@@ -286,10 +308,8 @@ impl<'a> Codec<'a> {
                 else {
                     continue;
                 };
-                // A member that carries a stream has no entry: its request
-                // holds only the non-stream parameters, so it is not a plain
-                // call. The Rust backend leaves it out of the face the same.
                 if !interaction.streams.is_empty() {
+                    codec.discover_stream(interface, slot, interaction, &spelled.declared)?;
                     continue;
                 }
                 let member = interaction
@@ -307,13 +327,24 @@ impl<'a> Codec<'a> {
     /// codec, local or foreign (an interface table over foreign scalars is
     /// one). A package without one, `ridl.std` included, gets no file.
     fn has_codec_payload(&self) -> bool {
-        self.has_local_payload() || !self.foreign_payloads.is_empty()
+        self.has_local_payload()
+            || !self.foreign_payloads.is_empty()
+            || !self.reply_streams.is_empty()
     }
 
     /// Whether the package has a payload type of its own: the one case the
     /// module needs `flatc`'s barrel, `<base>.ts` and the builder.
     fn has_local_payload(&self) -> bool {
         !self.payload_types().is_empty()
+    }
+
+    fn has_domain_types(&self) -> bool {
+        self.needs_domain
+            || self.payload_types().iter().any(|payload| {
+                payload
+                    .declaration
+                    .is_some_and(|d| d.visibility() != v1::Visibility::Internal)
+            })
     }
 
     /// Refuses two declarations of the module that spell the same name: a
@@ -347,6 +378,34 @@ impl<'a> Codec<'a> {
             "RULES",
         ] {
             register(reserved.to_string(), reserved.to_string())?;
+        }
+        if !self.reply_streams.is_empty() {
+            for helper in [
+                "StreamSession",
+                "StreamOptions",
+                "CatalogMismatch",
+                "CodecError",
+                "StreamError",
+                "checkStreamSession",
+                "encodeStreamRequest",
+            ] {
+                register(
+                    helper.to_string(),
+                    format!("runtime stream helper {helper}"),
+                )?;
+            }
+            for (form, helper) in [("elements", "decodeStream"), ("text", "decodeTextStream")] {
+                if self
+                    .reply_streams
+                    .values()
+                    .any(|stream| stream.form == form)
+                {
+                    register(
+                        helper.to_string(),
+                        format!("runtime stream helper {helper}"),
+                    )?;
+                }
+            }
         }
         if self.needs_rule_error() {
             register("RuleError".to_string(), "RuleError".to_string())?;
@@ -434,6 +493,20 @@ impl<'a> Codec<'a> {
         for interface in &self.model.interfaces {
             if let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity {
                 register(spelled.declared.clone(), spelled.declared.clone())?;
+                for slot in &interface.slots {
+                    if let Some(stream) = self.reply_streams.get(&(interface.number, slot.ordinal))
+                    {
+                        let member = stream
+                            .interaction
+                            .name
+                            .as_ref()
+                            .map_or("", |n| n.declared.as_str());
+                        register(
+                            format!("{}_{member}", spelled.declared),
+                            format!("{}.{member}", spelled.declared),
+                        )?;
+                    }
+                }
             }
         }
         Ok(())
@@ -704,7 +777,10 @@ impl<'a> Codec<'a> {
         use v1::r#type::Kind;
         match &ty.kind {
             Some(Kind::Named(reference)) => match self.resolve(reference, qualified)? {
-                Target::Local(_, declaration) => Ok(value_type(declaration)),
+                Target::Local(_, declaration) => {
+                    self.needs_domain = true;
+                    Ok(value_type(declaration))
+                }
                 Target::Foreign(package, declaration) => {
                     self.foreign_types.insert(package.to_string());
                     Ok(format!(
@@ -1117,6 +1193,9 @@ impl<'a> Codec<'a> {
             );
         }
 
+        if !self.reply_streams.is_empty() {
+            self.emit_stream_helpers(&mut body);
+        }
         for interface in &self.model.interfaces {
             let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity else {
                 continue;
@@ -1131,6 +1210,23 @@ impl<'a> Codec<'a> {
         // payload roots are all foreign has no table, so `flatc` writes no
         // barrel for it to import.
         let local = self.has_local_payload();
+        if !self.reply_streams.is_empty() {
+            out.push_str(
+                "import type { StreamSession, StreamOptions } from \"@driftsys/ridl-runtime\";\n",
+            );
+            let mut helpers = vec!["CatalogMismatch", "CodecError", "StreamError"];
+            if self.reply_streams.values().any(|s| s.form == "elements") {
+                helpers.push("decodeStream");
+            }
+            if self.reply_streams.values().any(|s| s.form == "text") {
+                helpers.push("decodeTextStream");
+            }
+            let _ = writeln!(
+                out,
+                "import {{ {} }} from \"@driftsys/ridl-runtime\";",
+                helpers.join(", ")
+            );
+        }
         if local {
             out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
         }
@@ -1140,7 +1236,7 @@ impl<'a> Codec<'a> {
         if !self.used_locals.is_empty() || !self.foreign_payloads.is_empty() {
             out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
         }
-        if local {
+        if self.has_domain_types() {
             let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
         }
         for package in &self.foreign_types {
@@ -1758,6 +1854,277 @@ impl<'a> Codec<'a> {
         Ok(())
     }
 
+    /// Validates stream numbering and shape before selecting supported calls.
+    fn discover_stream(
+        &mut self,
+        interface: &'a v1::Interface,
+        slot: &'a v1::InteractionSlot,
+        interaction: &'a v1::Interaction,
+        name: &str,
+    ) -> Result<(), GenerateError> {
+        let member = interaction
+            .name
+            .as_ref()
+            .map_or("", |n| n.declared.as_str());
+        let path = format!("{name}.{member}");
+        let (params, reply) = match &interaction.shape {
+            Some(v1::interaction::Shape::Query(q)) if interaction.kind() == v1::Kind::Query => (
+                &q.params,
+                matches!(q.reply.as_ref().and_then(|r| r.kind.as_ref()),
+                    Some(v1::reply::Kind::Value(ty)) if matches!(ty.kind, Some(v1::r#type::Kind::Stream(_)))),
+            ),
+            Some(v1::interaction::Shape::Command(c)) if interaction.kind() == v1::Kind::Command => {
+                (&c.params, false)
+            }
+            _ => {
+                return refuse(format!(
+                    "malformed codegen model: `{path}` has streams on a non-call shape"
+                ));
+            }
+        };
+        let uploads = params
+            .iter()
+            .filter(|p| {
+                p.r#type
+                    .as_ref()
+                    .is_some_and(|ty| matches!(ty.kind, Some(v1::r#type::Kind::Stream(_))))
+            })
+            .count();
+        if interaction.streams.len() != uploads + usize::from(reply) {
+            return refuse(format!(
+                "malformed codegen model: `{path}` has inconsistent stream metadata"
+            ));
+        }
+        for (index, stream) in interaction.streams.iter().enumerate() {
+            let expected = index as u32 + u32::from(!reply);
+            let elements = stream.form() == v1::StreamForm::Elements;
+            if stream.no != expected
+                || stream.form() == v1::StreamForm::Unspecified
+                || elements != stream.element.is_some()
+            {
+                return refuse(format!(
+                    "malformed codegen model: `{path}` has invalid stream number, form or element"
+                ));
+            }
+        }
+        let key = (interface.number, slot.ordinal);
+        let omission = if uploads > 1 {
+            Some("multiple parameter streams are not supported")
+        } else if uploads != 0 && reply {
+            Some("duplex streams are not generated yet")
+        } else if uploads != 0 {
+            Some("parameter streams are not generated yet")
+        } else {
+            None
+        };
+        if let Some(reason) = omission {
+            self.stream_omissions.insert(key, reason.to_string());
+            return Ok(());
+        }
+        let Some(v1::interaction::Shape::Query(query)) = &interaction.shape else {
+            return refuse(format!(
+                "malformed codegen model: `{path}` has no streamed query reply"
+            ));
+        };
+        let shape = &interaction.streams[0];
+        let previous_locals = self.used_locals.clone();
+        let previous_payloads = self.foreign_payloads.clone();
+        let previous_types = self.foreign_types.clone();
+        let previous_domain = self.needs_domain;
+        let request = self.payload(query.request.as_ref(), query.request_tuple.as_ref(), &path)?;
+        let (form, element, element_type) = match shape.form() {
+            v1::StreamForm::Elements => {
+                let reference = shape.element.as_ref().expect("validated element");
+                let max_size = shape
+                    .sizes
+                    .as_ref()
+                    .and_then(|sizes| sizes.flatbuffers.as_ref())
+                    .and_then(|state| match state.state {
+                        Some(v1::size_state::State::Bounded(n)) => Some(n),
+                        _ => None,
+                    });
+                let payload = v1::Payload {
+                    r#type: Some(reference.clone()),
+                    flatbuffers_max_size: max_size,
+                    sizes: shape.sizes.clone(),
+                };
+                let element = self.payload(Some(&payload), None, &path)?;
+                let ty = self.ts_type(
+                    &v1::Type {
+                        kind: Some(v1::r#type::Kind::Named(reference.clone())),
+                        ..Default::default()
+                    },
+                    &path,
+                )?;
+                ("elements", Some(element), ty)
+            }
+            v1::StreamForm::Bytes => ("bytes", None, "Uint8Array".to_string()),
+            v1::StreamForm::Text => ("text", None, "string".to_string()),
+            v1::StreamForm::Unspecified => unreachable!("validated form"),
+        };
+        let missing = request
+            .as_ref()
+            .err()
+            .or_else(|| element.as_ref().and_then(|e| e.as_ref().err()));
+        if let Some(missing) = missing {
+            self.stream_omissions
+                .insert(key, format!("{missing} has no finite FlatBuffers bound"));
+            self.used_locals = previous_locals;
+            self.foreign_payloads = previous_payloads;
+            self.foreign_types = previous_types;
+            self.needs_domain = previous_domain;
+            return Ok(());
+        }
+        let mut param_types = Vec::new();
+        for param in &query.params {
+            let Some(ty) = &param.r#type else {
+                return refuse(format!(
+                    "malformed codegen model: `{path}` has a parameter without a type"
+                ));
+            };
+            let mut spelled = self.ts_type(ty, &path)?;
+            if ty.optional {
+                spelled.push_str(" | undefined");
+            }
+            param_types.push(spelled);
+        }
+        self.reply_streams.insert(
+            key,
+            ReplyStream {
+                interaction,
+                query,
+                request: request.expect("bounded request"),
+                element: element.map(|e| e.expect("bounded element")),
+                element_type,
+                form,
+                bindings: stream_bindings(&query.params, name),
+                param_types,
+            },
+        );
+        Ok(())
+    }
+
+    fn emit_stream_helpers(&self, out: &mut String) {
+        out.push_str("\nfunction checkStreamSession(session: StreamSession, limit: number | undefined): void {\n  const hash = session.codec.catalogHash;\n  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {\n    throw new CatalogMismatch(\n      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n      Array.from(hash, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n    );\n  }\n  if (limit === 0) throw new StreamError({ category: \"corrupt\" });\n}\n");
+        out.push_str("\nfunction encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {\n  let bytes: Uint8Array;\n  try {\n    bytes = payload.encode(value);\n  } catch (error) {\n");
+        if self.needs_rule_error() {
+            out.push_str("    if (error instanceof RuleError) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule } });\n    }\n");
+        } else {
+            // The binding is required for shared rendering, but unused without RuleError.
+            out.push_str("    void error;\n");
+        }
+        out.push_str("    throw new StreamError({ category: \"corrupt\" });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
+    }
+
+    fn emit_reply_stream(
+        &self,
+        out: &mut String,
+        name: &str,
+        member: &str,
+        stream: &ReplyStream<'a>,
+    ) {
+        let params = stream
+            .bindings
+            .iter()
+            .zip(&stream.param_types)
+            .map(|(binding, ty)| format!("{binding}: {ty}"));
+        let mut signature = vec!["session: StreamSession".to_string()];
+        signature.extend(params);
+        signature.push("opts: StreamOptions".to_string());
+        out.push('\n');
+        out.push_str(&self.stream_docs(stream));
+        let _ = writeln!(
+            out,
+            "export function {name}_{member}({}): ReadableStream<{}> {{",
+            signature.join(", "),
+            stream.element_type
+        );
+        let _ = writeln!(out, "  const entry = {name}.{member};");
+        let limit = if stream.interaction.limit.is_some() {
+            "entry.limit"
+        } else {
+            "undefined"
+        };
+        let _ = writeln!(out, "  checkStreamSession(session, {limit});");
+        out.push_str("  const requestType = session.codec.typeId(entry.request.type);\n");
+        if stream.element.is_some() {
+            out.push_str("  const element = entry.streams[0].element;\n  const elementType = session.codec.typeId(element.type);\n");
+        }
+        let value = if stream.query.request.is_some() {
+            stream.bindings[0].clone()
+        } else {
+            let fields = stream
+                .query
+                .params
+                .iter()
+                .zip(&stream.bindings)
+                .map(|(p, b)| {
+                    format!(
+                        "{}: {b}",
+                        p.name.as_ref().map_or("", |n| n.declared.as_str())
+                    )
+                })
+                .collect::<Vec<_>>();
+            format!("{{ {} }}", fields.join(", "))
+        };
+        let _ = writeln!(
+            out,
+            "  const args = encodeStreamRequest(session, entry.request, requestType, {value}, {limit});"
+        );
+        out.push_str(
+            "  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);\n",
+        );
+        match stream.form {
+            "elements" => out.push_str("  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));\n"),
+            "text" => out.push_str("  return raw.pipeThrough(decodeTextStream());\n"),
+            _ => out.push_str("  return raw;\n"),
+        }
+        out.push_str("}\n");
+    }
+
+    /// Reuses the domain renderer for canonical rules, links and doc tags.
+    fn stream_docs(&self, stream: &ReplyStream<'a>) -> String {
+        let package = ridl_ir::v2::Package {
+            name: self.package.to_string(),
+            ..Default::default()
+        };
+        let output = crate::Output {
+            imports: self.foreign_types.clone(),
+            emitted: self
+                .model
+                .declarations
+                .iter()
+                .filter(|d| self.has_domain_types() && d.visibility() != v1::Visibility::Internal)
+                .map(|d| declared_name(d).to_string())
+                .collect(),
+        };
+        let ctx = crate::Ctx::new(&package, self.model, output);
+        let i = stream.interaction;
+        let parts = crate::TsDocParts {
+            doc: &i.doc,
+            links: &i.links,
+            see: &i.see,
+            since: &i.since,
+            rules: &i.rules,
+            deprecated: i.deprecated.as_deref(),
+        };
+        let mut tags = Vec::new();
+        for (param, binding) in stream.query.params.iter().zip(&stream.bindings) {
+            let doc = crate::linked(&ctx, &param.doc, &param.links);
+            if !doc.is_empty() {
+                tags.push(format!("@param {binding} - {doc}"));
+            }
+        }
+        let mut doc = crate::jsdoc(&ctx, "", &parts, &tags);
+        // Local domain types live in the imported namespace of a codec module.
+        for declaration in &self.model.declarations {
+            let name = declared_name(declaration);
+            doc = doc.replace(&format!("{{@link {name}}}"), &format!("{{@link t.{name}}}"));
+            doc = doc.replace(&format!("{{@link {name}."), &format!("{{@link t.{name}."));
+        }
+        doc
+    }
+
     fn emit_interface(
         &mut self,
         out: &mut String,
@@ -1781,9 +2148,26 @@ impl<'a> Codec<'a> {
                 .name
                 .as_ref()
                 .map_or("", |name| name.declared.as_str());
-            // A member that carries a stream has no entry (see `Codec::new`).
             if !interaction.streams.is_empty() {
-                let _ = writeln!(out, "  // {member} has no entry: it carries a stream");
+                let key = (interface.number, slot.ordinal);
+                if let Some(stream) = self.reply_streams.get(&key) {
+                    let element = stream
+                        .element
+                        .as_ref()
+                        .map(|e| format!(", element: {e}"))
+                        .unwrap_or_default();
+                    let limit = interaction
+                        .limit
+                        .map(|n| format!(", limit: {n}"))
+                        .unwrap_or_default();
+                    let _ = writeln!(
+                        out,
+                        "  {member}: {{ iface: {number}, ord: {}, kind: \"query\", request: {}, streams: [{{ no: 0, form: \"{}\"{element} }}]{limit} }},",
+                        slot.ordinal, stream.request, stream.form
+                    );
+                } else if let Some(reason) = self.stream_omissions.get(&key) {
+                    let _ = writeln!(out, "  // {member} has no entry: {reason}");
+                }
                 continue;
             }
             let mut roles = Vec::new();
@@ -1829,6 +2213,16 @@ impl<'a> Codec<'a> {
             );
         }
         out.push_str("} as const;\n");
+        for slot in &interface.slots {
+            if let Some(stream) = self.reply_streams.get(&(number, slot.ordinal)) {
+                let member = stream
+                    .interaction
+                    .name
+                    .as_ref()
+                    .map_or("", |n| n.declared.as_str());
+                self.emit_reply_stream(out, name, member, stream);
+            }
+        }
         Ok(())
     }
 
@@ -1899,7 +2293,7 @@ impl<'a> Codec<'a> {
     /// tuple.
     fn payload(
         &mut self,
-        named: Option<&'a v1::Payload>,
+        named: Option<&v1::Payload>,
         tuple: Option<&v1::TupleRef>,
         path: &str,
     ) -> Result<Result<String, String>, GenerateError> {
@@ -1987,6 +2381,101 @@ impl<'a> Codec<'a> {
              module does not carry"
         ))
     }
+}
+
+/// Allocates local bindings without shadowing generated locals or helper imports.
+fn stream_bindings(params: &[v1::Param], interface: &str) -> Vec<String> {
+    let reserved = [
+        "session",
+        "opts",
+        "entry",
+        "element",
+        "requestType",
+        "elementType",
+        "args",
+        "raw",
+        "bytes",
+        "checkStreamSession",
+        "encodeStreamRequest",
+        "decodeStream",
+        "decodeTextStream",
+        "undefined",
+        "t",
+        "await",
+        "yield",
+        "arguments",
+        "eval",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "function",
+        "if",
+        "implements",
+        "import",
+        "in",
+        "instanceof",
+        "interface",
+        "let",
+        "new",
+        "null",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "static",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "typeof",
+        "var",
+        "void",
+        "while",
+        "with",
+    ];
+    let mut occupied: HashSet<String> = reserved.into_iter().map(str::to_string).collect();
+    occupied.insert(interface.to_string());
+    let declared: HashSet<&str> = params
+        .iter()
+        .filter_map(|p| p.name.as_ref())
+        .map(|n| n.declared.as_str())
+        .collect();
+    params
+        .iter()
+        .map(|param| {
+            let name = param.name.as_ref().map_or("", |n| n.declared.as_str());
+            let mut binding = name.to_string();
+            let mut suffix = 1;
+            if occupied.contains(&binding) {
+                loop {
+                    binding = format!("{name}{suffix}");
+                    suffix += 1;
+                    if !declared.contains(binding.as_str()) && !occupied.contains(&binding) {
+                        break;
+                    }
+                }
+            }
+            occupied.insert(binding.clone());
+            binding
+        })
+        .collect()
 }
 
 /// Refuses an optional `ty` at a position that is not a table field, as the

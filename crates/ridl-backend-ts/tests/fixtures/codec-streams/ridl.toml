@@ -1,0 +1,13 @@
+[package]
+name = "streams.demo"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+
+[backend.typescript]
+codec = true
+
+[limits.interaction]
+"Feed.readBytes" = 512
+"Feed.zero" = 64

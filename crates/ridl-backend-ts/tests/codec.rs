@@ -1234,9 +1234,9 @@ interface Cabin {
 }
 ";
 
-/// A member that carries a stream is left out of the interface table, as the
-/// Rust backend leaves it out of the face: its request holds only the
-/// non-stream parameters, so a plain call would carry an incomplete request.
+/// A parameter-stream member stays out of the interface table until its
+/// typed upload callable is generated: its request holds only the non-stream
+/// parameters, so a plain call would carry an incomplete request.
 /// A member of the same interface without a stream keeps its entry. Every
 /// stream of the package is a parameter, so the members would otherwise have
 /// a representable entry: without the skip, the table lists them.
@@ -1262,7 +1262,7 @@ fn a_stream_member_has_no_entry_in_the_interface_table() {
             !source.contains(&format!("  {member}: {{")),
             "`{member}` has an entry in:\n{source}"
         );
-        let note = format!("  // {member} has no entry: it carries a stream\n");
+        let note = format!("  // {member} has no entry: parameter streams are not generated yet\n");
         assert!(
             source.contains(&note),
             "the skip of `{member}` has no note in:\n{source}"
@@ -1270,8 +1270,8 @@ fn a_stream_member_has_no_entry_in_the_interface_table() {
     }
 }
 
-/// A package whose members reply with a stream, and take one, is accepted:
-/// the codec does not try to represent the payload of a stream member.
+/// A package with reply streams and parameter streams is accepted: reply-only
+/// queries get typed functions while uploads remain explicitly omitted.
 #[test]
 fn a_package_with_stream_replies_is_accepted() {
     let model = codegen::lower(&rust_fixture("streams.ridl"), &[]);
@@ -1722,5 +1722,399 @@ fn foreign_open_sets_of_one_name_check_their_own_width() {
     assert!(
         source.contains("function pack_veh_b_Flags(value: veh_b.Flags): number {\n  if (!Number.isInteger(value) || value < 0 || value > 65535) {"),
         "{source}"
+    );
+}
+
+/// The stream fixture is compiled through the manifest so limits reach the model.
+fn streams_model() -> v1::Model {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-streams");
+    let output = ridlc::compile_workspace(&mut db, &entry).expect("load stream fixture");
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let package = &output
+        .checked
+        .iter()
+        .find(|p| p.ir.name == "streams.demo")
+        .unwrap()
+        .ir;
+    codegen::lower(package, &[&output.std_ir])
+}
+
+fn stream_member_mut<'a>(model: &'a mut v1::Model, member: &str) -> &'a mut v1::Interaction {
+    model
+        .interfaces
+        .iter_mut()
+        .flat_map(|i| &mut i.slots)
+        .find_map(|slot| match &mut slot.occupant {
+            Some(v1::interaction_slot::Occupant::Interaction(i))
+                if i.name.as_ref().unwrap().declared == member =>
+            {
+                Some(i)
+            }
+            _ => None,
+        })
+        .expect("stream member")
+}
+
+#[test]
+fn stream_reply_exports_match_model() {
+    let model = streams_model();
+    let source = module(&model, "streams.demo");
+    // This independent list includes every live reply-only stream and no upload.
+    let expected = [
+        ("Feed_scalars", "t.Count"),
+        ("Feed_structs", "t.Chunk"),
+        ("Feed_unions", "t.Choice"),
+        ("Feed_statuses", "t.StatusValue"),
+        ("Feed_data", "t.Data"),
+        ("Feed_labels", "t.Text"),
+        ("Feed_readBytes", "Uint8Array"),
+        ("Feed_text", "string"),
+        ("Feed_zero", "Uint8Array"),
+        ("Feed_fetch", "Uint8Array"),
+        ("Other_fetch", "Uint8Array"),
+    ];
+    let actual: BTreeSet<_> = exported_functions(&source, "")
+        .into_iter()
+        .filter(|name| !name.starts_with("encode") && !name.starts_with("decode"))
+        .collect();
+    assert_eq!(
+        actual,
+        expected.iter().map(|(name, _)| name.to_string()).collect()
+    );
+    for (name, ty) in expected {
+        let signature = source
+            .lines()
+            .find(|line| line.starts_with(&format!("export function {name}(")))
+            .unwrap();
+        assert!(
+            signature.ends_with(&format!("): ReadableStream<{ty}> {{")),
+            "{signature}"
+        );
+    }
+    for interface in &model.interfaces {
+        for slot in &interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(i)) = &slot.occupant else {
+                continue;
+            };
+            if i.streams.len() != 1 || i.streams[0].no != 0 {
+                continue;
+            }
+            let name = &i.name.as_ref().unwrap().declared;
+            let v1::interface::Identity::Declared(interface_name) =
+                interface.identity.as_ref().unwrap()
+            else {
+                continue;
+            };
+            let table_start = source
+                .find(&format!("export const {} = {{", interface_name.declared))
+                .unwrap();
+            let entry = source[table_start..]
+                .lines()
+                .find(|line| line.starts_with(&format!("  {name}: {{")))
+                .unwrap();
+            assert!(
+                entry.contains(&format!(
+                    "iface: {}, ord: {}, kind: \"query\"",
+                    interface.number, slot.ordinal
+                )),
+                "{entry}"
+            );
+            assert!(entry.contains("streams: [{ no: 0, form:"), "{entry}");
+        }
+    }
+    assert!(!source.contains("ridl-transport-ws"));
+    insta::assert_snapshot!("streams", source);
+}
+
+#[test]
+fn stream_tables_keep_limits_and_roles() {
+    let source = module(&streams_model(), "streams.demo");
+    let entry = source
+        .lines()
+        .find(|line| line.starts_with("  readBytes: {"))
+        .expect("stream entry");
+    assert!(entry.contains("limit: 512"), "{entry}");
+    assert!(
+        entry.contains("request: codecCount") && entry.contains("form: \"bytes\""),
+        "{entry}"
+    );
+    assert!(!entry.contains("reply:"), "{entry}");
+    let entry = source
+        .lines()
+        .find(|line| line.starts_with("  structs: {"))
+        .unwrap();
+    assert!(
+        entry.contains("element: codecChunk") && !entry.contains("reply:"),
+        "{entry}"
+    );
+    let entry = source
+        .lines()
+        .find(|line| line.starts_with("  latest: {"))
+        .unwrap();
+    assert!(
+        entry.contains("reply: codecCount") && !entry.contains("streams:"),
+        "{entry}"
+    );
+    let output = ridlc::compile(
+        "raw.ridl",
+        "package raw.only\ninterface Raw { query fetch(): <bytes> @[..50ms] }",
+    );
+    let raw = module(&codegen::lower(&output.package, &[]), "raw.only");
+    assert!(raw.contains("export function Raw_fetch("), "{raw}");
+    assert!(
+        !raw.contains("import type * as t"),
+        "induced requests use no domain namespace: {raw}"
+    );
+    // The induced empty request has a flatc table, so this barrel does exist.
+    assert!(raw.contains("import * as fb from \"./raw/only.js\""));
+}
+
+#[test]
+fn stream_names_and_unsupported_shapes_are_explicit() {
+    let mut model = streams_model();
+    let v1::interaction::Shape::Query(q) = stream_member_mut(&mut model, "unions")
+        .shape
+        .as_mut()
+        .unwrap()
+    else {
+        panic!()
+    };
+    q.params[2].r#type.as_mut().unwrap().optional = true;
+    let tuple = q.request_tuple.as_ref().unwrap().index as usize;
+    model.tuples[tuple].fields[2]
+        .r#type
+        .as_mut()
+        .unwrap()
+        .optional = true;
+    let source = module(&model, "streams.demo");
+    for (member, reason) in [
+        ("upload", "parameter streams are not generated yet"),
+        ("duplex", "duplex streams are not generated yet"),
+        ("multiple", "multiple parameter streams are not supported"),
+    ] {
+        assert!(
+            source.contains(&format!("// {member} has no entry: {reason}")),
+            "{source}"
+        );
+        assert!(!source.contains(&format!("export function Feed_{member}(")));
+        assert!(!source.contains(&format!("  {member}: {{")));
+    }
+    assert!(
+        source.contains(
+            "session2: t.Count, session1: t.Count, opts1: t.Count | undefined, opts: StreamOptions"
+        ),
+        "{source}"
+    );
+    // Two concatenations can collide even when their source paths differ.
+    model.interfaces[0].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+        declared: "A_B".into(),
+        ..Default::default()
+    }));
+    stream_member_mut(&mut model, "scalars")
+        .name
+        .as_mut()
+        .unwrap()
+        .declared = "c".into();
+    model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+        declared: "A".into(),
+        ..Default::default()
+    }));
+    let last = model.interfaces[1].slots[0].occupant.as_mut().unwrap();
+    let v1::interaction_slot::Occupant::Interaction(i) = last else {
+        panic!()
+    };
+    i.name.as_mut().unwrap().declared = "B_c".into();
+    let error = refusal(&model);
+    assert!(
+        error.contains("A_B.c") && error.contains("A.B_c"),
+        "{error}"
+    );
+    let mut model = streams_model();
+    model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+        declared: "decodeStream".into(),
+        ..Default::default()
+    }));
+    let error = refusal(&model);
+    assert!(
+        error.contains("decodeStream") && error.contains("runtime"),
+        "{error}"
+    );
+}
+
+#[test]
+fn generated_stream_docs_render_model_contract() {
+    let mut model = streams_model();
+    let i = stream_member_mut(&mut model, "structs");
+    // Inject canonical model data to isolate rendering from parser behavior.
+    i.doc = "Reads Count.".into();
+    i.links = vec![v1::DocLink {
+        offset: 6,
+        len: 5,
+        target: "streams.demo.Count".into(),
+        ..Default::default()
+    }];
+    i.rules = vec![v1::Rule {
+        text: "response bound <= 50000 us".into(),
+        ..Default::default()
+    }];
+    i.since = vec!["1.2.0".into()];
+    i.deprecated = Some("Use scalars.".into());
+    let v1::interaction::Shape::Query(q) = i.shape.as_mut().unwrap() else {
+        panic!()
+    };
+    q.params[0].doc = "The first Count.".into();
+    q.params[0].links = vec![v1::DocLink {
+        offset: 10,
+        len: 5,
+        target: "streams.demo.Count".into(),
+        ..Default::default()
+    }];
+    let source = module(&model, "streams.demo");
+    let signature = source
+        .find("export function Feed_structs(")
+        .expect("callable");
+    let start = source[..signature].rfind("/**").unwrap();
+    let doc = &source[start..signature];
+    for expected in [
+        "Reads {@link t.Count}.",
+        "@remarks",
+        "Rules:",
+        "response bound <= 50000 us",
+        "@since 1.2.0",
+        "@deprecated Use scalars.",
+        "@param seed - The first {@link t.Count}.",
+    ] {
+        assert!(doc.contains(expected), "missing {expected}: {doc}");
+    }
+    assert!(
+        !doc.contains("github.com") && !doc.contains("rejects") && !doc.contains("range 0"),
+        "{doc}"
+    );
+    let sig = source.find("export function Feed_unions(").unwrap();
+    let start = source[..sig].rfind("/**").unwrap();
+    assert!(source[start..sig].contains("@param session2 - The session number."));
+    assert!(source[start..sig].contains("@param opts1 - A selection."));
+    // A codec with only an induced request has no imported domain namespace.
+    let mut model = streams_model();
+    let i = stream_member_mut(&mut model, "text");
+    i.doc = "Reads Count.".into();
+    i.links = vec![v1::DocLink {
+        offset: 6,
+        len: 5,
+        target: "streams.demo.Count".into(),
+        ..Default::default()
+    }];
+    let v1::interaction::Shape::Query(q) = i.shape.as_ref().unwrap() else {
+        panic!()
+    };
+    let tuple = q.request_tuple.as_ref().unwrap().index;
+    model.interfaces.truncate(1);
+    model.interfaces[0].slots.retain(|slot| matches!(&slot.occupant,
+        Some(v1::interaction_slot::Occupant::Interaction(i)) if i.name.as_ref().unwrap().declared == "text"));
+    model
+        .flatbuffers
+        .as_mut()
+        .unwrap()
+        .roots
+        .retain(|r| r.tuple == Some(tuple));
+    let source = module(&model, "streams.demo");
+    assert!(!source.contains("import type * as t"));
+    assert!(source.contains("Reads `streams.demo.Count`."), "{source}");
+}
+
+#[test]
+fn stream_codec_limits_and_malformed_metadata_are_explicit() {
+    let mut model = streams_model();
+    let root = model
+        .declarations
+        .iter()
+        .position(|d| d.name.as_ref().unwrap().declared == "Count")
+        .unwrap();
+    model
+        .flatbuffers
+        .as_mut()
+        .unwrap()
+        .roots
+        .iter_mut()
+        .filter(|r| r.tuple.is_none() && r.declaration as usize == root)
+        .for_each(|r| r.bound = None);
+    let source = module(&model, "streams.demo");
+    assert!(
+        source.contains(
+            "// scalars has no entry: streams.demo.Count has no finite FlatBuffers bound"
+        ),
+        "{source}"
+    );
+    assert!(!source.contains("export function Feed_scalars("));
+    // Omitting the only stream must not leave unused request codec constants.
+    let scalar_slot = model.interfaces[0].slots.iter().find(|slot| matches!(&slot.occupant,
+        Some(v1::interaction_slot::Occupant::Interaction(i)) if i.name.as_ref().unwrap().declared == "scalars")).unwrap().clone();
+    model.interfaces.truncate(1);
+    model.interfaces[0].slots = vec![scalar_slot];
+    let omitted = module(&model, "streams.demo");
+    assert!(
+        !omitted.contains("const codecFeedScalarsParams"),
+        "{omitted}"
+    );
+    let mut model = streams_model();
+    stream_member_mut(&mut model, "scalars").streams[0].form = v1::StreamForm::Unspecified as i32;
+    assert!(refusal(&model).contains("malformed codegen model"));
+    let mut model = streams_model();
+    stream_member_mut(&mut model, "scalars").streams[0].element = None;
+    assert!(refusal(&model).contains("malformed codegen model"));
+    let mut model = streams_model();
+    stream_member_mut(&mut model, "scalars").streams[0].no = 2;
+    assert!(refusal(&model).contains("malformed codegen model"));
+    let mut model = streams_model();
+    let stream = stream_member_mut(&mut model, "scalars").streams[0].clone();
+    stream_member_mut(&mut model, "scalars")
+        .streams
+        .push(stream);
+    assert!(refusal(&model).contains("malformed codegen model"));
+    for kind in [
+        v1::declaration::Kind::Struct(v1::Struct::default()),
+        v1::declaration::Kind::Union(v1::Union::default()),
+        v1::declaration::Kind::Enum(v1::Enum::default()),
+    ] {
+        let mut model = streams_model();
+        let reference = foreign_thing(&mut model, kind);
+        stream_member_mut(&mut model, "scalars").streams[0].element = Some(reference);
+        let error = refusal(&model);
+        assert!(
+            error.contains("veh.other.Thing") && error.contains("another package"),
+            "{error}"
+        );
+    }
+    for kind in [
+        v1::declaration::Kind::Scalar(v1::Scalar::default()),
+        v1::declaration::Kind::EnumSet(v1::EnumSet {
+            width: v1::IntWidth::U8 as i32,
+            ..Default::default()
+        }),
+    ] {
+        let mut model = streams_model();
+        let reference = foreign_thing(&mut model, kind);
+        stream_member_mut(&mut model, "scalars").streams[0].element = Some(reference);
+        let source = module(&model, "streams.demo");
+        assert!(
+            source.contains("element: codecVehOtherThing")
+                && source.contains("import * as veh_other_codec"),
+            "{source}"
+        );
+    }
+    let mut model = streams_model();
+    model.declarations[root].visibility = v1::Visibility::Internal as i32;
+    let error = refusal(&model);
+    assert!(
+        error.contains("internal") && error.contains("Count"),
+        "{error}"
     );
 }

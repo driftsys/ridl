@@ -1,0 +1,729 @@
+---
+source: crates/ridl-backend-ts/tests/codec.rs
+expression: source
+---
+import type { StreamSession, StreamOptions } from "@driftsys/ridl-runtime";
+import { CatalogMismatch, CodecError, StreamError, decodeStream, decodeTextStream } from "@driftsys/ridl-runtime";
+import * as flatbuffers from "flatbuffers";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
+import type * as t from "./streams.demo.js";
+// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
+// of this file.
+import * as fb from "./streams/demo.js";
+
+/** Thrown for a value the codec refuses, with the text of the rule it breaks. */
+export class RuleError extends RangeError {
+  readonly rule: (typeof RULES)[number];
+  constructor(rule: (typeof RULES)[number], message: string) {
+    super(message);
+    this.name = "RuleError";
+    this.rule = rule;
+  }
+}
+
+/** The name of the catalog unit this package belongs to. */
+export const CATALOG_NAME = "streams.demo";
+/** The hash of the catalog unit, which the wasm module carries. */
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([86, 34, 78, 114, 55, 240, 150, 35, 158, 50, 119, 109, 104, 190, 39, 84, 88, 98, 245, 107, 103, 10, 161, 71, 113, 155, 134, 116, 187, 144, 198, 56]);
+/** The qualified names of the payload types of this package, which name the wasm type ids. */
+export const PAYLOAD_TYPES = [
+  "streams.demo.Choice",
+  "streams.demo.Chunk",
+  "streams.demo.Count",
+  "streams.demo.Data",
+  "streams.demo.FeedDataParams",
+  "streams.demo.FeedDuplexParams",
+  "streams.demo.FeedFetchParams",
+  "streams.demo.FeedLabelsParams",
+  "streams.demo.FeedLatestParams",
+  "streams.demo.FeedMultipleParams",
+  "streams.demo.FeedScalarsParams",
+  "streams.demo.FeedStatusesParams",
+  "streams.demo.FeedTextParams",
+  "streams.demo.FeedUnionsParams",
+  "streams.demo.FeedUploadParams",
+  "streams.demo.FeedZeroParams",
+  "streams.demo.OtherFetchParams",
+  "streams.demo.Status",
+  "streams.demo.Text",
+] as const;
+/** The text of each rule code the wasm module reports, rule code n at index n - 2. */
+export const RULES = ["length", "pattern", "range", "step", "unique", "utf8", "variant"] as const;
+
+/** The induced tuple of `Feed.scalars`. */
+export type FeedScalarsParams = Record<string, never>;
+
+/** The induced tuple of `Feed.unions`. */
+export interface FeedUnionsParams {
+  session: t.Count;
+  session1: t.Count;
+  opts: t.Count;
+}
+
+/** The induced tuple of `Feed.statuses`. */
+export type FeedStatusesParams = Record<string, never>;
+
+/** The induced tuple of `Feed.data`. */
+export type FeedDataParams = Record<string, never>;
+
+/** The induced tuple of `Feed.labels`. */
+export type FeedLabelsParams = Record<string, never>;
+
+/** The induced tuple of `Feed.text`. */
+export type FeedTextParams = Record<string, never>;
+
+/** The induced tuple of `Feed.zero`. */
+export type FeedZeroParams = Record<string, never>;
+
+/** The induced tuple of `Feed.latest`. */
+export type FeedLatestParams = Record<string, never>;
+
+/** The induced tuple of `Feed.upload`. */
+export type FeedUploadParams = Record<string, never>;
+
+/** The induced tuple of `Feed.duplex`. */
+export type FeedDuplexParams = Record<string, never>;
+
+/** The induced tuple of `Feed.multiple`. */
+export type FeedMultipleParams = Record<string, never>;
+
+/** The induced tuple of `Feed.fetch`. */
+export type FeedFetchParams = Record<string, never>;
+
+/** The induced tuple of `Other.fetch`. */
+export type OtherFetchParams = Record<string, never>;
+
+/** Encodes a `streams.demo.Count` payload. */
+export function encodeCount(value: t.Count): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.CountBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Count` payload the codec has verified. */
+export function decodeCount(bytes: Uint8Array): t.Count {
+  return fb.CountBox.getRootAsCountBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Count;
+}
+
+/** Encodes a `streams.demo.Data` payload. */
+export function encodeData(value: t.Data): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.DataBoxT(Array.from(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Data` payload the codec has verified. */
+export function decodeData(bytes: Uint8Array): t.Data {
+  return Uint8Array.from(fb.DataBox.getRootAsDataBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Data;
+}
+
+/** Encodes a `streams.demo.Text` payload. */
+export function encodeText(value: t.Text): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.TextBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Text` payload the codec has verified. */
+export function decodeText(bytes: Uint8Array): t.Text {
+  return fb.TextBox.getRootAsTextBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Text;
+}
+
+/** Encodes a `streams.demo.Chunk` payload. */
+export function encodeChunk(value: t.Chunk): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packChunk(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Chunk` payload the codec has verified. */
+export function decodeChunk(bytes: Uint8Array): t.Chunk {
+  return unpackChunk(fb.Chunk.getRootAsChunk(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packChunk(value: t.Chunk): fb.ChunkT {
+  const object = new fb.ChunkT();
+  object.value = value.value;
+  return object;
+}
+function unpackChunk(object: fb.ChunkT): t.Chunk {
+  return {
+    value: object.value as t.Count,
+  };
+}
+
+/** Encodes a `streams.demo.Choice` payload. */
+export function encodeChoice(value: t.Choice): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packChoice(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Choice` payload the codec has verified. */
+export function decodeChoice(bytes: Uint8Array): t.Choice {
+  return unpackChoice(fb.Choice.getRootAsChoice(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packChoice(value: t.Choice): fb.ChoiceT {
+  switch (value.kind) {
+    case "ok":
+      return new fb.ChoiceT(fb.ChoiceUnion.ok, packChunk(value.value));
+    case "err":
+      return new fb.ChoiceT(fb.ChoiceUnion.err, new fb.ChoiceErrBoxT(value.value));
+  }
+}
+function unpackChoice(object: fb.ChoiceT): t.Choice {
+  switch (object.valueType) {
+    case fb.ChoiceUnion.ok:
+      return { kind: "ok", value: unpackChunk(object.value as fb.ChunkT) };
+    case fb.ChoiceUnion.err:
+      return { kind: "err", value: (object.value as fb.ChoiceErrBoxT).value as t.Count };
+    default:
+      throw new RangeError("union streams.demo.Choice carries no arm");
+  }
+}
+
+/** Encodes a `streams.demo.Status` payload. */
+export function encodeStatus(value: t.StatusValue): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.StatusBoxT(packStatus(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Status` payload the codec has verified. */
+export function decodeStatus(bytes: Uint8Array): t.StatusValue {
+  return unpackStatus(fb.StatusBox.getRootAsStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function packStatus(value: t.StatusValue): bigint {
+  const raw = typeof value === "number" ? value : value.unknown;
+  if (!Number.isSafeInteger(raw)) {
+    throw new RuleError("variant", `value ${raw} of streams.demo.Status is not a safe integer`);
+  }
+  return BigInt(raw);
+}
+function unpackStatus(raw: bigint | null): t.StatusValue {
+  const value = raw ?? 0n;
+  if (value > 9007199254740991n || value < -9007199254740991n) {
+    throw new RuleError("variant", `value ${value} of streams.demo.Status is outside the safe integers`);
+  }
+  const n = Number(value);
+  return ([0, 1] as readonly number[]).includes(n)
+    ? n as t.Status
+    : { unknown: n };
+}
+
+/** Encodes a `streams.demo.FeedScalarsParams` payload. */
+export function encodeFeedScalarsParams(value: FeedScalarsParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedScalarsParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedScalarsParams` payload the codec has verified. */
+export function decodeFeedScalarsParams(bytes: Uint8Array): FeedScalarsParams {
+  return unpackFeedScalarsParams(fb.FeedScalarsParams.getRootAsFeedScalarsParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedScalarsParams(_value: FeedScalarsParams): fb.FeedScalarsParamsT {
+  const tuple = new fb.FeedScalarsParamsT();
+  return tuple;
+}
+function unpackFeedScalarsParams(_object: fb.FeedScalarsParamsT): FeedScalarsParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedUnionsParams` payload. */
+export function encodeFeedUnionsParams(value: FeedUnionsParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedUnionsParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedUnionsParams` payload the codec has verified. */
+export function decodeFeedUnionsParams(bytes: Uint8Array): FeedUnionsParams {
+  return unpackFeedUnionsParams(fb.FeedUnionsParams.getRootAsFeedUnionsParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedUnionsParams(value: FeedUnionsParams): fb.FeedUnionsParamsT {
+  const tuple = new fb.FeedUnionsParamsT();
+  tuple.field1 = value.session;
+  tuple.field2 = value.session1;
+  tuple.field3 = value.opts;
+  return tuple;
+}
+function unpackFeedUnionsParams(object: fb.FeedUnionsParamsT): FeedUnionsParams {
+  return { session: object.field1 as t.Count, session1: object.field2 as t.Count, opts: object.field3 as t.Count };
+}
+
+/** Encodes a `streams.demo.FeedStatusesParams` payload. */
+export function encodeFeedStatusesParams(value: FeedStatusesParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedStatusesParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedStatusesParams` payload the codec has verified. */
+export function decodeFeedStatusesParams(bytes: Uint8Array): FeedStatusesParams {
+  return unpackFeedStatusesParams(fb.FeedStatusesParams.getRootAsFeedStatusesParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedStatusesParams(_value: FeedStatusesParams): fb.FeedStatusesParamsT {
+  const tuple = new fb.FeedStatusesParamsT();
+  return tuple;
+}
+function unpackFeedStatusesParams(_object: fb.FeedStatusesParamsT): FeedStatusesParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedDataParams` payload. */
+export function encodeFeedDataParams(value: FeedDataParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedDataParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedDataParams` payload the codec has verified. */
+export function decodeFeedDataParams(bytes: Uint8Array): FeedDataParams {
+  return unpackFeedDataParams(fb.FeedDataParams.getRootAsFeedDataParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedDataParams(_value: FeedDataParams): fb.FeedDataParamsT {
+  const tuple = new fb.FeedDataParamsT();
+  return tuple;
+}
+function unpackFeedDataParams(_object: fb.FeedDataParamsT): FeedDataParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedLabelsParams` payload. */
+export function encodeFeedLabelsParams(value: FeedLabelsParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedLabelsParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedLabelsParams` payload the codec has verified. */
+export function decodeFeedLabelsParams(bytes: Uint8Array): FeedLabelsParams {
+  return unpackFeedLabelsParams(fb.FeedLabelsParams.getRootAsFeedLabelsParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedLabelsParams(_value: FeedLabelsParams): fb.FeedLabelsParamsT {
+  const tuple = new fb.FeedLabelsParamsT();
+  return tuple;
+}
+function unpackFeedLabelsParams(_object: fb.FeedLabelsParamsT): FeedLabelsParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedTextParams` payload. */
+export function encodeFeedTextParams(value: FeedTextParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedTextParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedTextParams` payload the codec has verified. */
+export function decodeFeedTextParams(bytes: Uint8Array): FeedTextParams {
+  return unpackFeedTextParams(fb.FeedTextParams.getRootAsFeedTextParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedTextParams(_value: FeedTextParams): fb.FeedTextParamsT {
+  const tuple = new fb.FeedTextParamsT();
+  return tuple;
+}
+function unpackFeedTextParams(_object: fb.FeedTextParamsT): FeedTextParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedZeroParams` payload. */
+export function encodeFeedZeroParams(value: FeedZeroParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedZeroParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedZeroParams` payload the codec has verified. */
+export function decodeFeedZeroParams(bytes: Uint8Array): FeedZeroParams {
+  return unpackFeedZeroParams(fb.FeedZeroParams.getRootAsFeedZeroParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedZeroParams(_value: FeedZeroParams): fb.FeedZeroParamsT {
+  const tuple = new fb.FeedZeroParamsT();
+  return tuple;
+}
+function unpackFeedZeroParams(_object: fb.FeedZeroParamsT): FeedZeroParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedLatestParams` payload. */
+export function encodeFeedLatestParams(value: FeedLatestParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedLatestParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedLatestParams` payload the codec has verified. */
+export function decodeFeedLatestParams(bytes: Uint8Array): FeedLatestParams {
+  return unpackFeedLatestParams(fb.FeedLatestParams.getRootAsFeedLatestParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedLatestParams(_value: FeedLatestParams): fb.FeedLatestParamsT {
+  const tuple = new fb.FeedLatestParamsT();
+  return tuple;
+}
+function unpackFeedLatestParams(_object: fb.FeedLatestParamsT): FeedLatestParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedUploadParams` payload. */
+export function encodeFeedUploadParams(value: FeedUploadParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedUploadParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedUploadParams` payload the codec has verified. */
+export function decodeFeedUploadParams(bytes: Uint8Array): FeedUploadParams {
+  return unpackFeedUploadParams(fb.FeedUploadParams.getRootAsFeedUploadParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedUploadParams(_value: FeedUploadParams): fb.FeedUploadParamsT {
+  const tuple = new fb.FeedUploadParamsT();
+  return tuple;
+}
+function unpackFeedUploadParams(_object: fb.FeedUploadParamsT): FeedUploadParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedDuplexParams` payload. */
+export function encodeFeedDuplexParams(value: FeedDuplexParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedDuplexParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedDuplexParams` payload the codec has verified. */
+export function decodeFeedDuplexParams(bytes: Uint8Array): FeedDuplexParams {
+  return unpackFeedDuplexParams(fb.FeedDuplexParams.getRootAsFeedDuplexParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedDuplexParams(_value: FeedDuplexParams): fb.FeedDuplexParamsT {
+  const tuple = new fb.FeedDuplexParamsT();
+  return tuple;
+}
+function unpackFeedDuplexParams(_object: fb.FeedDuplexParamsT): FeedDuplexParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedMultipleParams` payload. */
+export function encodeFeedMultipleParams(value: FeedMultipleParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedMultipleParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedMultipleParams` payload the codec has verified. */
+export function decodeFeedMultipleParams(bytes: Uint8Array): FeedMultipleParams {
+  return unpackFeedMultipleParams(fb.FeedMultipleParams.getRootAsFeedMultipleParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedMultipleParams(_value: FeedMultipleParams): fb.FeedMultipleParamsT {
+  const tuple = new fb.FeedMultipleParamsT();
+  return tuple;
+}
+function unpackFeedMultipleParams(_object: fb.FeedMultipleParamsT): FeedMultipleParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.FeedFetchParams` payload. */
+export function encodeFeedFetchParams(value: FeedFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedFetchParams` payload the codec has verified. */
+export function decodeFeedFetchParams(bytes: Uint8Array): FeedFetchParams {
+  return unpackFeedFetchParams(fb.FeedFetchParams.getRootAsFeedFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedFetchParams(_value: FeedFetchParams): fb.FeedFetchParamsT {
+  const tuple = new fb.FeedFetchParamsT();
+  return tuple;
+}
+function unpackFeedFetchParams(_object: fb.FeedFetchParamsT): FeedFetchParams {
+  return {};
+}
+
+/** Encodes a `streams.demo.OtherFetchParams` payload. */
+export function encodeOtherFetchParams(value: OtherFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packOtherFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.OtherFetchParams` payload the codec has verified. */
+export function decodeOtherFetchParams(bytes: Uint8Array): OtherFetchParams {
+  return unpackOtherFetchParams(fb.OtherFetchParams.getRootAsOtherFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packOtherFetchParams(_value: OtherFetchParams): fb.OtherFetchParamsT {
+  const tuple = new fb.OtherFetchParamsT();
+  return tuple;
+}
+function unpackOtherFetchParams(_object: fb.OtherFetchParamsT): OtherFetchParams {
+  return {};
+}
+
+const codecCount: PayloadCodec<t.Count> = { type: "streams.demo.Count", encode: encodeCount, decode: decodeCount };
+const codecData: PayloadCodec<t.Data> = { type: "streams.demo.Data", encode: encodeData, decode: decodeData };
+const codecText: PayloadCodec<t.Text> = { type: "streams.demo.Text", encode: encodeText, decode: decodeText };
+const codecChunk: PayloadCodec<t.Chunk> = { type: "streams.demo.Chunk", encode: encodeChunk, decode: decodeChunk };
+const codecChoice: PayloadCodec<t.Choice> = { type: "streams.demo.Choice", encode: encodeChoice, decode: decodeChoice };
+const codecStatus: PayloadCodec<t.StatusValue> = { type: "streams.demo.Status", encode: encodeStatus, decode: decodeStatus };
+const codecFeedScalarsParams: PayloadCodec<FeedScalarsParams> = { type: "streams.demo.FeedScalarsParams", encode: encodeFeedScalarsParams, decode: decodeFeedScalarsParams };
+const codecFeedUnionsParams: PayloadCodec<FeedUnionsParams> = { type: "streams.demo.FeedUnionsParams", encode: encodeFeedUnionsParams, decode: decodeFeedUnionsParams };
+const codecFeedStatusesParams: PayloadCodec<FeedStatusesParams> = { type: "streams.demo.FeedStatusesParams", encode: encodeFeedStatusesParams, decode: decodeFeedStatusesParams };
+const codecFeedDataParams: PayloadCodec<FeedDataParams> = { type: "streams.demo.FeedDataParams", encode: encodeFeedDataParams, decode: decodeFeedDataParams };
+const codecFeedLabelsParams: PayloadCodec<FeedLabelsParams> = { type: "streams.demo.FeedLabelsParams", encode: encodeFeedLabelsParams, decode: decodeFeedLabelsParams };
+const codecFeedTextParams: PayloadCodec<FeedTextParams> = { type: "streams.demo.FeedTextParams", encode: encodeFeedTextParams, decode: decodeFeedTextParams };
+const codecFeedZeroParams: PayloadCodec<FeedZeroParams> = { type: "streams.demo.FeedZeroParams", encode: encodeFeedZeroParams, decode: decodeFeedZeroParams };
+const codecFeedLatestParams: PayloadCodec<FeedLatestParams> = { type: "streams.demo.FeedLatestParams", encode: encodeFeedLatestParams, decode: decodeFeedLatestParams };
+const codecFeedFetchParams: PayloadCodec<FeedFetchParams> = { type: "streams.demo.FeedFetchParams", encode: encodeFeedFetchParams, decode: decodeFeedFetchParams };
+const codecOtherFetchParams: PayloadCodec<OtherFetchParams> = { type: "streams.demo.OtherFetchParams", encode: encodeOtherFetchParams, decode: decodeOtherFetchParams };
+
+function checkStreamSession(session: StreamSession, limit: number | undefined): void {
+  const hash = session.codec.catalogHash;
+  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {
+    throw new CatalogMismatch(
+      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, "0")).join(""),
+      Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join(""),
+    );
+  }
+  if (limit === 0) throw new StreamError({ category: "corrupt" });
+}
+
+function encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {
+  let bytes: Uint8Array;
+  try {
+    bytes = payload.encode(value);
+  } catch (error) {
+    if (error instanceof RuleError) {
+      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule } });
+    }
+    throw new StreamError({ category: "corrupt" });
+  }
+  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: "corrupt" });
+  const result = session.codec.verify(typeId, bytes);
+  if (!result.ok) {
+    if (result.kind === "malformed") throw new StreamError({ category: "corrupt" });
+    if (result.kind === "rule" && (RULES as readonly string[]).includes(result.rule ?? "")) {
+      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
+    }
+    throw new CodecError("unknown payload type or rule during request verification");
+  }
+  return bytes;
+}
+
+/** The members of interface `Feed`, interface number `1`. */
+export const Feed = {
+  iface: 1,
+  scalars: { iface: 1, ord: 2, kind: "query", request: codecFeedScalarsParams, streams: [{ no: 0, form: "elements", element: codecCount }] },
+  structs: { iface: 1, ord: 3, kind: "query", request: codecCount, streams: [{ no: 0, form: "elements", element: codecChunk }] },
+  unions: { iface: 1, ord: 4, kind: "query", request: codecFeedUnionsParams, streams: [{ no: 0, form: "elements", element: codecChoice }] },
+  statuses: { iface: 1, ord: 5, kind: "query", request: codecFeedStatusesParams, streams: [{ no: 0, form: "elements", element: codecStatus }] },
+  data: { iface: 1, ord: 6, kind: "query", request: codecFeedDataParams, streams: [{ no: 0, form: "elements", element: codecData }] },
+  labels: { iface: 1, ord: 7, kind: "query", request: codecFeedLabelsParams, streams: [{ no: 0, form: "elements", element: codecText }] },
+  readBytes: { iface: 1, ord: 8, kind: "query", request: codecCount, streams: [{ no: 0, form: "bytes" }], limit: 512 },
+  text: { iface: 1, ord: 9, kind: "query", request: codecFeedTextParams, streams: [{ no: 0, form: "text" }] },
+  zero: { iface: 1, ord: 10, kind: "query", request: codecFeedZeroParams, streams: [{ no: 0, form: "bytes" }], limit: 64 },
+  latest: { iface: 1, ord: 11, kind: "query", request: codecFeedLatestParams, reply: codecCount },
+  // upload has no entry: parameter streams are not generated yet
+  // duplex has no entry: duplex streams are not generated yet
+  // multiple has no entry: multiple parameter streams are not supported
+  fetch: { iface: 1, ord: 15, kind: "query", request: codecFeedFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+/**
+ * Reads sequence numbers.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_scalars(session: StreamSession, opts: StreamOptions): ReadableStream<t.Count> {
+  const entry = Feed.scalars;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/**
+ * Reads numbered elements for {@link t.Count}.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ *
+ * @param seed - The first sequence number.
+ * @since 1.0.0
+ * @deprecated Use scalars.
+ */
+export function Feed_structs(session: StreamSession, seed: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
+  const entry = Feed.structs;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, seed, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/**
+ * Reads results with parameter names also used by generated bindings.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ *
+ * @param session2 - The session number.
+ * @param session1 - A second number.
+ * @param opts1 - A selection.
+ */
+export function Feed_unions(session: StreamSession, session2: t.Count, session1: t.Count, opts1: t.Count, opts: StreamOptions): ReadableStream<t.Choice> {
+  const entry = Feed.unions;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { session: session2, session1: session1, opts: opts1 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/**
+ * Reads statuses.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_statuses(session: StreamSession, opts: StreamOptions): ReadableStream<t.StatusValue> {
+  const entry = Feed.statuses;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/**
+ * Reads bounded byte elements.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_data(session: StreamSession, opts: StreamOptions): ReadableStream<t.Data> {
+  const entry = Feed.data;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/**
+ * Reads bounded text elements.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_labels(session: StreamSession, opts: StreamOptions): ReadableStream<t.Text> {
+  const entry = Feed.labels;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/**
+ * Reads raw bytes for a sequence number.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_readBytes(session: StreamSession, seed: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = Feed.readBytes;
+  checkStreamSession(session, entry.limit);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, seed, entry.limit);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/**
+ * Reads UTF-8 text.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_text(session: StreamSession, opts: StreamOptions): ReadableStream<string> {
+  const entry = Feed.text;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeTextStream());
+}
+
+/**
+ * A zero limit prevents a call.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_zero(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = Feed.zero;
+  checkStreamSession(session, entry.limit);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/**
+ * Reads the last live streamed member.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_fetch(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = Feed.fetch;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `Other`, interface number `2`. */
+export const Other = {
+  iface: 2,
+  fetch: { iface: 2, ord: 1, kind: "query", request: codecOtherFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+/**
+ * Reads bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Other_fetch(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = Other.fetch;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}

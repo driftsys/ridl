@@ -1,0 +1,83 @@
+package streams.demo
+
+/// A sequence number.
+type Count : integer [0..100]
+
+/// A bounded byte element.
+type Data : bytes [0..32]
+
+/// A bounded text element.
+type Text : string [0..32]
+
+/// A numbered element.
+struct Chunk {
+  /// The sequence number.
+  value: Count
+}
+
+/// A result element.
+union Choice {
+  /// A numbered value.
+  ok: Chunk
+  /// A failure code.
+  err: Count
+}
+
+/// An extensible status.
+open enum Status {
+  /// Idle.
+  IDLE = 0
+  /// Active.
+  ACTIVE = 1
+}
+
+/// Streamed replies and an ordinary query.
+interface Feed {
+  reserved retired
+  /// Reads sequence numbers.
+  query scalars(): <Count> @[..50ms]
+  /// Reads numbered elements for [Count].
+  /// @since 1.0.0
+  /// @deprecated Use scalars.
+  query structs(
+    /// The first sequence number.
+    seed: Count
+  ): <Chunk> @[..50ms]
+  /// Reads results with parameter names also used by generated bindings.
+  query unions(
+    /// The session number.
+    session: Count,
+    /// A second number.
+    session1: Count,
+    /// A selection.
+    opts: Count
+  ): <Choice> @[..50ms]
+  /// Reads statuses.
+  query statuses(): <Status> @[..50ms]
+  /// Reads bounded byte elements.
+  query data(): <Data> @[..50ms]
+  /// Reads bounded text elements.
+  query labels(): <Text> @[..50ms]
+  /// Reads raw bytes for a sequence number.
+  query readBytes(seed: Count): <bytes> @[..50ms]
+  /// Reads UTF-8 text.
+  query text(): <string> @[..50ms]
+  /// A zero limit prevents a call.
+  query zero(): <bytes> @[..50ms]
+  /// Reads one ordinary value.
+  query latest(): Count @[..50ms]
+  /// Receives bytes.
+  command upload(data: <bytes>) @[..50ms]
+  /// Receives and replies concurrently.
+  query duplex(data: <bytes>): <Chunk> @[..50ms]
+  /// Receives two streams.
+  command multiple(first: <bytes>, second: <string>) @[..50ms]
+  /// Reads the last live streamed member.
+  query fetch(): <bytes> @[..50ms]
+}
+
+/// An interface with the same member name.
+interface Other {
+  /// Reads bytes.
+  query fetch(): <bytes> @[..50ms]
+}

@@ -3084,6 +3084,29 @@ _codec-ts-check:
     deno lint --config "$strict/deno.json" "$strict/strict.demo.codec.ts"
     deno check --config "$strict/deno.json" "$strict/strict.demo.codec.ts" "$strict/strict.demo.ts"
     deno test --config "$strict/deno.json" "$strict/strict_test.ts"
+    # The fifth fixture: verified named, byte and text reply streams.
+    streams="$tmp/streams"
+    mkdir -p "$streams"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-streams --emit typescript --emit flatbuffers --out-dir "$streams"
+    flatc --ts --gen-object-api -I "$streams" -o "$streams" "$streams/streams.demo.fbs"
+    for config in deno.json generated-only.deno.json browser.deno.json; do
+        sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-streams/"$config" > "$streams/$config"
+    done
+    cp crates/ridl-backend-ts/tests/fixtures/codec-streams/streams_test.ts "$streams/"
+    deno lint --config "$streams/generated-only.deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    deno check --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    deno check --config "$streams/browser.deno.json" "$streams/streams.demo.codec.ts"
+    deno test --config "$streams/deno.json" "$streams/streams_test.ts"
+    # An induced-request-only module imports no unused domain namespace.
+    raw="$streams/raw-only"
+    mkdir -p "$raw/source" "$raw/generated"
+    printf 'package raw.only\n/// Raw bytes.\ninterface Raw {\n  /// Reads bytes.\n  query fetch(): <bytes> @[..50ms]\n}\n' > "$raw/source/raw.ridl"
+    printf '[package]\nname = "raw.only"\nversion = "1.0.0"\n[backend.rust]\nencodings = ["flatbuffers"]\n[backend.typescript]\ncodec = true\n' > "$raw/source/ridl.toml"
+    "$target/debug/ridl" build "$raw/source" --emit typescript --emit flatbuffers --out-dir "$raw/generated"
+    flatc --ts --gen-object-api -I "$raw/generated" -o "$raw/generated" "$raw/generated/raw.only.fbs"
+    cp "$streams/deno.json" "$raw/generated/deno.json"
+    deno lint --config "$raw/generated/deno.json" "$raw/generated/raw.only.codec.ts"
+    deno check --config "$raw/generated/deno.json" "$raw/generated/raw.only.codec.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because
