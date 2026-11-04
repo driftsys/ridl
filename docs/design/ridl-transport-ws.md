@@ -852,9 +852,12 @@ chooses.
   `seq` 1. The server queues at most 4 chunks per upload. It tries to push them
   with `StreamCaller::push` immediately and on each tick, without waiting for
   backend room. A nonempty chunk whose push returns 0 stays queued. Each chunk
-  taken returns one credit; one drain sends one `stream_credit` for their total.
-  An empty chunk whose push returns 0 counts as taken and returns one credit. A
-  stalled upload does not stop polling other calls and subscriptions.
+  taken returns one credit; one drain sends one `stream_credit` for their total,
+  unless the client's `stream_end` has been received for that upload. After that
+  end, queued chunks still reach the backend but return no credit because the
+  client sends no more chunks. An empty chunk whose push returns 0 counts as
+  taken and follows the same credit rule. A stalled upload does not stop polling
+  other calls and subscriptions.
 - **Discarding and violations.** A frame for no call in flight is ignored
   without a note. After target validation (D-27), a chunk on an undeclared
   parameter stream, or beyond its credit, records `StreamCreditExceeded` and

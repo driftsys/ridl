@@ -226,6 +226,36 @@ fn the_server_grants_one_credit_per_chunk_the_backend_takes() {
         }
     }
 }
+// Mutation: return credit for queued chunks after receiving the client's end.
+#[test]
+fn queued_upload_chunks_drain_without_credit_after_the_client_end() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, Some(Ok(&[])));
+    accepted(&mut r);
+    for seq in 1..=8 {
+        let (step, out) = chunk(&mut r, seq, 1, &[seq as u8]);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(credits(&out), if seq <= 4 { 1 } else { 0 });
+    }
+    assert_eq!(end(&mut r, 9, StreamOutcome::End), (Step::Continue, vec![]));
+
+    let mut buf = [0; 8];
+    for n in 1..=8 {
+        assert_eq!(
+            r.p.pull_claim(claim, StreamNo(1), &mut buf),
+            Ok(Pull::Chunk(1))
+        );
+        assert_eq!(buf[0], n);
+        let now = r.now;
+        assert_eq!(
+            poll(&mut r, now),
+            (Step::Continue, vec![]),
+            "draining after the client's end must not return credit"
+        );
+    }
+    pull(&mut r, claim, Pull::End);
+    assert!(r.notes.lock().unwrap().is_empty());
+}
 #[test]
 fn a_chunk_over_the_member_limit_is_stream_end_corrupt_and_forgotten() {
     for len in [4, 5] {

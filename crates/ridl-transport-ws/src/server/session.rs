@@ -1541,7 +1541,8 @@ impl<B: Backend> Session<B> {
         Step::Continue
     }
 
-    /// Drains every upload, granting credit only for chunks taken by the backend.
+    /// Drains every upload, granting credit for chunks taken by the backend
+    /// only before the client's `stream_end` has been received.
     fn drain_uploads(&mut self, call: &mut InFlight, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
         for upload in &mut call.uploads {
             if upload.state != UploadState::Open {
@@ -1551,7 +1552,7 @@ impl<B: Backend> Session<B> {
                 return Step::Close(CloseCode::GOING_AWAY.0);
             };
             let drain = upload.drain(call.correlation, ports, now);
-            if drain.taken > 0 {
+            if drain.taken > 0 && !upload.end_received {
                 push(
                     out,
                     &Frame::StreamCredit {

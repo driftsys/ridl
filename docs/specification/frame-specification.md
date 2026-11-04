@@ -1504,10 +1504,13 @@ received a `stream_credit` for that stream. Each `stream_credit` adds its
 
 For a parameter stream, the consumer is the sender and the provider grants one
 credit per chunk taken by its backend, combining the credits from one drain into
-one frame. An empty chunk is one chunk and consumes and returns one credit. The
-provider holds at most 4 queued chunks per parameter stream and pushes the end
-only after those chunks. Exceeding credit closes the session with 1002; a chunk
-above the member's limit ends the stream as `corrupt` and forgets the call
+one frame, unless it has received the consumer's `stream_end` for that stream.
+After that end, queued chunks still reach the backend but return no credit
+because the consumer sends no more chunks. An empty chunk is one chunk and
+consumes one credit; it returns credit under the same rule. The provider holds
+at most 4 queued chunks per parameter stream and pushes the end only after those
+chunks. Exceeding credit closes the session with 1002; a chunk above the
+member's limit ends the stream as `corrupt` and forgets the call
 ([the server design](../design/ridl-transport-ws.md), D-28).
 
 **Framing.** A stream frame that is wrong by itself (§4, "The stream forms") is
