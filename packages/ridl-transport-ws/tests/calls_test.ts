@@ -1569,3 +1569,117 @@ uploadTest(
     }
   },
 );
+
+for (const query of [false, true]) {
+  for (const operation of ["write", "close", "abort", "over-limit"] as const) {
+    uploadTest(
+      `${
+        query ? "query" : "command"
+      }_upload_send_throw_${operation}_rejects_and_forgets`,
+      async ({ session, socket, notes }) => {
+        const target = query ? UPLOAD_QUERY : UPLOAD;
+        const call = query
+          ? session.queryWithUpload(1, 12, new Uint8Array(), { bound: 60_000 })
+          : session.commandStream(1, 11, new Uint8Array(), { bound: 60_000 });
+        const state = watch<void | Uint8Array>(
+          "reply" in call ? call.reply : call.accepted,
+        );
+        const writer = call.upload.getWriter();
+        const closed = watch(writer.closed);
+        const error = new Error("upload send failed");
+        const send = socket.send;
+        socket.send = () => {
+          throw error;
+        };
+        try {
+          const sending = operation === "write"
+            ? writer.write(Uint8Array.of(7))
+            : operation === "over-limit"
+            ? writer.write(new Uint8Array(16_129))
+            : operation === "close"
+            ? writer.close()
+            : writer.abort();
+          await assert.rejects(sending, (e) => e === error);
+          for (let i = 0; i < 10; i++) await Promise.resolve();
+          assert.equal(
+            state.status,
+            "rejected",
+            "the call must reject promptly",
+          );
+          assert.equal(state.error, error);
+          if (operation !== "abort") {
+            assert.equal(closed.status, "rejected");
+            assert.equal(closed.error, error);
+            await assert.rejects(
+              writer.write(Uint8Array.of(8)),
+              (e) => e === error,
+            );
+          }
+          const late = credit(target);
+          socket.deliver(late);
+          assert.deepEqual(notes, [{
+            note: "discarded",
+            reason: "unknown-correlation",
+            frame: late,
+          }]);
+          assert.equal(
+            socket.sent.length,
+            2,
+            "only attach and request were sent",
+          );
+          assert.deepEqual(socket.closes, []);
+        } finally {
+          socket.send = send;
+        }
+      },
+    );
+  }
+}
+
+uploadTest(
+  "an_upload_write_exactly_at_the_member_limit_sends_one_chunk",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    const payload = new Uint8Array(16_128).fill(7);
+    const written = watch(writer.write(payload));
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    assert.equal(
+      written.status,
+      "resolved",
+      "a write at the limit must succeed",
+    );
+    const chunks = sentOf(socket, "chunk");
+    assert.equal(chunks.length, 1);
+    assert.deepEqual(chunks[0], {
+      form: "chunk",
+      target: UPLOAD,
+      envelope: { stamp: STAMP, seq: 1n },
+      correlation: 1n,
+      stream: 1,
+      payload,
+    });
+    assert.deepEqual(sentOf(socket, "stream_end"), []);
+  },
+);
+
+for (const abort of [false, true]) {
+  uploadTest(
+    `command_upload_${
+      abort ? "abort" : "close"
+    }_after_accepted_forgets_the_call`,
+    async ({ session, socket, notes }) => {
+      const { writer, promise } = uploading(session);
+      socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
+      await resolved(promise);
+      await resolved(abort ? writer.abort() : writer.close());
+      const late = credit();
+      socket.deliver(late);
+      assert.deepEqual(notes, [{
+        note: "discarded",
+        reason: "unknown-correlation",
+        frame: late,
+      }]);
+      assert.deepEqual(socket.closes, []);
+    },
+  );
+}

@@ -567,6 +567,8 @@ export class Session {
    * for the call, a chunk beyond the granted credit, a stream frame
    * on a stream other than 0 ends the session with `unexpected-form`. A
    * stream frame whose target differs from its call is discarded and recorded.
+   * A stream frame with a matching target for a plain command or query, with
+   * neither an upload nor a streamed reply, also ends the session.
    */
   queryStream(
     iface: number,
@@ -633,7 +635,9 @@ export class Session {
    * Sends a query with parameter stream 1. The reply bound starts when close
    * sends the upload's end. Abort rejects the reply with interrupted. Upload
    * failures reject the reply and every waiting write with the same error.
-   * Writes and close behave as in {@link Session.commandStream}.
+   * A plain reply while the upload is open errors the upload with interrupted
+   * and resolves the reply. Writes and close behave as in
+   * {@link Session.commandStream}.
    */
   queryWithUpload(
     iface: number,
@@ -725,8 +729,8 @@ export class Session {
     args: Uint8Array,
   ): void {
     const clock = this.#options.clock ?? (() => BigInt(Date.now()) * 1000n);
-    // `encode` copies `args` into the message it allocates; the session keeps
-    // no reference to `args`.
+    // `encode` copies `args` into the message it allocates. The upload's
+    // send callbacks may retain the original arguments.
     this.#send({
       form: "request",
       target: { kind, iface, ord },

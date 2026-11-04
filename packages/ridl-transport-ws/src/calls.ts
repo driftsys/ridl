@@ -3,9 +3,10 @@
  * §11.1).
  *
  * A {@link Calls} table numbers each call with the session's caller counter,
- * which starts at 1, keeps an upload command after its acknowledgment until
- * the upload ends, and rejects every pending call with `down` when
- * the session ends. A query whose reply is a stream is kept until its reply
+ * which starts at 1, keeps a call until a response names it or its bound
+ * passes, and rejects every pending call with `down` when the session ends.
+ * An upload command is kept after its acknowledgment until the upload ends.
+ * A query whose reply is a stream is kept until its reply
  * stream ends, is stopped by the client, or its bound passes before its first
  * frame. It sends nothing itself: the session encodes and sends every frame,
  * through the callbacks a call is started with.
@@ -28,7 +29,9 @@ type StreamFrame = Extract<
 
 /**
  * Why the session did not use a frame: it names no call in flight
- * (`unknown-correlation`, a discard), or a call whose shape the frame does
+ * (`unknown-correlation`, a discard), or a stream frame's target differs
+ * from its call's target (also `unknown-correlation`, frame specification
+ * §6.4), or a call whose shape the frame does
  * not fit (`unexpected-outcome`, a discard; `unexpected-form`, a violation
  * that ends the session).
  */
@@ -294,6 +297,17 @@ export class Calls {
         );
       }, bound);
     };
+    const sendFrame = (action: () => void) => {
+      try {
+        action();
+      } catch (error) {
+        if (call) {
+          this.#forget(seq, call);
+          call.reject(error);
+        }
+        throw error;
+      }
+    };
     const upload = new WritableStream<Uint8Array>({
       start: (controller) => {
         const fail = (error: unknown) => {
@@ -358,7 +372,9 @@ export class Calls {
         if (!call) return;
         if (payload.length > call.limit) {
           const error = new SessionError({ category: "corrupt" });
-          send.end(seq, call.expected, { kind: "interrupted" });
+          sendFrame(() =>
+            send.end(seq, call!.expected, { kind: "interrupted" })
+          );
           this.#forget(seq, call);
           call.reject(error);
           throw error;
@@ -369,19 +385,19 @@ export class Calls {
           });
         }
         if (call.failure) throw call.failure;
-        send.chunk(seq, call.expected++, payload);
+        sendFrame(() => send.chunk(seq, call!.expected++, payload));
         call.sent += 1;
       },
       close: () => {
         if (!call) return;
-        send.end(seq, call.expected, { kind: "end" });
+        sendFrame(() => send.end(seq, call!.expected, { kind: "end" }));
         call.open = false;
         if (query) startTimer();
         else if (call.settled) this.#forget(seq, call);
       },
       abort: () => {
         if (!call) return;
-        send.end(seq, call.expected, { kind: "interrupted" });
+        sendFrame(() => send.end(seq, call!.expected, { kind: "interrupted" }));
         call.open = false;
         if (query) {
           this.#forget(seq, call);
@@ -467,7 +483,8 @@ export class Calls {
   }
 
   /**
-   * Settles the call a `response` names and forgets it, and returns `null`.
+   * Settles the call a `response` names and returns `null`. Forgets the call
+   * unless it is an accepted command whose upload is still open.
    * Returns why the response was not used, and changes nothing, when
    * `correlation` names no call in flight (`unknown-correlation`) or names a
    * call whose kind the outcome does not fit (`unexpected-outcome`):
