@@ -353,12 +353,13 @@ timer would end healthy sessions. The session therefore ends on the platform's
 `close` and `error` events only, and the server's liveness check (the crate's
 D-22) is the one that runs. A server that is gone is detected when the
 platform's connection fails; a server host that vanished without a TCP reset is
-detected only at the operating system's timeout. Each call ends at its bound
-once its timer starts; a `queryWithUpload` with an open upload has no reply
-timer until the upload closes (D-23). `connect`, `subscribe` and `read` have no
-bound: each waits until its answer arrives or the session ends.
-driftsys/ridl#991 also asks the specification to state what a client that cannot
-see pings does.
+detected only at the operating system's timeout. A call ends at its bound if no
+answer arrives while its timer runs; a streamed reply clears that timer at its
+first chunk and then ends only with its stream end or the session. A
+`queryWithUpload` with an open upload has no reply timer until the upload closes
+(D-23). `connect`, `subscribe` and `read` have no bound: each waits until its
+answer arrives or the session ends. driftsys/ridl#991 also asks the
+specification to state what a client that cannot see pings does.
 
 **D-12. The default request stamp is wall-clock UTC in microseconds.** A
 `request`'s `stamp` is in the platform's synchronized time base, TAI (ridl
