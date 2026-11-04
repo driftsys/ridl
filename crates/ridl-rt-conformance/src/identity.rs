@@ -1,8 +1,9 @@
 //! Descriptor-based attachment tests, selected with `suite!(F; identity)`.
 //!
-//! Implement [`IdentityFactory`] to share one node between attachments. The
-//! `identity_debug` flag additionally checks twins and listeners and requires
-//! this crate's `debug` feature. No loopback or compiler dependency is needed.
+//! Implement [`IdentityFactory`](crate::identity::IdentityFactory) to share
+//! one node between attachments. The `identity_debug` flag additionally checks
+//! twins and listeners and requires this crate's `debug` feature. No loopback
+//! or compiler dependency is needed.
 
 use ridl_rt::contract::{CatalogHash, CatalogRef};
 #[cfg(feature = "debug")]
@@ -54,7 +55,7 @@ pub const DESCRIPTOR: &[u8] = include_bytes!("../fixtures/identity/identity.depl
 /// Instance 1 offers [`ALPHA`] and maps [`MAPPED`]; instance 3 offers
 /// [`BETA`] and maps [`ALPHA`]. Each call to `node` creates independent state.
 /// Attachments share stores and identity reservations within that node.
-pub trait IdentityFactory: crate::Factory {
+pub trait IdentityFactory {
     /// One machine's stores and grants.
     type Node;
     /// A reserved identity with checked access to its catalog's ports.
