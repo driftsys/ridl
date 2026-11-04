@@ -54,7 +54,7 @@ pub const DESCRIPTOR: &[u8] = include_bytes!("../fixtures/identity/identity.depl
 /// Instance 1 offers [`ALPHA`] and maps [`MAPPED`]; instance 3 offers
 /// [`BETA`] and maps [`ALPHA`]. Each call to `node` creates independent state.
 /// Attachments share stores and identity reservations within that node.
-pub trait IdentityFactory: crate::Factory {
+pub trait IdentityFactory {
     /// One machine's stores and grants.
     type Node;
     /// A reserved identity with checked access to its catalog's ports.
