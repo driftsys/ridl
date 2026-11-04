@@ -6,25 +6,24 @@ name: vscode-release
 # ridlc (the plumbing compiler front end, for CI/build-system use) for five
 # targets with the tag stamped as ridl's version, packages one VSIX per target
 # from the ridl binary alone, creates the GitHub Release carrying both
-# binaries' tarballs, and runs the Marketplace and Open VSX publishes in the
-# `marketplace` environment, which a maintainer must configure with required
-# reviewers. The release job does not depend on the publish jobs, so a publish
-# failure never blocks the release.
+# binaries' tarballs, and runs the Marketplace publish in the `marketplace`
+# environment, which a maintainer must configure with required reviewers. The
+# release job does not depend on the publish job, so a publish failure never
+# blocks the release.
 #
 # Packaging runs through `just package-vsix` (ADR-0009: the justfile defines
 # it; this file only invokes it), the same recipe `just package-vscode` calls
 # for a local build. `just` is installed the same way `ci.yml` and
 # `vscode-verify.yaml` install it.
 #
-# Neither `vsce publish` nor `ovsx publish` is idempotent: after a partial
-# failure, publish the remaining targets by hand rather than re-running.
+# `vsce publish` is not idempotent: after a partial failure, publish the
+# remaining targets by hand rather than re-running.
 #
 # Repository write is granted only where it is needed: the workflow default is
 # read, and the `release` job raises its own permissions to create the GitHub
 # Release. `ci.yml` documents the same convention (its `pages` job raises
 # permissions the same way, for the same reason) and every other job here
-# stays read-only, including the two that hold the Marketplace and Open VSX
-# tokens.
+# stays read-only, including the one that holds the Marketplace token.
 
 on:
   push:
@@ -296,27 +295,4 @@ jobs:
       - name: publish each target
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: editors/vscode/scripts/publish-vsix.sh vsce vsix
-
-  publish-ovsx:
-    name: publish to Open VSX
-    needs: package-vsix
-    runs-on: ubuntu-latest
-    environment: marketplace
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/download-artifact@v4
-        with:
-          path: vsix
-          pattern: ridl-lang-*-vsix
-          merge-multiple: true
-      - name: install the extension's pinned tools
-        run: npm ci
-        working-directory: editors/vscode
-      - name: publish each target
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: editors/vscode/scripts/publish-vsix.sh ovsx vsix
+        run: editors/vscode/scripts/publish-vsix.sh vsix
