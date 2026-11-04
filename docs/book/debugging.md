@@ -109,7 +109,10 @@ while N is attached to the node, because N and its twin never run at the same
 time. Then connect with `provide`, with the path
 `/<component>/<instance>/<catalog>` of the URL naming the qualified component,
 the instance and the catalog, as the deployment descriptor spells them. The
-catalog has to be one that the instance offers.
+catalog has to be one that the instance offers. When the machine embeds two
+versions of one catalog name, injection selects the first in descriptor order;
+the path cannot select the other version, and the client must match that first
+version's hash.
 
 ```ts
 import { provide } from "@driftsys/ridl-transport-ws";
@@ -124,6 +127,9 @@ const provision = await provide(
       { iface: 1, ord: 2, kind: "event" },
       { iface: 1, ord: 3, kind: "command" },
     ],
+    onNote(note) {
+      console.log(note); // Includes an occurrence raised before subscription.
+    },
     onRequest(request) {
       // Answer a command or a query that a component sent to N.
       return { outcome: "accepted" };
@@ -132,14 +138,17 @@ const provision = await provide(
 );
 const now = BigInt(Date.now()) * 1000n; // microseconds
 provision.publish(1, 1, temperatureBytes, now);
+// Raise events when they occur; without a subscription they are noted and dropped.
 provision.raise(1, 2, eventBytes, now);
 ```
 
 The `encoding` is explicit because the gateway serves FlatBuffers, and the
 package accepts the gateway's `attach` only when the catalog hash equals the
 given hash exactly. `members` names what the instance provides. `publish` and
-`raise` work after the gateway has subscribed to the member, which it does right
-after `attached`. The payload bytes are encoded by the caller, as for `connect`.
+`invalidate` update the current signal state even before subscription. After its
+`answer`, the provider sends that state as the initial value (§5.1). A `raise`
+without a subscription is dropped and recorded through `onNote`; it does not
+throw (R-DS-10). The payload bytes are encoded by the caller, as for `connect`.
 
 The gateway answers the handshake before it upgrades the connection:
 
@@ -181,8 +190,10 @@ the same for every client.
   event is not raised. A gap in the client's sequence is not visible on the
   machine.
 
-The gateway records each of these cases as a note in its own process, through
-the `Config::with_record` hook, and not for the client.
+`Config::default()` records nothing, including in the gateway examples. To
+observe these notes in the gateway process, embed the server with
+`Config::with_record` and pass a hook that stores or logs each note. They are
+not sent to the client.
 
 ## A redundant provider set
 

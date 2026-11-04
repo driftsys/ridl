@@ -67,7 +67,7 @@ pub(super) fn assert_pong_end(session: &mut impl Driver, expected: Ended, reads:
     assert_eq!(n.get(), reads, "attach deadline must ignore pongs");
 }
 #[test]
-fn consuming_attach_wait_is_bounded_despite_pongs() {
+fn consuming_attach_wait_keeps_prior_pong_liveness() {
     let rt = Loopback::new(CatalogRef {
         name: "test",
         hash: CatalogHash([7; 32]),
@@ -78,7 +78,7 @@ fn consuming_attach_wait_is_bounded_despite_pongs() {
         frame_version: 2,
         config_refused: false,
     };
-    assert_attach_timeout(&mut selection);
+    assert_pong_end(&mut selection, Ended::Io(io::ErrorKind::UnexpectedEof), 5);
 }
 
 #[test]
@@ -103,4 +103,140 @@ fn consuming_acceptance_cancels_attach_deadline() {
         Step::Continue
     );
     assert_pong_end(&mut selection, Ended::Io(io::ErrorKind::UnexpectedEof), 5);
+}
+
+#[test]
+fn consuming_zero_poll_interval_is_invalid_input() {
+    struct Unattached(bool);
+    impl Driver for Unattached {
+        fn bounded_attach_wait(&self) -> bool {
+            self.0
+        }
+        fn attached(&self) -> bool {
+            false
+        }
+        fn on_message(&mut self, _: &[u8], _: Instant, _: &mut Vec<Vec<u8>>, _: &Config) -> Step {
+            Step::Continue
+        }
+        fn tick(&mut self, _: Instant, _: &mut Vec<Vec<u8>>) -> Step {
+            Step::Continue
+        }
+    }
+    struct RejectZero;
+    impl Read for RejectZero {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            Ok(0)
+        }
+    }
+    impl Write for RejectZero {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    impl Connection for RejectZero {
+        fn set_read_timeout(&self, t: Option<Duration>) -> io::Result<()> {
+            if t == Some(Duration::ZERO) {
+                Err(io::ErrorKind::InvalidInput.into())
+            } else {
+                Ok(())
+            }
+        }
+        fn set_write_timeout(&self, _: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut config = Config::default();
+    config.poll_interval = Duration::ZERO;
+    for (bounded, error) in [
+        (false, io::ErrorKind::InvalidInput),
+        (true, io::ErrorKind::UnexpectedEof),
+    ] {
+        assert_eq!(
+            run_upgraded(&mut RejectZero, &mut Unattached(bounded), &config),
+            Ended::Io(error)
+        );
+    }
+}
+
+#[test]
+fn provided_attach_deadline_checks_events_and_idle_reads_independently() {
+    struct Attaching {
+        attached: bool,
+    }
+    impl Driver for Attaching {
+        fn bounded_attach_wait(&self) -> bool {
+            true
+        }
+        fn attached(&self) -> bool {
+            self.attached
+        }
+        fn on_message(&mut self, _: &[u8], _: Instant, _: &mut Vec<Vec<u8>>, _: &Config) -> Step {
+            self.attached = true;
+            Step::Continue
+        }
+        fn tick(&mut self, _: Instant, _: &mut Vec<Vec<u8>>) -> Step {
+            Step::Continue
+        }
+    }
+    struct AtDeadline<'a> {
+        time: &'a Cell<u64>,
+        binary: bool,
+    }
+    impl Read for AtDeadline<'_> {
+        fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+            match self.time.get() {
+                0 => {
+                    self.time.set(2);
+                    b[..6].copy_from_slice(&[0x8a, 0x80, 0, 0, 0, 0]);
+                    return Ok(6);
+                }
+                2 => self.time.set(3),
+                _ => return Ok(0),
+            }
+            if self.binary {
+                b[..6].copy_from_slice(&[0x82, 0x80, 0, 0, 0, 0]);
+                Ok(6)
+            } else {
+                Err(io::ErrorKind::TimedOut.into())
+            }
+        }
+    }
+    impl Write for AtDeadline<'_> {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    impl Connection for AtDeadline<'_> {
+        fn set_read_timeout(&self, _: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+        fn set_write_timeout(&self, _: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    for binary in [true, false] {
+        let time = Cell::new(0);
+        let origin = Instant::now();
+        let mut config = Config::default();
+        config.liveness_timeout = Duration::from_secs(3);
+        assert_eq!(
+            run_upgraded_clock(
+                &mut AtDeadline {
+                    time: &time,
+                    binary
+                },
+                &mut Attaching { attached: false },
+                &config,
+                || origin + Duration::from_secs(time.get())
+            ),
+            Ended::LivenessTimeout,
+            "binary={binary}"
+        );
+    }
 }

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{InterfaceNo, Kind, Ordinal};
 use ridl_rt::port::Clock;
 use ridl_rt::sample::{
     Cause, Detection, Envelope, Freshness, Occurrence, Provenance, Sample, Timestamp,
@@ -69,11 +69,7 @@ impl Consumer {
         else {
             return;
         };
-        let limit = backend
-            .members()
-            .limit(target.iface, target.ord)
-            .map(|n| n as usize)
-            .unwrap_or(default_ceiling(target.kind));
+        let limit = backend.members().payload_limit(target);
         let provenance = match state {
             PublishState::Init => {
                 channel.good = None;
@@ -152,11 +148,7 @@ impl Consumer {
                 return;
             }
         }
-        let limit = backend
-            .members()
-            .limit(target.iface, target.ord)
-            .map(|n| n as usize)
-            .unwrap_or(default_ceiling(target.kind));
+        let limit = backend.members().payload_limit(target);
         let payload = if payload.len() > limit {
             Err(Detection::Corrupt)
         } else {
@@ -220,8 +212,4 @@ impl Consumer {
         }
     }
 }
-pub(super) fn record(config: &Config, note: Note) {
-    if let Some(record) = config.record() {
-        record(&note)
-    }
-}
+pub(super) use super::super::provided_backend::record;

@@ -40,7 +40,8 @@ pub enum Note {
         /// The number of missing occurrences.
         count: u64,
     },
-    /// A local debug port refused a delivered sample or occurrence.
+    /// A local debug port refused a delivered sample or occurrence, or its
+    /// handler refused to serve an offered member.
     PortRefused {
         /// The interaction named.
         target: Target,
@@ -49,14 +50,15 @@ pub enum Note {
     Violation(ProtocolViolation),
     /// A message that is not an `attach` arrived before the `attach`. The
     /// session closes with 1002. In the reversed role, this also covers a
-    /// discarded data frame before `attached`.
+    /// data frame before `attached`.
     MessageBeforeAttach,
-    /// A second `attach` arrived on an open session. The session closes
-    /// with 1002.
+    /// A second `attach` (or reversed-role `attached`) arrived on an open
+    /// session. The session closes with 1002.
     SecondAttach,
     /// A provider-to-consumer form arrived from the client, with or without
     /// bytes after its header that a consumer would discard it for. The
-    /// session closes with 1002.
+    /// session closes with 1002. In the reversed role this instead names
+    /// a consumer-to-provider form received from the provider.
     UnexpectedDirection,
     /// An `unsubscribe` named a kind the form does not admit. The frame is
     /// dropped.
@@ -81,7 +83,8 @@ pub enum Note {
         needed: usize,
     },
     /// A `request` repeated a `seq` the session has seen and is not answering
-    /// again. The frame is dropped.
+    /// again, or a reversed-role signal or event sequence did not advance.
+    /// The frame is dropped.
     DuplicateDropped {
         /// The repeated `seq`.
         seq: u64,
@@ -128,7 +131,8 @@ pub enum Note {
     /// A `subscribe`, `read`, `request` or `unsubscribe` named an interaction
     /// the member table does not hold, or holds under another kind (frame
     /// specification §6.4). An `unsubscribe` is dropped; the other three are
-    /// answered `contract(UnknownInteraction)`.
+    /// answered `contract(UnknownInteraction)`. In the reversed role, an
+    /// unknown or wrong-kind `answer`, `publish` or `occurrence` is dropped.
     UnknownInteraction {
         /// The interaction named.
         target: Target,

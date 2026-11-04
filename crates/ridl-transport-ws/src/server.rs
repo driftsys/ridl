@@ -16,7 +16,7 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-use ridl_rt::contract::{default_ceiling, CatalogHash, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 use ridl_rt::sample::{Envelope, Timestamp};
 
 pub use backend::{Backend, Described, Polling, Scanning, Streaming, TableMismatch};
@@ -130,7 +130,8 @@ pub enum Ended {
     /// on a message over [`Config::max_message_bytes`], 1008 when the
     /// responses the session keeps for a repeated `request` pass
     /// [`Config::max_retained_bytes`]. A violation of the frame is also
-    /// recorded as a [`Note`].
+    /// recorded as a [`Note`]. Internal failure after acceptance closes with
+    /// 1011, including a provided handler refusing an offered member.
     ServerClosed(u16),
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
@@ -146,7 +147,9 @@ pub enum Ended {
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
     /// control, arrived for that long after it, or a write waited that long
-    /// for the client to read. No close frame is sent.
+    /// for the client to read. For provided entry points, this also covers
+    /// waiting that long after upgrade for `attached`, even while control
+    /// messages arrive. No close frame is sent.
     LivenessTimeout,
     /// A read or a write of the connection failed with this kind of error.
     /// `UnexpectedEof` is a client that closed the connection without a
@@ -458,21 +461,19 @@ fn refuse_selected(out: &mut Vec<Vec<u8>>, reason: Reason) -> Step {
 fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     let header = largest_header();
     let block_cap = block_message() - header;
-    let largest = table
-        .entries()
-        .fold(None, |largest, (target, member_limit)| {
-            let member_limit = member_limit.map_or(default_ceiling(target.kind), |l| l as usize);
-            let carried = if target.kind == Kind::Fixed {
-                member_limit.min(block_cap)
-            } else {
-                member_limit
-            };
-            let needed = header.saturating_add(carried);
-            match largest {
-                Some((_, most)) if most >= needed => largest,
-                _ => Some((target, needed)),
-            }
-        });
+    let largest = table.entries().fold(None, |largest, (target, _)| {
+        let member_limit = table.payload_limit(target);
+        let carried = if target.kind == Kind::Fixed {
+            member_limit.min(block_cap)
+        } else {
+            member_limit
+        };
+        let needed = header.saturating_add(carried);
+        match largest {
+            Some((_, most)) if most >= needed => largest,
+            _ => Some((target, needed)),
+        }
+    });
     largest.filter(|(_, needed)| *needed > limit)
 }
 
@@ -560,6 +561,9 @@ where
 /// The shared WebSocket loop delegates only frame and tick dispositions.
 trait Driver {
     fn attached(&self) -> bool;
+    fn bounded_attach_wait(&self) -> bool {
+        false
+    }
     fn on_message(
         &mut self,
         msg: &[u8],
@@ -610,12 +614,15 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
     config: &Config,
     clock: impl Fn() -> Instant,
 ) -> Ended {
-    if let Err(e) = conn.set_read_timeout(Some(
+    let first_wait = if session.bounded_attach_wait() {
         config
             .poll_interval
             .min(config.liveness_timeout)
-            .max(MIN_READ_TIMEOUT),
-    )) {
+            .max(MIN_READ_TIMEOUT)
+    } else {
+        config.poll_interval
+    };
+    if let Err(e) = conn.set_read_timeout(Some(first_wait)) {
         return Ended::Io(e.kind());
     }
 
@@ -640,7 +647,10 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
 
         while let Some(event) = parser.next() {
             let now = clock();
-            if !session.attached() && now.duration_since(opened) >= config.liveness_timeout {
+            if session.bounded_attach_wait()
+                && !session.attached()
+                && now.duration_since(opened) >= config.liveness_timeout
+            {
                 return Ended::LivenessTimeout;
             }
             heard = now;
@@ -675,7 +685,10 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
         // A message is handled as soon as it is read, but the backend is
         // polled at most once per poll interval, whatever the client's rate.
         let now = clock();
-        if !session.attached() && now.duration_since(opened) >= config.liveness_timeout {
+        if session.bounded_attach_wait()
+            && !session.attached()
+            && now.duration_since(opened) >= config.liveness_timeout
+        {
             return Ended::LivenessTimeout;
         }
         if now.duration_since(ticked) >= config.poll_interval {
@@ -694,7 +707,7 @@ fn run_upgraded_clock<C: Connection, D: Driver>(
         let mut wait = (ticked + config.poll_interval)
             .saturating_duration_since(clock())
             .max(MIN_READ_TIMEOUT);
-        if !session.attached() {
+        if session.bounded_attach_wait() && !session.attached() {
             wait = wait.min(
                 (opened + config.liveness_timeout)
                     .saturating_duration_since(clock())

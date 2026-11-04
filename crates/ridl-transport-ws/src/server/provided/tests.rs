@@ -410,7 +410,20 @@ fn reversed_stream_forms_close_1002() {
             credit: 1,
         },
     ] {
-        assert!(matches!(send(&mut s, frame, now).0, Step::Close(1002)));
+        use std::sync::{Arc, Mutex};
+        let notes = Arc::new(Mutex::new(vec![]));
+        let seen = notes.clone();
+        let config = Config::default().with_record(move |n| seen.lock().unwrap().push(*n));
+        let mut bytes = vec![0; frame.encoded_len()];
+        frame.encode(&mut bytes).unwrap();
+        assert_eq!(
+            s.on_message(&bytes, now, &mut vec![], &config),
+            Step::Close(1002)
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            [Note::Violation(frame::ProtocolViolation::UnknownCode)]
+        );
     }
 }
 
@@ -1206,4 +1219,117 @@ fn provided_attach_timeout_releases_twin_reservation() {
     super::super::attach_tests::assert_attach_timeout(&mut s);
     drop(s);
     assert!(node.attach(who, &catalog).is_ok());
+}
+
+#[test]
+fn one_lost_occurrence_is_a_gap() {
+    let mut s = session();
+    let now = Instant::now();
+    ready(&mut s, now);
+    for seq in [1, 3] {
+        send(
+            &mut s,
+            Frame::Occurrence {
+                target: EVENT,
+                envelope: Envelope {
+                    stamp: Timestamp(99),
+                    seq,
+                },
+                payload: &[1],
+            },
+            now,
+        );
+    }
+    assert_eq!(s.backend.seen.events[1].3, Some(1));
+}
+#[test]
+fn second_answer_cannot_reverse_acceptance() {
+    let mut s = session();
+    let now = Instant::now();
+    ready(&mut s, now);
+    send(
+        &mut s,
+        Frame::Answer {
+            target: SIGNAL,
+            outcome: AnswerOutcome::Contract(ridl_rt::error::Contract::UnknownInteraction),
+        },
+        now,
+    );
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 99, PublishState::Live(&[1])),
+        now,
+    );
+    assert_eq!(s.backend.seen.samples.len(), 1);
+}
+#[test]
+fn provided_notes_identify_each_rejection() {
+    use std::sync::{Arc, Mutex};
+    let notes = Arc::new(Mutex::new(vec![]));
+    let capture = notes.clone();
+    let config = Config::default().with_record(move |n| capture.lock().unwrap().push(*n));
+    let mut s = session();
+    let now = Instant::now();
+    let unknown = Target {
+        ord: Ordinal(999),
+        ..SIGNAL
+    };
+    let receive = |s: &mut Provided<Capture>, f: Frame<'_>| {
+        let mut b = vec![0; f.encoded_len()];
+        f.encode(&mut b).unwrap();
+        s.on_message(&b, now, &mut vec![], &config)
+    };
+    assert_eq!(
+        receive(&mut s, publish(SIGNAL, 1, 99, PublishState::Init)),
+        Step::Close(1002)
+    );
+    assert_eq!(*notes.lock().unwrap(), [Note::MessageBeforeAttach]);
+    notes.lock().unwrap().clear();
+    receive(&mut s, Frame::Attached(AttachOutcome::Accepted));
+    receive(&mut s, publish(SIGNAL, 1, 99, PublishState::Live(&[1])));
+    receive(&mut s, publish(unknown, 1, 99, PublishState::Live(&[1])));
+    receive(
+        &mut s,
+        Frame::Answer {
+            target: unknown,
+            outcome: AnswerOutcome::Accepted,
+        },
+    );
+    receive(
+        &mut s,
+        Frame::Answer {
+            target: SIGNAL,
+            outcome: AnswerOutcome::Accepted,
+        },
+    );
+    receive(&mut s, publish(SIGNAL, 1, 99, PublishState::Live(&[1])));
+    receive(&mut s, publish(SIGNAL, 1, 99, PublishState::Live(&[1])));
+    assert_eq!(
+        *notes.lock().unwrap(),
+        [
+            Note::NotSubscribed { target: SIGNAL },
+            Note::UnknownInteraction { target: unknown },
+            Note::UnknownInteraction { target: unknown },
+            Note::DuplicateDropped { seq: 1 }
+        ]
+    );
+    notes.lock().unwrap().clear();
+    assert_eq!(
+        receive(&mut s, Frame::Attached(AttachOutcome::Accepted)),
+        Step::Close(1002)
+    );
+    assert_eq!(*notes.lock().unwrap(), [Note::SecondAttach]);
+    notes.lock().unwrap().clear();
+    assert_eq!(receive(&mut s, Frame::Subscribe(SIGNAL)), Step::Close(1002));
+    assert_eq!(*notes.lock().unwrap(), [Note::UnexpectedDirection]);
+    notes.lock().unwrap().clear();
+    let f = publish(SIGNAL, 2, 99, PublishState::InvalidDeclared);
+    let mut b = vec![0; f.encoded_len() + 1];
+    f.encode(&mut b).unwrap();
+    let reason = match frame::decode(&b) {
+        Err(frame::DecodeError::Discard(reason)) => reason,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(s.on_message(&b, now, &mut vec![], &config), Step::Continue);
+    assert_eq!(*notes.lock().unwrap(), [Note::Discarded(reason)]);
 }

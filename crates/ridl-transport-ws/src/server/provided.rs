@@ -153,6 +153,9 @@ impl<B: ProvidedBackend> Provided<B> {
 }
 
 impl<B: ProvidedBackend> Driver for Provided<B> {
+    fn bounded_attach_wait(&self) -> bool {
+        true
+    }
     fn attached(&self) -> bool {
         self.attached
     }
@@ -226,6 +229,13 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
                 if let Some(record) = config.record() {
                     record(&match other {
                         Err(frame::DecodeError::Violation(v)) => Note::Violation(v),
+                        Ok(
+                            Frame::Chunk { .. }
+                            | Frame::StreamEnd { .. }
+                            | Frame::StreamCredit { .. },
+                        ) => Note::Violation(frame::ProtocolViolation::UnknownCode),
+                        _ if !self.attached => Note::MessageBeforeAttach,
+                        Ok(Frame::Attached(_)) => Note::SecondAttach,
                         _ => Note::UnexpectedDirection,
                     });
                 }
@@ -236,7 +246,7 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
     fn tick(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
         self.consumer.tick(&mut self.backend, now);
         if self.attached {
-            self.calls.tick(&mut self.backend, now, out);
+            return self.calls.tick(&mut self.backend, now, out);
         }
         Step::Continue
     }

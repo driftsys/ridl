@@ -511,3 +511,27 @@ fn provider_unencodable_catalog_refuses_before_upgrade_without_capacity_note() {
         assert!(notes.lock().unwrap().is_empty());
     }
 }
+
+#[test]
+fn provider_entry_point_ignores_the_url_path() {
+    for path in ["/", "/arbitrary/path?query=1"] {
+        let conn = connection(
+            frame::SUBPROTOCOL_PROVIDER,
+            path,
+            &wire(Frame::Attached(AttachOutcome::Accepted)),
+        );
+        let output = conn.output.clone();
+        assert_eq!(
+            serve_provided(conn, backend(), &Config::default()),
+            Ended::Io(io::ErrorKind::UnexpectedEof)
+        );
+        let output = output.borrow();
+        assert!(output.starts_with(b"HTTP/1.1 101"));
+        let frames = messages(&output);
+        assert!(matches!(frame::decode(&frames[0].1), Ok(Frame::Attach(_))));
+        assert!(matches!(
+            frame::decode(&frames[1].1),
+            Ok(Frame::Subscribe(_))
+        ));
+    }
+}

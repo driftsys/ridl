@@ -839,14 +839,14 @@ connection is dropped. A backend port that reports `Detached` from any call ends
 the session with close 1001, because the provider is going away. `serve` returns
 an `Ended`:
 
-| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                 |
-| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                          |
-| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                          |
-| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, the session had not attached that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                       |
-| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                        |
-| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000 |
+| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, a provided session had not received `attached` that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                                                                           |
+| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000. From `serve_provided_selected`, a selected table exceeding message capacity or an unencodable attach answers HTTP 400 before upgrade |
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
@@ -969,6 +969,13 @@ target no meaning; the embedder does (the debug gateway reads
 `/<component>/<instance>/<catalog>`, see
 [the deployment descriptor record](deployment-descriptor.md#attaching-to-a-node)).
 
+**Gateway catalog selection (R-DS-11).** The injection URL names a catalog by
+name. If a machine embeds two versions with the same catalog name, the gateway
+selects the first in descriptor order. The URL cannot select the other version;
+the provider must match the selected hash. Listening selection instead prefers a
+matching name and hash. This is a limitation of the example gateway's injection
+selector, not a change to catalog compatibility.
+
 The `Origin` header is the one exception: it is read and given to a check the
 embedder sets with `Config::with_origin_check`, as `None` when the request has
 none. A request the check refuses is answered `403 Forbidden`, with the same
@@ -1037,15 +1044,14 @@ not counted, because it cannot read while it writes; a client that stops reading
 is ended by the write timeout (D-7). The time a client takes to read bytes the
 kernel has already accepted is still counted.
 
-The wait for the first message of the session is bounded by `liveness_timeout`
-as a whole: the `attach` for `serve` and `serve_selected`, and the `attached`
-for the provided session (D-28). While the session has not attached, the session
-ends as `Ended::LivenessTimeout` once `liveness_timeout` has passed since the
-upgrade, whatever control frames arrive meanwhile. Before this bound, a peer
-that sent pongs or pings and no `attach` kept the connection open, because any
-message reset the silence clock; the bound applies to `serve` and
-`serve_selected` too, and not only to the provided entry points. The server
-sends its pings from the upgrade on in either role. A browser answers a ping
+For `serve_provided` and `serve_provided_selected` only, the wait for `attached`
+is bounded by `liveness_timeout` after the upgrade, even while control frames
+arrive (R-DS-8). Both attach-wait checks enforce that deadline: one before
+handling each complete frame and one after a read with no complete frame.
+`serve` and `serve_selected` retain their prior behavior: any message resets
+their liveness clock, including before `attach`. Their first read uses
+`poll_interval` directly, so zero is refused as `Ended::Io(InvalidInput)`. The
+server sends pings from the upgrade in either role. A browser answers a ping
 automatically, so 5 s pings detect a dead client in 15 s at a cost of one small
 frame per 5 s.
 
@@ -1053,16 +1059,17 @@ frame per 5 s.
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol
 violation, 1003 on a text message, 1009 on an oversized message, and 1008 when
 the retained responses pass `max_retained_bytes` (D-16). The provided session
-adds one: 1011 when the local `Handler` refuses to serve a member of the table
-when the session starts (D-16, "The provided direction"). Item 4 does not list
-1011. The server answers a client's close frame with a close frame that carries
-the same code. After every close frame it sends, the answer to the client's
-included, and after a handshake `400`, `403`, `404` or `409`, the server shuts
-down its write side and lingers for up to 100 ms, reading and discarding what
-the client still sends, so that the close frame or the answer reaches the client
-instead of being lost to a reset of the connection. It waits no longer than that
-for the client to close the connection (RFC 6455 §7.1.1 has the client wait for
-the server to close it).
+uses 1011 for an internal failure after acceptance, as §11.1 item 4 allows
+(R-DS-9), including when the local `Handler` refuses to serve a member of the
+table when the session starts (D-16, "The provided direction"). The server
+answers a client's close frame with a close frame that carries the same code.
+After every close frame it sends, the answer to the client's included, and after
+a handshake `400`, `403`, `404` or `409`, the server shuts down its write side
+and lingers for up to 100 ms, reading and discarding what the client still
+sends, so that the close frame or the answer reaches the client instead of being
+lost to a reset of the connection. It waits no longer than that for the client
+to close the connection (RFC 6455 §7.1.1 has the client wait for the server to
+close it).
 
 ## Tests
 
@@ -1161,7 +1168,10 @@ All under `crates/ridl-transport-ws/`.
   itself is answered `409`; the session subscribes only the members of the
   interfaces that the instance offers; and a handshake that ends in any way
   (origin refusal, wrong subprotocol, a refused `attached`, end of input, an
-  accepted session) releases the twin.
+  accepted session) releases the twin. The offered table preserves each member's
+  `max` and `limit`. The executable delegates to the tested support function
+  that binds both listeners before announcement and routes each connection to
+  its requested role.
 - **The provided session** (`tests/provided.rs`, `tests/provided_signals.rs`,
   `tests/provided_calls.rs`, and the unit tests under `src/server/provided/`).
   Each listener accepts only its role, and a mixed offer selects the role of the
@@ -1171,31 +1181,33 @@ All under `crates/ridl-transport-ws/`.
   release the backend; the reversed vectors reach the backend after the
   `subscribe` is answered; every consumer disposition of D-29 (the `Init` rule,
   a duplicate or stale `seq`, a payload over the limit, an expired occurrence, a
-  gap, the commit groups of R-DS-4); the calls of D-16 (every outcome, the
-  deadline, the cap of 64, `Down` at the end of the session); and the server's
-  pings and its close of a client that falls silent.
+  gap of exactly one occurrence, exact rejection notes, second-answer handling,
+  the commit groups of R-DS-4); the calls of D-16 (every outcome, the deadline,
+  the cap of 64, `Down` at the end of the session); and the server's pings and
+  its close of a client that sends no messages.
 - **The debug gateway example** (`examples/debug_gateway.rs`, with
   `examples/support/debug_gateway.rs`; the `descriptor` feature). Reads a
   deployment descriptor and a machine name, builds an `ridl-loopback` `Node`,
   binds `127.0.0.1` on the port given (0 asks for any free port), prints
-  `port <n>`, and serves each connection on its own thread with
-  `serve_selected`. The selector finds the catalog the client names among the
-  node's catalogs and attaches to it as the listener (`InstanceNo::LISTENER`),
-  with the member table of the descriptor's embedded catalog. The listener reads
-  every signal and event of the machine's catalogs and may send commands and
-  queries; it writes nothing. With a fourth argument, the injection port, the
-  example binds a second listener on `127.0.0.1`, prints `inject-port <n>`, and
-  serves each connection with `serve_provided_selected`. Its selector reads the
-  request path `/<component>/<instance>/<catalog>`, finds the instance on the
-  machine that offers the catalog, and attaches to the node as the twin of the
-  instance (`InstanceNo::twin`). A path that names nothing, or a catalog that
-  the instance only maps, is `NotFound`; an instance that is attached as itself
-  makes the attach fail with `IdentityConflict`, which is `Conflict`. The member
-  table of the session holds only the interfaces the instance offers. The node
-  lives in the gateway's own process, so only components that run in that
-  process are visible through it. The example states `max_version` 2 for the
-  listener. The example has no access policy beyond the loopback address (D-7).
-  A gateway that does not bind the injection port cannot inject.
+  `port <n>` after both requested ports have bound, and serves each connection
+  on its own thread with `serve_selected`. The selector finds the catalog the
+  client names among the node's catalogs and attaches to it as the listener
+  (`InstanceNo::LISTENER`), with the member table of the descriptor's embedded
+  catalog. The listener reads every signal and event of the machine's catalogs
+  and may send commands and queries; it writes nothing. With a fourth argument,
+  the injection port, the example binds a second listener on `127.0.0.1`, prints
+  `inject-port <n>`, and serves each connection with `serve_provided_selected`.
+  Its selector reads the request path `/<component>/<instance>/<catalog>`, finds
+  the instance on the machine that offers the catalog, and attaches to the node
+  as the twin of the instance (`InstanceNo::twin`). A path that names nothing,
+  or a catalog that the instance only maps, is `NotFound`; an instance that is
+  attached as itself makes the attach fail with `IdentityConflict`, which is
+  `Conflict`. The member table of the session holds only the interfaces the
+  instance offers. The node lives in the gateway's own process, so only
+  components that run in that process are visible through it. The example states
+  `max_version` 2 for the listener. The example has no access policy beyond the
+  loopback address (D-7). A gateway that does not bind the injection port cannot
+  inject.
 - **The debug gateway fixture** (`examples/debug_gateway_fixture.rs`, the
   `descriptor` feature). The gateway of the previous item over the committed
   identity deployment, with a control channel on standard input and output: the
@@ -1254,8 +1266,8 @@ into local ports. The frame does not change. The server sends `attach`,
 `occurrence` and `response`.
 
 **D-28. The provided session.** The code is `server/provided.rs`. The rulings
-R-DS-3 to R-DS-6 that this decision and D-29 and D-16 hold are in the archived
-plan
+R-DS-3, R-DS-4 and R-DS-6 that this decision, D-29 and D-16 hold are in the
+archived plan
 ([`2026-11-03-debug-socket-plan.md`](../archive/2026-11-03-debug-socket-plan.md),
 "Delegated rulings"); this record states them as built.
 
@@ -1282,7 +1294,10 @@ plan
   count of occurrences missed since the last accepted one), and `commit` at the
   end of a group of signal frames (D-29). `Providing<P>` adapts the local ports;
   its constructor refuses ports and a table of different catalogs
-  (`TableMismatch`, as `Described` does).
+  (`TableMismatch`, as `Described` does). `MemberTable::iter` returns
+  `(Target, Option<Duration>, Option<u32>)` in interface and ordinal order. This
+  differs from the archived plan's Names signature: the as-built iterator
+  exposes the bound and limit needed to construct offered tables.
 - **The first messages.** The server writes `attach` right after the upgrade,
   with frame version 2, the encoding of the ports, and the catalog of the ports.
   It then waits for `attached`, for at most `liveness_timeout` (D-22). A message

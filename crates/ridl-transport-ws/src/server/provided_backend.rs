@@ -18,8 +18,9 @@ pub trait ProvidedBackend {
     fn ports(&mut self) -> &mut Self::Ports;
     /// Only the members this instance offers.
     fn members(&self) -> &MemberTable;
-    /// Delivers an accepted signal sample. `None` means the catalog init value;
-    /// `Some` is the last good encoded value, including on invalid samples.
+    /// Delivers an accepted signal sample. `None` means the catalog init value
+    /// or an invalid sample with no good value; `Some` is the last good encoded
+    /// value, including on invalid samples.
     /// The generated binding verifies live bytes before application use.
     fn sample(&mut self, target: Target, sample: Sample<Option<&[u8]>>, config: &Config);
     /// Delivers an occurrence with its original envelope. `gap` counts lost
@@ -129,7 +130,7 @@ where
     }
 }
 
-fn record(config: &Config, note: Note) {
+pub(super) fn record(config: &Config, note: Note) {
     if let Some(record) = config.record() {
         record(&note);
     }
