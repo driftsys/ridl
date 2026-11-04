@@ -29,7 +29,7 @@
 //! elements, bytes or text, commands with one parameter stream, and queries
 //! with one parameter stream and a plain or named-element streamed reply.
 //! Calls with two or more stream parameters have no generated method yet
-//! (driftsys/ridl#1116).
+//! (driftsys/ridl#1224).
 
 use core::task::Waker;
 

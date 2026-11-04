@@ -2,9 +2,10 @@
 
 The Rust backend's generated face over `ridl-rt`: per interface, an async
 `Client`, a `Publisher`, a `Provider` trait, `serve`, and a `blocking` module
-holding the same client, and `serve` where there is one, as blocking calls. The
-first form of it was an in-process-only MVP, ahead of the frame specification
-and the transport, so the team had a face to write against; ADR-0018 decision 15
+holding the supported blocking client methods and blocking `serve`. An
+upload-only interface has blocking `serve` and no blocking `Client`. The first
+form of it was an in-process-only MVP, ahead of the frame specification and the
+transport, so the team had a face to write against; ADR-0018 decision 15
 restores the face as the runtime layer's "phase 2". `ridl build --emit rust`
 then emitted it, and the call surface was reshaped: the poll face the MVP made
 public — a send that returns a correlation, a poll per outcome, a one-pass
@@ -31,7 +32,8 @@ function beside the domain-type emission:
   `Provider` and the `Event` enum in `face.rs`; the named futures in
   `futures.rs`; the internal poll face in `poll.rs`; the internal one-pass step
   in `dispatch.rs`; `serve` and its future in `serve.rs`; and the `blocking`
-  module in `blocking.rs`.
+  module in `blocking.rs`; parameter-stream commands and shared caller state in
+  `upload.rs`; and upload queries and duplex drivers in `upload_query.rs`.
 - `src/clauses.rs` — the contract-clause translator. Only `src/descriptors.rs`
   calls it, when it emits a `Command`'s or a `Query`'s `require` and `ensure`
   bodies. `src/face/dispatch.rs` names those generated methods from the step it
@@ -188,7 +190,7 @@ lowering wrote, and the backend never builds one. A fallible `T | E` reply and
 an untyped position are still refused (driftsys/ridl#943). A call with a stream
 gets its descriptor, whose row lists its streams, and the supported forms get
 the methods listed under [Stream forms](#stream-forms). A call with two or more
-stream parameters stays outside the face (driftsys/ridl#1116); its descriptors
+stream parameters stays outside the face (driftsys/ridl#1224); its descriptors
 are still emitted. An upload query with a byte or text reply stream is also
 outside the face. An induced payload with no finite bound in an encoding
 `encodings` names is also refused before its descriptor is accepted, because
@@ -461,7 +463,7 @@ reference; a stream-only request uses its induced empty parameter struct.
 The last two rows show named input elements; byte or text input uses
 `ByteConsumer` and the corresponding sink methods instead. A query with an
 upload and a byte or text reply stream is not carried. Calls with two or more
-stream parameters remain outside the face (driftsys/ridl#1116).
+stream parameters remain outside the face (driftsys/ridl#1224).
 
 Stream methods use `core::task` and `core::future::poll_fn`, including their
 async wrappers, without `std`. There are no blocking stream methods and no
@@ -477,7 +479,9 @@ sends the longest prefix within `LIMIT` that ends at a character boundary.
 A named sink checks and encodes one element before pushing it and retains at
 most one encoded element under backpressure. `send` while an element is held
 answers `Transport::Busy` without dropping it; `poll_ready` flushes it and
-`poll_end` flushes it before ending. A failed value check aborts the stream. A
+`poll_end` flushes it before ending. A failed value check before admission
+cancels the retained request without sending it and settles the call with that
+validation error. After admission, a failed check aborts the parameter stream. A
 push is taken when its answer equals the chunk length, including a zero-byte
 Proto3 element; zero means full only for a nonempty chunk. Byte and text sinks
 push directly from the caller's buffer and return `Pending` with stream interest
@@ -491,9 +495,21 @@ admission, the call future waits for a slot; byte and text writes are pending,
 and a named sink may retain its checked element. Dropping a sink before the call
 is admitted cancels the retained request with `Interrupted`. A command's
 acknowledgment is independent of upload errors: a successful acknowledgment
-stays successful. An unfinished sink aborts and forgets its call once when
-dropped. An ended sink does not withdraw an unclaimed call; its call value
-retains ownership until acknowledgment or reply, or cancellation by drop.
+stays successful. Dropping an unfinished sink after admission settles a command
+future that has not yet resolved with `Transport::Interrupted`, then forgets the
+call. Cancellation records wake the sibling value that last returned `Pending`;
+shared state retains and takes its waker. An unfinished sink aborts and forgets
+its call once when dropped. An ended sink does not withdraw an unclaimed call;
+its call value retains ownership until acknowledgment or reply, or cancellation
+by drop.
+
+The upload driver pulls a terminal outcome without waiting for consumer
+readiness when it holds no earlier element. It can retain one pulled element
+while the consumer is not ready, and accepts that element before pulling the
+next outcome. End and failure notifications are delivered once, and release the
+member slot. The byte consumer receives every held suffix before the next pull.
+`serve` panics if `ByteConsumer::poll_write` returns zero or more than the
+offered length for a nonempty buffer.
 
 A plain upload query retains ordinary arguments for `Query::ensure`, calls
 `q_reply` after notifying its consumer of end, and settles the reply then. The
@@ -577,27 +593,27 @@ crate that `include!`s the fixture, so `pub(crate)` reaches it.
 **A query whose reply is a stream of named elements** adds to the provider side.
 `Provider` gains `type <Name>: ridl_rt::face::Source<Item = T>` and
 `fn <name>(&mut self, ..) -> Self::<Name>`; `serve` registers the member with
-the others, and its `H`, and the blocking `serve`'s, add `StreamHandler`, only
-on an interface that declares such a member. `dispatch` checks the arguments and
-`require` as for any query, calls the method, and keeps the source in the
-member's slot of `Serve` without settling the claim; the face drives one stream
-per member at a time, and a call of a member whose slot is held is settled
-`Transport::Busy`. The handler port gives `serve` no signal of a caller's
-`forget` except through the next push, so while a member's source answers
-`Pending`, a caller that timed out or dropped its stream keeps the member `Busy`
-until the source yields its next element; that push fails, and the source is
-dropped and the member freed then. Each poll of `Serve` drives its streams
-before it takes claims. An element that found the stream's window full is kept,
-as a range of the element buffer inline in `Serve`, and pushed again on a later
-poll before the source is polled again; otherwise the source is polled at most
-once per poll, and that poll counts as one of the 32. An element is encoded and
-checked against its type before `push_claim`; one that fails stops the stream
-with `Contract::InvalidValue` and is not sent. `Ready(None)` is `end_claim`,
-`Err(Interrupted)` and a push refused `TooLarge` are `abort_claim` with
-`Transport::Interrupted`, and a push answered `Failed(_)`, a caller that refused
-or stopped reading the stream, is `end_claim`, which settles the claim so that
-the caller's call slot is given back. The source is dropped with its slot.
-Dropping `Serve` stops every stream it still drives with `abort_claim` and
+the others. The handler bound adds `StreamHandler` for every supported reply or
+parameter stream, including byte and text streams and uploads. `dispatch` checks
+the arguments and `require` as for any query, calls the method, and keeps the
+source in the member's slot of `Serve` without settling the claim; the face
+drives one stream per member at a time, and a call of a member whose slot is
+held is settled `Transport::Busy`. The handler port gives `serve` no signal of a
+caller's `forget` except through the next push, so while a member's source
+answers `Pending`, a caller that timed out or dropped its stream keeps the
+member `Busy` until the source yields its next element; that push fails, and the
+source is dropped and the member freed then. Each poll of `Serve` drives its
+streams before it takes claims. An element that found the stream's window full
+is kept, as a range of the element buffer inline in `Serve`, and pushed again on
+a later poll before the source is polled again; otherwise the source is polled
+at most once per poll, and that poll counts as one of the 32. An element is
+encoded and checked against its type before `push_claim`; one that fails stops
+the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` is
+`end_claim`, `Err(Interrupted)` and a push refused `TooLarge` are `abort_claim`
+with `Transport::Interrupted`, and a push answered `Failed(_)`, a caller that
+refused or stopped reading the stream, is `end_claim`, which settles the claim
+so that the caller's call slot is given back. The source is dropped with its
+slot. Dropping `Serve` stops every stream it still drives with `abort_claim` and
 `Transport::Interrupted` and drops its source, so that `blocking::serve`, which
 drops the future when its timeout passes, leaves no claim held. `ensure` is not
 evaluated on a streamed reply. `tests/stream_face.rs` tests these paths over

@@ -879,7 +879,7 @@ the in-process `ridl-loopback` implements it. The Rust that `ridl build` emits
 carries reply streams of named elements, bytes and text, commands with one
 stream parameter, and queries with one stream parameter and a plain or
 named-element streamed reply, over `ridl-loopback`. Calls with two or more
-stream parameters remain outside the face (driftsys/ridl#1116). The WebSocket
+stream parameters remain outside the face (driftsys/ridl#1224). The WebSocket
 upload direction and the corresponding TypeScript client methods are not built
 yet. The [interaction-face record](../design/interaction-face.md#stream-forms)
 lists the generated reader and writer methods. The specification's §12 and

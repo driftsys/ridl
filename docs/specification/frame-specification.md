@@ -1059,14 +1059,15 @@ it is the consumer's own finding about bytes it received.
 **What a violation carries.** `contract(InvalidValue(violation))` crosses as the
 violation's `Rule` alone; the name of the typl type whose constraint failed does
 not cross. The `Rule` codes: `Range` 1, `Step` 2, `Length` 3, `Pattern` 4,
-`Variant` 5, `Unique` 6; a new `Rule` variant is added only together with a new
-frame version, because a receiver cannot construct a variant it does not know. A
-runtime that decodes the violation from a frame reports it with no type name,
-which `ridl_rt::payload::Violation` represents as `type_name: None`; a violation
-the generated binding detects locally keeps its name, and an in-process
-transport delivers a violation with its name. A type identifier was rejected
-because the catalog descriptor carries no type table, and the name is
-diagnostic, not contractual.
+`Variant` 5, `Unique` 6. `Rule::Utf8` exists in `ridl-rt` without a wire code. A
+rule receives its wire code with the frame version that first carries it,
+because a receiver cannot construct a variant it does not know. A runtime that
+decodes the violation from a frame reports it with no type name, which
+`ridl_rt::payload::Violation` represents as `type_name: None`; a violation the
+generated binding detects locally keeps its name, and an in-process transport
+delivers a violation with its name. A type identifier was rejected because the
+catalog descriptor carries no type table, and the name is diagnostic, not
+contractual.
 
 ## 10. What a Binding Decides
 

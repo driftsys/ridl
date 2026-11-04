@@ -648,8 +648,11 @@ other entry below is Accepted.
   is built, and so are frame version 3, which carries a query's streamed reply
   over WebSocket
   ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
-  and the Rust face for a streamed reply of named elements; parameter, byte and
-  text streams are not carried yet (driftsys/ridl#1116).
+  and, as amended 2026-11-04, the Rust face over `ridl-loopback` for byte, text
+  and named-element reply streams and commands and queries with one parameter
+  stream. An upload query has a plain or named-element streamed reply. The
+  WebSocket upload direction, the corresponding TypeScript methods, and calls
+  with two or more parameter streams are not built (driftsys/ridl#1224).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

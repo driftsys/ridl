@@ -1028,9 +1028,9 @@ What the crate already does so that the addition is local:
 
 - The stand-in ports (driftsys/ridl#988).
 - A parameter stream on a command or a query, a byte stream, and the UTF-8 rule
-  of a `<string>` stream. A chunk from the client is refused (D-27). The `Rule`
-  for UTF-8 is added with the parameter streams: to version 3 if it has not been
-  released, else to a later version.
+  of a `<string>` stream. A chunk from the client is refused (D-27).
+  `Rule::Utf8` already exists in `ridl-rt`, without a wire code. A rule receives
+  its wire code with the frame version that first carries it.
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
   `temperature` signal to a TypeScript client, with the member table read from

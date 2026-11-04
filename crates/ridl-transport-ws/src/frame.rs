@@ -478,9 +478,11 @@ fn kind_from(code: u8) -> Result<Kind, ProtocolViolation> {
 
 /// The `detail` code of a violation's rule: `Range` 1, `Step` 2, `Length` 3,
 /// `Pattern` 4, `Variant` 5, `Unique` 6 (frame specification §9.6), or
-/// `None` for a `Rule` variant frame version 2 has no code for. `Rule` is
-/// `#[non_exhaustive]`, and a new variant comes only with a new frame
-/// version, so a sender built against a newer `ridl-rt` checks here before
+/// `None` for a `Rule` variant the supported frame versions have no code for.
+/// `Rule` is
+/// `#[non_exhaustive]`; `Rule::Utf8` exists in `ridl-rt` without a wire code.
+/// A rule receives its wire code with the frame version that first carries it,
+/// so a sender built against a newer `ridl-rt` checks here before
 /// it builds a `contract(InvalidValue)` outcome: the server sends such a
 /// violation as `corrupt` on a `response` and as `contract(ContractBroken)`
 /// on an `answer`, which has no `corrupt` outcome.

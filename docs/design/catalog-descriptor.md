@@ -670,7 +670,7 @@ The stream port and descriptors cover every stream form. Over `ridl-loopback`,
 the Rust face carries reply streams of named elements, bytes and text, commands
 with one stream parameter, and queries with one stream parameter and a plain or
 named-element streamed reply. Calls with two or more stream parameters remain
-outside the face (driftsys/ridl#1116); their descriptor rows are still emitted.
+outside the face (driftsys/ridl#1224); their descriptor rows are still emitted.
 The [interaction-face record](interaction-face.md#stream-forms) gives the
 methods and the remaining combinations.
 

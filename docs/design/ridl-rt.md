@@ -141,7 +141,7 @@ byte and text reply streams, and feeds `Consumer` and `ByteConsumer` for named,
 byte and text parameter streams. Commands with one stream parameter and queries
 with one stream parameter and a plain or named-element streamed reply run over
 `ridl-loopback`. Calls with two or more stream parameters remain outside the
-face (driftsys/ridl#1116). The WebSocket upload direction and the corresponding
+face (driftsys/ridl#1224). The WebSocket upload direction and the corresponding
 TypeScript client methods are not built yet.
 
 `Ready(Some(Ok(item)))` is the next element, `Ready(None)` the end,
@@ -1225,7 +1225,7 @@ The original stream gaps are now partly closed: the stream port and WebSocket
 reply framing are built, and the generated Rust face carries named, byte and
 text reply streams, one stream parameter on a command, and one stream parameter
 with a plain or named-element streamed query reply over `ridl-loopback`. Calls
-with two or more stream parameters remain outside the face (driftsys/ridl#1116);
+with two or more stream parameters remain outside the face (driftsys/ridl#1224);
 the WebSocket upload direction and the corresponding TypeScript client methods
 are not built yet.
 

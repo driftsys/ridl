@@ -990,7 +990,7 @@ parameter and queries with one stream parameter and a plain or named-element
 streamed reply. These forms run over `ridl-loopback`; the WebSocket upload
 direction and the corresponding TypeScript client methods are not built yet. A
 call with two or more stream parameters is left out of an otherwise emitted face
-without a note, while its descriptor row is still written (driftsys/ridl#1116).
+without a note, while its descriptor row is still written (driftsys/ridl#1224).
 An upload query with a byte or text reply stream also has no face method. An
 `internal` interface gets no face in any case
 ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face)
