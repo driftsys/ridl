@@ -92,7 +92,7 @@ export function provide(
     for (const m of options.members) {
       numbers(m.iface, m.ord);
       if (
-        !(m.kind in kinds) ||
+        !Object.hasOwn(kinds, m.kind) ||
         (m.limit !== undefined &&
           (!Number.isSafeInteger(m.limit) || m.limit < 0))
       ) throw new RangeError("invalid member kind or payload limit");
@@ -162,29 +162,35 @@ export class Provision {
     socket.onclose = (event) => this.#end(event.code, event.reason);
     socket.onerror = () => this.#end(1006, "");
   }
-  /** Publish a value only on an accepted signal subscription. */
+  /** Update a signal value; send it immediately when subscribed. */
   publish(iface: number, ord: number, payload: Uint8Array, time: bigint): void {
     this.#publication({ kind: Kind.Signal, iface, ord }, time, {
       provenance: "live",
       payload: payload.slice(),
     });
   }
-  /** Invalidate a subscribed signal without a payload. */
+  /** Update a signal to invalid; send it immediately when subscribed. */
   invalidate(iface: number, ord: number, time: bigint): void {
     this.#publication({ kind: Kind.Signal, iface, ord }, time, {
       provenance: "invalid",
     });
   }
-  /** Raise an occurrence only on an accepted event subscription. No event is cached. */
+  /** Raise an occurrence when subscribed; otherwise record it without delivery. */
   raise(iface: number, ord: number, payload: Uint8Array, time: bigint): void {
     const target = { kind: Kind.Event, iface, ord };
     this.#check(target, time, payload);
-    this.#send({
+    const frame: Frame = {
       form: "occurrence",
       target,
       envelope: { stamp: time, seq: this.#next(target) },
       payload,
-    });
+    };
+    if (this.#subscribed.has(key(target))) this.#send(frame);
+    else {notify(this.options.onNote, {
+        note: "discarded",
+        reason: "not-subscribed",
+        frame,
+      });}
   }
   /** Stop sends immediately; closed waits for the platform's closing handshake. */
   close(): void {
@@ -210,7 +216,7 @@ export class Provision {
     numbers(t.iface, t.ord);
     stamp(time);
     if (this.#ended) throw new SessionError({ category: "down" });
-    if (!this.#attached || !this.#subscribed.has(key(t))) {
+    if (!this.#attached || !this.#members.has(key(t))) {
       throw new SessionError({
         category: "contract",
         contract: { category: "unknown-interaction" },
@@ -228,7 +234,9 @@ export class Provision {
     );
     const value = { envelope: { stamp: time, seq: this.#next(target) }, state };
     this.#states.set(key(target), value);
-    this.#send({ form: "publish", target, ...value });
+    if (this.#subscribed.has(key(target))) {
+      this.#send({ form: "publish", target, ...value });
+    }
   }
   #current(target: Target): void {
     this.#send({

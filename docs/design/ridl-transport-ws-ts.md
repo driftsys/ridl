@@ -535,6 +535,7 @@ const provision = await provide(
     clock: () => taiMicros(), // optional; the stamp of a response and the initial publish
   },
 );
+// Update the initial state before the gateway subscribes (R-DS-10).
 provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
 ```
 
@@ -555,16 +556,20 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   `Provision`.
 - **The session.** `publish`, `invalidate` and `raise` take the stamp as an
   argument, a `bigint` in microseconds that fits an `i64`, because the package
-  has no clock for the value's time. Each is refused with a `SessionError`
-  `contract` `unknown-interaction` until the server has subscribed the member,
-  with `corrupt` when the payload is longer than the member's limit, and with
-  `down` after the session ended; an interface or ordinal that is not a nonzero
-  `u32`, or a stamp outside `i64`, throws a `RangeError`. The session counts
-  `seq` per channel from 1. A signal keeps its last frame, so the first
-  `subscribe` of a signal and each `read` of it send that frame, or `init`
-  (`seq` 0, stamped at the attach) when nothing was published; an event is not
-  kept. A `subscribe` of a member that the options do not list, or of another
-  kind, is answered `contract(UnknownInteraction)`.
+  has no clock for the value's time. Under R-DS-10, `publish` and `invalidate`
+  update the current signal state even before subscription; the initial value is
+  sent after the `answer` when the subscription arrives (§5.1). A `raise`
+  without a subscription is not delivered and records a `discarded` note with
+  reason `not-subscribed`; it does not throw. Each operation is refused with a
+  `SessionError` `contract` `unknown-interaction` for an unlisted member, with
+  `corrupt` when the payload exceeds the member's limit, and with `down` after
+  the session ended; an interface or ordinal that is not a nonzero `u32`, or a
+  stamp outside `i64`, throws a `RangeError`. The session counts `seq` per
+  channel from 1. A signal keeps its last frame, so the first `subscribe` of a
+  signal and each `read` of it send that frame, or `init` (`seq` 0, stamped at
+  the attach) when nothing was published; an event is not kept. A `subscribe` of
+  a member that the options do not list, or of another kind, is answered
+  `contract(UnknownInteraction)`.
 - **Requests.** A `request` for a member that is not a listed command or query
   is answered `contract(UnknownInteraction)`; arguments longer than the member's
   limit, `corrupt`; and a request that arrives while 64 are in flight, `busy`.
@@ -579,11 +584,15 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   (`accepted` for a query, `reply` for a command), returns nothing, throws or
   rejects; it records
   `{ note: "discarded", reason: "unexpected-outcome", frame }` through `onNote`
-  and releases the slot. The Rust provided session, which is the consumer of
-  these responses, settles an outcome outside the set as `Corrupt` at once (the
-  crate's D-16), so a call to a TypeScript provider that failed ends at the Rust
-  call's own deadline. A handler that never settles holds its slot among the 64
-  until the session ends, and the server's deadline reports the call.
+  and releases the slot. A clock or encoding failure while settling a request is
+  recorded in the same way and never escapes the message callback. A synchronous
+  refusal advances neither the replay high-water mark nor the response counter
+  until it is sent successfully, so a retry can settle it. The Rust provided
+  session, which is the consumer of these responses, settles an outcome outside
+  the set as `Corrupt` at once (the crate's D-16), so a call to a TypeScript
+  provider that failed ends at the Rust call's own deadline. A handler that
+  never settles holds its slot among the 64 until the session ends, and the
+  server's deadline reports the call.
 - **The limits of a browser (R-DS-7).** The platform's `WebSocket` closes with
   no code except 1000 and 3000 to 4999, and shows no pings to the page, so the
   providing side follows D-10 and D-11 exactly. On a violation (a text message,
@@ -594,7 +603,8 @@ provision.publish(1, 1, payload, stamp); // stamp: bigint microseconds
   check is the one that runs. `Provision.close()` closes with 1000, and
   `Provision.closed` resolves on the platform's close or error event.
   driftsys/ridl#991 asks the frame specification to state what such a client
-  does, and covers the reversed role too.
+  does for `connect` and the consumer role. The reversed role has the same
+  specification gap; the issue should be widened to cover it.
 
 ## The end-to-end tests
 

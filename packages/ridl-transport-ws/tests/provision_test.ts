@@ -200,36 +200,40 @@ Deno.test("provide_subscription_and_initial_state", async () => {
   exact(h.socket, 2, sample(S, 0n, 77n, { provenance: "init" }));
   assert.equal(clocks, 1);
   h.socket.sent.splice(1);
-  assert.throws(() => h.p.publish(1, 1, bytes, 10n), SessionError);
-  assert.throws(() => h.p.raise(1, 2, bytes, 10n), SessionError);
+  h.p.publish(1, 1, bytes, 10n);
+  h.p.raise(1, 2, bytes, 10n);
+  assert.equal(h.socket.sent.length, 1);
+  assert.deepEqual(h.notes, [{
+    note: "discarded",
+    reason: "not-subscribed",
+    frame: {
+      form: "occurrence",
+      target: E,
+      envelope: { seq: 1n, stamp: 10n },
+      payload: bytes,
+    },
+  }]);
   h.socket.deliver({ form: "subscribe", target: S });
   exact(h.socket, 1, {
     form: "answer",
     target: S,
     outcome: { outcome: "accepted" },
   });
-  exact(h.socket, 2, sample(S, 0n, 77n, { provenance: "init" }));
-  const value = bytes.slice();
-  h.p.publish(1, 1, value, 10n);
-  value[0] = 99;
-  h.socket.deliver({ form: "subscribe", target: S });
-  assert.equal(h.socket.sent.length, 5);
+  exact(
+    h.socket,
+    2,
+    sample(S, 1n, 10n, { provenance: "live", payload: bytes }),
+  );
   h.socket.deliver({ form: "unsubscribe", target: S });
-  assert.throws(() => h.p.publish(1, 1, bytes, 11n), SessionError);
-  assert.throws(() => h.p.invalidate(1, 1, 11n), SessionError);
-  assert.equal(h.socket.sent.length, 5);
+  h.p.invalidate(1, 1, 11n);
+  assert.equal(h.socket.sent.length, 3);
   h.socket.deliver({ form: "subscribe", target: S });
-  exact(
-    h.socket,
-    6,
-    sample(S, 1n, 10n, { provenance: "live", payload: bytes }),
-  );
-  h.socket.deliver({ form: "read", target: S });
-  exact(
-    h.socket,
-    7,
-    sample(S, 1n, 10n, { provenance: "live", payload: bytes }),
-  );
+  exact(h.socket, 3, {
+    form: "answer",
+    target: S,
+    outcome: { outcome: "accepted" },
+  });
+  exact(h.socket, 4, sample(S, 2n, 11n, { provenance: "invalid" }));
 });
 Deno.test("provide_encodes_values_events_and_invalidation", async () => {
   const h = await open();
@@ -259,14 +263,14 @@ Deno.test("provide_encodes_values_events_and_invalidation", async () => {
   assert.equal(nextSequence(0xffff_ffff_ffff_ffffn), 0n);
   assert.equal(nextSequence(0n), 1n);
   h.socket.deliver({ form: "unsubscribe", target: E });
-  assert.throws(() => h.p.raise(1, 2, bytes, 0n), SessionError);
+  assert.doesNotThrow(() => h.p.raise(1, 2, bytes, 0n));
   h.socket.deliver({ form: "subscribe", target: E });
   assert.equal(h.socket.sent.length, 9);
   h.p.raise(1, 2, bytes, 125n);
   exact(h.socket, 9, {
     form: "occurrence",
     target: E,
-    envelope: { seq: 3n, stamp: 125n },
+    envelope: { seq: 4n, stamp: 125n },
     payload: bytes,
   });
 });
@@ -542,7 +546,8 @@ Deno.test("provide_event_limits_read_and_error_outcomes", async () => {
   }
   h.socket.deliver({ form: "read", target: S });
   exact(h.socket, 2, sample(S, 0n, 77n, { provenance: "init" }));
-  assert.throws(() => h.p.publish(1, 1, bytes, 0n), SessionError); // read did not subscribe
+  h.p.publish(1, 1, bytes, 0n); // read does not subscribe or send this value
+  assert.equal(h.socket.sent.length, 3);
   h.socket.deliver({ form: "subscribe", target: S });
   h.p.invalidate(1, 1, 19n);
   h.socket.deliver({ form: "unsubscribe", target: S });
@@ -550,7 +555,7 @@ Deno.test("provide_event_limits_read_and_error_outcomes", async () => {
   exact(
     h.socket,
     h.socket.sent.length - 1,
-    sample(S, 1n, 19n, { provenance: "invalid" }),
+    sample(S, 2n, 19n, { provenance: "invalid" }),
   );
 });
 Deno.test("provide_stream_forms_are_version_violations", async () => {
@@ -668,17 +673,21 @@ Deno.test("provide_failed_clock_does_not_advance_response_sequence", async () =>
   const h = await open({ clock: () => time });
   time = 1n << 63n;
   // Unknown targets settle synchronously inside the message handler.
-  assert.throws(() => h.socket.deliver(req(S, 1n)), RangeError);
+  assert.doesNotThrow(() => h.socket.deliver(req(S, 1n)));
+  assert.deepEqual(h.notes, [{
+    note: "discarded",
+    reason: "unexpected-outcome",
+    frame: req(S, 1n),
+  }]);
   assert.equal(h.socket.sent.length, 1);
   time = 88n;
-  h.socket.deliver(req(C, 2n));
-  await tick();
+  h.socket.deliver(req(S, 1n));
   exact(h.socket, 1, {
     form: "response",
-    target: C,
+    target: S,
     envelope: { seq: 1n, stamp: 88n },
-    correlation: 2n,
-    outcome: { outcome: "accepted" },
+    correlation: 1n,
+    outcome: unknown,
   });
 });
 
@@ -739,4 +748,146 @@ Deno.test("provide_rejects_unsafe_integer_limit_before_socket_creation", async (
     RangeError,
   );
   assert.equal(created, false);
+});
+
+Deno.test("provide_handler_failure_releases_each_capacity_slot", async () => {
+  for (
+    const fail of [() => {
+      throw Error("sync");
+    }, () => Promise.reject(Error("async"))]
+  ) {
+    let dispatched = 0;
+    const h = await open({
+      onRequest: () => {
+        dispatched++;
+        return fail();
+      },
+    });
+    for (let seq = 1n; seq <= 65n; seq++) {
+      h.socket.deliver(req(C, seq));
+      await tick();
+    }
+    assert.equal(dispatched, 65);
+    assert.equal(h.notes.length, 65);
+    assert.equal(h.socket.sent.length, 1);
+  }
+});
+Deno.test("provide_counters_are_independent_per_channel", async () => {
+  const s2 = { ...S, iface: 2 }, e2 = { ...E, iface: 2 };
+  const h = await open({
+    members: [...members, { ...s2, kind: "signal" }, { ...e2, kind: "event" }],
+  });
+  for (const target of [S, s2, E, e2]) {
+    h.socket.deliver({ form: "subscribe", target });
+  }
+  for (let seq = 1n; seq <= 2n; seq++) {
+    for (const target of [S, s2, E, e2]) {
+      if (target.kind === Kind.Signal) {
+        h.p.publish(target.iface, target.ord, bytes, 1n);
+      } else h.p.raise(target.iface, target.ord, bytes, 1n);
+      const f = last(h.socket);
+      assert(f.form === "publish" || f.form === "occurrence");
+      assert.deepEqual(f.target, target);
+      assert.equal(f.envelope.seq, seq);
+    }
+  }
+});
+Deno.test("provide_malformed_before_attach_is_unexpected_form", async () => {
+  const h = start();
+  const rejected = assert.rejects(h.pending, ProtocolError);
+  h.socket.open("ridl-ws-v2-provider");
+  const init = encode(sample(S, 0n, 0n, { provenance: "init" }));
+  const malformed = new Uint8Array(init.length + 1);
+  malformed.set(init);
+  assert.deepEqual(decode(malformed), {
+    ok: false,
+    class: "discard",
+    discard: "unexpected-payload",
+  });
+  h.socket.deliver(malformed);
+  assert.deepEqual(h.socket.closes, [{}]);
+  await rejected;
+  assert.deepEqual(h.notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+  assert.deepEqual(h.socket.closes, [{}]);
+});
+Deno.test("provide_violation_ends_operations_before_notifying", async () => {
+  let observed = false;
+  const h = await open({
+    onNote: () => {
+      try {
+        h.p.publish(1, 1, bytes, 0n);
+      } catch (error) {
+        observed = error instanceof SessionError;
+      }
+    },
+  });
+  h.socket.deliver("text");
+  assert(observed);
+});
+Deno.test("provide_prototype_member_kind_is_rejected", async () => {
+  let created = false;
+  await assert.rejects(
+    provide("ws://fixture", {
+      catalog,
+      encoding: "flatbuffers",
+      members: [
+        {
+          iface: 1,
+          ord: 1,
+          kind: "toString",
+        } as unknown as ProvideOptions["members"][number],
+      ],
+      onRequest: () => ({ outcome: "accepted" }),
+      webSocket: () => {
+        created = true;
+        throw Error("socket");
+      },
+    }),
+    RangeError,
+  );
+  assert.equal(created, false);
+});
+Deno.test("provide_synchronous_settle_clock_failure_is_recorded_and_retryable", async () => {
+  for (const mode of ["unknown", "corrupt", "busy"] as const) {
+    let broken = false;
+    const h = await open({
+      clock: () => {
+        if (broken) throw Error("clock");
+        return 77n;
+      },
+      onRequest: () => new Promise(() => {}),
+    });
+    let seq = 1n;
+    if (mode === "busy") {
+      for (; seq <= 64n; seq++) h.socket.deliver(req(C, seq));
+      await tick();
+    }
+    const frame = mode === "unknown"
+      ? req(S, seq)
+      : req(C, seq, mode === "corrupt" ? new Uint8Array(3) : bytes);
+    broken = true;
+    const sent = h.socket.sent.length;
+    assert.doesNotThrow(() => h.socket.deliver(frame));
+    assert.equal(h.socket.sent.length, sent);
+    assert.deepEqual(h.notes, [{
+      note: "discarded",
+      reason: "unexpected-outcome",
+      frame,
+    }]);
+    broken = false;
+    h.socket.deliver(frame);
+    const result = last(h.socket);
+    assert(result.form === "response");
+    assert.equal(result.correlation, seq);
+    assert.equal(result.envelope.seq, 1n);
+    assert.deepEqual(
+      result.outcome,
+      mode === "unknown"
+        ? unknown
+        : { outcome: mode === "busy" ? "busy" : "corrupt" },
+    );
+  }
 });

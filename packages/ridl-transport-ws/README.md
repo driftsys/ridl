@@ -134,6 +134,7 @@ const provision = await provide(
     onRequest: () => ({ outcome: "accepted" }),
   },
 );
+// This becomes the initial value when the gateway subscribes.
 provision.publish(1, 1, new Uint8Array([42]), BigInt(Date.now()) * 1000n);
 ```
 
@@ -144,9 +145,13 @@ The path of the URL is the gateway's: the binding gives it no meaning.
   Otherwise it answers `attached(refused)`, closes with 1000 and rejects with
   `AttachRefused`.
 - `publish`, `invalidate` and `raise` take the stamp as a `bigint` in
-  microseconds. Each throws a `SessionError` `contract` `unknown-interaction`
-  until the server has subscribed the member, `corrupt` when the payload is
-  longer than the member's limit, and `down` after the session ended.
+  microseconds. `publish` and `invalidate` update the current signal state
+  before subscription, and the server receives that state after the
+  subscription's `answer`. A `raise` without a subscription sends nothing and
+  records `{ note: "discarded", reason: "not-subscribed", frame }` through
+  `onNote`. Each throws a `SessionError` `contract` `unknown-interaction` for an
+  unlisted member, `corrupt` when the payload exceeds its limit, and `down`
+  after the session ended.
 - `onRequest` answers each command and query and may be asynchronous. The
   package answers a request for an unlisted member with
   `contract(UnknownInteraction)`, arguments over the limit with `corrupt`, and a

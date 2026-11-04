@@ -40,24 +40,35 @@ export class ProvidedCalls {
       if (kept) this.send(kept);
       return;
     }
-    this.#highest = seq;
+    const discarded = () => {
+      this.#active.delete(seq);
+      if (!this.#ended) {
+        this.note({ note: "discarded", reason: "unexpected-outcome", frame });
+      }
+    };
     const settle = (outcome: ResponseOutcome) => {
       if (this.#ended) return;
-      const stamp = this.clock();
-      this.#active.delete(seq);
-      this.#sequence = nextSequence(this.#sequence);
-      const bytes = encode({
-        form: "response",
-        target: frame.target,
-        correlation: seq,
-        envelope: { seq: this.#sequence, stamp },
-        outcome,
-      });
-      this.#kept.set(seq, bytes);
-      if (this.#kept.size > CAPACITY) {
-        this.#kept.delete(this.#kept.keys().next().value!);
+      try {
+        const stamp = this.clock();
+        this.#active.delete(seq);
+        const sequence = nextSequence(this.#sequence);
+        const bytes = encode({
+          form: "response",
+          target: frame.target,
+          correlation: seq,
+          envelope: { seq: sequence, stamp },
+          outcome,
+        });
+        this.send(bytes);
+        this.#highest = seq > this.#highest ? seq : this.#highest;
+        this.#sequence = sequence;
+        this.#kept.set(seq, bytes);
+        if (this.#kept.size > CAPACITY) {
+          this.#kept.delete(this.#kept.keys().next().value!);
+        }
+      } catch {
+        discarded();
       }
-      this.send(bytes);
     };
     if (!known) {
       settle({
@@ -75,12 +86,7 @@ export class ProvidedCalls {
       return;
     }
     this.#active.add(seq);
-    const discarded = () => {
-      this.#active.delete(seq);
-      if (!this.#ended) {
-        this.note({ note: "discarded", reason: "unexpected-outcome", frame });
-      }
-    };
+    this.#highest = seq;
     // Both synchronous throws and promise rejections are observed. There is no
     // wire Down outcome: leave this request unanswered for the server's deadline.
     Promise.resolve().then(() => {
