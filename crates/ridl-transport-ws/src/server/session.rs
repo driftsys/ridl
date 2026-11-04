@@ -324,6 +324,31 @@ impl<B: Backend> Session<B> {
                 }
             };
         }
+        if let Frame::Chunk {
+            target,
+            correlation,
+            ..
+        }
+        | Frame::StreamEnd {
+            target,
+            correlation,
+            ..
+        }
+        | Frame::StreamCredit {
+            target,
+            correlation,
+            ..
+        } = frame
+        {
+            if self
+                .calls
+                .by_seq(correlation)
+                .is_some_and(|call| call.target != target)
+            {
+                self.note(Note::UnknownInteraction { target });
+                return Step::Continue;
+            }
+        }
         match frame {
             Frame::Attach(_) => {
                 self.note(Note::SecondAttach);
@@ -511,8 +536,9 @@ impl<B: Backend> Session<B> {
     /// Drains parameter streams, then reads each pending call outcome. An
     /// accepted command remains in flight until all its uploads ended or
     /// stopped. A refusing response covers the whole call. Open uploads are
-    /// abandoned from their last receive or backend progress; other pending
-    /// calls are abandoned from their request. Kept responses expire first.
+    /// abandoned from their last receive or backend progress. A reply stream
+    /// uses its last sent chunk or received credit; other pending calls use
+    /// their request. Kept responses expire first.
     fn poll_calls(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
         let clock = self.backend.ports().now();
         self.calls.expire(clock);
@@ -4448,6 +4474,10 @@ mod tests {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Fail {
         None,
+        /// `Caller::ack` reports a timeout while the provider remains pending.
+        AckTimeout,
+        /// `Caller::ack` reports busy while the provider remains pending.
+        AckBusy,
         /// `EventSource::subscribe` answers `Detached`.
         Subscribe,
         /// `EventSource::subscribe` answers `Contract(PreconditionFailed)`.
@@ -4656,7 +4686,11 @@ mod tests {
             }
         }
         fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
-            self.inner.ack(c)
+            match self.fail.get() {
+                Fail::AckTimeout => Some(Err(CallError::Transport(Transport::Timeout))),
+                Fail::AckBusy => Some(Err(CallError::Transport(Transport::Busy))),
+                _ => self.inner.ack(c),
+            }
         }
         fn reply(
             &mut self,
@@ -5193,8 +5227,91 @@ mod tests {
         }
     }
 
-    /// A client `stream_end` or `stream_credit` on a stream other than 0 is
-    /// ignored: the reply stream keeps its credit and is not stopped.
+    /// Mutation: grant reply credit without comparing the frame and call targets.
+    #[test]
+    fn a_mismatched_reply_stream_credit_grants_nothing() {
+        for target in [
+            Target {
+                kind: Kind::Command,
+                ..STREAMED
+            },
+            Target {
+                iface: InterfaceNo(99),
+                ..STREAMED
+            },
+            Target {
+                ord: QUERY.ord,
+                ..STREAMED
+            },
+        ] {
+            let mut r = stream_rig(Fail::None, None);
+            let claim = start_stream(&mut r);
+            for _ in 0..4 {
+                r.p.push_claim(claim, REPLY_STREAM, &[1]).unwrap();
+            }
+            assert_eq!(tick(&mut r.s).1.len(), 4);
+            r.p.push_claim(claim, REPLY_STREAM, &[2]).unwrap();
+            assert!(tick(&mut r.s).1.is_empty());
+            let credit = msg(Frame::StreamCredit {
+                target,
+                correlation: 1,
+                stream: 0,
+                credit: 1,
+            });
+            assert_eq!(send(&mut r.s, &credit), (Step::Continue, vec![]));
+            assert_eq!(tick(&mut r.s), (Step::Continue, vec![]));
+            assert_eq!(
+                *r.notes.lock().unwrap(),
+                vec![Note::UnknownInteraction { target }]
+            );
+            let valid = msg(Frame::StreamCredit {
+                target: STREAMED,
+                correlation: 1,
+                stream: 0,
+                credit: 1,
+            });
+            assert_eq!(send(&mut r.s, &valid), (Step::Continue, vec![]));
+            let (step, out) = tick(&mut r.s);
+            assert_eq!(step, Step::Continue);
+            assert_eq!(out.len(), 1);
+            assert_eq!(decode(&out[0]).unwrap(), streamed_chunk(5, &[2]));
+        }
+    }
+
+    /// Mutation: stop a reply stream without checking the frame's target.
+    #[test]
+    fn a_mismatched_reply_stream_end_does_not_stop_the_provider() {
+        let mut r = stream_rig(Fail::None, None);
+        let claim = start_stream(&mut r);
+        let target = Target {
+            ord: QUERY.ord,
+            ..STREAMED
+        };
+        let frame = msg(Frame::StreamEnd {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream: 0,
+            outcome: StreamOutcome::Interrupted,
+        });
+        assert_eq!(send(&mut r.s, &frame), (Step::Continue, vec![]));
+        assert_eq!(r.p.push_claim(claim, REPLY_STREAM, &[3]), Ok(1));
+        let (step, out) = tick(&mut r.s);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), streamed_chunk(1, &[3]));
+        assert_eq!(
+            *r.notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target }]
+        );
+    }
+
+    /// A client `stream_end` on an undeclared parameter stream, or a
+    /// `stream_credit` on a stream other than 0, is ignored: the reply stream
+    /// keeps its credit and is not stopped.
     ///
     /// Mutations: drop the stream check of `stop_stream`; drop that of
     /// `grant`.

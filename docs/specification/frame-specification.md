@@ -817,8 +817,12 @@ between peers, `Contract::UnknownInteraction`:
 - a `subscribe` is answered with an `answer` carrying
   `contract(UnknownInteraction)`;
 - a `read` is answered as §6.3 states;
-- a `publish`, an `occurrence`, a `response` or an `unsubscribe` is discarded
-  and recorded; nothing is sent back.
+- a `publish`, an `occurrence`, a `response`, an `unsubscribe`, a `chunk`, a
+  `stream_end` or a `stream_credit` is discarded and recorded; nothing is sent
+  back.
+
+A stream form is checked against the call its `correlation` names, and a target
+other than that call's is treated as an unknown interaction.
 
 An `answer` or a `response` that refuses a frame carries the `interface`,
 `ordinal` and `kind` of that frame as received. So a `response` carrying

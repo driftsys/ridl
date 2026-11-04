@@ -6,15 +6,20 @@ const UPLOAD: Target = Target {
     iface: IFACE,
     ord: Ordinal(11),
 };
-type UploadSession = Session<Described<Streaming<Scanning<Loopback>>>>;
+type UploadSession = Session<Described<Streaming<FaultyBackend>>>;
 struct Rig {
     s: UploadSession,
     p: Loopback,
     notes: Notes,
     now: Instant,
+    fail: Rc<Cell<Fail>>,
 }
 
 fn rig(version: u32, limit: u32) -> Rig {
+    rig_with_streams(version, limit, 1)
+}
+
+fn rig_with_streams(version: u32, limit: u32, count: u8) -> Rig {
     let rt = Loopback::new(CATALOG);
     let mut p = rt.attach();
     p.serve(IFACE, &[UPLOAD.ord, COMMAND.ord]).unwrap();
@@ -26,11 +31,18 @@ fn rig(version: u32, limit: u32) -> Rig {
         Some(std::time::Duration::from_secs(1)),
     );
     table.insert(IFACE, COMMAND.ord, Kind::Command, None);
-    table.set_parameter_streams(IFACE, UPLOAD.ord, 1);
+    table.set_parameter_streams(IFACE, UPLOAD.ord, count);
     table.set_limit(IFACE, UPLOAD.ord, limit);
     let notes = Notes::default();
+    let fail = Rc::new(Cell::new(Fail::None));
+    let backend = FaultyBackend(Faulty {
+        inner: rt,
+        fail: Rc::clone(&fail),
+        forgotten: Rc::default(),
+        aborted: Rc::default(),
+    });
     let mut s = Session::new(
-        Described::new(Streaming(Scanning(rt)), Arc::new(table)).unwrap(),
+        Described::new(Streaming(backend), Arc::new(table)).unwrap(),
         &config(&notes),
     );
     s.upgraded(version);
@@ -44,7 +56,13 @@ fn rig(version: u32, limit: u32) -> Rig {
         ),
         Step::Continue
     );
-    Rig { s, p, notes, now }
+    Rig {
+        s,
+        p,
+        notes,
+        now,
+        fail,
+    }
 }
 fn start(r: &mut Rig, outcome: Option<Result<&[u8], CallError>>) -> ClaimId {
     let (step, out) = send_at(r, &request(UPLOAD, 1, &[]), r.now);
@@ -329,7 +347,17 @@ fn a_chunk_on_a_stream_the_member_does_not_declare_closes_1002() {
             send_at(&mut r, &request(target, 1, &[]), now).0,
             Step::Continue
         );
-        assert_eq!(chunk(&mut r, 1, stream, &[1]).0, Step::Close(1002));
+        let frame = msg(Frame::Chunk {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream,
+            payload: &[1],
+        });
+        assert_eq!(send_at(&mut r, &frame, now).0, Step::Close(1002));
         assert_eq!(
             *r.notes.lock().unwrap(),
             vec![Note::StreamCreditExceeded { seq: 1 }]
@@ -476,4 +504,320 @@ fn a_v2_session_answers_an_upload_member_unknown_interaction() {
         vec![Note::UnknownInteraction { target: UPLOAD }]
     );
     assert!(r.p.next_claim(&mut []).unwrap().is_none());
+}
+
+/// Mutation: accept an arbitrary sequence number in `Session::end_upload`.
+#[test]
+fn an_upload_end_seq_gap_interrupts_the_provider_and_the_client() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, None);
+    assert_eq!(credits(&chunk(&mut r, 1, 1, &[1]).1), 1);
+    pull(&mut r, claim, Pull::Chunk(1));
+    let (step, out) = end(&mut r, 3, StreamOutcome::End);
+    assert_eq!(step, Step::Continue);
+    assert_end(&out, StreamOutcome::Interrupted);
+    pull(
+        &mut r,
+        claim,
+        Pull::Failed(CallError::Transport(Transport::Interrupted)),
+    );
+    assert!(r.notes.lock().unwrap().is_empty());
+}
+
+/// Mutation: skip `interrupt_uploads` before a non-refusing forget.
+#[test]
+fn a_non_refusing_command_outcome_interrupts_its_open_upload() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, None);
+    // Inject only the caller's outcome, keeping the provider's upload open.
+    r.fail.set(Fail::AckTimeout);
+    let now = r.now;
+    let (step, out) = poll(&mut r, now);
+    assert_eq!(step, Step::Continue);
+    assert_end(&out, StreamOutcome::Interrupted);
+    pull(
+        &mut r,
+        claim,
+        Pull::Failed(CallError::Transport(Transport::Interrupted)),
+    );
+    assert!(r.s.calls.in_flight().is_empty());
+    assert!(r.notes.lock().unwrap().is_empty());
+}
+
+/// Mutation: remove `Busy` from either refusing-outcome check in `poll_calls`.
+#[test]
+fn a_busy_command_outcome_covers_open_and_queued_uploads() {
+    for queued in [false, true] {
+        let mut r = rig(3, 4);
+        let claim = start(&mut r, None);
+        if queued {
+            for seq in 1..=5 {
+                assert_eq!(chunk(&mut r, seq, 1, &[1]).0, Step::Continue);
+            }
+            pull(&mut r, claim, Pull::Chunk(1));
+        }
+        r.fail.set(Fail::AckBusy);
+        let now = r.now;
+        let (step, out) = poll(&mut r, now);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(
+            out.len(),
+            1,
+            "busy covers the whole call without upload credit or end"
+        );
+        assert!(matches!(
+            decode(&out[0]).unwrap(),
+            Frame::Response {
+                target: UPLOAD,
+                correlation: 1,
+                outcome: ResponseOutcome::Busy,
+                ..
+            }
+        ));
+        assert!(r.s.calls.in_flight().is_empty());
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+}
+
+/// Mutation: skip the backend abort for a client `stream_end interrupted`.
+#[test]
+fn a_client_interrupt_before_acknowledgment_aborts_the_upload() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, None);
+    assert_eq!(
+        end(&mut r, 1, StreamOutcome::Interrupted),
+        (Step::Continue, vec![])
+    );
+    pull(
+        &mut r,
+        claim,
+        Pull::Failed(CallError::Transport(Transport::Interrupted)),
+    );
+    // The acknowledgment is still pending, so forgetting cannot hide a missing abort.
+    r.p.settle(claim, Ok(&[])).unwrap();
+    accepted(&mut r);
+    assert!(r.notes.lock().unwrap().is_empty());
+}
+
+/// Mutation: a drain does not restart the upload's activity clock.
+#[test]
+fn backend_drain_progress_restarts_the_upload_abandonment_clock() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, Some(Ok(&[])));
+    accepted(&mut r);
+    for seq in 1..=5 {
+        assert_eq!(chunk(&mut r, seq, 1, &[1]).0, Step::Continue);
+    }
+    let t0 = r.now;
+    pull(&mut r, claim, Pull::Chunk(1));
+    let (step, out) = poll(&mut r, t0 + std::time::Duration::from_secs(50));
+    assert_eq!(step, Step::Continue);
+    assert_eq!(credits(&out), 1);
+    assert_eq!(
+        poll(&mut r, t0 + std::time::Duration::from_secs(100)),
+        (Step::Continue, vec![])
+    );
+    assert!(r.notes.lock().unwrap().is_empty());
+}
+
+/// Mutation: forget drained uploads even while the acknowledgment is pending.
+#[test]
+fn uploads_drained_before_settlement_still_receive_the_acknowledgment() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, None);
+    assert_eq!(credits(&chunk(&mut r, 1, 1, &[1]).1), 1);
+    assert_eq!(end(&mut r, 2, StreamOutcome::End), (Step::Continue, vec![]));
+    pull(&mut r, claim, Pull::Chunk(1));
+    pull(&mut r, claim, Pull::End);
+    let now = r.now;
+    assert_eq!(poll(&mut r, now), (Step::Continue, vec![]));
+    r.p.settle(claim, Ok(&[])).unwrap();
+    accepted(&mut r);
+    assert!(r.notes.lock().unwrap().is_empty());
+}
+
+/// Mutation: an oversized chunk does not interrupt the other open upload.
+#[test]
+fn an_oversized_chunk_interrupts_the_other_parameter_stream() {
+    let mut r = rig_with_streams(3, 4, 2);
+    let claim = start(&mut r, None);
+    assert_eq!(
+        r.p.pull_claim(claim, StreamNo(2), &mut []),
+        Ok(Pull::Pending)
+    );
+    let (step, out) = chunk(&mut r, 1, 1, &[1; 5]);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(
+        out.len(),
+        2,
+        "both uploads must receive their terminal outcome"
+    );
+    for (bytes, stream, outcome) in [
+        (&out[0], 1, StreamOutcome::Corrupt),
+        (&out[1], 2, StreamOutcome::Interrupted),
+    ] {
+        assert!(matches!(decode(bytes).unwrap(), Frame::StreamEnd {
+            target: UPLOAD, envelope: Envelope { seq: 1, .. }, correlation: 1,
+            stream: actual_stream, outcome: actual_outcome
+        } if actual_stream == stream && actual_outcome == outcome));
+    }
+    for stream in [1, 2] {
+        assert_eq!(
+            r.p.pull_claim(claim, StreamNo(stream), &mut []),
+            Ok(Pull::Failed(CallError::Transport(Transport::Interrupted)))
+        );
+    }
+    assert_eq!(
+        *r.notes.lock().unwrap(),
+        vec![Note::ChunkTooLarge {
+            seq: 1,
+            stream: 1,
+            len: 5
+        }]
+    );
+}
+
+/// Mutation: finish the call when any upload ends rather than all of them.
+#[test]
+fn ending_one_of_two_uploads_keeps_the_other_open() {
+    let mut r = rig_with_streams(3, 4, 2);
+    let claim = start(&mut r, None);
+    assert_eq!(
+        r.p.pull_claim(claim, StreamNo(2), &mut []),
+        Ok(Pull::Pending)
+    );
+    r.p.settle(claim, Ok(&[])).unwrap();
+    accepted(&mut r);
+    assert_eq!(end(&mut r, 1, StreamOutcome::End), (Step::Continue, vec![]));
+    pull(&mut r, claim, Pull::End);
+    let (step, out) = chunk(&mut r, 1, 2, &[2]);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 1, "the second upload must still return credit");
+    assert!(matches!(
+        decode(&out[0]).unwrap(),
+        Frame::StreamCredit {
+            target: UPLOAD,
+            correlation: 1,
+            stream: 2,
+            credit: 1
+        }
+    ));
+    let mut buf = [0; 1];
+    assert_eq!(
+        r.p.pull_claim(claim, StreamNo(2), &mut buf),
+        Ok(Pull::Chunk(1))
+    );
+    assert_eq!(buf, [2]);
+    let now = r.now;
+    let frame = msg(Frame::StreamEnd {
+        target: UPLOAD,
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq: 2,
+        },
+        correlation: 1,
+        stream: 2,
+        outcome: StreamOutcome::End,
+    });
+    assert_eq!(send_at(&mut r, &frame, now), (Step::Continue, vec![]));
+    assert_eq!(r.p.pull_claim(claim, StreamNo(2), &mut []), Ok(Pull::End));
+    assert!(r.notes.lock().unwrap().is_empty());
+}
+
+/// Mutation: abandon a pending call from `sent` while an upload is active.
+#[test]
+fn active_upload_chunks_keep_an_unacknowledged_command_alive_past_sent_bound() {
+    let mut r = rig(3, 4);
+    let claim = start(&mut r, None);
+    let t0 = r.now;
+    for (seq, seconds) in [(1, 50), (2, 100), (3, 150)] {
+        r.now = t0 + std::time::Duration::from_secs(seconds);
+        assert_eq!(credits(&chunk(&mut r, seq, 1, &[1]).1), 1);
+        pull(&mut r, claim, Pull::Chunk(1));
+        let now = r.now;
+        assert_eq!(poll(&mut r, now), (Step::Continue, vec![]));
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+    r.p.settle(claim, Ok(&[])).unwrap();
+    accepted(&mut r);
+}
+
+fn mismatched_targets(target: Target) -> [Target; 3] {
+    [
+        Target {
+            kind: Kind::Query,
+            ..target
+        },
+        Target {
+            iface: InterfaceNo(99),
+            ..target
+        },
+        Target {
+            ord: Ordinal(99),
+            ..target
+        },
+    ]
+}
+
+/// Mutation: route a chunk by correlation without checking its full target.
+#[test]
+fn a_mismatched_chunk_reaches_no_provider_and_consumes_no_credit() {
+    for target in mismatched_targets(UPLOAD) {
+        let mut r = rig(3, 4);
+        let claim = start(&mut r, None);
+        let frame = msg(Frame::Chunk {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream: 1,
+            payload: &[9],
+        });
+        let now = r.now;
+        assert_eq!(send_at(&mut r, &frame, now), (Step::Continue, vec![]));
+        pull(&mut r, claim, Pull::Pending);
+        assert_eq!(
+            *r.notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target }]
+        );
+        // Four backend slots plus four queued chunks remain available.
+        for seq in 1..=8 {
+            let (step, out) = chunk(&mut r, seq, 1, &[1]);
+            assert_eq!(step, Step::Continue);
+            assert_eq!(credits(&out), if seq <= 4 { 1 } else { 0 });
+        }
+        assert_eq!(chunk(&mut r, 9, 1, &[1]).0, Step::Close(1002));
+    }
+}
+
+/// Mutation: route a stream end by correlation without checking its target.
+#[test]
+fn a_mismatched_stream_end_does_not_end_an_upload() {
+    for target in mismatched_targets(UPLOAD) {
+        let mut r = rig(3, 4);
+        let claim = start(&mut r, None);
+        let frame = msg(Frame::StreamEnd {
+            target,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            stream: 1,
+            outcome: StreamOutcome::End,
+        });
+        let now = r.now;
+        assert_eq!(send_at(&mut r, &frame, now), (Step::Continue, vec![]));
+        pull(&mut r, claim, Pull::Pending);
+        assert_eq!(
+            *r.notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target }]
+        );
+        assert_eq!(credits(&chunk(&mut r, 1, 1, &[1]).1), 1);
+        pull(&mut r, claim, Pull::Chunk(1));
+        assert_eq!(end(&mut r, 2, StreamOutcome::End), (Step::Continue, vec![]));
+        pull(&mut r, claim, Pull::End);
+    }
 }

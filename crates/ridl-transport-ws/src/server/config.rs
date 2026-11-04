@@ -89,11 +89,13 @@ pub enum Note {
         /// The repeated `seq`.
         seq: u64,
     },
-    /// A call whose outcome stayed unknown for [`Config::call_abandon_after`]
-    /// was forgotten on the backend. Nothing is sent for it, except for a
-    /// call whose reply is a stream: its bound is measured from the last
-    /// `chunk` sent or `stream_credit` received, and the stream is ended
-    /// with a `stream_end interrupted`.
+    /// A call was forgotten on the backend after no progress for
+    /// [`Config::call_abandon_after`]. An open parameter stream uses its last
+    /// received chunk or backend drain; a reply stream uses its last sent
+    /// chunk or received credit. Other pending calls use their request.
+    /// Open uploads are ended with `stream_end interrupted`, even after a
+    /// command's acknowledgment; an abandoned reply stream is also ended
+    /// with `stream_end interrupted`. Other calls send nothing.
     CallAbandoned {
         /// The `seq` of the abandoned request.
         seq: u64,
@@ -116,8 +118,8 @@ pub enum Note {
         seq: u64,
     },
     /// The client stopped the reply stream of a call with a `stream_end`.
-    /// The call was forgotten on the backend, and nothing more is sent for
-    /// it.
+    /// The call was forgotten on the backend. Each open parameter stream is
+    /// ended with `stream_end interrupted`; no more reply chunks are sent.
     StreamStopped {
         /// The `seq` of the request whose reply stream was stopped.
         seq: u64,
@@ -139,10 +141,13 @@ pub enum Note {
         correlation: u64,
     },
     /// A `subscribe`, `read`, `request` or `unsubscribe` named an interaction
-    /// the member table does not hold, or holds under another kind (frame
-    /// specification §6.4). An `unsubscribe` is dropped; the other three are
-    /// answered `contract(UnknownInteraction)`. In the reversed role, an
-    /// unknown or wrong-kind `answer`, `publish` or `occurrence` is dropped.
+    /// the member table does not hold, or holds under another kind, or a
+    /// `chunk`, `stream_end` or `stream_credit` named a target other than the
+    /// call its correlation names (frame specification §6.4). An
+    /// `unsubscribe` or stream form is discarded without an answer; the
+    /// other three are answered `contract(UnknownInteraction)`. In the
+    /// reversed role, an unknown or wrong-kind `answer`, `publish` or
+    /// `occurrence` is dropped.
     UnknownInteraction {
         /// The interaction named.
         target: Target,
