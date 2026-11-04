@@ -192,6 +192,7 @@ fn main() {
         ("range", Rule::Range),
         ("step", Rule::Step),
         ("unique", Rule::Unique),
+        ("utf8", Rule::Utf8),
         ("variant", Rule::Variant),
     ] {
         println!("rulecode {text} {}", veh_cabin::wasm::rule_code(rule));
@@ -476,8 +477,10 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
             .lines()
             .filter(|l| l.starts_with("rulecode "))
             .count(),
-        6
+        7
     );
+    assert!(stdout.lines().any(|line| line == "rulecode utf8 7"));
+    assert!(stdout.lines().any(|line| line == "rulecode variant 8"));
     assert_eq!(catalog.len(), 64);
 
     // 3 — the same crate as a wasm32 cdylib, built the way the generated
@@ -794,9 +797,8 @@ fn a_module_with_no_payload_type_builds_without_warnings() {
 /// so a rule added to or removed from `ridl-rt` fails here until the list
 /// that fixes the rule codes is updated. `Rule` is `#[non_exhaustive]`, so an
 /// exhaustive match outside `ridl-rt` is not possible; the variants are read
-/// from its source instead. `Utf8` is excluded: invalid UTF-8 in a payload is
-/// `Malformed`, while only a text stream's chunk check produces `Rule::Utf8`.
-/// Keeping it outside this table preserves the existing payload rule codes.
+/// from its source instead. The sorted list includes `Utf8`, assigning
+/// `utf8` code 7 and `variant` code 8.
 #[test]
 fn the_rule_list_matches_the_runtime_rule_enum() {
     let payload = std::fs::read_to_string(
@@ -813,7 +815,6 @@ fn the_rule_list_matches_the_runtime_rule_enum() {
         .map(str::trim)
         .filter(|line| !line.starts_with("//") && !line.starts_with('#') && !line.is_empty())
         .map(|line| line.trim_end_matches(',').to_lowercase())
-        .filter(|variant| variant != "utf8")
         .collect();
     variants.sort();
     let source = ridl_backend_rust::generate_wasm_module(&[0; 32], &[])

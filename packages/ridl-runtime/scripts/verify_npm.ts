@@ -132,7 +132,10 @@ try {
   assertEquals(JSON.parse(names.stdout), [
     "CatalogMismatch",
     "CodecError",
+    "StreamError",
     "UnknownPayloadType",
+    "decodeStream",
+    "decodeTextStream",
     "loadCodec",
   ]);
 
