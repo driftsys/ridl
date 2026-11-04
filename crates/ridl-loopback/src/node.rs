@@ -253,6 +253,74 @@ mod tests {
     use std::sync::{mpsc, TryLockError};
 
     #[test]
+    fn attachment_reads_fixed_bytes_and_coherent_sample_metadata() {
+        use ridl_rt::contract::{InterfaceNo, Ordinal};
+        use ridl_rt::port::*;
+        use ridl_rt::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
+        let mut node = Node::from_descriptor(
+            include_bytes!("../../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb"),
+            "Local",
+        )
+        .unwrap();
+        let catalog = *node.catalogs().find(|c| c.name == "alpha").unwrap();
+        let iface = InterfaceNo(1);
+        let key = (catalog.name, catalog.hash);
+        let store = node.stores.get_mut(&key).unwrap();
+        store
+            .provision_fixed(iface, Ordinal(5), &[31, 32, 33])
+            .unwrap();
+        store.advance(Duration(17));
+        let mut publisher = node.attach(InstanceNo::new(1).unwrap(), &catalog).unwrap();
+        let reader = node.attach(InstanceNo::new(3).unwrap(), &catalog).unwrap();
+        publisher.set(iface, Ordinal(1), &[41, 42]).unwrap();
+        publisher.set(iface, Ordinal(6), &[51]).unwrap();
+        publisher.commit();
+        let mut out = [0; 8];
+        assert_eq!(reader.read_fixed(iface, Ordinal(5), &mut out).unwrap(), 3);
+        assert_eq!(&out[..3], &[31, 32, 33]);
+        let blank = RawSample {
+            provenance: Provenance::Init,
+            freshness: Freshness::Unbounded,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 0,
+            },
+            len: 0,
+        };
+        let mut samples = [blank; 2];
+        assert_eq!(
+            reader
+                .read_coherent(iface, &[Ordinal(6), Ordinal(1)], &mut out, &mut samples)
+                .unwrap(),
+            3
+        );
+        assert_eq!(&out[..3], &[51, 41, 42]);
+        assert_eq!(
+            samples,
+            [
+                RawSample {
+                    provenance: Provenance::Live,
+                    freshness: Freshness::Unbounded,
+                    envelope: Envelope {
+                        stamp: Timestamp(17),
+                        seq: 1
+                    },
+                    len: 1
+                },
+                RawSample {
+                    provenance: Provenance::Live,
+                    freshness: Freshness::Unbounded,
+                    envelope: Envelope {
+                        stamp: Timestamp(17),
+                        seq: 1
+                    },
+                    len: 2
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn simultaneous_opposites_have_one_winner() {
         let catalog = CatalogRef {
             name: "test",

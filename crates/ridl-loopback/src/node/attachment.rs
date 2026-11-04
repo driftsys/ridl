@@ -204,3 +204,8 @@ impl Wakeable for Attachment {
         self.ports.wake_on(what, waker);
     }
 }
+
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Attachment>();
+};

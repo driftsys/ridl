@@ -104,7 +104,8 @@ mod debug {
             a.set(IFACE, ORD, &[7]).unwrap();
             a.commit();
             let mut out = [0; 4];
-            assert_eq!(a.read(IFACE, ORD, &mut out).unwrap().len, 1);
+            let observer = n.attach(InstanceNo::LISTENER, &c).unwrap();
+            assert_eq!(observer.read(IFACE, ORD, &mut out).unwrap().len, 1);
             assert_eq!(out[0], 7);
         }
         assert!(matches!(
@@ -120,11 +121,45 @@ mod debug {
     fn opposite_identities_exclude_in_both_orders() {
         for (first, second) in [(id(1), twin()), (twin(), id(1))] {
             let n = node();
-            let _a = n.attach(first, &catalog(&n, "alpha")).unwrap();
+            let a = n.attach(first, &catalog(&n, "alpha")).unwrap();
             assert!(matches!(
                 n.attach(second, &catalog(&n, "mapped")),
                 Err(AttachError::IdentityConflict)
             ));
+            drop(a);
+            drop(n.attach(second, &catalog(&n, "mapped")).unwrap());
+            assert!(n.attach(first, &catalog(&n, "alpha")).is_ok());
+        }
+        for (first, second) in [(1, -3), (-3, 1), (3, -1), (-1, 3)] {
+            let n = node();
+            let signed = |number: i32| {
+                if number < 0 {
+                    id(-number).twin().unwrap()
+                } else {
+                    id(number)
+                }
+            };
+            let a = n.attach(signed(first), &catalog(&n, "alpha")).unwrap();
+            let b = n.attach(signed(second), &catalog(&n, "alpha")).unwrap();
+            drop((a, b));
+        }
+    }
+    #[test]
+    fn listeners_coexist_with_each_other_and_both_identities() {
+        for who in [id(1), twin()] {
+            for listener_first in [false, true] {
+                let n = node();
+                let c = catalog(&n, "alpha");
+                let (first, second) = if listener_first {
+                    (InstanceNo::LISTENER, who)
+                } else {
+                    (who, InstanceNo::LISTENER)
+                };
+                let a = n.attach(first, &c).unwrap();
+                let b = n.attach(second, &c).unwrap();
+                let c = n.attach(InstanceNo::LISTENER, &c).unwrap();
+                drop((a, b, c));
+            }
         }
     }
     #[test]
@@ -143,6 +178,58 @@ mod debug {
         drop(b);
         assert!(n.attach(twin(), &c).is_ok());
     }
+    #[test]
+    fn reservation_outlives_port_cleanup() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        use std::task::{Wake, Waker};
+        struct Reattach {
+            node: Arc<Node>,
+            catalog: CatalogRef,
+            wakes: AtomicUsize,
+            conflicts: AtomicUsize,
+        }
+        impl Wake for Reattach {
+            fn wake(self: Arc<Self>) {
+                self.wake_by_ref();
+            }
+            fn wake_by_ref(self: &Arc<Self>) {
+                self.wakes.fetch_add(1, Ordering::SeqCst);
+                if matches!(
+                    self.node.attach(twin(), &self.catalog),
+                    Err(AttachError::IdentityConflict)
+                ) {
+                    self.conflicts.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        }
+        let n = Arc::new(node());
+        let c = catalog(&n, "alpha");
+        let mut provider = n.attach(id(1), &c).unwrap();
+        let mut caller = n.attach(id(3), &c).unwrap();
+        provider.serve(IFACE, &[Ordinal(4)]).unwrap();
+        caller.serve(IFACE, &[Ordinal(4)]).unwrap();
+        let call = caller.query(IFACE, Ordinal(4), &[], None).unwrap();
+        provider.next_claim(&mut [0; 8]).unwrap().unwrap();
+        let callback = Arc::new(Reattach {
+            node: Arc::clone(&n),
+            catalog: c,
+            wakes: AtomicUsize::new(0),
+            conflicts: AtomicUsize::new(0),
+        });
+        caller.wake_on(Interest::Claim(IFACE), &Waker::from(Arc::clone(&callback)));
+        drop(provider);
+        // Dropping the handler returns its claim and wakes another serving handler.
+        assert_eq!(callback.wakes.load(Ordering::SeqCst), 1);
+        assert_eq!(callback.conflicts.load(Ordering::SeqCst), 1);
+        assert!(n.attach(twin(), &c).is_ok());
+        let claim = caller.next_claim(&mut [0; 8]).unwrap().unwrap();
+        caller.settle(claim.id, Ok(&[])).unwrap();
+        caller.forget(call);
+    }
+
     fn listener() -> (Node, ridl_loopback::Attachment, ridl_loopback::Attachment) {
         let n = node();
         let c = catalog(&n, "alpha");
@@ -284,7 +371,7 @@ fn runtime_debug_does_not_enable_node_debug() {
     struct Probe(std::path::PathBuf);
     impl Drop for Probe {
         fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).unwrap();
+            let _ = fs::remove_dir_all(&self.0);
         }
     }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -339,4 +426,88 @@ fn main() {{
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn missing_embedded_catalog_is_refused() {
+    use ridl_descriptor::deployment::{self, Deployment, Instance, Machine};
+    let descriptor = Deployment {
+        version: deployment::SCHEMA_VERSION,
+        system: "test.System".into(),
+        name: "Test".into(),
+        package: "test".into(),
+        machines: vec![Machine {
+            name: "Local".into(),
+            ..Default::default()
+        }],
+        instances: vec![Instance {
+            component: "test.Component".into(),
+            instance: "test.Component/Unit".into(),
+            machine: "Local".into(),
+            number: 1,
+            maps: vec!["missing".into()],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let bytes = Box::leak(deployment::finish(&descriptor).into_boxed_slice());
+    deployment::verify(bytes).unwrap();
+    assert!(matches!(
+        Node::from_descriptor(bytes, "Local"),
+        Err(NodeError::MissingCatalog)
+    ));
+}
+
+#[test]
+fn attachment_wakes_and_delivers_events_claims_and_outcomes() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use std::task::{Wake, Waker};
+    struct Count(AtomicUsize);
+    impl Wake for Count {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    let n = node();
+    let c = catalog(&n, "alpha");
+    let mut a = n.attach(id(1), &c).unwrap();
+    let mut b = n.attach(id(3), &c).unwrap();
+    let count = Arc::new(Count(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&count));
+    a.subscribe(IFACE, &[Ordinal(2)]).unwrap();
+    a.wake_on(Interest::Event(IFACE), &waker);
+    let before = count.0.load(Ordering::SeqCst);
+    b.raise(IFACE, Ordinal(2), &[7, 8], None).unwrap();
+    assert!(count.0.load(Ordering::SeqCst) > before);
+    let mut out = [0; 8];
+    let event = a.next(&mut out).unwrap().unwrap();
+    assert_eq!(&out[..event.len], &[7, 8]);
+    a.serve(IFACE, &[Ordinal(4)]).unwrap();
+    a.wake_on(Interest::Claim(IFACE), &waker);
+    let before = count.0.load(Ordering::SeqCst);
+    let call = b.query(IFACE, Ordinal(4), &[9], None).unwrap();
+    assert!(count.0.load(Ordering::SeqCst) > before);
+    let claim = a.next_claim(&mut out).unwrap().unwrap();
+    assert_eq!(&out[..claim.len], &[9]);
+    b.wake_on(Interest::Outcome(call), &waker);
+    let before = count.0.load(Ordering::SeqCst);
+    a.settle(claim.id, Ok(&[10, 11])).unwrap();
+    assert!(count.0.load(Ordering::SeqCst) > before);
+    assert_eq!(b.reply(call, &mut out).unwrap(), Some(Ok(2)));
+    assert_eq!(&out[..2], &[10, 11]);
+    b.forget(call);
+    assert_eq!(b.reply(call, &mut out).unwrap(), None);
+    // Every settled call must return its slot after forget.
+    for _ in 0..ridl_loopback::Loopback::SLOTS * 2 {
+        let call = b.query(IFACE, Ordinal(4), &[], None).unwrap();
+        let claim = a.next_claim(&mut out).unwrap().unwrap();
+        a.settle(claim.id, Ok(&[])).unwrap();
+        b.forget(call);
+    }
 }

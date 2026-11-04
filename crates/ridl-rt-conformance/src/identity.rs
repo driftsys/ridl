@@ -140,7 +140,9 @@ pub fn identity_twin_grants<F: IdentityFactory>() {
                 twin.set(IFACE, SIGNAL, &[7]).unwrap();
                 twin.commit();
                 let mut out = [0; 8];
-                assert_eq!(twin.read(IFACE, SIGNAL, &mut out).unwrap().len, 1);
+                let observer =
+                    F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &catalog).unwrap();
+                assert_eq!(observer.read(IFACE, SIGNAL, &mut out).unwrap().len, 1);
                 assert_eq!(out[0], 7);
             }
         }
@@ -161,6 +163,20 @@ pub fn identity_twin_grants<F: IdentityFactory>() {
 /// Opposite identities exclude each other across catalogs in either order.
 #[cfg(feature = "debug")]
 pub fn identity_exclusion_both_orders<F: IdentityFactory>() {
+    // Opposites exclude only their own positive instance, in either order.
+    for (first, second) in [(1_i32, -3_i32), (-3, 1), (3, -1), (-1, 3)] {
+        let node = F::node(DESCRIPTOR, "Local");
+        let signed = |number: i32| {
+            if number < 0 {
+                id(-number).twin().unwrap()
+            } else {
+                id(number)
+            }
+        };
+        let a = F::attach(&node, signed(first), &ALPHA).unwrap();
+        let b = F::attach(&node, signed(second), &ALPHA).unwrap();
+        drop((a, b));
+    }
     let positive = id(1);
     let twin = positive.twin().unwrap();
     for (first, second) in [(positive, twin), (twin, positive)] {
@@ -168,7 +184,8 @@ pub fn identity_exclusion_both_orders<F: IdentityFactory>() {
         let attachment = F::attach(&node, first, &ALPHA).unwrap();
         assert!(F::attach(&node, second, &MAPPED).is_err());
         drop(attachment);
-        assert!(F::attach(&node, second, &MAPPED).is_ok());
+        drop(F::attach(&node, second, &MAPPED).unwrap());
+        assert!(F::attach(&node, first, &ALPHA).is_ok());
     }
 }
 
@@ -193,6 +210,20 @@ pub fn identity_last_drop<F: IdentityFactory>() {
 /// A listener reads each catalog's own store.
 #[cfg(feature = "debug")]
 pub fn identity_listener_all_catalogs<F: IdentityFactory>() {
+    for who in [id(1), id(1).twin().unwrap()] {
+        for listener_first in [false, true] {
+            let node = F::node(DESCRIPTOR, "Local");
+            let (first, second) = if listener_first {
+                (ridl_rt::contract::InstanceNo::LISTENER, who)
+            } else {
+                (who, ridl_rt::contract::InstanceNo::LISTENER)
+            };
+            let a = F::attach(&node, first, &ALPHA).unwrap();
+            let b = F::attach(&node, second, &ALPHA).unwrap();
+            let c = F::attach(&node, ridl_rt::contract::InstanceNo::LISTENER, &ALPHA).unwrap();
+            drop((a, b, c));
+        }
+    }
     let node = F::node(DESCRIPTOR, "Local");
     let mut providers = Vec::new();
     for (number, catalog, byte) in [(1, ALPHA, 11), (3, BETA, 22), (1, MAPPED, 33)] {

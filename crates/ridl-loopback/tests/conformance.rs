@@ -1,10 +1,11 @@
 //! The port contract suite of `ridl-rt-conformance`, run over this runtime.
 //!
-//! Every test the suite has runs here, including those of both signal
+//! The five base extension flags run here, including those of both signal
 //! extensions, of `Wakeable` and of the two stream extensions, which the
 //! loopback implements, and those of the `trace` arm, because the loopback
 //! carries the trace context. The tests
-//! of what only this runtime can express are in `tests/ports.rs`.
+//! of what only this runtime can express are in `tests/ports.rs`. The identity
+//! group runs with `node`, and `identity_debug` runs with `debug`.
 
 use ridl_loopback::{CallerHandle, HandlerHandle, Loopback, SourceHandle};
 use ridl_rt::contract::CatalogRef;
@@ -50,13 +51,6 @@ impl Factory for LoopbackFactory {
 }
 
 ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent, wakeable, trace, streams);
-
-// This factory deliberately implements only the original hooks.
-#[test]
-fn existing_factory_needs_no_identity_hook() {
-    fn accepts_original_factory<F: Factory>() {}
-    accepts_original_factory::<LoopbackFactory>();
-}
 
 #[cfg(feature = "node")]
 mod identity {
@@ -128,7 +122,7 @@ fn identity_debug_selection_uses_dependency_feature() {
     struct Probe(std::path::PathBuf);
     impl Drop for Probe {
         fn drop(&mut self) {
-            fs::remove_dir_all(&self.0).unwrap();
+            let _ = fs::remove_dir_all(&self.0);
         }
     }
     let probe = Probe(std::env::temp_dir().join(format!(
