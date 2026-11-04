@@ -282,11 +282,11 @@ member; rsdl is the apex.
                          rejects -41 and 86 with the range rule; it then
                          verifies every received payload with the codec.
                          Needs Deno and flatc at the version in .flatc-version
-    just ts-browser-e2e  the same build, then the package's end-to-end test
-                         in a headless browser; needs a Chromium-family
-                         browser (RIDL_BROWSER names one). Runs in CI; not a
-                         member of build, so a contributor's build needs no
-                         browser
+    just ts-browser-e2e  build the ridl-transport-ws example loopback_server,
+                         then run the package's end-to-end test in a headless
+                         Chromium-family browser (RIDL_BROWSER names one).
+                         Runs in CI; not a member of build, so a
+                         contributor's build needs no browser
     just cabin-browser-demo
                          the generation and server build of cabin-ws-demo,
                          then the same codec self-test, payload verification
