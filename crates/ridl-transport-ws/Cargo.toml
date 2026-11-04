@@ -88,3 +88,7 @@ required-features = ["server"]
 [[test]]
 name = "provided_signals"
 required-features = ["server"]
+
+[[test]]
+name = "provided_calls"
+required-features = ["server"]

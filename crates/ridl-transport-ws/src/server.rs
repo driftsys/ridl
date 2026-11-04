@@ -674,15 +674,33 @@ fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config:
         if let Err(e) = conn.set_read_timeout(Some(wait)) {
             return Ended::Io(e.kind());
         }
-        if now.duration_since(heard) >= config.liveness_timeout {
-            return Ended::LivenessTimeout;
-        }
-        if now.duration_since(pinged) >= config.ping_interval {
-            if let Err(e) = writer.ping(conn) {
-                return write_failed(&e);
+        match heartbeat(now, heard, pinged, config) {
+            Heartbeat::Expired => return Ended::LivenessTimeout,
+            Heartbeat::Ping => {
+                if let Err(e) = writer.ping(conn) {
+                    return write_failed(&e);
+                }
+                pinged = now;
             }
-            pinged = now;
+            Heartbeat::Wait => {}
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Heartbeat {
+    Wait,
+    Ping,
+    Expired,
+}
+
+fn heartbeat(now: Instant, heard: Instant, pinged: Instant, config: &Config) -> Heartbeat {
+    if now.duration_since(heard) >= config.liveness_timeout {
+        Heartbeat::Expired
+    } else if now.duration_since(pinged) >= config.ping_interval {
+        Heartbeat::Ping
+    } else {
+        Heartbeat::Wait
     }
 }
 

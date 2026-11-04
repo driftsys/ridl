@@ -1,5 +1,6 @@
 //! Reversed-role negotiation, attach and consumer deliveries.
 
+mod calls;
 mod signals;
 
 use ridl_rt::encoding::Encoding;
@@ -32,7 +33,17 @@ pub enum SelectionError {
 /// Accepts only `ridl-ws-v2-provider`, ignores the URL path, and sends
 /// `attach` first. The peer must answer `attached`. The blocking, timeout,
 /// framing and cleanup rules of [`serve`](super::serve) apply. After acceptance
-/// the session subscribes to every offered signal and event.
+/// the session subscribes to every offered signal and event, and serves the
+/// offered commands and queries through the remote provider. At most 64 claims
+/// are in flight; further calls stay queued on the local handler. Streamed
+/// replies are refused locally with `UnknownInteraction`.
+///
+/// Calls use the earlier of the port's remaining bound and the table's bound
+/// measured from the request stamp. With neither bound, `call_abandon_after`
+/// applies. A missing acknowledgment yields `Undelivered`, a missing query
+/// reply yields `Timeout`, and connection loss settles outstanding claims as
+/// `Down` before dropping the backend. Local ports should be dedicated to this
+/// session and initially serve no members outside its offered table.
 pub fn serve_provided<C: Connection, B: ProvidedBackend>(
     conn: C,
     backend: B,
@@ -123,9 +134,10 @@ fn configured_attach(
         .ok_or(HttpRefusal::Config)
 }
 
-struct Provided<B> {
+struct Provided<B: ProvidedBackend> {
     backend: B,
     consumer: signals::Consumer,
+    calls: calls::Calls,
     attached: bool,
 }
 
@@ -133,6 +145,7 @@ impl<B: ProvidedBackend> Provided<B> {
     fn new(backend: B, config: &Config) -> Self {
         Self {
             backend,
+            calls: calls::Calls::new(config),
             attached: false,
             consumer: signals::Consumer::new(config.poll_interval),
         }
@@ -149,11 +162,24 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
     ) -> Step {
         match frame::decode(msg) {
             Ok(Frame::Attached(AttachOutcome::Accepted)) if !self.attached => {
+                if !self.calls.start(&mut self.backend) {
+                    return Step::Close(1011);
+                }
                 self.attached = true;
                 self.consumer.subscribe(&self.backend, out);
                 Step::Continue
             }
             Ok(Frame::Attached(AttachOutcome::Refused(_))) if !self.attached => Step::Close(1000),
+            Ok(Frame::Response {
+                target,
+                correlation,
+                outcome,
+                ..
+            }) if self.attached => {
+                self.calls
+                    .response(&mut self.backend, target, correlation, outcome, now);
+                Step::Continue
+            }
             Ok(Frame::Answer { target, outcome }) if self.attached => {
                 if self
                     .backend
@@ -204,9 +230,18 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
             }
         }
     }
-    fn tick(&mut self, now: Instant, _: &mut Vec<Vec<u8>>) -> Step {
+    fn tick(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
         self.consumer.tick(&mut self.backend, now);
+        if self.attached {
+            self.calls.tick(&mut self.backend, now, out);
+        }
         Step::Continue
+    }
+}
+
+impl<B: ProvidedBackend> Drop for Provided<B> {
+    fn drop(&mut self) {
+        self.calls.down(&mut self.backend);
     }
 }
 
@@ -238,3 +273,7 @@ mod tests {
 #[cfg(test)]
 #[path = "provided/tests.rs"]
 mod consumer_tests;
+
+#[cfg(test)]
+#[path = "provided/calls_tests.rs"]
+mod calls_tests;
