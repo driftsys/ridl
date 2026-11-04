@@ -14,7 +14,7 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{default_ceiling, CatalogHash, InterfaceNo, Kind, Ordinal};
 use ridl_rt::sample::{Envelope, Timestamp};
 
 pub use backend::{Backend, Described, Polling, Scanning, Streaming, TableMismatch};
@@ -24,7 +24,8 @@ pub use descriptor::DescriptorError;
 pub use members::MemberTable;
 
 use crate::frame::{
-    Frame, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES, FRAME_VERSION, FRAME_VERSION_3,
+    AttachOutcome, Frame, Reason, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
+    FRAME_VERSION, FRAME_VERSION_3,
 };
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
@@ -153,6 +154,13 @@ pub enum Ended {
     /// the opening handshake, without reading the connection, and recorded
     /// [`Note::MessageLimitTooSmall`]; the connection closes when it is
     /// dropped. Without a member table there is no check.
+    ///
+    /// With [`serve_selected`], this also covers an unsupported advertised
+    /// capability (before reading), or a selected backend lacking the
+    /// negotiated capability or message capacity. Selected-backend refusals
+    /// answer `attach` with `attached(refused)` and close 1000 before any
+    /// session data: `frame_version_unsupported` for capability and `range`
+    /// for message capacity. A capacity refusal records the same note.
     ConfigRefused,
 }
 
@@ -251,7 +259,7 @@ const LINGER: Duration = Duration::from_millis(100);
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
-pub fn serve<C: Connection, B: Backend>(mut conn: C, mut backend: B, config: &Config) -> Ended {
+pub fn serve<C: Connection, B: Backend>(conn: C, mut backend: B, config: &Config) -> Ended {
     if let Some((target, needed)) = backend
         .members()
         .and_then(|table| limit_short(table, config.max_message_bytes()))
@@ -269,10 +277,154 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, mut backend: B, config: &Co
     } else {
         FRAME_VERSION
     };
-    let mut session = Session::new(backend, config);
-    let ended = run(&mut conn, &mut session, config, max_version);
-    session.close();
+    run_session(
+        conn,
+        Some(Session::new(backend, config)),
+        max_version,
+        |_| None,
+        config,
+    )
+}
+
+/// A client's catalog identity, borrowed only for backend selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RequestedCatalog<'a> {
+    /// The catalog name in the client's `attach`.
+    pub name: &'a str,
+    /// The catalog hash in the client's `attach`.
+    pub hash: CatalogHash,
+}
+
+/// Serves a backend chosen once from the client's first `attach`.
+///
+/// `max_version` must be 2 or 3; other values return
+/// [`Ended::ConfigRefused`] without reading the connection. It states the
+/// capability available before selection for subprotocol negotiation. Version
+/// 1 is negotiated only to refuse attach, as in [`serve`].
+///
+/// After parsing `attach`, `select` receives its borrowed name and hash.
+/// `None` refuses with `unknown_catalog`. A selected backend undergoes the
+/// ordinary version, name, hash and encoding checks. Before accepting attach,
+/// it must also support the negotiated capability and message capacity;
+/// otherwise the server sends `attached(refused)` and close 1000 and returns
+/// [`Ended::ConfigRefused`]. See that variant for the refusal reasons.
+///
+/// Origin checks precede selection. The blocking, liveness and cleanup rules
+/// of [`serve`] apply, including dropping the selected backend on every exit.
+pub fn serve_selected<C, B, S>(conn: C, max_version: u32, select: S, config: &Config) -> Ended
+where
+    C: Connection,
+    B: Backend,
+    S: for<'a> FnOnce(RequestedCatalog<'a>) -> Option<B>,
+{
+    if !matches!(max_version, FRAME_VERSION | FRAME_VERSION_3) {
+        return Ended::ConfigRefused;
+    }
+    run_session(conn, None, max_version, select, config)
+}
+
+fn run_session<C, B, S>(
+    mut conn: C,
+    session: Option<Session<B>>,
+    max_version: u32,
+    select: S,
+    config: &Config,
+) -> Ended
+where
+    C: Connection,
+    B: Backend,
+    S: for<'a> FnOnce(RequestedCatalog<'a>) -> Option<B>,
+{
+    let mut selected = Selection {
+        session,
+        select: Some(select),
+        frame_version: FRAME_VERSION,
+        config_refused: false,
+    };
+    let ended = run(&mut conn, &mut selected, config, max_version);
+    if let Some(session) = selected.session {
+        session.close();
+    }
     ended
+}
+
+struct Selection<B: Backend, S> {
+    session: Option<Session<B>>,
+    select: Option<S>,
+    frame_version: u32,
+    config_refused: bool,
+}
+
+impl<B, S> Selection<B, S>
+where
+    B: Backend,
+    S: for<'a> FnOnce(RequestedCatalog<'a>) -> Option<B>,
+{
+    fn on_message(
+        &mut self,
+        msg: &[u8],
+        now: Instant,
+        out: &mut Vec<Vec<u8>>,
+        config: &Config,
+    ) -> Step {
+        if let Some(session) = &mut self.session {
+            return session.on_message(msg, now, out);
+        }
+        let attach = match session::first_attach(msg, self.frame_version, config) {
+            Ok(attach) => attach,
+            Err(step) => return step,
+        };
+        let backend = self.select.take().expect("selection runs once")(RequestedCatalog {
+            name: attach.name(),
+            hash: *attach.hash(),
+        });
+        let Some(mut backend) = backend else {
+            let reason = if attach.frame_version() != self.frame_version
+                || self.frame_version < FRAME_VERSION
+            {
+                Reason::FrameVersionUnsupported
+            } else {
+                Reason::UnknownCatalog
+            };
+            return refuse_selected(out, reason);
+        };
+        let capability_short = self.frame_version == FRAME_VERSION_3
+            && (backend.streams().is_none() || backend.members().is_none());
+        let limit = backend
+            .members()
+            .and_then(|table| limit_short(table, config.max_message_bytes()));
+        // Ordinary attach refusals take precedence over configuration errors.
+        let mut session = Session::new(backend, config);
+        session.upgraded(self.frame_version);
+        let step = session.on_message(msg, now, out);
+        if step == Step::Continue && (capability_short || limit.is_some()) {
+            out.clear();
+            self.config_refused = true;
+            if let Some((target, needed)) = limit {
+                if let Some(record) = config.record() {
+                    record(&Note::MessageLimitTooSmall { target, needed });
+                }
+            }
+            return refuse_selected(
+                out,
+                if capability_short {
+                    Reason::FrameVersionUnsupported
+                } else {
+                    Reason::Range
+                },
+            );
+        }
+        self.session = Some(session);
+        step
+    }
+}
+
+fn refuse_selected(out: &mut Vec<Vec<u8>>, reason: Reason) -> Step {
+    let frame = Frame::Attached(AttachOutcome::Refused(reason));
+    let mut msg = vec![0; frame.encoded_len()];
+    frame.encode(&mut msg).expect("an attached frame fits");
+    out.push(msg);
+    Step::Close(CloseCode::NORMAL.0)
 }
 
 /// The member of `table` whose messages need the most bytes, with that
@@ -348,12 +500,17 @@ fn block_message() -> usize {
     header + BLOCK_BYTES
 }
 
-fn run<C: Connection, B: Backend>(
+fn run<C, B, S>(
     conn: &mut C,
-    session: &mut Session<B>,
+    session: &mut Selection<B, S>,
     config: &Config,
     max_version: u32,
-) -> Ended {
+) -> Ended
+where
+    C: Connection,
+    B: Backend,
+    S: for<'a> FnOnce(RequestedCatalog<'a>) -> Option<B>,
+{
     if let Err(e) = conn.set_write_timeout(Some(config.liveness_timeout)) {
         return Ended::Io(e.kind());
     }
@@ -364,7 +521,12 @@ fn run<C: Connection, B: Backend>(
         max_version,
         accept_origin,
     ) {
-        Ok(Upgrade::Accepted(frame_version)) => session.upgraded(frame_version),
+        Ok(Upgrade::Accepted(frame_version)) => {
+            session.frame_version = frame_version;
+            if let Some(inner) = &mut session.session {
+                inner.upgraded(frame_version);
+            }
+        }
         Ok(Upgrade::Rejected | Upgrade::Forbidden) => {
             linger(conn);
             return Ended::Rejected;
@@ -399,7 +561,7 @@ fn run<C: Connection, B: Backend>(
             let now = Instant::now();
             heard = now;
             let step = match event {
-                Ok(Event::Binary(msg)) => session.on_message(&msg, now, &mut out),
+                Ok(Event::Binary(msg)) => session.on_message(&msg, now, &mut out, config),
                 Ok(Event::Ping(payload)) => match writer.pong(conn, &payload) {
                     Ok(()) => continue,
                     Err(e) => return write_failed(&e),
@@ -418,7 +580,11 @@ fn run<C: Connection, B: Backend>(
             let ended = flush(conn, &mut writer, &mut out, step);
             heard += wrote.elapsed();
             if let Some(ended) = ended {
-                return ended;
+                return if session.config_refused && ended == Ended::ServerClosed(1000) {
+                    Ended::ConfigRefused
+                } else {
+                    ended
+                };
             }
         }
 
@@ -427,7 +593,10 @@ fn run<C: Connection, B: Backend>(
         let now = Instant::now();
         if now.duration_since(ticked) >= config.poll_interval {
             ticked = now;
-            let step = session.tick(now, &mut out);
+            let step = session
+                .session
+                .as_mut()
+                .map_or(Step::Continue, |inner| inner.tick(now, &mut out));
             let wrote = Instant::now();
             let ended = flush(conn, &mut writer, &mut out, step);
             heard += wrote.elapsed();

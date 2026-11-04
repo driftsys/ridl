@@ -68,3 +68,7 @@ required-features = ["descriptor"]
 [[example]]
 name = "loopback_server"
 required-features = ["server"]
+
+[[test]]
+name = "selected"
+required-features = ["server"]

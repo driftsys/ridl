@@ -33,6 +33,29 @@ pub(crate) enum Step {
     Close(u16),
 }
 
+/// Parses the first selected-session message with the same protocol
+/// dispositions as a session whose backend is already known.
+pub(super) fn first_attach<'a>(
+    msg: &'a [u8],
+    version: u32,
+    config: &Config,
+) -> Result<Attach<'a>, Step> {
+    let note = match frame::decode(msg) {
+        Ok(Frame::Attach(attach)) => return Ok(attach),
+        Err(DecodeError::Violation(v)) => Note::Violation(v),
+        Ok(Frame::Chunk { .. } | Frame::StreamEnd { .. } | Frame::StreamCredit { .. })
+            if version < FRAME_VERSION_3 =>
+        {
+            Note::Violation(ProtocolViolation::UnknownCode)
+        }
+        _ => Note::MessageBeforeAttach,
+    };
+    if let Some(record) = config.record() {
+        record(&note);
+    }
+    Err(Step::Close(CloseCode::PROTOCOL.0))
+}
+
 /// A signal channel: `(interface, ordinal)`.
 type Key = (InterfaceNo, Ordinal);
 
