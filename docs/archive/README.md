@@ -837,10 +837,11 @@ provenance. Nothing here is normative — the current references live in
   and minimum supporting tool release is 0.15.0; publication is separate work.
 
 - **2026-11-02-streams-stage-5a-plan.md** — the plan for stage 5a of the streams
-  work: the Rust face of every stream form over `ridl-loopback` (byte and text
-  reply streams, commands and queries with one parameter stream, the `pipe`
-  form, and the docstore example). Archived verbatim, on 2026-11-04, once the
-  work landed in driftsys/ridl#1222 (squash `2feb58f7`). The durable records are
+  work: the Rust face of the stream forms that stage 3 left out, over
+  `ridl-loopback` (byte and text reply streams, commands and queries with one
+  parameter stream, the `pipe` form, and the docstore example). Archived
+  verbatim, on 2026-11-04, once the work landed in driftsys/ridl#1222 (squash
+  `2feb58f7`). The durable records are
   [the interaction face design](../design/interaction-face.md),
   [the ridl-rt design](../design/ridl-rt.md),
   [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
