@@ -100,7 +100,11 @@ impl Gateway {
     }
 
     fn select(&self, request: RequestedCatalog<'_>) -> Option<ListeningBackend> {
-        let catalog = self.node().catalogs().find(|c| c.name == request.name)?;
+        let catalog = self
+            .node()
+            .catalogs()
+            .find(|c| c.name == request.name && c.hash == request.hash)
+            .or_else(|| self.node().catalogs().find(|c| c.name == request.name))?;
         let ports = match self.node.attach(InstanceNo::LISTENER, catalog) {
             Ok(ports) => ports,
             Err(error) => {
@@ -108,7 +112,11 @@ impl Gateway {
                 return None;
             }
         };
-        match Described::new(Scanning(ports), self.table(catalog)?.clone()) {
+        let Some(table) = self.table(catalog) else {
+            eprintln!("catalog {}: member table missing", request.name);
+            return None;
+        };
+        match Described::new(Scanning(ports), table.clone()) {
             Ok(backend) => Some(backend),
             Err(error) => {
                 eprintln!("catalog {}: member table mismatch: {error}", request.name);
@@ -131,4 +139,72 @@ pub fn accepted<T>(connections: impl Iterator<Item = io::Result<T>>) -> impl Ite
             None
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ridl_transport_ws::frame::{Attach, Frame};
+
+    #[test]
+    fn missing_member_table_logs_to_stderr() {
+        const CHILD: &str = "RIDL_GATEWAY_MISSING_TABLE_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["missing_member_table_logs_to_stderr", "--nocapture"])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("catalog alpha: member table missing"),
+                "{stderr}"
+            );
+            return;
+        }
+        let bytes = include_bytes!(
+            "../../../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb"
+        );
+        let mut gateway = Gateway::from_descriptor(bytes, "Local").unwrap();
+        let catalog = *gateway
+            .node()
+            .catalogs()
+            .find(|c| c.name == "alpha")
+            .unwrap();
+        gateway.tables.clear();
+        let frame = Frame::Attach(Attach::new(2, 1, catalog.hash, catalog.name).unwrap());
+        let mut msg = vec![0; frame.encoded_len()];
+        frame.encode(&mut msg).unwrap();
+        let mut input = b"GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: ridl-ws-v2\r\n\r\n".to_vec();
+        input.extend([0x82, 0x80 | msg.len() as u8, 0, 0, 0, 0]);
+        input.extend(msg);
+        assert_eq!(
+            gateway.serve(Memory(io::Cursor::new(input)), &Config::default()),
+            Ended::ServerClosed(1000)
+        );
+    }
+
+    struct Memory(io::Cursor<Vec<u8>>);
+    impl io::Read for Memory {
+        fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+            io::Read::read(&mut self.0, out)
+        }
+    }
+    impl Write for Memory {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    impl Connection for Memory {
+        fn set_read_timeout(&self, _: Option<std::time::Duration>) -> io::Result<()> {
+            Ok(())
+        }
+        fn set_write_timeout(&self, _: Option<std::time::Duration>) -> io::Result<()> {
+            Ok(())
+        }
+    }
 }

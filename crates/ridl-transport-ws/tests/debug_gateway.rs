@@ -644,3 +644,64 @@ fn gateway_accept_errors_do_not_end_iteration() {
         [1, 2]
     );
 }
+
+#[test]
+fn gateway_memory_selects_matching_hash_among_duplicate_names() {
+    use ridl_descriptor::deployment::{self, Deployment};
+    use ridl_rt::contract::CatalogHash;
+    let mut descriptor = Deployment::try_from(deployment::verify(DESCRIPTOR).unwrap()).unwrap();
+    let mut duplicate = descriptor
+        .catalogs
+        .iter()
+        .find(|c| c.name == "alpha")
+        .unwrap()
+        .clone();
+    let mut embedded =
+        ridl_descriptor::Catalog::try_from(ridl_descriptor::verify(&duplicate.bytes).unwrap())
+            .unwrap();
+    embedded.hash = vec![255; 32];
+    duplicate.hash = embedded.hash.clone();
+    duplicate.bytes = ridl_descriptor::finish(&embedded);
+    descriptor.catalogs.push(duplicate);
+    let bytes = Box::leak(deployment::finish(&descriptor).into_boxed_slice());
+    // Verification admits two hashes under one name; the node keeps both stores.
+    deployment::verify(bytes).unwrap();
+    let g = Gateway::from_descriptor(bytes, "Local").unwrap();
+    let catalogs: Vec<_> = g
+        .node()
+        .catalogs()
+        .filter(|c| c.name == "alpha")
+        .copied()
+        .collect();
+    assert_eq!(catalogs.len(), 2);
+    for (cat, value) in catalogs.into_iter().zip([11, 22]) {
+        let mut p = provider(&g, 1, cat);
+        p.set(SIGNAL.iface, SIGNAL.ord, &[value]).unwrap();
+        p.commit();
+        let conn = memory(cat, &[Frame::Subscribe(SIGNAL)]);
+        let output = conn.output.clone();
+        assert_eq!(
+            g.serve(conn, &Config::default()),
+            Ended::Io(io::ErrorKind::UnexpectedEof)
+        );
+        let bytes = output.borrow();
+        let frames = binary_frames(&bytes);
+        assert_eq!(frames[0], Frame::Attached(AttachOutcome::Accepted));
+        assert!(frames.iter().any(|f| matches!(f, Frame::Publish { state: PublishState::Live(bytes), .. } if *bytes == [value])));
+    }
+    let conn = memory(
+        CatalogRef {
+            name: "alpha",
+            hash: CatalogHash([0; 32]),
+        },
+        &[],
+    );
+    let output = conn.output.clone();
+    assert_eq!(g.serve(conn, &Config::default()), Ended::ServerClosed(1000));
+    assert_eq!(
+        binary_frames(&output.borrow()),
+        [Frame::Attached(AttachOutcome::Refused(
+            frame::Reason::CatalogMismatch
+        ))]
+    );
+}

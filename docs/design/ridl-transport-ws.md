@@ -237,10 +237,10 @@ The server is `crates/ridl-transport-ws/src/server.rs` and its modules
 blocking functions, `serve(conn, backend, &config) -> Ended` and
 `serve_selected(conn, max_version, select, &config) -> Ended`. The embedder
 binds a listener, applies its access policy to each accepted connection, chooses
-a thread, builds one `Backend` value for the connection, and calls `serve`.
-`serve` returns when the session ends, with why. The crate rustdoc carries an
-embedding example. Nothing in the crate calls `bind`, `listen`, `spawn` or
-`connect`.
+a thread, and either builds one `Backend` value for `serve` or supplies a
+`select` closure to `serve_selected`. Both return when the session ends, with
+why. The crate rustdoc carries an embedding example. Nothing in the crate calls
+`bind`, `listen`, `spawn` or `connect`.
 
 `serve` takes a backend that the embedder built before the client sent anything.
 A server that holds several catalogs cannot do that, because the catalog is
@@ -250,10 +250,13 @@ named in the client's `attach`.
 entry point for that case. It takes no backend; it takes `select`, a closure
 that is called at most once, when the first `attach` has been parsed, with a
 `RequestedCatalog` that borrows the name and the hash from that message. The
-closure selects by catalog name and returns the backend, or `None` for an
-unknown name; the session checks the hash (D-11). Everything else in this
-section applies to both functions: the embedder owns the socket and the thread,
-and the backend is dropped on every exit.
+closure returns a backend matching the requested name and hash when available,
+or falls back to one with the requested name so the session can refuse an
+incompatible hash (D-11). It returns `None` for an unknown name. Deployment
+verification permits multiple catalogs with the same name and different hashes;
+the example gateway prefers an exact match. Everything else in this section
+applies to both functions: the embedder owns the socket and the thread, and the
+backend is dropped on every exit.
 
 The embedder states `max_version`, 2 or 3, in advance, because the opening
 handshake picks the subprotocol before the `attach` arrives, so the server

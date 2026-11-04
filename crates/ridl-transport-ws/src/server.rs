@@ -308,7 +308,8 @@ pub struct RequestedCatalog<'a> {
 /// 1 is negotiated only to refuse attach, as in [`serve`].
 ///
 /// After parsing `attach`, `select` receives its borrowed name and hash.
-/// Select by catalog name; the session checks the hash. `None` means an unknown
+/// Prefer a matching name and hash when available; otherwise select by name
+/// so the session can refuse an incompatible hash. `None` means an unknown
 /// name and refuses with `unknown_catalog`, except that a wrong attach version
 /// or a version 1 connection is refused with `frame_version_unsupported`.
 /// A selected backend undergoes the

@@ -11,11 +11,11 @@ how to connect to it from the TypeScript client.
 The gateway is the example `debug_gateway` of the `ridl-transport-ws` crate. It
 reads a deployment descriptor and the name of one machine, builds the
 `ridl-loopback` node of that machine, and serves the node over WebSocket. For
-each connection it reads the catalog name in the client's `attach`, finds that
-catalog among the node's catalogs, and attaches to it as the listener. A client
-therefore attaches once per catalog, as the binding requires, and can subscribe
-to any signal and event of that catalog and send a command or a query. A client
-that publishes is closed with code 1002.
+each connection it reads the catalog name and hash in the client's `attach`,
+finds a matching catalog among the node's catalogs, and attaches to it as the
+listener. A client therefore attaches once per catalog, as the binding requires,
+and can subscribe to any signal and event of that catalog and send a command or
+a query. A client that publishes is closed with code 1002.
 
 Two limits hold today.
 
@@ -73,10 +73,11 @@ await session.subscribe({
 
 `CATALOG_NAME` and `CATALOG_HASH` come from the generated codec module of the
 catalog. Without `encoding: "flatbuffers"` the gateway refuses the `attach` with
-`encoding_unsupported`. The gateway selects by catalog name only. A name the
-machine does not hold is refused with `unknown_catalog`; for a known name, the
-session checks the hash and refuses an incompatible hash with
-`catalog_mismatch`.
+`encoding_unsupported`. The gateway prefers a catalog whose name and hash both
+match, including when the machine holds several hashes under one name. A name
+the machine does not hold is refused with `unknown_catalog`. When no hash
+matches a known name, the gateway selects by name and the session refuses the
+incompatible hash with `catalog_mismatch`.
 
 For the complete connection sequence with the generated codec module, see
 `examples/cabin/web/main.ts` in the repository.
