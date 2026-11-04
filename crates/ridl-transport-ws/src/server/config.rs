@@ -212,7 +212,8 @@ pub struct Config {
     /// pinged sends nothing (a browser sends no ping of its own).
     pub ping_interval: Duration,
     /// How long without any message from the client before the session is
-    /// closed.
+    /// closed. Also bounds the wait for `attach` (or `attached` in a provided
+    /// session) after upgrade, regardless of ping and pong traffic.
     pub liveness_timeout: Duration,
     /// How long a call whose outcome stays unknown is kept on the backend
     /// before it is forgotten.

@@ -153,6 +153,9 @@ impl<B: ProvidedBackend> Provided<B> {
 }
 
 impl<B: ProvidedBackend> Driver for Provided<B> {
+    fn attached(&self) -> bool {
+        self.attached
+    }
     fn on_message(
         &mut self,
         msg: &[u8],

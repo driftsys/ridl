@@ -233,6 +233,10 @@ impl<B: Backend> Session<B> {
         }
     }
 
+    pub(super) fn attached(&self) -> bool {
+        self.attached
+    }
+
     /// Records the frame version of the subprotocol the handshake selected.
     /// A new session assumes `FRAME_VERSION`.
     pub(crate) fn upgraded(&mut self, frame_version: u32) {

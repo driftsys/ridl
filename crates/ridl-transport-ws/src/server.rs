@@ -560,6 +560,7 @@ where
 
 /// The shared WebSocket loop delegates only frame and tick dispositions.
 trait Driver {
+    fn attached(&self) -> bool;
     fn on_message(
         &mut self,
         msg: &[u8],
@@ -592,13 +593,30 @@ where
             .as_mut()
             .map_or(Step::Continue, |inner| inner.tick(now, out))
     }
+    fn attached(&self) -> bool {
+        self.session.as_ref().is_some_and(Session::attached)
+    }
     fn config_refused(&self) -> bool {
         self.config_refused
     }
 }
 
 fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config: &Config) -> Ended {
-    if let Err(e) = conn.set_read_timeout(Some(config.poll_interval)) {
+    run_upgraded_clock(conn, session, config, Instant::now)
+}
+
+fn run_upgraded_clock<C: Connection, D: Driver>(
+    conn: &mut C,
+    session: &mut D,
+    config: &Config,
+    clock: impl Fn() -> Instant,
+) -> Ended {
+    if let Err(e) = conn.set_read_timeout(Some(
+        config
+            .poll_interval
+            .min(config.liveness_timeout)
+            .max(MIN_READ_TIMEOUT),
+    )) {
         return Ended::Io(e.kind());
     }
 
@@ -606,7 +624,7 @@ fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config:
     let mut buf = vec![0u8; READ_BUFFER];
     let mut out = Vec::new();
     let mut writer = FrameWriter::default();
-    let opened = Instant::now();
+    let opened = clock();
     // The clock measures time since the client's last message, excluding
     // time spent in `flush`, because the server cannot read while it writes.
     // The write timeout ends a stalled reader.
@@ -622,7 +640,10 @@ fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config:
         }
 
         while let Some(event) = parser.next() {
-            let now = Instant::now();
+            let now = clock();
+            if !session.attached() && now.duration_since(opened) >= config.liveness_timeout {
+                return Ended::LivenessTimeout;
+            }
             heard = now;
             let step = match event {
                 Ok(Event::Binary(msg)) => session.on_message(&msg, now, &mut out, config),
@@ -640,9 +661,9 @@ fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config:
                 }
                 Err(code) => Step::Close(code.0),
             };
-            let wrote = Instant::now();
+            let wrote = clock();
             let ended = flush(conn, &mut writer, &mut out, step);
-            heard += wrote.elapsed();
+            heard += clock().saturating_duration_since(wrote);
             if let Some(ended) = ended {
                 return if session.config_refused() && ended == Ended::ServerClosed(1000) {
                     Ended::ConfigRefused
@@ -654,13 +675,16 @@ fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config:
 
         // A message is handled as soon as it is read, but the backend is
         // polled at most once per poll interval, whatever the client's rate.
-        let now = Instant::now();
+        let now = clock();
+        if !session.attached() && now.duration_since(opened) >= config.liveness_timeout {
+            return Ended::LivenessTimeout;
+        }
         if now.duration_since(ticked) >= config.poll_interval {
             ticked = now;
             let step = session.tick(now, &mut out);
-            let wrote = Instant::now();
+            let wrote = clock();
             let ended = flush(conn, &mut writer, &mut out, step);
-            heard += wrote.elapsed();
+            heard += clock().saturating_duration_since(wrote);
             if let Some(ended) = ended {
                 return ended;
             }
@@ -668,9 +692,16 @@ fn run_upgraded<C: Connection, D: Driver>(conn: &mut C, session: &mut D, config:
         // The next read waits only until the next poll is due, so that a
         // message read just before it does not push the poll a whole
         // interval back: a change is still sent within one poll interval.
-        let wait = (ticked + config.poll_interval)
-            .saturating_duration_since(Instant::now())
+        let mut wait = (ticked + config.poll_interval)
+            .saturating_duration_since(clock())
             .max(MIN_READ_TIMEOUT);
+        if !session.attached() {
+            wait = wait.min(
+                (opened + config.liveness_timeout)
+                    .saturating_duration_since(clock())
+                    .max(MIN_READ_TIMEOUT),
+            );
+        }
         if let Err(e) = conn.set_read_timeout(Some(wait)) {
             return Ended::Io(e.kind());
         }
@@ -796,3 +827,6 @@ impl<C: Connection> Write for Deadline<'_, C> {
         self.conn.flush()
     }
 }
+
+#[cfg(test)]
+mod attach_tests;

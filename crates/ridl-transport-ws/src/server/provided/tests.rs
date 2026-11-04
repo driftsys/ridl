@@ -1165,3 +1165,45 @@ fn stamp_flush_clears_previous_group_channels() {
     s.tick(now + Config::default().poll_interval, &mut vec![]);
     assert_eq!(s.backend.seen.groups, [Timestamp(900), Timestamp(901)]);
 }
+
+#[test]
+fn provided_attached_wait_is_bounded_despite_pongs() {
+    super::super::attach_tests::assert_attach_timeout(&mut session());
+}
+
+#[test]
+fn provided_acceptance_cancels_attach_deadline() {
+    let mut s = session();
+    ready(&mut s, Instant::now());
+    super::super::attach_tests::assert_pong_end(
+        &mut s,
+        Ended::Io(std::io::ErrorKind::UnexpectedEof),
+        5,
+    );
+}
+#[test]
+fn provided_attach_timeout_releases_twin_reservation() {
+    use ridl_rt::contract::InstanceNo;
+    let node = ridl_loopback::Node::from_descriptor(
+        include_bytes!(
+            "../../../../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb"
+        ),
+        "Local",
+    )
+    .unwrap();
+    let catalog = *node.catalogs().find(|c| c.name == "alpha").unwrap();
+    let who = InstanceNo::new(1).unwrap();
+    let ports = node.attach(who.twin().unwrap(), &catalog).unwrap();
+    let mut s = Provided::new(
+        super::super::Providing::new(
+            ports,
+            super::super::MemberTable::new(catalog.name, catalog.hash),
+        )
+        .unwrap(),
+        &Config::default(),
+    );
+    assert!(node.attach(who, &catalog).is_err());
+    super::super::attach_tests::assert_attach_timeout(&mut s);
+    drop(s);
+    assert!(node.attach(who, &catalog).is_ok());
+}
