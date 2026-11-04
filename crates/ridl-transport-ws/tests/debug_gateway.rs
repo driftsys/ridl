@@ -306,7 +306,7 @@ fn gateway_disconnect_drops_listener_attachment() {
 }
 
 #[test]
-fn gateway_argument_and_bind_policy() {
+fn gateway_arguments_and_descriptor_validation() {
     for args in [
         vec![],
         vec!["file"],
@@ -324,7 +324,13 @@ fn gateway_argument_and_bind_policy() {
         .join("../ridl-rt-conformance/fixtures/identity/identity.deployment.binfb");
     let loaded = Gateway::load(&options).unwrap();
     assert_eq!(loaded.node().catalogs().count(), 3);
-    let listener = options.bind().unwrap();
+    assert!(Gateway::from_descriptor(DESCRIPTOR, "missing").is_err());
+    assert!(Gateway::from_descriptor(&[], "Local").is_err());
+}
+
+#[test]
+fn gateway_bind_policy() {
+    let listener = options().bind().unwrap();
     let addr = listener.local_addr().unwrap();
     assert_eq!(addr.ip(), std::net::Ipv4Addr::LOCALHOST);
     assert_ne!(addr.port(), 0);
@@ -334,8 +340,6 @@ fn gateway_argument_and_bind_policy() {
         String::from_utf8(output).unwrap(),
         format!("port {}\n", addr.port())
     );
-    assert!(Gateway::from_descriptor(DESCRIPTOR, "missing").is_err());
-    assert!(Gateway::from_descriptor(&[], "Local").is_err());
 }
 
 /// A finite connection for deterministic attach, routing and lifetime controls.
@@ -473,13 +477,6 @@ fn gateway_memory_refuses_publication_with_direction_note() {
 }
 
 #[test]
-fn gateway_arguments_and_descriptor_validation_without_socket() {
-    assert!(Options::parse(["descriptor".to_owned()]).is_err());
-    assert!(Gateway::from_descriptor(DESCRIPTOR, "missing").is_err());
-    assert!(Gateway::from_descriptor(&[], "Local").is_err());
-}
-
-#[test]
 fn gateway_memory_forwards_updates_events_and_command_answers() {
     let g = gateway();
     let mut config = Config::default();
@@ -540,4 +537,110 @@ fn gateway_memory_forwards_updates_events_and_command_answers() {
             }
         )));
     }
+}
+
+#[test]
+fn gateway_memory_catalog_refusal_reasons() {
+    use frame::Reason;
+    use ridl_rt::contract::CatalogHash;
+    let g = gateway();
+    let alpha = catalog(&g, "alpha");
+    for (cat, reason) in [
+        (
+            CatalogRef {
+                name: "unknown",
+                ..alpha
+            },
+            Reason::UnknownCatalog,
+        ),
+        (
+            CatalogRef {
+                name: "remote",
+                ..alpha
+            },
+            Reason::UnknownCatalog,
+        ),
+        (
+            CatalogRef {
+                hash: CatalogHash([0; 32]),
+                ..alpha
+            },
+            Reason::CatalogMismatch,
+        ),
+    ] {
+        let conn = memory(cat, &[]);
+        let output = conn.output.clone();
+        assert_eq!(g.serve(conn, &Config::default()), Ended::ServerClosed(1000));
+        assert_eq!(
+            binary_frames(&output.borrow()),
+            [Frame::Attached(AttachOutcome::Refused(reason))]
+        );
+    }
+}
+
+#[test]
+fn gateway_memory_max_version_is_two() {
+    let g = gateway();
+    for (offer, accepted) in [("ridl-ws-v3, ridl-ws-v2", true), ("ridl-ws-v3", false)] {
+        let mut conn = memory(catalog(&g, "alpha"), &[]);
+        let bytes = conn.input.into_inner();
+        let head = bytes.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+        let mut input = String::from_utf8(bytes[..head].to_vec())
+            .unwrap()
+            .replace(
+                "Sec-WebSocket-Protocol: ridl-ws-v2",
+                &format!("Sec-WebSocket-Protocol: {offer}"),
+            )
+            .into_bytes();
+        input.extend_from_slice(&bytes[head..]);
+        conn.input = io::Cursor::new(input);
+        let output = conn.output.clone();
+        let ended = g.serve(conn, &Config::default());
+        let bytes = output.borrow();
+        if accepted {
+            assert_eq!(ended, Ended::Io(io::ErrorKind::UnexpectedEof));
+            assert!(
+                String::from_utf8_lossy(&bytes).contains("Sec-WebSocket-Protocol: ridl-ws-v2\r\n")
+            );
+        } else {
+            assert_eq!(ended, Ended::Rejected);
+            assert!(bytes.starts_with(b"HTTP/1.1 400"));
+        }
+    }
+}
+
+#[test]
+fn gateway_memory_listener_does_not_reserve_instance_one() {
+    let g = gateway();
+    let cat = catalog(&g, "alpha");
+    let mut conn = memory(cat, &[]);
+    let node = g.clone();
+    conn.on_idle = Some(Box::new(move || {
+        let twin = node
+            .node()
+            .attach(InstanceNo::new(1).unwrap().twin().unwrap(), &cat);
+        assert!(
+            twin.is_ok(),
+            "listener must not reserve instance 1 against its twin"
+        );
+    }));
+    assert_eq!(
+        g.serve(conn, &Config::default()),
+        Ended::Io(io::ErrorKind::UnexpectedEof)
+    );
+}
+
+#[test]
+fn gateway_accept_errors_do_not_end_iteration() {
+    // ECONNABORTED and EMFILE on macOS; both errors must leave later accepts reachable.
+    let connections = [
+        Err(io::Error::from_raw_os_error(53)),
+        Ok(1),
+        Err(io::Error::from_raw_os_error(24)),
+        Ok(2),
+    ];
+    assert_eq!(
+        gateway::accepted(connections.into_iter()).collect::<Vec<_>>(),
+        [1, 2]
+    );
 }

@@ -100,15 +100,35 @@ impl Gateway {
     }
 
     fn select(&self, request: RequestedCatalog<'_>) -> Option<ListeningBackend> {
-        let catalog = self
-            .node()
-            .catalogs()
-            .find(|c| c.name == request.name && c.hash == request.hash)?;
-        let ports = self.node.attach(InstanceNo::LISTENER, catalog).ok()?;
-        Described::new(Scanning(ports), self.table(catalog)?.clone()).ok()
+        let catalog = self.node().catalogs().find(|c| c.name == request.name)?;
+        let ports = match self.node.attach(InstanceNo::LISTENER, catalog) {
+            Ok(ports) => ports,
+            Err(error) => {
+                eprintln!("catalog {}: listener attach failed: {error}", request.name);
+                return None;
+            }
+        };
+        match Described::new(Scanning(ports), self.table(catalog)?.clone()) {
+            Ok(backend) => Some(backend),
+            Err(error) => {
+                eprintln!("catalog {}: member table mismatch: {error}", request.name);
+                None
+            }
+        }
     }
 
     pub fn serve(&self, conn: impl Connection, config: &Config) -> Ended {
         serve_selected(conn, 2, |request| self.select(request), config)
     }
+}
+
+/// Logs accept errors and keeps accepting subsequent connections.
+pub fn accepted<T>(connections: impl Iterator<Item = io::Result<T>>) -> impl Iterator<Item = T> {
+    connections.filter_map(|conn| match conn {
+        Ok(conn) => Some(conn),
+        Err(error) => {
+            eprintln!("accept: {error}");
+            None
+        }
+    })
 }

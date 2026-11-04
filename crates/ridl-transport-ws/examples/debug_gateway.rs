@@ -22,8 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let gateway = Arc::new(Gateway::load(&options)?);
     let listener = options.bind()?;
     gateway::announce(&listener, &mut io::stdout().lock())?;
-    for conn in listener.incoming() {
-        let conn = conn?;
+    for conn in gateway::accepted(listener.incoming()) {
         let gateway = gateway.clone();
         thread::spawn(move || gateway.serve(conn, &Config::default()));
     }

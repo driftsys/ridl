@@ -11,11 +11,11 @@ how to connect to it from the TypeScript client.
 The gateway is the example `debug_gateway` of the `ridl-transport-ws` crate. It
 reads a deployment descriptor and the name of one machine, builds the
 `ridl-loopback` node of that machine, and serves the node over WebSocket. For
-each connection it reads the catalog name and hash in the client's `attach`,
-finds that catalog among the node's catalogs, and attaches to it as the
-listener. A client therefore attaches once per catalog, as the binding requires,
-and can subscribe to any signal and event of that catalog and send a command or
-a query. A client that publishes is closed with code 1002.
+each connection it reads the catalog name in the client's `attach`, finds that
+catalog among the node's catalogs, and attaches to it as the listener. A client
+therefore attaches once per catalog, as the binding requires, and can subscribe
+to any signal and event of that catalog and send a command or a query. A client
+that publishes is closed with code 1002.
 
 Two limits hold today.
 
@@ -50,11 +50,11 @@ writes its own program over `serve_selected`
 ## Connect from TypeScript
 
 The client of `@driftsys/ridl-transport-ws` asks for proto3 when `connect` is
-given no encoding. The gateway serves the encoding of the catalog descriptor,
-FlatBuffers, so the client names it:
+given no encoding. The gateway serves FlatBuffers because the loopback
+attachment encodes FlatBuffers, so the client names it:
 
 ```ts
-import { connect } from "@driftsys/ridl-transport-ws";
+import { connect, Kind } from "@driftsys/ridl-transport-ws";
 
 const session = await connect(`ws://127.0.0.1:${port}`, {
   catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
@@ -64,12 +64,19 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
     // Called for each signal value the listener receives.
   },
 });
+await session.subscribe({
+  kind: Kind.Signal,
+  iface: Cabin.temperature.iface,
+  ord: Cabin.temperature.ord,
+});
 ```
 
 `CATALOG_NAME` and `CATALOG_HASH` come from the generated codec module of the
 catalog. Without `encoding: "flatbuffers"` the gateway refuses the `attach` with
-`encoding_unsupported`. A catalog name or hash that the machine does not hold is
-refused with `unknown_catalog`, because the gateway selects a catalog by both.
+`encoding_unsupported`. The gateway selects by catalog name only. A name the
+machine does not hold is refused with `unknown_catalog`; for a known name, the
+session checks the hash and refuses an incompatible hash with
+`catalog_mismatch`.
 
 For the complete connection sequence with the generated codec module, see
 `examples/cabin/web/main.ts` in the repository.
