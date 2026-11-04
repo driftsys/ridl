@@ -194,7 +194,22 @@ fn invalidate_preserves_frame_rules() {
 fn same_stamp_values_commit_together_and_idle_tick_flushes() {
     let mut s = session();
     let now = Instant::now();
+    let second = Target {
+        ord: Ordinal(5),
+        ..SIGNAL
+    };
+    s.backend
+        .table
+        .insert(second.iface, second.ord, second.kind, None);
     ready(&mut s, now);
+    send(
+        &mut s,
+        Frame::Answer {
+            target: second,
+            outcome: AnswerOutcome::Accepted,
+        },
+        now,
+    );
     send(
         &mut s,
         publish(SIGNAL, 1, 900, PublishState::Live(&[1])),
@@ -202,7 +217,7 @@ fn same_stamp_values_commit_together_and_idle_tick_flushes() {
     );
     send(
         &mut s,
-        publish(SIGNAL, 2, 900, PublishState::Live(&[2])),
+        publish(second, 1, 900, PublishState::Live(&[2])),
         now,
     );
     assert!(s.backend.seen.groups.is_empty());
@@ -333,6 +348,10 @@ fn unknown_and_wrong_kind_frames_do_not_deliver() {
             ..SIGNAL
         },
         EVENT,
+        Target {
+            kind: Kind::Signal,
+            ..EVENT
+        },
         Target {
             kind: Kind::Fixed,
             ..SIGNAL
@@ -509,14 +528,14 @@ mod mapping {
             now,
             &config,
         );
-        assert_eq!(sample(&observer).0, [42]);
+        assert_eq!(sample(&observer).0, [1]);
         s.tick(now + config.poll_interval, &mut vec![]);
         let (bytes, provenance, envelope) = sample(&observer);
         assert_eq!(bytes, [2]);
         assert_eq!(provenance, Provenance::Live);
         assert_eq!(envelope.stamp, observer.now());
         assert_ne!(envelope.stamp, Timestamp(901));
-        assert_eq!(envelope.seq, 1); // one local publication for the group
+        assert_eq!(envelope.seq, 2); // repeated channel starts a second group
         assert!(notes.lock().unwrap().is_empty());
     }
     #[test]
@@ -638,6 +657,29 @@ mod mapping {
                 Note::PortRefused { target: SIGNAL },
                 Note::PortRefused { target: EVENT }
             ]
+        );
+    }
+    #[test]
+    fn live_sample_without_bytes_is_refused() {
+        let (mut s, observer, config, notes) = setup();
+        s.backend.sample(
+            SIGNAL,
+            Sample {
+                value: None,
+                provenance: Provenance::Live,
+                freshness: ridl_rt::sample::Freshness::Fresh,
+                envelope: Envelope {
+                    stamp: Timestamp(900),
+                    seq: 1,
+                },
+            },
+            &config,
+        );
+        s.backend.commit(Timestamp(900));
+        assert_eq!(sample(&observer).0, [42]);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            [Note::PortRefused { target: SIGNAL }]
         );
     }
     #[test]
@@ -851,7 +893,22 @@ fn malformed_publication_before_attached_closes() {
 fn idle_deadline_tracks_last_delivery_and_equal_stamp_after_flush_starts_again() {
     let mut s = session();
     let now = Instant::now();
+    let second = Target {
+        ord: Ordinal(5),
+        ..SIGNAL
+    };
+    s.backend
+        .table
+        .insert(second.iface, second.ord, second.kind, None);
     ready(&mut s, now);
+    send(
+        &mut s,
+        Frame::Answer {
+            target: second,
+            outcome: AnswerOutcome::Accepted,
+        },
+        now,
+    );
     let interval = Config::default().poll_interval;
     send(
         &mut s,
@@ -860,7 +917,7 @@ fn idle_deadline_tracks_last_delivery_and_equal_stamp_after_flush_starts_again()
     );
     send(
         &mut s,
-        publish(SIGNAL, 2, 900, PublishState::Live(&[2])),
+        publish(second, 1, 900, PublishState::Live(&[2])),
         now + interval / 2,
     );
     s.tick(now + interval, &mut vec![]);
@@ -874,4 +931,173 @@ fn idle_deadline_tracks_last_delivery_and_equal_stamp_after_flush_starts_again()
     );
     s.tick(now + interval * 3, &mut vec![]);
     assert_eq!(s.backend.seen.groups, [Timestamp(900), Timestamp(900)]);
+}
+
+#[test]
+fn repeated_channel_commits_without_idle_or_stamp_change() {
+    let mut s = session();
+    let now = Instant::now();
+    ready(&mut s, now);
+    let step = Config::default().poll_interval / 4;
+    for seq in 1..=8 {
+        let at = now + step * seq as u32;
+        send(
+            &mut s,
+            publish(SIGNAL, seq, 900, PublishState::Live(&[seq as u8])),
+            at,
+        );
+        s.tick(at, &mut vec![]);
+        assert_eq!(
+            s.backend.seen.groups,
+            vec![Timestamp(900); seq as usize - 1]
+        );
+    }
+}
+
+#[test]
+fn interleaved_occurrence_does_not_split_or_extend_signal_group() {
+    let mut s = session();
+    let now = Instant::now();
+    let second = Target {
+        ord: Ordinal(5),
+        ..SIGNAL
+    };
+    s.backend
+        .table
+        .insert(second.iface, second.ord, second.kind, None);
+    ready(&mut s, now);
+    send(
+        &mut s,
+        Frame::Answer {
+            target: second,
+            outcome: AnswerOutcome::Accepted,
+        },
+        now,
+    );
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 900, PublishState::Live(&[1])),
+        now,
+    );
+    send(
+        &mut s,
+        Frame::Occurrence {
+            target: EVENT,
+            envelope: Envelope {
+                stamp: Timestamp(901),
+                seq: 1,
+            },
+            payload: &[2],
+        },
+        now + Config::default().poll_interval / 2,
+    );
+    assert!(s.backend.seen.groups.is_empty());
+    send(
+        &mut s,
+        publish(second, 1, 900, PublishState::Live(&[3])),
+        now + Config::default().poll_interval / 2,
+    );
+    s.tick(now + Config::default().poll_interval * 3 / 2, &mut vec![]);
+    assert_eq!(s.backend.seen.groups, [Timestamp(900)]);
+    send(
+        &mut s,
+        Frame::Occurrence {
+            target: EVENT,
+            envelope: Envelope {
+                stamp: Timestamp(902),
+                seq: 2,
+            },
+            payload: &[4],
+        },
+        now + Config::default().poll_interval * 2,
+    );
+    s.tick(now + Config::default().poll_interval * 3, &mut vec![]);
+    assert_eq!(s.backend.seen.groups, [Timestamp(900)]);
+    assert_eq!(s.backend.seen.events.len(), 2);
+}
+
+#[test]
+fn expired_occurrence_records_wire_gap_before_next_fresh_occurrence() {
+    use std::sync::{Arc, Mutex};
+    let notes = Arc::new(Mutex::new(Vec::new()));
+    let recorded = notes.clone();
+    let config = Config::default().with_record(move |n| recorded.lock().unwrap().push(*n));
+    let mut s = session();
+    s.backend.table.insert(
+        EVENT.iface,
+        EVENT.ord,
+        Kind::Event,
+        Some(std::time::Duration::from_micros(10)),
+    );
+    s.backend.ports.advance(ridl_rt::sample::Duration(100));
+    let now = Instant::now();
+    ready(&mut s, now);
+    for (seq, stamp) in [(1, 100), (4, 89), (5, 100)] {
+        let frame = Frame::Occurrence {
+            target: EVENT,
+            envelope: Envelope {
+                stamp: Timestamp(stamp),
+                seq,
+            },
+            payload: &[1],
+        };
+        let mut bytes = vec![0; frame.encoded_len()];
+        frame.encode(&mut bytes).unwrap();
+        s.on_message(&bytes, now, &mut vec![], &config);
+    }
+    assert_eq!(
+        s.backend
+            .seen
+            .events
+            .iter()
+            .map(|e| e.2.seq)
+            .collect::<Vec<_>>(),
+        [1, 5]
+    );
+    assert_eq!(
+        *notes.lock().unwrap(),
+        [Note::EventGap {
+            target: EVENT,
+            count: 2
+        }]
+    );
+    assert_eq!(s.backend.seen.events[1].3, None);
+}
+
+#[test]
+fn wrong_kind_answer_does_not_accept_or_consume_signal_subscription() {
+    let mut s = session();
+    let now = Instant::now();
+    send(&mut s, Frame::Attached(AttachOutcome::Accepted), now);
+    send(
+        &mut s,
+        Frame::Answer {
+            target: Target {
+                kind: Kind::Event,
+                ..SIGNAL
+            },
+            outcome: AnswerOutcome::Accepted,
+        },
+        now,
+    );
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 900, PublishState::Live(&[1])),
+        now,
+    );
+    assert!(s.backend.seen.samples.is_empty());
+    send(
+        &mut s,
+        Frame::Answer {
+            target: SIGNAL,
+            outcome: AnswerOutcome::Accepted,
+        },
+        now,
+    );
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 900, PublishState::Live(&[2])),
+        now,
+    );
+    assert_eq!(s.backend.seen.samples[0].2, Some(vec![2]));
 }

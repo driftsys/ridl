@@ -182,7 +182,7 @@ impl<B: ProvidedBackend> Driver for Provided<B> {
                 payload,
             }) if self.attached => {
                 self.consumer
-                    .occurrence(&mut self.backend, target, envelope, payload, now, config);
+                    .occurrence(&mut self.backend, target, envelope, payload, config);
                 Step::Continue
             }
             Err(frame::DecodeError::Discard(_)) if !self.attached => {

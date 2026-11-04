@@ -1,6 +1,6 @@
 //! Consumer dispositions and remote-stamp commit scheduling.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
@@ -24,6 +24,7 @@ struct Channel {
 pub(super) struct Consumer {
     channels: BTreeMap<Key, Channel>,
     group: Option<(Timestamp, Instant)>,
+    group_channels: BTreeSet<Key>,
     interval: Duration,
 }
 impl Consumer {
@@ -31,6 +32,7 @@ impl Consumer {
         Self {
             channels: BTreeMap::new(),
             group: None,
+            group_channels: BTreeSet::new(),
             interval,
         }
     }
@@ -88,7 +90,7 @@ impl Consumer {
         };
         // Sequence validation precedes grouping, so a discarded frame cannot
         // flush a group or extend its idle deadline.
-        self.begin(backend, envelope.stamp, now);
+        self.begin(backend, target, envelope.stamp, now);
         let channel = &self.channels[&(target.iface, target.ord)];
         let max = backend
             .members()
@@ -125,7 +127,6 @@ impl Consumer {
         target: Target,
         envelope: Envelope,
         payload: &[u8],
-        now: Instant,
         config: &Config,
     ) {
         let last = self
@@ -145,6 +146,9 @@ impl Consumer {
         if let Some((_, Some(max))) = backend.members().member(target.iface, target.ord) {
             let age = backend.ports().now().0.saturating_sub(envelope.stamp.0);
             if age > i64::try_from(max.as_micros()).unwrap_or(i64::MAX) {
+                if let Some(count) = gap {
+                    record(config, Note::EventGap { target, count });
+                }
                 return;
             }
         }
@@ -158,7 +162,6 @@ impl Consumer {
         } else {
             Ok(payload)
         };
-        self.begin(backend, envelope.stamp, now);
         backend.occurrence(target, Occurrence { payload, envelope }, gap, config);
     }
     fn channel<'a>(
@@ -187,14 +190,24 @@ impl Consumer {
         channel.seq = Some(seq);
         Some(channel)
     }
-    fn begin(&mut self, backend: &mut impl ProvidedBackend, stamp: Timestamp, now: Instant) {
-        if self.group.is_some_and(|(held, _)| held != stamp) {
+    fn begin(
+        &mut self,
+        backend: &mut impl ProvidedBackend,
+        target: Target,
+        stamp: Timestamp,
+        now: Instant,
+    ) {
+        if self.group.is_some_and(|(held, _)| held != stamp)
+            || self.group_channels.contains(&(target.iface, target.ord))
+        {
             self.flush(backend)
         }
+        self.group_channels.insert((target.iface, target.ord));
         self.group = Some((stamp, now));
     }
     fn flush(&mut self, backend: &mut impl ProvidedBackend) {
         if let Some((stamp, _)) = self.group.take() {
+            self.group_channels.clear();
             backend.commit(stamp)
         }
     }

@@ -31,8 +31,10 @@ pub trait ProvidedBackend {
         gap: Option<u64>,
         config: &Config,
     );
-    /// Ends a group of consecutive accepted deliveries with one remote stamp.
-    /// Called on stamp change or after one idle poll interval; never on drop.
+    /// Ends a group of accepted signal frames with one remote stamp and at most
+    /// one frame per channel. Occurrences do not affect groups. Called before
+    /// a stamp change or repeated channel, or after one idle poll interval;
+    /// never on drop.
     fn commit(&mut self, remote_stamp: Timestamp);
 }
 
@@ -81,11 +83,13 @@ where
     fn sample(&mut self, target: Target, sample: Sample<Option<&[u8]>>, config: &Config) {
         let result = match sample.provenance {
             Provenance::Init => return,
-            Provenance::Live => self.ports.set(
-                target.iface,
-                target.ord,
-                sample.value.expect("live sample has bytes"),
-            ),
+            Provenance::Live => {
+                let Some(bytes) = sample.value else {
+                    record(config, Note::PortRefused { target });
+                    return;
+                };
+                self.ports.set(target.iface, target.ord, bytes)
+            }
             Provenance::Invalid(cause) => {
                 if let Cause::Detected(cause) = cause {
                     record(config, Note::DetectedInvalid { target, cause });
