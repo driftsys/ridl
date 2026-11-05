@@ -637,3 +637,33 @@ fn the_report_orders_the_operation_sections_after_the_update_sections() {
     assert!(at("### Ratios per operation") < at("### CPU load, paced and derived"));
     assert!(at("## Per payload") < at("### Time per operation"));
 }
+
+#[test]
+fn the_run_header_says_the_duration_is_per_operation_and_the_caption_uses_the_real_sample_count() {
+    let mut r = file(op_trio("p.A.x", "Speed"));
+    r.samples = 17;
+    r.duration_s = 3.0;
+    let out = render("r.json", &r);
+    assert!(
+        out.contains("17 samples per cell, 3 s of CPU time per operation of a cell and encoding"),
+        "{out}"
+    );
+    assert!(!out.contains("per cell and encoding"));
+    for op in Op::ALL {
+        let t = op_time_table(&r, op);
+        assert!(t.contains("median of 17 samples"), "{t}");
+        assert!(!t.contains("30 samples"), "{t}");
+    }
+}
+
+#[test]
+fn operation_ratio_and_mix_tables_warn_that_times_under_10_ns_are_not_comparable() {
+    let r = file(op_trio("p.A.x", "Speed"));
+    let note = "A time under about 10 ns includes harness cost and is an upper bound, so a \
+                ratio whose podbuf time is under 10 ns is not comparable.";
+    let flat = |t: String| t.split_whitespace().collect::<Vec<_>>().join(" ");
+    let note = flat(note.to_string());
+    assert!(flat(op_ratio_table(&r)).contains(&note));
+    assert!(flat(op_mix_table(&r, Weighting::PerSignal)).contains(&note));
+    assert!(flat(op_mix_table(&r, Weighting::PerPayloadType)).contains(&note));
+}

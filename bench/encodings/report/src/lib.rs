@@ -291,6 +291,9 @@ impl Metric {
     }
 }
 
+const HARNESS_NOTE: &str = "A time under about 10 ns includes harness cost and is an upper \
+     bound, so a ratio whose podbuf time is under 10 ns is not comparable.";
+
 const FLAG: &str = "\u{2020}";
 
 fn esc(s: &str) -> String {
@@ -648,7 +651,7 @@ pub fn op_mix_table(r: &ResultFile, w: Weighting) -> String {
         metrics.push((format!("{l}: heap allocations"), Metric::OpAllocs(op), 1));
     }
     format!(
-        "{} The rows are per operation.\n\n{}",
+        "{} The rows are per operation. {HARNESS_NOTE}\n\n{}",
         mix_caption(w),
         mix_rows(r, w, &metrics)
     )
@@ -656,11 +659,12 @@ pub fn op_mix_table(r: &ResultFile, w: Weighting) -> String {
 
 pub fn op_time_table(r: &ResultFile, op: Op) -> String {
     format!(
-        "CPU time of the {} operation of one update, in ns: the median of 30 samples \
+        "CPU time of the {} operation of one update, in ns: the median of {} samples \
          of a batch of this operation alone, with the fastest and the slowest sample \
          and the range as a share of the median. {FLAG} spread above 10 %: the \
          figure is not stable.\n\n{}",
         op.label().to_lowercase(),
+        r.samples,
         per_encoding(r, |m| match &m.ops {
             Some(o) => fmt_timing(&o[op.index()].timing),
             None => "not timed".to_string(),
@@ -726,7 +730,7 @@ pub fn op_ratio_table(r: &ResultFile) -> String {
         "Time of each operation of each encoding divided by the time of the same \
          operation in podbuf: above 1.00 the encoding is slower than podbuf in that \
          operation, below 1.00 faster. A refused or not-built cell has no ratio and \
-         is marked.\n\n{}",
+         is marked. {HARNESS_NOTE}\n\n{}",
         table(&headers, &rows)
     )
 }
@@ -785,7 +789,7 @@ pub fn render(name: &str, r: &ResultFile) -> String {
          - Date: {}\n- Commit: {}\n- Platform: {}\n- Core: {}\n\
          - Frequency of the core: {freq}; governor: {gov}\n- Toolchain: {}\n\
          - Run: {:.0} updates per second, {} samples per cell, {} s of CPU time \
-         per cell and encoding, paced run: {}\n\n",
+         per operation of a cell and encoding, paced run: {}\n\n",
         r.date,
         r.commit,
         r.platform,
