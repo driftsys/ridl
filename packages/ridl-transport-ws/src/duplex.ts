@@ -82,6 +82,7 @@ export class DuplexCall {
           this.#send(() =>
             send.end(seq, this.#uploadSeq, { kind: "interrupted" })
           );
+          this.#send(() => send.stop(seq, { kind: "interrupted" }));
           const error = new SessionError({ category: "corrupt" });
           this.reject(error);
           throw error;

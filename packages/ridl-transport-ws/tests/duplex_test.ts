@@ -328,6 +328,8 @@ Deno.test("duplex_reply_validation", async () => {
     const defect of [
       "gap",
       "size",
+      "accepted",
+      "upload-chunk",
       "credit",
       "direction",
       "response",
@@ -340,6 +342,25 @@ Deno.test("duplex_reply_validation", async () => {
       const read = observe(reader.read());
       const closed = observe(writer.closed);
       if (defect === "gap") chunk(socket, 2n);
+      if (defect === "accepted") {
+        socket.deliver({
+          form: "response",
+          target: TARGET,
+          correlation: 1n,
+          envelope: { seq: 1n, stamp: 0n },
+          outcome: { outcome: "accepted" },
+        });
+      }
+      if (defect === "upload-chunk") {
+        socket.deliver({
+          form: "chunk",
+          target: TARGET,
+          correlation: 1n,
+          stream: 1,
+          envelope: { seq: 1n, stamp: 0n },
+          payload: bytes,
+        });
+      }
       if (defect === "size") chunk(socket, 1n, new Uint8Array(65536));
       if (defect === "credit") {
         for (let i = 1n; i <= 6n; i++) chunk(socket, i);
@@ -440,8 +461,19 @@ Deno.test("duplex_upload_validation", async () => {
       }
       await tick();
       assert.equal(uploadClosed.settled, true);
-      if (failure === "size") category(uploadClosed.error, "corrupt");
-      else assert.equal(uploadClosed.error, exception);
+      if (failure === "size") {
+        category(uploadClosed.error, "corrupt");
+        const stops = sent(socket).filter((f) => f.form === "stream_end");
+        assert.deepEqual(
+          stops.map((f) => [f.stream, f.envelope.seq, f.outcome.kind]),
+          [[1, 1n, "interrupted"], [0, 1n, "interrupted"]],
+          "oversized writes must interrupt upload before reply",
+        );
+        for (const stop of stops) {
+          assert.deepEqual(stop.target, TARGET);
+          assert.equal(stop.correlation, 1n);
+        }
+      } else assert.equal(uploadClosed.error, exception);
       if (failure !== "stop") {
         assert.equal(read.settled, true);
         assert.equal(
@@ -579,6 +611,90 @@ Deno.test("duplex_preflight", async () => {
             : "down",
         );}
       assert.equal(sent(socket).length, before);
+    } finally {
+      session.close();
+    }
+  }
+});
+
+// Mutation: use the default ceiling instead of the catalog member limit.
+Deno.test("duplex_catalog_chunk_limit", async () => {
+  for (const direction of ["upload", "reply"] as const) {
+    const { session, socket, notes } = await rig(SUBPROTOCOL_V3, {
+      interfaces: [{
+        iface: 1,
+        narrow: { iface: 1, ord: 14, kind: "query", limit: 5 },
+      }],
+    });
+    try {
+      const { writer, reader } = open(session, socket);
+      const closed = observe(writer.closed);
+      const read = direction === "upload" ? observe(reader.read()) : undefined;
+      const exact = new Uint8Array(5).fill(7);
+      if (direction === "upload") {
+        await writer.write(exact);
+        assert.deepEqual(
+          sent(socket).filter((f) => f.form === "chunk").map((f) => f.payload),
+          [exact],
+        );
+        const operation = observe(writer.write(new Uint8Array(6)));
+        await tick();
+        assert.equal(operation.settled, true);
+        category(operation.error, "corrupt");
+      } else {
+        chunk(socket, 1n, exact);
+        assert.deepEqual(await reader.read(), { done: false, value: exact });
+        chunk(socket, 2n, new Uint8Array(6));
+      }
+      await tick();
+      assert.equal(closed.settled, true);
+      category(closed.error, "corrupt");
+      if (read) {
+        assert.equal(read.settled, true);
+        assert.equal(read.error, closed.error);
+      } else {
+        await assert.rejects(
+          () => reader.read(),
+          (error) => error === closed.error,
+        );
+      }
+      chunk(socket);
+      assert.ok(
+        notes.some((n) =>
+          n.note === "discarded" && n.reason === "unknown-correlation"
+        ),
+      );
+    } finally {
+      session.close();
+    }
+  }
+});
+
+// Mutations: skip reply-end sequencing or accept any upload-end sequence.
+Deno.test("duplex_end_sequences", async () => {
+  for (const direction of ["reply", "upload"] as const) {
+    const { session, socket, notes } = await rig();
+    try {
+      const { writer, reader } = open(session, socket);
+      const closed = observe(writer.closed);
+      const read = observe(reader.read());
+      end(
+        socket,
+        direction === "reply" ? 0 : 1,
+        2n,
+        direction === "reply" ? "end" : "busy",
+      );
+      await tick();
+      assert.equal(closed.settled, true);
+      category(closed.error, "interrupted");
+      assert.equal(read.settled, true);
+      assert.equal(read.error, closed.error);
+      chunk(socket);
+      assert.ok(
+        notes.some((n) =>
+          n.note === "discarded" && n.reason === "unknown-correlation"
+        ),
+      );
     } finally {
       session.close();
     }
