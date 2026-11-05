@@ -261,6 +261,16 @@ pub fn device_steps(
     ]
 }
 
+/// The run log, the frequencies before and the frequencies after, taken from
+/// the outputs of the steps of `device_steps`.
+pub fn split_outputs(outputs: &[String]) -> (&str, &str, &str) {
+    (
+        &outputs[STEP_RUN],
+        &outputs[STEP_FREQ_BEFORE],
+        &outputs[STEP_FREQ_AFTER],
+    )
+}
+
 fn adb(args: &[String]) -> Command {
     let mut cmd = Command::new("adb");
     cmd.args(args);
@@ -319,9 +329,10 @@ pub fn run() -> Result<(), String> {
         for step in device_steps(&serial, &binary, core, commit, &json) {
             outputs.push(output(&mut adb(&step), "adb")?);
         }
-        print!("{}", outputs[STEP_RUN]);
+        let (log, before, after) = split_outputs(&outputs);
+        print!("{log}");
         let record = json.with_extension("cpufreq.txt");
-        let text = cpufreq_record(&outputs[STEP_FREQ_BEFORE], &outputs[STEP_FREQ_AFTER]);
+        let text = cpufreq_record(before, after);
         std::fs::write(&record, text).map_err(|e| format!("write {}: {e}", record.display()))?;
         println!("wrote {} and {}", json.display(), record.display());
     }
@@ -563,5 +574,14 @@ mod tests {
             steps[5],
             pull_args("S1", Core::A55, Path::new("/r/pixel5-a55-d.json"))
         );
+    }
+
+    #[test]
+    fn each_output_lands_in_its_slot() {
+        let outputs: Vec<String> = ["push", "chmod", "before", "run", "after", "pull"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(split_outputs(&outputs), ("run", "before", "after"));
     }
 }
