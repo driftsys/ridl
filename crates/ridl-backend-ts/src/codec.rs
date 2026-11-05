@@ -550,10 +550,6 @@ impl<'a> Codec<'a> {
                 for slot in &interface.slots {
                     if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
                         &slot.occupant
-                        && (interaction.streams.is_empty()
-                            || self
-                                .stream_calls
-                                .contains_key(&(interface.number, slot.ordinal)))
                     {
                         let member = interaction
                             .name

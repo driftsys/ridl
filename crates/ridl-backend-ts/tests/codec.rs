@@ -2539,7 +2539,34 @@ interface Feed {
     );
 }
 
-// Mutation: treat every public model declaration as an emitted domain export.
+// Mutation: skip name registration for unsupported stream members.
+#[test]
+fn unsupported_streamed_iface_member_is_refused_as_table_metadata_collision() {
+    let output = ridlc::compile(
+        "unsupported-metadata.ridl",
+        r#"package metadata.demo
+interface Feed {
+  command iface(a: <bytes>, b: <bytes>) @[..50ms]
+}
+"#,
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let message = refusal(&codegen::lower(&output.package, &[]));
+    assert!(message.contains("Feed.iface"), "{message}");
+    assert!(
+        message.contains("interface-table metadata key `iface`"),
+        "{message}"
+    );
+}
+
+// Mutations: link every constant, or exclude every constant from stream docs.
 #[test]
 fn stream_docs_do_not_link_to_omitted_bytes_constants() {
     let output = ridlc::compile(
@@ -2547,8 +2574,10 @@ fn stream_docs_do_not_link_to_omitted_bytes_constants() {
         r#"package constant.docs
 type Block: bytes [0..10]
 const DEFAULT: Block = "00"
+const RAW: bytes = "01"
+const LIMIT: integer = 10
 interface Feed {
-  /// Reads [DEFAULT].
+  /// Reads [DEFAULT], [RAW] and [LIMIT].
   query read(): <Block> @[..50ms]
 }
 "#,
@@ -2563,10 +2592,16 @@ interface Feed {
     );
     let domain = ridl_backend_ts::generate(&output.package).unwrap().source;
     assert!(!domain.contains("export const DEFAULT"), "{domain}");
+    assert!(!domain.contains("export const RAW"), "{domain}");
+    assert!(domain.contains("export const LIMIT"), "{domain}");
     let source = module(&codegen::lower(&output.package, &[]), "constant.docs");
     let signature = source.find("export function Feed_read(").unwrap();
     let start = source[..signature].rfind("/**").unwrap();
     let doc = &source[start..signature];
-    assert!(doc.contains("Reads `constant.docs.DEFAULT`."), "{doc}");
+    assert!(
+        doc.contains("Reads `constant.docs.DEFAULT`, `constant.docs.RAW` and {@link t.LIMIT}."),
+        "{doc}"
+    );
+    assert!(!doc.contains("{@link t.RAW}"), "{doc}");
     assert!(!doc.contains("{@link t.DEFAULT}"), "{doc}");
 }
