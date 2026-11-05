@@ -64,3 +64,6 @@ evals/results/*/transcripts/
 
 # Written by `cargo xtask bench gen`.
 /bench/encodings/generated/
+
+# Written by `cargo xtask bench pixel`.
+/bench/encodings/results/

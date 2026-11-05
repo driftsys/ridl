@@ -3838,3 +3838,11 @@ package-vscode:
 # `build`: the bench is measurement, not a gate (bench/encodings/README.md).
 bench-host:
     cargo xtask bench host
+
+# Cross-build the encoding bench's harness, run it on a Pixel 5 over adb pinned
+# to an A55 core and to an A76 core, and pull the JSON files to
+# bench/encodings/results/ (not in git). Needs adb, zig, cargo-zigbuild and the
+# aarch64-unknown-linux-musl rustup target. Not a member of `build`: it needs
+# the phone.
+bench-pixel:
+    cargo xtask bench pixel

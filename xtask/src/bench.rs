@@ -2,11 +2,15 @@
 //!
 //! - `host` runs `gen`, the tests of the harness, and the program that prints
 //!   the size and allocation table of the corpus.
+//! - `pixel` cross-builds the harness and runs it on a Pixel 5 over adb, pinned
+//!   to an A55 core and to an A76 core (`pixel.rs`).
 //! - `gen` writes, under `bench/encodings/generated/`, the Rust crate that
 //!   `ridl build --emit rust` generates for each of the veh-cluster corpus,
 //!   `examples/cabin` and the stress package `bench/encodings/stress`, with
 //!   the encodings each `ridl.toml` enables. It also writes `signals.txt`, the
 //!   name of every signal of those sources, which the corpus test reads.
+
+mod pixel;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,7 +26,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("gen") => generate(),
         Some("host") => host(),
-        _ => Err("usage: cargo xtask bench gen|host".to_string()),
+        Some("pixel") => pixel::run(),
+        _ => Err("usage: cargo xtask bench gen|host|pixel".to_string()),
     }
 }
 

@@ -45,3 +45,32 @@ Each JSON row names its payload and its payload type, so that a report can
 weight the signals or the distinct payload types equally. The provenance block
 holds the date, the commit, the platform, the core label, the toolchain, and the
 frequency and governor of the core when the system exposes them.
+
+## Pixel 5
+
+    just bench-pixel
+
+The recipe runs `cargo xtask bench pixel`. It needs `adb`, `zig`,
+`cargo-zigbuild`, the `aarch64-unknown-linux-musl` rustup target and a Pixel 5
+with USB debugging enabled. The command fails before the build when
+`adb devices` lists no ready device (with `ANDROID_SERIAL` set, when that serial
+is not listed). The phone is not rooted and the recipe changes no setting of it:
+it pushes the binary to `/data/local/tmp`, runs it, and reads files under
+`/sys`.
+
+The command cross-builds `encoding-bench` as a static binary, then runs it twice
+under `adb shell taskset`: pinned to cpu2 (one of the A55 cores, cpu0 to cpu5,
+up to 1.8 GHz), then to cpu6 (an A76 core, 2.2 GHz). Each run uses
+`--duration 2 --paced`: 2 s is long enough that a `getrusage` tick of 10 ms is
+0.5 % of the paced run. The commit is passed with `--commit`, because the phone
+has no repository. It pulls the results to `bench/encodings/results/` (not in
+git):
+
+- `pixel5-a55-<date>.json` and `pixel5-a76-<date>.json`, the harness output.
+- `pixel5-a55-<date>.cpufreq.txt` and `pixel5-a76-<date>.cpufreq.txt`, the
+  governor and the current frequency of each of the eight cores before and after
+  the run.
+
+Hardware counters are not available on the phone. The linker wrapper that the
+command writes under `target/zig-linker/` removes `-Wl,--fix-cortex-a53-843419`,
+which `zig cc` of zig 0.16 rejects.
