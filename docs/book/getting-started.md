@@ -882,8 +882,10 @@ named-element streamed reply, over `ridl-loopback`. Calls with two or more
 stream parameters remain outside the face (driftsys/ridl#1224). The WebSocket
 server carries parameter streams, including a query with both an upload and a
 reply stream ([the server record](../design/ridl-transport-ws.md), D-30). The
-TypeScript client's upload methods and their limits are recorded in
-[D-23](../design/ridl-transport-ws-ts.md). The
+TypeScript transport methods and their limits are recorded in
+[D-23](../design/ridl-transport-ws-ts.md). The optional TypeScript codec module
+also emits typed stream functions, including duplex; see
+[Calling generated streams](generated-code.md#calling-generated-streams). The
 [interaction-face record](../design/interaction-face.md#stream-forms) lists the
 generated reader and writer methods. The specification's §12 and
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) record the contract a stream

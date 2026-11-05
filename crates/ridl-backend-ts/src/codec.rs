@@ -362,7 +362,8 @@ impl<'a> Codec<'a> {
 
     /// Whether the module has anything to write: a payload root that gets a
     /// codec, local or foreign (an interface table over foreign scalars is
-    /// one). A package without one, `ridl.std` included, gets no file.
+    /// one), or a supported stream call. A package with neither gets no file;
+    /// `ridl.std` is written only when another codec module imports it.
     fn has_codec_payload(&self) -> bool {
         self.has_local_payload()
             || !self.foreign_payloads.is_empty()

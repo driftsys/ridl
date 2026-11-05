@@ -456,18 +456,19 @@ The catalog and its hash are described in
 
 `ridl build --emit typescript` writes the domain types of a package as one `.ts`
 file: branded scalars, interfaces, enums, enum sets, discriminated unions and
-init functions. It emits no face and no feature selection, so there is no async
-or blocking API to choose between.
+init functions. This domain module has no interaction face or feature selection.
+The optional codec module also emits stream functions, using platform streams.
 
 With `[backend.typescript] codec = true` it also writes `<base>.codec.ts`, for
 every package that has a payload root with a codec (its own, or one of another
-package that its interfaces name): one `encode<Name>` and one `decode<Name>`
-function per payload type, which take and return the plain objects of
-`<base>.ts` and call the object API that `flatc` generates; one table per
-interface, which gives each interaction its interface number, its ordinal, its
-kind and the functions of its payloads; and the catalog's name and hash, the
-payload type names and the rule texts that the wasm codec takes at load. `ridl`
-does not run `flatc`. Build the files in two steps:
+package that its interfaces name) or a supported stream interaction: one
+`encode<Name>` and one `decode<Name>` function per payload type, which take and
+return the plain objects of `<base>.ts` and call the object API that `flatc`
+generates; one table per interface, which gives each interaction its interface
+number, its ordinal, its kind and the functions of its payloads; generated typed
+stream functions and stream metadata for supported interactions; and the
+catalog's name and hash, the payload type names and the rule texts that the wasm
+codec takes at load. `ridl` does not run `flatc`. Build the files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
@@ -486,13 +487,13 @@ that package's schema too, in the same directory:
 flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs <out-dir>/<package>.fbs
 ```
 
-A package with no such payload root, and `ridl.std` when no codec file imports
-its module, gets no codec file. The converters cover every typl kind: a union by
-its `kind` and `value`, a tuple by its named fields, an array, a map by its
-entries, an optional field (absent when the buffer leaves it out; an optional
-array, bytes or map field reads back as empty, because the object API cannot
-leave a vector out of the buffer), and an induced tuple of an interaction, which
-the codec file exports as an `interface`
+A package with neither a usable payload root nor a supported stream call gets no
+codec file; `ridl.std` gets one only when a codec file imports its module. The
+converters cover every typl kind: a union by its `kind` and `value`, a tuple by
+its named fields, an array, a map by its entries, an optional field (absent when
+the buffer leaves it out; an optional array, bytes or map field reads back as
+empty, because the object API cannot leave a vector out of the buffer), and an
+induced tuple of an interaction, which the codec file exports as an `interface`
 (`export type X = Record<string,
 never>` for one with no field). An optional
 array element, map key or map value is refused, as the Rust codec refuses it. A
@@ -503,6 +504,133 @@ package's own codec file; a payload type that reaches a struct, a union or an
 enum of another package is refused with an error that names both. An internal
 payload type has no `encode`/`decode`, because `<base>.ts` does not export its
 type. [The codec table design record][codec-table] gives the rules in full.
+
+### Calling generated streams
+
+A generated function is named `<Interface>_<declaredMember>`. It takes a runtime
+`StreamSession` context, the non-stream parameters in declaration order, and
+required `{ bound: number }` options, in milliseconds. Load the matching wasm
+codec and connect the byte transport before constructing the context. Generated
+code and `@driftsys/ridl-runtime` do not depend on the WebSocket package; its
+`Session` satisfies the structural transport interface.
+
+For the document example, `DocStore_fetch` returns `ReadableStream<Uint8Array>`,
+`DocStore_chunks` returns `ReadableStream<DocChunk>`, `DocStore_put` returns
+`{ upload: WritableStream<Uint8Array>, accepted: Promise<void> }`, and
+`DocStore_exchange` returns
+`{ upload: WritableStream<DocChunk>, stream: ReadableStream<DocChunk> }`. The
+following TypeScript illustration assumes the generated files, wasm and a
+running document server; the executable version is
+`examples/docstore/web/main.ts`:
+
+```typescript
+import { loadCodec } from "@driftsys/ridl-runtime";
+import { connect } from "@driftsys/ridl-transport-ws";
+import {
+  CATALOG_HASH, CATALOG_NAME, PAYLOAD_TYPES, RULES, DocStore,
+  DocStore_fetch, DocStore_put, DocStore_chunks, DocStore_exchange,
+} from "./generated/docstore.api.codec.js";
+import type {
+  ChunkIndex, DocBlock, DocChunk, DocId, DocSize,
+} from "./generated/docstore.api.js";
+
+const codec = await loadCodec(
+  await Deno.readFile("./generated/docstore_api.wasm"),
+  { catalogHash: CATALOG_HASH, payloadTypes: PAYLOAD_TYPES, ruleText: RULES },
+);
+const transport = await connect("ws://127.0.0.1:8080", {
+  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
+  encoding: "flatbuffers",
+  interfaces: [DocStore],
+});
+const context = { transport, codec };
+const id = "manual" as DocId;
+const opts = { bound: 1000 };
+const bytes = new Uint8Array([1, 2, 3]);
+const put = DocStore_put(context, {
+  name: id, size: BigInt(bytes.length) as DocSize,
+}, opts);
+await put.accepted;
+const writer = put.upload.getWriter();
+await writer.write(bytes);
+await writer.close();
+writer.releaseLock();
+
+// This provider waits for explicit upload end before exposing committed data.
+for await (const chunk of DocStore_fetch(context, id, opts)) {
+  console.log(chunk);
+}
+for await (const chunk of DocStore_chunks(context, id, opts)) {
+  console.log(chunk.index, chunk.data);
+}
+
+const exchange = DocStore_exchange(context, id, opts);
+const sending = (async () => {
+  const writer = exchange.upload.getWriter();
+  const chunk: DocChunk = {
+    index: 0 as ChunkIndex, data: bytes as DocBlock,
+  };
+  await writer.write(chunk);
+  await writer.close();
+  writer.releaseLock();
+})();
+for await (const echo of exchange.stream) console.log(echo.index);
+await sending;
+transport.close();
+await transport.closed;
+```
+
+A query with an upload and a plain reply instead returns
+`{ upload: WritableStream<T>, reply: Promise<R> }`. The generated function
+verifies that reply before decoding it. `accepted` acknowledges command
+acceptance; `writer.close()` confirms local upload transmission. Neither proves
+that the provider has consumed the upload's explicit end. A provider-specific
+completion barrier is needed when subsequent work depends on consumption; the
+document provider makes fetch/chunks wait until the upload is committed.
+
+Named elements are verified by wasm before their decoded values reach
+application code, and encoded uploads are verified before sending. Each named
+element, including a named byte or string type, is one whole payload; it is
+never split. Raw bytes may be divided at the member limit. Text writes split
+only at code-point boundaries and reject unpaired JavaScript surrogates; each
+received text chunk is decoded as complete UTF-8. An oversized named encoding or
+single code point fails locally. Pulling replies replenishes transport credit,
+writes await credit, and platform cancellation/abort propagates to the
+transport. Duplex upload and reply progress concurrently; consume replies while
+writing, so neither direction waits indefinitely for the other's credit. Upload
+close leaves the reply open; reply end interrupts an upload still open. The
+response bound of a duplex query starts at its request and stops at the first
+reply chunk or end, rather than bounding the complete transfer.
+
+A setup failure, such as a mismatched catalog (`CatalogMismatch`) or unknown
+payload type (`UnknownPayloadType`), occurs before sending the request.
+`CodecError` also reports invalid or missing codec ABI exports or unknown
+verification-rule metadata. Local `StreamError.failure` is either
+`{ category: "corrupt" }` or
+`{ category: "contract", contract: { category: "invalid-value", rule } }`.
+Remote transport errors retain their identity, including `SessionError` from the
+WebSocket transport. A decode failure cancels the raw reply through normal pipe
+propagation; an upload verification failure errors the local writer and
+interrupts the transport. In duplex, the other direction receives the transport
+interruption rather than the local validation error. Observe both stream
+directions and result promises. Pending/later writes and `writer.closed` retain
+a remote error, while a new `close()` after the writer has errored follows
+native `TypeError` behavior.
+
+Payload rules are sorted: `length, pattern, range, step, unique, utf8, variant`.
+The wasm payload codes are 2–8, so `utf8` is 7 and `variant` is 8. This changes
+the previous `variant` code and widens the TypeScript rule union; it is a
+breaking-release change. Regenerate wasm and TypeScript together. Frame detail
+codes are a separate table.
+
+The supported subset is reply streams and exactly one parameter stream on a
+command or query, including duplex. Two or more parameter streams
+(driftsys/ridl#1224), inline fallible upload replies without a codec, and
+payload roots without a finite FlatBuffers bound have an explicit omission
+comment and no function or table entry. Existing internal/foreign composite
+payload refusals remain. The `.ts` type generator still refuses a stream as an
+ordinary typl value. [The codec table record][codec-table] owns the precise
+discovery, naming, metadata and runtime contracts.
 
 An `open` enum keeps its `export enum` and adds the type
 `<Name>Value = <Name> | { readonly unknown: number }`; a field of the enum has
@@ -562,10 +690,10 @@ and a member of a named scalar or of a constant, which has no member item. In
 Rust it is also the case for an event, a `fixed`, an interface with no face
 module, a target whose path Rust spells with a raw identifier (`r#move`), and an
 item whose name the module of a child package takes, which a program reaches
-only through the hidden `__ridl_package` module. In TypeScript it is also the
-case for an interface, an interaction and a union arm, which the module holds no
-item for, and for a declaration of another package that the module does not
-import. `@labels` is not rendered.
+only through the hidden `__ridl_package` module. In the TypeScript domain module
+it is also the case for an interface, an interaction and a union arm, which that
+module holds no item for, and for a declaration of another package that the
+module does not import. `@labels` is not rendered.
 
 A Rust link uses the short form `[Speed]` when that text is the target's Rust
 name and the target is in the module that holds the doc. When a Markdown
@@ -591,6 +719,11 @@ itself, then the `# Rules` section, then, for a command or a query, a
 the parameter's rules as nested bullets), then the `# See also` section and the
 `Available since` lines. The doc of an interface goes on its face module, in the
 same order around the module's own sentence.
+
+The codec module's public stream functions also carry the interaction's
+model-derived documentation, canonical rules, `@see`, `@since` and
+`@deprecated`. Non-stream parameters use `@param`; stream parameters and their
+rules use `@remarks` sections. Private codec helpers carry no facade docs.
 
 ### What the generated code checks
 
@@ -654,8 +787,15 @@ In the Rust column:
   `proto3` under `[backend.rust] encodings` (see
   [What the crate contains](#what-the-crate-contains)).
 
-The TypeScript module holds types, constants, the `<Name>Bits` objects and init
-functions only, and none of them checks a value.
+The TypeScript domain module's types, constants, `<Name>Bits` objects and init
+functions do not validate values. The TypeScript column above describes that
+domain module. Optional codec stream functions verify named requests, elements
+and plain replies through the wasm codec, so their validation uses the Rust
+codec's enabled checks, including pattern checks only when its feature is on.
+They also enforce chunk limits and UTF-8 as
+[Calling generated streams](#calling-generated-streams) describes. They do not
+evaluate interaction `require` or `ensure` clauses. A standalone `encode<Name>`
+or `decode<Name>` is a converter, not a full validator.
 
 An item that the generated code needs but a program does not name carries no
 doc. In Rust it is `pub(crate)`, such as the constraint check behind `new` and

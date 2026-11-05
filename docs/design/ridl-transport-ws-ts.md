@@ -915,12 +915,12 @@ bytes are the value the provider set.
 
 **D-16. Four recipes.**
 
-| Recipe           | Runs                                                                                                                                                               | Needs                            | In `build` |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ---------- |
-| `ts-check`       | `deno fmt --check`, `deno lint`, `deno check mod.ts` for Deno and against the DOM library (`browser.deno.json`), `deno test` of `tests/`, `deno publish --dry-run` | Deno                             | yes        |
-| `ts-e2e`         | `cargo build` of the two examples, then `e2e/deno_test.ts` and `e2e/provide_test.ts` against them                                                                  | Deno, the pinned Rust            | yes        |
-| `ts-browser-e2e` | `cargo build` of the example, then `e2e/browser_test.ts` against it                                                                                                | Deno, the pinned Rust, a browser | no         |
-| `ts-npm-check`   | dnt build of the package into `npm/`, check of the built manifest and tarball, install of the tarball in a temporary directory, import by name from Node           | Deno, Node, npm, network access  | yes        |
+| Recipe           | Runs                                                                                                                                                                 | Needs                                          | In `build` |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| `ts-check`       | `deno fmt --check`, `deno lint`, `deno check mod.ts` for Deno and against the DOM library (`browser.deno.json`), `deno test` of `tests/`, `deno publish --dry-run`   | Deno                                           | yes        |
+| `ts-e2e`         | Build the transport examples and run `e2e/deno_test.ts` and `e2e/provide_test.ts`; generate/build docstore and run its typed byte, named-element and duplex consumer | Deno, pinned Rust, pinned flatc, wasm32 target | yes        |
+| `ts-browser-e2e` | `cargo build` of the example, then `e2e/browser_test.ts` against it                                                                                                  | Deno, the pinned Rust, a browser               | no         |
+| `ts-npm-check`   | dnt build of the package into `npm/`, check of the built manifest and tarball, install of the tarball in a temporary directory, import by name from Node             | Deno, Node, npm, network access                | yes        |
 
 The browser proof runs in CI only, so a contributor's `just build` needs no
 browser; a browser-only regression is first seen in CI. `ts-browser-e2e` is
@@ -937,9 +937,9 @@ type-checking against the DOM library, is part of `ts-check`; it shows that the
 package compiles for a browser, not that a page receives a signal.
 
 In CI the four run in the `typescript` job, which installs the pinned Rust
-toolchain, `just`, and Deno from the release zip of the pinned version. The job
-reads the `rust` path filter, which runs for any path outside the skip list,
-`packages/` included.
+toolchain, the wasm32 target, pinned `flatc`, `just`, Node, and Deno from the
+release zip of the pinned version. The job reads the `rust` path filter, which
+runs for any path outside the skip list, `packages/` included.
 
 **The Deno pin.** The version is in one file, `.deno-version` at the root. CI
 reads it. `./bootstrap` downloads that release's zip from GitHub into

@@ -69,6 +69,41 @@ with `queryStream`, `commandStream`, `queryWithUpload` and `queryDuplex`
 byte-stream methods. `StreamOptions` requires `bound`, the response bound in
 milliseconds. The runtime has no dependency on a transport package.
 
+A caller of a generated codec module constructs the context explicitly. This
+example uses the generated document store module and the WebSocket transport:
+
+```ts
+import { loadCodec, type StreamSession } from "@driftsys/ridl-runtime";
+import { connect } from "@driftsys/ridl-transport-ws";
+import {
+  CATALOG_HASH,
+  CATALOG_NAME,
+  DocStore,
+  PAYLOAD_TYPES,
+  RULES,
+} from "./generated/docstore.api.codec.ts";
+
+const codec = await loadCodec(
+  new URL("./generated/docstore_api.wasm", import.meta.url),
+  {
+    catalogHash: CATALOG_HASH,
+    payloadTypes: PAYLOAD_TYPES,
+    ruleText: RULES,
+  },
+);
+const transport = await connect("ws://localhost:8080", {
+  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
+  encoding: "flatbuffers",
+  interfaces: [DocStore],
+});
+const context: StreamSession = { transport, codec };
+```
+
+Pass `context` first and required `{ bound: milliseconds }` last to a generated
+stream function. The [generated-code chapter](../../docs/book/generated-code.md)
+shows the supported signatures and document store calls. The transport import
+above belongs to the application; this runtime package does not import it.
+
 Resolve named payload types with `codec.typeId` before making a request, and
 load the codec with the expected catalog hash. An unknown name throws
 `UnknownPayloadType`; a mismatched hash rejects loading with `CatalogMismatch`.
@@ -124,7 +159,7 @@ transport-specific error class.
 The generated TypeScript and wasm codecs must be regenerated together. The
 sorted payload rule table assigns `utf8` code 7 and `variant` code 8; the
 addition of `utf8` widens the generated rule union and changes the previous
-`variant` code.
+`variant` code. This is a breaking change for the next breaking release.
 
 ## Limits
 

@@ -7,26 +7,36 @@ export interface StreamOptions {
   readonly bound: number;
 }
 
-/** Byte stream operations supplied by a transport. */
+/**
+ * Byte stream operations supplied by a transport, without a transport-package
+ * dependency. Generated functions call these methods with their receiver.
+ */
 export interface StreamTransport {
+  /** Opens a reply stream; cancellation reaches its upstream transport. */
   queryStream(
     iface: number,
     ord: number,
     args: Uint8Array,
     opts: StreamOptions,
   ): ReadableStream<Uint8Array>;
+  /**
+   * Opens concurrent upload and reply streams. Upload close leaves the reply
+   * open; aborting upload or canceling reply interrupts the call.
+   */
   queryDuplex(
     iface: number,
     ord: number,
     args: Uint8Array,
     opts: StreamOptions,
   ): { upload: WritableStream<Uint8Array>; stream: ReadableStream<Uint8Array> };
+  /** Opens an upload whose acceptance does not confirm provider consumption. */
   commandStream(
     iface: number,
     ord: number,
     args: Uint8Array,
     opts: StreamOptions,
   ): { upload: WritableStream<Uint8Array>; accepted: Promise<void> };
+  /** Opens an upload and returns the eventual plain reply bytes. */
   queryWithUpload(
     iface: number,
     ord: number,
@@ -35,13 +45,22 @@ export interface StreamTransport {
   ): { upload: WritableStream<Uint8Array>; reply: Promise<Uint8Array> };
 }
 
-/** The transport and loaded codec used by a streaming interaction. */
+/**
+ * The transport and loaded codec used by a generated streaming interaction.
+ * Construct as `{ transport, codec }` after loading the codec with the generated
+ * catalog hash, payload names and rule texts. See the package README example.
+ */
 export interface StreamSession {
   readonly transport: StreamTransport;
   readonly codec: Codec;
 }
 
-/** Verifies each whole payload before decoding and delivering its value. */
+/**
+ * Verifies each whole payload before decoding and delivering its value.
+ * Local payload failures error the stream with StreamError; missing or unknown
+ * verifier rule texts use CodecError. Transport failures retain their identity.
+ * Native pipeThrough cancellation and backpressure propagate upstream.
+ */
 export function decodeStream<T>(
   decode: (bytes: Uint8Array) => T,
   verify: (bytes: Uint8Array) => VerifyResult,
@@ -77,7 +96,10 @@ export function decodeStream<T>(
   });
 }
 
-/** Decodes each chunk as complete UTF-8 text, preserving a leading BOM. */
+/**
+ * Decodes each chunk as complete UTF-8 text, preserving a leading BOM.
+ * Invalid UTF-8 errors the transform with StreamError and the utf8 rule.
+ */
 export function decodeTextStream(): TransformStream<Uint8Array, string> {
   const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   return new TransformStream({
@@ -96,7 +118,14 @@ export function decodeTextStream(): TransformStream<Uint8Array, string> {
   });
 }
 
-/** Encodes and verifies each named element as one whole payload. */
+/**
+ * Encodes and verifies each named element as one whole payload without splitting
+ * it. An oversized element fails with StreamError (corrupt); a failed rule uses
+ * StreamError (contract). Local failures abort the raw upload. Each write waits
+ * for all resulting raw writes; closing confirms transmission, not consumption.
+ * Remote errors retain their identity, except that a close requested after the
+ * writer has errored follows the platform TypeError behavior.
+ */
 export function encodeUpload<T>(
   upload: WritableStream<Uint8Array>,
   encode: (value: T) => Uint8Array,
@@ -126,7 +155,11 @@ export function encodeUpload<T>(
   });
 }
 
-/** Splits raw bytes at the member limit, preserving empty chunks. */
+/**
+ * Splits raw bytes at the member limit, preserving empty chunks for a positive
+ * limit. A nonpositive limit fails with StreamError (corrupt). Writes wait for
+ * every raw chunk, and abort reaches a raw write waiting for credit.
+ */
 export function byteUpload(
   upload: WritableStream<Uint8Array>,
   limit: number,
@@ -140,7 +173,12 @@ export function byteUpload(
   });
 }
 
-/** Encodes text as complete UTF-8 chunks and rejects unpaired surrogates. */
+/**
+ * Encodes text as complete UTF-8 chunks and rejects unpaired surrogates with
+ * StreamError and the utf8 rule. A code point larger than the limit, or a
+ * nonpositive limit, fails as corrupt. Empty writes remain empty chunks for a
+ * positive limit. Writes wait for every raw chunk before completing.
+ */
 export function textUpload(
   upload: WritableStream<Uint8Array>,
   limit: number,
