@@ -39,8 +39,9 @@ written with their reasons and are not timed.
 Per-update CPU time comes from an unpaced loop: thread CPU time
 (`CLOCK_THREAD_CPUTIME_ID`) over batches, 30 samples per cell, with the three
 encodings run in rotation inside each sample. A cell whose
-`(p95 - p05) / median` is above 10 % is flagged in the JSON. Each JSON row names
-its payload and its payload type, so that a report can weight the signals or the
-distinct payload types equally. The provenance block holds the date, the commit,
-the platform, the core label, the toolchain, and the frequency and governor of
-the core when the system exposes them.
+`(p95 - p05) / median` or `(max - min) / median` is above 10 % is flagged in the
+JSON (the range catches one disturbed sample, which p95 of 30 samples cannot).
+Each JSON row names its payload and its payload type, so that a report can
+weight the signals or the distinct payload types equally. The provenance block
+holds the date, the commit, the platform, the core label, the toolchain, and the
+frequency and governor of the core when the system exposes them.

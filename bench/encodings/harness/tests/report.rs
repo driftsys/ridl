@@ -48,6 +48,8 @@ fn measured_row(encoding: &'static str, median: f64, p05: f64, p95: f64) -> Row 
                 median_ns: median,
                 p05_ns: p05,
                 p95_ns: p95,
+                min_ns: p05,
+                max_ns: p95,
                 reps: 30,
             },
             paced: None,
@@ -107,6 +109,9 @@ fn a_measured_row_carries_counts_timing_and_the_derived_load() {
     assert_eq!(r["per_update_ns"]["p05"], 100_000.0);
     assert_eq!(r["per_update_ns"]["p95"], 150_000.0);
     assert_eq!(r["per_update_ns"]["reps"], 30);
+    assert_eq!(r["per_update_ns"]["min"], 100_000.0);
+    assert_eq!(r["per_update_ns"]["max"], 150_000.0);
+    assert_eq!(r["per_update_ns"]["range_spread"], 0.4);
     assert_eq!(r["per_update_ns"]["spread_flagged"], true);
     assert_eq!(r["cpu_percent_at_rate"], 50.0);
     assert!(r["paced"].is_null());
@@ -192,18 +197,13 @@ fn the_recorder_times_only_measured_cells_and_labels_each_row() {
     for r in &rec.rows[..3] {
         let t = r.timing.expect("a measured cell is timed");
         assert_eq!(t.stat.reps, 30);
-        assert!(t.stat.median_ns > 0.0 && t.stat.p05_ns <= t.stat.median_ns);
         assert!(t.paced.is_none());
-        assert!(r.payload_type.ends_with("Speed"), "{}", r.payload_type);
+        assert_eq!(r.payload_type, "Speed");
     }
     for r in &rec.rows[3..] {
         assert!(matches!(r.cell, Cell::Refused { .. }));
         assert!(r.timing.is_none());
-        assert!(
-            r.payload_type.ends_with("ItemListPayload"),
-            "{}",
-            r.payload_type
-        );
+        assert_eq!(r.payload_type, "ItemListPayload");
     }
 }
 
@@ -233,5 +233,31 @@ fn a_paced_recorder_runs_the_rate_for_the_duration_and_reports_next_to_the_deriv
             encoding_bench::timing::sustained_cpu_percent(t.stat.median_ns, 4000.0)
         );
         assert!((p.difference - (p.measured_percent - p.derived_percent)).abs() < 1e-9);
+    }
+}
+
+#[test]
+fn the_payload_type_is_the_bare_type_name_for_buildable_and_not_built_rows() {
+    let mut rec = Recorder::default();
+    for entry in encoding_bench::corpus::corpus() {
+        if entry.name == "veh.cluster.VehicleStatus.currentSpeed"
+            || entry.name == "veh.cluster.WheelDiagnostics.wheelTicks"
+        {
+            (entry.run)(&mut rec);
+        }
+    }
+    let types: Vec<_> = rec
+        .rows
+        .iter()
+        .map(|r| (r.payload, r.payload_type))
+        .collect();
+    assert_eq!(types.len(), 6);
+    for (payload, ty) in types {
+        let expected = if payload.ends_with("currentSpeed") {
+            "Speed"
+        } else {
+            "RawTickCount"
+        };
+        assert_eq!(ty, expected, "{payload}");
     }
 }

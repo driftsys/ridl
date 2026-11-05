@@ -21,6 +21,11 @@ pub struct Stat {
     pub median_ns: f64,
     pub p05_ns: f64,
     pub p95_ns: f64,
+    /// The fastest and the slowest sample. With 30 samples the 95th
+    /// percentile never includes the slowest one, so a single disturbed
+    /// repetition is visible only here.
+    pub min_ns: f64,
+    pub max_ns: f64,
     /// The number of samples the figures come from.
     pub reps: usize,
 }
@@ -32,10 +37,15 @@ impl Stat {
         (self.p95_ns - self.p05_ns) / self.median_ns
     }
 
-    /// Whether the spread is above `SPREAD_LIMIT`, so that the report can
-    /// mark the cell as noisy.
+    /// `(max - min) / median`: the width of all the samples.
+    pub fn range_spread(&self) -> f64 {
+        (self.max_ns - self.min_ns) / self.median_ns
+    }
+
+    /// Whether the spread or the range is above `SPREAD_LIMIT`, so that the
+    /// report can mark the cell as noisy.
     pub fn spread_flagged(&self) -> bool {
-        self.spread() > SPREAD_LIMIT
+        self.spread() > SPREAD_LIMIT || self.range_spread() > SPREAD_LIMIT
     }
 }
 
@@ -57,6 +67,8 @@ pub fn summarize(samples: &[f64]) -> Stat {
         median_ns: percentile(&sorted, 0.5),
         p05_ns: percentile(&sorted, 0.05),
         p95_ns: percentile(&sorted, 0.95),
+        min_ns: sorted[0],
+        max_ns: sorted[sorted.len() - 1],
         reps: sorted.len(),
     }
 }
@@ -164,21 +176,42 @@ pub fn process_cpu_ns() -> u64 {
 /// The shortest batch the size calibration accepts, in nanoseconds of the
 /// clock. A batch shorter than this is dominated by the clock's resolution.
 const CALIBRATION_FLOOR_NS: u64 = 1_000_000;
+/// The shortest batch that is sampled, in nanoseconds of the clock.
+const MIN_BATCH_NS: u64 = 200_000;
+/// Runs of one batch size whose minimum is taken, so that one disturbed run
+/// does not decide the batch size.
+const CALIBRATION_RUNS: usize = 3;
 
-/// Doubles the batch size until a batch takes `CALIBRATION_FLOOR_NS`, then
-/// sizes a batch to take `target_ns`.
+/// The shortest of `CALIBRATION_RUNS` runs of a batch of `n` updates.
+fn min_batch_ns(run: &mut dyn FnMut(u64), n: u64, now: &dyn Fn() -> u64) -> u64 {
+    (0..CALIBRATION_RUNS)
+        .map(|_| {
+            let t0 = now();
+            run(n);
+            now().saturating_sub(t0)
+        })
+        .min()
+        .expect("at least one run")
+}
+
+/// Doubles the batch size until the fastest of several batches takes
+/// `CALIBRATION_FLOOR_NS`, sizes a batch to take `target_ns` (at least
+/// `MIN_BATCH_NS`), and grows it until the fastest of several runs of that
+/// batch lasts `MIN_BATCH_NS`.
 fn calibrate(run: &mut dyn FnMut(u64), target_ns: f64, now: &dyn Fn() -> u64) -> u64 {
     let mut n = 1u64;
-    loop {
-        let t0 = now();
-        run(n);
-        let elapsed = now().saturating_sub(t0);
+    let per_update = loop {
+        let elapsed = min_batch_ns(run, n, now);
         if elapsed >= CALIBRATION_FLOOR_NS || n >= 1 << 40 {
-            let per_update = elapsed.max(1) as f64 / n as f64;
-            return ((target_ns / per_update) as u64).max(1);
+            break elapsed.max(1) as f64 / n as f64;
         }
         n *= 2;
+    };
+    let mut batch = ((target_ns.max(MIN_BATCH_NS as f64) / per_update) as u64).max(1);
+    while min_batch_ns(run, batch, now) < MIN_BATCH_NS && batch < 1 << 40 {
+        batch *= 2;
     }
+    batch
 }
 
 /// Times the runners against each other. Each is calibrated to a batch of

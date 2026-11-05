@@ -180,13 +180,22 @@ impl Recorder {
         };
         self.rows.push(Row {
             payload,
-            payload_type: std::any::type_name::<T>(),
+            payload_type: short_type_name::<T>(),
             kind,
             encoding,
             cell,
             timing: None,
         });
     }
+}
+
+/// The name of `T` without its module path: the last path segment of
+/// `std::any::type_name`, which does not depend on where the type is declared.
+fn short_type_name<T>() -> &'static str {
+    let full = std::any::type_name::<T>();
+    let head = full.find('<').unwrap_or(full.len());
+    let start = full[..head].rfind("::").map_or(0, |i| i + 2);
+    &full[start..]
 }
 
 const ENCODINGS: [&str; 3] = [FlatBuffers::NAME, Proto3::NAME, Podbuf::NAME];
