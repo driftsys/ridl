@@ -731,13 +731,14 @@ generated stream TSDoc. Private codec helpers carry no facade docs.
 
 The rules lists state the contract, not what the code checks. On each item the
 backend emits, every rule the schema declares is listed, in the same words in
-both languages, whether or not the generated code checks it. The sentence the
-backend writes about a method describes what that method does, its checks
-included: the doc of a named scalar's `new` says that it returns an error for a
-value that breaks a constraint the generated code checks, the doc of a `Client`
-call method says what happens when a `require` clause fails, and the doc of a
-query's `Provider` method says that `serve` discards a reply that breaks an
-`ensure` clause.
+both languages, whether or not the generated code checks it. The one exception
+is a TypeScript stream function, whose parameter rules are not rendered (see
+above). The sentence the backend writes about a method describes what that
+method does, its checks included: the doc of a named scalar's `new` says that it
+returns an error for a value that breaks a constraint the generated code checks,
+the doc of a `Client` call method says what happens when a `require` clause
+fails, and the doc of a query's `Provider` method says that `serve` discards a
+reply that breaks an `ensure` clause.
 
 This table records, for each kind of rule, the generated item that checks it:
 

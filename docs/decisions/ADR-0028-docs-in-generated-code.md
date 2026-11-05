@@ -90,9 +90,10 @@ because the first consumer that would need it is generated deprecation metadata.
 
 3. **The docs state the contract, not what a backend enforces** (design D-3).
    Every backend renders every rule that the `Model` declares, in neutral
-   wording ("range 0.0 ..= 250.0", never "this function rejects"). Which rules
-   the generated code of a backend checks is recorded once per backend in the
-   book, not per item.
+   wording ("range 0.0 ..= 250.0", never "this function rejects"), except the
+   parameter rules of a TypeScript stream function (amended 2026-11-05 above).
+   Which rules the generated code of a backend checks is recorded once per
+   backend in the book, not per item.
 
 4. **`deprecated` and `labels` stay doc tags** (design D-4). The general form
    §4.7 promotion of `labels` and `deprecated` to attribute keys is declined,

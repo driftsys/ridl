@@ -198,19 +198,22 @@ as corrupt; a named encoding is never split. Empty byte and text writes remain
 valid chunks. Named `bytes` and `string` types remain whole named elements.
 
 **D-20. Local errors are distinct from transport errors (S6-6).**
-`StreamError.failure` is `{ category: "corrupt" }` for malformed bytes or an
-oversized encoding, or
+`StreamError.failure` is `{ category: "corrupt" }` for malformed bytes, an
+oversized encoding, or any other exception a generated `encode` or `decode`
+throws, or
 `{ category: "contract", contract: { category:
 "invalid-value", rule } }` for a
-constraint or UTF-8 violation. Remote errors retain their original object
-identity. `CatalogMismatch` and `UnknownPayloadType` are setup errors before
-request transmission. `CodecError` also reports invalid codec ABI or verifier
-metadata. Normal pipe cancellation interrupts the raw call when decoding fails;
-it does not invent an outbound contract frame. An upload adapter failure errors
-the local writer with `StreamError` and aborts the transport. A duplex reply
-then fails with the transport's interruption, rather than that local
-`StreamError`. Explicit upload abort preserves the supplied reason on the native
-writer; the other direction reports transport interruption.
+constraint or UTF-8 violation, including a `RuleError` a generated `encode` or
+`decode` throws. The original exception is kept as the `cause`. Remote errors
+retain their original object identity. `CatalogMismatch` and
+`UnknownPayloadType` are setup errors before request transmission. `CodecError`
+also reports invalid codec ABI or verifier metadata. Normal pipe cancellation
+interrupts the raw call when decoding fails; it does not invent an outbound
+contract frame. An upload adapter failure errors the local writer with
+`StreamError` and aborts the transport. A duplex reply then fails with the
+transport's interruption, rather than that local `StreamError`. Explicit upload
+abort preserves the supplied reason on the native writer; the other direction
+reports transport interruption.
 
 **D-21. Generated interoperability uses the document example (S6-7).**
 `examples/docstore/web` loads the generated wasm and tables, calls byte

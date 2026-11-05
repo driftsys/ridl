@@ -147,14 +147,15 @@ object. A close requested after the writer has errored rejects with the
 platform's `TypeError`. An already resolved command acceptance stays resolved.
 
 Local payload failures throw `StreamError`. Its `failure` is
-`{ category: "corrupt" }` for malformed payloads, encoding failures without a
-rule, or an oversized named element or code point. Rule failures, including
-invalid UTF-8, use
-`{ category: "contract", contract: { category: "invalid-value", rule } }`.
-`PayloadRule` names `length`, `pattern`, `range`, `step`, `unique`, `utf8` and
-`variant`. A missing or unknown verification rule text, or an unknown-type
-verification result, throws `CodecError`. Local errors do not require a
-transport-specific error class.
+`{ category: "corrupt" }` for malformed payloads, an oversized named element or
+code point, or any exception a generated `encode` or `decode` throws without a
+rule. Rule failures, including invalid UTF-8 and a `RuleError` from a generated
+`encode` or `decode`, use
+`{ category: "contract", contract: { category: "invalid-value", rule } }`. A
+mapped exception is kept as the error's `cause`. `PayloadRule` names `length`,
+`pattern`, `range`, `step`, `unique`, `utf8` and `variant`. A missing or unknown
+verification rule text, or an unknown-type verification result, throws
+`CodecError`. Local errors do not require a transport-specific error class.
 
 The generated TypeScript and wasm codecs must be regenerated together. The
 sorted payload rule table assigns `utf8` code 7 and `variant` code 8; the
