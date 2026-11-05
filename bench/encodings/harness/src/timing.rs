@@ -1,0 +1,268 @@
+//! CPU time per update: encode, verify and decode one value through
+//! `Payload<E>`, timed as thread CPU time over batches, and the CPU load that
+//! cost means at a fixed update rate.
+
+use std::hint::black_box;
+use std::time::{Duration, Instant};
+
+use ridl_rt::encoding::Encoding;
+use ridl_rt::payload::{Payload, Ref};
+
+/// The update rate of the headline figure, in updates per second.
+pub const RATE_PER_S: f64 = 4000.0;
+/// The fewest samples a cell may report.
+pub const MIN_SAMPLES: usize = 30;
+/// A cell whose `(p95 - p05) / median` is above this is flagged.
+pub const SPREAD_LIMIT: f64 = 0.10;
+
+/// The CPU time per update of one cell, over many samples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stat {
+    pub median_ns: f64,
+    pub p05_ns: f64,
+    pub p95_ns: f64,
+    /// The number of samples the figures come from.
+    pub reps: usize,
+}
+
+impl Stat {
+    /// `(p95 - p05) / median`: the width of the middle 90 % of the samples
+    /// relative to the median.
+    pub fn spread(&self) -> f64 {
+        (self.p95_ns - self.p05_ns) / self.median_ns
+    }
+
+    /// Whether the spread is above `SPREAD_LIMIT`, so that the report can
+    /// mark the cell as noisy.
+    pub fn spread_flagged(&self) -> bool {
+        self.spread() > SPREAD_LIMIT
+    }
+}
+
+/// The percentile `p` (0 to 1) of sorted values, by linear interpolation
+/// between the two nearest ranks.
+fn percentile(sorted: &[f64], p: f64) -> f64 {
+    let pos = p * (sorted.len() - 1) as f64;
+    let lo = pos.floor() as usize;
+    let hi = pos.ceil() as usize;
+    sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo as f64)
+}
+
+/// Median, 5th and 95th percentile of `samples` (nanoseconds per update).
+/// Panics when `samples` is empty.
+pub fn summarize(samples: &[f64]) -> Stat {
+    let mut sorted = samples.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).expect("a sample is not NaN"));
+    Stat {
+        median_ns: percentile(&sorted, 0.5),
+        p05_ns: percentile(&sorted, 0.05),
+        p95_ns: percentile(&sorted, 0.95),
+        reps: sorted.len(),
+    }
+}
+
+/// The CPU load, in percent of one core, of `rate_per_s` updates per second
+/// at `per_update_ns` of CPU time each.
+pub fn sustained_cpu_percent(per_update_ns: f64, rate_per_s: f64) -> f64 {
+    // ns * (1/s) is ns per second; 1e9 ns per second is 100 %.
+    per_update_ns * rate_per_s / 1e7
+}
+
+/// The order in which the `n` encodings are visited in sample number
+/// `sample`: the rotation starts one position later at each sample, so that
+/// every encoding runs first, second and last equally often.
+pub fn interleave_order(sample: usize, n: usize) -> Vec<usize> {
+    (0..n).map(|k| (sample + k) % n).collect()
+}
+
+/// Calls `f(encoding_index)` once per encoding per sample, in the rotation of
+/// `interleave_order`, and returns the values of each encoding in sample
+/// order.
+pub fn collect_interleaved(
+    samples: usize,
+    n: usize,
+    f: &mut dyn FnMut(usize) -> f64,
+) -> Vec<Vec<f64>> {
+    let mut out = vec![Vec::with_capacity(samples); n];
+    for sample in 0..samples {
+        for enc in interleave_order(sample, n) {
+            out[enc].push(f(enc));
+        }
+    }
+    out
+}
+
+/// How a cell is timed.
+#[derive(Debug, Clone)]
+pub struct TimingConfig {
+    /// Samples per cell; at least `MIN_SAMPLES`.
+    pub samples: usize,
+    /// The CPU time spent in the samples of one cell, per encoding.
+    pub duration_s: f64,
+    /// Batches run and discarded before the samples.
+    pub warmup_batches: u32,
+}
+
+impl TimingConfig {
+    pub fn new(duration_s: f64) -> Self {
+        TimingConfig {
+            samples: MIN_SAMPLES,
+            duration_s,
+            warmup_batches: 3,
+        }
+    }
+}
+
+/// One encoding of one payload, ready to run a batch of updates.
+pub struct Runner<'a> {
+    pub encoding: &'static str,
+    pub run: Box<dyn FnMut(u64) + 'a>,
+}
+
+/// A runner that does `n` updates of `value` under `E`: encode into a stack
+/// buffer, verify the bytes, decode them. Panics when `E` refuses the value;
+/// the caller times only a value that `try_measure_counts` accepted.
+pub fn runner<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> Runner<'a> {
+    Runner {
+        encoding: E::NAME,
+        run: Box::new(move |n| {
+            let mut buf = T::BUFFER;
+            for _ in 0..n {
+                let encoded = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()))
+                    .expect("the encoding accepts the value");
+                let verified = black_box(Ref::<T, E>::verify(black_box(encoded.bytes())))
+                    .expect("the encoding verifies its own bytes");
+                black_box(verified.decode());
+            }
+        }),
+    }
+}
+
+/// Thread CPU time in nanoseconds.
+pub fn thread_cpu_ns() -> u64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `ts` is a valid timespec for the call to fill.
+    let rc = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) };
+    assert_eq!(rc, 0, "clock_gettime(CLOCK_THREAD_CPUTIME_ID)");
+    ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
+}
+
+/// Process CPU time (user plus system) in nanoseconds.
+pub fn process_cpu_ns() -> u64 {
+    // SAFETY: an all-zero rusage is a valid value for the call to fill.
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    // SAFETY: `ru` is a valid rusage for the call to fill.
+    let rc = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    assert_eq!(rc, 0, "getrusage");
+    let tv = |t: libc::timeval| t.tv_sec as u64 * 1_000_000_000 + t.tv_usec as u64 * 1_000;
+    tv(ru.ru_utime) + tv(ru.ru_stime)
+}
+
+/// The shortest batch the size calibration accepts, in nanoseconds of the
+/// clock. A batch shorter than this is dominated by the clock's resolution.
+const CALIBRATION_FLOOR_NS: u64 = 1_000_000;
+
+/// Doubles the batch size until a batch takes `CALIBRATION_FLOOR_NS`, then
+/// sizes a batch to take `target_ns`.
+fn calibrate(run: &mut dyn FnMut(u64), target_ns: f64, now: &dyn Fn() -> u64) -> u64 {
+    let mut n = 1u64;
+    loop {
+        let t0 = now();
+        run(n);
+        let elapsed = now().saturating_sub(t0);
+        if elapsed >= CALIBRATION_FLOOR_NS || n >= 1 << 40 {
+            let per_update = elapsed.max(1) as f64 / n as f64;
+            return ((target_ns / per_update) as u64).max(1);
+        }
+        n *= 2;
+    }
+}
+
+/// Times the runners against each other. Each is calibrated to a batch of
+/// `duration_s / samples` of clock time, warmed up, and then sampled
+/// `cfg.samples` times, with the encodings interleaved in rotation. A sample
+/// is the clock time of one batch divided by the batch size. `now` is the
+/// clock in nanoseconds (thread CPU time in the bench, injected in tests).
+/// Returns `(encoding, stat)` in runner order.
+pub fn time_cells(
+    runners: &mut [Runner],
+    cfg: &TimingConfig,
+    now: &dyn Fn() -> u64,
+) -> Vec<(&'static str, Stat)> {
+    assert!(cfg.samples >= MIN_SAMPLES, "at least {MIN_SAMPLES} samples");
+    let target_ns = cfg.duration_s * 1e9 / cfg.samples as f64;
+    let batches: Vec<u64> = runners
+        .iter_mut()
+        .map(|r| calibrate(&mut r.run, target_ns, now))
+        .collect();
+    for _ in 0..cfg.warmup_batches {
+        for (r, &n) in runners.iter_mut().zip(&batches) {
+            (r.run)(n);
+        }
+    }
+    let samples = collect_interleaved(cfg.samples, runners.len(), &mut |i| {
+        let n = batches[i];
+        let t0 = now();
+        (runners[i].run)(n);
+        now().saturating_sub(t0) as f64 / n as f64
+    });
+    runners
+        .iter()
+        .zip(&samples)
+        .map(|(r, s)| (r.encoding, summarize(s)))
+        .collect()
+}
+
+/// The result of a run paced at a fixed rate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Paced {
+    pub updates: u64,
+    pub wall_s: f64,
+    pub process_cpu_s: f64,
+    /// Process CPU time over wall time, in percent of one core.
+    pub measured_percent: f64,
+    /// The figure derived from the unpaced per-update cost at the same rate.
+    pub derived_percent: f64,
+    /// `measured_percent - derived_percent`, in percentage points.
+    pub difference: f64,
+}
+
+/// Builds a `Paced` from the raw readings of a paced run.
+pub fn paced_summary(updates: u64, wall_ns: u64, cpu_ns: u64, derived_percent: f64) -> Paced {
+    let measured_percent = cpu_ns as f64 / wall_ns as f64 * 100.0;
+    Paced {
+        updates,
+        wall_s: wall_ns as f64 / 1e9,
+        process_cpu_s: cpu_ns as f64 / 1e9,
+        measured_percent,
+        derived_percent,
+        difference: measured_percent - derived_percent,
+    }
+}
+
+/// Runs one update per tick at `rate_per_s` for `secs` of wall time, sleeping
+/// to the next tick, and reads process CPU time over the run.
+pub fn paced_run(
+    run: &mut dyn FnMut(u64),
+    rate_per_s: f64,
+    secs: f64,
+    derived_percent: f64,
+) -> Paced {
+    let total = (rate_per_s * secs).round() as u64;
+    let cpu0 = process_cpu_ns();
+    let start = Instant::now();
+    for i in 0..total {
+        let tick = start + Duration::from_secs_f64(i as f64 / rate_per_s);
+        let now = Instant::now();
+        if tick > now {
+            std::thread::sleep(tick - now);
+        }
+        run(1);
+    }
+    let wall_ns = start.elapsed().as_nanos() as u64;
+    let cpu_ns = process_cpu_ns() - cpu0;
+    paced_summary(total, wall_ns, cpu_ns, derived_percent)
+}

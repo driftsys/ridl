@@ -1,8 +1,12 @@
 //! The payloads the bench measures, and the rows it records.
 
-use ridl_rt::encoding::{FlatBuffers, Podbuf, Proto3};
+use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf, Proto3};
 use ridl_rt::payload::Payload;
 
+use crate::timing::{
+    paced_run, runner, sustained_cpu_percent, thread_cpu_ns, time_cells, Paced, Runner, Stat,
+    TimingConfig, RATE_PER_S,
+};
 use crate::{try_measure_counts, Counts};
 
 /// Which part of the corpus a payload belongs to.
@@ -26,19 +30,37 @@ pub enum Cell {
     NotBuilt { reason: String },
 }
 
+/// The CPU time per update of a measured cell, and the paced run when one was
+/// asked for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowTiming {
+    pub stat: Stat,
+    pub paced: Option<Paced>,
+}
+
 /// One row: a payload under one encoding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub payload: &'static str,
+    /// The Rust name of the payload type. Signals that share a payload type
+    /// share this name, so that a report can group by type.
+    pub payload_type: &'static str,
     pub kind: Kind,
     pub encoding: &'static str,
     pub cell: Cell,
+    /// Set only on a `Measured` cell, and only when the recorder times.
+    pub timing: Option<RowTiming>,
 }
 
 /// Collects one row per `(payload, encoding)`.
 #[derive(Default)]
 pub struct Recorder {
     pub rows: Vec<Row>,
+    /// When set, every `Measured` cell is also timed.
+    pub timing: Option<TimingConfig>,
+    /// With `timing` set: also run each timed cell paced at `RATE_PER_S`
+    /// for `timing.duration_s` of wall time.
+    pub paced: bool,
 }
 
 /// A payload and the code that measures it.
@@ -55,42 +77,97 @@ impl Recorder {
     where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
-        self.push(
+        let first = self.rows.len();
+        self.push::<T>(
             payload,
             kind,
-            "flatbuffers",
+            FlatBuffers::NAME,
             try_measure_counts::<T, FlatBuffers>(value),
         );
-        self.push(
+        self.push::<T>(
             payload,
             kind,
-            "proto3",
+            Proto3::NAME,
             try_measure_counts::<T, Proto3>(value),
         );
-        self.push(
+        self.push::<T>(
             payload,
             kind,
-            "podbuf",
+            Podbuf::NAME,
             try_measure_counts::<T, Podbuf>(value),
         );
+        if let Some(cfg) = self.timing.clone() {
+            self.time_rows::<T>(first, value, &cfg);
+        }
+    }
+
+    /// Times the `Measured` rows from `first` on: one interleaved run of the
+    /// encodings that accepted the value, then the paced run of each.
+    fn time_rows<T>(&mut self, first: usize, value: &T, cfg: &TimingConfig)
+    where
+        T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
+    {
+        let measured = |rows: &[Row], enc: &str| {
+            rows.iter()
+                .any(|r| r.encoding == enc && matches!(r.cell, Cell::Measured(_)))
+        };
+        let mut runners: Vec<Runner> = Vec::new();
+        if measured(&self.rows[first..], FlatBuffers::NAME) {
+            runners.push(runner::<T, FlatBuffers>(value));
+        }
+        if measured(&self.rows[first..], Proto3::NAME) {
+            runners.push(runner::<T, Proto3>(value));
+        }
+        if measured(&self.rows[first..], Podbuf::NAME) {
+            runners.push(runner::<T, Podbuf>(value));
+        }
+        if runners.is_empty() {
+            return;
+        }
+        let stats = time_cells(&mut runners, cfg, &thread_cpu_ns);
+        for (encoding, stat) in stats {
+            let paced = if self.paced {
+                let derived = sustained_cpu_percent(stat.median_ns, RATE_PER_S);
+                let r = runners
+                    .iter_mut()
+                    .find(|r| r.encoding == encoding)
+                    .expect("a runner of the stat");
+                Some(paced_run(&mut *r.run, RATE_PER_S, cfg.duration_s, derived))
+            } else {
+                None
+            };
+            let row = self.rows[first..]
+                .iter_mut()
+                .find(|r| r.encoding == encoding)
+                .expect("a row of the encoding");
+            row.timing = Some(RowTiming { stat, paced });
+        }
     }
 
     /// Records a `NotBuilt` row under each encoding for a payload that the
     /// bench cannot build a value of.
-    pub fn not_built(&mut self, payload: &'static str, kind: Kind, reason: &str) {
+    pub fn not_built(
+        &mut self,
+        payload: &'static str,
+        payload_type: &'static str,
+        kind: Kind,
+        reason: &str,
+    ) {
         for encoding in ENCODINGS {
             self.rows.push(Row {
                 payload,
+                payload_type,
                 kind,
                 encoding,
                 cell: Cell::NotBuilt {
                     reason: reason.to_string(),
                 },
+                timing: None,
             });
         }
     }
 
-    fn push(
+    fn push<T>(
         &mut self,
         payload: &'static str,
         kind: Kind,
@@ -103,14 +180,16 @@ impl Recorder {
         };
         self.rows.push(Row {
             payload,
+            payload_type: std::any::type_name::<T>(),
             kind,
             encoding,
             cell,
+            timing: None,
         });
     }
 }
 
-const ENCODINGS: [&str; 3] = ["flatbuffers", "proto3", "podbuf"];
+const ENCODINGS: [&str; 3] = [FlatBuffers::NAME, Proto3::NAME, Podbuf::NAME];
 
 macro_rules! entry {
     ($name:literal, $kind:expr, |$rec:ident| $body:expr) => {
@@ -187,6 +266,7 @@ pub fn corpus() -> Vec<CorpusEntry> {
                 r
             .not_built(
                 "veh.cluster.WheelDiagnostics.wheelTicks",
+                "RawTickCount",
                 Kind::Signal,
                 "the payload type RawTickCount is internal to its package, so a value cannot be built outside the generated crate",
             )

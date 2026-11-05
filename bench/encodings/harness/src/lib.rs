@@ -56,6 +56,8 @@ pub struct Counts {
 }
 
 pub mod corpus;
+pub mod report;
+pub mod timing;
 
 /// Encodes `value` into a stack buffer, verifies the bytes, and decodes them,
 /// and counts the allocations of each step.

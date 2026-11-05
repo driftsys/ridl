@@ -95,8 +95,8 @@ fn an_accepted_value_is_recorded_as_measured_with_counts() {
     }
 }
 
-/// Every entry yields, for each encoding, either a measured size above zero
-/// or a refusal that names a reason.
+/// Every entry yields, for each encoding, a measured size above zero, a
+/// refusal that names a reason, or a not-built row that names a reason.
 #[test]
 fn no_cell_of_the_corpus_is_empty() {
     for entry in corpus() {
