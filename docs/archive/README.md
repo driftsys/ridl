@@ -887,3 +887,18 @@ provenance. Nothing here is normative — the current references live in
   [the frame specification](../specification/frame-specification.md). Stage 6 is
   recorded in the archived
   [shared streams design](2026-10-31-streams-design.md).
+
+- **2026-11-04-streams-stage-6-plan.md** — the plan for stage 6 of the streams
+  work: generated TypeScript stream functions in the codec module (reply
+  streams, uploads for commands and plain-reply queries, and duplex queries),
+  the runtime context and error contract, the breaking `utf8` payload rule, the
+  TypeScript client `queryDuplex` method, and a generated docstore example that
+  runs against a Rust server. Archived verbatim, on 2026-11-05, once the work
+  landed in driftsys/ridl#1253. The durable records are
+  [the codec table design](../design/ts-codec-table.md),
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md),
+  [ADR-0032](../decisions/ADR-0032-byte-streams.md),
+  [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) and
+  [the generated code chapter](../book/generated-code.md). Its rulings are
+  mapped to decision numbers in the archived
+  [shared streams design](2026-10-31-streams-design.md).
