@@ -74,3 +74,17 @@ git):
 Hardware counters are not available on the phone. The linker wrapper that the
 command writes under `target/zig-linker/` removes `-Wl,--fix-cortex-a53-843419`,
 which `zig cc` of zig 0.16 rejects.
+
+## Report
+
+    cargo xtask bench report
+
+The command reads every `bench/encodings/results/*.json` file and prints
+Markdown tables to standard output, one section per file: the equal-weight mix
+per signal and per payload type, then per payload the size, the allocations, the
+time per update, the derived CPU load, the ratios to podbuf, and the paced and
+derived CPU load side by side. Refused cells and payloads the bench could not
+build are marked and listed apart, and are in no ratio and no mix. The tables
+are written by `report/`, a program of this workspace. The method and the
+results are in
+[`docs/technotes/encoding-bench.md`](../../docs/technotes/encoding-bench.md).

@@ -36,3 +36,8 @@ it — for decisions that bind downstream work, see
   subprotocol and its version, the header layout, payload presence, the encoding
   tag, close codes, the sizes, streams as version 2, and the frozen vectors,
   each with the alternatives considered and the cost of a wrong choice.
+- **encoding-bench.md** — what the three payload encodings (FlatBuffers, proto3,
+  podbuf) cost: the method of the encoding bench (CPU load at 4 000 updates per
+  second, encoded size, heap allocations), what each encoding's verify and
+  decode do, what each number shows and does not show, the host tables, and the
+  commands that record the Pixel 5 tables, which are not yet recorded.
