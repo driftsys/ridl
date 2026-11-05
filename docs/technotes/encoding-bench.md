@@ -465,12 +465,13 @@ refused. The commands were `just bench-pixel`, then `cargo xtask bench report`.
 
 - **Frequency.** The phone is not rooted, the governor is `schedutil` and the
   frequency is not fixed. The sidecar files read the frequency of each core
-  before and after a run, when the core is idle or ramping down, so they do not
-  show the frequency during the run. The A55 run read cpu2 at 1 363 200 kHz
-  before and after. The A76 run read cpu6 at 652 800 kHz before and 1 900 800
-  kHz after. The result files record the frequency of the core at the start of
-  the program: 1 804 800 kHz in the A55 run and 1 728 000 kHz in the A76 run.
-  The frequency during the runs is therefore not known; it may have varied.
+  before and after a run; the two reads do not show the frequency during the
+  run. The A55 run read cpu2 at 1 363 200 kHz before and after. The A76 run read
+  cpu6 at 652 800 kHz before and 1 900 800 kHz after. The result files record
+  the frequency of the core at the start of the program: 1 804 800 kHz in the
+  A55 run and 1 728 000 kHz in the A76 run. These start-of-program values differ
+  from the sidecar reads of the pinned core, and this note asserts no cause. The
+  frequency during the runs is therefore not known; it may have varied.
 - **Stability.** No cell carries the spread marker. The largest
   `(max - min) / median` of any cell is 2.0 % in the A55 run and 3.6 % in the
   A76 run, and every cell has 30 samples. The tables therefore show no
