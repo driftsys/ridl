@@ -1,4 +1,5 @@
-//! The generated provider used by the WebSocket server and Rust consumer.
+//! The hand-written implementation of the generated Provider trait, shared by
+//! the WebSocket server and Rust consumer.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;

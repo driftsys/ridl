@@ -28,10 +28,13 @@ export async function checkBytes(
 /** Checks the complete ordered named transfer, including its explicit end. */
 export async function checkChunks(
   stream: ReadableStream<Chunk>,
+  expectedCount = 64,
 ): Promise<void> {
   let count = 0;
   for await (const chunk of stream) {
-    if (count >= 64) throw new Error("chunk count exceeds 64");
+    if (count >= expectedCount) {
+      throw new Error(`chunk count exceeds ${expectedCount}`);
+    }
     if (chunk.index !== count) {
       throw new Error(`chunk order: expected ${count}, got ${chunk.index}`);
     }
@@ -45,7 +48,9 @@ export async function checkChunks(
     }
     count++;
   }
-  if (count !== 64) throw new Error(`chunk count ${count}, expected 64`);
+  if (count !== expectedCount) {
+    throw new Error(`chunk count ${count}, expected ${expectedCount}`);
+  }
 }
 
 /** Checks a concurrent echo, including progress before close and end after it. */
@@ -74,6 +79,12 @@ export async function checkDuplex<T extends Chunk>(
         }
       })(),
     ]);
+    // A reply that ended after 64 echoes cannot answer another write. Require
+    // its echo while upload is open, then require normal end after close.
+    await writer.write(chunk(64));
+    const probe = await reader.read();
+    if (probe.done) throw new Error("duplex ended before upload close");
+    values.push(probe.value);
     await checkChunks(
       new ReadableStream({
         start(controller) {
@@ -81,27 +92,11 @@ export async function checkDuplex<T extends Chunk>(
           controller.close();
         },
       }),
+      65,
     );
-    let settled = false;
-    const end = reader.read().then(
-      (value) => {
-        settled = true;
-        return { value };
-      },
-      (error: unknown) => {
-        settled = true;
-        return { error };
-      },
-    );
-    // Five default server polling intervals leave the upload open while the
-    // extra read checks for an early end or an unsolicited 65th reply. The
-    // overall program deadline also bounds a provider that never ends.
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    if (settled) throw new Error("duplex replied or ended before upload close");
     await writer.close();
-    const result = await end;
-    if ("error" in result) throw result.error;
-    if (!result.value.done) throw new Error("duplex chunk count exceeds 64");
+    const end = await reader.read();
+    if (!end.done) throw new Error("duplex chunk count exceeds 65");
   } finally {
     writer.releaseLock();
     reader.releaseLock();

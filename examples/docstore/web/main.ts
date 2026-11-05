@@ -79,7 +79,10 @@ try {
   const bytes = Uint8Array.from({ length: 204_800 }, (_, i) => i % 251);
   const chunk = (index: number): DocChunk => ({
     index: index as ChunkIndex,
-    data: bytes.slice(index * 3200, (index + 1) * 3200) as DocBlock,
+    data: Uint8Array.from(
+      { length: 3200 },
+      (_, i) => (index * 3200 + i) % 251,
+    ) as DocBlock,
   });
   const opts = { bound: 1000 };
   stage = "uploading bytes";
@@ -142,7 +145,7 @@ try {
   assert.equal((await server.stop()).code, 0, "server exits successfully");
   clearTimeout(deadline);
   console.log(
-    "docstore-web: 204800 exact bytes, 64 named chunks, 64 duplex echoes, cancel and abort passed",
+    "docstore-web: 204800 exact bytes, 64 named chunks, 65 duplex echoes, cancel and abort passed",
   );
 } catch (error) {
   fail(error);

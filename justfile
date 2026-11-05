@@ -138,6 +138,9 @@ test:
         # `ridl-transport-ws`, so its test target `descriptor`, which requires
         # the feature, runs only from this line.
         cargo test --locked -p ridl-transport-ws --features descriptor
+        # The server is a separate workspace and depends on this generated API.
+        cargo run --locked -p ridl-cli -- build examples/docstore --emit rust --out-dir examples/docstore/generated
+        cargo test --locked --manifest-path examples/docstore/server/Cargo.toml
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi

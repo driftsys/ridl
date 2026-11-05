@@ -274,6 +274,8 @@ jobs:
       - run: just compat-check
 
   # The TypeScript packages packages/ridl-runtime and packages/ridl-transport-ws.
+  # ts-e2e also generates the docstore codecs and wasm, builds and lints its
+  # Rust server and consumer, and runs its Deno validators and web program.
   # `ts-check`, `ts-npm-check`, `ts-e2e` and `cabin-ws-demo`
   # are members of `just build`; `ts-browser-e2e` and `cabin-browser-demo` are
   # not, because a contributor's build needs no browser, so `gate-parity` does

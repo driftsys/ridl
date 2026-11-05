@@ -50,7 +50,7 @@ interface DocStore {
   command put(info: DocInfo, data: <bytes>) @[..1s]
   /// Reads the document as ordered indexed chunks.
   query chunks(id: DocId): <DocChunk> @[..1s]
-  /// Echoes each indexed chunk before the upload ends.
+  /// Echoes indexed chunks as reply credit permits and ends after upload end.
   query exchange(id: DocId, chunks: <DocChunk>): <DocChunk> @[..1s]
   /// Reads the metadata of the named document.
   query describe(id: DocId): DescribeResult @[..1s]

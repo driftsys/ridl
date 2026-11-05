@@ -181,7 +181,8 @@ member; rsdl is the apex.
                          default features and with all features; ridl-loopback
                          with node (conformance dev-dependencies enable ridl-rt
                          debug) and with debug; ridl-rt-conformance
-                         with debug; ridl-transport-ws with descriptor
+                         with debug; ridl-transport-ws with descriptor; generate the
+                         docstore Rust API and run its server workspace tests
     just lint            workspace clippy --all-targets -- -D warnings, plus
                          ridl-rt with all features; ridl-loopback library alone
                          with node and ridl-rt debug off, all targets with node
@@ -258,7 +259,9 @@ member; rsdl is the apex.
                          the package's Deno e2e/deno_test.ts and
                          e2e/provide_test.ts against them respectively; then
                          generate the docstore codecs, build its Rust server,
-                         and run its typed byte, named-chunk and duplex checks
+                         and run its typed byte, named-chunk and duplex checks.
+                         Needs Deno, flatc at the version in .flatc-version and
+                         the wasm32-unknown-unknown target
     just cabin-ws-demo   generate cabin's crate, its TypeScript codec module and
                          its FlatBuffers schema with ridl build, run flatc
                          over the schema, check the
