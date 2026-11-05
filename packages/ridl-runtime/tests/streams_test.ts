@@ -267,26 +267,33 @@ Deno.test("raw_uploads_split_at_member_limit", async () => {
   assertEquals(text.chunks.map((b) => b.length), [2, 5, 5, 1, 0]);
 });
 
-Deno.test("unrepresentable_text_and_elements_abort", async () => {
+Deno.test("unrepresentable_text_and_elements_abort", async (t) => {
   for (
-    const [value, limit, category] of [["\ud800", 5, "contract"], [
-      "😀",
-      3,
-      "corrupt",
-    ]] as const
+    const [value, limit, category] of [
+      ["\ud800", 5, "contract"],
+      ["\udc00", 5, "contract"],
+      ["ab\udc00cd", 5, "contract"],
+      [
+        "😀",
+        3,
+        "corrupt",
+      ],
+    ] as const
   ) {
-    const sink = uploadSink();
-    const writer = textUpload(sink.upload, limit).getWriter();
-    writer.closed.catch(() => {});
-    const error = await assertRejects(() => writer.write(value), StreamError);
-    assertEquals(
-      error.failure,
-      category === "contract"
-        ? { category, contract: { category: "invalid-value", rule: "utf8" } }
-        : { category },
-    );
-    assertEquals(sink.chunks.length, 0);
-    assertEquals(sink.aborted.length, 1);
+    await t.step(JSON.stringify(value), async () => {
+      const sink = uploadSink();
+      const writer = textUpload(sink.upload, limit).getWriter();
+      writer.closed.catch(() => {});
+      const error = await assertRejects(() => writer.write(value), StreamError);
+      assertEquals(
+        error.failure,
+        category === "contract"
+          ? { category, contract: { category: "invalid-value", rule: "utf8" } }
+          : { category },
+      );
+      assertEquals(sink.chunks.length, 0);
+      assertEquals(sink.aborted.length, 1);
+    });
   }
   const sink = uploadSink();
   const writer = encodeUpload(
@@ -549,4 +556,94 @@ for (const operation of ["decode", "encode"] as const) {
       assertStrictEquals(error.cause, cause);
     });
   }
+}
+
+// Mutations: classify malformed uploads as CodecError or omit the utf8 rule.
+Deno.test("named_upload_verification_classification", async (t) => {
+  const cases: {
+    result: Exclude<VerifyResult, { ok: true }>;
+    failure: StreamError["failure"];
+  }[] = [
+    {
+      result: { ok: false, kind: "malformed", code: 1 },
+      failure: { category: "corrupt" },
+    },
+    {
+      result: { ok: false, kind: "rule", rule: "utf8", code: 7 },
+      failure: {
+        category: "contract",
+        contract: { category: "invalid-value", rule: "utf8" },
+      },
+    },
+  ];
+  for (const { result, failure } of cases) {
+    await t.step(result.kind, async () => {
+      const sink = uploadSink();
+      const writer = encodeUpload(
+        sink.upload,
+        () => Uint8Array.of(1),
+        () => result,
+        5,
+      ).getWriter();
+      writer.closed.catch(() => {});
+      const error = await assertRejects(() => writer.write(1), StreamError);
+      assertEquals(error.failure, failure);
+      assertEquals(sink.chunks, []);
+      assertEquals(sink.aborted.length, 1);
+      assertStrictEquals(sink.aborted[0], error);
+      assertEquals(sink.upload.locked, false);
+    });
+  }
+});
+
+// Mutation: reject a named element whose encoded length equals the limit.
+Deno.test("named_upload_accepts_exact_limit", async () => {
+  const sink = uploadSink();
+  const value = Uint8Array.of(1, 2, 3, 4, 5);
+  const verified: Uint8Array[] = [];
+  const writer = encodeUpload(
+    sink.upload,
+    (bytes: Uint8Array) => bytes,
+    (bytes) => {
+      verified.push(bytes);
+      return valid();
+    },
+    5,
+  ).getWriter();
+  writer.closed.catch(() => {});
+  assertEquals(await writer.write(value).catch((error) => error), undefined);
+  await writer.close();
+  assertEquals(verified, [value]);
+  assertEquals(sink.chunks, [value]);
+  assertEquals(sink.ends, 1);
+  assertEquals(sink.aborted, []);
+});
+
+// Mutations: change either nonpositive-limit guard from <= 0 to < 0.
+for (const form of ["bytes", "text"] as const) {
+  Deno.test(`${form}_upload_rejects_nonpositive_limits`, async (t) => {
+    for (const limit of [0, -1]) {
+      await t.step(String(limit), async () => {
+        const sink = uploadSink();
+        // Empty values expose a missing zero guard without an infinite split loop.
+        const writer = form === "bytes"
+          ? byteUpload(sink.upload, limit).getWriter()
+          : textUpload(sink.upload, limit).getWriter();
+        writer.closed.catch(() => {});
+        const error = await assertRejects(
+          () =>
+            form === "bytes"
+              ? (writer as WritableStreamDefaultWriter<Uint8Array>).write(
+                new Uint8Array(),
+              )
+              : (writer as WritableStreamDefaultWriter<string>).write(""),
+          StreamError,
+        );
+        assertEquals(error.failure, { category: "corrupt" });
+        assertEquals(sink.chunks, []);
+        assertEquals(sink.aborted.length, 1);
+        assertStrictEquals(sink.aborted[0], error);
+      });
+    }
+  });
 }
