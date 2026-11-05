@@ -91,7 +91,13 @@ export function decodeStream<T>(
         }
         throw new CodecError("unknown payload type during stream verification");
       }
-      controller.enqueue(decode(bytes));
+      let value: T;
+      try {
+        value = decode(bytes);
+      } catch (error) {
+        throw codecException(error);
+      }
+      controller.enqueue(value);
     },
   });
 }
@@ -137,16 +143,7 @@ export function encodeUpload<T>(
     try {
       bytes = encode(value);
     } catch (error) {
-      // Generated encoders report enum and enumset constraints structurally.
-      if (error instanceof Error && "rule" in error) {
-        throw verificationError({
-          ok: false,
-          kind: "rule",
-          rule: String(error.rule),
-          code: 0,
-        });
-      }
-      throw new StreamError({ category: "corrupt" });
+      throw codecException(error);
     }
     if (bytes.length > limit) throw new StreamError({ category: "corrupt" });
     const result = verify(bytes);
@@ -207,6 +204,26 @@ export function textUpload(
     }
     if (chunk.length || text.length === 0) await write(encoder.encode(chunk));
   });
+}
+
+function codecException(error: unknown): StreamError {
+  // Each generated module defines its own RuleError class.
+  if (error instanceof Error && error.name === "RuleError" && "rule" in error) {
+    switch (error.rule) {
+      case "length":
+      case "pattern":
+      case "range":
+      case "step":
+      case "unique":
+      case "utf8":
+      case "variant":
+        return new StreamError({
+          category: "contract",
+          contract: { category: "invalid-value", rule: error.rule },
+        }, { cause: error });
+    }
+  }
+  return new StreamError({ category: "corrupt" }, { cause: error });
 }
 
 function verificationError(result: Exclude<VerifyResult, { ok: true }>): Error {

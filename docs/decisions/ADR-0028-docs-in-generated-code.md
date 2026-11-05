@@ -39,10 +39,11 @@ It amends two records in place, in the same change:
 The optional TypeScript codec module now emits public stream functions. Each
 carries the interaction's model-derived doc, resolved links, canonical rules,
 `@see`, `@since` and `@deprecated`. Non-stream parameters render their model
-documentation as `@param` tags; stream parameters and their rules render in
-`@remarks` sections. This is a narrow extension of decision 6 to those emitted
-functions. Neutral contract wording and the private-helper policy of decisions 3
-and 7 remain unchanged. The domain `.ts` module still emits no interaction face.
+documentation as `@param` tags. Stream-parameter documentation and parameter
+rules are not rendered; the codec table record linked below describes this
+limit. This is a narrow extension of decision 6 to those emitted functions.
+Neutral contract wording and the private-helper policy of decisions 3 and 7
+remain unchanged. The domain `.ts` module still emits no interaction face.
 [The codec table record](../design/ts-codec-table.md#stream-functions) owns the
 function surface.
 

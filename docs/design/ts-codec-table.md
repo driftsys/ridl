@@ -182,11 +182,13 @@ generation error naming both sources; the generator does not silently rename
 public functions. Private parameter and table-capture bindings are allocated
 without changing public names.
 
-Stream TSDoc renders the interaction's model doc, links, canonical rule texts,
-`@see`, `@since` and `@deprecated`, then model-derived `@param` tags for
-non-stream parameters and `@remarks` sections for stream parameters and their
-rules. Local domain links name the imported `t` namespace; targets without an
-emitted item remain qualified code spans. Private helpers carry no facade docs.
+Stream TSDoc renders the interaction's model doc, links, canonical interaction
+rule texts, `@see`, `@since` and `@deprecated`, then model-derived `@param` tags
+for non-stream parameters. The `@remarks` Rules list comes from
+`Interaction.rules`. Stream-parameter documentation and parameter rules
+(`Param.rules`, for both stream and non-stream parameters) are not rendered.
+Local domain links name the imported `t` namespace; targets without an emitted
+item remain qualified code spans. Private helpers carry no facade docs.
 
 **D-19. Sender adapters preserve the distinction between chunks and elements
 (S6-5).** Raw writes split at the member limit, and text splits only between

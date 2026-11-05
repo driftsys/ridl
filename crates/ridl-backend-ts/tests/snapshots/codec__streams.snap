@@ -1135,10 +1135,10 @@ function encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>
   try {
     bytes = payload.encode(value);
   } catch (error) {
-    if (error instanceof RuleError) {
-      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule } });
+    if (typeof error === "object" && error !== null && "name" in error && error.name === "RuleError" && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
+      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
     }
-    throw new StreamError({ category: "corrupt" });
+    throw new StreamError({ category: "corrupt" }, { cause: error });
   }
   if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: "corrupt" });
   const result = session.codec.verify(typeId, bytes);
@@ -1161,7 +1161,14 @@ function decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, 
     }
     throw new CodecError("unknown payload type or rule during reply verification");
   }
-  return payload.decode(bytes);
+  try {
+    return payload.decode(bytes);
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "name" in error && error.name === "RuleError" && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
+      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
+    }
+    throw new StreamError({ category: "corrupt" }, { cause: error });
+  }
 }
 
 /** The members of interface `Feed`, interface number `1`. */

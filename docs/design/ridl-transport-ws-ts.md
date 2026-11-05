@@ -21,10 +21,12 @@ structure. Verifying a payload is the wasm codec's, of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7, loaded by `@driftsys/ridl-runtime`, and decoding and encoding one is
 the generated codec module's, `<base>.codec.ts`
-([`ts-codec-table.md`](ts-codec-table.md)); the generated faces over this
-package are not built. ADR-0020 decision 6 places the package; its dependency
-row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
-§3 to §9 and §11.1 (binding versions 1, 2 and 3).
+([`ts-codec-table.md`](ts-codec-table.md)). Generated stream functions use this
+package's `Session` through the structural `StreamTransport` interface without
+importing the transport package. Generated plain-call and provider faces remain
+unbuilt (driftsys/ridl#287). ADR-0020 decision 6 places the package; its
+dependency row was amended on 2026-10-20 (D-4). The wire rules are the frame
+specification §3 to §9 and §11.1 (binding versions 1, 2 and 3).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -937,9 +939,10 @@ type-checking against the DOM library, is part of `ts-check`; it shows that the
 package compiles for a browser, not that a page receives a signal.
 
 In CI the four run in the `typescript` job, which installs the pinned Rust
-toolchain, the wasm32 target, pinned `flatc`, `just`, Node, and Deno from the
-release zip of the pinned version. The job reads the `rust` path filter, which
-runs for any path outside the skip list, `packages/` included.
+toolchain, the wasm32 target, pinned `flatc`, `just`, and Deno from the release
+zip of the pinned version. Node and npm come from the runner image. The job
+reads the `rust` path filter, which runs for any path outside the skip list,
+`packages/` included.
 
 **The Deno pin.** The version is in one file, `.deno-version` at the root. CI
 reads it. `./bootstrap` downloads that release's zip from GitHub into
@@ -956,15 +959,17 @@ option, and the size checks of D-19 with the `interfaces` option. The frame
 specification's "As built" note and §11 and §11.1 name the package and its path.
 ADR-0020 carries the dated amendment of decision 6 (D-4) and a note on open item
 2 (D-1). The book has no chapter on the package: `npm-release.yml` publishes it
-on a `v*` tag, and no generated code uses it yet.
+on a `v*` tag. Generated stream functions use its `Session` through the
+structural `StreamTransport` interface, without importing this package.
 
 ## What is not built
 
-- Generated faces over this package (driftsys/ridl#287). The wasm codec of
-  ADR-0020 decision 7, the runtime package `@driftsys/ridl-runtime` that loads
-  it, and the generated codec module that decodes and encodes a payload are
-  built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
-  this package by hand.
+- Generated plain-call and provider faces over this package (driftsys/ridl#287).
+  Generated stream functions are built and drive `Session` through
+  `StreamTransport` without a transport import; the
+  [codec table record](ts-codec-table.md#stream-functions) owns their supported
+  forms. The cabin signal demo still joins its generated payload codecs to this
+  package by hand.
 - The upload method limits are recorded in D-23. The package checks no
   named-element payload or UTF-8 text boundary. Rule code 7 decodes as `"utf8"`
   and reaches callers in a refusal.

@@ -53,8 +53,8 @@ const MAX_SAFE: u64 = 9_007_199_254_740_991;
 const HASH_LEN: usize = 32;
 
 /// Generates `<artifact_base>.codec.ts` for the package `model` describes,
-/// or `None` for a package with no payload root that gets a codec, local or
-/// foreign, which has nothing the module could carry. The returned source
+/// or `None` for a package with neither a payload root that gets a codec,
+/// local or foreign, nor a supported stream call. The returned source
 /// starts at the imports; the caller writes the generated marker and the
 /// header above it.
 pub fn generate_codec(
@@ -2144,15 +2144,10 @@ impl<'a> Codec<'a> {
     fn emit_stream_helpers(&self, out: &mut String) {
         out.push_str("\nfunction checkStreamSession(session: StreamSession, limit: number | undefined): void {\n  const hash = session.codec.catalogHash;\n  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {\n    throw new CatalogMismatch(\n      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n      Array.from(hash, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n    );\n  }\n  if (limit === 0) throw new StreamError({ category: \"corrupt\" });\n}\n");
         out.push_str("\nfunction encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {\n  let bytes: Uint8Array;\n  try {\n    bytes = payload.encode(value);\n  } catch (error) {\n");
-        if self.needs_rule_error() {
-            out.push_str("    if (error instanceof RuleError) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule } });\n    }\n");
-        } else {
-            // The binding is required for shared rendering, but unused without RuleError.
-            out.push_str("    void error;\n");
-        }
-        out.push_str("    throw new StreamError({ category: \"corrupt\" });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
+        out.push_str("    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n");
+        out.push_str("    throw new StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
         if self.stream_calls.values().any(|s| s.reply.is_some()) {
-            out.push_str("\nfunction decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  return payload.decode(bytes);\n}\n");
+            out.push_str("\nfunction decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  try {\n    return payload.decode(bytes);\n  } catch (error) {\n    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n    throw new StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n}\n");
         }
     }
 

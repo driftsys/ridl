@@ -722,8 +722,10 @@ same order around the module's own sentence.
 
 The codec module's public stream functions also carry the interaction's
 model-derived documentation, canonical rules, `@see`, `@since` and
-`@deprecated`. Non-stream parameters use `@param`; stream parameters and their
-rules use `@remarks` sections. Private codec helpers carry no facade docs.
+`@deprecated`. Non-stream parameters use `@param`; stream-parameter
+documentation and parameter rules are not rendered. The
+[codec table record](../design/ts-codec-table.md#stream-functions) describes the
+generated stream TSDoc. Private codec helpers carry no facade docs.
 
 ### What the generated code checks
 

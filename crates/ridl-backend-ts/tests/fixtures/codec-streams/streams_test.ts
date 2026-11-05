@@ -8,6 +8,8 @@ import {
 import type { Frame, Target } from "@ridl-test/mod.ts";
 import { FakeSocket } from "@ridl-test/tests/fake_socket.ts";
 import assert from "node:assert/strict";
+import * as flatbuffers from "flatbuffers";
+import { StatusBoxT } from "./streams/demo.ts";
 import {
   CatalogMismatch,
   CodecError,
@@ -1073,3 +1075,136 @@ Deno.test("duplex_adapters_propagate_failure", async () => {
     }
   }
 });
+
+// Mutation: let a verified generated open-enum decoder throw past decodeStream.
+Deno.test("open_enum_2_pow_53_decode_is_a_stream_contract_failure", async () => {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new StatusBoxT(9007199254740992n).pack(builder));
+  const bytes = builder.asUint8Array();
+  // Bypass the safe-integer encoder to reproduce a valid wire i64 that the
+  // wasm verifier accepts but the TypeScript domain cannot represent.
+  const h = harness([bytes]);
+  const original = entry("statuses").streams[0].element!.decode;
+  let cause: unknown;
+  try {
+    original(bytes);
+  } catch (error) {
+    cause = error;
+  }
+  assert.ok(cause instanceof codec.RuleError);
+  assert.equal(cause.rule, "variant");
+  await assert.rejects(
+    () => collect(generated("Feed_statuses")(h.session, { bound: 50 })),
+    (error: unknown) => {
+      assert.ok(error instanceof StreamError);
+      assert.deepEqual(error.failure, {
+        category: "contract",
+        contract: { category: "invalid-value", rule: "variant" },
+      });
+      assert.ok(error.cause instanceof codec.RuleError);
+      assert.equal(error.cause.rule, "variant");
+      return true;
+    },
+  );
+});
+
+// Mutations: drop request cause or let a plain reply decoder exception escape.
+for (const operation of ["request", "reply"] as const) {
+  for (const kind of ["rule", "error", "value"] as const) {
+    Deno.test(`generated_${operation}_exception_mapping_${kind}`, async () => {
+      const h = uploadHarness();
+      const row = entry("uploadChoice");
+      const payload = operation === "request" ? row.request : row.reply!;
+      const method = operation === "request" ? "encode" : "decode";
+      const original = { ...payload };
+      const cause = kind === "rule"
+        ? new codec.RuleError("variant", "invalid enum")
+        : kind === "error"
+        ? new TypeError("invalid codec input")
+        : 42;
+      payload[method] = () => {
+        throw cause;
+      };
+      const check = (error: unknown) => {
+        assert.ok(error instanceof StreamError);
+        assert.deepEqual(
+          error.failure,
+          kind === "rule"
+            ? {
+              category: "contract",
+              contract: { category: "invalid-value", rule: "variant" },
+            }
+            : { category: "corrupt" },
+        );
+        assert.strictEqual(error.cause, cause);
+        return true;
+      };
+      try {
+        const call = () =>
+          uploadFunction("uploadChoice")(h.session, 7, 8, { bound: 50 });
+        if (operation === "request") {
+          assert.throws(call, check);
+          assert.equal(h.calls.length, 0);
+        } else {
+          const result = call();
+          h.reply.resolve(Uint8Array.of(1));
+          await assert.rejects(() => result.reply!, check);
+          await result.upload.close();
+        }
+      } finally {
+        Object.assign(payload, original);
+      }
+    });
+  }
+}
+
+// Mutations: bypass codec exception mapping in either duplex direction.
+for (const direction of ["upload", "reply"] as const) {
+  for (const kind of ["rule", "error"] as const) {
+    Deno.test(`duplex_codec_exception_mapping_${direction}_${kind}`, async () => {
+      const { session, socket } = await socketHarness();
+      const payload = entry("duplexNamed")
+        .streams[direction === "reply" ? 0 : 1].element!;
+      const method = direction === "reply" ? "decode" : "encode";
+      const original = { ...payload };
+      const cause = kind === "rule"
+        ? new codec.RuleError("variant", "invalid enum")
+        : new TypeError("invalid codec input");
+      payload[method] = () => {
+        throw cause;
+      };
+      try {
+        const call = duplexFunction()(session, 7, 8, { bound: 1000 });
+        const writer = call.upload.getWriter();
+        const reader = call.stream.getReader();
+        writer.closed.catch(() => {});
+        reader.closed.catch(() => {});
+        if (direction === "reply") {
+          replyChunk(socket, 1, { value: 1 });
+        }
+        await assert.rejects(
+          () =>
+            direction === "reply" ? reader.read() : writer.write({ value: 1 }),
+          (error: unknown) => {
+            assert.ok(error instanceof StreamError);
+            assert.deepEqual(
+              error.failure,
+              kind === "rule"
+                ? {
+                  category: "contract",
+                  contract: { category: "invalid-value", rule: "variant" },
+                }
+                : { category: "corrupt" },
+            );
+            assert.strictEqual(error.cause, cause);
+            return true;
+          },
+        );
+        await tick();
+      } finally {
+        Object.assign(payload, original);
+        session.transport.close();
+      }
+    });
+  }
+}

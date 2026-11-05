@@ -503,3 +503,50 @@ Deno.test("empty_upload_waits_for_raw_credit", async () => {
     await writer.close();
   }
 });
+
+// Mutations: bypass codec exception mapping, misclassify a rule, or drop cause.
+for (const operation of ["decode", "encode"] as const) {
+  for (const kind of ["rule", "error", "value"] as const) {
+    Deno.test(`${operation}_exceptions_become_stream_errors_${kind}`, async () => {
+      const cause = kind === "rule"
+        ? Object.assign(new RangeError("unsafe enum value"), {
+          name: "RuleError",
+          rule: "variant",
+        })
+        : kind === "error"
+        ? new TypeError("invalid codec input")
+        : { reason: "codec refused" };
+      const fail = () => {
+        throw cause;
+      };
+      let error: StreamError;
+      if (operation === "decode") {
+        error = await assertRejects(
+          () =>
+            Array.fromAsync(
+              ReadableStream.from([Uint8Array.of(1)])
+                .pipeThrough(decodeStream(fail, valid)),
+            ),
+          StreamError,
+        );
+      } else {
+        const sink = uploadSink();
+        const writer = encodeUpload(sink.upload, fail, valid, 32).getWriter();
+        writer.closed.catch(() => {});
+        error = await assertRejects(() => writer.write(1), StreamError);
+        assertStrictEquals(sink.aborted[0], error);
+        assertEquals(sink.chunks, []);
+      }
+      assertEquals(
+        error.failure,
+        kind === "rule"
+          ? {
+            category: "contract",
+            contract: { category: "invalid-value", rule: "variant" },
+          }
+          : { category: "corrupt" },
+      );
+      assertStrictEquals(error.cause, cause);
+    });
+  }
+}

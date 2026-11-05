@@ -65,11 +65,12 @@ export class StreamError extends Error {
       contract: { category: "invalid-value"; rule: PayloadRule };
     };
 
-  constructor(failure: StreamError["failure"]) {
+  constructor(failure: StreamError["failure"], options?: ErrorOptions) {
     super(
       failure.category === "contract"
         ? `invalid stream payload: ${failure.contract.rule}`
         : "malformed stream payload",
+      options,
     );
     this.name = "StreamError";
     this.failure = failure;
