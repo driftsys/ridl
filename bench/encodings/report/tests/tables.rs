@@ -306,3 +306,56 @@ fn parse_rejects_an_unknown_encoding_label() {
     });
     assert!(parse(&v.to_string()).is_err());
 }
+
+/// A stress row: like `measured`, with kind `stress`.
+fn stress_trio(payload: &str, ty: &str, size: u64) -> Vec<Value> {
+    trio(payload, ty, [size; 3], [10.0; 3])
+        .into_iter()
+        .map(|mut v| {
+            v["kind"] = json!("stress");
+            v
+        })
+        .collect()
+}
+
+#[test]
+fn stress_rows_are_in_the_payload_tables_and_in_neither_mix() {
+    let mut rows = trio("p.s1", "A", [20, 20, 10], [10.0, 10.0, 10.0]);
+    rows.extend(stress_trio("p.stress", "Big", 1000));
+    let r = file(rows);
+    for w in [Weighting::PerSignal, Weighting::PerPayloadType] {
+        let t = mix_table(&r, w);
+        let size = cells(line_of(&t, "Size (bytes)"));
+        assert_eq!(&size[1..4], ["20.0", "20.0", "10.0"], "{t}");
+        assert_eq!(size[6], "1", "{t}");
+    }
+    let sizes = cells(line_of(&size_table(&r), "p.stress"));
+    assert_eq!(&sizes[1..4], ["1000", "1000", "1000"]);
+    assert!(ratio_table(&r).contains("| p.stress "));
+    assert!(time_table(&r).contains("| p.stress "));
+}
+
+#[test]
+fn each_mix_caption_names_its_own_weighting_only() {
+    let r = file(trio("p.s1", "A", [20, 20, 10], [10.0, 10.0, 10.0]));
+    let per_signal = mix_table(&r, Weighting::PerSignal);
+    let per_type = mix_table(&r, Weighting::PerPayloadType);
+    assert!(per_signal.contains("per signal: each signal counts once"));
+    assert!(!per_signal.contains("per payload type"));
+    assert!(per_type.contains("per payload type: each payload type counts once"));
+    assert!(!per_type.contains("per signal"));
+}
+
+#[test]
+fn the_allocation_mix_sums_encode_verify_and_decode() {
+    // The fixture counts are 1, 2 and 3 for every cell.
+    let r = file(trio("p.s1", "A", [20, 20, 10], [10.0, 10.0, 10.0]));
+    for w in [Weighting::PerSignal, Weighting::PerPayloadType] {
+        let t = mix_table(&r, w);
+        let row = cells(line_of(
+            &t,
+            "Heap allocations per update (encode + verify + decode)",
+        ));
+        assert_eq!(&row[1..4], ["6.0", "6.0", "6.0"], "{t}");
+    }
+}

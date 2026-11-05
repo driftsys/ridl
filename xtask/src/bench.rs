@@ -85,19 +85,28 @@ fn generate() -> Result<(), String> {
     Ok(())
 }
 
+/// The arguments of one cargo call of `bench host`. The bench workspace holds
+/// two binaries (the harness and the report), so `run` names the harness.
+fn host_args(subcommand: &str, manifest: &Path) -> Vec<std::ffi::OsString> {
+    let mut args: Vec<std::ffi::OsString> = vec![subcommand.into()];
+    args.push("--manifest-path".into());
+    args.push(manifest.into());
+    args.push("-p".into());
+    args.push("encoding-bench".into());
+    args
+}
+
 fn host() -> Result<(), String> {
     generate()?;
     let manifest = root().join("bench/encodings/Cargo.toml");
-    for args in [["test"], ["run"]] {
+    for subcommand in ["test", "run"] {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
         let status = Command::new(cargo)
-            .args(args)
-            .arg("--manifest-path")
-            .arg(&manifest)
+            .args(host_args(subcommand, &manifest))
             .status()
-            .map_err(|e| format!("run cargo {}: {e}", args[0]))?;
+            .map_err(|e| format!("run cargo {subcommand}: {e}"))?;
         if !status.success() {
-            return Err(format!("cargo {} failed: {status}", args[0]));
+            return Err(format!("cargo {subcommand} failed: {status}"));
         }
     }
     Ok(())
@@ -244,6 +253,24 @@ fn push_signals(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_names_the_harness_package_for_test_and_run() {
+        let m = Path::new("/x/Cargo.toml");
+        for sub in ["test", "run"] {
+            let args = host_args(sub, m);
+            assert_eq!(
+                args,
+                [
+                    sub,
+                    "--manifest-path",
+                    "/x/Cargo.toml",
+                    "-p",
+                    "encoding-bench"
+                ]
+            );
+        }
+    }
 
     #[test]
     fn result_files_lists_json_files_sorted_and_nothing_else() {
