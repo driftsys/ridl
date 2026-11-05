@@ -4,8 +4,8 @@ Loads the wasm codec module that `ridl build` generates and verifies encoded
 payloads with it. A payload is checked against the structure and the typl rules
 of its type before the caller uses it.
 
-The package has no dependency. It uses only the platform `WebAssembly`, so it
-runs in Deno, Bun, Node 22 or later, and in a browser.
+The package has no dependency. It uses the platform `WebAssembly`, streams and
+text decoder APIs, so it runs in Deno, Bun, Node 22 or later, and in a browser.
 
 ## API
 
@@ -61,6 +61,106 @@ is read with `arrayBuffer()` and compiled with `WebAssembly.instantiate`. A
 `file:` URL is read with `Deno.readFile` when `Deno` exists and is fetched
 otherwise. Any other URL is fetched.
 
+## Streams
+
+`StreamSession` holds `{ transport, codec }`. Its `codec` is the loaded wasm
+`Codec`; its `transport` implements the structural `StreamTransport` interface,
+with `queryStream`, `commandStream`, `queryWithUpload` and `queryDuplex`
+byte-stream methods. `StreamOptions` requires `bound`, the response bound in
+milliseconds. The runtime has no dependency on a transport package.
+
+A caller of a generated codec module constructs the context explicitly. This
+example uses the generated document store module and the WebSocket transport:
+
+```ts
+import { loadCodec, type StreamSession } from "@driftsys/ridl-runtime";
+import { connect } from "@driftsys/ridl-transport-ws";
+import {
+  CATALOG_HASH,
+  CATALOG_NAME,
+  DocStore,
+  PAYLOAD_TYPES,
+  RULES,
+} from "./generated/docstore.api.codec.ts";
+
+const codec = await loadCodec(
+  new URL("./generated/docstore_api.wasm", import.meta.url),
+  {
+    catalogHash: CATALOG_HASH,
+    payloadTypes: PAYLOAD_TYPES,
+    ruleText: RULES,
+  },
+);
+const transport = await connect("ws://localhost:8080", {
+  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
+  encoding: "flatbuffers",
+  interfaces: [DocStore],
+});
+const context: StreamSession = { transport, codec };
+```
+
+Pass `context` first and required `{ bound: milliseconds }` last to a generated
+stream function. The [generated-code chapter](../../docs/book/generated-code.md)
+shows the supported signatures and document store calls. The transport import
+above belongs to the application; this runtime package does not import it.
+
+Resolve named payload types with `codec.typeId` before making a request, and
+load the codec with the expected catalog hash. An unknown name throws
+`UnknownPayloadType`; a mismatched hash rejects loading with `CatalogMismatch`.
+Supply the generated module's `RULES` to `loadCodec` as `ruleText` so that
+verification failures include their rule text.
+
+`decodeStream(decode, verify)` returns a `TransformStream` that checks each
+whole payload before decoding it. For example, after resolving `typeId`, pipe a
+byte stream through
+`decodeStream(payload.decode, bytes => codec.verify(typeId, bytes))`. Each chunk
+produces one decoded value. Native stream queues preserve backpressure; reader
+cancellation and transform errors propagate upstream through `pipeThrough`.
+Transport failures propagate unchanged.
+
+`decodeTextStream()` returns a `TransformStream<Uint8Array, string>` that
+decodes each chunk independently with fatal UTF-8 checking. A chunk must contain
+complete code points. Empty chunks produce empty strings, and a leading BOM
+remains content.
+
+`encodeUpload(upload, encode, verify, limit)` returns a typed `WritableStream`.
+Each named element becomes one encoded, verified chunk. Its encoded bytes are
+never split. Use the generated payload encoder and verify with the resolved
+payload type, for example
+`encodeUpload(raw.upload, payload.encode, bytes => codec.verify(typeId, bytes), limit)`.
+
+`byteUpload(upload, limit)` splits byte writes into chunks of at most `limit`
+bytes. `textUpload(upload, limit)` encodes strings as UTF-8 and splits only
+between complete code points. It refuses lone JavaScript surrogates instead of
+replacing them. Both adapters preserve empty writes as empty chunks when `limit`
+is positive; a zero or negative limit fails as corrupt before an empty chunk can
+be written.
+
+Each typed write waits until every raw write it produces has completed, in
+order. Closing waits for pending writes before closing the raw upload. Local
+failures use the error categories described below, error the typed stream and
+abort the raw upload once. Aborting also reaches a raw write waiting for credit.
+
+Remote failures preserve the original error object: pending and later writes,
+`writer.closed`, and a close queued before the failure reject with that same
+object. A close requested after the writer has errored rejects with the
+platform's `TypeError`. An already resolved command acceptance stays resolved.
+
+Local payload failures throw `StreamError`. Its `failure` is
+`{ category: "corrupt" }` for malformed payloads, an oversized named element or
+code point, or any exception a generated `encode` or `decode` throws without a
+rule. Rule failures, including invalid UTF-8 and a `RuleError` from a generated
+`encode` or `decode`, use
+`{ category: "contract", contract: { category: "invalid-value", rule } }`. A
+mapped exception is kept as the error's `cause`. `PayloadRule` names `length`,
+`pattern`, `range`, `step`, `unique`, `utf8` and `variant`. A missing or unknown
+verification rule text, or an unknown-type verification result, throws
+`CodecError`. Local errors do not require a transport-specific error class.
+
+The [payload rule ABI](../../docs/design/ts-codec-table.md#stream-functions)
+defines the rule codes, their release classification and the codec regeneration
+requirement.
+
 ## Limits
 
 - The module must export `memory`, `ridl_alloc`, `ridl_free`,
@@ -68,6 +168,7 @@ otherwise. Any other URL is fetched.
   read other exports.
 - `verify` is synchronous and copies the payload into the module memory on each
   call. It frees the copy before it returns, also when the call throws.
-- The package does not decode a payload. It reports whether the payload is
-  valid.
+- The package verifies named payloads with wasm; stream adapters use the encoder
+  and decoder supplied by the caller for named stream elements. For raw byte
+  splitting and complete text code points, see the upload adapters above.
 - The package is not yet published.

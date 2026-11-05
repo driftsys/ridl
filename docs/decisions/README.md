@@ -660,7 +660,10 @@ other entry below is Accepted.
   WebSocket server carries uploads as
   [D-30 records](../design/ridl-transport-ws.md). The TypeScript upload methods
   and their limits are recorded in [D-23](../design/ridl-transport-ws-ts.md).
-  Calls with two or more parameter streams remain outside the Rust face
+  The 2026-11-05 amendment records the generated typed reply, upload and duplex
+  functions, whose contracts and codec limits are owned by
+  [the codec table record](../design/ts-codec-table.md#stream-functions). Calls
+  with two or more parameter streams remain outside the Rust face
   (driftsys/ridl#1224).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family

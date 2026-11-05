@@ -457,13 +457,13 @@ ridl.codegen.v1.PodbufField.source = 1 singular ridl.codegen.v1.PodbufSource
 ridl.codegen.v1.PodbufFlagBit.bit = 2 singular uint32
 ridl.codegen.v1.PodbufFlagBit.flags = 1 singular uint32
 ridl.codegen.v1.PodbufForm.boolean = 10 singular bool oneof=kind
-ridl.codegen.v1.PodbufForm.descriptor = 17 singular ridl.codegen.v1.PodbufDescriptor oneof=kind
 ridl.codegen.v1.PodbufForm.enum = 13 singular ridl.codegen.v1.PodbufEnum oneof=kind
 ridl.codegen.v1.PodbufForm.enum_set = 14 singular ridl.codegen.v1.PodbufEnumSet oneof=kind
 ridl.codegen.v1.PodbufForm.float = 12 singular ridl.codegen.v1.FloatWidth oneof=kind
 ridl.codegen.v1.PodbufForm.inline_array = 16 singular ridl.codegen.v1.PodbufInlineArray oneof=kind
 ridl.codegen.v1.PodbufForm.inline_head = 15 singular uint32 oneof=kind
 ridl.codegen.v1.PodbufForm.int = 11 singular ridl.codegen.v1.PodbufInt oneof=kind
+ridl.codegen.v1.PodbufForm.tail_descriptor = 17 singular ridl.codegen.v1.PodbufDescriptor oneof=kind
 ridl.codegen.v1.PodbufHead.align = 3 singular uint32
 ridl.codegen.v1.PodbufHead.arm = 13 singular ridl.codegen.v1.ArmHead oneof=source
 ridl.codegen.v1.PodbufHead.declaration = 10 singular uint32 oneof=source

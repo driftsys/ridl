@@ -1054,7 +1054,7 @@ impl<'a> Header<'a> {
                 self.type_names[*index as usize].clone()
             }
             Kind::InlineArray(array) => return self.base_type(array.element.as_ref()?),
-            Kind::Descriptor(descriptor) => match descriptor.kind.as_ref()? {
+            Kind::TailDescriptor(descriptor) => match descriptor.kind.as_ref()? {
                 Descriptor::Array(_) | Descriptor::Map(_) => "ridl_podbuf_array_desc".to_string(),
                 Descriptor::Text(_) | Descriptor::Bytes(_) | Descriptor::Arms(_) => {
                     "ridl_podbuf_desc".to_string()
@@ -1411,7 +1411,7 @@ impl<'a> Header<'a> {
                         }
                         ("const uint8_t *".to_string(), "", "", false, inline_bytes)
                     }
-                    Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+                    Kind::TailDescriptor(descriptor) => match descriptor.kind.as_ref() {
                         Some(Descriptor::Text(_)) => (
                             "const char *".to_string(),
                             ", uint32_t *len",

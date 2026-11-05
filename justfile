@@ -138,6 +138,10 @@ test:
         # `ridl-transport-ws`, so its test target `descriptor`, which requires
         # the feature, runs only from this line.
         cargo test --locked -p ridl-transport-ws --features descriptor
+        # The server is a separate workspace and depends on this generated API
+        # and on the catalog descriptor its main.rs embeds.
+        cargo run --locked -p ridl-cli -- build examples/docstore --emit rust --emit catalog --out-dir examples/docstore/generated
+        cargo test --locked --manifest-path examples/docstore/server/Cargo.toml
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -2960,7 +2964,8 @@ ts-npm-check:
 # and e2e/provide_test.ts against them. Tests start the executables from
 # RIDL_TRANSPORT_WS_SERVER and RIDL_DEBUG_GATEWAY_FIXTURE respectively.
 # Resolve both through `CARGO_TARGET_DIR` where set and pass absolute paths
-# because the tests run from the package directory.
+# because the tests run from the package directory. The generated docstore
+# program then checks bytes, named chunks and duplex echoes against its server.
 ts-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -2973,9 +2978,55 @@ ts-e2e:
     cargo build --locked -p ridl-transport-ws --features descriptor --example debug_gateway_fixture
     fixture="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/debug_gateway_fixture"
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
-    cd packages/ridl-transport-ws
-    RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
-    RIDL_DEBUG_GATEWAY_FIXTURE="$fixture" deno test --allow-read --allow-net --allow-run --allow-env=RIDL_DEBUG_GATEWAY_FIXTURE e2e/provide_test.ts
+    (cd packages/ridl-transport-ws && RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts)
+    (cd packages/ridl-transport-ws && RIDL_DEBUG_GATEWAY_FIXTURE="$fixture" deno test --allow-read --allow-net --allow-run --allow-env=RIDL_DEBUG_GATEWAY_FIXTURE e2e/provide_test.ts)
+    "{{just_executable()}}" _docstore-web-generate
+    docstore_server="$(cd "${CARGO_TARGET_DIR:-examples/docstore/server/target}" && pwd)/debug/docstore-server"
+    (cd examples/docstore/web && deno run --cached-only -A main.ts "$docstore_server")
+
+# Generate and check the document store's real codecs and both consumers.
+# This helper needs no socket; ts-e2e runs the program after it builds.
+[private]
+_docstore-web-generate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+    if ! command -v flatc >/dev/null 2>&1 || [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
+        echo "_docstore-web-generate: flatc version $flatc_version is required." >&2
+        exit 1
+    fi
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "_docstore-web-generate: deno is required; run ./bootstrap." >&2
+        exit 1
+    fi
+    if [ ! -d "$(rustc --print sysroot)/lib/rustlib/wasm32-unknown-unknown" ]; then
+        echo "_docstore-web-generate: run 'rustup target add wasm32-unknown-unknown'." >&2
+        exit 1
+    fi
+    cargo build --locked -p ridl-cli
+    cli="${CARGO_TARGET_DIR:-target}/debug/ridl"
+    "$cli" build examples/docstore --emit rust --emit catalog --out-dir examples/docstore/generated
+    "$cli" build examples/docstore --emit typescript --emit flatbuffers --out-dir examples/docstore/web/generated
+    flatc --ts --gen-object-api -I examples/docstore/web/generated -o examples/docstore/web/generated examples/docstore/web/generated/docstore.api.fbs
+    cargo fmt --manifest-path examples/docstore/server/Cargo.toml --check
+    cargo fmt --manifest-path examples/docstore/consumer/Cargo.toml --check
+    cargo clippy --manifest-path examples/docstore/server/Cargo.toml --locked --all-targets --no-deps -- -D warnings
+    cargo build --manifest-path examples/docstore/server/Cargo.toml --locked
+    cargo clippy --manifest-path examples/docstore/consumer/Cargo.toml --locked --no-deps -- -D warnings
+    # The server and consumer are separate workspaces. Give the generated crate
+    # its own temporary workspace for Cargo's package feature selection.
+    cat >> examples/docstore/generated/Cargo.toml <<'TOML'
+    [workspace]
+    [patch.crates-io]
+    ridl-rt = { path = "../../../crates/ridl-rt" }
+    TOML
+    cargo generate-lockfile --offline --manifest-path examples/docstore/generated/Cargo.toml
+    wasm_target="${CARGO_TARGET_DIR:-examples/docstore/generated/target}"
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort \
+        cargo rustc --manifest-path examples/docstore/generated/Cargo.toml --locked --release \
+        --target wasm32-unknown-unknown --crate-type cdylib --no-default-features --features wasm-exports
+    cp "$wasm_target/wasm32-unknown-unknown/release/docstore_api.wasm" examples/docstore/web/generated/docstore_api.wasm
+    (cd examples/docstore/web && deno fmt --check && deno lint && deno check main.ts check_test.ts && deno test check_test.ts)
 
 # The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
 # `deno` checks, the TypeScript types, codec module and `.fbs` schema that
@@ -3034,6 +3085,13 @@ _cabin-web-generate name:
 # crates/ridl-backend-ts/tests/fixtures/codec-strict, whose strict enums and
 # strict enum sets refuse one with the `variant` rule. `cabin-ws-demo` runs it
 # once, after `_cabin-web-generate` has checked the `flatc` and `deno` versions.
+# The codec-streams fixture checks reply streams, uploads and duplex calls, named element
+# verification, raw bytes, UTF-8 text, typed replies of upload queries, request
+# verification for every form, and table-name collisions with stream locals.
+# FakeSocket tests check upload credit and refusal behavior, and for duplex
+# calls the separate reply credit, upload close and cancel, abort and refusal. The separate
+# generated-only.deno.json check excludes transport imports. Its raw-only module
+# checks an induced request without a domain namespace import.
 [private]
 _codec-ts-check:
     #!/usr/bin/env bash
@@ -3084,6 +3142,32 @@ _codec-ts-check:
     deno lint --config "$strict/deno.json" "$strict/strict.demo.codec.ts"
     deno check --config "$strict/deno.json" "$strict/strict.demo.codec.ts" "$strict/strict.demo.ts"
     deno test --config "$strict/deno.json" "$strict/strict_test.ts"
+    # The fifth fixture: verified named elements, raw bytes and UTF-8 text for
+    # replies and uploads, typed upload-query replies, and FakeSocket credit
+    # and refusal tests. Check generated-only.deno.json separately.
+    streams="$tmp/streams"
+    mkdir -p "$streams"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-streams --emit typescript --emit flatbuffers --out-dir "$streams"
+    flatc --ts --gen-object-api -I "$streams" -o "$streams" "$streams/streams.demo.fbs"
+    for config in deno.json generated-only.deno.json browser.deno.json; do
+        sed -e "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" -e "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-transport-ws/#$PWD/packages/ridl-transport-ws/#" crates/ridl-backend-ts/tests/fixtures/codec-streams/"$config" > "$streams/$config"
+    done
+    cp crates/ridl-backend-ts/tests/fixtures/codec-streams/streams_test.ts "$streams/"
+    deno lint --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    deno check --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    deno check --config "$streams/generated-only.deno.json" "$streams/streams.demo.codec.ts"
+    deno check --config "$streams/browser.deno.json" "$streams/streams.demo.codec.ts"
+    deno test --config "$streams/deno.json" "$streams/streams_test.ts"
+    # An induced-request-only module imports no unused domain namespace.
+    raw="$streams/raw-only"
+    mkdir -p "$raw/source" "$raw/generated"
+    printf 'package raw.only\n/// Raw bytes.\ninterface Raw {\n  /// Reads bytes.\n  query fetch(): <bytes> @[..50ms]\n}\n' > "$raw/source/raw.ridl"
+    printf '[package]\nname = "raw.only"\nversion = "1.0.0"\n[backend.rust]\nencodings = ["flatbuffers"]\n[backend.typescript]\ncodec = true\n' > "$raw/source/ridl.toml"
+    "$target/debug/ridl" build "$raw/source" --emit typescript --emit flatbuffers --out-dir "$raw/generated"
+    flatc --ts --gen-object-api -I "$raw/generated" -o "$raw/generated" "$raw/generated/raw.only.fbs"
+    cp "$streams/deno.json" "$raw/generated/deno.json"
+    deno lint --config "$raw/generated/deno.json" "$raw/generated/raw.only.codec.ts"
+    deno check --config "$raw/generated/deno.json" "$raw/generated/raw.only.codec.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because

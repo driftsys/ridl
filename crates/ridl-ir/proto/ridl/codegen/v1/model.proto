@@ -1478,7 +1478,7 @@ message PodbufForm {
     // An exact-length array or exact-length `bytes`, inline with no length.
     PodbufInlineArray inline_array = 16;
     // A descriptor to data in the tail.
-    PodbufDescriptor descriptor = 17;
+    PodbufDescriptor tail_descriptor = 17;
   }
 }
 

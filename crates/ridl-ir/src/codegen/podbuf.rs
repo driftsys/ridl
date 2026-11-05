@@ -480,7 +480,7 @@ impl Walk<'_> {
                     count: *count,
                 }))
             }
-            Form::Descriptor(descriptor) => Kind::Descriptor(Box::new(self.descriptor(
+            Form::Descriptor(descriptor) => Kind::TailDescriptor(Box::new(self.descriptor(
                 descriptor,
                 path,
                 key,

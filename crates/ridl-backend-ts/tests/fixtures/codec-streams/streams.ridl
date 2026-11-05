@@ -1,0 +1,203 @@
+package streams.demo
+
+/// A sequence number.
+type Count : integer [0..100]
+
+/// A bounded byte element.
+type Data : bytes [0..32]
+
+/// A bounded text element.
+type Text : string [0..32]
+
+/// A numbered element.
+struct Chunk {
+  /// The sequence number.
+  value: Count
+}
+
+/// A result element.
+union Choice {
+  /// A numbered value.
+  ok: Chunk
+  /// A failure code.
+  err: Count
+}
+
+/// An extensible status.
+open enum Status {
+  /// Idle.
+  IDLE = 0
+  /// Active.
+  ACTIVE = 1
+}
+
+/// Streamed replies and an ordinary query.
+interface Feed {
+  reserved retired
+  /// Reads sequence numbers.
+  query scalars(): <Count> @[..50ms]
+  /// Reads numbered elements for [Count].
+  /// @since 1.0.0
+  /// @deprecated Use scalars.
+  query structs(
+    /// The first sequence number.
+    seed: Count
+  ): <Chunk> @[..50ms]
+  /// Reads results with parameter names also used by generated bindings.
+  query unions(
+    /// The session number.
+    session: Count,
+    /// A second number.
+    session1: Count,
+    /// A selection.
+    opts: Count
+  ): <Choice> @[..50ms]
+  /// Reads statuses.
+  query statuses(): <Status> @[..50ms]
+  /// Reads bounded byte elements.
+  query data(): <Data> @[..50ms]
+  /// Reads bounded text elements.
+  query labels(): <Text> @[..50ms]
+  /// Reads raw bytes for a sequence number.
+  query readBytes(seed: Count): <bytes> @[..50ms]
+  /// Reads UTF-8 text.
+  query text(): <string> @[..50ms]
+  /// Reads raw bytes with a 64-byte payload limit.
+  query zero(): <bytes> @[..50ms]
+  /// Reads one ordinary value.
+  query latest(): Count @[..50ms]
+  /// Receives bytes.
+  command upload(data: <bytes>) @[..50ms]
+  /// Receives and replies concurrently.
+  query duplex(data: <bytes>): <Chunk> @[..50ms]
+  /// Exchanges numbered elements for [Count].
+  query duplexNamed(
+    /// The first [Count].
+    seed: Count,
+    /// The numbered values.
+    values: <Chunk>,
+    /// The last [Count].
+    tail: Count
+  ): <Chunk> @[..50ms]
+  /// Exchanges UTF-8 text.
+  query duplexText(values: <string>): <string> @[..50ms]
+  /// Sends numbered elements and receives bytes.
+  query duplexBytes(values: <Chunk>): <bytes> @[..50ms]
+  /// Receives two streams.
+  command multiple(first: <bytes>, second: <string>) @[..50ms]
+  /// Reads the last live streamed member.
+  query fetch(): <bytes> @[..50ms]
+  /// Receives numbered elements for [Count].
+  /// @see Count
+  command uploadNamed(
+    /// The first [Count].
+    seed: Count,
+    /// The numbered values.
+    values: <Chunk>,
+    /// The last [Count].
+    tail: Count
+  ) @[..50ms]
+  /// Receives one named bytes element per write.
+  command uploadData(values: <Data>) @[..50ms]
+  /// Receives UTF-8 text.
+  command uploadText(seed: Count, values: <string>) @[..50ms]
+  /// Receives data and returns a result.
+  query uploadChoice(seed: Count, values: <Chunk>, tail: Count): UploadResult @[..50ms]
+  /// Receives data and returns a tuple.
+  query uploadTuple(values: <bytes>): (first: Count, tail: Count) @[..50ms]
+  /// Receives data with an unsupported inline fallible reply.
+  query uploadFallible(values: <bytes>): Chunk | UploadError @[..50ms]
+
+}
+
+/// An interface with the same member name.
+interface Other {
+  /// Reads bytes.
+  query fetch(): <bytes> @[..50ms]
+}
+
+/// Permission values.
+enum Permission {
+  /// Read access.
+  READ = 0
+}
+
+/// Permission bits.
+enumset Flags : Permission
+
+/// A table named session.
+interface session {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named opts.
+interface opts {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named entry.
+interface entry {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named args.
+interface args {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named raw.
+interface raw {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named element.
+interface element {
+  /// Reads numbered elements.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <Chunk> @[..50ms]
+}
+
+/// A table named requestType.
+interface requestType {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named elementType.
+interface elementType {
+  /// Reads numbered elements.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <Chunk> @[..50ms]
+}
+
+/// A table named streamEntry.
+interface streamEntry {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named streamEntry1.
+interface streamEntry1 {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// An upload failure.
+error union UploadError {
+  /// The upload is unavailable.
+  unavailable: UploadFault
+}
+
+/// An unavailable upload.
+error struct UploadFault {}
+
+/// The result of an upload.
+union UploadResult {
+  /// A received value.
+  ok: Chunk
+  /// An upload failure.
+  err: UploadError
+}

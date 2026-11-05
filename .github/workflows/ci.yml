@@ -274,6 +274,9 @@ jobs:
       - run: just compat-check
 
   # The TypeScript packages packages/ridl-runtime and packages/ridl-transport-ws.
+  # ts-e2e also generates the docstore codecs and wasm, builds and lints its
+  # Rust server, lints its Rust consumer, and runs its Deno validators and web
+  # program.
   # `ts-check`, `ts-npm-check`, `ts-e2e` and `cabin-ws-demo`
   # are members of `just build`; `ts-browser-e2e` and `cabin-browser-demo` are
   # not, because a contributor's build needs no browser, so `gate-parity` does
@@ -324,8 +327,7 @@ jobs:
           "$HOME/.local/bin/deno" --version
       - run: just ts-check
       - run: just ts-npm-check
-      - run: just ts-e2e
-      # `just cabin-ws-demo` and `just cabin-browser-demo` need `flatc` at the
+      # `just ts-e2e`, `just cabin-ws-demo` and `just cabin-browser-demo` need `flatc` at the
       # version the recipes check, which is read from .flatc-version, the one
       # place it is pinned. The official release archive is used because the
       # distribution packages carry other versions.
@@ -340,6 +342,7 @@ jobs:
           chmod +x "$HOME/.local/bin/flatc"
           "$HOME/.local/bin/flatc" --version
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: just ts-e2e
       - run: just cabin-ws-demo
       - run: just ts-browser-e2e
         env:

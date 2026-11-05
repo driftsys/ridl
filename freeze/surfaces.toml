@@ -41,7 +41,7 @@ baseline = "91687651ee97bc2fe7ac162dba2d1e4168ff6653"
 
 [[surface]]
 name = "codegen-protocol"
-baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
+baseline = "4a6098f88f840445808e34a42b4335c2340e9e64"
 
 [[surface]]
 name = "generated-crate"
