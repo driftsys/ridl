@@ -3519,7 +3519,8 @@ release *ARGS: toolchain-check
 # the same pre-release matches), the cabin example's manifests, lockfiles and
 # `deno.lock`, the editor manifest (an `editor-v` tag must equal it), the root
 # `Cargo.lock` (one entry per crate, and a `version_files` entry rewrites only
-# the first match) and the frozen generated manifests.
+# the first match), the frozen generated manifests and the identity fixture of
+# ridl-rt-conformance, which embeds the compiler version.
 # xtask/tests/release_derived_pins.rs fails when one of them does not follow
 # the workspace version.
 release-sync:
@@ -3547,6 +3548,12 @@ release-sync:
     just _cabin-generate
     (cd examples/cabin && cargo update --workspace --offline)
     cargo run --locked --package xtask -- freeze update
+    # The identity fixture embeds the compiler version. The procedure is the
+    # one in crates/ridl-rt-conformance/fixtures/identity/README.md.
+    identity_output="$(mktemp -d)"
+    trap 'rm -rf "$identity_output"' EXIT
+    cargo run --locked -p ridl-cli -- build crates/ridl-rt-conformance/fixtures/identity --emit deployment --out-dir "$identity_output"
+    cp "$identity_output/alpha.Bench.deployment.binfb" crates/ridl-rt-conformance/fixtures/identity/identity.deployment.binfb
 
 # Push the release commit that `just release` made, wait for the `ci` run on it
 # to pass, then push its two tags, which start the crates.io, npm and editor
