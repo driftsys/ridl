@@ -429,7 +429,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-ts/tests/codec.rs",
-        lines: 20,
+        lines: 22,
         why: "a test fixture over `ridl_ir::codegen::v1::Model::interfaces`, \
               which is lowered from `Package::shapes()` and so holds an inline \
               shape too: the tests edit and rename the lowered model's \

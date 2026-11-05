@@ -3095,11 +3095,12 @@ _codec-ts-check:
     "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-streams --emit typescript --emit flatbuffers --out-dir "$streams"
     flatc --ts --gen-object-api -I "$streams" -o "$streams" "$streams/streams.demo.fbs"
     for config in deno.json generated-only.deno.json browser.deno.json; do
-        sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-streams/"$config" > "$streams/$config"
+        sed -e "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" -e "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-transport-ws/#$PWD/packages/ridl-transport-ws/#" crates/ridl-backend-ts/tests/fixtures/codec-streams/"$config" > "$streams/$config"
     done
     cp crates/ridl-backend-ts/tests/fixtures/codec-streams/streams_test.ts "$streams/"
-    deno lint --config "$streams/generated-only.deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    deno lint --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
     deno check --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    deno check --config "$streams/generated-only.deno.json" "$streams/streams.demo.codec.ts"
     deno check --config "$streams/browser.deno.json" "$streams/streams.demo.codec.ts"
     deno test --config "$streams/deno.json" "$streams/streams_test.ts"
     # An induced-request-only module imports no unused domain namespace.

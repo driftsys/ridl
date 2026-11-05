@@ -17,9 +17,10 @@
 //! and hash, the qualified names of the payload types, the text of the rule
 //! codes of the wasm module, and one member table per declared interface,
 //! whose entry carries the member's payload limit when the model records one.
-//! Reply-only stream queries get typed functions over a runtime `StreamSession`:
+//! Stream queries and commands get typed functions over a runtime `StreamSession`:
 //! they verify requests before sending, verify named elements before decoding,
-//! decode raw text as UTF-8, and preserve raw byte streams.
+//! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
+//! verify whole named elements, and split raw bytes or text at the member limit.
 //!
 //! A named scalar of another package converts by a type assertion, an enum set
 //! of another package by a checking function of the module, and a payload type
@@ -132,10 +133,13 @@ struct ForeignPayload {
     name: String,
 }
 
-/// A reply-only stream whose request and element codecs were resolved during discovery.
-struct ReplyStream<'a> {
+/// A supported stream call whose payload codecs were resolved during discovery.
+struct StreamCall<'a> {
     interaction: &'a v1::Interaction,
-    query: &'a v1::QueryShape,
+    params: Vec<&'a v1::Param>,
+    named_request: bool,
+    upload: bool,
+    reply: Option<(String, String)>,
     request: String,
     element: Option<String>,
     element_type: String,
@@ -183,7 +187,7 @@ struct Codec<'a> {
     /// qualified name: each gets a function that checks a value against the
     /// declared bits.
     foreign_strict_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
-    reply_streams: BTreeMap<(u32, u32), ReplyStream<'a>>,
+    stream_calls: BTreeMap<(u32, u32), StreamCall<'a>>,
     stream_omissions: BTreeMap<(u32, u32), String>,
     needs_domain: bool,
 }
@@ -245,7 +249,7 @@ impl<'a> Codec<'a> {
             foreign_open_sets: BTreeMap::new(),
             reached_strict: BTreeSet::new(),
             foreign_strict_sets: BTreeMap::new(),
-            reply_streams: BTreeMap::new(),
+            stream_calls: BTreeMap::new(),
             stream_omissions: BTreeMap::new(),
             needs_domain: false,
         };
@@ -321,14 +325,14 @@ impl<'a> Codec<'a> {
             }
         }
         let mut names = codec.check_names()?;
-        for stream in codec.reply_streams.values_mut() {
+        for stream in codec.stream_calls.values_mut() {
             let mut binding = "streamEntry".to_string();
             let mut suffix = 1;
             while !names.insert(binding.clone()) {
                 binding = format!("streamEntry{suffix}");
                 suffix += 1;
             }
-            stream.bindings = stream_bindings(&stream.query.params, &binding);
+            stream.bindings = stream_bindings(&stream.params, &binding);
             stream.entry_binding = binding;
         }
         Ok(codec)
@@ -340,7 +344,7 @@ impl<'a> Codec<'a> {
     fn has_codec_payload(&self) -> bool {
         self.has_local_payload()
             || !self.foreign_payloads.is_empty()
-            || !self.reply_streams.is_empty()
+            || !self.stream_calls.is_empty()
     }
 
     /// Whether the package has a payload type of its own: the one case the
@@ -390,7 +394,7 @@ impl<'a> Codec<'a> {
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
-        if !self.reply_streams.is_empty() {
+        if !self.stream_calls.is_empty() {
             for helper in [
                 "StreamSession",
                 "StreamOptions",
@@ -405,11 +409,23 @@ impl<'a> Codec<'a> {
                     format!("runtime stream helper {helper}"),
                 )?;
             }
-            for (form, helper) in [("elements", "decodeStream"), ("text", "decodeTextStream")] {
+            if self.stream_calls.values().any(|s| s.reply.is_some()) {
+                register(
+                    "decodeStreamReply".to_string(),
+                    "stream reply helper".to_string(),
+                )?;
+            }
+            for (upload, form, helper) in [
+                (false, "elements", "decodeStream"),
+                (false, "text", "decodeTextStream"),
+                (true, "elements", "encodeUpload"),
+                (true, "bytes", "byteUpload"),
+                (true, "text", "textUpload"),
+            ] {
                 if self
-                    .reply_streams
+                    .stream_calls
                     .values()
-                    .any(|stream| stream.form == form)
+                    .any(|stream| stream.form == form && stream.upload == upload)
                 {
                     register(
                         helper.to_string(),
@@ -505,8 +521,7 @@ impl<'a> Codec<'a> {
             if let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity {
                 register(spelled.declared.clone(), spelled.declared.clone())?;
                 for slot in &interface.slots {
-                    if let Some(stream) = self.reply_streams.get(&(interface.number, slot.ordinal))
-                    {
+                    if let Some(stream) = self.stream_calls.get(&(interface.number, slot.ordinal)) {
                         let member = stream
                             .interaction
                             .name
@@ -1204,7 +1219,7 @@ impl<'a> Codec<'a> {
             );
         }
 
-        if !self.reply_streams.is_empty() {
+        if !self.stream_calls.is_empty() {
             self.emit_stream_helpers(&mut body);
         }
         for interface in &self.model.interfaces {
@@ -1221,16 +1236,25 @@ impl<'a> Codec<'a> {
         // payload roots are all foreign has no table, so `flatc` writes no
         // barrel for it to import.
         let local = self.has_local_payload();
-        if !self.reply_streams.is_empty() {
+        if !self.stream_calls.is_empty() {
             out.push_str(
                 "import type { StreamSession, StreamOptions } from \"@driftsys/ridl-runtime\";\n",
             );
             let mut helpers = vec!["CatalogMismatch", "CodecError", "StreamError"];
-            if self.reply_streams.values().any(|s| s.form == "elements") {
-                helpers.push("decodeStream");
-            }
-            if self.reply_streams.values().any(|s| s.form == "text") {
-                helpers.push("decodeTextStream");
+            for (upload, form, helper) in [
+                (false, "elements", "decodeStream"),
+                (false, "text", "decodeTextStream"),
+                (true, "elements", "encodeUpload"),
+                (true, "bytes", "byteUpload"),
+                (true, "text", "textUpload"),
+            ] {
+                if self
+                    .stream_calls
+                    .values()
+                    .any(|s| s.form == form && s.upload == upload)
+                {
+                    helpers.push(helper);
+                }
             }
             let _ = writeln!(
                 out,
@@ -1922,8 +1946,6 @@ impl<'a> Codec<'a> {
             Some("multiple parameter streams are not supported")
         } else if uploads != 0 && reply {
             Some("duplex streams are not generated yet")
-        } else if uploads != 0 {
-            Some("parameter streams are not generated yet")
         } else {
             None
         };
@@ -1931,17 +1953,40 @@ impl<'a> Codec<'a> {
             self.stream_omissions.insert(key, reason.to_string());
             return Ok(());
         }
-        let Some(v1::interaction::Shape::Query(query)) = &interaction.shape else {
-            return refuse(format!(
-                "malformed codegen model: `{path}` has no streamed query reply"
-            ));
+        let (request_payload, request_tuple, query) = match &interaction.shape {
+            Some(v1::interaction::Shape::Query(q)) => {
+                (q.request.as_ref(), q.request_tuple.as_ref(), Some(q))
+            }
+            Some(v1::interaction::Shape::Command(c)) => {
+                (c.request.as_ref(), c.request_tuple.as_ref(), None)
+            }
+            _ => unreachable!("validated call"),
         };
+        if let Some(q) = query
+            && matches!(
+                q.reply.as_ref().and_then(|r| r.kind.as_ref()),
+                Some(v1::reply::Kind::Fallible(_))
+            )
+            && q.reply_payload.is_none()
+            && q.reply_tuple.is_none()
+        {
+            self.stream_omissions
+                .insert(key, "inline fallible replies have no codec".to_string());
+            return Ok(());
+        }
         let shape = &interaction.streams[0];
         let previous_locals = self.used_locals.clone();
         let previous_payloads = self.foreign_payloads.clone();
         let previous_types = self.foreign_types.clone();
         let previous_domain = self.needs_domain;
-        let request = self.payload(query.request.as_ref(), query.request_tuple.as_ref(), &path)?;
+        let request = self.payload(request_payload, request_tuple, &path)?;
+        let result = if uploads == 1 {
+            query
+                .map(|q| self.payload(q.reply_payload.as_ref(), q.reply_tuple.as_ref(), &path))
+                .transpose()?
+        } else {
+            None
+        };
         let (form, element, element_type) = match shape.form() {
             v1::StreamForm::Elements => {
                 let reference = shape.element.as_ref().expect("validated element");
@@ -1975,7 +2020,8 @@ impl<'a> Codec<'a> {
         let missing = request
             .as_ref()
             .err()
-            .or_else(|| element.as_ref().and_then(|e| e.as_ref().err()));
+            .or_else(|| element.as_ref().and_then(|e| e.as_ref().err()))
+            .or_else(|| result.as_ref().and_then(|r| r.as_ref().err()));
         if let Some(missing) = missing {
             self.stream_omissions
                 .insert(key, format!("{missing} has no finite FlatBuffers bound"));
@@ -1985,8 +2031,17 @@ impl<'a> Codec<'a> {
             self.needs_domain = previous_domain;
             return Ok(());
         }
+        let params: Vec<_> = params
+            .iter()
+            .filter(|p| {
+                !matches!(
+                    p.r#type.as_ref().and_then(|t| t.kind.as_ref()),
+                    Some(v1::r#type::Kind::Stream(_))
+                )
+            })
+            .collect();
         let mut param_types = Vec::new();
-        for param in &query.params {
+        for param in &params {
             let Some(ty) = &param.r#type else {
                 return refuse(format!(
                     "malformed codegen model: `{path}` has a parameter without a type"
@@ -1998,11 +2053,33 @@ impl<'a> Codec<'a> {
             }
             param_types.push(spelled);
         }
-        self.reply_streams.insert(
+        let reply = if let (Some(q), Some(result)) = (query, result) {
+            let ty = if let Some(tuple) = &q.reply_tuple {
+                tuple_name(&self.model.tuples[tuple.index as usize]).to_string()
+            } else if let Some(reference) = q.reply_payload.as_ref().and_then(|p| p.r#type.as_ref())
+            {
+                self.ts_type(
+                    &v1::Type {
+                        kind: Some(v1::r#type::Kind::Named(reference.clone())),
+                        ..Default::default()
+                    },
+                    &path,
+                )?
+            } else {
+                unreachable!("resolved reply payload")
+            };
+            Some((result.expect("bounded reply"), ty))
+        } else {
+            None
+        };
+        self.stream_calls.insert(
             key,
-            ReplyStream {
+            StreamCall {
                 interaction,
-                query,
+                params,
+                named_request: request_payload.is_some(),
+                upload: uploads == 1,
+                reply,
                 request: request.expect("bounded request"),
                 element: element.map(|e| e.expect("bounded element")),
                 element_type,
@@ -2025,14 +2102,17 @@ impl<'a> Codec<'a> {
             out.push_str("    void error;\n");
         }
         out.push_str("    throw new StreamError({ category: \"corrupt\" });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
+        if self.stream_calls.values().any(|s| s.reply.is_some()) {
+            out.push_str("\nfunction decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  return payload.decode(bytes);\n}\n");
+        }
     }
 
-    fn emit_reply_stream(
+    fn emit_stream_call(
         &self,
         out: &mut String,
         name: &str,
         member: &str,
-        stream: &ReplyStream<'a>,
+        stream: &StreamCall<'a>,
     ) {
         let params = stream
             .bindings
@@ -2046,11 +2126,22 @@ impl<'a> Codec<'a> {
         let entry_binding = &stream.entry_binding;
         let _ = writeln!(out, "const {entry_binding} = {name}.{member};\n");
         out.push_str(&self.stream_docs(stream));
+        let returns = if stream.upload {
+            let result = stream.reply.as_ref().map_or_else(
+                || "accepted: Promise<void>".to_string(),
+                |(_, ty)| format!("reply: Promise<{ty}>"),
+            );
+            format!(
+                "{{ upload: WritableStream<{}>; {result} }}",
+                stream.element_type
+            )
+        } else {
+            format!("ReadableStream<{}>", stream.element_type)
+        };
         let _ = writeln!(
             out,
-            "export function {name}_{member}({}): ReadableStream<{}> {{",
-            signature.join(", "),
-            stream.element_type
+            "export function {name}_{member}({}): {returns} {{",
+            signature.join(", ")
         );
         let _ = writeln!(out, "  const entry = {entry_binding};");
         let limit = if stream.interaction.limit.is_some() {
@@ -2063,11 +2154,13 @@ impl<'a> Codec<'a> {
         if stream.element.is_some() {
             out.push_str("  const element = entry.streams[0].element;\n  const elementType = session.codec.typeId(element.type);\n");
         }
-        let value = if stream.query.request.is_some() {
+        if stream.reply.is_some() {
+            out.push_str("  const replyType = session.codec.typeId(entry.reply.type);\n");
+        }
+        let value = if stream.named_request {
             stream.bindings[0].clone()
         } else {
             let fields = stream
-                .query
                 .params
                 .iter()
                 .zip(&stream.bindings)
@@ -2084,6 +2177,37 @@ impl<'a> Codec<'a> {
             out,
             "  const args = encodeStreamRequest(session, entry.request, requestType, {value}, {limit});"
         );
+        if stream.upload {
+            let method = if stream.reply.is_some() {
+                "queryWithUpload"
+            } else {
+                "commandStream"
+            };
+            let _ = writeln!(
+                out,
+                "  const raw = session.transport.{method}(entry.iface, entry.ord, args, opts);"
+            );
+            let upload_limit = if stream.interaction.limit.is_some() {
+                "entry.limit"
+            } else {
+                "16128"
+            };
+            let adapter = match stream.form {
+                "elements" => format!(
+                    "encodeUpload(raw.upload, (value: {}) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), {upload_limit})",
+                    stream.element_type
+                ),
+                "text" => format!("textUpload(raw.upload, {upload_limit})"),
+                _ => format!("byteUpload(raw.upload, {upload_limit})"),
+            };
+            let _ = writeln!(out, "  const upload = {adapter};");
+            if stream.reply.is_some() {
+                out.push_str("  const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));\n  return { upload, reply };\n}\n");
+            } else {
+                out.push_str("  return { upload, accepted: raw.accepted };\n}\n");
+            }
+            return;
+        }
         out.push_str(
             "  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);\n",
         );
@@ -2096,7 +2220,7 @@ impl<'a> Codec<'a> {
     }
 
     /// Reuses the domain renderer for canonical rules, links and doc tags.
-    fn stream_docs(&self, stream: &ReplyStream<'a>) -> String {
+    fn stream_docs(&self, stream: &StreamCall<'a>) -> String {
         let package = ridl_ir::v2::Package {
             name: self.package.to_string(),
             ..Default::default()
@@ -2122,7 +2246,7 @@ impl<'a> Codec<'a> {
             deprecated: i.deprecated.as_deref(),
         };
         let mut tags = Vec::new();
-        for (param, binding) in stream.query.params.iter().zip(&stream.bindings) {
+        for (param, binding) in stream.params.iter().zip(&stream.bindings) {
             let doc = crate::linked(&ctx, &param.doc, &param.links);
             if !doc.is_empty() {
                 tags.push(format!("@param {binding} - {doc}"));
@@ -2187,7 +2311,7 @@ impl<'a> Codec<'a> {
                 .map_or("", |name| name.declared.as_str());
             if !interaction.streams.is_empty() {
                 let key = (interface.number, slot.ordinal);
-                if let Some(stream) = self.reply_streams.get(&key) {
+                if let Some(stream) = self.stream_calls.get(&key) {
                     let element = stream
                         .element
                         .as_ref()
@@ -2197,9 +2321,20 @@ impl<'a> Codec<'a> {
                         .limit
                         .map(|n| format!(", limit: {n}"))
                         .unwrap_or_default();
+                    let kind = if interaction.kind() == v1::Kind::Command {
+                        "command"
+                    } else {
+                        "query"
+                    };
+                    let no = u32::from(stream.upload);
+                    let reply = stream
+                        .reply
+                        .as_ref()
+                        .map(|(codec, _)| format!(", reply: {codec}"))
+                        .unwrap_or_default();
                     let _ = writeln!(
                         out,
-                        "  {member}: {{ iface: {number}, ord: {}, kind: \"query\", request: {}, streams: [{{ no: 0, form: \"{}\"{element} }}]{limit} }},",
+                        "  {member}: {{ iface: {number}, ord: {}, kind: \"{kind}\", request: {}{reply}, streams: [{{ no: {no}, form: \"{}\"{element} }}]{limit} }},",
                         slot.ordinal, stream.request, stream.form
                     );
                 } else if let Some(reason) = self.stream_omissions.get(&key) {
@@ -2251,13 +2386,13 @@ impl<'a> Codec<'a> {
         }
         out.push_str("} as const;\n");
         for slot in &interface.slots {
-            if let Some(stream) = self.reply_streams.get(&(number, slot.ordinal)) {
+            if let Some(stream) = self.stream_calls.get(&(number, slot.ordinal)) {
                 let member = stream
                     .interaction
                     .name
                     .as_ref()
                     .map_or("", |n| n.declared.as_str());
-                self.emit_reply_stream(out, name, member, stream);
+                self.emit_stream_call(out, name, member, stream);
             }
         }
         Ok(())
@@ -2421,7 +2556,7 @@ impl<'a> Codec<'a> {
 }
 
 /// Allocates local bindings without shadowing generated locals or helper imports.
-fn stream_bindings(params: &[v1::Param], entry_binding: &str) -> Vec<String> {
+fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
     let reserved = [
         "session",
         "opts",
@@ -2429,6 +2564,13 @@ fn stream_bindings(params: &[v1::Param], entry_binding: &str) -> Vec<String> {
         "element",
         "requestType",
         "elementType",
+        "replyType",
+        "upload",
+        "reply",
+        "encodeUpload",
+        "byteUpload",
+        "textUpload",
+        "decodeStreamReply",
         "args",
         "raw",
         "bytes",

@@ -1238,10 +1238,9 @@ interface Cabin {
 /// typed upload callable is generated: its request holds only the non-stream
 /// parameters, so a plain call would carry an incomplete request.
 /// A member of the same interface without a stream keeps its entry. Every
-/// stream of the package is a parameter, so the members would otherwise have
-/// a representable entry: without the skip, the table lists them.
+/// stream of the package is a parameter and gets an upload entry and function.
 #[test]
-fn a_stream_member_has_no_entry_in_the_interface_table() {
+fn parameter_stream_members_have_entries_in_the_interface_table() {
     let output = ridlc::compile("stream-parameters.ridl", STREAM_PARAMETERS);
     assert!(
         output
@@ -1259,19 +1258,18 @@ fn a_stream_member_has_no_entry_in_the_interface_table() {
     );
     for member in ["replayTrace", "putBlob", "lookup"] {
         assert!(
-            !source.contains(&format!("  {member}: {{")),
-            "`{member}` has an entry in:\n{source}"
+            source.contains(&format!("  {member}: {{")),
+            "`{member}` has no upload entry in:\n{source}"
         );
-        let note = format!("  // {member} has no entry: parameter streams are not generated yet\n");
         assert!(
-            source.contains(&note),
-            "the skip of `{member}` has no note in:\n{source}"
+            source.contains(&format!("export function Cabin_{member}(")),
+            "missing upload function {member}"
         );
     }
 }
 
 /// A package with reply streams and parameter streams is accepted: reply-only
-/// queries get typed functions while uploads remain explicitly omitted.
+/// queries and uploads get typed functions.
 #[test]
 fn a_package_with_stream_replies_is_accepted() {
     let model = codegen::lower(&rust_fixture("streams.ridl"), &[]);
@@ -1793,7 +1791,11 @@ fn stream_reply_exports_match_model() {
     ];
     let actual: BTreeSet<_> = exported_functions(&source, "")
         .into_iter()
-        .filter(|name| !name.starts_with("encode") && !name.starts_with("decode"))
+        .filter(|name| {
+            !name.starts_with("encode")
+                && !name.starts_with("decode")
+                && !name.starts_with("Feed_upload")
+        })
         .collect();
     assert_eq!(
         actual,
@@ -1906,7 +1908,7 @@ fn stream_names_and_unsupported_shapes_are_explicit() {
         .optional = true;
     let source = module(&model, "streams.demo");
     for (member, reason) in [
-        ("upload", "parameter streams are not generated yet"),
+        ("uploadFallible", "inline fallible replies have no codec"),
         ("duplex", "duplex streams are not generated yet"),
         ("multiple", "multiple parameter streams are not supported"),
     ] {
@@ -2243,4 +2245,87 @@ fn stream_doc_links_qualify_every_local_target_spelling() {
             "{target}: {doc}"
         );
     }
+}
+
+#[test]
+fn generated_upload_encodes_only_plain_arguments() {
+    let source = module(&streams_model(), "streams.demo");
+    for (name, ty, result) in [
+        ("upload", "Uint8Array", "accepted: Promise<void>"),
+        ("uploadNamed", "t.Chunk", "accepted: Promise<void>"),
+        ("uploadData", "t.Data", "accepted: Promise<void>"),
+        ("uploadText", "string", "accepted: Promise<void>"),
+        ("uploadChoice", "t.Chunk", "reply: Promise<t.UploadResult>"),
+        (
+            "uploadTuple",
+            "Uint8Array",
+            "reply: Promise<FeedUploadTupleReply>",
+        ),
+    ] {
+        let signature = source
+            .lines()
+            .find(|line| line.starts_with(&format!("export function Feed_{name}(")));
+        assert!(signature.is_some(), "missing generated upload {name}");
+        let signature = signature.unwrap();
+        assert!(
+            signature.contains(&format!("upload: WritableStream<{ty}>; {result}")),
+            "{signature}"
+        );
+        assert!(!signature.contains("values:"), "{signature}");
+    }
+    let signature = source
+        .lines()
+        .find(|line| line.starts_with("export function Feed_uploadNamed("))
+        .unwrap();
+    assert!(
+        signature.contains("seed: t.Count, tail: t.Count, opts: StreamOptions"),
+        "{signature}"
+    );
+    let start = source.find("export function Feed_uploadNamed(").unwrap();
+    let doc = &source[source[..start].rfind("/**").unwrap()..start];
+    for text in [
+        "Receives numbered elements for {@link t.Count}.",
+        "@see {@link t.Count}",
+        "@param seed - The first {@link t.Count}.",
+        "@param tail - The last {@link t.Count}.",
+        "response within 50000 us",
+    ] {
+        assert!(doc.contains(text), "{doc}");
+    }
+    assert!(!source.contains("export function Feed_uploadFallible("));
+    assert!(
+        source.contains("// uploadFallible has no entry: inline fallible replies have no codec"),
+        "{source}"
+    );
+}
+
+#[test]
+fn upload_helper_and_function_names_are_checked() {
+    for helper in [
+        "encodeUpload",
+        "byteUpload",
+        "textUpload",
+        "decodeStreamReply",
+    ] {
+        let mut model = streams_model();
+        model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: helper.into(),
+            ..Default::default()
+        }));
+        let error = refusal(&model);
+        assert!(
+            error.contains(helper) && error.contains("helper"),
+            "{error}"
+        );
+    }
+    let mut model = streams_model();
+    model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+        declared: "Feed_uploadNamed".into(),
+        ..Default::default()
+    }));
+    let error = refusal(&model);
+    assert!(
+        error.contains("Feed.uploadNamed") && error.contains("Feed_uploadNamed"),
+        "{error}"
+    );
 }

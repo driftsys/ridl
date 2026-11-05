@@ -419,6 +419,10 @@ in the fixture so that the signature cannot accidentally declare either twice.
 
 ### Task 3: Generate typed uploads for commands and plain-reply queries
 
+Ruling: R-6-T3-3 — Use native writers; close after error rejects TypeError.
+
+Ruling: R-6-T3-5 — Drop empty query replies: RIDL-105 rejects `()` returns.
+
 **Base:** Task 2 accepted; Q4–Q6 answered. The fixture's upload cases are added
 here, so Task 2 does not leave tests expecting unimplemented upload exports.
 
@@ -443,11 +447,11 @@ export function textUpload(upload: WritableStream<Uint8Array>,
 Generate `<Interface>_<command>(session, ...nonStreamParams, opts)` returning
 `{ upload: WritableStream<Element>; accepted: Promise<void> }`; an upload query
 returns `{ upload: WritableStream<Element>; reply: Promise<Reply> }`. Use
-named/induced plain reply codecs, including a named result union and an empty
-induced reply object. An inline `T | E` with no codec remains an explicit
-omission; it is not raw bytes disguised as a typed reply. These functions return
-a writable; they do not take a pre-existing writable parameter. This is section
-8's `uploadFirmware` shape and needs Q4's acceptance of issue wording.
+named/induced plain reply codecs, including a named result union and an induced
+tuple reply. An inline `T | E` with no codec remains an explicit omission; it is
+not raw bytes disguised as a typed reply. These functions return a writable;
+they do not take a pre-existing writable parameter. This is section 8's
+`uploadFirmware` shape and needs Q4's acceptance of issue wording.
 
 - [ ] **Write and run RED tests**:
 
@@ -460,7 +464,7 @@ a writable; they do not take a pre-existing writable parameter. This is section
 | `remote_refusal_errors_typed_writer`            | After accepted resolves, inject contract-range and contract-utf8 while a typed write awaits credit. Pending/later writes and close reject with the same remote error; accepted stays resolved. No unhandled rejection occurs.                  | Ignore raw writer.closed rejection or replace the remote error with a generic local error. |
 | `abort_releases_a_credit_waiter`                | Abort while a write is credit-blocked rejects it, interrupts once, releases locks/timers and does not send another chunk.                                                                                                                      | Wait for the blocked write before forwarding abort.                                        |
 | `generated_upload_encodes_only_plain_arguments` | A stream between two ordinary parameters is excluded from request encoding. Correct method, target, bound and typed writable/result are used for command and query. A named scalar uses its root box, multiple arguments their induced struct. | Include the stream parameter in request packing or call commandStream for a query.         |
-| `plain_reply_is_verified_before_decode`         | A valid named-union/tuple/empty reply decodes to its value. Malformed/rule-invalid replies reject without decoder invocation. Early provider reply errors the open typed upload while resolving the valid reply.                               | Decode before verify or disconnect raw upload failure from typed writable.                 |
+| `plain_reply_is_verified_before_decode`         | A valid named-union/tuple reply decodes to its value. Malformed/rule-invalid replies reject without decoder invocation. Early provider reply errors the open typed upload while resolving the valid reply.                                     | Decode before verify or disconnect raw upload failure from typed writable.                 |
 
 - [ ] **Implement** writable adapters over a raw writer. Named writes await the
       actual writer.write; raw/text splitting awaits each chunk, so credit is

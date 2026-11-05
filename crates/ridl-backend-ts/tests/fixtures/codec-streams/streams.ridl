@@ -74,6 +74,27 @@ interface Feed {
   command multiple(first: <bytes>, second: <string>) @[..50ms]
   /// Reads the last live streamed member.
   query fetch(): <bytes> @[..50ms]
+  /// Receives numbered elements for [Count].
+  /// @see Count
+  command uploadNamed(
+    /// The first [Count].
+    seed: Count,
+    /// The numbered values.
+    values: <Chunk>,
+    /// The last [Count].
+    tail: Count
+  ) @[..50ms]
+  /// Receives one named bytes element per write.
+  command uploadData(values: <Data>) @[..50ms]
+  /// Receives UTF-8 text.
+  command uploadText(seed: Count, values: <string>) @[..50ms]
+  /// Receives data and returns a result.
+  query uploadChoice(seed: Count, values: <Chunk>, tail: Count): UploadResult @[..50ms]
+  /// Receives data and returns a tuple.
+  query uploadTuple(values: <bytes>): (first: Count, tail: Count) @[..50ms]
+  /// Receives data with an unsupported inline fallible reply.
+  query uploadFallible(values: <bytes>): Chunk | UploadError @[..50ms]
+
 }
 
 /// An interface with the same member name.
@@ -149,4 +170,21 @@ interface streamEntry {
 interface streamEntry1 {
   /// Reads raw bytes.
   query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// An upload failure.
+error union UploadError {
+  /// The upload is unavailable.
+  unavailable: UploadFault
+}
+
+/// An unavailable upload.
+error struct UploadFault {}
+
+/// The result of an upload.
+union UploadResult {
+  /// A received value.
+  ok: Chunk
+  /// An upload failure.
+  err: UploadError
 }

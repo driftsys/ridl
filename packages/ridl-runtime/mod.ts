@@ -16,7 +16,13 @@ export type {
   PayloadCodec,
   VerifyResult,
 } from "./src/codec.ts";
-export { decodeStream, decodeTextStream } from "./src/streams.ts";
+export {
+  byteUpload,
+  decodeStream,
+  decodeTextStream,
+  encodeUpload,
+  textUpload,
+} from "./src/streams.ts";
 export type {
   StreamOptions,
   StreamSession,

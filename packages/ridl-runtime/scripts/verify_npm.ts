@@ -134,9 +134,12 @@ try {
     "CodecError",
     "StreamError",
     "UnknownPayloadType",
+    "byteUpload",
     "decodeStream",
     "decodeTextStream",
+    "encodeUpload",
     "loadCodec",
+    "textUpload",
   ]);
 
   // A TypeScript consumer without the DOM library must be able to read the
