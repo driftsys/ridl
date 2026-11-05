@@ -243,3 +243,11 @@ fn thread_cpu_time_does_not_advance_during_a_sleep() {
         "advanced {advanced} ns in a 20 ms sleep"
     );
 }
+
+#[test]
+fn the_default_config_has_30_samples_and_3_warm_up_batches() {
+    let cfg = TimingConfig::new(1.0);
+    assert_eq!(cfg.samples, 30);
+    assert_eq!(cfg.warmup_batches, 3);
+    assert_eq!(cfg.duration_s, 1.0);
+}
