@@ -1,105 +1,20 @@
 //! Transfers a document through the generated Rust face over ridl-loopback.
 //! The compiler integration test builds and runs this program with plain rustc.
 
-use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use api::doc_store::{self, prelude::*};
-use docstore::docstore as api;
+use docstore_api::docstore::api;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogRef, Interface};
-use ridl_rt::error::CallError;
-use ridl_rt::face::{ByteConsumer, ByteSource, Interrupted};
 
 const CATALOG: CatalogRef = *<api::DocStore as Interface>::CATALOG;
 
-struct Document {
-    info: api::DocInfo,
-    bytes: Vec<u8>,
-}
-
-type Store = Rc<RefCell<Option<Document>>>;
-
-struct Documents(Store);
-
-/// Collects the upload separately and publishes it only after its explicit end.
-struct Upload {
-    store: Store,
-    info: api::DocInfo,
-    bytes: Vec<u8>,
-}
-
-impl ByteConsumer for Upload {
-    fn poll_write(&mut self, _: &mut Context<'_>, bytes: &[u8]) -> Poll<usize> {
-        self.bytes.extend_from_slice(bytes);
-        Poll::Ready(bytes.len())
-    }
-
-    fn end(&mut self) {
-        assert_eq!(self.info.size.get() as usize, self.bytes.len());
-        *self.store.borrow_mut() = Some(Document {
-            info: self.info.clone(),
-            bytes: std::mem::take(&mut self.bytes),
-        });
-    }
-
-    fn failed(&mut self, error: CallError) {
-        panic!("document upload failed: {error:?}");
-    }
-}
-
-struct Download {
-    bytes: Vec<u8>,
-    position: usize,
-}
-
-impl ByteSource for Download {
-    fn poll_read(
-        &mut self,
-        _: &mut Context<'_>,
-        out: &mut [u8],
-    ) -> Poll<Result<usize, Interrupted>> {
-        let n = out.len().min(self.bytes.len() - self.position);
-        out[..n].copy_from_slice(&self.bytes[self.position..self.position + n]);
-        self.position += n;
-        Poll::Ready(Ok(n))
-    }
-}
-
-impl doc_store::Provider for Documents {
-    type Put = Upload;
-    type Fetch = Download;
-
-    fn put(&mut self, info: &api::DocInfo) -> Self::Put {
-        Upload {
-            store: self.0.clone(),
-            info: info.clone(),
-            bytes: Vec::new(),
-        }
-    }
-
-    fn describe(&mut self, id: &api::DocId) -> api::DescribeResult {
-        match self.0.borrow().as_ref().filter(|doc| &doc.info.name == id) {
-            Some(doc) => api::DescribeResult::Info(doc.info.clone()),
-            None => api::DescribeResult::Failure(api::DocError::Missing),
-        }
-    }
-
-    fn fetch(&mut self, id: &api::DocId) -> Self::Fetch {
-        let stored = self.0.borrow();
-        let doc = stored
-            .as_ref()
-            .filter(|doc| &doc.info.name == id)
-            .expect("the requested document exists");
-        Download {
-            bytes: doc.bytes.clone(),
-            position: 0,
-        }
-    }
-}
+#[path = "../../server/src/documents.rs"]
+mod documents;
+use documents::Documents;
 
 /// Drives the caller and provider together, with a finite limit on progress.
 fn complete<T>(mut step: impl FnMut() -> Poll<T>) -> T {
@@ -115,8 +30,8 @@ fn main() {
     let rt = Loopback::new(CATALOG);
     let mut client = doc_store::Client::new(rt.attach());
     let mut handler = rt.handler();
-    let store = Rc::new(RefCell::new(None));
-    let mut provider = Documents(store.clone());
+    let mut provider = Documents::default();
+    let mut observer = provider.clone();
     let mut serve = doc_store::serve(&mut handler, &mut provider);
     let waker = std::task::Waker::noop();
     let mut cx = Context::from_waker(waker);
@@ -152,7 +67,10 @@ fn main() {
         // A command acknowledges admission before its upload has been consumed.
         complete(|| {
             assert!(Pin::new(&mut serve).poll(&mut cx).is_pending());
-            if store.borrow().is_some() {
+            if matches!(
+                doc_store::Provider::describe(&mut observer, &id),
+                api::DescribeResult::Info(_)
+            ) {
                 Poll::Ready(())
             } else {
                 Poll::Pending

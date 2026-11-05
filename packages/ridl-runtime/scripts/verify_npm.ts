@@ -132,8 +132,14 @@ try {
   assertEquals(JSON.parse(names.stdout), [
     "CatalogMismatch",
     "CodecError",
+    "StreamError",
     "UnknownPayloadType",
+    "byteUpload",
+    "decodeStream",
+    "decodeTextStream",
+    "encodeUpload",
     "loadCodec",
+    "textUpload",
   ]);
 
   // A TypeScript consumer without the DOM library must be able to read the

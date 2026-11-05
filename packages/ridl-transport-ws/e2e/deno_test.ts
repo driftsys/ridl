@@ -200,6 +200,90 @@ async function withUploadSession(
   }
 }
 
+Deno.test("queryDuplex_echoes_64_chunks", async () => {
+  await withUploadSession(async (session) => {
+    const { upload, stream } = session.queryDuplex(
+      catalog.IFACE,
+      catalog.DUPLEX,
+      new Uint8Array(),
+      { bound: 2000 },
+    );
+    const writer = upload.getWriter();
+    const reader = stream.getReader();
+    writer.closed.catch(() => {});
+    reader.closed.catch(() => {});
+    const element = (i: number) =>
+      Uint8Array.from({ length: 1024 }, (_, j) => (i + j) % 251);
+    try {
+      await writer.write(element(0));
+      // The first reply must arrive while the upload is still open.
+      assert.deepEqual(await reader.read(), { done: false, value: element(0) });
+      await Promise.all([
+        (async () => {
+          for (let i = 1; i < 64; i++) await writer.write(element(i));
+          await writer.close();
+        })(),
+        (async () => {
+          for (let i = 1; i < 64; i++) {
+            assert.deepEqual(await reader.read(), {
+              done: false,
+              value: element(i),
+            });
+          }
+          assert.equal((await reader.read()).done, true);
+        })(),
+      ]);
+    } finally {
+      writer.releaseLock();
+      reader.releaseLock();
+    }
+  });
+});
+
+Deno.test("queryDuplex_cancel_and_abort", async () => {
+  for (const action of ["cancel", "abort"] as const) {
+    await withUploadSession(async (session) => {
+      const { upload, stream } = session.queryDuplex(
+        catalog.IFACE,
+        catalog.DUPLEX,
+        new Uint8Array(),
+        { bound: 2000 },
+      );
+      const writer = upload.getWriter();
+      const reader = stream.getReader();
+      writer.closed.catch(() => {});
+      reader.closed.catch(() => {});
+      try {
+        await writer.write(Uint8Array.of(9));
+        assert.deepEqual((await reader.read()).value, Uint8Array.of(9));
+        const interrupted = assert.rejects(
+          action === "cancel" ? writer.closed : reader.closed,
+          (error: unknown) => {
+            assert.ok(error instanceof SessionError);
+            assert.equal(error.failure.category, "interrupted");
+            return true;
+          },
+        );
+        if (action === "cancel") await reader.cancel();
+        else await writer.abort();
+        await interrupted;
+        assert.deepEqual(
+          await session.query(
+            catalog.IFACE,
+            catalog.QUERY,
+            Uint8Array.of(1),
+            { bound: 2000 },
+          ),
+          Uint8Array.of(2),
+        );
+      } finally {
+        writer.releaseLock();
+        reader.releaseLock();
+      }
+    });
+  }
+});
+
 Deno.test("commandStream_uploads_200_000_bytes_and_fetch_reads_them_back", async () => {
   await withUploadSession(async (session) => {
     const bytes = catalog.pattern(catalog.UPLOAD_LEN);

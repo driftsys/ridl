@@ -1,0 +1,22 @@
+[package]
+name = "docstore-server"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+docstore_api = { path = "../generated", default-features = false, features = [
+  "std",
+] }
+ridl-loopback = { path = "../../../crates/ridl-loopback" }
+ridl-rt = { path = "../../../crates/ridl-rt", features = ["std"] }
+ridl-transport-ws = { path = "../../../crates/ridl-transport-ws", features = [
+  "server",
+  "descriptor",
+] }
+
+[patch.crates-io]
+ridl-rt = { path = "../../../crates/ridl-rt" }
