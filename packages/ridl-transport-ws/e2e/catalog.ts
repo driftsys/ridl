@@ -48,6 +48,8 @@ export const UPLOAD = 11;
 export const UPLOAD_QUERY = 12;
 /** The query that streams the stored bytes for its argument's key. */
 export const FETCH = 13;
+/** The query that echoes parameter stream 1 on reply stream 0. */
+export const DUPLEX = 14;
 /** Refuses the third chunk with the range rule. */
 export const MODE_REFUSE_RANGE = 1;
 /** Refuses the third chunk with the UTF-8 rule. */

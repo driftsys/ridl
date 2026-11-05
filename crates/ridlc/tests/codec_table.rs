@@ -160,6 +160,27 @@ fn the_codec_table_names_what_the_wasm_module_lists() {
 }
 
 #[test]
+fn payload_rules_include_utf8_in_both_emits() {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let (run, out) = build_cabin(work.path(), &format!("{}{CODEC_TABLE}", cabin_manifest()));
+    assert_clean(&run);
+    let wasm = std::fs::read_to_string(out.join("__ridl_wasm.rs")).expect("the module is written");
+    let codec =
+        std::fs::read_to_string(out.join("veh.cabin.codec.ts")).expect("the codec file is written");
+    let expected = [
+        "length", "pattern", "range", "step", "unique", "utf8", "variant",
+    ];
+    assert_eq!(wasm_lists(&wasm).1, expected);
+    assert_eq!(codec_rules(&codec), expected);
+    let d = dense(&wasm);
+    assert!(d.contains("::ridl_rt::payload::Rule::Utf8=>7,"), "{wasm}");
+    assert!(
+        d.contains("::ridl_rt::payload::Rule::Variant=>8,"),
+        "{wasm}"
+    );
+}
+
+#[test]
 fn each_package_lists_a_subsequence_of_the_crate_list() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-two-packages");
     let work = tempfile::tempdir().expect("a temp dir is created");

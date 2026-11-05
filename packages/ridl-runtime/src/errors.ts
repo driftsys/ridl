@@ -45,3 +45,34 @@ export class UnknownPayloadType extends Error {
     this.type = type;
   }
 }
+
+/** The text of a payload rule reported by the generated codecs. */
+export type PayloadRule =
+  | "length"
+  | "pattern"
+  | "range"
+  | "step"
+  | "unique"
+  | "utf8"
+  | "variant";
+
+/** A locally detected invalid stream payload. */
+export class StreamError extends Error {
+  readonly failure:
+    | { category: "corrupt" }
+    | {
+      category: "contract";
+      contract: { category: "invalid-value"; rule: PayloadRule };
+    };
+
+  constructor(failure: StreamError["failure"], options?: ErrorOptions) {
+    super(
+      failure.category === "contract"
+        ? `invalid stream payload: ${failure.contract.rule}`
+        : "malformed stream payload",
+      options,
+    );
+    this.name = "StreamError";
+    this.failure = failure;
+  }
+}

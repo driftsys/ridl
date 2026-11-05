@@ -15,7 +15,7 @@ Written from the owner's decisions of 2026-10-28 (decisions 1 to 8) and of
 was proposed with). It adds no syntax, no interaction kind and no diagnostic
 code. The documents in "Documents amended" are changed with the acceptance.
 Built: the current implementation and its remaining limits are recorded in the
-[2026-11-04 amendment](#amended-2026-11-04).
+[2026-11-05 amendment](#amended-2026-11-05).
 
 Amended 2026-10-31. Decision 10's example spelled the result union inline as
 `<DocChunk | DocError>`, which the grammar does not admit; the example now
@@ -35,11 +35,43 @@ stream and a plain or named-element streamed reply. The WebSocket server also
 receives parameter streams on commands and queries, including a query with an
 upload and a reply stream ([the server record](../design/ridl-transport-ws.md),
 D-30). Frame version 3 carries `Utf8` as rule code 7 (frame specification §9.6).
-The TypeScript client's upload methods and the missing duplex query method
-(driftsys/ridl#1240) are recorded in [D-23](../design/ridl-transport-ws-ts.md).
-Calls with two or more parameter streams remain outside the Rust face
-(driftsys/ridl#1224). A query with an upload and a byte or text reply stream
-also remains outside the face.
+The TypeScript client's `commandStream`, `queryWithUpload` and `queryDuplex`
+methods, including one upload with a concurrent streamed reply, are recorded in
+[D-23](../design/ridl-transport-ws-ts.md). Calls with two or more parameter
+streams remain outside the Rust face (driftsys/ridl#1224). A query with an
+upload and a byte or text reply stream also remains outside the face.
+
+### Amended 2026-11-05
+
+This amendment records the implemented TypeScript codec surface. The optional
+TypeScript codec module now emits reply-only functions and commands or queries
+with exactly one parameter stream, including duplex. Bare bytes map to
+`ReadableStream<Uint8Array>` / `WritableStream<Uint8Array>`, bare text to
+platform streams of `string`, and named elements to streams of the generated
+domain type. The runtime context, function signatures, verification, errors and
+chunking are owned by
+[the codec table record](../design/ts-codec-table.md#stream-functions). The byte
+transport's `queryDuplex` and the generated duplex functions are built.
+
+The remaining generated TypeScript limits are two or more parameter streams
+(driftsys/ridl#1224), inline fallible upload replies without a codec, and
+payload roots without a finite FlatBuffers bound, with existing internal/foreign
+composite payload refusals retained. An unsupported streamed member is never
+represented as a plain call. Rust-side limits in the preceding amendment remain:
+multiple parameter streams and an upload query with a byte or text reply stream
+are outside its face. Upload close confirms local transmission, not provider
+consumption. For duplex, upload close leaves the reply open; reply end
+interrupts an upload still open. The response bound is measured from the request
+to the first reply chunk or end.
+
+Evidence recipes are `_codec-ts-check` (generated fixture type checks and
+runtime contracts), `ts-e2e` (transport regressions plus generated document
+byte, named and duplex transfers against Rust), `ts-browser-e2e` (the existing
+transport browser regression), and `test` (including socket-free document
+provider tests). The generated documentation and TypeScript/wasm rule parity are
+also pinned by the backend and compiler test suites. The
+[payload rule ABI](../design/ts-codec-table.md#stream-functions) owns the rule
+codes, release classification and codec regeneration requirement.
 
 ## Context
 
@@ -289,10 +321,11 @@ order the questions were listed.
   ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3));
   the Rust face carries the forms listed in the Status amendment of 2026-11-04
   over `ridl-loopback`.
-- The stream port of `ridl-rt`, the WebSocket stream framing, and the codegen
-  for `<T>` and `<bytes>` in the Rust and TypeScript backends are new work. The
-  port adds fields to `Member` or `PayloadInfo`, so it is a breaking change of
-  `ridl-rt`, released in a 0.x minor version (driftsys/ridl#336).
+- At acceptance, the stream port of `ridl-rt`, WebSocket stream framing, and
+  codegen for `<T>` and `<bytes>` in Rust and TypeScript required new work.
+  Current coverage is recorded in Status. The port added fields to `Member` or
+  `PayloadInfo`, a breaking change of `ridl-rt` released in a 0.x minor version
+  (driftsys/ridl#336).
 - The descriptor and the codegen `Model` must be able to tell a byte stream from
   a stream of named elements. The IR already does, through
   `StreamType.primitive` and `StreamType.named`.

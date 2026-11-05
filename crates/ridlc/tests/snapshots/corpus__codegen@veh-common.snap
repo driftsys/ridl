@@ -2869,7 +2869,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "128"
@@ -3008,10 +3008,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
-                    "descriptor": {
+                    "tailDescriptor": {
                       "text": {
                         "min": "1",
                         "max": "64"
@@ -3037,7 +3037,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "map": {
                   "entryHead": 8,
                   "elemSize": 16,
@@ -3079,7 +3079,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "arms": {
                   "arms": [
                     {
@@ -3188,7 +3188,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "256"
@@ -3308,7 +3308,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "64"
@@ -3325,7 +3325,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "128"
@@ -3425,7 +3425,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "256"

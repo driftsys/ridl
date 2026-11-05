@@ -740,7 +740,7 @@ impl<'a> Codec<'a> {
                 .as_deref()
                 .map_or(0, |element| self.form_size(element))
                 .saturating_mul(array.count),
-            Some(Form::Descriptor(_)) => 8,
+            Some(Form::TailDescriptor(_)) => 8,
             None => 0,
         }
     }
@@ -754,7 +754,7 @@ impl<'a> Codec<'a> {
                 .element
                 .as_deref()
                 .map_or(1, |element| self.form_align(element)),
-            Some(Form::Descriptor(_)) => 4,
+            Some(Form::TailDescriptor(_)) => 4,
             _ => self.form_size(form).max(1),
         }
     }
@@ -878,7 +878,7 @@ impl<'a> Codec<'a> {
                 let count = Literal::usize_unsuffixed(array.count as usize);
                 quote! { [#element; #count] }
             }
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Array(_)) | Some(Descriptor::Map(_)) => {
                     quote! { ::ridl_rt::podbuf::ArrayDesc }
                 }
@@ -1358,7 +1358,7 @@ impl<'a> Codec<'a> {
             Some(Form::InlineArray(array)) => {
                 self.inline_array_write(array, ty, operand, at, owner)?
             }
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Text(_)) => self.text_write(ty, operand, at, owner)?,
                 Some(Descriptor::Bytes(_)) => self.bytes_write(ty, operand, at, owner)?,
                 Some(Descriptor::Array(array)) => {
@@ -1803,7 +1803,7 @@ impl<'a> Codec<'a> {
                 message: format!("the podbuf head of `{owner}` has no arm descriptor"),
             })?;
         let arms = match arm_field.form.as_ref().and_then(|form| form.kind.as_ref()) {
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Arms(arms)) => &arms.arms,
                 _ => {
                     return fail(format!(
@@ -2141,7 +2141,7 @@ impl<'a> Codec<'a> {
     fn borrows(&self, form: &v1::PodbufForm) -> bool {
         matches!(
             form.kind.as_ref(),
-            Some(Form::InlineHead(_) | Form::InlineArray(_) | Form::Descriptor(_))
+            Some(Form::InlineHead(_) | Form::InlineArray(_) | Form::TailDescriptor(_))
         )
     }
 
@@ -2365,7 +2365,7 @@ impl<'a> Codec<'a> {
                 };
                 quote! { impl ::core::iter::Iterator<Item = #item> + 'a }
             }
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Text(_)) => quote! { &'a ::core::primitive::str },
                 Some(Descriptor::Bytes(_)) => quote! { &'a [::core::primitive::u8] },
                 Some(Descriptor::Array(array)) => {
@@ -2582,7 +2582,7 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Text(_)) => {
                     let region = place.region();
                     let off = off.tokens();
@@ -2690,7 +2690,7 @@ impl<'a> Codec<'a> {
                 message: format!("the podbuf head of `{owner}` has no arm descriptor"),
             })?;
         let arms = match arm_field.form.as_ref().and_then(|form| form.kind.as_ref()) {
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Arms(arms)) => &arms.arms[..],
                 _ => {
                     return fail(format!(
@@ -3072,7 +3072,7 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Text(bound)) => {
                     let region = place.region();
                     let off = off.tokens();
@@ -3356,7 +3356,7 @@ impl<'a> Codec<'a> {
                     },
                 )
             }
-            Some(Form::Descriptor(descriptor))
+            Some(Form::TailDescriptor(descriptor))
                 if matches!(
                     descriptor.kind.as_ref(),
                     Some(Descriptor::Text(_) | Descriptor::Bytes(_))
@@ -3579,7 +3579,7 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Some(Form::Descriptor(descriptor)) => match descriptor.kind.as_ref() {
+            Some(Form::TailDescriptor(descriptor)) => match descriptor.kind.as_ref() {
                 Some(Descriptor::Text(_)) => {
                     let text = self.view_expr(form, ty, place, off)?;
                     let owned = quote! { ::std::string::String::from(#text) };

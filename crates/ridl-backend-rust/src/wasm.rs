@@ -32,12 +32,13 @@ pub const RULES_CONST: &str = "WASM_RULES";
 
 /// The typl rules `ridl_rt::payload::Rule` names, sorted by their text, with
 /// the variant each text stands for.
-const RULES: [(&str, &str); 6] = [
+const RULES: [(&str, &str); 7] = [
     ("length", "Length"),
     ("pattern", "Pattern"),
     ("range", "Range"),
     ("step", "Step"),
     ("unique", "Unique"),
+    ("utf8", "Utf8"),
     ("variant", "Variant"),
 ];
 

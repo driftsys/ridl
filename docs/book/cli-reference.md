@@ -996,12 +996,14 @@ of named elements, bytes or text is on the face, as are commands with one stream
 parameter and queries with one stream parameter and a plain or named-element
 streamed reply. These forms run over `ridl-loopback`. The WebSocket server's
 upload support is recorded in [D-30](../design/ridl-transport-ws.md); the
-TypeScript upload methods and their limits are recorded in
-[D-23](../design/ridl-transport-ws-ts.md). A call with two or more stream
-parameters is left out of an otherwise emitted face without a note, while its
-descriptor row is still written (driftsys/ridl#1224). An upload query with a
-byte or text reply stream also has no face method. An `internal` interface gets
-no face in any case
+TypeScript transport methods and their limits are recorded in
+[D-23](../design/ridl-transport-ws-ts.md). Typed TypeScript stream functions are
+also emitted by the optional codec module; see
+[Calling generated streams](generated-code.md#calling-generated-streams). A call
+with two or more stream parameters is left out of an otherwise emitted face
+without a note, while its descriptor row is still written (driftsys/ridl#1224).
+An upload query with a byte or text reply stream also has no face method. An
+`internal` interface gets no face in any case
 ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face)
 gives the rule). When its descriptors are refused, its note says that the
 descriptors are absent and gives the reason. Neither is an error: the rest of
@@ -1073,11 +1075,17 @@ has no manifest, so it has no `wasm` module.
 
 `[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
 TypeScript module of every package that has a payload root with a codec (its
-own, or one of another package that its interfaces name), and turns the `wasm`
-module on when `[backend.rust]` writes no `wasm` key. A written `wasm = false`,
-and a manifest with no `[backend.rust]` table, are MANI-019.
-`[backend.rust] encodings` must still name `flatbuffers`, and the Rust backend
-refuses an implied `wasm` module otherwise.
+own, or one of another package that its interfaces name) or a supported stream
+call, and turns the `wasm` module on when `[backend.rust]` writes no `wasm` key.
+A written `wasm = false`, and a manifest with no `[backend.rust]` table, are
+MANI-019. `[backend.rust] encodings` must still name `flatbuffers`, and the Rust
+backend refuses an implied `wasm` module otherwise. The codec module includes
+typed stream functions and stream metadata for supported interactions, in
+addition to payload converters and interface tables. The application runs
+`flatc` and builds and loads the matching Rust wasm codec; `ridl build` does not
+run `flatc`.
+[Calling generated streams](generated-code.md#calling-generated-streams) gives
+the setup, return shapes and remaining limits.
 
 `[backend.rust] transcode = true` asks the Rust backend for the transcoding
 functions between the encodings of the same table. The table must write at least
