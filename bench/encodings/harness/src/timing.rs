@@ -49,6 +49,23 @@ impl Stat {
     }
 }
 
+impl Stat {
+    /// The sum of the stats, field by field: the median of the sum is the sum
+    /// of the medians, and the other bounds are sums of the bounds, an
+    /// envelope and not percentiles of the summed samples. `reps` is the
+    /// smallest of the inputs.
+    pub fn sum(stats: &[Stat]) -> Stat {
+        Stat {
+            median_ns: stats.iter().map(|s| s.median_ns).sum(),
+            p05_ns: stats.iter().map(|s| s.p05_ns).sum(),
+            p95_ns: stats.iter().map(|s| s.p95_ns).sum(),
+            min_ns: stats.iter().map(|s| s.min_ns).sum(),
+            max_ns: stats.iter().map(|s| s.max_ns).sum(),
+            reps: stats.iter().map(|s| s.reps).min().unwrap_or(0),
+        }
+    }
+}
+
 /// The percentile `p` (0 to 1) of sorted values, by linear interpolation
 /// between the two nearest ranks.
 fn percentile(sorted: &[f64], p: f64) -> f64 {
@@ -125,10 +142,83 @@ impl TimingConfig {
     }
 }
 
-/// One encoding of one payload, ready to run a batch of updates.
+/// What a runner repeats in a batch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Op {
+    /// Encode the value into the caller's buffer.
+    Encode,
+    /// Verify a fixed set of already-encoded bytes.
+    Verify,
+    /// Decode from a proof that was built once, before the batch.
+    Decode,
+    /// The whole update: encode, verify and decode.
+    Update,
+}
+
+impl Op {
+    pub fn name(self) -> &'static str {
+        match self {
+            Op::Encode => "encode",
+            Op::Verify => "verify",
+            Op::Decode => "decode",
+            Op::Update => "update",
+        }
+    }
+}
+
+/// The three operations of one update, in the order of an update.
+pub const OPS: [Op; 3] = [Op::Encode, Op::Verify, Op::Decode];
+
+/// One operation of one encoding of one payload, ready to run a batch.
 pub struct Runner<'a> {
     pub encoding: &'static str,
+    pub op: Op,
     pub run: Box<dyn FnMut(u64) + 'a>,
+}
+
+/// The timing of one runner.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Timed {
+    pub encoding: &'static str,
+    pub op: Op,
+    pub stat: Stat,
+}
+
+/// The timing of the three operations of one cell.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpStats {
+    pub encode: Stat,
+    pub verify: Stat,
+    pub decode: Stat,
+}
+
+impl OpStats {
+    /// The stats of `encoding` out of `timed`. Panics when one of the three
+    /// operations is missing.
+    pub fn of(timed: &[Timed], encoding: &str) -> OpStats {
+        let find = |op: Op| {
+            timed
+                .iter()
+                .find(|t| t.encoding == encoding && t.op == op)
+                .unwrap_or_else(|| panic!("no {} timing for {encoding}", op.name()))
+                .stat
+        };
+        OpStats {
+            encode: find(Op::Encode),
+            verify: find(Op::Verify),
+            decode: find(Op::Decode),
+        }
+    }
+
+    /// The per-update stat: the sum of the three operations (see `Stat::sum`).
+    pub fn per_update(&self) -> Stat {
+        Stat::sum(&[self.encode, self.verify, self.decode])
+    }
+
+    /// Whether any operation is flagged.
+    pub fn flagged(&self) -> bool {
+        self.encode.spread_flagged() || self.verify.spread_flagged() || self.decode.spread_flagged()
+    }
 }
 
 /// A runner that does `n` updates of `value` under `E`: encode into a stack
@@ -137,6 +227,7 @@ pub struct Runner<'a> {
 pub fn runner<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> Runner<'a> {
     Runner {
         encoding: E::NAME,
+        op: Op::Update,
         run: Box::new(move |n| {
             let mut buf = T::BUFFER;
             for _ in 0..n {
@@ -148,6 +239,68 @@ pub fn runner<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> Runner<'a> {
             }
         }),
     }
+}
+
+/// The three operations of `E` on `value`, each a runner of its own. A batch
+/// of `n` repeats one operation `n` times and nothing else:
+///
+/// - encode writes `value` into the same buffer each time;
+/// - verify checks the same already-encoded bytes each time;
+/// - decode builds a value from a proof that `Ref::verify` built once, here,
+///   before any batch. `Ref::decode` takes the proof by value and the proof
+///   cannot be cloned, so each decode reads a bitwise copy of it. That is
+///   sound only when the proof owns nothing that is dropped; the function
+///   panics otherwise. The bytes of the proof are leaked, a few bytes per
+///   call, so that the proof can live in the runner.
+///
+/// Every input and every result goes through `black_box`. Panics when `E`
+/// refuses the value; the caller times only a value that `try_measure_counts`
+/// accepted.
+pub fn op_runners<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> [Runner<'a>; 3] {
+    let mut buf = T::BUFFER;
+    let bytes: &'static [u8] = {
+        let mut scratch = T::BUFFER;
+        let encoded =
+            Ref::<T, E>::encode(value, scratch.as_mut()).expect("the encoding accepts the value");
+        Box::leak(encoded.bytes().to_vec().into_boxed_slice())
+    };
+    let proof = Ref::<T, E>::verify(bytes).expect("the encoding verifies its own bytes");
+    assert!(
+        !std::mem::needs_drop::<Ref<'a, T, E>>(),
+        "the proof of this payload owns data that is dropped, so it cannot be copied"
+    );
+    let encode = Runner {
+        encoding: E::NAME,
+        op: Op::Encode,
+        run: Box::new(move |n| {
+            for _ in 0..n {
+                let _ = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()));
+            }
+        }),
+    };
+    let verify = Runner {
+        encoding: E::NAME,
+        op: Op::Verify,
+        run: Box::new(move |n| {
+            for _ in 0..n {
+                let _ = black_box(Ref::<T, E>::verify(black_box(bytes)));
+            }
+        }),
+    };
+    let decode = Runner {
+        encoding: E::NAME,
+        op: Op::Decode,
+        run: Box::new(move |n| {
+            for _ in 0..n {
+                // SAFETY: `Ref` has no `Drop` implementation and the assertion
+                // above shows that its view needs none, so a bitwise copy owns
+                // nothing and the original is never used after the copies.
+                let copy = unsafe { std::ptr::read(black_box(&proof)) };
+                black_box(copy.decode());
+            }
+        }),
+    };
+    [encode, verify, decode]
 }
 
 /// Thread CPU time in nanoseconds.
@@ -219,12 +372,8 @@ fn calibrate(run: &mut dyn FnMut(u64), target_ns: f64, now: &dyn Fn() -> u64) ->
 /// `cfg.samples` times, with the encodings interleaved in rotation. A sample
 /// is the clock time of one batch divided by the batch size. `now` is the
 /// clock in nanoseconds (thread CPU time in the bench, injected in tests).
-/// Returns `(encoding, stat)` in runner order.
-pub fn time_cells(
-    runners: &mut [Runner],
-    cfg: &TimingConfig,
-    now: &dyn Fn() -> u64,
-) -> Vec<(&'static str, Stat)> {
+/// Returns one `Timed` per runner, in runner order.
+pub fn time_cells(runners: &mut [Runner], cfg: &TimingConfig, now: &dyn Fn() -> u64) -> Vec<Timed> {
     assert!(cfg.samples >= MIN_SAMPLES, "at least {MIN_SAMPLES} samples");
     let target_ns = cfg.duration_s * 1e9 / cfg.samples as f64;
     let batches: Vec<u64> = runners
@@ -245,7 +394,11 @@ pub fn time_cells(
     runners
         .iter()
         .zip(&samples)
-        .map(|(r, s)| (r.encoding, summarize(s)))
+        .map(|(r, s)| Timed {
+            encoding: r.encoding,
+            op: r.op,
+            stat: summarize(s),
+        })
         .collect()
 }
 

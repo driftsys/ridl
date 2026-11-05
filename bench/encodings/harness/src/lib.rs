@@ -51,7 +51,8 @@ pub struct Counts {
     pub encode_allocs: u64,
     /// Allocations made by `Ref::verify`.
     pub verify_allocs: u64,
-    /// Allocations made by `Ref::verify` followed by `Ref::decode`.
+    /// Allocations made by `Ref::decode` alone, from a proof that `Ref::verify`
+    /// built before the count started.
     pub decode_allocs: u64,
 }
 
@@ -69,6 +70,36 @@ pub fn measure_counts<T: Payload<E>, E: Encoding>(value: &T) -> Counts {
     try_measure_counts::<T, E>(value).expect("the encoding accepts the value")
 }
 
+/// Counts the allocations of three steps run in order: `encode` returns the
+/// encoded bytes, `verify` checks them and returns a proof, `decode` consumes
+/// the proof. Each count covers its own call alone. The size is the length of
+/// the encoded bytes. A step that fails ends the measurement with its reason.
+pub fn count_ops<'b, P, D>(
+    encode: impl FnOnce() -> Result<&'b [u8], String>,
+    verify: impl FnOnce(&'b [u8]) -> Result<P, String>,
+    decode: impl FnOnce(P) -> D,
+) -> Result<Counts, String> {
+    CountingAlloc::reset();
+    let bytes = black_box(encode())?;
+    let encode_allocs = CountingAlloc::count();
+
+    CountingAlloc::reset();
+    let proof = black_box(verify(black_box(bytes)))?;
+    let verify_allocs = CountingAlloc::count();
+
+    CountingAlloc::reset();
+    let decoded = black_box(decode(proof));
+    let decode_allocs = CountingAlloc::count();
+    drop(decoded);
+
+    Ok(Counts {
+        size: bytes.len(),
+        encode_allocs,
+        verify_allocs,
+        decode_allocs,
+    })
+}
+
 /// Like `measure_counts`, and returns the reason when the encoding refuses
 /// the value (an encode error) or refuses the bytes it just wrote (a verify
 /// error).
@@ -77,29 +108,14 @@ pub fn try_measure_counts<T: Payload<E>, E: Encoding>(value: &T) -> Result<Count
     // a step it sees no use for, which would also drop its allocations.
     let value = black_box(value);
     let mut buf = T::BUFFER;
-
-    CountingAlloc::reset();
-    let encoded = black_box(Ref::<T, E>::encode(value, buf.as_mut()))
-        .map_err(|e| format!("encode: {e:?}"))?;
-    let encode_allocs = CountingAlloc::count();
-    let bytes = black_box(encoded.bytes());
-    let size = bytes.len();
-
-    CountingAlloc::reset();
-    let verified = black_box(Ref::<T, E>::verify(bytes)).map_err(|e| format!("verify: {e:?}"))?;
-    let verify_allocs = CountingAlloc::count();
-    drop(verified);
-
-    CountingAlloc::reset();
-    let verified = black_box(Ref::<T, E>::verify(bytes)).map_err(|e| format!("verify: {e:?}"))?;
-    let decoded = black_box(verified.decode());
-    let decode_allocs = CountingAlloc::count();
-    drop(decoded);
-
-    Ok(Counts {
-        size,
-        encode_allocs,
-        verify_allocs,
-        decode_allocs,
-    })
+    let out = buf.as_mut();
+    count_ops(
+        move || {
+            Ref::<T, E>::encode(value, out)
+                .map(|r| r.bytes())
+                .map_err(|e| format!("encode: {e:?}"))
+        },
+        |bytes| Ref::<T, E>::verify(bytes).map_err(|e| format!("verify: {e:?}")),
+        |proof| proof.decode(),
+    )
 }

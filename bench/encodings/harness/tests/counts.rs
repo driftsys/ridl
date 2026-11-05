@@ -1,6 +1,6 @@
 use bench_veh_cluster::ridl::std::Name;
 use bench_veh_cluster::veh::common::{DriverProfile, Speed, SpeedLimitPayload};
-use encoding_bench::{measure_counts, CountingAlloc};
+use encoding_bench::{count_ops, measure_counts, CountingAlloc, Counts};
 use ridl_rt::encoding::{FlatBuffers, Podbuf, Proto3};
 use std::hint::black_box;
 
@@ -63,4 +63,50 @@ fn counts_for_a_payload_with_a_string_see_decode_allocations() {
     assert!(pb.decode_allocs > 0, "podbuf {pb:?}");
     assert_eq!(pb.encode_allocs, 0, "podbuf {pb:?}");
     assert_eq!(pb.verify_allocs, 0, "podbuf {pb:?}");
+}
+
+/// Positive control for each step: encode makes 1 allocation, verify 2 and
+/// decode 4, and each count covers its own call alone. A counter that drops a
+/// step, or that adds the verify allocations to the decode count, fails here.
+#[test]
+fn each_step_counts_its_own_allocations_only() {
+    static BYTES: [u8; 3] = [1, 2, 3];
+    let allocs = |n: usize| {
+        for _ in 0..n {
+            black_box(Box::new(0u64));
+        }
+    };
+    let counts = count_ops(
+        || {
+            allocs(1);
+            Ok(&BYTES[..])
+        },
+        |bytes| {
+            allocs(2);
+            Ok(bytes.len())
+        },
+        |_proof| allocs(4),
+    )
+    .unwrap();
+    assert_eq!(
+        counts,
+        Counts {
+            size: 3,
+            encode_allocs: 1,
+            verify_allocs: 2,
+            decode_allocs: 4
+        }
+    );
+}
+
+#[test]
+fn a_failing_step_ends_the_measurement_with_its_reason() {
+    static BYTES: [u8; 1] = [0];
+    let err = count_ops(
+        || Ok(&BYTES[..]),
+        |_| Err::<(), _>("verify: bad".to_string()),
+        |_| (),
+    )
+    .unwrap_err();
+    assert_eq!(err, "verify: bad");
 }

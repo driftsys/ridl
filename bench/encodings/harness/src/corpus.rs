@@ -4,8 +4,8 @@ use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf, Proto3};
 use ridl_rt::payload::Payload;
 
 use crate::timing::{
-    paced_run, runner, sustained_cpu_percent, thread_cpu_ns, time_cells, Paced, Runner, Stat,
-    TimingConfig, RATE_PER_S,
+    op_runners, paced_run, runner, sustained_cpu_percent, thread_cpu_ns, time_cells, OpStats,
+    Paced, Runner, Stat, TimingConfig, RATE_PER_S,
 };
 use crate::{try_measure_counts, Counts};
 
@@ -30,12 +30,23 @@ pub enum Cell {
     NotBuilt { reason: String },
 }
 
-/// The CPU time per update of a measured cell, and the paced run when one was
-/// asked for.
+/// The CPU time of a measured cell: per operation, per update, and the paced
+/// run when one was asked for.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RowTiming {
+    /// The per update figure: the sum of the three operation stats
+    /// (`OpStats::per_update`).
     pub stat: Stat,
+    /// Encode, verify and decode, each timed in batches of its own.
+    pub ops: OpStats,
     pub paced: Option<Paced>,
+}
+
+impl RowTiming {
+    /// Whether the spread of any operation is flagged.
+    pub fn flagged(&self) -> bool {
+        self.ops.flagged()
+    }
 }
 
 /// One row: a payload under one encoding.
@@ -101,8 +112,10 @@ impl Recorder {
         }
     }
 
-    /// Times the `Measured` rows from `first` on: one interleaved run of the
-    /// encodings that accepted the value, then the paced run of each.
+    /// Times the `Measured` rows from `first` on: one run of the operations
+    /// of the encodings that accepted the value, each operation in batches of
+    /// its own, interleaved in rotation; then the paced run of each encoding,
+    /// which repeats the whole update.
     fn time_rows<T>(&mut self, first: usize, value: &T, cfg: &TimingConfig)
     where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
@@ -112,35 +125,37 @@ impl Recorder {
                 .any(|r| r.encoding == enc && matches!(r.cell, Cell::Measured(_)))
         };
         let mut runners: Vec<Runner> = Vec::new();
+        let mut whole: Vec<Runner> = Vec::new();
         if measured(&self.rows[first..], FlatBuffers::NAME) {
-            runners.push(runner::<T, FlatBuffers>(value));
+            runners.extend(op_runners::<T, FlatBuffers>(value));
+            whole.push(runner::<T, FlatBuffers>(value));
         }
         if measured(&self.rows[first..], Proto3::NAME) {
-            runners.push(runner::<T, Proto3>(value));
+            runners.extend(op_runners::<T, Proto3>(value));
+            whole.push(runner::<T, Proto3>(value));
         }
         if measured(&self.rows[first..], Podbuf::NAME) {
-            runners.push(runner::<T, Podbuf>(value));
+            runners.extend(op_runners::<T, Podbuf>(value));
+            whole.push(runner::<T, Podbuf>(value));
         }
         if runners.is_empty() {
             return;
         }
-        let stats = time_cells(&mut runners, cfg, &thread_cpu_ns);
-        for (encoding, stat) in stats {
+        let timed = time_cells(&mut runners, cfg, &thread_cpu_ns);
+        for r in &mut whole {
+            let ops = OpStats::of(&timed, r.encoding);
+            let stat = ops.per_update();
             let paced = if self.paced {
                 let derived = sustained_cpu_percent(stat.median_ns, RATE_PER_S);
-                let r = runners
-                    .iter_mut()
-                    .find(|r| r.encoding == encoding)
-                    .expect("a runner of the stat");
                 Some(paced_run(&mut *r.run, RATE_PER_S, cfg.duration_s, derived))
             } else {
                 None
             };
             let row = self.rows[first..]
                 .iter_mut()
-                .find(|r| r.encoding == encoding)
+                .find(|row| row.encoding == r.encoding)
                 .expect("a row of the encoding");
-            row.timing = Some(RowTiming { stat, paced });
+            row.timing = Some(RowTiming { stat, ops, paced });
         }
     }
 

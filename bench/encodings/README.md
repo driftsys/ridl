@@ -18,7 +18,8 @@ tests of `harness/`, and prints the table.
 ## Timing
 
 The headline figure is the CPU load, in percent of one core, of 4 000 updates
-per second. One update is encode, verify and decode through `Payload<E>`.
+per second. One update is encode, verify and decode through `Payload<E>`; the
+harness times each of the three operations on its own and states their sum.
 Without `--out` the binary prints the table only. With `--out` it also times
 every `Measured` row and writes a JSON file; `Refused` and `NotBuilt` rows are
 written with their reasons and are not timed.
@@ -28,8 +29,9 @@ written with their reasons and are not timed.
 - `--out FILE` turns timing on and names the JSON file.
 - `--core-label TEXT` names the core the run is pinned to (for example `A55`);
   the harness does not pin itself, use `taskset`.
-- `--duration SECONDS` is the CPU time spent in the samples of one cell and
-  encoding. The default is 0.5.
+- `--duration SECONDS` is the CPU time spent in the samples of one operation of
+  one cell and encoding, so a payload takes three times this per encoding. The
+  default is 0.5.
 - `--paced` also runs each cell at 4 000 updates per second, sleeping to the
   next tick, and reads process CPU time (`getrusage`) over the run. The JSON
   holds that figure, the figure derived from the unpaced cost, and the
@@ -38,11 +40,26 @@ written with their reasons and are not timed.
 - `--date YYYY-MM-DD` states the date of the run when the clock of the machine
   is wrong; without it the date is the UTC date of the clock.
 
-Per-update CPU time comes from an unpaced loop: thread CPU time
-(`CLOCK_THREAD_CPUTIME_ID`) over batches, 30 samples per cell, with the three
-encodings run in rotation inside each sample. A cell whose
-`(p95 - p05) / median` or `(max - min) / median` is above 10 % is flagged in the
-JSON (the range catches one disturbed sample, which p95 of 30 samples cannot).
+CPU time comes from an unpaced loop: thread CPU time (`CLOCK_THREAD_CPUTIME_ID`)
+over batches, 30 samples per operation, with every operation of the three
+encodings run in rotation inside each sample. A batch repeats one operation
+only: encode writes into the caller's buffer, verify checks a fixed set of
+already-encoded bytes, and decode reads a proof that was built once before the
+batch (the proof is copied bitwise for each call, because `Ref::decode` consumes
+it; the harness refuses a payload whose proof owns data that is dropped). The
+per-update figure is the sum of the three operation medians; its p05, p95, min
+and max are the sums of the operation bounds, an envelope and not percentiles of
+a summed sample. A stat is flagged when `(p95 - p05) / median` or
+`(max - min) / median` is above 10 % (the range catches one disturbed sample,
+which p95 of 30 samples cannot); the flag of the per-update figure is raised
+when any operation is flagged. The paced run repeats the whole update.
+
+JSON fields of a measured row, beyond the payload, its type and the counts:
+`per_update_ns` (median, p05, p95, min, max, range_spread, reps, spread,
+spread_flagged), `cpu_percent_at_rate` (the per-update median at the rate),
+`per_op_ns` with `encode`, `verify` and `decode`, each with the same fields as
+`per_update_ns` and its own `cpu_percent_at_rate`, and `paced` when asked for.
+`encode_allocs`, `verify_allocs` and `decode_allocs` each count that call alone.
 Each JSON row names its payload and its payload type, so that a report can
 weight the signals or the distinct payload types equally. The provenance block
 holds the date, the commit, the platform, the core label, the toolchain, and the

@@ -1,7 +1,13 @@
+use bench_stress::bench::stress::ItemListPayload;
+use bench_stress::bench::stress::{Count, Item, Label};
 use bench_veh_cluster::veh::common::Speed;
 use encoding_bench::timing::*;
+use encoding_bench::CountingAlloc;
 use ridl_rt::encoding::{FlatBuffers, Podbuf, Proto3};
 use std::cell::Cell;
+
+#[global_allocator]
+static ALLOC: CountingAlloc = CountingAlloc;
 
 fn stat(median: f64, p05: f64, p95: f64) -> Stat {
     Stat {
@@ -82,6 +88,7 @@ fn time_cells_divides_batch_time_by_batch_size_and_labels_by_runner() {
     let log = std::cell::RefCell::new(Vec::<&'static str>::new());
     let mk = |label: &'static str, cost: u64| Runner {
         encoding: label,
+        op: Op::Encode,
         run: Box::new({
             let clock = &clock;
             let log = &log;
@@ -99,14 +106,14 @@ fn time_cells_divides_batch_time_by_batch_size_and_labels_by_runner() {
     };
     let out = time_cells(&mut runners, &cfg, &|| clock.get());
     assert_eq!(
-        out.iter().map(|(l, _)| *l).collect::<Vec<_>>(),
+        out.iter().map(|t| t.encoding).collect::<Vec<_>>(),
         ["a", "b", "c"]
     );
-    assert_eq!(out[0].1.median_ns, 100.0);
-    assert_eq!(out[1].1.median_ns, 200.0);
-    assert_eq!(out[2].1.median_ns, 300.0);
-    assert!(out.iter().all(|(_, s)| s.reps == 30));
-    assert!(out.iter().all(|(_, s)| !s.spread_flagged()));
+    assert_eq!(out[0].stat.median_ns, 100.0);
+    assert_eq!(out[1].stat.median_ns, 200.0);
+    assert_eq!(out[2].stat.median_ns, 300.0);
+    assert!(out.iter().all(|t| t.stat.reps == 30));
+    assert!(out.iter().all(|t| !t.stat.spread_flagged()));
 
     // The last 90 batches are the measured samples: rotation, 30 samples.
     let log = log.borrow();
@@ -153,6 +160,7 @@ fn costed<'a>(clock: &'a Cell<u64>, log: &'a Log, cost: u64, first_call_extra: u
     let mut first = true;
     Runner {
         encoding: "x",
+        op: Op::Encode,
         run: Box::new(move |n: u64| {
             log.borrow_mut().push(n);
             let extra = if first { first_call_extra } else { 0 };
@@ -179,7 +187,7 @@ fn a_slow_first_call_does_not_collapse_the_batch_size() {
     let log = log.borrow();
     let sampled = &log[log.len() - 30..];
     assert!(sampled.iter().all(|&n| n >= 900_000), "{sampled:?}");
-    assert_eq!(out[0].1.median_ns, 1.0);
+    assert_eq!(out[0].stat.median_ns, 1.0);
 }
 
 /// The cost per update falls from 10 ns to 1 ns after the 54 calls of the
@@ -192,6 +200,7 @@ fn the_sampled_batch_lasts_at_least_the_floor() {
     let log = Log::default();
     let mut runners = [Runner {
         encoding: "x",
+        op: Op::Encode,
         run: Box::new(|n: u64| {
             let calls = log.borrow().len();
             log.borrow_mut().push(n);
@@ -222,7 +231,7 @@ fn warm_up_batches_run_before_the_samples_and_are_not_sampled() {
             warmup_batches: warmup,
         };
         let out = time_cells(&mut runners, &cfg, &|| clock.get());
-        assert!(out.iter().all(|(_, s)| s.reps == 30));
+        assert!(out.iter().all(|t| t.stat.reps == 30));
         let n = log.borrow().len();
         n
     };
@@ -250,4 +259,129 @@ fn the_default_config_has_30_samples_and_3_warm_up_batches() {
     assert_eq!(cfg.samples, 30);
     assert_eq!(cfg.warmup_batches, 3);
     assert_eq!(cfg.duration_s, 1.0);
+}
+
+fn stat_of(median: f64, p05: f64, p95: f64, min: f64, max: f64, reps: usize) -> Stat {
+    Stat {
+        median_ns: median,
+        p05_ns: p05,
+        p95_ns: p95,
+        min_ns: min,
+        max_ns: max,
+        reps,
+    }
+}
+
+#[test]
+fn the_sum_of_stats_adds_every_field_and_keeps_the_smallest_reps() {
+    let a = stat_of(10.0, 9.0, 12.0, 8.0, 14.0, 30);
+    let b = stat_of(20.0, 18.0, 25.0, 17.0, 27.0, 40);
+    let c = stat_of(300.0, 280.0, 330.0, 270.0, 340.0, 35);
+    let s = Stat::sum(&[a, b, c]);
+    assert_eq!(s.median_ns, 330.0);
+    assert_eq!(s.p05_ns, 307.0);
+    assert_eq!(s.p95_ns, 367.0);
+    assert_eq!(s.min_ns, 295.0);
+    assert_eq!(s.max_ns, 381.0);
+    assert_eq!(s.reps, 30);
+}
+
+/// Three operations of one encoding with distinct costs per operation: the
+/// stat of each operation lands in its own field, and the per-update median
+/// is the sum.
+#[test]
+fn each_operation_is_timed_on_its_own_and_its_label_is_kept() {
+    let clock = Cell::new(0u64);
+    let mk = |op: Op, cost: u64| Runner {
+        encoding: "e",
+        op,
+        run: Box::new({
+            let clock = &clock;
+            move |n: u64| clock.set(clock.get() + n * cost)
+        }) as Box<dyn FnMut(u64) + '_>,
+    };
+    // runners in a scrambled order, so the result is found by label
+    let mut runners = [
+        mk(Op::Decode, 300),
+        mk(Op::Encode, 100),
+        mk(Op::Verify, 200),
+    ];
+    let cfg = TimingConfig::new(0.03);
+    let timed = time_cells(&mut runners, &cfg, &|| clock.get());
+    let ops = OpStats::of(&timed, "e");
+    assert_eq!(ops.encode.median_ns, 100.0);
+    assert_eq!(ops.verify.median_ns, 200.0);
+    assert_eq!(ops.decode.median_ns, 300.0);
+    assert_eq!(ops.per_update().median_ns, 600.0);
+    assert!(!ops.flagged());
+}
+
+#[test]
+fn one_noisy_operation_flags_the_cell() {
+    let quiet = stat_of(100.0, 100.0, 100.0, 100.0, 100.0, 30);
+    let noisy = stat_of(100.0, 100.0, 100.0, 100.0, 200.0, 30);
+    for k in 0..3 {
+        let mut v = [quiet; 3];
+        v[k] = noisy;
+        let ops = OpStats {
+            encode: v[0],
+            verify: v[1],
+            decode: v[2],
+        };
+        assert!(ops.flagged(), "operation {k}");
+    }
+}
+
+#[test]
+fn op_runners_are_labeled_with_the_encoding_and_the_operation_in_update_order() {
+    let v = Speed::new(72.5).unwrap();
+    let r = op_runners::<_, Proto3>(&v);
+    assert_eq!(
+        r.iter().map(|r| (r.encoding, r.op)).collect::<Vec<_>>(),
+        [
+            ("proto3", Op::Encode),
+            ("proto3", Op::Verify),
+            ("proto3", Op::Decode)
+        ]
+    );
+    assert_eq!(OPS, [Op::Encode, Op::Verify, Op::Decode]);
+    assert_eq!(runner::<_, Podbuf>(&v).op, Op::Update);
+}
+
+fn item_list() -> ItemListPayload {
+    ItemListPayload {
+        items: (0..16)
+            .map(|i| Item {
+                label: Label::new(format!("item-{i:02}")).unwrap(),
+                count: Count::new(i * 1000).unwrap(),
+            })
+            .collect(),
+    }
+}
+
+/// Allocations made by a batch of `n` of each operation. The counts are
+/// exact per call (FlatBuffers: encode 1, verify 0, decode 17 for this
+/// value), so a runner that repeats more than its own operation, or the
+/// whole update, shows other numbers.
+fn batch_allocs(runners: &mut [Runner; 3], n: u64) -> Vec<u64> {
+    runners
+        .iter_mut()
+        .map(|r| {
+            (r.run)(1); // the first call may allocate lazily
+            CountingAlloc::reset();
+            (r.run)(n);
+            CountingAlloc::count()
+        })
+        .collect()
+}
+
+#[test]
+fn a_batch_of_one_operation_repeats_only_that_operation() {
+    let v = item_list();
+    let mut fb = op_runners::<_, FlatBuffers>(&v);
+    assert_eq!(batch_allocs(&mut fb, 5), [5, 0, 85]);
+    let mut pb = op_runners::<_, Podbuf>(&v);
+    assert_eq!(batch_allocs(&mut pb, 5), [0, 0, 85]);
+    let mut p3 = op_runners::<_, Proto3>(&v);
+    assert_eq!(batch_allocs(&mut p3, 5), [0, 0, 95]);
 }

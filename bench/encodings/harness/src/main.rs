@@ -105,7 +105,7 @@ fn main() {
 
 fn print_table(rec: &Recorder) {
     println!(
-        "{:<48} {:<7} {:<12} {:>6} {:>7} {:>7} {:>7} {:>10} {:>8}",
+        "{:<48} {:<7} {:<12} {:>6} {:>7} {:>7} {:>7} {:>10} {:>8}  enc/ver/dec ns",
         "payload", "kind", "encoding", "size", "enc_al", "ver_al", "dec_al", "ns/update", "cpu%@4k"
     );
     for row in &rec.rows {
@@ -115,12 +115,12 @@ fn print_table(rec: &Recorder) {
         };
         match &row.cell {
             Cell::Measured(c) => {
-                let (ns, pct) = match &row.timing {
+                let (ns, pct, ops) = match &row.timing {
                     Some(t) => (
                         format!(
                             "{:.0}{}",
                             t.stat.median_ns,
-                            if t.stat.spread_flagged() { "*" } else { "" }
+                            if t.flagged() { "*" } else { "" }
                         ),
                         format!(
                             "{:.3}",
@@ -129,11 +129,15 @@ fn print_table(rec: &Recorder) {
                                 RATE_PER_S
                             )
                         ),
+                        format!(
+                            "{:.0}/{:.0}/{:.0}",
+                            t.ops.encode.median_ns, t.ops.verify.median_ns, t.ops.decode.median_ns
+                        ),
                     ),
-                    None => ("-".into(), "-".into()),
+                    None => ("-".into(), "-".into(), "-".into()),
                 };
                 println!(
-                    "{:<48} {:<7} {:<12} {:>6} {:>7} {:>7} {:>7} {:>10} {:>8}",
+                    "{:<48} {:<7} {:<12} {:>6} {:>7} {:>7} {:>7} {:>10} {:>8}  {}",
                     row.payload,
                     kind,
                     row.encoding,
@@ -142,7 +146,8 @@ fn print_table(rec: &Recorder) {
                     c.verify_allocs,
                     c.decode_allocs,
                     ns,
-                    pct
+                    pct,
+                    ops
                 )
             }
             Cell::Refused { reason } => println!(

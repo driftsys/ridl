@@ -4,7 +4,7 @@ use encoding_bench::corpus::{Cell, Kind, Recorder, Row, RowTiming};
 use encoding_bench::report::{
     civil_date, collect_provenance, resolve_date, to_json, Provenance, RunInfo,
 };
-use encoding_bench::timing::{paced_summary, Stat, TimingConfig};
+use encoding_bench::timing::{paced_summary, OpStats, Stat, TimingConfig};
 use encoding_bench::{CountingAlloc, Counts};
 use serde_json::Value;
 
@@ -45,17 +45,31 @@ fn measured_row(encoding: &'static str, median: f64, p05: f64, p95: f64) -> Row 
             verify_allocs: 2,
             decode_allocs: 3,
         }),
-        timing: Some(RowTiming {
-            stat: Stat {
-                median_ns: median,
-                p05_ns: p05,
-                p95_ns: p95,
-                min_ns: p05,
-                max_ns: p95,
-                reps: 30,
-            },
-            paced: None,
-        }),
+        timing: Some(timing_of(median, p05, p95)),
+    }
+}
+
+/// A timing whose operations are one fifth (encode), one fifth (verify) and
+/// three fifths (decode) of the per-update figures, so that the per-update
+/// stat is the sum of the three.
+fn timing_of(median: f64, p05: f64, p95: f64) -> RowTiming {
+    let part = |k: f64| Stat {
+        median_ns: median * k / 5.0,
+        p05_ns: p05 * k / 5.0,
+        p95_ns: p95 * k / 5.0,
+        min_ns: p05 * k / 5.0,
+        max_ns: p95 * k / 5.0,
+        reps: 30,
+    };
+    let ops = OpStats {
+        encode: part(1.0),
+        verify: part(1.0),
+        decode: part(3.0),
+    };
+    RowTiming {
+        stat: ops.per_update(),
+        ops,
+        paced: None,
     }
 }
 
@@ -117,6 +131,29 @@ fn a_measured_row_carries_counts_timing_and_the_derived_load() {
     assert_eq!(r["per_update_ns"]["spread_flagged"], true);
     assert_eq!(r["cpu_percent_at_rate"], 50.0);
     assert!(r["paced"].is_null());
+    // per operation: encode and verify a fifth each, decode three fifths
+    let ops = &r["per_op_ns"];
+    for (op, median, p05, p95, pct) in [
+        ("encode", 25_000.0, 20_000.0, 30_000.0, 10.0),
+        ("verify", 25_000.0, 20_000.0, 30_000.0, 10.0),
+        ("decode", 75_000.0, 60_000.0, 90_000.0, 30.0),
+    ] {
+        let o = &ops[op];
+        assert_eq!(o["median"], median, "{op}");
+        assert_eq!(o["p05"], p05, "{op}");
+        assert_eq!(o["p95"], p95, "{op}");
+        assert_eq!(o["min"], p05, "{op}");
+        assert_eq!(o["max"], p95, "{op}");
+        assert_eq!(o["reps"], 30, "{op}");
+        assert_eq!(o["range_spread"], 0.4, "{op}");
+        assert_eq!(o["spread_flagged"], true, "{op}");
+        assert_eq!(o["cpu_percent_at_rate"], pct, "{op}");
+    }
+    // the headline is the sum of the three medians
+    assert_eq!(
+        r["per_update_ns"]["median"].as_f64().unwrap(),
+        25_000.0 + 25_000.0 + 75_000.0
+    );
 }
 
 #[test]
@@ -127,6 +164,9 @@ fn a_quiet_cell_is_not_flagged_and_a_paced_run_is_reported_next_to_the_derived_f
     let v = to_json(&prov(), &info(true), &[row]);
     let r = &rows_of(&v)[0];
     assert_eq!(r["per_update_ns"]["spread_flagged"], false);
+    for op in ["encode", "verify", "decode"] {
+        assert_eq!(r["per_op_ns"][op]["spread_flagged"], false, "{op}");
+    }
     assert_eq!(r["paced"]["updates"], 4000);
     assert_eq!(r["paced"]["measured_percent"], 0.5);
     assert_eq!(r["paced"]["derived_percent"], 0.4);
@@ -276,4 +316,43 @@ fn the_date_flag_overrides_the_clock() {
     let clocked = collect_provenance("A55", Some("abc"), None);
     assert_ne!(clocked.date, "2001-02-03");
     assert_eq!(clocked.date.len(), 10);
+}
+
+/// The per-update flag is raised when any operation is noisy, even when the
+/// sum of the bounds is quiet.
+#[test]
+fn the_per_update_flag_follows_the_noisiest_operation() {
+    let mut row = measured_row("podbuf", 1_000.0, 990.0, 1_010.0);
+    // decode is three fifths of the update; give encode a 1.3x outlier
+    let t = row.timing.as_mut().unwrap();
+    t.ops.encode.max_ns = t.ops.encode.median_ns * 1.3;
+    t.stat = t.ops.per_update();
+    assert!(!t.stat.spread_flagged(), "the sum alone is mild");
+    let v = to_json(&prov(), &info(false), &[row]);
+    let r = &rows_of(&v)[0];
+    assert_eq!(r["per_op_ns"]["encode"]["spread_flagged"], true);
+    assert_eq!(r["per_op_ns"]["verify"]["spread_flagged"], false);
+    assert_eq!(r["per_update_ns"]["spread_flagged"], true);
+}
+
+/// The headline stat of a timed row is the sum of the three operation
+/// medians, whatever the clock read.
+#[test]
+fn a_timed_row_sums_its_operation_medians() {
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.03)),
+        ..Recorder::default()
+    };
+    rec.record("a.b.c", Kind::Signal, &Speed::new(72.5).unwrap());
+    for r in &rec.rows {
+        let t = r.timing.expect("timed");
+        assert_eq!(
+            t.stat.median_ns,
+            t.ops.encode.median_ns + t.ops.verify.median_ns + t.ops.decode.median_ns
+        );
+        assert_eq!(t.stat, t.ops.per_update());
+        assert_eq!(t.ops.encode.reps, 30);
+        assert_eq!(t.ops.verify.reps, 30);
+        assert_eq!(t.ops.decode.reps, 30);
+    }
 }

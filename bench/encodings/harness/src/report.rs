@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use crate::corpus::{Cell, Kind, Row};
-use crate::timing::sustained_cpu_percent;
+use crate::timing::{sustained_cpu_percent, Stat};
 
 /// Where and when a result was produced.
 #[derive(Debug, Clone)]
@@ -115,6 +115,23 @@ pub fn collect_provenance(
     }
 }
 
+/// The JSON of one stat. `flagged` is passed in, because the flag of a cell
+/// is the flag of its noisiest operation, not a property of the stat alone.
+fn stat_json(stat: &Stat, flagged: bool, rate_per_s: f64) -> Value {
+    json!({
+        "median": stat.median_ns,
+        "p05": stat.p05_ns,
+        "p95": stat.p95_ns,
+        "min": stat.min_ns,
+        "max": stat.max_ns,
+        "range_spread": stat.range_spread(),
+        "reps": stat.reps,
+        "spread": stat.spread(),
+        "spread_flagged": flagged,
+        "cpu_percent_at_rate": sustained_cpu_percent(stat.median_ns, rate_per_s),
+    })
+}
+
 fn row_json(row: &Row, rate_per_s: f64) -> Value {
     let kind = match row.kind {
         Kind::Signal => "signal",
@@ -135,18 +152,21 @@ fn row_json(row: &Row, rate_per_s: f64) -> Value {
             obj.insert("verify_allocs".into(), c.verify_allocs.into());
             obj.insert("decode_allocs".into(), c.decode_allocs.into());
             if let Some(t) = &row.timing {
+                // The headline: the sum of the three operation stats. Its flag
+                // is raised when any operation is flagged.
+                let mut per_update = stat_json(&t.stat, t.flagged(), rate_per_s);
+                per_update
+                    .as_object_mut()
+                    .expect("an object")
+                    .remove("cpu_percent_at_rate");
+                obj.insert("per_update_ns".into(), per_update);
+                let op = |s: &Stat| stat_json(s, s.spread_flagged(), rate_per_s);
                 obj.insert(
-                    "per_update_ns".into(),
+                    "per_op_ns".into(),
                     json!({
-                        "median": t.stat.median_ns,
-                        "p05": t.stat.p05_ns,
-                        "p95": t.stat.p95_ns,
-                        "min": t.stat.min_ns,
-                        "max": t.stat.max_ns,
-                        "range_spread": t.stat.range_spread(),
-                        "reps": t.stat.reps,
-                        "spread": t.stat.spread(),
-                        "spread_flagged": t.stat.spread_flagged(),
+                        "encode": op(&t.ops.encode),
+                        "verify": op(&t.ops.verify),
+                        "decode": op(&t.ops.decode),
                     }),
                 );
                 obj.insert(
