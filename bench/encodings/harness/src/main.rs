@@ -3,8 +3,8 @@
 //! writes the result as JSON.
 //!
 //! Flags: `--out FILE` (turns timing on), `--core-label TEXT` (names the core
-//! the run is pinned to), `--duration SECONDS` (CPU time per cell and
-//! encoding, default 0.5), `--paced` (also run each cell at 4 000 updates per
+//! the run is pinned to), `--duration SECONDS` (CPU time per operation
+//! of a cell and encoding, default 0.5), `--paced` (also run each cell at 4 000 updates per
 //! second and read process CPU time), `--date YYYY-MM-DD` (for a device with a
 //! wrong clock), `--commit HASH` (for a device without git).
 

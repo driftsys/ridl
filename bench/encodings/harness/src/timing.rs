@@ -126,7 +126,8 @@ pub fn collect_interleaved(
 pub struct TimingConfig {
     /// Samples per cell; at least `MIN_SAMPLES`.
     pub samples: usize,
-    /// The CPU time spent in the samples of one cell, per encoding.
+    /// The CPU time spent in the samples of one operation of one cell, per
+    /// encoding.
     pub duration_s: f64,
     /// Batches run and discarded before the samples.
     pub warmup_batches: u32,
