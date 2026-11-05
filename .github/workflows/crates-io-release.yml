@@ -111,8 +111,8 @@ jobs:
           unzip -o -q "$RUNNER_TEMP/deno.zip" -d "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/deno" --version
-      # `just build` runs `cabin-ws-demo`, which needs `flatc` at the version in
-      # .flatc-version, as ci.yml's typescript job installs it.
+      # `just build` runs `ts-e2e` and `cabin-ws-demo`, which need `flatc` at the
+      # version in .flatc-version, as ci.yml's typescript job installs it.
       - name: install flatc
         run: |
           set -o pipefail

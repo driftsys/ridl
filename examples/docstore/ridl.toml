@@ -1,9 +1,13 @@
 [package]
-name = "docstore"
+name = "docstore.api"
 version = "1.0.0"
 
 [backend.rust]
 encodings = ["flatbuffers"]
+wasm = true
+
+[backend.typescript]
+codec = true
 
 [lints]
 # The generated face requires a named union for a functional error reply.

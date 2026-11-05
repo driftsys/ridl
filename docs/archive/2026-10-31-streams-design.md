@@ -1506,6 +1506,93 @@ belongs to [the frame specification](../specification/frame-specification.md)
   process. No review completion is claimed here. Server TCP tests remain
   compiled but unexecuted in the available sandbox reports.
 
+## As built (stage 6)
+
+Recorded 2026-11-05 against the completed implementation and accepted driver
+answers. This is a working-branch implementation record, not a merge or release
+claim. The authoritative generated surface is
+[the codec table record](../design/ts-codec-table.md#stream-functions), whose
+D-16–D-29 decisions preserve these rulings without the implementation plan's
+proposed wording. The owner accepted Q1–Q8: duplex is included, sorted rule
+codes and paired regeneration are required, the explicit runtime context and
+prefixed function names are used, uploads return their platform writer, sender
+splitting and local errors follow the accepted contracts, and generated docstore
+interop replaces the proposed faults fixture. The planning report remains in the
+implementation plan.
+
+- S6-1 → D-16: payload rules are sorted
+  `length, pattern, range, step, unique,
+  utf8, variant`, with `utf8` code 7
+  and `variant` code 8. The prior additive classification is incorrect: widening
+  the TypeScript union and moving the numeric `variant` code is breaking and
+  belongs to the next breaking release. Regenerate wasm and TypeScript together;
+  frame detail codes are separate.
+- S6-3 → D-17: functions receive `StreamSession = { transport, codec }`.
+  Transport is structural and methods retain their receiver. Loading and
+  connecting are explicit, with no WebSocket dependency in generated code or the
+  runtime.
+- S6-4 → D-18: names are `<Interface>_<declaredMember>`, options are required
+  `{ bound }` in milliseconds, and all public names and helper imports are
+  collision checked. Functions and metadata cover reply-only, command upload,
+  plain-reply upload query and duplex. Interaction and parameter TSDoc comes
+  from the codegen model.
+- S6-5 → D-19: named encodings stay whole and are verified; bytes split at the
+  member limit, text splits between code points and rejects lone surrogates. A
+  zero limit fails before request transmission; oversized named encodings or a
+  single oversized code point fail locally as corrupt.
+- S6-6 → D-20: local corrupt/contract failures use `StreamError`; remote errors
+  retain identity. Setup checks precede transmission. Decode errors propagate
+  normal raw cancellation. Upload errors keep the local validation error on the
+  writer while the other duplex direction receives interruption.
+- S6-7 → D-21: the generated document server and consumer are part of `ts-e2e`,
+  alongside existing raw transport regressions. The byte transfer is 204,800
+  exact bytes; the named download is 64 indexed elements. The existing browser
+  regression remains separate.
+- R-6-T1-1 → D-22: platform cancellation/backpressure regressions may initially
+  pass. Their evidence is a production mutation and restored pass, not an
+  artificial assertion RED.
+- R-6-T0-1 → D-23: upload abort sends stream 1 then stream 0 interrupted; reply
+  cancel sends stream 0 only. Platform abort errors the native writer; reply
+  failure and blocked writes use the transport interruption error.
+- R-6-T2-1 → D-24: ordinary inline fallible queries still lack a `reply` codec
+  entry. This implementation does not repair that ordinary-call limit.
+- R-6-T3-3 → D-25: native writer behavior is retained. Pending/later writes,
+  queued close and `writer.closed` preserve remote error identity; close after
+  the writer has already errored follows native `TypeError` behavior.
+- R-6-T3-5 → D-26: RIDL-105 rejects `()` query replies. No synthetic empty query
+  result is generated; named unions and induced tuple replies are used.
+- R-6-T4-1 → D-27: duplex requires the 65th valid indexed echo before upload
+  close, then normal reply end. This replaces the 100 ms timing probe and
+  demonstrates continued progress with upload still open.
+- R-6-T4-2 → D-28: `just test` generates docstore Rust before testing its
+  socket-free provider. The web helper does not execute provider tests, so
+  integrated negative controls reach the TypeScript consumer.
+- Package correction → D-29: the example is `docstore.api`, generated crate
+  `docstore_api`. A single-component package collides between the codec's domain
+  import and the `flatc` barrel path. The fixture avoids that collision; the
+  generator repair is tracked in driftsys/ridl#1252.
+
+S6-2 is superseded by the owner's duplex inclusion. The byte transport's
+`queryDuplex` and typed generated duplex functions are built (#1240). Two or
+more parameter streams remain excluded (#1224). Other exact omissions are inline
+fallible upload replies without a codec and payload roots without a finite
+FlatBuffers bound; existing internal and foreign composite refusals remain.
+Stream containers are still refused as ordinary typl types. Rust-side limits for
+byte/text duplex replies remain as recorded in ADR-0032.
+
+Tests and evidence: the per-task implementation and fix reports record semantic
+assertion RED/GREEN and killed mutations for decoding, encoding, request/reply
+verification, naming, TSDoc, errors, direction coupling and generated
+interoperability. `_codec-ts-check` checks generated fixture functions against
+`flatc`; compiler tests pin wasm/TypeScript payload names and literal rule codes
+7/8. `ts-e2e` runs the actual generated document byte, named and duplex
+transfers, including cancellation and abort followed by reuse. `test` includes
+the provider-consumption barrier, and `ts-browser-e2e` retains the browser
+transport proof. The driver reports Tasks 0–4 done and gated at base `f9a4fe4a`;
+this archive does not infer TCP execution from sandbox-only runs. Upload
+acceptance and local writer close do not prove provider consumption; docstore's
+pending fetch/chunks wait for committed upload end.
+
 ## Trace
 
 - Issues: driftsys/ridl#1116, driftsys/ridl#336, driftsys/ridl#943.

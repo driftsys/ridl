@@ -882,8 +882,10 @@ named-element streamed reply, over `ridl-loopback`. Calls with two or more
 stream parameters remain outside the face (driftsys/ridl#1224). The WebSocket
 server carries parameter streams, including a query with both an upload and a
 reply stream ([the server record](../design/ridl-transport-ws.md), D-30). The
-TypeScript client's upload methods and their limits are recorded in
-[D-23](../design/ridl-transport-ws-ts.md). The
+TypeScript transport methods and their limits are recorded in
+[D-23](../design/ridl-transport-ws-ts.md). The optional TypeScript codec module
+also emits typed stream functions, including duplex; see
+[Calling generated streams](generated-code.md#calling-generated-streams). The
 [interaction-face record](../design/interaction-face.md#stream-forms) lists the
 generated reader and writer methods. The specification's §12 and
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) record the contract a stream
@@ -975,20 +977,20 @@ emit target, except that `catalog` writes one per unit and none for a unit that
 declares no interface and no service with an inline body, and `deployment`
 writes one per deployment of the system. Twelve emit targets exist today:
 
-| `--emit`          | Output                              | Contents                                                                                                                       |
-| ----------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `rust`            | `<package>.rs`                      | idiomatic Rust source (the default)                                                                                            |
-| `ir-json`         | `<package>.ir.json`                 | the lowered IR v2 as exact-decimal JSON                                                                                        |
-| `ir-text`         | `<package>.ir.txtpb`                | the lowered IR v2 as prototext                                                                                                 |
-| `ir-binary`       | `<package>.ir.binpb`                | the lowered IR v2 as protobuf binary                                                                                           |
-| `typescript`      | `<package>.ts`                      | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true` for a package with a payload root that gets a codec |
-| `proto`           | `<package>.proto`                   | the proto3 schema — types and the ordinals                                                                                     |
-| `flatbuffers`     | `<package>.fbs`                     | the FlatBuffers schema — types and the ordinals                                                                                |
-| `podbuf`          | `<package>.h`                       | the podbuf C header — the head structs and the accessors a C consumer reads a verified buffer through                          |
-| `codegen-model`   | `<package>.codegen.json`            | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON                                                       |
-| `codegen-request` | `<package>.codegen-request.json`    | the whole codegen request a build hands a backend, as canonical protobuf JSON                                                  |
-| `catalog`         | `<unit>.catalog.binfb`              | the catalog descriptor an engine reads — interfaces, numbers, members, sizes                                                   |
-| `deployment`      | `<package>.<Name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs                      |
+| `--emit`          | Output                              | Contents                                                                                                                                                  |
+| ----------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rust`            | `<package>.rs`                      | idiomatic Rust source (the default)                                                                                                                       |
+| `ir-json`         | `<package>.ir.json`                 | the lowered IR v2 as exact-decimal JSON                                                                                                                   |
+| `ir-text`         | `<package>.ir.txtpb`                | the lowered IR v2 as prototext                                                                                                                            |
+| `ir-binary`       | `<package>.ir.binpb`                | the lowered IR v2 as protobuf binary                                                                                                                      |
+| `typescript`      | `<package>.ts`                      | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true` for a package with a payload root that gets a codec or a supported stream call |
+| `proto`           | `<package>.proto`                   | the proto3 schema — types and the ordinals                                                                                                                |
+| `flatbuffers`     | `<package>.fbs`                     | the FlatBuffers schema — types and the ordinals                                                                                                           |
+| `podbuf`          | `<package>.h`                       | the podbuf C header — the head structs and the accessors a C consumer reads a verified buffer through                                                     |
+| `codegen-model`   | `<package>.codegen.json`            | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON                                                                                  |
+| `codegen-request` | `<package>.codegen-request.json`    | the whole codegen request a build hands a backend, as canonical protobuf JSON                                                                             |
+| `catalog`         | `<unit>.catalog.binfb`              | the catalog descriptor an engine reads — interfaces, numbers, members, sizes                                                                              |
+| `deployment`      | `<package>.<Name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs                                                 |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by

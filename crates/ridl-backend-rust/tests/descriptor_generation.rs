@@ -1100,7 +1100,7 @@ fn wasm_module_lists_the_payload_types_sorted() {
     }
     assert!(
         d.contains(
-            "WASM_RULES:&[&str]=&[\"length\",\"pattern\",\"range\",\"step\",\"unique\",\"variant\",]"
+            "WASM_RULES:&[&str]=&[\"length\",\"pattern\",\"range\",\"step\",\"unique\",\"utf8\",\"variant\",]"
         ),
         "got:\n{source}"
     );

@@ -36,7 +36,7 @@ export const PAYLOAD_TYPES = [
   "open.demo.WideFlags",
 ] as const;
 /** The text of each rule code the wasm module reports, rule code n at index n - 2. */
-export const RULES = ["length", "pattern", "range", "step", "unique", "variant"] as const;
+export const RULES = ["length", "pattern", "range", "step", "unique", "utf8", "variant"] as const;
 
 /** The induced tuple of `Control.select`. */
 export interface ControlSelectParams {

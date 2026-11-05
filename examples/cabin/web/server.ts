@@ -1,5 +1,6 @@
-// Starts the cabin server of ../server and reads the `port` and `hash` lines
-// it prints. main.ts and browser.ts both use it.
+// Starts an example server and reads the `port` and `hash` lines it prints.
+// The cabin main.ts and browser.ts use it; the docstore web program re-exports
+// it through its server.ts and uses it too.
 
 /** A started cabin server. */
 export interface CabinServer {

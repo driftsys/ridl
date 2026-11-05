@@ -780,14 +780,20 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md) and
   [the lints chapter](../book/lints.md).
 
+- **[2026-10-31-streams-design.md](2026-10-31-streams-design.md)** — the shared
+  streams design, archived on 2026-11-05 with its as-built section and mapping
+  from plan labels to durable decision numbers. The implemented TypeScript
+  surface is recorded in [the codec table design](../design/ts-codec-table.md)
+  and [the transport design](../design/ridl-transport-ws-ts.md); the archive
+  records the implementation without claiming a merge or release.
+
 - **2026-10-31-streams-stages-1-2-plan.md** — the plan for stages 1 and 2 of the
   streams work: the `streams` list in the catalog descriptor, and the stream
   port of `ridl-rt` with its loopback implementation and conformance tests.
   Archived verbatim, on 2026-11-01, once the work landed in driftsys/ridl#1154
   (squash `ed336b98`, 2026-10-31); the `runtime-crates` freeze row came back in
-  driftsys/ridl#1159. Stages 3 to 6 continue from
-  `docs/wip/2026-10-31-streams-design.md` and driftsys/ridl#1116, which stay in
-  `docs/wip/`.
+  driftsys/ridl#1159. The shared design for driftsys/ridl#1116 is archived as
+  [2026-10-31-streams-design.md](2026-10-31-streams-design.md).
 
 - **2026-10-30-ws-blocks-design.md** — the design note for the `block` frames of
   the WebSocket binding (frame version 2, binding version 2 under `ridl-ws-v2`):
@@ -810,7 +816,8 @@ provenance. Nothing here is normative — the current references live in
   elements, its caller side and its `serve`. Archived verbatim, on 2026-11-01,
   with the pull request that builds it (driftsys/ridl#1171). The durable record
   is [`../design/interaction-face.md`](../design/interaction-face.md). Stages 4
-  to 6 continue from `docs/wip/2026-10-31-streams-design.md`.
+  to 6 are recorded in the archived
+  [shared streams design](2026-10-31-streams-design.md).
 
 - **2026-11-01-streams-stage-4-plan.md** — the plan for stage 4 of the streams
   work: a query's streamed reply over the WebSocket binding (frame version 3
@@ -821,7 +828,8 @@ provenance. Nothing here is normative — the current references live in
   [the WebSocket binding design](../design/ridl-transport-ws.md),
   [the TypeScript client design](../design/ridl-transport-ws-ts.md) and
   [the binding rationale technote](../technotes/websocket-binding-rationale.md).
-  Stages 5 and 6 continue from `docs/wip/2026-10-31-streams-design.md`.
+  Stages 5 and 6 are recorded in the archived
+  [shared streams design](2026-10-31-streams-design.md).
 
 - **2026-11-02-podbuf-remote-inline-design.md** and
   **2026-11-02-podbuf-remote-inline-plan.md** — remote struct growth held inline
@@ -863,7 +871,8 @@ provenance. Nothing here is normative — the current references live in
   [the ridl-rt design](../design/ridl-rt.md),
   [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
   [the frame specification](../specification/frame-specification.md). Stage 5b
-  continues from `docs/wip/2026-10-31-streams-design.md`.
+  is recorded in the archived
+  [shared streams design](2026-10-31-streams-design.md).
 - **2026-11-04-streams-stage-5b-plan.md** — the plan for stage 5b of the streams
   work: the upload direction of a stream over the WebSocket binding (the server
   in `ridl-transport-ws` receives `chunk` frames on a parameter stream under a
@@ -875,5 +884,6 @@ provenance. Nothing here is normative — the current references live in
   [the `ridl-transport-ws` design](../design/ridl-transport-ws.md),
   [the TypeScript client design](../design/ridl-transport-ws-ts.md),
   [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
-  [the frame specification](../specification/frame-specification.md). Stage 6
-  continues from `docs/wip/2026-10-31-streams-design.md`.
+  [the frame specification](../specification/frame-specification.md). Stage 6 is
+  recorded in the archived
+  [shared streams design](2026-10-31-streams-design.md).

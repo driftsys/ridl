@@ -14,6 +14,7 @@
  * @module
  */
 
+import { DuplexCall, type DuplexSend } from "./duplex.ts";
 import { INITIAL_CREDIT, Kind } from "./frame.ts";
 import type { Frame, StreamOutcome, Target } from "./frame.ts";
 import { type CallFailure, SessionError } from "./errors.ts";
@@ -70,6 +71,7 @@ type Call =
     }
     | StreamCall
     | UploadCall
+    | DuplexCall
   );
 
 /** A query whose reply is a stream: the reply stream 0 of the call. */
@@ -249,6 +251,35 @@ export class Calls {
         call.stop({ kind: "interrupted" });
       },
     }, new CountQueuingStrategy({ highWaterMark: INITIAL_CREDIT }));
+  }
+
+  /** Starts one query owning parameter stream 1 and reply stream 0. */
+  duplex(
+    bound: number,
+    limit: number,
+    send: DuplexSend,
+    target?: Target,
+  ): {
+    upload: WritableStream<Uint8Array>;
+    stream: ReadableStream<Uint8Array>;
+  } {
+    if (!Number.isFinite(bound) || bound <= 0 || bound > MAX_BOUND) {
+      throw new RangeError(
+        `a call bound must be greater than 0 and at most ${MAX_BOUND}`,
+      );
+    }
+    if (this.#ended) throw new SessionError({ category: "down" });
+    const seq = this.#next++;
+    const call = new DuplexCall(
+      target,
+      seq,
+      limit,
+      send,
+      () => this.#inFlight.delete(seq),
+    );
+    this.#inFlight.set(seq, call);
+    call.start(bound);
+    return { upload: call.upload, stream: call.stream };
   }
 
   /** Starts a command with an upload; its acknowledgment is bounded from the request. */
@@ -432,6 +463,7 @@ export class Calls {
     ) {
       return "unknown-correlation";
     }
+    if (call.kind === "duplex") return call.onStream(frame);
     if (call.kind === "upload") {
       if (frame.stream !== UPLOAD_STREAM || frame.form === "chunk") {
         return "unexpected-form";
@@ -511,6 +543,7 @@ export class Calls {
     const call = this.#inFlight.get(frame.correlation);
     if (!call) return "unknown-correlation";
     const outcome = frame.outcome;
+    if (call.kind === "duplex") return call.settle(frame);
     if (call.kind === "upload") {
       if (
         (outcome.outcome === "accepted" && call.query) ||

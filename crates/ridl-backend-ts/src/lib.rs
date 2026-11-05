@@ -34,7 +34,8 @@
 //! - **Bare `integer` primitive** in field position — `bigint`: it carries no
 //!   width, so there is no proof the value fits 2^53.
 //! - **Docs** — TSDoc read from the codegen model (ADR-0028): the doc text
-//!   with each link as `{@link Name}`, or a code span of the qualified name
+//!   with each local link as `{@link Name}` (or `{@link t.Name}` in a codec
+//!   stream function), or a code span of the qualified name
 //!   when the target is not an item of this module; the rules as a `Rules:`
 //!   list under `@remarks`; then the `@unit`, `@range` and `@bounds` tags,
 //!   `@see`, `@since` and `@deprecated` (typl §14). `internal` declarations
@@ -165,6 +166,8 @@ struct Ctx<'a> {
     /// What a doc link may resolve to: the imports and the declarations of
     /// the module, from the first pass of [`generate_with`].
     output: Output,
+    /// Namespace prefix for local declaration links in this output module.
+    local_doc_namespace: &'static str,
     /// The declarations emitted so far; [`generate_with`] reads it after its
     /// first pass.
     emitted: RefCell<HashSet<String>>,
@@ -198,6 +201,7 @@ impl<'a> Ctx<'a> {
             model,
             documented,
             output,
+            local_doc_namespace: "",
             emitted: RefCell::new(HashSet::new()),
             visiting: RefCell::new(HashSet::new()),
             imports: RefCell::new(BTreeSet::new()),
@@ -1337,10 +1341,16 @@ fn linked(ctx: &Ctx, doc: &str, links: &[v1::DocLink]) -> String {
     text
 }
 
-/// `{@link <name>}` when the target is an item of this module, and a code
-/// span of the qualified target name otherwise.
+/// `{@link <name>}` when the target is emitted or imported by this module,
+/// using `ctx.local_doc_namespace` for a local declaration (`t.` for codec
+/// stream functions). Otherwise a code span of the qualified target name.
 fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
-    match ts_link(ctx.model, &ctx.output, &link.target) {
+    match ts_link(
+        ctx.model,
+        &ctx.output,
+        &link.target,
+        ctx.local_doc_namespace,
+    ) {
         Some(name) => format!("{{@link {name}}}"),
         None => format!("`{}`", link.target),
     }
@@ -1350,7 +1360,10 @@ fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
 /// target is not an item of this module: `target` is a canonical qualified
 /// name `pkg.Name` with an optional `.member`.
 ///
-/// - A declaration of the package is its name, when the module emits it.
+/// `local_namespace` prefixes a local declaration: empty in the domain module,
+/// `t.` in codec stream functions, which import the domain module as `t`.
+///
+/// - A declaration of the package is its prefixed name, when emitted.
 /// - A foreign declaration is `<alias>.<Name>`, the alias of the namespace
 ///   import, when the module imports its package.
 /// - A member is the declaration's name and the member's spelling: a struct
@@ -1359,7 +1372,12 @@ fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
 ///   member of a scalar or a constant, has no TypeScript member.
 /// - An `internal` declaration, an interface, an interaction, and anything
 ///   else, is `None`.
-fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
+fn ts_link(
+    model: &v1::Model,
+    output: &Output,
+    target: &str,
+    local_namespace: &str,
+) -> Option<String> {
     let package = model
         .scope
         .as_ref()
@@ -1392,7 +1410,9 @@ fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
         if !in_output {
             return None;
         }
-        let prefix = alias.map(|alias| format!("{alias}.")).unwrap_or_default();
+        let prefix = alias
+            .map(|alias| format!("{alias}."))
+            .unwrap_or_else(|| local_namespace.to_string());
         let Some(member) = rest.strip_prefix('.') else {
             return Some(format!("{prefix}{name}"));
         };
