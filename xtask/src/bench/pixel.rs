@@ -195,14 +195,55 @@ fn output(cmd: &mut Command, what: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-fn adb(serial: &str) -> Command {
+/// The environment variable cargo reads for the linker of the target. It is
+/// set on the cargo child process only, because cargo gives
+/// `CARGO_ENCODED_RUSTFLAGS` precedence over `RUSTFLAGS` and a config
+/// `build.rustflags` replaces them, so a flag passed through RUSTFLAGS can be
+/// ignored.
+const LINKER_ENV: &str = "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER";
+
+/// `adb -s <serial> <rest...>`, so that every call names the device.
+pub fn adb_args(serial: &str, rest: &[&str]) -> Vec<String> {
+    ["-s", serial]
+        .iter()
+        .chain(rest)
+        .map(|s| s.to_string())
+        .collect()
+}
+
+pub fn push_args(serial: &str, local: &Path) -> Vec<String> {
+    adb_args(serial, &["push", &local.to_string_lossy(), DEVICE_BINARY])
+}
+
+/// The adb push of a file does not keep the execute bit, so the run is
+/// preceded by a chmod.
+pub fn chmod_args(serial: &str) -> Vec<String> {
+    adb_args(serial, &["shell", "chmod", "755", DEVICE_BINARY])
+}
+
+pub fn shell_args(serial: &str, script: &str) -> Vec<String> {
+    adb_args(serial, &["shell", script])
+}
+
+pub fn pull_args(serial: &str, core: Core, local: &Path) -> Vec<String> {
+    adb_args(
+        serial,
+        &[
+            "pull",
+            &format!("{DEVICE_DIR}/{}", device_json(core)),
+            &local.to_string_lossy(),
+        ],
+    )
+}
+
+fn adb(args: &[String]) -> Command {
     let mut cmd = Command::new("adb");
-    cmd.args(["-s", serial]);
+    cmd.args(args);
     cmd
 }
 
 fn adb_shell(serial: &str, script: &str) -> Result<String, String> {
-    output(adb(serial).args(["shell", script]), "adb shell")
+    output(&mut adb(&shell_args(serial, script)), "adb shell")
 }
 
 pub fn run() -> Result<(), String> {
@@ -217,13 +258,8 @@ pub fn run() -> Result<(), String> {
     let manifest = root.join("bench/encodings/Cargo.toml");
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let linker = write_linker_wrapper(&root.join("bench/encodings/target/zig-linker"))?;
-    let rustflags = format!(
-        "{} -C linker={}",
-        std::env::var("RUSTFLAGS").unwrap_or_default(),
-        linker.display()
-    );
     let status = Command::new(cargo)
-        .env("RUSTFLAGS", rustflags.trim())
+        .env(LINKER_ENV, &linker)
         .args([
             "zigbuild",
             "--release",
@@ -242,10 +278,8 @@ pub fn run() -> Result<(), String> {
     let binary = root.join(format!(
         "bench/encodings/target/{TARGET}/release/encoding-bench"
     ));
-    output(
-        adb(&serial).arg("push").arg(&binary).arg(DEVICE_BINARY),
-        "adb push",
-    )?;
+    output(&mut adb(&push_args(&serial, &binary)), "adb push")?;
+    output(&mut adb(&chmod_args(&serial)), "adb shell chmod")?;
 
     // The phone has no repository, so the commit comes from this side.
     let commit = output(
@@ -267,13 +301,7 @@ pub fn run() -> Result<(), String> {
         print!("{log}");
         let after = adb_shell(&serial, &cpufreq_command())?;
         let json = results.join(result_name(core, date));
-        output(
-            adb(&serial)
-                .arg("pull")
-                .arg(format!("{DEVICE_DIR}/{}", device_json(core)))
-                .arg(&json),
-            "adb pull",
-        )?;
+        output(&mut adb(&pull_args(&serial, core, &json)), "adb pull")?;
         let record = json.with_extension("cpufreq.txt");
         std::fs::write(&record, cpufreq_record(&before, &after))
             .map_err(|e| format!("write {}: {e}", record.display()))?;
@@ -389,6 +417,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("pixel-wrapper-{}", std::process::id()));
         let path = write_linker_wrapper(&dir).unwrap();
         assert_eq!(path.file_name().unwrap(), "cc");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert!(mode & 0o111 != 0, "wrapper mode {mode:o} is not executable");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -427,5 +460,66 @@ mod tests {
             text,
             "before:\ncpu0 schedutil 300000\nafter:\ncpu0 schedutil 1800000\n"
         );
+    }
+
+    #[test]
+    fn every_adb_call_names_the_device_first() {
+        assert_eq!(adb_args("S1", &["devices"]), ["-s", "S1", "devices"]);
+    }
+
+    #[test]
+    fn the_push_copies_the_local_binary_to_the_device_path() {
+        assert_eq!(
+            push_args("S1", Path::new("/x/encoding-bench")),
+            [
+                "-s",
+                "S1",
+                "push",
+                "/x/encoding-bench",
+                "/data/local/tmp/encoding-bench"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_binary_is_made_executable_on_the_device() {
+        assert_eq!(
+            chmod_args("S1"),
+            [
+                "-s",
+                "S1",
+                "shell",
+                "chmod",
+                "755",
+                "/data/local/tmp/encoding-bench"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_shell_call_passes_the_script_as_one_argument() {
+        assert_eq!(
+            shell_args("S1", "taskset 4 x"),
+            ["-s", "S1", "shell", "taskset 4 x"]
+        );
+    }
+
+    #[test]
+    fn the_pull_reads_the_device_json_of_the_core_into_the_local_path() {
+        assert_eq!(
+            pull_args("S1", Core::A76, Path::new("/r/pixel5-a76-d.json")),
+            [
+                "-s",
+                "S1",
+                "pull",
+                "/data/local/tmp/encoding-bench-a76.json",
+                "/r/pixel5-a76-d.json"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_linker_is_set_through_the_cargo_target_variable() {
+        assert_eq!(LINKER_ENV, "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER");
     }
 }
