@@ -894,7 +894,7 @@ provenance. Nothing here is normative — the current references live in
   the runtime context and error contract, the breaking `utf8` payload rule, the
   TypeScript client `queryDuplex` method, and a generated docstore example that
   runs against a Rust server. Archived verbatim, on 2026-11-05, once the work
-  landed in driftsys/ridl#1253. The durable records are
+  landed in driftsys/ridl#1253 (squash `17aa33f4`). The durable records are
   [the codec table design](../design/ts-codec-table.md),
   [the TypeScript client design](../design/ridl-transport-ws-ts.md),
   [ADR-0032](../decisions/ADR-0032-byte-streams.md),
