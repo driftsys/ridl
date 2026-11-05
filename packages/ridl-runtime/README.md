@@ -65,9 +65,9 @@ otherwise. Any other URL is fetched.
 
 `StreamSession` holds `{ transport, codec }`. Its `codec` is the loaded wasm
 `Codec`; its `transport` implements the structural `StreamTransport` interface,
-with `queryStream`, `commandStream` and `queryWithUpload` byte-stream methods.
-`StreamOptions` requires `bound`, the response bound in milliseconds. The
-runtime has no dependency on a transport package.
+with `queryStream`, `commandStream`, `queryWithUpload` and `queryDuplex`
+byte-stream methods. `StreamOptions` requires `bound`, the response bound in
+milliseconds. The runtime has no dependency on a transport package.
 
 Resolve named payload types with `codec.typeId` before making a request, and
 load the codec with the expected catalog hash. An unknown name throws

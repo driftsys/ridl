@@ -3034,10 +3034,11 @@ _cabin-web-generate name:
 # crates/ridl-backend-ts/tests/fixtures/codec-strict, whose strict enums and
 # strict enum sets refuse one with the `variant` rule. `cabin-ws-demo` runs it
 # once, after `_cabin-web-generate` has checked the `flatc` and `deno` versions.
-# The codec-streams fixture checks reply streams and uploads, named element
+# The codec-streams fixture checks reply streams, uploads and duplex calls, named element
 # verification, raw bytes, UTF-8 text, typed replies of upload queries, request
 # verification for every form, and table-name collisions with stream locals.
-# FakeSocket tests check upload credit and refusal behavior. The separate
+# FakeSocket tests check upload credit and refusal behavior, and for duplex
+# calls the separate reply credit, upload close and cancel, abort and refusal. The separate
 # generated-only.deno.json check excludes transport imports. Its raw-only module
 # checks an induced request without a domain namespace import.
 [private]
