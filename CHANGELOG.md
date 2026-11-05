@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.16.0] (2026-11-05)
+
+### Bug Fixes
+
+- **ridl-ir:** rename PodbufForm.descriptor to tail_descriptor ([#1256])
+  ([4a6098f]), closes [#1254]
+
+### Features
+
+- **ridl-backend-ts:** generate TypeScript stream functions ([#1253])
+  ([17aa33f]), refs [#1247], [#1247], [#1247], [#1247], [#1240], [#1240],
+  [#1240], [#1247], [#1247], [#1247], [#1247], [#1247], [#1247], [#1247],
+  [#1247], [#1247], [#1247], [#1247], [#1247], [#1247], [#1247], [#1247],
+  [#1247], [#1247], [#1247], [#1247], [#1247]
+
+### Documentation
+
+- **ridl-backend-ts:** archive the streams stage 6 plan ([#1255]) ([06220c1]),
+  refs [#1247], [#1247]
+
+### BREAKING CHANGES
+
+- the codegen model JSON key changes from descriptor to
+tailDescriptor, and the Rust variant changes from
+- generated TypeScript rule unions include utf8;
+regenerate TypeScript and wasm codecs together. Sorted payload rule codes
+assign utf8 7 and variant 8.
+
+[0.16.0]: https://github.com/driftsys/ridl/compare/v0.15.0...v0.16.0
+[4a6098f]: https://github.com/driftsys/ridl/commit/4a6098f
+[#1256]: https://github.com/driftsys/ridl/issues/1256
+[#1254]: https://github.com/driftsys/ridl/issues/1254
+[17aa33f]: https://github.com/driftsys/ridl/commit/17aa33f
+[#1253]: https://github.com/driftsys/ridl/issues/1253
+[#1247]: https://github.com/driftsys/ridl/issues/1247
+[#1240]: https://github.com/driftsys/ridl/issues/1240
+[06220c1]: https://github.com/driftsys/ridl/commit/06220c1
+[#1255]: https://github.com/driftsys/ridl/issues/1255
+
 ## [0.15.0] (2026-11-04)
 
 ### Refactoring
