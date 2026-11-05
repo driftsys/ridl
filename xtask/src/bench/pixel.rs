@@ -236,14 +236,35 @@ pub fn pull_args(serial: &str, core: Core, local: &Path) -> Vec<String> {
     )
 }
 
+/// Index of each step in the list `device_steps` returns.
+const STEP_FREQ_BEFORE: usize = 2;
+const STEP_RUN: usize = 3;
+const STEP_FREQ_AFTER: usize = 4;
+
+/// The adb calls of one core, in the order they run: push the binary, make it
+/// executable, read the frequencies, run it pinned, read the frequencies
+/// again, and pull the JSON.
+pub fn device_steps(
+    serial: &str,
+    binary: &Path,
+    core: Core,
+    commit: &str,
+    json: &Path,
+) -> Vec<Vec<String>> {
+    vec![
+        push_args(serial, binary),
+        chmod_args(serial),
+        shell_args(serial, &cpufreq_command()),
+        shell_args(serial, &run_command(core, commit)),
+        shell_args(serial, &cpufreq_command()),
+        pull_args(serial, core, json),
+    ]
+}
+
 fn adb(args: &[String]) -> Command {
     let mut cmd = Command::new("adb");
     cmd.args(args);
     cmd
-}
-
-fn adb_shell(serial: &str, script: &str) -> Result<String, String> {
-    output(&mut adb(&shell_args(serial, script)), "adb shell")
 }
 
 pub fn run() -> Result<(), String> {
@@ -278,9 +299,6 @@ pub fn run() -> Result<(), String> {
     let binary = root.join(format!(
         "bench/encodings/target/{TARGET}/release/encoding-bench"
     ));
-    output(&mut adb(&push_args(&serial, &binary)), "adb push")?;
-    output(&mut adb(&chmod_args(&serial)), "adb shell chmod")?;
-
     // The phone has no repository, so the commit comes from this side.
     let commit = output(
         Command::new("git")
@@ -296,15 +314,15 @@ pub fn run() -> Result<(), String> {
 
     for core in Core::ALL {
         println!("running on {} (cpu{})", core.label(), core.cpu());
-        let before = adb_shell(&serial, &cpufreq_command())?;
-        let log = adb_shell(&serial, &run_command(core, commit))?;
-        print!("{log}");
-        let after = adb_shell(&serial, &cpufreq_command())?;
         let json = results.join(result_name(core, date));
-        output(&mut adb(&pull_args(&serial, core, &json)), "adb pull")?;
+        let mut outputs = Vec::new();
+        for step in device_steps(&serial, &binary, core, commit, &json) {
+            outputs.push(output(&mut adb(&step), "adb")?);
+        }
+        print!("{}", outputs[STEP_RUN]);
         let record = json.with_extension("cpufreq.txt");
-        std::fs::write(&record, cpufreq_record(&before, &after))
-            .map_err(|e| format!("write {}: {e}", record.display()))?;
+        let text = cpufreq_record(&outputs[STEP_FREQ_BEFORE], &outputs[STEP_FREQ_AFTER]);
+        std::fs::write(&record, text).map_err(|e| format!("write {}: {e}", record.display()))?;
         println!("wrote {} and {}", json.display(), record.display());
     }
     Ok(())
@@ -521,5 +539,29 @@ mod tests {
     #[test]
     fn the_linker_is_set_through_the_cargo_target_variable() {
         assert_eq!(LINKER_ENV, "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER");
+    }
+
+    #[test]
+    fn the_device_steps_run_in_order_with_the_serial_first() {
+        let steps = device_steps(
+            "S1",
+            Path::new("/b/encoding-bench"),
+            Core::A55,
+            "abc",
+            Path::new("/r/pixel5-a55-d.json"),
+        );
+        assert!(steps.iter().all(|s| s[..2] == ["-s", "S1"]));
+        let verbs: Vec<&str> = steps.iter().map(|s| s[2].as_str()).collect();
+        assert_eq!(verbs, ["push", "shell", "shell", "shell", "shell", "pull"]);
+        assert_eq!(steps[0], push_args("S1", Path::new("/b/encoding-bench")));
+        assert_eq!(steps[1], chmod_args("S1"));
+        assert_eq!(steps[STEP_FREQ_BEFORE][3], cpufreq_command());
+        assert_eq!(steps[STEP_RUN][3], run_command(Core::A55, "abc"));
+        assert!(steps[STEP_RUN][3].starts_with("taskset 4 "));
+        assert_eq!(steps[STEP_FREQ_AFTER][3], cpufreq_command());
+        assert_eq!(
+            steps[5],
+            pull_args("S1", Core::A55, Path::new("/r/pixel5-a55-d.json"))
+        );
     }
 }
