@@ -1,4 +1,4 @@
-package docstore
+package docstore.api
 
 /// The name used to find a document.
 type DocId: string [1..64] = "-"
@@ -12,6 +12,20 @@ struct DocInfo {
   name: DocId
   /// The document's length in bytes.
   size: DocSize
+}
+
+/// A chunk's position within a document.
+type ChunkIndex: integer [0..65535]
+
+/// The bytes carried by one document chunk.
+type DocBlock: bytes [1..3200] = "-"
+
+/// An indexed portion of a document.
+struct DocChunk {
+  /// The chunk's zero-based position.
+  index: ChunkIndex
+  /// The document bytes at that position.
+  data: DocBlock
 }
 
 /// A document lookup failure.
@@ -34,6 +48,10 @@ interface DocStore {
   query fetch(id: DocId): <bytes> @[..1s]
   /// Stores the uploaded contents with their metadata.
   command put(info: DocInfo, data: <bytes>) @[..1s]
+  /// Reads the document as ordered indexed chunks.
+  query chunks(id: DocId): <DocChunk> @[..1s]
+  /// Echoes each indexed chunk before the upload ends.
+  query exchange(id: DocId, chunks: <DocChunk>): <DocChunk> @[..1s]
   /// Reads the metadata of the named document.
   query describe(id: DocId): DescribeResult @[..1s]
 }

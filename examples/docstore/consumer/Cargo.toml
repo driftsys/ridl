@@ -10,7 +10,7 @@ publish = false
 [workspace]
 
 [dependencies]
-docstore = { path = "../generated", default-features = false, features = [
+docstore_api = { path = "../generated", default-features = false, features = [
   "std",
 ] }
 ridl-loopback = { path = "../../../crates/ridl-loopback" }

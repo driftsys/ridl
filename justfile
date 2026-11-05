@@ -2960,7 +2960,8 @@ ts-npm-check:
 # and e2e/provide_test.ts against them. Tests start the executables from
 # RIDL_TRANSPORT_WS_SERVER and RIDL_DEBUG_GATEWAY_FIXTURE respectively.
 # Resolve both through `CARGO_TARGET_DIR` where set and pass absolute paths
-# because the tests run from the package directory.
+# because the tests run from the package directory. The generated docstore
+# program then checks bytes, named chunks and duplex echoes against its server.
 ts-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -2973,9 +2974,55 @@ ts-e2e:
     cargo build --locked -p ridl-transport-ws --features descriptor --example debug_gateway_fixture
     fixture="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/debug_gateway_fixture"
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
-    cd packages/ridl-transport-ws
-    RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
-    RIDL_DEBUG_GATEWAY_FIXTURE="$fixture" deno test --allow-read --allow-net --allow-run --allow-env=RIDL_DEBUG_GATEWAY_FIXTURE e2e/provide_test.ts
+    (cd packages/ridl-transport-ws && RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts)
+    (cd packages/ridl-transport-ws && RIDL_DEBUG_GATEWAY_FIXTURE="$fixture" deno test --allow-read --allow-net --allow-run --allow-env=RIDL_DEBUG_GATEWAY_FIXTURE e2e/provide_test.ts)
+    "{{just_executable()}}" _docstore-web-generate
+    docstore_server="$(cd "${CARGO_TARGET_DIR:-examples/docstore/server/target}" && pwd)/debug/docstore-server"
+    (cd examples/docstore/web && deno run --cached-only -A main.ts "$docstore_server")
+
+# Generate and check the document store's real codecs and both consumers.
+# This helper needs no socket; ts-e2e runs the program after it builds.
+[private]
+_docstore-web-generate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+    if ! command -v flatc >/dev/null 2>&1 || [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
+        echo "_docstore-web-generate: flatc version $flatc_version is required." >&2
+        exit 1
+    fi
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "_docstore-web-generate: deno is required; run ./bootstrap." >&2
+        exit 1
+    fi
+    if [ ! -d "$(rustc --print sysroot)/lib/rustlib/wasm32-unknown-unknown" ]; then
+        echo "_docstore-web-generate: run 'rustup target add wasm32-unknown-unknown'." >&2
+        exit 1
+    fi
+    cargo build --locked -p ridl-cli
+    cli="${CARGO_TARGET_DIR:-target}/debug/ridl"
+    "$cli" build examples/docstore --emit rust --emit catalog --out-dir examples/docstore/generated
+    "$cli" build examples/docstore --emit typescript --emit flatbuffers --out-dir examples/docstore/web/generated
+    flatc --ts --gen-object-api -I examples/docstore/web/generated -o examples/docstore/web/generated examples/docstore/web/generated/docstore.api.fbs
+    cargo fmt --manifest-path examples/docstore/server/Cargo.toml --check
+    cargo fmt --manifest-path examples/docstore/consumer/Cargo.toml --check
+    cargo clippy --manifest-path examples/docstore/server/Cargo.toml --locked --all-targets --no-deps -- -D warnings
+    cargo build --manifest-path examples/docstore/server/Cargo.toml --locked
+    cargo clippy --manifest-path examples/docstore/consumer/Cargo.toml --locked --no-deps -- -D warnings
+    # The server and consumer are separate workspaces. Give the generated crate
+    # its own temporary workspace for Cargo's package feature selection.
+    cat >> examples/docstore/generated/Cargo.toml <<'TOML'
+    [workspace]
+    [patch.crates-io]
+    ridl-rt = { path = "../../../crates/ridl-rt" }
+    TOML
+    cargo generate-lockfile --offline --manifest-path examples/docstore/generated/Cargo.toml
+    wasm_target="${CARGO_TARGET_DIR:-examples/docstore/generated/target}"
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort \
+        cargo rustc --manifest-path examples/docstore/generated/Cargo.toml --locked --release \
+        --target wasm32-unknown-unknown --crate-type cdylib --no-default-features --features wasm-exports
+    cp "$wasm_target/wasm32-unknown-unknown/release/docstore_api.wasm" examples/docstore/web/generated/docstore_api.wasm
+    (cd examples/docstore/web && deno fmt --check && deno lint && deno check main.ts check_test.ts && deno test check_test.ts)
 
 # The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
 # `deno` checks, the TypeScript types, codec module and `.fbs` schema that

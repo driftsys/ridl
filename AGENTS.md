@@ -256,7 +256,9 @@ member; rsdl is the apex.
     just ts-e2e          build the ridl-transport-ws examples loopback_server
                          and debug_gateway_fixture (with descriptor), then run
                          the package's Deno e2e/deno_test.ts and
-                         e2e/provide_test.ts against them respectively
+                         e2e/provide_test.ts against them respectively; then
+                         generate the docstore codecs, build its Rust server,
+                         and run its typed byte, named-chunk and duplex checks
     just cabin-ws-demo   generate cabin's crate, its TypeScript codec module and
                          its FlatBuffers schema with ridl build, run flatc
                          over the schema, check the
