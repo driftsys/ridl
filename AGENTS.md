@@ -182,7 +182,8 @@ member; rsdl is the apex.
                          with node (conformance dev-dependencies enable ridl-rt
                          debug) and with debug; ridl-rt-conformance
                          with debug; ridl-transport-ws with descriptor; generate the
-                         docstore Rust API and run its server workspace tests
+                         docstore Rust API and catalog and run its server
+                         workspace tests
     just lint            workspace clippy --all-targets -- -D warnings, plus
                          ridl-rt with all features; ridl-loopback library alone
                          with node and ridl-rt debug off, all targets with node
