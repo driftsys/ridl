@@ -41,6 +41,46 @@ pub struct Timing {
     pub flagged: bool,
 }
 
+/// The operations of one update, in column order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Op {
+    Encode,
+    Verify,
+    Decode,
+}
+
+impl Op {
+    pub const ALL: [Op; 3] = [Op::Encode, Op::Verify, Op::Decode];
+
+    /// The key in `per_op_ns`.
+    pub fn json_key(self) -> &'static str {
+        match self {
+            Op::Encode => "encode",
+            Op::Verify => "verify",
+            Op::Decode => "decode",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Op::Encode => "Encode",
+            Op::Verify => "Verify",
+            Op::Decode => "Decode",
+        }
+    }
+
+    fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// The timing of one operation of one cell.
+#[derive(Debug, Clone)]
+pub struct OpTiming {
+    pub timing: Timing,
+    pub cpu_percent: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Paced {
     pub measured_percent: f64,
@@ -56,6 +96,8 @@ pub struct Measured {
     pub decode_allocs: f64,
     pub timing: Option<Timing>,
     pub cpu_percent: Option<f64>,
+    /// Encode, verify and decode apart, in `Op::ALL` order.
+    pub ops: Option<Box<[OpTiming; 3]>>,
     pub paced: Option<Paced>,
 }
 
@@ -104,6 +146,18 @@ fn text(v: &Value, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("missing or non-text `{key}`"))
 }
 
+fn parse_timing(t: &Value) -> Result<Timing, String> {
+    Ok(Timing {
+        median: num(t, "median")?,
+        min: num(t, "min")?,
+        max: num(t, "max")?,
+        range_spread: num(t, "range_spread")?,
+        flagged: t["spread_flagged"]
+            .as_bool()
+            .ok_or("missing `spread_flagged`")?,
+    })
+}
+
 fn parse_row(v: &Value) -> Result<Row, String> {
     let payload = text(v, "payload")?;
     let label = text(v, "encoding")?;
@@ -119,15 +173,23 @@ fn parse_row(v: &Value) -> Result<Row, String> {
     let cell = match text(v, "status")?.as_str() {
         "measured" => {
             let timing = match v.get("per_update_ns") {
-                Some(t) => Some(Timing {
-                    median: num(t, "median")?,
-                    min: num(t, "min")?,
-                    max: num(t, "max")?,
-                    range_spread: num(t, "range_spread")?,
-                    flagged: t["spread_flagged"]
-                        .as_bool()
-                        .ok_or("missing `spread_flagged`")?,
-                }),
+                Some(t) => Some(parse_timing(t)?),
+                None => None,
+            };
+            let ops = match v.get("per_op_ns") {
+                Some(o) => {
+                    let mut out = Vec::new();
+                    for op in Op::ALL {
+                        let t = o
+                            .get(op.json_key())
+                            .ok_or_else(|| format!("{payload}: no `{}` timing", op.json_key()))?;
+                        out.push(OpTiming {
+                            timing: parse_timing(t)?,
+                            cpu_percent: num(t, "cpu_percent_at_rate")?,
+                        });
+                    }
+                    out.try_into().ok().map(Box::new)
+                }
                 None => None,
             };
             let paced = match v.get("paced") {
@@ -144,6 +206,7 @@ fn parse_row(v: &Value) -> Result<Row, String> {
                 verify_allocs: num(v, "verify_allocs")?,
                 decode_allocs: num(v, "decode_allocs")?,
                 timing,
+                ops,
                 cpu_percent: v["cpu_percent_at_rate"].as_f64(),
                 paced,
             })
@@ -205,6 +268,9 @@ enum Metric {
     Allocs,
     Time,
     Cpu,
+    OpTime(Op),
+    OpCpu(Op),
+    OpAllocs(Op),
 }
 
 impl Metric {
@@ -214,6 +280,13 @@ impl Metric {
             Metric::Allocs => Some(m.encode_allocs + m.verify_allocs + m.decode_allocs),
             Metric::Time => m.timing.as_ref().map(|t| t.median),
             Metric::Cpu => m.cpu_percent,
+            Metric::OpTime(op) => m.ops.as_ref().map(|o| o[op.index()].timing.median),
+            Metric::OpCpu(op) => m.ops.as_ref().map(|o| o[op.index()].cpu_percent),
+            Metric::OpAllocs(op) => Some(match op {
+                Op::Encode => m.encode_allocs,
+                Op::Verify => m.verify_allocs,
+                Op::Decode => m.decode_allocs,
+            }),
         }
     }
 }
@@ -309,24 +382,29 @@ pub fn alloc_table(r: &ResultFile) -> String {
     )
 }
 
+fn fmt_timing(t: &Timing) -> String {
+    format!(
+        "{:.1} ({:.1} to {:.1}; {:.0} %){}",
+        t.median,
+        t.min,
+        t.max,
+        t.range_spread * 100.0,
+        if t.flagged {
+            format!(" {FLAG}")
+        } else {
+            String::new()
+        }
+    )
+}
+
 pub fn time_table(r: &ResultFile) -> String {
     format!(
-        "CPU time of one update (encode, verify and decode), median in ns, with \
-         the fastest and slowest sample and the range as a share of the median. \
-         {FLAG} spread above 10 %: the figure is not stable.\n\n{}",
+        "CPU time of one update (encode, verify and decode), in ns: the sum of the \
+         medians of the three operations, with the sum of their fastest and the sum \
+         of their slowest sample (an envelope, not a percentile) and its range as a \
+         share of the sum. {FLAG} spread above 10 %: the figure is not stable.\n\n{}",
         per_encoding(r, |m| match &m.timing {
-            Some(t) => format!(
-                "{:.1} ({:.1} to {:.1}; {:.0} %){}",
-                t.median,
-                t.min,
-                t.max,
-                t.range_spread * 100.0,
-                if t.flagged {
-                    format!(" {FLAG}")
-                } else {
-                    String::new()
-                }
-            ),
+            Some(t) => fmt_timing(t),
             None => "not timed".to_string(),
         })
     )
@@ -476,24 +554,25 @@ fn unit_values(r: &ResultFile, w: Weighting, metric: Metric) -> Vec<[f64; 3]> {
     }
 }
 
-pub fn mix_table(r: &ResultFile, w: Weighting) -> String {
-    let metrics: [(String, Metric, usize); 4] = [
-        ("Size (bytes)".into(), Metric::Size, 1),
-        (
-            "Heap allocations per update (encode + verify + decode)".into(),
-            Metric::Allocs,
-            1,
-        ),
-        ("Time per update (median ns)".into(), Metric::Time, 1),
-        (
-            format!(
-                "CPU % of one core at {:.0} updates per second (derived)",
-                r.rate_per_s
-            ),
-            Metric::Cpu,
-            4,
-        ),
-    ];
+fn mix_caption(w: Weighting) -> &'static str {
+    match w {
+        Weighting::PerSignal => {
+            "Equal-weight mix, per signal: each signal counts once, so a payload type \
+             that several signals share counts once for each of them. Only signals \
+             whose three encodings are measured are counted; the last column gives \
+             how many."
+        }
+        Weighting::PerPayloadType => {
+            "Equal-weight mix, per payload type: each payload type counts once, \
+             however many signals share it (the value of a type is the mean over its \
+             signals). Only payload types whose signals are measured in all three \
+             encodings are counted; the last column gives how many."
+        }
+    }
+}
+
+/// The rows of a mix table: `(name, metric, decimals)`.
+fn mix_rows(r: &ResultFile, w: Weighting, metrics: &[(String, Metric, usize)]) -> String {
     let mut headers = vec!["Metric".to_string()];
     headers.extend(Encoding::ALL.iter().map(|e| e.column_label().to_string()));
     headers.push("FlatBuffers / podbuf".into());
@@ -524,21 +603,132 @@ pub fn mix_table(r: &ResultFile, w: Weighting) -> String {
             row
         })
         .collect();
-    let caption = match w {
-        Weighting::PerSignal => {
-            "Equal-weight mix, per signal: each signal counts once, so a payload type \
-             that several signals share counts once for each of them. Only signals \
-             whose three encodings are measured are counted; the last column gives \
-             how many."
+    table(&headers, &rows)
+}
+
+pub fn mix_table(r: &ResultFile, w: Weighting) -> String {
+    let metrics: [(String, Metric, usize); 4] = [
+        ("Size (bytes)".into(), Metric::Size, 1),
+        (
+            "Heap allocations per update (encode + verify + decode)".into(),
+            Metric::Allocs,
+            1,
+        ),
+        ("Time per update (median ns)".into(), Metric::Time, 1),
+        (
+            format!(
+                "CPU % of one core at {:.0} updates per second (derived)",
+                r.rate_per_s
+            ),
+            Metric::Cpu,
+            4,
+        ),
+    ];
+    format!("{}\n\n{}", mix_caption(w), mix_rows(r, w, &metrics))
+}
+
+/// The mix of each operation apart: time, CPU load and allocations.
+pub fn op_mix_table(r: &ResultFile, w: Weighting) -> String {
+    let mut metrics: Vec<(String, Metric, usize)> = Vec::new();
+    for op in Op::ALL {
+        let l = op.label();
+        metrics.push((
+            format!("{l}: time per operation (median ns)"),
+            Metric::OpTime(op),
+            1,
+        ));
+        metrics.push((
+            format!(
+                "{l}: CPU % of one core at {:.0} updates per second (derived)",
+                r.rate_per_s
+            ),
+            Metric::OpCpu(op),
+            4,
+        ));
+        metrics.push((format!("{l}: heap allocations"), Metric::OpAllocs(op), 1));
+    }
+    format!(
+        "{} The rows are per operation.\n\n{}",
+        mix_caption(w),
+        mix_rows(r, w, &metrics)
+    )
+}
+
+pub fn op_time_table(r: &ResultFile, op: Op) -> String {
+    format!(
+        "CPU time of the {} operation of one update, in ns: the median of 30 samples \
+         of a batch of this operation alone, with the fastest and the slowest sample \
+         and the range as a share of the median. {FLAG} spread above 10 %: the \
+         figure is not stable.\n\n{}",
+        op.label().to_lowercase(),
+        per_encoding(r, |m| match &m.ops {
+            Some(o) => fmt_timing(&o[op.index()].timing),
+            None => "not timed".to_string(),
+        })
+    )
+}
+
+pub fn op_cpu_table(r: &ResultFile) -> String {
+    let mut headers = vec!["Payload".to_string()];
+    for op in Op::ALL {
+        for e in Encoding::ALL {
+            headers.push(format!("{}: {}", op.label(), e.column_label()));
         }
-        Weighting::PerPayloadType => {
-            "Equal-weight mix, per payload type: each payload type counts once, \
-             however many signals share it (the value of a type is the mean over its \
-             signals). Only payload types whose signals are measured in all three \
-             encodings are counted; the last column gives how many."
+    }
+    let rows: Vec<Vec<String>> = payloads(r)
+        .into_iter()
+        .map(|p| {
+            let mut row = vec![esc(p)];
+            for op in Op::ALL {
+                for e in Encoding::ALL {
+                    row.push(match marker(cell(r, p, e)) {
+                        Some(m) => m.to_string(),
+                        None => match measured(r, p, e).and_then(|m| Metric::OpCpu(op).value(m)) {
+                            Some(c) => format!("{c:.4}"),
+                            None => "not timed".to_string(),
+                        },
+                    });
+                }
+            }
+            row
+        })
+        .collect();
+    format!(
+        "CPU load in percent of one core at {:.0} updates per second of each \
+         operation alone, derived from the median time of that operation. The three \
+         operations of an encoding add up to its derived load of one update.\n\n{}",
+        r.rate_per_s,
+        table(&headers, &rows)
+    )
+}
+
+pub fn op_ratio_table(r: &ResultFile) -> String {
+    let others = [Encoding::Flatbuffers, Encoding::Proto3];
+    let mut headers = vec!["Payload".to_string()];
+    for op in Op::ALL {
+        for e in others {
+            headers.push(format!("{}: {} / podbuf", op.label(), e.column_label()));
         }
-    };
-    format!("{caption}\n\n{}", table(&headers, &rows))
+    }
+    let rows: Vec<Vec<String>> = payloads(r)
+        .into_iter()
+        .map(|p| {
+            let mut row = vec![esc(p)];
+            for op in Op::ALL {
+                for e in others {
+                    row.push(ratio_cell(r, p, e, Metric::OpTime(op)));
+                }
+            }
+            row
+        })
+        .collect();
+    format!(
+        "Time of each operation of each encoding divided by the time of the same \
+         operation in podbuf: above 1.00 the encoding is slower than podbuf in that \
+         operation, below 1.00 faster. A refused or not-built cell has no ratio and \
+         is marked.\n\n{}",
+        table(&headers, &rows)
+    )
 }
 
 pub fn not_built_table(r: &ResultFile) -> String {
@@ -610,6 +800,10 @@ pub fn render(name: &str, r: &ResultFile) -> String {
     out.push_str(&mix_table(r, Weighting::PerSignal));
     out.push('\n');
     out.push_str(&mix_table(r, Weighting::PerPayloadType));
+    out.push('\n');
+    out.push_str(&op_mix_table(r, Weighting::PerSignal));
+    out.push('\n');
+    out.push_str(&op_mix_table(r, Weighting::PerPayloadType));
     out.push_str("\n## Per payload\n\n");
     for (title, body) in [
         ("Encoded size", size_table(r)),
@@ -617,6 +811,11 @@ pub fn render(name: &str, r: &ResultFile) -> String {
         ("Time per update", time_table(r)),
         ("CPU load, derived", cpu_table(r)),
         ("Ratios to podbuf", ratio_table(r)),
+        ("Time per operation, encode", op_time_table(r, Op::Encode)),
+        ("Time per operation, verify", op_time_table(r, Op::Verify)),
+        ("Time per operation, decode", op_time_table(r, Op::Decode)),
+        ("CPU load per operation", op_cpu_table(r)),
+        ("Ratios per operation", op_ratio_table(r)),
         ("CPU load, paced and derived", paced_table(r)),
     ] {
         out.push_str(&format!("### {title}\n\n{body}\n"));

@@ -359,3 +359,281 @@ fn the_allocation_mix_sums_encode_verify_and_decode() {
         assert_eq!(&row[1..4], ["6.0", "6.0", "6.0"], "{t}");
     }
 }
+
+// ---- per-operation tables ----
+
+/// Adds `per_op_ns` to a measured row from three medians (encode, verify,
+/// decode). The flags say which operations carry a flagged spread.
+fn with_ops(mut row: Value, medians: [f64; 3], flagged: [bool; 3]) -> Value {
+    let mut ops = serde_json::Map::new();
+    for (i, key) in ["encode", "verify", "decode"].iter().enumerate() {
+        let m = medians[i];
+        ops.insert(
+            (*key).to_string(),
+            json!({
+                "median": m, "p05": m, "p95": m, "min": m - 1.0, "max": m + 1.0,
+                "range_spread": 0.05, "reps": 30, "spread": 0.02,
+                "spread_flagged": flagged[i], "cpu_percent_at_rate": m / 2500.0
+            }),
+        );
+    }
+    row["per_op_ns"] = Value::Object(ops);
+    row
+}
+
+/// One signal in all three encodings with distinct per-operation medians:
+/// FlatBuffers 100/200/300, proto3 110/210/310, podbuf 120/220/320 ns.
+fn op_trio(payload: &str, ty: &str) -> Vec<Value> {
+    let meds = [
+        [100.0, 200.0, 300.0],
+        [110.0, 210.0, 310.0],
+        [120.0, 220.0, 320.0],
+    ];
+    ["flatbuffers", "proto3", "podbuf"]
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            let sum: f64 = meds[i].iter().sum();
+            with_ops(
+                measured(payload, ty, e, 10, sum, false, sum / 2500.0),
+                meds[i],
+                [false; 3],
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn each_operation_table_shows_the_medians_of_its_own_operation() {
+    let r = file(op_trio("p.A.x", "Speed"));
+    for (op, expect) in [
+        (Op::Encode, ["100.0", "110.0", "120.0"]),
+        (Op::Verify, ["200.0", "210.0", "220.0"]),
+        (Op::Decode, ["300.0", "310.0", "320.0"]),
+    ] {
+        let t = op_time_table(&r, op);
+        let header = cells(t.lines().find(|l| l.starts_with("| Payload")).unwrap());
+        assert_eq!(&header[1..4], ["FlatBuffers", "proto3", "podbuf"], "{t}");
+        let row = cells(line_of(&t, "p.A.x"));
+        for i in 0..3 {
+            assert!(row[i + 1].starts_with(expect[i]), "{op:?} {row:?}");
+        }
+        assert!(
+            t.contains(&format!("the {} operation", op.label().to_lowercase())),
+            "the caption names the operation"
+        );
+    }
+}
+
+#[test]
+fn the_operation_cpu_table_has_one_column_per_operation_and_encoding() {
+    let r = file(op_trio("p.A.x", "Speed"));
+    let t = op_cpu_table(&r);
+    let header = cells(t.lines().find(|l| l.starts_with("| Payload")).unwrap());
+    assert_eq!(header[1], "Encode: FlatBuffers");
+    assert_eq!(header[3], "Encode: podbuf");
+    assert_eq!(header[4], "Verify: FlatBuffers");
+    assert_eq!(header[9], "Decode: podbuf");
+    let row = cells(line_of(&t, "p.A.x"));
+    // median / 2500 with four decimals.
+    assert_eq!(row[1], "0.0400");
+    assert_eq!(row[3], "0.0480");
+    assert_eq!(row[4], "0.0800");
+    assert_eq!(row[7], "0.1200");
+    assert_eq!(row[9], "0.1280");
+}
+
+#[test]
+fn an_operation_ratio_divides_by_the_podbuf_column_of_the_same_operation() {
+    let r = file(op_trio("p.A.x", "Speed"));
+    let t = op_ratio_table(&r);
+    let header = cells(t.lines().find(|l| l.starts_with("| Payload")).unwrap());
+    assert_eq!(header[1], "Encode: FlatBuffers / podbuf");
+    assert_eq!(header[2], "Encode: proto3 / podbuf");
+    assert_eq!(header[3], "Verify: FlatBuffers / podbuf");
+    assert_eq!(header[6], "Decode: proto3 / podbuf");
+    let row = cells(line_of(&t, "p.A.x"));
+    assert_eq!(
+        &row[1..7],
+        ["0.83", "0.92", "0.91", "0.95", "0.94", "0.97"],
+        "{t}"
+    );
+}
+
+#[test]
+fn operation_tables_mark_refused_and_not_built_cells_and_leave_them_out_of_ratios() {
+    let mut rows = op_trio("p.A.x", "Speed");
+    rows.push(not_built("p.B.raw", "RawTickCount", "flatbuffers"));
+    rows.push(not_built("p.B.raw", "RawTickCount", "proto3"));
+    rows.push(not_built("p.B.raw", "RawTickCount", "podbuf"));
+    rows.push(with_ops(
+        measured("p.C.r", "Big", "flatbuffers", 8, 600.0, false, 0.2),
+        [100.0, 200.0, 300.0],
+        [false; 3],
+    ));
+    rows.push(refused("p.C.r", "Big", "proto3"));
+    rows.push(with_ops(
+        measured("p.C.r", "Big", "podbuf", 8, 660.0, false, 0.2),
+        [120.0, 220.0, 320.0],
+        [false; 3],
+    ));
+    rows.push(refused("p.D.z", "Gear", "podbuf"));
+    rows.push(with_ops(
+        measured("p.D.z", "Gear", "flatbuffers", 8, 600.0, false, 0.2),
+        [100.0, 200.0, 300.0],
+        [false; 3],
+    ));
+    rows.push(with_ops(
+        measured("p.D.z", "Gear", "proto3", 8, 600.0, false, 0.2),
+        [100.0, 200.0, 300.0],
+        [false; 3],
+    ));
+    let r = file(rows);
+    let ratios = op_ratio_table(&r);
+    let raw = cells(line_of(&ratios, "p.B.raw"));
+    assert!(raw[1..].iter().all(|c| c == "not built"), "{raw:?}");
+    let c = cells(line_of(&ratios, "p.C.r"));
+    assert_eq!(c[2], "refused");
+    assert_eq!(c[4], "refused");
+    assert_eq!(c[1], "0.83");
+    let z = cells(line_of(&ratios, "p.D.z"));
+    assert!(z[1..].iter().all(|c| c == "podbuf refused"), "{z:?}");
+    let time = op_time_table(&r, Op::Verify);
+    assert_eq!(cells(line_of(&time, "p.B.raw"))[1], "not built");
+    assert_eq!(cells(line_of(&time, "p.C.r"))[2], "refused");
+    let cpu = op_cpu_table(&r);
+    assert_eq!(cells(line_of(&cpu, "p.C.r"))[2], "refused");
+    assert_eq!(cells(line_of(&cpu, "p.B.raw"))[1], "not built");
+}
+
+#[test]
+fn a_flagged_operation_spread_is_marked_on_that_operation_only() {
+    let rows = vec![
+        with_ops(
+            measured("p.A.x", "S", "flatbuffers", 1, 600.0, false, 0.2),
+            [100.0, 200.0, 300.0],
+            [false, true, false],
+        ),
+        with_ops(
+            measured("p.A.x", "S", "proto3", 1, 600.0, false, 0.2),
+            [100.0, 200.0, 300.0],
+            [false; 3],
+        ),
+        with_ops(
+            measured("p.A.x", "S", "podbuf", 1, 600.0, false, 0.2),
+            [100.0, 200.0, 300.0],
+            [false; 3],
+        ),
+    ];
+    let r = file(rows);
+    assert!(!cells(line_of(&op_time_table(&r, Op::Encode), "p.A.x"))[1].contains('\u{2020}'));
+    assert!(cells(line_of(&op_time_table(&r, Op::Verify), "p.A.x"))[1].ends_with('\u{2020}'));
+    assert!(!cells(line_of(&op_time_table(&r, Op::Decode), "p.A.x"))[1].contains('\u{2020}'));
+    assert!(!cells(line_of(&op_time_table(&r, Op::Verify), "p.A.x"))[2].contains('\u{2020}'));
+}
+
+/// Types A (three signals) and B (one signal), podbuf encode medians 120 for
+/// A and 240 for B; FlatBuffers and proto3 equal to podbuf.
+fn weighted_ops() -> ResultFile {
+    let mut rows = Vec::new();
+    for (p, ty, enc_ns) in [
+        ("p.s1", "A", 120.0),
+        ("p.s2", "A", 120.0),
+        ("p.s3", "A", 120.0),
+        ("p.s4", "B", 240.0),
+    ] {
+        for e in ["flatbuffers", "proto3", "podbuf"] {
+            rows.push(with_ops(
+                measured(p, ty, e, 1, 600.0, false, 0.2),
+                [enc_ns, 200.0, 300.0],
+                [false; 3],
+            ));
+        }
+    }
+    file(rows)
+}
+
+#[test]
+fn the_operation_mix_weights_per_signal_and_per_type_and_names_the_weighting() {
+    let r = weighted_ops();
+    let per_signal = op_mix_table(&r, Weighting::PerSignal);
+    let per_type = op_mix_table(&r, Weighting::PerPayloadType);
+    let enc = "Encode: time per operation (median ns)";
+    // (120 * 3 + 240) / 4 = 150 per signal; (120 + 240) / 2 = 180 per type.
+    let row = cells(line_of(&per_signal, enc));
+    assert_eq!(&row[1..4], ["150.0", "150.0", "150.0"], "{per_signal}");
+    assert_eq!(row[6], "4");
+    let row = cells(line_of(&per_type, enc));
+    assert_eq!(&row[1..4], ["180.0", "180.0", "180.0"], "{per_type}");
+    assert_eq!(row[6], "2");
+    assert!(per_signal.contains("per signal: each signal counts once"));
+    assert!(!per_signal.contains("per payload type"));
+    assert!(per_type.contains("per payload type: each payload type counts once"));
+    assert!(!per_type.contains("per signal"));
+}
+
+#[test]
+fn the_operation_mix_reports_each_operation_and_its_own_allocation_count() {
+    // The fixture counts are 1, 2 and 3 for encode, verify and decode.
+    let r = file(op_trio("p.A.x", "Speed"));
+    let t = op_mix_table(&r, Weighting::PerSignal);
+    for (op, time, allocs) in [
+        ("Encode", "100.0", "1.0"),
+        ("Verify", "200.0", "2.0"),
+        ("Decode", "300.0", "3.0"),
+    ] {
+        let row = cells(line_of(
+            &t,
+            &format!("{op}: time per operation (median ns)"),
+        ));
+        assert_eq!(row[1], time, "{t}");
+        let row = cells(line_of(&t, &format!("{op}: heap allocations")));
+        assert_eq!(&row[1..4], [allocs; 3], "{t}");
+        let row = cells(line_of(
+            &t,
+            &format!("{op}: CPU % of one core at 4000 updates per second (derived)"),
+        ));
+        assert!(row[1].starts_with("0."), "{row:?}");
+    }
+    // Ratios per operation: proto3 encode 110 / podbuf 120.
+    let row = cells(line_of(&t, "Encode: time per operation (median ns)"));
+    assert_eq!(&row[4..6], ["0.83", "0.92"]);
+}
+
+#[test]
+fn the_operation_mix_leaves_out_stress_rows() {
+    let mut rows = op_trio("p.s1", "A");
+    for mut v in op_trio("p.stress", "Big") {
+        v["kind"] = json!("stress");
+        v["per_op_ns"]["encode"]["median"] = json!(9999.0);
+        rows.push(v);
+    }
+    let r = file(rows);
+    for w in [Weighting::PerSignal, Weighting::PerPayloadType] {
+        let t = op_mix_table(&r, w);
+        let row = cells(line_of(&t, "Encode: time per operation (median ns)"));
+        assert_eq!(row[1], "100.0", "{t}");
+        assert_eq!(row[6], "1");
+    }
+}
+
+#[test]
+fn a_result_without_per_operation_timing_still_renders() {
+    let r = file(trio("p.A.x", "Speed", [1, 2, 3], [40.0, 40.0, 40.0]));
+    let t = op_time_table(&r, Op::Verify);
+    assert_eq!(cells(line_of(&t, "p.A.x"))[1], "not timed");
+    let out = render("old.json", &r);
+    assert!(out.contains("## Mix"));
+}
+
+#[test]
+fn the_report_orders_the_operation_sections_after_the_update_sections() {
+    let r = file(op_trio("p.A.x", "Speed"));
+    let out = render("r.json", &r);
+    let at = |s: &str| out.find(s).unwrap_or_else(|| panic!("missing {s}"));
+    assert!(at("### Time per update") < at("### Time per operation"));
+    assert!(at("### Time per operation") < at("### CPU load per operation"));
+    assert!(at("### CPU load per operation") < at("### Ratios per operation"));
+    assert!(at("### Ratios per operation") < at("### CPU load, paced and derived"));
+    assert!(at("## Per payload") < at("### Time per operation"));
+}
