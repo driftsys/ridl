@@ -700,3 +700,161 @@ Deno.test("duplex_end_sequences", async () => {
     }
   }
 });
+
+// Advance the caller counter independently of the upload and reply counters.
+async function secondCall(session: Session, socket: FakeSocket, bound = 1000) {
+  const first = open(session, socket);
+  end(socket);
+  assert.equal((await first.reader.read()).done, true);
+  const { upload, stream } = session.queryDuplex(1, 14, bytes, { bound });
+  const writer = upload.getWriter();
+  const reader = stream.getReader();
+  writer.closed.catch(() => {});
+  reader.closed.catch(() => {});
+  await writer.write(bytes);
+  await writer.write(bytes);
+  return { writer, reader };
+}
+
+// Mutation: use the upload sequence as the stop correlation at each stop site.
+for (const cause of ["size", "cancel", "bound", "gap", "reply-size"] as const) {
+  Deno.test(`duplex_stop_correlation_${cause}`, async () => {
+    const { session, socket, notes } = await rig();
+    try {
+      const { writer, reader } = await secondCall(
+        session,
+        socket,
+        cause === "bound" ? 20 : 1000,
+      );
+      const closed = observe(writer.closed);
+      if (cause === "size") {
+        const write = observe(writer.write(new Uint8Array(65536)));
+        await tick();
+        assert.equal(write.settled, true);
+        category(write.error, "corrupt");
+      } else if (cause === "cancel") await reader.cancel();
+      else if (cause === "bound") {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } else {
+        socket.deliver({
+          form: "chunk",
+          target: TARGET,
+          correlation: 2n,
+          stream: 0,
+          envelope: { stamp: 0n, seq: cause === "gap" ? 2n : 1n },
+          payload: cause === "gap" ? bytes : new Uint8Array(65536),
+        });
+      }
+      await tick();
+      assert.equal(closed.settled, true);
+      category(
+        closed.error,
+        cause === "size" || cause === "reply-size"
+          ? "corrupt"
+          : cause === "bound"
+          ? "timeout"
+          : "interrupted",
+      );
+      const stops = sent(socket).filter((f) => f.form === "stream_end");
+      assert.deepEqual(
+        stops.map((f) => [
+          f.target,
+          f.correlation,
+          f.stream,
+          f.envelope.seq,
+          f.outcome.kind,
+        ]),
+        cause === "size"
+          ? [
+            [TARGET, 2n, 1, 3n, "interrupted"],
+            [TARGET, 2n, 0, 1n, "interrupted"],
+          ]
+          : [[
+            TARGET,
+            2n,
+            0,
+            1n,
+            cause === "reply-size" ? "corrupt" : "interrupted",
+          ]],
+      );
+      socket.deliver({
+        form: "chunk",
+        target: TARGET,
+        correlation: 2n,
+        stream: 0,
+        envelope: { stamp: 0n, seq: 1n },
+        payload: bytes,
+      });
+      assert.ok(
+        notes.some((n) =>
+          n.note === "discarded" && n.reason === "unknown-correlation"
+        ),
+      );
+    } finally {
+      session.close();
+    }
+  });
+}
+
+// Mutation: bypass #send for the stream-0 stop after an oversized write.
+Deno.test("duplex_oversized_stop_send_exception", async () => {
+  const { session, socket, notes } = await rig();
+  try {
+    const { writer, reader } = await secondCall(session, socket);
+    const exception = new Error("reply interruption send failed");
+    const send = socket.send.bind(socket);
+    socket.send = (data) => {
+      assert.ok(data instanceof Uint8Array);
+      const decoded = decode(data);
+      assert.ok(decoded.ok);
+      if (decoded.frame.form === "stream_end" && decoded.frame.stream === 0) {
+        throw exception;
+      }
+      send(data);
+    };
+    const closed = observe(writer.closed);
+    const read = observe(reader.read());
+    const replyClosed = observe(reader.closed);
+    const write = observe(writer.write(new Uint8Array(65536)));
+    await tick();
+    assert.equal(write.settled, true);
+    assert.equal(write.error, exception);
+    assert.equal(closed.settled, true);
+    assert.equal(closed.error, exception);
+    assert.equal(read.settled, true, "the reply must reject immediately");
+    assert.equal(read.error, exception);
+    assert.equal(replyClosed.settled, true);
+    assert.equal(replyClosed.error, exception);
+    assert.deepEqual(
+      sent(socket).filter((f) => f.form === "stream_end").map((f) => [
+        f.correlation,
+        f.stream,
+        f.envelope.seq,
+        f.outcome.kind,
+      ]),
+      [[2n, 1, 3n, "interrupted"]],
+    );
+    socket.send = send;
+    socket.deliver({
+      form: "chunk",
+      target: TARGET,
+      correlation: 2n,
+      stream: 0,
+      envelope: { stamp: 0n, seq: 1n },
+      payload: bytes,
+    });
+    assert.ok(
+      notes.some((n) =>
+        n.note === "discarded" && n.reason === "unknown-correlation"
+      ),
+      "the failed call must be forgotten",
+    );
+    assert.equal(
+      socket.closes.length,
+      0,
+      "send failure leaves the session open",
+    );
+  } finally {
+    session.close();
+  }
+});

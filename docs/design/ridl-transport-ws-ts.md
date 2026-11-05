@@ -662,8 +662,9 @@ carries two or more parameter streams (driftsys/ridl#1224).
   resumed write checks for failure again before sending, so a credit followed by
   refusal in the same turn sends no extra chunk. A write longer than the
   member's limit sends no chunk: it sends `stream_end interrupted`, errors the
-  upload, rejects any pending result with `corrupt` and forgets the call. A
-  write exactly at the limit sends one whole chunk. The
+  upload, rejects any pending result with `corrupt` and forgets the call. For
+  `queryDuplex`, it also stops stream 0 after stream 1, as described in **Duplex
+  queries** below. A write exactly at the limit sends one whole chunk. The
   [binding rationale](../technotes/websocket-binding-rationale.md#streams-arrive-as-frame-version-3-and-binding-version-3)
   explains why the client preserves write boundaries.
 - **Close.** After the queued writes complete, `close` sends `stream_end end`
