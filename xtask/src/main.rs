@@ -8,7 +8,8 @@
 //! - `descriptor-codegen` regenerates the catalog-descriptor accessors from
 //!   `crates/ridl-descriptor/schema/catalog.fbs`.
 //! - `bench gen` writes the generated crates of the encoding bench under
-//!   `bench/encodings/generated/`.
+//!   `bench/encodings/generated/`; `bench host` also runs its tests and prints
+//!   the size and allocation table.
 //! - `calibrate` dumps corpus findings and derives levels from reviewed labels.
 //! - `freeze update|check` writes or checks the dumps of the frozen surfaces
 //!   under `freeze/`.

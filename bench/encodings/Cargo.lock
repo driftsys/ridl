@@ -12,11 +12,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "bench_cabin"
+version = "0.0.0"
+dependencies = [
+ "regex",
+ "ridl-rt",
+]
+
+[[package]]
+name = "bench_stress"
+version = "0.0.0"
+dependencies = [
+ "regex",
+ "ridl-rt",
+]
+
+[[package]]
+name = "bench_veh_cluster"
+version = "0.0.0"
+dependencies = [
+ "regex",
+ "ridl-rt",
+]
+
+[[package]]
 name = "encoding-bench"
 version = "0.0.0"
 dependencies = [
+ "bench_cabin",
+ "bench_stress",
+ "bench_veh_cluster",
  "ridl-rt",
- "ridl_generated",
 ]
 
 [[package]]
@@ -57,11 +83,3 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "ridl-rt"
 version = "0.15.0"
-
-[[package]]
-name = "ridl_generated"
-version = "0.0.0"
-dependencies = [
- "regex",
- "ridl-rt",
-]

@@ -1,8 +1,8 @@
+use bench_veh_cluster::ridl::std::Name;
+use bench_veh_cluster::veh::common::{DriverProfile, Speed, SpeedLimitPayload};
 use encoding_bench::{measure_counts, CountingAlloc};
-use ridl_generated::veh::common::{DriverProfile, Speed, SpeedLimitPayload};
-use ridl_generated::ridl::std::Name;
-use std::hint::black_box;
 use ridl_rt::encoding::{FlatBuffers, Podbuf, Proto3};
+use std::hint::black_box;
 
 #[global_allocator]
 static ALLOC: CountingAlloc = CountingAlloc;

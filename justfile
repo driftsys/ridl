@@ -3833,8 +3833,8 @@ package-vscode:
     cp "$bin" editors/vscode/bin/
     just package-vsix
 
-# Generate the encoding bench's crate and run its host tests. Not a member of
+# Generate the encoding bench's crates, run its host tests, and print the
+# size and allocation table. Not a member of
 # `build`: the bench is measurement, not a gate (bench/encodings/README.md).
 bench-host:
-    cargo xtask bench gen
-    cargo test --manifest-path bench/encodings/Cargo.toml
+    cargo xtask bench host

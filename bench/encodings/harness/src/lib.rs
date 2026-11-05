@@ -55,38 +55,49 @@ pub struct Counts {
     pub decode_allocs: u64,
 }
 
+pub mod corpus;
+
 /// Encodes `value` into a stack buffer, verifies the bytes, and decodes them,
 /// and counts the allocations of each step.
 ///
 /// The binary that calls this installs `CountingAlloc` as its global
-/// allocator; without it every count is zero.
+/// allocator; without it every count is zero. Panics when the encoding
+/// refuses the value; `try_measure_counts` reports the refusal instead.
 pub fn measure_counts<T: Payload<E>, E: Encoding>(value: &T) -> Counts {
+    try_measure_counts::<T, E>(value).expect("the encoding accepts the value")
+}
+
+/// Like `measure_counts`, and returns the reason when the encoding refuses
+/// the value (an encode error) or refuses the bytes it just wrote (a verify
+/// error).
+pub fn try_measure_counts<T: Payload<E>, E: Encoding>(value: &T) -> Result<Counts, String> {
     // Every result goes through `black_box` so that the optimizer cannot drop
     // a step it sees no use for, which would also drop its allocations.
     let value = black_box(value);
     let mut buf = T::BUFFER;
 
     CountingAlloc::reset();
-    let encoded = black_box(Ref::<T, E>::encode(value, buf.as_mut()).expect("encode"));
+    let encoded = black_box(Ref::<T, E>::encode(value, buf.as_mut()))
+        .map_err(|e| format!("encode: {e:?}"))?;
     let encode_allocs = CountingAlloc::count();
     let bytes = black_box(encoded.bytes());
     let size = bytes.len();
 
     CountingAlloc::reset();
-    let verified = black_box(Ref::<T, E>::verify(bytes).expect("verify"));
+    let verified = black_box(Ref::<T, E>::verify(bytes)).map_err(|e| format!("verify: {e:?}"))?;
     let verify_allocs = CountingAlloc::count();
     drop(verified);
 
     CountingAlloc::reset();
-    let verified = black_box(Ref::<T, E>::verify(bytes).expect("verify"));
+    let verified = black_box(Ref::<T, E>::verify(bytes)).map_err(|e| format!("verify: {e:?}"))?;
     let decoded = black_box(verified.decode());
     let decode_allocs = CountingAlloc::count();
     drop(decoded);
 
-    Counts {
+    Ok(Counts {
         size,
         encode_allocs,
         verify_allocs,
         decode_allocs,
-    }
+    })
 }

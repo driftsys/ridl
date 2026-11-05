@@ -1,0 +1,70 @@
+package bench.stress
+
+/// A string at the top of what a signal carries.
+type LongText: string [1..512] = "-"
+
+/// A short label.
+type Label: string [1..16] = "-"
+
+/// A small count.
+type Count: integer [0..65535]
+
+/// A signal payload that holds one long string.
+struct LongStringPayload {
+  /// The text.
+  text: LongText
+}
+
+/// One element of a list of structs.
+struct Item {
+  /// The element label.
+  label: Label
+  /// The element count.
+  count: Count
+}
+
+/// A signal payload that holds a list of structs.
+struct ItemListPayload {
+  /// The elements.
+  items: [Item; 1..16]
+}
+
+/// A signal payload whose optional fields hold optional structs.
+struct NestedOptionalPayload {
+  /// The outer optional.
+  outer: Inner?
+  /// A plain optional beside it.
+  tag: Label?
+}
+
+/// The middle layer of the nested optionals.
+struct Inner {
+  /// An optional struct inside the optional.
+  leaf: Leaf?
+  /// An optional count.
+  count: Count?
+}
+
+/// The innermost layer of the nested optionals.
+struct Leaf {
+  /// The leaf label.
+  label: Label
+}
+
+/// A signal payload that holds a map.
+struct MapPayload {
+  /// Counts by label.
+  counts: [Label : Count; 0..16]
+}
+
+/// Interface that makes the stress shapes interaction payloads.
+interface Stress {
+  /// A long string.
+  signal longString: LongStringPayload @10ms
+  /// A list of structs.
+  signal itemList: ItemListPayload @10ms
+  /// Nested optionals.
+  signal nestedOptional: NestedOptionalPayload @10ms
+  /// A map.
+  signal map: MapPayload @10ms
+}
