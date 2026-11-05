@@ -7444,7 +7444,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -7499,7 +7499,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -7632,7 +7632,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "16"
@@ -7652,7 +7652,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -7699,7 +7699,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "bytes": {
                   "min": "0",
                   "max": "64"
@@ -7835,7 +7835,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
                     "int": {
@@ -7862,10 +7862,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
-                    "descriptor": {
+                    "tailDescriptor": {
                       "text": {
                         "min": "0",
                         "max": "8"
@@ -7891,7 +7891,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "map": {
                   "entryHead": 22,
                   "elemSize": 16,
@@ -7913,7 +7913,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
                     "inlineHead": 0
@@ -7987,7 +7987,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
                     "enum": {
@@ -8015,7 +8015,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
                     "enumSet": {
@@ -8089,7 +8089,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "arms": {
                   "arms": [
                     {
@@ -8150,7 +8150,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "arms": {
                   "arms": [
                     {
@@ -8495,7 +8495,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "16"
@@ -8576,7 +8576,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -8703,7 +8703,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "16"
@@ -8723,7 +8723,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -8770,7 +8770,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "bytes": {
                   "min": "0",
                   "max": "64"
@@ -8906,7 +8906,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
                     "int": {
@@ -8933,10 +8933,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
-                    "descriptor": {
+                    "tailDescriptor": {
                       "text": {
                         "min": "0",
                         "max": "8"
@@ -8962,7 +8962,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "map": {
                   "entryHead": 26,
                   "elemSize": 16,
@@ -8984,7 +8984,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "array": {
                   "element": {
                     "inlineHead": 0
@@ -9021,7 +9021,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "1",
                   "max": "16"
@@ -9093,7 +9093,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -9151,7 +9151,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
             "size": 8,
             "align": 4,
             "form": {
-              "descriptor": {
+              "tailDescriptor": {
                 "text": {
                   "min": "0",
                   "max": "32"
@@ -9302,7 +9302,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "size": 8,
               "align": 4,
               "form": {
-                "descriptor": {
+                "tailDescriptor": {
                   "text": {
                     "min": "1",
                     "max": "16"
@@ -9329,7 +9329,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "size": 8,
               "align": 4,
               "form": {
-                "descriptor": {
+                "tailDescriptor": {
                   "text": {
                     "min": "0",
                     "max": "32"
@@ -9386,7 +9386,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
               "size": 8,
               "align": 4,
               "form": {
-                "descriptor": {
+                "tailDescriptor": {
                   "bytes": {
                     "min": "0",
                     "max": "64"

@@ -1193,7 +1193,7 @@ fn the_model_carries_the_podbuf_head_of_every_struct() {
     );
     assert_eq!(
         form_kind(field(sample, "name")),
-        &v1::podbuf_form::Kind::Descriptor(Box::new(v1::PodbufDescriptor {
+        &v1::podbuf_form::Kind::TailDescriptor(Box::new(v1::PodbufDescriptor {
             kind: Some(v1::podbuf_descriptor::Kind::Text(v1::PodbufBound {
                 min: 0,
                 max: 8
@@ -1253,7 +1253,7 @@ fn a_union_head_carries_its_tag_and_one_head_per_arm() {
     assert_eq!(kinds[1].0, 4);
     assert_eq!(kinds[1].1, 8);
     assert_eq!(kinds[1].2, Some(v1::podbuf_source::Kind::Arm(true)));
-    let Some(v1::podbuf_form::Kind::Descriptor(descriptor)) =
+    let Some(v1::podbuf_form::Kind::TailDescriptor(descriptor)) =
         shape.fields[1].form.as_ref().and_then(|f| f.kind.clone())
     else {
         panic!("the active arm is a descriptor");
@@ -1294,7 +1294,8 @@ fn a_map_field_names_its_entry_head() {
     let projection = model.podbuf.as_ref().expect("a podbuf projection");
     let (inner_at, _) = declaration_head(&model, "Inner");
     let (_, sample) = declaration_head(&model, "Sample");
-    let v1::podbuf_form::Kind::Descriptor(descriptor) = form_kind(field(sample, "table")) else {
+    let v1::podbuf_form::Kind::TailDescriptor(descriptor) = form_kind(field(sample, "table"))
+    else {
         panic!("a descriptor");
     };
     let Some(v1::podbuf_descriptor::Kind::Map(map)) = descriptor.kind.as_ref() else {
@@ -1344,7 +1345,7 @@ fn every_head_index_of_the_corpus_points_inside_the_list() {
                         Some(v1::podbuf_form::Kind::InlineArray(array)) => {
                             forms.extend(array.element.as_deref());
                         }
-                        Some(v1::podbuf_form::Kind::Descriptor(descriptor)) => {
+                        Some(v1::podbuf_form::Kind::TailDescriptor(descriptor)) => {
                             match descriptor.kind.as_ref() {
                                 Some(v1::podbuf_descriptor::Kind::Array(array)) => {
                                     forms.extend(array.element.as_deref());
@@ -1443,7 +1444,7 @@ fn the_veh_cluster_fault_event_has_the_head_the_law_gives() {
 fn a_bounded_array_names_its_stride_and_its_bounds() {
     let model = podbuf_model();
     let (_, flagged) = declaration_head(&model, "Flagged");
-    let v1::podbuf_form::Kind::Descriptor(descriptor) = form_kind(field(flagged, "readings"))
+    let v1::podbuf_form::Kind::TailDescriptor(descriptor) = form_kind(field(flagged, "readings"))
     else {
         panic!("a descriptor");
     };
@@ -1578,7 +1579,8 @@ fn a_union_arm_that_is_a_union_keeps_its_tuples() {
             .fields
             .iter()
             .find_map(|field| match form_kind(field) {
-                v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+                v1::podbuf_form::Kind::TailDescriptor(descriptor) => match descriptor.kind.as_ref()
+                {
                     Some(v1::podbuf_descriptor::Kind::Arms(arms)) => Some(
                         arms.arms
                             .iter()
@@ -1948,7 +1950,7 @@ fn a_tuple_as_a_map_key_or_value_is_found_by_its_identity() {
     const B: &str = "package p.b\n\nimport p.a.Table\n\nstruct Local {\n  table : Table\n}\n";
     let entry_of = |projection: &v1::PodbufProjection, table: &v1::PodbufHead| -> u32 {
         match form_kind(field(table, "byPair")) {
-            v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+            v1::podbuf_form::Kind::TailDescriptor(descriptor) => match descriptor.kind.as_ref() {
                 Some(v1::podbuf_descriptor::Kind::Map(map)) => {
                     assert!(matches!(
                         projection.heads[map.entry_head as usize].source,
@@ -2125,7 +2127,7 @@ fn an_inline_tuple_is_found_by_its_identity() {
         .fields
         .iter()
         .find_map(|field| match form_kind(field) {
-            v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+            v1::podbuf_form::Kind::TailDescriptor(descriptor) => match descriptor.kind.as_ref() {
                 Some(v1::podbuf_descriptor::Kind::Arms(arms)) => Some(arms),
                 _ => None,
             },
@@ -2150,7 +2152,7 @@ fn an_inline_tuple_is_found_by_its_identity() {
         .expect("position 2");
     assert_eq!(nested(inline_at(inner)), ("p.a", "HubSizeField2"));
     let element = match form_kind(field(arm_hub, "items")) {
-        v1::podbuf_form::Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+        v1::podbuf_form::Kind::TailDescriptor(descriptor) => match descriptor.kind.as_ref() {
             Some(v1::podbuf_descriptor::Kind::Array(array)) => {
                 array.element.as_deref().expect("an element")
             }
@@ -2230,7 +2232,7 @@ fn a_foreign_union_and_a_foreign_tuple_keep_their_heads() {
     };
     let pick = &projection.heads[*pick_at as usize];
     assert_eq!(foreign_name(&pick.source).as_deref(), Some("Pick"));
-    let v1::podbuf_form::Kind::Descriptor(descriptor) = pick.fields[1]
+    let v1::podbuf_form::Kind::TailDescriptor(descriptor) = pick.fields[1]
         .form
         .as_ref()
         .and_then(|f| f.kind.as_ref())
