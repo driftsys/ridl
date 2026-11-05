@@ -4,6 +4,8 @@
 //!   the size and allocation table of the corpus.
 //! - `pixel` cross-builds the harness and runs it on a Pixel 5 over adb, pinned
 //!   to an A55 core and to an A76 core (`pixel.rs`).
+//! - `report` reads the result files under `bench/encodings/results/` and
+//!   prints Markdown tables (the `bench/encodings/report` program).
 //! - `gen` writes, under `bench/encodings/generated/`, the Rust crate that
 //!   `ridl build --emit rust` generates for each of the veh-cluster corpus,
 //!   `examples/cabin` and the stress package `bench/encodings/stress`, with
@@ -27,7 +29,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("gen") => generate(),
         Some("host") => host(),
         Some("pixel") => pixel::run(),
-        _ => Err("usage: cargo xtask bench gen|host|pixel".to_string()),
+        Some("report") => report(),
+        _ => Err("usage: cargo xtask bench gen|host|pixel|report".to_string()),
     }
 }
 
@@ -98,6 +101,44 @@ fn host() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The result files in `dir`, sorted by name, so that the sections of the
+/// report come in a fixed order.
+fn result_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        format!(
+            "read {}: {e} (run `just bench-pixel`, or write a result with `--out`)",
+            dir.display()
+        )
+    })?;
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .collect();
+    files.sort();
+    if files.is_empty() {
+        return Err(format!("no .json result file in {}", dir.display()));
+    }
+    Ok(files)
+}
+
+fn report() -> Result<(), String> {
+    let root = root();
+    let files = result_files(&root.join("bench/encodings/results"))?;
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let status = Command::new(cargo)
+        .args(["run", "--quiet", "--release", "--manifest-path"])
+        .arg(root.join("bench/encodings/Cargo.toml"))
+        .args(["-p", "encoding-bench-report", "--"])
+        .args(&files)
+        .status()
+        .map_err(|e| format!("run the report program: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("the report program failed: {status}"))
+    }
 }
 
 fn ridl_build(root: &Path, source: &str, emit: &str, out: &Path) -> Result<(), String> {
@@ -197,5 +238,36 @@ fn push_signals(
         if let Some(name) = interaction["name"].as_str() {
             out.push(format!("{prefix}{owner}.{name}"));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn result_files_lists_json_files_sorted_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("bench-results-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["b.json", "a.json", "a.cpufreq.txt"] {
+            std::fs::write(dir.join(name), "").unwrap();
+        }
+        let files = result_files(&dir).unwrap();
+        let names: Vec<_> = files
+            .iter()
+            .map(|f| f.file_name().unwrap().to_str().unwrap())
+            .collect();
+        assert_eq!(names, ["a.json", "b.json"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn result_files_fails_when_there_is_no_json_file() {
+        let dir = std::env::temp_dir().join(format!("bench-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.cpufreq.txt"), "").unwrap();
+        let err = result_files(&dir).unwrap_err();
+        assert!(err.contains("no .json result file"), "{err}");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
