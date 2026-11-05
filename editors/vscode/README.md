@@ -46,13 +46,13 @@ Learn the languages:
 
 ## Install
 
-Releases are published to the VS Code Marketplace and Open VSX under "RIDL". A
-maintainer cuts each one from an `editor-v*` tag. The published extension
-bundles the `ridl` binary and runs it as `ridl lsp` (the language server) and
-`ridl mcp` (the MCP server Copilot sees). Before the first release, or to test a
-change, build the extension from source (below). The repository root also has
-installer scripts (`install.sh` / `install.ps1`) that download `ridl` alone from
-the newest `editor-v*` GitHub Release.
+Releases are published to the VS Code Marketplace under "RIDL". A maintainer
+cuts each one from an `editor-v*` tag. The published extension bundles the
+`ridl` binary and runs it as `ridl lsp` (the language server) and `ridl mcp`
+(the MCP server Copilot sees). Before the first release, or to test a change,
+build the extension from source (below). The repository root also has installer
+scripts (`install.sh` / `install.ps1`) that download `ridl` alone from the
+newest `editor-v*` GitHub Release.
 
 Once the extension is installed, by whichever route, run the command **RIDL:
 Install ridl to PATH** to use `ridl` from a terminal, Claude Code, or Codex too.
