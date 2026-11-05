@@ -69,9 +69,9 @@ runtime contracts), `ts-e2e` (transport regressions plus generated document
 byte, named and duplex transfers against Rust), `ts-browser-e2e` (the existing
 transport browser regression), and `test` (including socket-free document
 provider tests). The generated documentation and TypeScript/wasm rule parity are
-also pinned by the backend and compiler test suites. The payload ABI adds `utf8`
-at 7 and moves `variant` to 8, requiring paired regeneration in the next
-breaking release; these codes are distinct from frame detail codes.
+also pinned by the backend and compiler test suites. The
+[payload rule ABI](../design/ts-codec-table.md#stream-functions) owns the rule
+codes, release classification and codec regeneration requirement.
 
 ## Context
 

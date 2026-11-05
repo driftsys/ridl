@@ -617,11 +617,8 @@ directions and result promises. Pending/later writes and `writer.closed` retain
 a remote error, while a new `close()` after the writer has errored follows
 native `TypeError` behavior.
 
-Payload rules are sorted: `length, pattern, range, step, unique, utf8, variant`.
-The wasm payload codes are 2–8, so `utf8` is 7 and `variant` is 8. This changes
-the previous `variant` code and widens the TypeScript rule union; it is a
-breaking-release change. Regenerate wasm and TypeScript together. Frame detail
-codes are a separate table.
+The [payload rule ABI][codec-table] defines the rule codes, their release
+classification and the codec regeneration requirement.
 
 The supported subset is reply streams and exactly one parameter stream on a
 command or query, including duplex. Two or more parameter streams
@@ -669,14 +666,14 @@ the editor's hover shows in its **Contract** list.
 A generated doc holds these parts, in this order, and leaves out each part that
 is empty:
 
-| Part          | Rust                                       | TypeScript                                   |
-| ------------- | ------------------------------------------ | -------------------------------------------- |
-| doc text      | `///` lines; each link an intra-doc link   | the comment's text; each link `{@link Name}` |
-| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list             |
-| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                 |
-| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                          |
-| `@since`      | one `Available since <version>.` line each | one `@since` tag each                        |
-| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                        |
+| Part          | Rust                                       | TypeScript                                                                                         |
+| ------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| doc text      | `///` lines; each link an intra-doc link   | the comment's text; each local link `{@link Name}`, or `{@link t.Name}` in a codec stream function |
+| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list                                                                   |
+| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                                                                       |
+| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                                                                                |
+| `@since`      | one `Available since <version>.` line each | one `@since` tag each                                                                              |
+| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                                                                              |
 
 A link, or an `@see` target, whose target has no item in the same output is
 written as a code span of the target's qualified name, such as

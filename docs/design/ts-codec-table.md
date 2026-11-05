@@ -123,20 +123,22 @@ enum sets of other packages whose `pack_<alias>_<Name>` or
 `unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
 `d`), two foreign payload types whose `codec<Package><Name>` constants spell the
 same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
-spells a foreign one.
+spells a foreign one. An interaction named `iface` is refused because it
+collides with the interface table metadata key of that name; the error names
+both sources.
 
 ## Stream functions
 
-**D-16. The payload rule table changes together with wasm (S6-1).** The sorted
-table is `length, pattern, range, step, unique, utf8, variant`. Codes are 2 plus
-the index: `utf8` is 7 and `variant` is 8. Widening the TypeScript rule union
-and moving `variant` from 7 to 8 is a breaking change for the next breaking
-release. Regenerate the TypeScript module and wasm codec together. These payload
-ABI codes are separate from frame detail codes.
+**D-16. The payload rule table changes together with wasm.** The sorted table is
+`length, pattern, range, step, unique, utf8, variant`. Codes are 2 plus the
+index: `utf8` is 7 and `variant` is 8. Widening the TypeScript rule union and
+moving `variant` from 7 to 8 is a breaking change for the next breaking release.
+Regenerate the TypeScript module and wasm codec together. These payload ABI
+codes are separate from frame detail codes.
 
-**D-17. A runtime context supplies transport and verification (S6-3).** Every
-function takes `session: StreamSession` first: `{ transport, codec }`, with a
-loaded `Codec` and a structural `StreamTransport`. The application connects its
+**D-17. A runtime context supplies transport and verification.** Every function
+takes `session: StreamSession` first: `{ transport, codec }`, with a loaded
+`Codec` and a structural `StreamTransport`. The application connects its
 transport and loads wasm explicitly; there is no global codec or hidden load.
 The generator calls transport methods with their receiver retained. Generated
 imports come only from `@driftsys/ridl-runtime`: `StreamSession`,
@@ -153,9 +155,9 @@ Named input elements are encoded and verified before transmission. Named output
 elements and plain replies are verified before decoding into application values.
 Text replies use fatal UTF-8 decoding per chunk; raw bytes pass through.
 
-**D-18. Functions and tables describe the supported stream forms (S6-4).** The
-exported name is `<Interface>_<declaredMember>`, for example `DocStore_fetch`.
-Non-stream parameters follow the context in declaration order; the final
+**D-18. Functions and tables describe the supported stream forms.** The exported
+name is `<Interface>_<declaredMember>`, for example `DocStore_fetch`. Non-stream
+parameters follow the context in declaration order; the final
 `opts: StreamOptions` is required and contains `bound` in milliseconds. The
 functions return:
 
@@ -190,17 +192,16 @@ for non-stream parameters. The `@remarks` Rules list comes from
 Local domain links name the imported `t` namespace; targets without an emitted
 item remain qualified code spans. Private helpers carry no facade docs.
 
-**D-19. Sender adapters preserve the distinction between chunks and elements
-(S6-5).** Raw writes split at the member limit, and text splits only between
-complete code points. Text encoding rejects unpaired JavaScript surrogates with
-the `utf8` rule. An oversized code point or encoded named element fails locally
-as corrupt; a named encoding is never split. Empty byte and text writes remain
-valid chunks. Named `bytes` and `string` types remain whole named elements.
+**D-19. Sender adapters preserve the distinction between chunks and elements.**
+Raw writes split at the member limit, and text splits only between complete code
+points. Text encoding rejects unpaired JavaScript surrogates with the `utf8`
+rule. An oversized code point or encoded named element fails locally as corrupt;
+a named encoding is never split. Empty byte and text writes remain valid chunks.
+Named `bytes` and `string` types remain whole named elements.
 
-**D-20. Local errors are distinct from transport errors (S6-6).**
-`StreamError.failure` is `{ category: "corrupt" }` for malformed bytes, an
-oversized encoding, or any other exception a generated `encode` or `decode`
-throws, or
+**D-20. Local errors are distinct from transport errors.** `StreamError.failure`
+is `{ category: "corrupt" }` for malformed bytes, an oversized encoding, or any
+other exception a generated `encode` or `decode` throws, or
 `{ category: "contract", contract: { category:
 "invalid-value", rule } }` for a
 constraint or UTF-8 violation, including a `RuleError` a generated `encode` or
@@ -215,7 +216,7 @@ transport's interruption, rather than that local `StreamError`. Explicit upload
 abort preserves the supplied reason on the native writer; the other direction
 reports transport interruption.
 
-**D-21. Generated interoperability uses the document example (S6-7).**
+**D-21. Generated interoperability uses the document example.**
 `examples/docstore/web` loads the generated wasm and tables, calls byte
 put/fetch, checks 64 exact indexed named download chunks, and exercises duplex
 exchange. The existing raw transport fixtures remain transport regressions.
@@ -223,47 +224,46 @@ exchange. The existing raw transport fixtures remain transport regressions.
 and the generated consumer against Rust. `just ts-browser-e2e` remains the
 transport browser regression; the document example has no browser page.
 
-**D-22. Platform behavior is tested by mutation (R-6-T1-1).** Cancellation and
-backpressure already provided by platform streams are retained. Their regression
-tests may pass initially; production mutations establish that the tests detect
-broken forwarding or credit waiting. They are recorded as platform behavior with
+**D-22. Platform behavior is tested by mutation.** Cancellation and backpressure
+already provided by platform streams are retained. Their regression tests may
+pass initially; production mutations establish that the tests detect broken
+forwarding or credit waiting. They are recorded as platform behavior with
 mutation evidence, rather than artificial assertion RED runs.
 
-**D-23. Duplex cancellation follows the transport contract (R-6-T0-1).**
+**D-23. Duplex cancellation follows the transport contract.**
 [The transport record, D-23](ridl-transport-ws-ts.md), owns the byte transport
 state machine: upload abort sends stream-1 then stream-0 interruption and
 forgets the call; reply cancel sends stream 0 only. Successful abort lets the
 platform error the native writer. Local reply failure and a blocked write use
 the transport interruption error. No frame amendment is required.
 
-**D-24. Ordinary fallible queries retain their previous table shape
-(R-6-T2-1).** A plain query with an inline `T | E` result still has no `reply`
-codec entry. Generated upload queries whose inline fallible result has no codec
-are explicitly omitted; a named result union with a finite codec is supported.
-This does not change ordinary-call generation.
+**D-24. Ordinary fallible queries retain their previous table shape.** A plain
+query with an inline `T | E` result still has no `reply` codec entry. Generated
+upload queries whose inline fallible result has no codec are explicitly omitted;
+a named result union with a finite codec is supported. This does not change
+ordinary-call generation.
 
-**D-25. Upload writers retain native close behavior (R-6-T3-3).** Pending and
-later writes, `writer.closed`, and a close queued before remote refusal retain
-the original remote error. Calling `close()` after the writer is already errored
-follows platform `TypeError` behavior. No writer proxy changes those semantics.
+**D-25. Upload writers retain native close behavior.** Pending and later writes,
+`writer.closed`, and a close queued before remote refusal retain the original
+remote error. Calling `close()` after the writer is already errored follows
+platform `TypeError` behavior. No writer proxy changes those semantics.
 
-**D-26. Query replies are nonempty language values (R-6-T3-5).** The language
-rejects a query result `()` with RIDL-105. Generated upload queries support
-named unions and induced tuple replies; no synthetic empty-query result is
-added.
+**D-26. Query replies are nonempty language values.** The language rejects a
+query result `()` with RIDL-105. Generated upload queries support named unions
+and induced tuple replies; no synthetic empty-query result is added.
 
-**D-27. Duplex liveness uses an additional echo (R-6-T4-1).** After the first 64
-exact named echoes, the document consumer sends a 65th valid indexed chunk and
+**D-27. Duplex liveness uses an additional echo.** After the first 64 exact
+named echoes, the document consumer sends a 65th valid indexed chunk and
 requires its echo before upload close, then requires normal reply end. This
 establishes continued progress while upload remains open without a timing probe.
 The download validator still expects 64 elements.
 
-**D-28. Provider unit tests belong to the Rust test gate (R-6-T4-2).**
-`just test` generates the example's Rust API immediately before running the
-server workspace tests. That socket-free provider check needs neither `flatc`
-nor wasm. The web generation helper compiles and lints the server and runs the
-web validator tests; integration mutations therefore reach the generated
-TypeScript consumer instead of stopping in provider unit tests.
+**D-28. Provider unit tests belong to the Rust test gate.** `just test`
+generates the example's Rust API immediately before running the server workspace
+tests. That socket-free provider check needs neither `flatc` nor wasm. The web
+generation helper compiles and lints the server and runs the web validator
+tests; integration mutations therefore reach the generated TypeScript consumer
+instead of stopping in provider unit tests.
 
 **D-29. The document fixture uses `docstore.api`.** A single-component package's
 codec module imports its domain module and the `flatc` barrel from the same

@@ -739,13 +739,15 @@ interruption and errors the upload. An abort of an upload that is still open
 sends `stream_end interrupted` on stream 1 and then on stream 0, errors the
 reply and forgets the call; an abort after upload close sends nothing, as the
 platform defines for a closed `WritableStream`. Abort resolves once both
-interruptions are sent. Either cancellation rejects a write waiting for credit
-with `interrupted`, including one the sink has not yet processed. A refusal of
-either stream, a refusing response before the first reply frame, or session end
-fails both streams with the same error object. A plain response, a response
-after the reply begins, inbound reply credit or inbound upload chunks violates
-the protocol as in D-20. Send exceptions release the call and fail both
-directions with the original exception.
+interruptions are sent. An oversized upload write sends the same interruptions
+in that order, fails both local streams with `corrupt` and forgets the call.
+Either cancellation rejects a write waiting for credit with `interrupted`,
+including one the sink has not yet processed. A refusal of either stream, a
+refusing response before the first reply frame, or session end fails both
+streams with the same error object. A plain response, a response after the reply
+begins, inbound reply credit or inbound upload chunks violates the protocol as
+in D-20. Send exceptions release the call and fail both directions with the
+original exception.
 
 The duplex first-reply-frame bound runs from the request and stops at the first
 reply chunk or end; upload progress and close neither stop nor restart it. The
@@ -759,7 +761,7 @@ not confirm provider consumption. `src/duplex.ts` owns the two stream states;
 bounds, preflight, malformed replies and send exceptions. The loopback e2e cases
 `queryDuplex_echoes_64_chunks` and `queryDuplex_cancel_and_abort` cover
 concurrent echo and interruption followed by an ordinary call on the same
-session. TCP execution is required to establish interoperability.
+session. Their TCP execution status is recorded in D-14 below.
 
 ## The end-to-end tests
 
@@ -836,8 +838,17 @@ bytes are the value the provider set.
   closing cannot hide a refusal of the last chunks. The upload harness permits
   discard notes but asserts no violation: after a refusal settles and forgets a
   query, its later response may be discarded as `unknown-correlation`. These
-  four upload scenarios are written and type-checked; their TCP execution is not
-  verified by the available local results.
+  four upload scenarios are written and type-checked. Two duplex scenarios also
+  run against the loopback server:
+  - `queryDuplex_echoes_64_chunks` requires the first echo while the upload
+    remains open, checks 64 exact indexed echoes in total, closes the upload and
+    requires normal reply end.
+  - `queryDuplex_cancel_and_abort` checks reply cancellation and upload abort,
+    then completes an ordinary query on the same session after each action.
+
+  The four upload scenarios and both duplex scenarios require TCP execution to
+  establish interoperability; that execution is not verified by the available
+  local results.
 - **The browser** (`e2e/browser_test.ts`, `e2e/page.ts`, `e2e/browser.ts`). The
   test bundles `e2e/page.ts` with `deno bundle --platform=browser`, serves the
   bundle and a page from `Deno.serve` on `127.0.0.1`, starts a headless

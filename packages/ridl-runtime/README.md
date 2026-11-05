@@ -157,10 +157,9 @@ mapped exception is kept as the error's `cause`. `PayloadRule` names `length`,
 verification rule text, or an unknown-type verification result, throws
 `CodecError`. Local errors do not require a transport-specific error class.
 
-The generated TypeScript and wasm codecs must be regenerated together. The
-sorted payload rule table assigns `utf8` code 7 and `variant` code 8; the
-addition of `utf8` widens the generated rule union and changes the previous
-`variant` code. This is a breaking change for the next breaking release.
+The [payload rule ABI](../../docs/design/ts-codec-table.md#stream-functions)
+defines the rule codes, their release classification and the codec regeneration
+requirement.
 
 ## Limits
 
