@@ -66,9 +66,21 @@ fn current_cpu() -> Option<usize> {
     None
 }
 
+/// The date of the run: `date_override` when given, else the UTC date of the
+/// clock. A device may have a wrong clock, so the caller can state the date.
+pub fn resolve_date(date_override: Option<&str>, unix_secs: u64) -> String {
+    date_override
+        .map(str::to_string)
+        .unwrap_or_else(|| civil_date(unix_secs))
+}
+
 /// Collects the provenance of this run. `commit` overrides the commit read
-/// from `git`, for a device that has no git.
-pub fn collect_provenance(core_label: &str, commit: Option<&str>) -> Provenance {
+/// from `git`, for a device that has no git. `date` overrides the clock date.
+pub fn collect_provenance(
+    core_label: &str,
+    commit: Option<&str>,
+    date: Option<&str>,
+) -> Provenance {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -92,7 +104,7 @@ pub fn collect_provenance(core_label: &str, commit: Option<&str>) -> Provenance 
         .as_ref()
         .and_then(|d| read_trimmed(&format!("{d}/scaling_governor")));
     Provenance {
-        date: civil_date(secs),
+        date: resolve_date(date, secs),
         commit,
         os: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),

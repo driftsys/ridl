@@ -1,7 +1,9 @@
 use bench_stress::bench::stress::ItemListPayload;
 use bench_veh_cluster::veh::common::Speed;
 use encoding_bench::corpus::{Cell, Kind, Recorder, Row, RowTiming};
-use encoding_bench::report::{civil_date, to_json, Provenance, RunInfo};
+use encoding_bench::report::{
+    civil_date, collect_provenance, resolve_date, to_json, Provenance, RunInfo,
+};
 use encoding_bench::timing::{paced_summary, Stat, TimingConfig};
 use encoding_bench::{CountingAlloc, Counts};
 use serde_json::Value;
@@ -260,4 +262,18 @@ fn the_payload_type_is_the_bare_type_name_for_buildable_and_not_built_rows() {
         };
         assert_eq!(ty, expected, "{payload}");
     }
+}
+
+#[test]
+fn the_date_flag_overrides_the_clock() {
+    // 2024-01-24 is the clock; the flag states another date.
+    let clock = 1_706_054_400;
+    assert_eq!(civil_date(clock), "2024-01-24");
+    assert_eq!(resolve_date(Some("2001-02-03"), clock), "2001-02-03");
+    assert_eq!(resolve_date(None, clock), "2024-01-24");
+    let stated = collect_provenance("A55", Some("abc"), Some("2001-02-03"));
+    assert_eq!(stated.date, "2001-02-03");
+    let clocked = collect_provenance("A55", Some("abc"), None);
+    assert_ne!(clocked.date, "2001-02-03");
+    assert_eq!(clocked.date.len(), 10);
 }

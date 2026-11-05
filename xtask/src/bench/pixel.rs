@@ -117,10 +117,10 @@ pub fn choose_device(listed: &[String], android_serial: Option<&str>) -> Result<
 }
 
 /// The shell command that runs the harness pinned to `core`.
-pub fn run_command(core: Core, commit: &str) -> String {
+pub fn run_command(core: Core, commit: &str, date: &str) -> String {
     format!(
         "taskset {mask} {DEVICE_BINARY} --out {DEVICE_DIR}/{json} --core-label {label} \
-         --duration {DURATION_S} --paced --commit {commit}",
+         --duration {DURATION_S} --paced --commit {commit} --date {date}",
         mask = core.mask(),
         json = device_json(core),
         label = core.label(),
@@ -249,13 +249,14 @@ pub fn device_steps(
     binary: &Path,
     core: Core,
     commit: &str,
+    date: &str,
     json: &Path,
 ) -> Vec<Vec<String>> {
     vec![
         push_args(serial, binary),
         chmod_args(serial),
         shell_args(serial, &cpufreq_command()),
-        shell_args(serial, &run_command(core, commit)),
+        shell_args(serial, &run_command(core, commit, date)),
         shell_args(serial, &cpufreq_command()),
         pull_args(serial, core, json),
     ]
@@ -326,7 +327,7 @@ pub fn run() -> Result<(), String> {
         println!("running on {} (cpu{})", core.label(), core.cpu());
         let json = results.join(result_name(core, date));
         let mut outputs = Vec::new();
-        for step in device_steps(&serial, &binary, core, commit, &json) {
+        for step in device_steps(&serial, &binary, core, commit, date, &json) {
             outputs.push(output(&mut adb(&step), "adb")?);
         }
         let (log, before, after) = split_outputs(&outputs);
@@ -398,7 +399,7 @@ mod tests {
 
     #[test]
     fn the_a55_run_is_pinned_to_one_core_of_cpu0_to_cpu5() {
-        let command = run_command(Core::A55, "abc");
+        let command = run_command(Core::A55, "abc", "2026-11-05");
         let mask = u32::from_str_radix(&Core::A55.mask(), 16).unwrap();
         assert_eq!(mask.count_ones(), 1, "one core only");
         assert!(
@@ -414,7 +415,7 @@ mod tests {
 
     #[test]
     fn the_a76_run_is_pinned_to_cpu6() {
-        let command = run_command(Core::A76, "abc");
+        let command = run_command(Core::A76, "abc", "2026-11-05");
         assert_eq!(Core::A76.mask(), "40");
         assert!(command.starts_with("taskset 40 "), "{command}");
         assert!(command.contains("--core-label A76"), "{command}");
@@ -423,13 +424,14 @@ mod tests {
 
     #[test]
     fn the_run_is_paced_with_the_commit_and_a_long_enough_duration() {
-        let command = run_command(Core::A76, "deadbeef");
+        let command = run_command(Core::A76, "deadbeef", "2026-11-05");
         assert!(
             command.contains(" --out /data/local/tmp/encoding-bench-a76.json "),
             "{command}"
         );
         assert!(command.contains("--paced"), "{command}");
         assert!(command.contains("--commit deadbeef"), "{command}");
+        assert!(command.ends_with("--date 2026-11-05"), "{command}");
         assert!(
             command.contains(&format!("--duration {DURATION_S}")),
             "{command}"
@@ -469,7 +471,7 @@ mod tests {
     #[test]
     fn the_device_json_of_each_core_differs() {
         assert_ne!(device_json(Core::A55), device_json(Core::A76));
-        assert!(run_command(Core::A55, "x").contains(&device_json(Core::A55)));
+        assert!(run_command(Core::A55, "x", "d").contains(&device_json(Core::A55)));
     }
 
     #[test]
@@ -559,6 +561,7 @@ mod tests {
             Path::new("/b/encoding-bench"),
             Core::A55,
             "abc",
+            "2026-11-05",
             Path::new("/r/pixel5-a55-d.json"),
         );
         assert!(steps.iter().all(|s| s[..2] == ["-s", "S1"]));
@@ -567,8 +570,12 @@ mod tests {
         assert_eq!(steps[0], push_args("S1", Path::new("/b/encoding-bench")));
         assert_eq!(steps[1], chmod_args("S1"));
         assert_eq!(steps[STEP_FREQ_BEFORE][3], cpufreq_command());
-        assert_eq!(steps[STEP_RUN][3], run_command(Core::A55, "abc"));
+        assert_eq!(
+            steps[STEP_RUN][3],
+            run_command(Core::A55, "abc", "2026-11-05")
+        );
         assert!(steps[STEP_RUN][3].starts_with("taskset 4 "));
+        assert!(steps[STEP_RUN][3].contains("--date 2026-11-05"));
         assert_eq!(steps[STEP_FREQ_AFTER][3], cpufreq_command());
         assert_eq!(
             steps[5],

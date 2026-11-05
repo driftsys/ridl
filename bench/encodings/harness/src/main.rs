@@ -5,8 +5,8 @@
 //! Flags: `--out FILE` (turns timing on), `--core-label TEXT` (names the core
 //! the run is pinned to), `--duration SECONDS` (CPU time per cell and
 //! encoding, default 0.5), `--paced` (also run each cell at 4 000 updates per
-//! second and read process CPU time), `--commit HASH` (for a device without
-//! git).
+//! second and read process CPU time), `--date YYYY-MM-DD` (for a device with a
+//! wrong clock), `--commit HASH` (for a device without git).
 
 use encoding_bench::corpus::{corpus, Cell, Kind, Recorder};
 use encoding_bench::report::{collect_provenance, to_json, RunInfo};
@@ -22,6 +22,7 @@ struct Args {
     duration_s: f64,
     paced: bool,
     commit: Option<String>,
+    date: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -31,6 +32,7 @@ fn parse_args() -> Result<Args, String> {
         duration_s: 0.5,
         paced: false,
         commit: None,
+        date: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -39,6 +41,7 @@ fn parse_args() -> Result<Args, String> {
             "--out" => args.out = Some(value("--out")?),
             "--core-label" => args.core_label = value("--core-label")?,
             "--commit" => args.commit = Some(value("--commit")?),
+            "--date" => args.date = Some(value("--date")?),
             "--duration" => {
                 args.duration_s = value("--duration")?
                     .parse()
@@ -79,7 +82,11 @@ fn main() {
     }
     print_table(&rec);
     if let (Some(path), Some(cfg)) = (&args.out, &timing) {
-        let provenance = collect_provenance(&args.core_label, args.commit.as_deref());
+        let provenance = collect_provenance(
+            &args.core_label,
+            args.commit.as_deref(),
+            args.date.as_deref(),
+        );
         let run = RunInfo {
             rate_per_s: RATE_PER_S,
             samples: cfg.samples,

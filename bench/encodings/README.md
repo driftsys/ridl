@@ -35,6 +35,8 @@ written with their reasons and are not timed.
   holds that figure, the figure derived from the unpaced cost, and the
   difference. It needs `--out`.
 - `--commit HASH` states the commit when the machine has no `git`.
+- `--date YYYY-MM-DD` states the date of the run when the clock of the machine
+  is wrong; without it the date is the UTC date of the clock.
 
 Per-update CPU time comes from an unpaced loop: thread CPU time
 (`CLOCK_THREAD_CPUTIME_ID`) over batches, 30 samples per cell, with the three
@@ -63,7 +65,8 @@ under `adb shell taskset`: pinned to cpu2 (one of the A55 cores, cpu0 to cpu5,
 up to 1.8 GHz), then to cpu6 (an A76 core, 2.2 GHz). Each run uses
 `--duration 2 --paced`: 2 s is long enough that a `getrusage` tick of 10 ms is
 0.5 % of the paced run. The commit is passed with `--commit`, because the phone
-has no repository. It pulls the results to `bench/encodings/results/` (not in
+has no repository, and the host date with `--date`, because the clock of the
+phone can be wrong. It pulls the results to `bench/encodings/results/` (not in
 git):
 
 - `pixel5-a55-<date>.json` and `pixel5-a76-<date>.json`, the harness output.
