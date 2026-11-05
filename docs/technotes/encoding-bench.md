@@ -50,11 +50,11 @@ framing. It changes no codec.
   run. It is the load a program that really waits between updates would show. It
   includes the cost of the sleep and of the wake-up of the thread. The tables
   give it next to the derived figure and their difference. The derived figure is
-  the headline because the paced one measures mostly the timer, not the codec:
-  on the development machine a 40 ns update gave about 0.96 % paced and about
-  0.016 % derived, so more than 98 % of the paced figure was not the update. A
-  paced run cannot be split between the three encodings, so the paced runs are
-  one cell after the other, not interleaved.
+  the headline because the paced one is not stable and is far from the derived
+  one: in the host tables the paced figure ranges from 0.6 % to 3.8 % for signal
+  payloads whose derived load is below 0.02 %, so the update is a small part of
+  what the paced run measures. A paced run cannot be split between the three
+  encodings, so the paced runs are one cell after the other, not interleaved.
 - **Pinning.** On the Pixel 5, `taskset` pins the run to one Cortex-A55 core
   (cpu2) and, in a second run, to one Cortex-A76 core (cpu6). The harness does
   not pin itself. The governor is `schedutil` and the phone is not rooted, so
@@ -93,8 +93,9 @@ that.
   can reach, including the uniqueness of map keys by pairwise comparison
   (quadratic in the number of entries). It allocates nothing. `decode` builds
   the owned value from the verified bytes. `encode` builds from the end of the
-  buffer towards the start, and allocates where the domain type already does: a
-  vector of tables or strings needs each element's position first. See
+  buffer towards the start, and, for a vector of tables or strings, collects the
+  element positions in a `Vec` before it writes the vector (the generated
+  encoder of the stress package does this), which is an allocation. See
   [the FlatBuffers codec record](../design/flatbuffers-codec.md).
 - **proto3** `verify` walks the fields in order with a fixed-size table of seen
   fields per message, refuses a field written twice, a varint wider than its
@@ -122,9 +123,11 @@ None of the three applies a length check in `verify` (ADR-0030 decision 19).
 - **CPU load at 4 000 updates per second (derived)** is the time per update
   scaled to the rate. It shows the codec's share of a core. It does not include
   the transport, the application, the scheduler or the timer.
-- **Paced load** shows what a program that waits between updates measures; it is
-  dominated by the cost of waiting on the development machine, as the tables
-  show.
+- **Paced load** shows what a program that waits between updates measures; in
+  the host tables it varies from 0.6 % to 3.8 % for payloads whose derived load
+  is below 0.02 %, so it is dominated by something other than the codec (the
+  cost of the timer and of the wake-up on an unpinned machine is the likely
+  cause; it is not a measurement).
 - **Ratios** divide each encoding by podbuf. A ratio above 1.00 means the
   encoding is larger or slower than podbuf on that payload. A ratio is computed
   only when both cells are measured.
@@ -173,8 +176,9 @@ encodings compare on this machine), not the load on a vehicle's computer.
 What the tables show, without a recommendation:
 
 - Size: proto3 is the smallest on every measured signal row and FlatBuffers the
-  largest. The stress payloads follow the same order, except that proto3 and
-  podbuf are within 3 % of each other on the long string.
+  largest. The stress payloads follow the same order (proto3, podbuf,
+  FlatBuffers), and the gap between proto3 and podbuf on the long string is
+  small (2.7 %).
 - Time: on this machine podbuf has the lowest median time on every measured
   signal row and on three of the four stress rows (list of structs, nested
   optionals, map). On the long string it has the highest. Many of the signal
@@ -185,13 +189,18 @@ What the tables show, without a recommendation:
   payloads is 2.1 % (proto3, the map).
 - Allocations: the codecs make no allocation for the signal payloads. Only the
   stress payloads allocate: decode allocates for every one of them, and encode
-  allocates for FlatBuffers (list of structs, map) and podbuf (map).
+  allocates for FlatBuffers (list of structs, map) and podbuf (map); the cause
+  of the podbuf map allocation is not established here.
 - Paced against derived: the paced figure is 0.6 % to 3.8 % for the signal
-  payloads and the derived figure is below 0.02 %. The difference is the cost of
-  waiting, as the method section explains.
+  payloads and the derived figure is below 0.02 %. The paced figure is not a
+  codec figure, as the method section explains.
 
 The tables are the output of `cargo xtask bench report`, unedited except for the
-heading levels.
+heading levels. They are a snapshot of one run at commit 48ff069e, the base
+commit, taken before the report code existed. The directory
+`bench/encodings/results/` is git-ignored, so the JSON behind the tables is not
+in the repository. Refresh the tables by rerunning `just bench-host` and
+`cargo xtask bench report`.
 
 ### Mix
 
