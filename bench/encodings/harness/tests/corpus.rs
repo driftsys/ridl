@@ -105,10 +105,79 @@ fn no_cell_of_the_corpus_is_empty() {
         for row in rec.rows {
             match row.cell {
                 Cell::Measured(c) => assert!(c.size > 0, "{} {}", entry.name, row.encoding),
-                Cell::Refused { reason } => {
+                Cell::Refused { reason } | Cell::NotBuilt { reason } => {
                     assert!(!reason.is_empty(), "{} {}", entry.name, row.encoding)
                 }
             }
         }
+    }
+}
+
+fn rows_of(name: &str) -> Vec<encoding_bench::corpus::Row> {
+    let corpus = corpus();
+    let entry = corpus.iter().find(|e| e.name == name).unwrap();
+    let mut rec = Recorder::default();
+    (entry.run)(&mut rec);
+    rec.rows
+}
+
+fn counts_of(row: &encoding_bench::corpus::Row) -> encoding_bench::Counts {
+    match &row.cell {
+        Cell::Measured(c) => *c,
+        other => panic!("{} is {other:?}", row.encoding),
+    }
+}
+
+/// The label of a row names the encoding that measured it. The sizes differ
+/// per encoding (FlatBuffers 24, proto3 5, podbuf 16 for a `Speed`), so a row
+/// measured with another encoding than its label says fails here.
+#[test]
+fn each_row_label_names_the_encoding_that_measured_it() {
+    let rows = rows_of("veh.cluster.VehicleStatus.currentSpeed");
+    let sizes: Vec<_> = rows
+        .iter()
+        .map(|r| (r.encoding, counts_of(r).size))
+        .collect();
+    assert_eq!(sizes, [("flatbuffers", 24), ("proto3", 5), ("podbuf", 16)]);
+}
+
+/// Encode allocations, exact. FlatBuffers allocates once to encode the list
+/// of structs, proto3 not at all; the map allocates once under FlatBuffers
+/// and podbuf and not under proto3. A counter that reads zero for encode
+/// fails here.
+#[test]
+fn encode_allocations_are_counted_per_encoding() {
+    let item_list: Vec<_> = rows_of("bench.stress.Stress.itemList")
+        .iter()
+        .map(|r| counts_of(r).encode_allocs)
+        .collect();
+    assert_eq!(item_list, [1, 0, 0], "itemList flatbuffers, proto3, podbuf");
+    let map: Vec<_> = rows_of("bench.stress.Stress.map")
+        .iter()
+        .map(|r| counts_of(r).encode_allocs)
+        .collect();
+    assert_eq!(map, [1, 0, 1], "map flatbuffers, proto3, podbuf");
+}
+
+/// A payload the bench cannot build is `NotBuilt`; an encoding that refuses a
+/// value is `Refused`. The two are not mixed.
+#[test]
+fn a_payload_that_cannot_be_built_is_not_built_and_a_refusal_is_refused() {
+    let rows = rows_of("veh.cluster.WheelDiagnostics.wheelTicks");
+    assert_eq!(rows.len(), 3);
+    for row in &rows {
+        assert!(
+            matches!(&row.cell, Cell::NotBuilt { reason } if !reason.is_empty()),
+            "{row:?}"
+        );
+    }
+    let mut rec = Recorder::default();
+    rec.record(
+        "refused",
+        Kind::Stress,
+        &ItemListPayload { items: Vec::new() },
+    );
+    for row in &rec.rows {
+        assert!(matches!(&row.cell, Cell::Refused { .. }), "{row:?}");
     }
 }

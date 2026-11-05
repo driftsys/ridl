@@ -36,6 +36,10 @@ fn main() {
                 "{:<48} {:<7} {:<12} refused: {reason}",
                 row.payload, kind, row.encoding
             ),
+            Cell::NotBuilt { reason } => println!(
+                "{:<48} {:<7} {:<12} not built: {reason}",
+                row.payload, kind, row.encoding
+            ),
         }
     }
 }

@@ -19,8 +19,11 @@ pub enum Kind {
 pub enum Cell {
     /// The encoding accepted the value.
     Measured(Counts),
-    /// The encoding refused the value, or the payload cannot be built.
+    /// The encoding refused the value: an encode or verify error.
     Refused { reason: String },
+    /// The bench could not build a value of the payload, so no encoding was
+    /// asked. This is a limit of the bench, not a refusal by an encoding.
+    NotBuilt { reason: String },
 }
 
 /// One row: a payload under one encoding.
@@ -72,11 +75,18 @@ impl Recorder {
         );
     }
 
-    /// Records a `Refused` row under each encoding for a payload that the
+    /// Records a `NotBuilt` row under each encoding for a payload that the
     /// bench cannot build a value of.
-    pub fn refuse_all(&mut self, payload: &'static str, kind: Kind, reason: &str) {
+    pub fn not_built(&mut self, payload: &'static str, kind: Kind, reason: &str) {
         for encoding in ENCODINGS {
-            self.push(payload, kind, encoding, Err(reason.to_string()));
+            self.rows.push(Row {
+                payload,
+                kind,
+                encoding,
+                cell: Cell::NotBuilt {
+                    reason: reason.to_string(),
+                },
+            });
         }
     }
 
@@ -175,7 +185,7 @@ pub fn corpus() -> Vec<CorpusEntry> {
             Kind::Signal,
             |r| {
                 r
-            .refuse_all(
+            .not_built(
                 "veh.cluster.WheelDiagnostics.wheelTicks",
                 Kind::Signal,
                 "the payload type RawTickCount is internal to its package, so a value cannot be built outside the generated crate",
