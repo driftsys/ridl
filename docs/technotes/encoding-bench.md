@@ -196,11 +196,14 @@ What the tables show, without a recommendation:
   codec figure, as the method section explains.
 
 The tables are the output of `cargo xtask bench report`, unedited except for the
-heading levels. They are a snapshot of one run at commit 48ff069e, the base
-commit, taken before the report code existed. The directory
+heading levels. The host tables are a snapshot of one run at commit 48ff069e,
+the base commit, taken before the report code existed. The Pixel 5 tables below
+are a snapshot of one run at commit 69fdf811. The directory
 `bench/encodings/results/` is git-ignored, so the JSON behind the tables is not
-in the repository. Refresh the tables by rerunning `just bench-host` and
-`cargo xtask bench report`.
+in the repository. Refresh the host tables by rerunning the host command given
+above and the Pixel tables by rerunning `just bench-pixel`, then run
+`cargo xtask bench
+report`.
 
 ### Mix
 
@@ -450,17 +453,558 @@ None.
 
 ## Pixel 5
 
-The device tables are not yet recorded. The Pixel 5 was not connected when this
-note was written, so there is no figure for the Cortex-A55 and Cortex-A76 cores
-here, and the host figures above must not be read as a substitute for them.
+**Measured on a Pixel 5 (aarch64, Linux, run over `adb`), pinned with `taskset`
+to one core: cpu2, a Cortex-A55 core, and, in a second run, cpu6, a Cortex-A76
+core.** Date 2026-11-05, commit 69fdf811, rustc 1.98.1 (48a229cea 2026-09-01), 4
+000 updates per second, 30 samples per cell, 2 s of CPU time per cell and
+encoding, paced run included. 57 cells were measured and 3 were not built (the
+one payload `RawTickCount`, for each encoding), in each run. No cell was
+refused. The commands were `just bench-pixel`, then `cargo xtask bench report`.
 
-To produce them, connect the phone with USB debugging authorized, then run:
+### What the device data show, and what they do not
 
-    just bench-pixel
-    cargo xtask bench report
+- **Frequency.** The phone is not rooted, the governor is `schedutil` and the
+  frequency is not fixed. The sidecar files read the frequency of each core
+  before and after a run, when the core is idle or ramping down, so they do not
+  show the frequency during the run. The A55 run read cpu2 at 1 363 200 kHz
+  before and after. The A76 run read cpu6 at 652 800 kHz before and 1 900 800
+  kHz after. The result files record the frequency of the core at the start of
+  the program: 1 804 800 kHz in the A55 run and 1 728 000 kHz in the A76 run.
+  The frequency during the runs is therefore not known; it may have varied.
+- **Stability.** No cell carries the spread marker. The largest
+  `(max - min) / median` of any cell is 2.0 % in the A55 run and 3.6 % in the
+  A76 run, and every cell has 30 samples. The tables therefore show no
+  instability in the samples. They do not show that the frequency was constant,
+  because the samples of one cell are taken over a short time.
+- **Load.** The codec-only load at 4 000 updates per second is a small fraction
+  of one core for the signal payloads: 0.044 % to 0.183 % on the A55 core and
+  0.015 % to 0.061 % on the A76 core. The largest load of any cell is the proto3
+  encoding of the map stress payload: 16.02 % of the A55 core (40.1 us per
+  update) and 4.90 % of the A76 core (12.3 us per update). The largest load
+  among the signal payloads is FlatBuffers on `veh.hvac.cabin.blowerDuty` on the
+  A55 core (0.183 %, 458.1 ns per update) and FlatBuffers on
+  `veh.cluster.VehicleStatus.engineTemp` on the A76 core (0.061 %, 152.5 ns per
+  update).
+- **Paced against derived.** The paced figure is above the derived figure in
+  every cell of both runs. For the signal payloads the paced figure is 6.6 % to
+  11.2 % on the A55 core and 2.0 % to 4.2 % on the A76 core, where the derived
+  figure is 0.044 % to 0.183 % and 0.015 % to 0.061 %. The paced runs measure
+  process CPU time over a run that sleeps between updates; the tables do not
+  show what part of that time is the codec, and this note does not assert a
+  cause. The derived figure is the one that the codec determines.
+- **Comparison of the encodings.** On the 15 measured signal payloads podbuf has
+  the lowest median time per update on both cores, and the time ratios to podbuf
+  of those payloads are 1.34 or more for FlatBuffers and 1.13 or more for proto3
+  on the A55 core (1.41 and 1.12 on the A76 core). The same holds on three of
+  the four stress payloads (list of structs, nested optionals, map). It does not
+  hold on the long string, where podbuf has the highest time on both cores.
+  proto3 is the smallest in size on every signal payload. There is no ordering
+  of the encodings that holds on every payload, so this note gives no verdict
+  between them. Which one to use depends on the weight of size against CPU time
+  and on the payloads of the system, which the bench does not decide.
+- **The burst is not covered.** A burst of 200 messages in 10 ms was not run.
+  The time per update in the tables lets a reader compute a burst of
+  back-to-back updates. Worked example, derived and not measured: the heaviest
+  signal payload is FlatBuffers on `veh.hvac.cabin.blowerDuty`, 458.1 ns per
+  update on the A55 core; 200 updates cost 200 x 458.1 ns = 91.6 us of CPU time,
+  which is 0.92 % of the 10 ms window. This assumes that every update costs what
+  the warm, repeated update of the bench costs; it does not include the
+  transport, queueing, cold caches or a lower core frequency.
 
-The first command cross-builds the harness, runs it pinned to an A55 core and to
-an A76 core, and writes `pixel5-a55-<date>.json`, `pixel5-a76-<date>.json` and
-the `.cpufreq.txt` files to `bench/encodings/results/`. The second prints the
-tables for every file in that directory. Record the tables in this note, with
-the date, the commit and the frequencies the `.cpufreq.txt` files report.
+### Cortex-A55 (cpu2)
+
+#### Mix
+
+Equal-weight mix, per signal: each signal counts once, so a payload type that
+several signals share counts once for each of them. Only signals whose three
+encodings are measured are counted; the last column gives how many.
+
+| Metric                                                 | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
+| ------------------------------------------------------ | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
+| Size (bytes)                                           | 24.5        | 3.6    | 16.0   | 1.53                 | 0.23            | 15    |
+| Heap allocations per update (encode + verify + decode) | 0.0         | 0.0    | 0.0    | n/a                  | n/a             | 15    |
+| Time per update (median ns)                            | 366.5       | 314.6  | 233.0  | 1.57                 | 1.35            | 15    |
+| CPU % of one core at 4000 updates per second (derived) | 0.1466      | 0.1258 | 0.0932 | 1.57                 | 1.35            | 15    |
+
+Equal-weight mix, per payload type: each payload type counts once, however many
+signals share it (the value of a type is the mean over its signals). Only
+payload types whose signals are measured in all three encodings are counted; the
+last column gives how many.
+
+| Metric                                                 | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
+| ------------------------------------------------------ | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
+| Size (bytes)                                           | 25.3        | 3.4    | 16.0   | 1.58                 | 0.21            | 6     |
+| Heap allocations per update (encode + verify + decode) | 0.0         | 0.0    | 0.0    | n/a                  | n/a             | 6     |
+| Time per update (median ns)                            | 354.9       | 302.7  | 218.1  | 1.63                 | 1.39            | 6     |
+| CPU % of one core at 4000 updates per second (derived) | 0.1420      | 0.1211 | 0.0872 | 1.63                 | 1.39            | 6     |
+
+#### Per payload
+
+##### Encoded size
+
+Encoded size in bytes of one payload value.
+
+| Payload                                 | FlatBuffers | proto3    | podbuf    |
+| --------------------------------------- | ----------- | --------- | --------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 24          | 5         | 16        |
+| veh.cluster.VehicleStatus.engineTemp    | 24          | 5         | 16        |
+| veh.cluster.VehicleStatus.warnings      | 24          | 2         | 16        |
+| veh.cluster.WheelHistory.wheelTicks     | 24          | 2         | 16        |
+| veh.cluster.WheelHistory.wheelTemp      | 24          | 5         | 16        |
+| veh.cluster.WheelHistory.wheelSlipRate  | 24          | 5         | 16        |
+| veh.cluster.WheelSummary.wheelHealth    | 24          | 2         | 16        |
+| veh.cluster.wheels.ticks                | 24          | 2         | 16        |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
+| veh.hvac.cabin.cabinTemp                | 24          | 5         | 16        |
+| veh.hvac.cabin.targetTemp               | 24          | 5         | 16        |
+| veh.hvac.cabin.blowerDuty               | 24          | 5         | 16        |
+| veh.hvac.cabin.fanLevel                 | 24          | 2         | 16        |
+| veh.hvac.cabin.compressorLoad           | 24          | 5         | 16        |
+| veh.cabin.Cabin.temperature             | 24          | 2         | 16        |
+| veh.cabin.Horn.active                   | 32          | 2         | 16        |
+| bench.stress.Stress.longString          | 544         | 515       | 529       |
+| bench.stress.Stress.itemList            | 600         | 221       | 400       |
+| bench.stress.Stress.nestedOptional      | 80          | 17        | 49        |
+| bench.stress.Stress.map                 | 600         | 204       | 384       |
+
+##### Heap allocations
+
+Heap allocations of one encode / verify / decode.
+
+| Payload                                 | FlatBuffers | proto3     | podbuf     |
+| --------------------------------------- | ----------- | ---------- | ---------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.VehicleStatus.engineTemp    | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.VehicleStatus.warnings      | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelHistory.wheelTicks     | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelHistory.wheelTemp      | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelHistory.wheelSlipRate  | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelSummary.wheelHealth    | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built  | not built  |
+| veh.hvac.cabin.cabinTemp                | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.targetTemp               | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.blowerDuty               | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.fanLevel                 | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.compressorLoad           | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cabin.Cabin.temperature             | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cabin.Horn.active                   | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| bench.stress.Stress.longString          | 0 / 0 / 1   | 0 / 0 / 1  | 0 / 0 / 1  |
+| bench.stress.Stress.itemList            | 1 / 0 / 17  | 0 / 0 / 19 | 0 / 0 / 17 |
+| bench.stress.Stress.nestedOptional      | 0 / 0 / 2   | 0 / 0 / 2  | 0 / 0 / 2  |
+| bench.stress.Stress.map                 | 1 / 0 / 17  | 0 / 0 / 19 | 1 / 0 / 17 |
+
+##### Time per update
+
+CPU time of one update (encode, verify and decode), median in ns, with the
+fastest and slowest sample and the range as a share of the median. † spread
+above 10 %: the figure is not stable.
+
+| Payload                                 | FlatBuffers                       | proto3                            | podbuf                            |
+| --------------------------------------- | --------------------------------- | --------------------------------- | --------------------------------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 446.8 (446.7 to 447.5; 0 %)       | 378.8 (378.8 to 379.1; 0 %)       | 333.3 (333.3 to 333.9; 0 %)       |
+| veh.cluster.VehicleStatus.engineTemp    | 454.8 (454.7 to 457.0; 1 %)       | 387.6 (387.5 to 387.9; 0 %)       | 340.0 (339.9 to 340.3; 0 %)       |
+| veh.cluster.VehicleStatus.warnings      | 261.5 (260.8 to 262.9; 1 %)       | 233.7 (233.4 to 233.9; 0 %)       | 111.0 (110.9 to 111.8; 1 %)       |
+| veh.cluster.WheelHistory.wheelTicks     | 262.6 (261.8 to 263.4; 1 %)       | 231.8 (231.5 to 232.2; 0 %)       | 109.2 (109.0 to 109.8; 1 %)       |
+| veh.cluster.WheelHistory.wheelTemp      | 454.8 (454.6 to 455.2; 0 %)       | 387.6 (387.5 to 387.8; 0 %)       | 340.0 (339.9 to 340.3; 0 %)       |
+| veh.cluster.WheelHistory.wheelSlipRate  | 458.1 (457.9 to 460.4; 1 %)       | 387.7 (387.5 to 387.9; 0 %)       | 341.6 (341.6 to 342.8; 0 %)       |
+| veh.cluster.WheelSummary.wheelHealth    | 262.5 (261.7 to 263.3; 1 %)       | 231.7 (231.6 to 232.1; 0 %)       | 109.1 (108.9 to 109.4; 0 %)       |
+| veh.cluster.wheels.ticks                | 262.4 (261.7 to 263.2; 1 %)       | 231.8 (231.5 to 232.0; 0 %)       | 109.1 (109.0 to 109.4; 0 %)       |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built                         | not built                         | not built                         |
+| veh.hvac.cabin.cabinTemp                | 454.8 (454.6 to 455.3; 0 %)       | 387.6 (387.5 to 387.7; 0 %)       | 340.0 (339.9 to 340.4; 0 %)       |
+| veh.hvac.cabin.targetTemp               | 454.8 (454.6 to 455.3; 0 %)       | 387.7 (387.6 to 388.3; 0 %)       | 340.0 (339.9 to 340.3; 0 %)       |
+| veh.hvac.cabin.blowerDuty               | 458.1 (457.8 to 458.6; 0 %)       | 387.7 (387.6 to 388.6; 0 %)       | 341.7 (341.6 to 342.1; 0 %)       |
+| veh.hvac.cabin.fanLevel                 | 262.8 (261.8 to 264.1; 1 %)       | 231.8 (231.6 to 232.1; 0 %)       | 109.1 (108.9 to 109.5; 1 %)       |
+| veh.hvac.cabin.compressorLoad           | 458.1 (457.8 to 458.8; 0 %)       | 387.7 (387.4 to 388.0; 0 %)       | 341.7 (341.6 to 342.2; 0 %)       |
+| veh.cabin.Cabin.temperature             | 260.8 (259.6 to 262.2; 1 %)       | 239.1 (239.0 to 239.2; 0 %)       | 110.2 (110.1 to 110.5; 0 %)       |
+| veh.cabin.Horn.active                   | 284.5 (282.2 to 288.0; 2 %)       | 226.1 (225.9 to 226.2; 0 %)       | 119.2 (119.1 to 119.4; 0 %)       |
+| bench.stress.Stress.longString          | 2104.2 (2100.6 to 2109.5; 0 %)    | 1252.8 (1251.7 to 1254.9; 0 %)    | 2211.4 (2210.4 to 2212.6; 0 %)    |
+| bench.stress.Stress.itemList            | 10329.7 (10325.0 to 10337.8; 0 %) | 14079.0 (14068.1 to 14098.5; 0 %) | 9064.4 (9062.2 to 9072.0; 0 %)    |
+| bench.stress.Stress.nestedOptional      | 1488.9 (1483.0 to 1494.8; 1 %)    | 1624.3 (1621.0 to 1627.7; 0 %)    | 1162.3 (1160.8 to 1164.5; 0 %)    |
+| bench.stress.Stress.map                 | 21513.0 (21502.4 to 21610.3; 1 %) | 40056.7 (40044.1 to 40079.8; 0 %) | 11386.7 (11379.1 to 11391.6; 0 %) |
+
+##### CPU load, derived
+
+CPU load in percent of one core at 4000 updates per second, derived from the
+median time of one update (the headline figure).
+
+| Payload                                 | FlatBuffers | proto3    | podbuf    |
+| --------------------------------------- | ----------- | --------- | --------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 0.1787      | 0.1515    | 0.1333    |
+| veh.cluster.VehicleStatus.engineTemp    | 0.1819      | 0.1551    | 0.1360    |
+| veh.cluster.VehicleStatus.warnings      | 0.1046      | 0.0935    | 0.0444    |
+| veh.cluster.WheelHistory.wheelTicks     | 0.1051      | 0.0927    | 0.0437    |
+| veh.cluster.WheelHistory.wheelTemp      | 0.1819      | 0.1551    | 0.1360    |
+| veh.cluster.WheelHistory.wheelSlipRate  | 0.1832      | 0.1551    | 0.1367    |
+| veh.cluster.WheelSummary.wheelHealth    | 0.1050      | 0.0927    | 0.0436    |
+| veh.cluster.wheels.ticks                | 0.1049      | 0.0927    | 0.0436    |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
+| veh.hvac.cabin.cabinTemp                | 0.1819      | 0.1551    | 0.1360    |
+| veh.hvac.cabin.targetTemp               | 0.1819      | 0.1551    | 0.1360    |
+| veh.hvac.cabin.blowerDuty               | 0.1833      | 0.1551    | 0.1367    |
+| veh.hvac.cabin.fanLevel                 | 0.1051      | 0.0927    | 0.0436    |
+| veh.hvac.cabin.compressorLoad           | 0.1832      | 0.1551    | 0.1367    |
+| veh.cabin.Cabin.temperature             | 0.1043      | 0.0956    | 0.0441    |
+| veh.cabin.Horn.active                   | 0.1138      | 0.0904    | 0.0477    |
+| bench.stress.Stress.longString          | 0.8417      | 0.5011    | 0.8845    |
+| bench.stress.Stress.itemList            | 4.1319      | 5.6316    | 3.6258    |
+| bench.stress.Stress.nestedOptional      | 0.5956      | 0.6497    | 0.4649    |
+| bench.stress.Stress.map                 | 8.6052      | 16.0227   | 4.5547    |
+
+##### Ratios to podbuf
+
+Each encoding divided by podbuf: above 1.00 the encoding is larger or slower
+than podbuf, below 1.00 smaller or faster. The CPU ratios equal the time ratios,
+because the derived CPU load is proportional to the median time. A refused or
+not-built cell has no ratio and is marked.
+
+| Payload                                 | Size: FlatBuffers / podbuf | Size: proto3 / podbuf | Time: FlatBuffers / podbuf | Time: proto3 / podbuf | CPU: FlatBuffers / podbuf | CPU: proto3 / podbuf |
+| --------------------------------------- | -------------------------- | --------------------- | -------------------------- | --------------------- | ------------------------- | -------------------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 1.50                       | 0.31                  | 1.34                       | 1.14                  | 1.34                      | 1.14                 |
+| veh.cluster.VehicleStatus.engineTemp    | 1.50                       | 0.31                  | 1.34                       | 1.14                  | 1.34                      | 1.14                 |
+| veh.cluster.VehicleStatus.warnings      | 1.50                       | 0.12                  | 2.36                       | 2.10                  | 2.36                      | 2.10                 |
+| veh.cluster.WheelHistory.wheelTicks     | 1.50                       | 0.12                  | 2.41                       | 2.12                  | 2.41                      | 2.12                 |
+| veh.cluster.WheelHistory.wheelTemp      | 1.50                       | 0.31                  | 1.34                       | 1.14                  | 1.34                      | 1.14                 |
+| veh.cluster.WheelHistory.wheelSlipRate  | 1.50                       | 0.31                  | 1.34                       | 1.13                  | 1.34                      | 1.13                 |
+| veh.cluster.WheelSummary.wheelHealth    | 1.50                       | 0.12                  | 2.41                       | 2.12                  | 2.41                      | 2.12                 |
+| veh.cluster.wheels.ticks                | 1.50                       | 0.12                  | 2.40                       | 2.12                  | 2.40                      | 2.12                 |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built                  | not built             | not built                  | not built             | not built                 | not built            |
+| veh.hvac.cabin.cabinTemp                | 1.50                       | 0.31                  | 1.34                       | 1.14                  | 1.34                      | 1.14                 |
+| veh.hvac.cabin.targetTemp               | 1.50                       | 0.31                  | 1.34                       | 1.14                  | 1.34                      | 1.14                 |
+| veh.hvac.cabin.blowerDuty               | 1.50                       | 0.31                  | 1.34                       | 1.13                  | 1.34                      | 1.13                 |
+| veh.hvac.cabin.fanLevel                 | 1.50                       | 0.12                  | 2.41                       | 2.13                  | 2.41                      | 2.13                 |
+| veh.hvac.cabin.compressorLoad           | 1.50                       | 0.31                  | 1.34                       | 1.13                  | 1.34                      | 1.13                 |
+| veh.cabin.Cabin.temperature             | 1.50                       | 0.12                  | 2.37                       | 2.17                  | 2.37                      | 2.17                 |
+| veh.cabin.Horn.active                   | 2.00                       | 0.12                  | 2.39                       | 1.90                  | 2.39                      | 1.90                 |
+| bench.stress.Stress.longString          | 1.03                       | 0.97                  | 0.95                       | 0.57                  | 0.95                      | 0.57                 |
+| bench.stress.Stress.itemList            | 1.50                       | 0.55                  | 1.14                       | 1.55                  | 1.14                      | 1.55                 |
+| bench.stress.Stress.nestedOptional      | 1.63                       | 0.35                  | 1.28                       | 1.40                  | 1.28                      | 1.40                 |
+| bench.stress.Stress.map                 | 1.56                       | 0.53                  | 1.89                       | 3.52                  | 1.89                      | 3.52                 |
+
+##### CPU load, paced and derived
+
+CPU load in percent of one core at 4000 updates per second: paced (process CPU
+time over wall time, includes the cost of sleep and wake-up) next to the derived
+figure, and their difference.
+
+| Payload                                | Encoding    | Paced % | Derived % | Difference |
+| -------------------------------------- | ----------- | ------- | --------- | ---------- |
+| veh.cluster.VehicleStatus.currentSpeed | FlatBuffers | 9.5565  | 0.1787    | 9.3778     |
+| veh.cluster.VehicleStatus.currentSpeed | proto3      | 9.9855  | 0.1515    | 9.8340     |
+| veh.cluster.VehicleStatus.currentSpeed | podbuf      | 9.4294  | 0.1333    | 9.2961     |
+| veh.cluster.VehicleStatus.engineTemp   | FlatBuffers | 10.0295 | 0.1819    | 9.8475     |
+| veh.cluster.VehicleStatus.engineTemp   | proto3      | 9.4651  | 0.1551    | 9.3100     |
+| veh.cluster.VehicleStatus.engineTemp   | podbuf      | 9.5322  | 0.1360    | 9.3963     |
+| veh.cluster.VehicleStatus.warnings     | FlatBuffers | 10.3679 | 0.1046    | 10.2633    |
+| veh.cluster.VehicleStatus.warnings     | proto3      | 9.5036  | 0.0935    | 9.4101     |
+| veh.cluster.VehicleStatus.warnings     | podbuf      | 8.8492  | 0.0444    | 8.8048     |
+| veh.cluster.WheelHistory.wheelTicks    | FlatBuffers | 9.5451  | 0.1051    | 9.4401     |
+| veh.cluster.WheelHistory.wheelTicks    | proto3      | 9.1309  | 0.0927    | 9.0382     |
+| veh.cluster.WheelHistory.wheelTicks    | podbuf      | 9.0331  | 0.0437    | 8.9894     |
+| veh.cluster.WheelHistory.wheelTemp     | FlatBuffers | 10.8584 | 0.1819    | 10.6765    |
+| veh.cluster.WheelHistory.wheelTemp     | proto3      | 10.1914 | 0.1551    | 10.0363    |
+| veh.cluster.WheelHistory.wheelTemp     | podbuf      | 9.6988  | 0.1360    | 9.5628     |
+| veh.cluster.WheelHistory.wheelSlipRate | FlatBuffers | 10.9278 | 0.1832    | 10.7445    |
+| veh.cluster.WheelHistory.wheelSlipRate | proto3      | 10.5035 | 0.1551    | 10.3484    |
+| veh.cluster.WheelHistory.wheelSlipRate | podbuf      | 9.6915  | 0.1367    | 9.5548     |
+| veh.cluster.WheelSummary.wheelHealth   | FlatBuffers | 9.5976  | 0.1050    | 9.4926     |
+| veh.cluster.WheelSummary.wheelHealth   | proto3      | 9.4815  | 0.0927    | 9.3888     |
+| veh.cluster.WheelSummary.wheelHealth   | podbuf      | 9.2932  | 0.0436    | 9.2496     |
+| veh.cluster.wheels.ticks               | FlatBuffers | 9.9544  | 0.1049    | 9.8495     |
+| veh.cluster.wheels.ticks               | proto3      | 9.5159  | 0.0927    | 9.4232     |
+| veh.cluster.wheels.ticks               | podbuf      | 8.7471  | 0.0436    | 8.7034     |
+| veh.hvac.cabin.cabinTemp               | FlatBuffers | 6.5849  | 0.1819    | 6.4030     |
+| veh.hvac.cabin.cabinTemp               | proto3      | 9.7867  | 0.1551    | 9.6316     |
+| veh.hvac.cabin.cabinTemp               | podbuf      | 9.9173  | 0.1360    | 9.7813     |
+| veh.hvac.cabin.targetTemp              | FlatBuffers | 10.7671 | 0.1819    | 10.5852    |
+| veh.hvac.cabin.targetTemp              | proto3      | 10.7820 | 0.1551    | 10.6269    |
+| veh.hvac.cabin.targetTemp              | podbuf      | 10.8128 | 0.1360    | 10.6768    |
+| veh.hvac.cabin.blowerDuty              | FlatBuffers | 10.2632 | 0.1833    | 10.0799    |
+| veh.hvac.cabin.blowerDuty              | proto3      | 9.8182  | 0.1551    | 9.6631     |
+| veh.hvac.cabin.blowerDuty              | podbuf      | 9.6678  | 0.1367    | 9.5311     |
+| veh.hvac.cabin.fanLevel                | FlatBuffers | 9.9915  | 0.1051    | 9.8864     |
+| veh.hvac.cabin.fanLevel                | proto3      | 9.9058  | 0.0927    | 9.8131     |
+| veh.hvac.cabin.fanLevel                | podbuf      | 9.1024  | 0.0436    | 9.0587     |
+| veh.hvac.cabin.compressorLoad          | FlatBuffers | 9.9222  | 0.1832    | 9.7389     |
+| veh.hvac.cabin.compressorLoad          | proto3      | 10.0290 | 0.1551    | 9.8739     |
+| veh.hvac.cabin.compressorLoad          | podbuf      | 11.1676 | 0.1367    | 11.0310    |
+| veh.cabin.Cabin.temperature            | FlatBuffers | 10.6216 | 0.1043    | 10.5173    |
+| veh.cabin.Cabin.temperature            | proto3      | 9.5306  | 0.0956    | 9.4349     |
+| veh.cabin.Cabin.temperature            | podbuf      | 10.0674 | 0.0441    | 10.0233    |
+| veh.cabin.Horn.active                  | FlatBuffers | 9.7163  | 0.1138    | 9.6024     |
+| veh.cabin.Horn.active                  | proto3      | 9.2755  | 0.0904    | 9.1850     |
+| veh.cabin.Horn.active                  | podbuf      | 9.8233  | 0.0477    | 9.7756     |
+| bench.stress.Stress.longString         | FlatBuffers | 16.6024 | 0.8417    | 15.7607    |
+| bench.stress.Stress.longString         | proto3      | 15.2316 | 0.5011    | 14.7304    |
+| bench.stress.Stress.longString         | podbuf      | 17.2357 | 0.8845    | 16.3511    |
+| bench.stress.Stress.itemList           | FlatBuffers | 26.9315 | 4.1319    | 22.7996    |
+| bench.stress.Stress.itemList           | proto3      | 30.2254 | 5.6316    | 24.5938    |
+| bench.stress.Stress.itemList           | podbuf      | 24.8115 | 3.6258    | 21.1858    |
+| bench.stress.Stress.nestedOptional     | FlatBuffers | 13.9099 | 0.5956    | 13.3143    |
+| bench.stress.Stress.nestedOptional     | proto3      | 14.1788 | 0.6497    | 13.5291    |
+| bench.stress.Stress.nestedOptional     | podbuf      | 12.7295 | 0.4649    | 12.2646    |
+| bench.stress.Stress.map                | FlatBuffers | 39.1053 | 8.6052    | 30.5001    |
+| bench.stress.Stress.map                | proto3      | 61.5943 | 16.0227   | 45.5716    |
+| bench.stress.Stress.map                | podbuf      | 28.0513 | 4.5547    | 23.4967    |
+
+#### Payloads not built
+
+The bench could not build a value of these payloads, so no encoding was tried on
+them. This is not an encoding refusal.
+
+| Payload                                 | Payload type | Reason                                                                                                           |
+| --------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| veh.cluster.WheelDiagnostics.wheelTicks | RawTickCount | the payload type RawTickCount is internal to its package, so a value cannot be built outside the generated crate |
+
+#### Refused cells
+
+None.
+
+### Cortex-A76 (cpu6)
+
+#### Mix
+
+Equal-weight mix, per signal: each signal counts once, so a payload type that
+several signals share counts once for each of them. Only signals whose three
+encodings are measured are counted; the last column gives how many.
+
+| Metric                                                 | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
+| ------------------------------------------------------ | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
+| Size (bytes)                                           | 24.5        | 3.6    | 16.0   | 1.53                 | 0.23            | 15    |
+| Heap allocations per update (encode + verify + decode) | 0.0         | 0.0    | 0.0    | n/a                  | n/a             | 15    |
+| Time per update (median ns)                            | 127.2       | 99.3   | 74.4   | 1.71                 | 1.33            | 15    |
+| CPU % of one core at 4000 updates per second (derived) | 0.0509      | 0.0397 | 0.0297 | 1.71                 | 1.33            | 15    |
+
+Equal-weight mix, per payload type: each payload type counts once, however many
+signals share it (the value of a type is the mean over its signals). Only
+payload types whose signals are measured in all three encodings are counted; the
+last column gives how many.
+
+| Metric                                                 | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
+| ------------------------------------------------------ | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
+| Size (bytes)                                           | 25.3        | 3.4    | 16.0   | 1.58                 | 0.21            | 6     |
+| Heap allocations per update (encode + verify + decode) | 0.0         | 0.0    | 0.0    | n/a                  | n/a             | 6     |
+| Time per update (median ns)                            | 123.8       | 95.7   | 69.7   | 1.78                 | 1.37            | 6     |
+| CPU % of one core at 4000 updates per second (derived) | 0.0495      | 0.0383 | 0.0279 | 1.78                 | 1.37            | 6     |
+
+#### Per payload
+
+##### Encoded size
+
+Encoded size in bytes of one payload value.
+
+| Payload                                 | FlatBuffers | proto3    | podbuf    |
+| --------------------------------------- | ----------- | --------- | --------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 24          | 5         | 16        |
+| veh.cluster.VehicleStatus.engineTemp    | 24          | 5         | 16        |
+| veh.cluster.VehicleStatus.warnings      | 24          | 2         | 16        |
+| veh.cluster.WheelHistory.wheelTicks     | 24          | 2         | 16        |
+| veh.cluster.WheelHistory.wheelTemp      | 24          | 5         | 16        |
+| veh.cluster.WheelHistory.wheelSlipRate  | 24          | 5         | 16        |
+| veh.cluster.WheelSummary.wheelHealth    | 24          | 2         | 16        |
+| veh.cluster.wheels.ticks                | 24          | 2         | 16        |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
+| veh.hvac.cabin.cabinTemp                | 24          | 5         | 16        |
+| veh.hvac.cabin.targetTemp               | 24          | 5         | 16        |
+| veh.hvac.cabin.blowerDuty               | 24          | 5         | 16        |
+| veh.hvac.cabin.fanLevel                 | 24          | 2         | 16        |
+| veh.hvac.cabin.compressorLoad           | 24          | 5         | 16        |
+| veh.cabin.Cabin.temperature             | 24          | 2         | 16        |
+| veh.cabin.Horn.active                   | 32          | 2         | 16        |
+| bench.stress.Stress.longString          | 544         | 515       | 529       |
+| bench.stress.Stress.itemList            | 600         | 221       | 400       |
+| bench.stress.Stress.nestedOptional      | 80          | 17        | 49        |
+| bench.stress.Stress.map                 | 600         | 204       | 384       |
+
+##### Heap allocations
+
+Heap allocations of one encode / verify / decode.
+
+| Payload                                 | FlatBuffers | proto3     | podbuf     |
+| --------------------------------------- | ----------- | ---------- | ---------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.VehicleStatus.engineTemp    | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.VehicleStatus.warnings      | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelHistory.wheelTicks     | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelHistory.wheelTemp      | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelHistory.wheelSlipRate  | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelSummary.wheelHealth    | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built  | not built  |
+| veh.hvac.cabin.cabinTemp                | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.targetTemp               | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.blowerDuty               | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.fanLevel                 | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.hvac.cabin.compressorLoad           | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cabin.Cabin.temperature             | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| veh.cabin.Horn.active                   | 0 / 0 / 0   | 0 / 0 / 0  | 0 / 0 / 0  |
+| bench.stress.Stress.longString          | 0 / 0 / 1   | 0 / 0 / 1  | 0 / 0 / 1  |
+| bench.stress.Stress.itemList            | 1 / 0 / 17  | 0 / 0 / 19 | 0 / 0 / 17 |
+| bench.stress.Stress.nestedOptional      | 0 / 0 / 2   | 0 / 0 / 2  | 0 / 0 / 2  |
+| bench.stress.Stress.map                 | 1 / 0 / 17  | 0 / 0 / 19 | 1 / 0 / 17 |
+
+##### Time per update
+
+CPU time of one update (encode, verify and decode), median in ns, with the
+fastest and slowest sample and the range as a share of the median. † spread
+above 10 %: the figure is not stable.
+
+| Payload                                 | FlatBuffers                    | proto3                            | podbuf                         |
+| --------------------------------------- | ------------------------------ | --------------------------------- | ------------------------------ |
+| veh.cluster.VehicleStatus.currentSpeed  | 145.8 (144.5 to 147.0; 2 %)    | 116.3 (115.7 to 116.8; 1 %)       | 101.7 (100.4 to 103.4; 3 %)    |
+| veh.cluster.VehicleStatus.engineTemp    | 152.5 (150.7 to 154.6; 3 %)    | 121.4 (119.8 to 122.1; 2 %)       | 107.5 (106.5 to 108.0; 1 %)    |
+| veh.cluster.VehicleStatus.warnings      | 98.3 (97.9 to 98.4; 1 %)       | 77.3 (77.3 to 77.5; 0 %)          | 36.6 (36.2 to 36.9; 2 %)       |
+| veh.cluster.WheelHistory.wheelTicks     | 99.2 (98.9 to 99.6; 1 %)       | 75.7 (75.6 to 76.0; 1 %)          | 37.0 (36.4 to 37.2; 2 %)       |
+| veh.cluster.WheelHistory.wheelTemp      | 152.4 (150.8 to 154.3; 2 %)    | 121.2 (119.9 to 122.2; 2 %)       | 107.6 (107.1 to 108.9; 2 %)    |
+| veh.cluster.WheelHistory.wheelSlipRate  | 151.1 (149.5 to 152.5; 2 %)    | 118.8 (118.1 to 119.6; 1 %)       | 106.5 (106.1 to 106.9; 1 %)    |
+| veh.cluster.WheelSummary.wheelHealth    | 99.2 (98.9 to 100.1; 1 %)      | 75.7 (75.6 to 76.0; 1 %)          | 37.0 (36.2 to 37.2; 3 %)       |
+| veh.cluster.wheels.ticks                | 99.2 (99.0 to 99.3; 0 %)       | 75.7 (75.6 to 76.0; 1 %)          | 37.0 (36.6 to 37.2; 2 %)       |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built                      | not built                         | not built                      |
+| veh.hvac.cabin.cabinTemp                | 152.4 (151.3 to 153.8; 2 %)    | 121.1 (119.3 to 122.6; 3 %)       | 107.7 (107.0 to 108.3; 1 %)    |
+| veh.hvac.cabin.targetTemp               | 152.3 (150.6 to 154.4; 2 %)    | 121.0 (120.3 to 122.3; 2 %)       | 107.6 (107.1 to 108.3; 1 %)    |
+| veh.hvac.cabin.blowerDuty               | 151.0 (150.0 to 152.7; 2 %)    | 118.9 (118.3 to 120.3; 2 %)       | 106.5 (105.9 to 107.7; 2 %)    |
+| veh.hvac.cabin.fanLevel                 | 99.2 (99.0 to 99.5; 0 %)       | 75.7 (75.6 to 75.9; 1 %)          | 37.0 (36.7 to 37.3; 2 %)       |
+| veh.hvac.cabin.compressorLoad           | 151.2 (150.5 to 152.7; 1 %)    | 119.2 (118.6 to 119.9; 1 %)       | 106.3 (105.6 to 106.8; 1 %)    |
+| veh.cabin.Cabin.temperature             | 97.8 (97.6 to 98.2; 1 %)       | 77.5 (77.4 to 77.8; 0 %)          | 36.8 (36.2 to 37.3; 3 %)       |
+| veh.cabin.Horn.active                   | 107.2 (106.4 to 107.5; 1 %)    | 73.7 (73.6 to 73.8; 0 %)          | 42.9 (42.3 to 43.9; 4 %)       |
+| bench.stress.Stress.longString          | 745.3 (744.2 to 746.9; 0 %)    | 405.6 (405.5 to 405.8; 0 %)       | 802.3 (801.3 to 803.1; 0 %)    |
+| bench.stress.Stress.itemList            | 3466.1 (3464.1 to 3471.9; 0 %) | 4594.2 (4586.1 to 4597.9; 0 %)    | 2970.8 (2967.6 to 2977.8; 0 %) |
+| bench.stress.Stress.nestedOptional      | 485.7 (484.8 to 486.8; 0 %)    | 495.7 (494.1 to 497.4; 1 %)       | 360.5 (357.5 to 362.0; 1 %)    |
+| bench.stress.Stress.map                 | 7934.6 (7907.1 to 7950.3; 1 %) | 12257.2 (12206.0 to 12315.5; 1 %) | 3841.3 (3837.7 to 3867.8; 1 %) |
+
+##### CPU load, derived
+
+CPU load in percent of one core at 4000 updates per second, derived from the
+median time of one update (the headline figure).
+
+| Payload                                 | FlatBuffers | proto3    | podbuf    |
+| --------------------------------------- | ----------- | --------- | --------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 0.0583      | 0.0465    | 0.0407    |
+| veh.cluster.VehicleStatus.engineTemp    | 0.0610      | 0.0486    | 0.0430    |
+| veh.cluster.VehicleStatus.warnings      | 0.0393      | 0.0309    | 0.0146    |
+| veh.cluster.WheelHistory.wheelTicks     | 0.0397      | 0.0303    | 0.0148    |
+| veh.cluster.WheelHistory.wheelTemp      | 0.0609      | 0.0485    | 0.0431    |
+| veh.cluster.WheelHistory.wheelSlipRate  | 0.0604      | 0.0475    | 0.0426    |
+| veh.cluster.WheelSummary.wheelHealth    | 0.0397      | 0.0303    | 0.0148    |
+| veh.cluster.wheels.ticks                | 0.0397      | 0.0303    | 0.0148    |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
+| veh.hvac.cabin.cabinTemp                | 0.0609      | 0.0484    | 0.0431    |
+| veh.hvac.cabin.targetTemp               | 0.0609      | 0.0484    | 0.0430    |
+| veh.hvac.cabin.blowerDuty               | 0.0604      | 0.0476    | 0.0426    |
+| veh.hvac.cabin.fanLevel                 | 0.0397      | 0.0303    | 0.0148    |
+| veh.hvac.cabin.compressorLoad           | 0.0605      | 0.0477    | 0.0425    |
+| veh.cabin.Cabin.temperature             | 0.0391      | 0.0310    | 0.0147    |
+| veh.cabin.Horn.active                   | 0.0429      | 0.0295    | 0.0171    |
+| bench.stress.Stress.longString          | 0.2981      | 0.1622    | 0.3209    |
+| bench.stress.Stress.itemList            | 1.3864      | 1.8377    | 1.1883    |
+| bench.stress.Stress.nestedOptional      | 0.1943      | 0.1983    | 0.1442    |
+| bench.stress.Stress.map                 | 3.1738      | 4.9029    | 1.5365    |
+
+##### Ratios to podbuf
+
+Each encoding divided by podbuf: above 1.00 the encoding is larger or slower
+than podbuf, below 1.00 smaller or faster. The CPU ratios equal the time ratios,
+because the derived CPU load is proportional to the median time. A refused or
+not-built cell has no ratio and is marked.
+
+| Payload                                 | Size: FlatBuffers / podbuf | Size: proto3 / podbuf | Time: FlatBuffers / podbuf | Time: proto3 / podbuf | CPU: FlatBuffers / podbuf | CPU: proto3 / podbuf |
+| --------------------------------------- | -------------------------- | --------------------- | -------------------------- | --------------------- | ------------------------- | -------------------- |
+| veh.cluster.VehicleStatus.currentSpeed  | 1.50                       | 0.31                  | 1.43                       | 1.14                  | 1.43                      | 1.14                 |
+| veh.cluster.VehicleStatus.engineTemp    | 1.50                       | 0.31                  | 1.42                       | 1.13                  | 1.42                      | 1.13                 |
+| veh.cluster.VehicleStatus.warnings      | 1.50                       | 0.12                  | 2.69                       | 2.11                  | 2.69                      | 2.11                 |
+| veh.cluster.WheelHistory.wheelTicks     | 1.50                       | 0.12                  | 2.68                       | 2.05                  | 2.68                      | 2.05                 |
+| veh.cluster.WheelHistory.wheelTemp      | 1.50                       | 0.31                  | 1.42                       | 1.13                  | 1.42                      | 1.13                 |
+| veh.cluster.WheelHistory.wheelSlipRate  | 1.50                       | 0.31                  | 1.42                       | 1.12                  | 1.42                      | 1.12                 |
+| veh.cluster.WheelSummary.wheelHealth    | 1.50                       | 0.12                  | 2.68                       | 2.05                  | 2.68                      | 2.05                 |
+| veh.cluster.wheels.ticks                | 1.50                       | 0.12                  | 2.68                       | 2.05                  | 2.68                      | 2.05                 |
+| veh.cluster.WheelDiagnostics.wheelTicks | not built                  | not built             | not built                  | not built             | not built                 | not built            |
+| veh.hvac.cabin.cabinTemp                | 1.50                       | 0.31                  | 1.42                       | 1.12                  | 1.42                      | 1.12                 |
+| veh.hvac.cabin.targetTemp               | 1.50                       | 0.31                  | 1.41                       | 1.12                  | 1.41                      | 1.12                 |
+| veh.hvac.cabin.blowerDuty               | 1.50                       | 0.31                  | 1.42                       | 1.12                  | 1.42                      | 1.12                 |
+| veh.hvac.cabin.fanLevel                 | 1.50                       | 0.12                  | 2.68                       | 2.04                  | 2.68                      | 2.04                 |
+| veh.hvac.cabin.compressorLoad           | 1.50                       | 0.31                  | 1.42                       | 1.12                  | 1.42                      | 1.12                 |
+| veh.cabin.Cabin.temperature             | 1.50                       | 0.12                  | 2.66                       | 2.11                  | 2.66                      | 2.11                 |
+| veh.cabin.Horn.active                   | 2.00                       | 0.12                  | 2.50                       | 1.72                  | 2.50                      | 1.72                 |
+| bench.stress.Stress.longString          | 1.03                       | 0.97                  | 0.93                       | 0.51                  | 0.93                      | 0.51                 |
+| bench.stress.Stress.itemList            | 1.50                       | 0.55                  | 1.17                       | 1.55                  | 1.17                      | 1.55                 |
+| bench.stress.Stress.nestedOptional      | 1.63                       | 0.35                  | 1.35                       | 1.37                  | 1.35                      | 1.37                 |
+| bench.stress.Stress.map                 | 1.56                       | 0.53                  | 2.07                       | 3.19                  | 2.07                      | 3.19                 |
+
+##### CPU load, paced and derived
+
+CPU load in percent of one core at 4000 updates per second: paced (process CPU
+time over wall time, includes the cost of sleep and wake-up) next to the derived
+figure, and their difference.
+
+| Payload                                | Encoding    | Paced % | Derived % | Difference |
+| -------------------------------------- | ----------- | ------- | --------- | ---------- |
+| veh.cluster.VehicleStatus.currentSpeed | FlatBuffers | 3.8265  | 0.0583    | 3.7682     |
+| veh.cluster.VehicleStatus.currentSpeed | proto3      | 4.1561  | 0.0465    | 4.1096     |
+| veh.cluster.VehicleStatus.currentSpeed | podbuf      | 4.0873  | 0.0407    | 4.0466     |
+| veh.cluster.VehicleStatus.engineTemp   | FlatBuffers | 4.1465  | 0.0610    | 4.0855     |
+| veh.cluster.VehicleStatus.engineTemp   | proto3      | 4.1768  | 0.0486    | 4.1283     |
+| veh.cluster.VehicleStatus.engineTemp   | podbuf      | 4.1003  | 0.0430    | 4.0573     |
+| veh.cluster.VehicleStatus.warnings     | FlatBuffers | 2.2513  | 0.0393    | 2.2120     |
+| veh.cluster.VehicleStatus.warnings     | proto3      | 2.3145  | 0.0309    | 2.2836     |
+| veh.cluster.VehicleStatus.warnings     | podbuf      | 2.2899  | 0.0146    | 2.2753     |
+| veh.cluster.WheelHistory.wheelTicks    | FlatBuffers | 3.3149  | 0.0397    | 3.2752     |
+| veh.cluster.WheelHistory.wheelTicks    | proto3      | 3.4239  | 0.0303    | 3.3936     |
+| veh.cluster.WheelHistory.wheelTicks    | podbuf      | 3.3116  | 0.0148    | 3.2968     |
+| veh.cluster.WheelHistory.wheelTemp     | FlatBuffers | 4.1486  | 0.0609    | 4.0876     |
+| veh.cluster.WheelHistory.wheelTemp     | proto3      | 4.2367  | 0.0485    | 4.1882     |
+| veh.cluster.WheelHistory.wheelTemp     | podbuf      | 4.0903  | 0.0431    | 4.0472     |
+| veh.cluster.WheelHistory.wheelSlipRate | FlatBuffers | 2.2247  | 0.0604    | 2.1643     |
+| veh.cluster.WheelHistory.wheelSlipRate | proto3      | 2.2530  | 0.0475    | 2.2055     |
+| veh.cluster.WheelHistory.wheelSlipRate | podbuf      | 2.1268  | 0.0426    | 2.0842     |
+| veh.cluster.WheelSummary.wheelHealth   | FlatBuffers | 2.0558  | 0.0397    | 2.0161     |
+| veh.cluster.WheelSummary.wheelHealth   | proto3      | 2.0771  | 0.0303    | 2.0469     |
+| veh.cluster.WheelSummary.wheelHealth   | podbuf      | 2.0038  | 0.0148    | 1.9890     |
+| veh.cluster.wheels.ticks               | FlatBuffers | 2.0589  | 0.0397    | 2.0193     |
+| veh.cluster.wheels.ticks               | proto3      | 2.0912  | 0.0303    | 2.0610     |
+| veh.cluster.wheels.ticks               | podbuf      | 2.0315  | 0.0148    | 2.0167     |
+| veh.hvac.cabin.cabinTemp               | FlatBuffers | 2.1897  | 0.0609    | 2.1288     |
+| veh.hvac.cabin.cabinTemp               | proto3      | 2.2135  | 0.0484    | 2.1651     |
+| veh.hvac.cabin.cabinTemp               | podbuf      | 2.1166  | 0.0431    | 2.0735     |
+| veh.hvac.cabin.targetTemp              | FlatBuffers | 2.1715  | 0.0609    | 2.1105     |
+| veh.hvac.cabin.targetTemp              | proto3      | 2.1955  | 0.0484    | 2.1471     |
+| veh.hvac.cabin.targetTemp              | podbuf      | 2.1434  | 0.0430    | 2.1003     |
+| veh.hvac.cabin.blowerDuty              | FlatBuffers | 2.2717  | 0.0604    | 2.2112     |
+| veh.hvac.cabin.blowerDuty              | proto3      | 2.2153  | 0.0476    | 2.1677     |
+| veh.hvac.cabin.blowerDuty              | podbuf      | 2.1410  | 0.0426    | 2.0984     |
+| veh.hvac.cabin.fanLevel                | FlatBuffers | 2.0617  | 0.0397    | 2.0220     |
+| veh.hvac.cabin.fanLevel                | proto3      | 2.0814  | 0.0303    | 2.0512     |
+| veh.hvac.cabin.fanLevel                | podbuf      | 2.0195  | 0.0148    | 2.0047     |
+| veh.hvac.cabin.compressorLoad          | FlatBuffers | 2.2370  | 0.0605    | 2.1765     |
+| veh.hvac.cabin.compressorLoad          | proto3      | 2.2068  | 0.0477    | 2.1591     |
+| veh.hvac.cabin.compressorLoad          | podbuf      | 2.1317  | 0.0425    | 2.0891     |
+| veh.cabin.Cabin.temperature            | FlatBuffers | 2.1416  | 0.0391    | 2.1025     |
+| veh.cabin.Cabin.temperature            | proto3      | 2.1292  | 0.0310    | 2.0981     |
+| veh.cabin.Cabin.temperature            | podbuf      | 2.0158  | 0.0147    | 2.0011     |
+| veh.cabin.Horn.active                  | FlatBuffers | 2.1218  | 0.0429    | 2.0789     |
+| veh.cabin.Horn.active                  | proto3      | 2.0840  | 0.0295    | 2.0545     |
+| veh.cabin.Horn.active                  | podbuf      | 2.0318  | 0.0171    | 2.0146     |
+| bench.stress.Stress.longString         | FlatBuffers | 4.3091  | 0.2981    | 4.0110     |
+| bench.stress.Stress.longString         | proto3      | 3.9179  | 0.1622    | 3.7557     |
+| bench.stress.Stress.longString         | podbuf      | 4.4935  | 0.3209    | 4.1726     |
+| bench.stress.Stress.itemList           | FlatBuffers | 15.4686 | 1.3864    | 14.0822    |
+| bench.stress.Stress.itemList           | proto3      | 18.1575 | 1.8377    | 16.3198    |
+| bench.stress.Stress.itemList           | podbuf      | 13.8093 | 1.1883    | 12.6210    |
+| bench.stress.Stress.nestedOptional     | FlatBuffers | 2.7288  | 0.1943    | 2.5345     |
+| bench.stress.Stress.nestedOptional     | proto3      | 2.8823  | 0.1983    | 2.6841     |
+| bench.stress.Stress.nestedOptional     | podbuf      | 2.6178  | 0.1442    | 2.4736     |
+| bench.stress.Stress.map                | FlatBuffers | 13.7311 | 3.1738    | 10.5573    |
+| bench.stress.Stress.map                | proto3      | 19.5051 | 4.9029    | 14.6022    |
+| bench.stress.Stress.map                | podbuf      | 8.1194  | 1.5365    | 6.5829     |
+
+#### Payloads not built
+
+The bench could not build a value of these payloads, so no encoding was tried on
+them. This is not an encoding refusal.
+
+| Payload                                 | Payload type | Reason                                                                                                           |
+| --------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| veh.cluster.WheelDiagnostics.wheelTicks | RawTickCount | the payload type RawTickCount is internal to its package, so a value cannot be built outside the generated crate |
+
+#### Refused cells
+
+None.
