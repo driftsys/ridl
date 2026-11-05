@@ -165,6 +165,8 @@ struct Ctx<'a> {
     /// What a doc link may resolve to: the imports and the declarations of
     /// the module, from the first pass of [`generate_with`].
     output: Output,
+    /// Namespace prefix for local declaration links in this output module.
+    local_doc_namespace: &'static str,
     /// The declarations emitted so far; [`generate_with`] reads it after its
     /// first pass.
     emitted: RefCell<HashSet<String>>,
@@ -198,6 +200,7 @@ impl<'a> Ctx<'a> {
             model,
             documented,
             output,
+            local_doc_namespace: "",
             emitted: RefCell::new(HashSet::new()),
             visiting: RefCell::new(HashSet::new()),
             imports: RefCell::new(BTreeSet::new()),
@@ -1340,7 +1343,12 @@ fn linked(ctx: &Ctx, doc: &str, links: &[v1::DocLink]) -> String {
 /// `{@link <name>}` when the target is an item of this module, and a code
 /// span of the qualified target name otherwise.
 fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
-    match ts_link(ctx.model, &ctx.output, &link.target) {
+    match ts_link(
+        ctx.model,
+        &ctx.output,
+        &link.target,
+        ctx.local_doc_namespace,
+    ) {
         Some(name) => format!("{{@link {name}}}"),
         None => format!("`{}`", link.target),
     }
@@ -1359,7 +1367,12 @@ fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
 ///   member of a scalar or a constant, has no TypeScript member.
 /// - An `internal` declaration, an interface, an interaction, and anything
 ///   else, is `None`.
-fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
+fn ts_link(
+    model: &v1::Model,
+    output: &Output,
+    target: &str,
+    local_namespace: &str,
+) -> Option<String> {
     let package = model
         .scope
         .as_ref()
@@ -1392,7 +1405,9 @@ fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
         if !in_output {
             return None;
         }
-        let prefix = alias.map(|alias| format!("{alias}.")).unwrap_or_default();
+        let prefix = alias
+            .map(|alias| format!("{alias}."))
+            .unwrap_or_else(|| local_namespace.to_string());
         let Some(member) = rest.strip_prefix('.') else {
             return Some(format!("{prefix}{name}"));
         };

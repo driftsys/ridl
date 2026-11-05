@@ -1234,11 +1234,9 @@ interface Cabin {
 }
 ";
 
-/// A parameter-stream member stays out of the interface table until its
-/// typed upload callable is generated: its request holds only the non-stream
-/// parameters, so a plain call would carry an incomplete request.
-/// A member of the same interface without a stream keeps its entry. Every
-/// stream of the package is a parameter and gets an upload entry and function.
+/// Every parameter-stream member gets a table entry and a typed upload function.
+/// Its request holds only the non-stream parameters. A member of the same
+/// interface without a stream keeps its ordinary entry.
 #[test]
 fn parameter_stream_members_have_entries_in_the_interface_table() {
     let output = ridlc::compile("stream-parameters.ridl", STREAM_PARAMETERS);
@@ -2184,6 +2182,76 @@ fn stream_entry_bindings_avoid_interfaces_and_parameters() {
         assert!(
             body.contains(&format!("const entry = {capture};")),
             "{body}"
+        );
+    }
+}
+
+// Mutation: scan rendered TSDoc for link syntax instead of qualifying model links.
+#[test]
+fn stream_docs_preserve_literal_link_text() {
+    let source = r#"package literal.docs
+/// A sequence number.
+type Count : integer [0..100]
+/// An upload interface.
+interface Feed {
+  /// Accepts the literal prefix `{@link Count`.
+  /// Keeps `{@link Count}` literal and escapes */ safely.
+  /// Also links [Count].
+  command upload(
+    /// Accepts `{@link Count}` and [Count].
+    seed: Count,
+    data: <bytes>
+  ) @[..50ms]
+}
+"#;
+    let unmatched = r#"package literal.docs
+/// A sequence number.
+type Count : integer [0..100]
+/// An upload interface.
+interface Feed {
+  /// Accepts the literal prefix `{@link Count`.
+  command upload(data: <Count>) @[..50ms]
+}
+"#;
+    for input in [unmatched, source] {
+        let output = ridlc::compile("literal-docs.ridl", input);
+        assert!(
+            output
+                .diagnostics
+                .iter()
+                .all(|d| d.severity != ridl_core::diag::Severity::Error),
+            "{:?}",
+            output.diagnostics
+        );
+        let model = codegen::lower(&output.package, &[]);
+        let generated = std::panic::catch_unwind(|| module(&model, "literal.docs"));
+        assert!(
+            generated.is_ok(),
+            "valid literal documentation must not panic"
+        );
+        let source = generated.unwrap();
+        let signature = source
+            .find("export function Feed_upload(")
+            .expect("upload function");
+        let start = source[..signature].rfind("/**").unwrap();
+        let doc = &source[start..signature];
+        let expected: &[&str] = if input == unmatched {
+            &["Accepts the literal prefix `{@link Count`."]
+        } else {
+            &[
+                "Accepts the literal prefix `{@link Count`.",
+                "Keeps `{@link Count}` literal and escapes *\\/ safely.",
+                "Also links {@link t.Count}.",
+                "@param seed - Accepts `{@link Count}` and {@link t.Count}.",
+            ]
+        };
+        for expected in expected {
+            assert!(doc.contains(expected), "missing {expected}: {doc}");
+        }
+        assert_eq!(
+            doc.matches("*/").count(),
+            1,
+            "only the renderer closes the comment"
         );
     }
 }

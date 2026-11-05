@@ -327,6 +327,67 @@ Deno.test("typed_write_waits_for_credit_and_close", async () => {
   assertEquals(raw.locked, false);
 });
 
+// Mutation: detach raw writes instead of awaiting their completion.
+for (const form of ["text", "bytes"] as const) {
+  Deno.test(`${form}_upload_waits_for_every_raw_write`, async () => {
+    const gates = [
+      Promise.withResolvers<void>(),
+      Promise.withResolvers<void>(),
+    ];
+    const chunks: Uint8Array[] = [];
+    const raw = new WritableStream<Uint8Array>({
+      write(bytes) {
+        chunks.push(bytes.slice());
+        return gates[chunks.length - 1].promise;
+      },
+    });
+    const writer = form === "text"
+      ? textUpload(raw, 4).getWriter()
+      : byteUpload(raw, 4).getWriter();
+    let settled = false;
+    const write = (form === "text"
+      ? (writer as WritableStreamDefaultWriter<string>).write("ab😀")
+      : (writer as WritableStreamDefaultWriter<Uint8Array>).write(
+        Uint8Array.of(0, 1, 2, 3, 4, 5),
+      )).finally(() => {
+        settled = true;
+      });
+    try {
+      await tick();
+      assertEquals(chunks, [
+        form === "text" ? Uint8Array.of(97, 98) : Uint8Array.of(0, 1, 2, 3),
+      ]);
+      assertEquals(
+        settled,
+        false,
+        "typed write must wait for the first raw write",
+      );
+      gates[0].resolve();
+      await tick();
+      assertEquals(
+        chunks,
+        form === "text"
+          ? [Uint8Array.of(97, 98), Uint8Array.of(0xf0, 0x9f, 0x98, 0x80)]
+          : [Uint8Array.of(0, 1, 2, 3), Uint8Array.of(4, 5)],
+      );
+      assertEquals(
+        settled,
+        false,
+        "typed write must wait for the last raw write",
+      );
+      gates[1].resolve();
+      await write;
+      assertEquals(settled, true);
+    } finally {
+      for (const gate of gates) {
+        gate.resolve();
+      }
+      await write;
+      await writer.close();
+    }
+  });
+}
+
 Deno.test("remote_refusal_errors_typed_writer", async () => {
   for (const rule of ["range", "utf8"]) {
     for (const queuedClose of [false, true]) {

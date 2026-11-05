@@ -21,6 +21,8 @@
 //! they verify requests before sending, verify named elements before decoding,
 //! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
 //! verify whole named elements, and split raw bytes or text at the member limit.
+//! Typed functions are omitted for duplex calls, calls with two or more
+//! parameter streams, and uploads with an inline `T | E` reply.
 //!
 //! A named scalar of another package converts by a type assertion, an enum set
 //! of another package by a checking function of the module, and a payload type
@@ -1989,6 +1991,7 @@ impl<'a> Codec<'a> {
         };
         let (form, element, element_type) = match shape.form() {
             v1::StreamForm::Elements => {
+                // The metadata loop above requires an element for this form.
                 let reference = shape.element.as_ref().expect("validated element");
                 let max_size = shape
                     .sizes
@@ -2053,6 +2056,8 @@ impl<'a> Codec<'a> {
             }
             param_types.push(spelled);
         }
+        // Every payload result is Ok after the missing-bound branch above.
+        // These expects depend on that branch, not on documentation or names.
         let reply = if let (Some(q), Some(result)) = (query, result) {
             let ty = if let Some(tuple) = &q.reply_tuple {
                 tuple_name(&self.model.tuples[tuple.index as usize]).to_string()
@@ -2235,7 +2240,9 @@ impl<'a> Codec<'a> {
                 .map(|d| declared_name(d).to_string())
                 .collect(),
         };
-        let ctx = crate::Ctx::new(&package, self.model, output);
+        let mut ctx = crate::Ctx::new(&package, self.model, output);
+        // Qualify only links created from model targets, never literal doc text.
+        ctx.local_doc_namespace = "t.";
         let i = stream.interaction;
         let parts = crate::TsDocParts {
             doc: &i.doc,
@@ -2252,38 +2259,7 @@ impl<'a> Codec<'a> {
                 tags.push(format!("@param {binding} - {doc}"));
             }
         }
-        let doc = crate::jsdoc(&ctx, "", &parts, &tags);
-        // Qualify each original link target once, including enumset bit objects.
-        let local_targets: BTreeSet<String> = self
-            .model
-            .declarations
-            .iter()
-            .flat_map(|d| {
-                let name = declared_name(d).to_string();
-                let mut names = vec![name.clone()];
-                if matches!(d.kind, Some(v1::declaration::Kind::EnumSet(_))) {
-                    names.push(format!("{name}Bits"));
-                }
-                names
-            })
-            .collect();
-        let mut qualified = String::with_capacity(doc.len());
-        let mut rest = doc.as_str();
-        while let Some(start) = rest.find("{@link ") {
-            let (prefix, link) = rest.split_at(start + "{@link ".len());
-            qualified.push_str(prefix);
-            let end = link.find('}').expect("rendered link has a closing brace");
-            let target = &link[..end];
-            let root = target.split('.').next().unwrap_or(target);
-            if local_targets.contains(root) {
-                qualified.push_str("t.");
-            }
-            qualified.push_str(target);
-            qualified.push('}');
-            rest = &link[end + 1..];
-        }
-        qualified.push_str(rest);
-        qualified
+        crate::jsdoc(&ctx, "", &parts, &tags)
     }
 
     fn emit_interface(

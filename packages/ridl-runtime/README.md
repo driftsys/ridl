@@ -61,7 +61,7 @@ is read with `arrayBuffer()` and compiled with `WebAssembly.instantiate`. A
 `file:` URL is read with `Deno.readFile` when `Deno` exists and is fetched
 otherwise. Any other URL is fetched.
 
-## Stream decoding
+## Streams
 
 `StreamSession` holds `{ transport, codec }`. Its `codec` is the loaded wasm
 `Codec`; its `transport` implements the structural `StreamTransport` interface,
@@ -88,13 +88,38 @@ decodes each chunk independently with fatal UTF-8 checking. A chunk must contain
 complete code points. Empty chunks produce empty strings, and a leading BOM
 remains content.
 
-Local payload failures throw `StreamError`, whose `failure` is either
-`{ category: "corrupt" }` for malformed payloads, or
-`{ category: "contract", contract: { category: "invalid-value", rule } }` for
-rule failures, including invalid UTF-8. `PayloadRule` names `length`, `pattern`,
-`range`, `step`, `unique`, `utf8` and `variant`. A missing or unknown
-verification rule text, or an unknown-type verification result, throws
-`CodecError`. Local errors do not require a transport-specific error class.
+`encodeUpload(upload, encode, verify, limit)` returns a typed `WritableStream`.
+Each named element becomes one encoded, verified chunk. Its encoded bytes are
+never split. Use the generated payload encoder and verify with the resolved
+payload type, for example
+`encodeUpload(raw.upload, payload.encode, bytes => codec.verify(typeId, bytes), limit)`.
+
+`byteUpload(upload, limit)` splits byte writes into chunks of at most `limit`
+bytes. `textUpload(upload, limit)` encodes strings as UTF-8 and splits only
+between complete code points. It refuses lone JavaScript surrogates instead of
+replacing them. Both adapters preserve empty writes as empty chunks.
+
+Each typed write waits until every raw write it produces has completed, in
+order. Closing waits for pending writes before closing the raw upload. A named
+element or a single text code point that exceeds the limit fails locally as
+corrupt; an invalid text string fails with the `utf8` rule. Local failures error
+the typed stream and abort the raw upload once. Aborting also reaches a raw
+write waiting for credit.
+
+Remote failures preserve the original error object: pending and later writes,
+`writer.closed`, and a close queued before the failure reject with that same
+object. A close requested after the writer has errored rejects with the
+platform's `TypeError`. An already resolved command acceptance stays resolved.
+
+Local payload failures throw `StreamError`. Its `failure` is
+`{ category: "corrupt" }` for malformed payloads, encoding failures without a
+rule, or an oversized named element or code point. Rule failures, including
+invalid UTF-8, use
+`{ category: "contract", contract: { category: "invalid-value", rule } }`.
+`PayloadRule` names `length`, `pattern`, `range`, `step`, `unique`, `utf8` and
+`variant`. A missing or unknown verification rule text, or an unknown-type
+verification result, throws `CodecError`. Local errors do not require a
+transport-specific error class.
 
 The generated TypeScript and wasm codecs must be regenerated together. The
 sorted payload rule table assigns `utf8` code 7 and `variant` code 8; the
@@ -108,7 +133,8 @@ addition of `utf8` widens the generated rule union and changes the previous
   read other exports.
 - `verify` is synchronous and copies the payload into the module memory on each
   call. It frees the copy before it returns, also when the call throws.
-- The package verifies named payloads with wasm; stream decoding uses the
-  decoder supplied by the caller. It decodes raw text streams with the platform
-  text decoder.
+- The package verifies named payloads with wasm; stream adapters use the encoder
+  and decoder supplied by the caller for named stream elements. Raw byte uploads
+  are split at the supplied limit; raw text uses the platform text encoder and
+  decoder with complete code points in each chunk.
 - The package is not yet published.
