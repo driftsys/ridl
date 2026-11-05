@@ -471,5 +471,13 @@ on 2026-11-04, once the work landed (driftsys/ridl#1241);
 [`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) and
 [the frame specification](../specification/frame-specification.md) are its
-durable records. The streams design is archived; the stage 6 implementation plan
-remains here for the driver's final review and gardening.
+durable records. The streams design is archived.
+
+The streams stage 6 plan (`2026-11-04-streams-stage-6-plan.md`) was archived on
+2026-11-05, once the work landed (driftsys/ridl#1253);
+[`../design/ts-codec-table.md`](../design/ts-codec-table.md),
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
+[ADR-0032](../decisions/ADR-0032-byte-streams.md),
+[ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) and
+[the generated code chapter](../book/generated-code.md) are its durable records.
+The archived streams design records the as-built result.
