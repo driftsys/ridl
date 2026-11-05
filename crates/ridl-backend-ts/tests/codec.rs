@@ -2190,6 +2190,15 @@ fn stream_entry_bindings_avoid_interfaces_and_parameters() {
 #[test]
 fn stream_doc_links_qualify_every_local_target_spelling() {
     let mut model = streams_model();
+    // A domain declaration may have the same name as the codec namespace alias.
+    let mut alias = model
+        .declarations
+        .iter()
+        .find(|d| d.name.as_ref().unwrap().declared == "Count")
+        .unwrap()
+        .clone();
+    alias.name.as_mut().unwrap().declared = "t".into();
+    model.declarations.push(alias);
     let targets = [
         "Count",
         "Chunk",

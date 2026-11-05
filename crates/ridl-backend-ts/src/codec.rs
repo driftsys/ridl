@@ -2128,26 +2128,38 @@ impl<'a> Codec<'a> {
                 tags.push(format!("@param {binding} - {doc}"));
             }
         }
-        let mut doc = crate::jsdoc(&ctx, "", &parts, &tags);
-        // Local domain types live in the imported namespace of a codec module.
-        for declaration in &self.model.declarations {
-            let name = declared_name(declaration);
-            let mut spellings = vec![name.to_string()];
-            if matches!(declaration.kind, Some(v1::declaration::Kind::EnumSet(_))) {
-                spellings.push(format!("{name}Bits"));
+        let doc = crate::jsdoc(&ctx, "", &parts, &tags);
+        // Qualify each original link target once, including enumset bit objects.
+        let local_targets: BTreeSet<String> = self
+            .model
+            .declarations
+            .iter()
+            .flat_map(|d| {
+                let name = declared_name(d).to_string();
+                let mut names = vec![name.clone()];
+                if matches!(d.kind, Some(v1::declaration::Kind::EnumSet(_))) {
+                    names.push(format!("{name}Bits"));
+                }
+                names
+            })
+            .collect();
+        let mut qualified = String::with_capacity(doc.len());
+        let mut rest = doc.as_str();
+        while let Some(start) = rest.find("{@link ") {
+            let (prefix, link) = rest.split_at(start + "{@link ".len());
+            qualified.push_str(prefix);
+            let end = link.find('}').expect("rendered link has a closing brace");
+            let target = &link[..end];
+            let root = target.split('.').next().unwrap_or(target);
+            if local_targets.contains(root) {
+                qualified.push_str("t.");
             }
-            for spelling in spellings {
-                doc = doc.replace(
-                    &format!("{{@link {spelling}}}"),
-                    &format!("{{@link t.{spelling}}}"),
-                );
-                doc = doc.replace(
-                    &format!("{{@link {spelling}."),
-                    &format!("{{@link t.{spelling}."),
-                );
-            }
+            qualified.push_str(target);
+            qualified.push('}');
+            rest = &link[end + 1..];
         }
-        doc
+        qualified.push_str(rest);
+        qualified
     }
 
     fn emit_interface(

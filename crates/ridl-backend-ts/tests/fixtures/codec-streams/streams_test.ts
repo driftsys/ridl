@@ -284,3 +284,16 @@ Deno.test("stream_table_names_do_not_shadow_captured_entries", async () => {
     assert.equal(h.calls[0].ord, 1, name);
   }
 });
+
+// Mutation: bypass request verification in raw byte or text functions.
+for (const name of ["Feed_readBytes", "Feed_text"]) {
+  Deno.test(`raw_request_failures_send_no_request_${name}`, () => {
+    const h = harness([]);
+    h.session.codec.verify = () => ({ ok: false, kind: "malformed", code: 1 });
+    const fn = generated(name);
+    const args = name === "Feed_readBytes" ? [1, { bound: 1 }] : [{ bound: 1 }];
+    assert.throws(() => fn(h.session, ...args), StreamError);
+    assert.equal(h.calls.length, 0);
+    assert.ok(!h.events.includes("request"));
+  });
+}
