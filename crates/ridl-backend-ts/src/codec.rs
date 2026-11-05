@@ -21,8 +21,9 @@
 //! they verify requests before sending, verify named elements before decoding,
 //! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
 //! verify whole named elements, and split raw bytes or text at the member limit.
-//! Typed functions are omitted for duplex calls, calls with two or more
-//! parameter streams, and uploads with an inline `T | E` reply.
+//! Typed functions are omitted for calls with two or more parameter streams,
+//! uploads with an inline `T | E` reply, and calls whose request, named element
+//! or upload reply has no finite FlatBuffers bound.
 //!
 //! A named scalar of another package converts by a type assertion, an enum set
 //! of another package by a checking function of the module, and a payload type
@@ -142,6 +143,7 @@ struct StreamCall<'a> {
     named_request: bool,
     upload: bool,
     reply: Option<(String, String)>,
+    duplex_reply: Option<StreamElement>,
     request: String,
     element: Option<String>,
     element_type: String,
@@ -149,6 +151,24 @@ struct StreamCall<'a> {
     entry_binding: String,
     bindings: Vec<String>,
     param_types: Vec<String>,
+}
+
+/// A stream direction with a resolved payload codec when its elements are named.
+struct StreamElement {
+    form: &'static str,
+    element: Option<String>,
+    element_type: String,
+}
+
+impl StreamCall<'_> {
+    fn uses_adapter(&self, upload: bool, form: &str) -> bool {
+        (self.upload == upload && self.form == form)
+            || (!upload
+                && self
+                    .duplex_reply
+                    .as_ref()
+                    .is_some_and(|reply| reply.form == form))
+    }
 }
 
 struct Codec<'a> {
@@ -427,7 +447,7 @@ impl<'a> Codec<'a> {
                 if self
                     .stream_calls
                     .values()
-                    .any(|stream| stream.form == form && stream.upload == upload)
+                    .any(|stream| stream.uses_adapter(upload, form))
                 {
                     register(
                         helper.to_string(),
@@ -1253,7 +1273,7 @@ impl<'a> Codec<'a> {
                 if self
                     .stream_calls
                     .values()
-                    .any(|s| s.form == form && s.upload == upload)
+                    .any(|s| s.uses_adapter(upload, form))
                 {
                     helpers.push(helper);
                 }
@@ -1946,8 +1966,6 @@ impl<'a> Codec<'a> {
         let key = (interface.number, slot.ordinal);
         let omission = if uploads > 1 {
             Some("multiple parameter streams are not supported")
-        } else if uploads != 0 && reply {
-            Some("duplex streams are not generated yet")
         } else {
             None
         };
@@ -1976,55 +1994,36 @@ impl<'a> Codec<'a> {
                 .insert(key, "inline fallible replies have no codec".to_string());
             return Ok(());
         }
-        let shape = &interaction.streams[0];
+        let duplex = uploads == 1 && reply;
+        let shape = &interaction.streams[usize::from(duplex)];
         let previous_locals = self.used_locals.clone();
         let previous_payloads = self.foreign_payloads.clone();
         let previous_types = self.foreign_types.clone();
         let previous_domain = self.needs_domain;
         let request = self.payload(request_payload, request_tuple, &path)?;
-        let result = if uploads == 1 {
+        let result = if uploads == 1 && !duplex {
             query
                 .map(|q| self.payload(q.reply_payload.as_ref(), q.reply_tuple.as_ref(), &path))
                 .transpose()?
         } else {
             None
         };
-        let (form, element, element_type) = match shape.form() {
-            v1::StreamForm::Elements => {
-                // The metadata loop above requires an element for this form.
-                let reference = shape.element.as_ref().expect("validated element");
-                let max_size = shape
-                    .sizes
-                    .as_ref()
-                    .and_then(|sizes| sizes.flatbuffers.as_ref())
-                    .and_then(|state| match state.state {
-                        Some(v1::size_state::State::Bounded(n)) => Some(n),
-                        _ => None,
-                    });
-                let payload = v1::Payload {
-                    r#type: Some(reference.clone()),
-                    flatbuffers_max_size: max_size,
-                    sizes: shape.sizes.clone(),
-                };
-                let element = self.payload(Some(&payload), None, &path)?;
-                let ty = self.ts_type(
-                    &v1::Type {
-                        kind: Some(v1::r#type::Kind::Named(reference.clone())),
-                        ..Default::default()
-                    },
-                    &path,
-                )?;
-                ("elements", Some(element), ty)
-            }
-            v1::StreamForm::Bytes => ("bytes", None, "Uint8Array".to_string()),
-            v1::StreamForm::Text => ("text", None, "string".to_string()),
-            v1::StreamForm::Unspecified => unreachable!("validated form"),
+        let (form, element, element_type) = self.stream_element(shape, &path)?;
+        let duplex_reply = if duplex {
+            Some(self.stream_element(&interaction.streams[0], &path)?)
+        } else {
+            None
         };
         let missing = request
             .as_ref()
             .err()
             .or_else(|| element.as_ref().and_then(|e| e.as_ref().err()))
-            .or_else(|| result.as_ref().and_then(|r| r.as_ref().err()));
+            .or_else(|| result.as_ref().and_then(|r| r.as_ref().err()))
+            .or_else(|| {
+                duplex_reply
+                    .as_ref()
+                    .and_then(|(_, e, _)| e.as_ref().and_then(|e| e.as_ref().err()))
+            });
         if let Some(missing) = missing {
             self.stream_omissions
                 .insert(key, format!("{missing} has no finite FlatBuffers bound"));
@@ -2085,6 +2084,11 @@ impl<'a> Codec<'a> {
                 named_request: request_payload.is_some(),
                 upload: uploads == 1,
                 reply,
+                duplex_reply: duplex_reply.map(|(form, element, element_type)| StreamElement {
+                    form,
+                    element: element.map(|e| e.expect("bounded reply element")),
+                    element_type,
+                }),
                 request: request.expect("bounded request"),
                 element: element.map(|e| e.expect("bounded element")),
                 element_type,
@@ -2095,6 +2099,45 @@ impl<'a> Codec<'a> {
             },
         );
         Ok(())
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn stream_element(
+        &mut self,
+        shape: &v1::StreamShape,
+        path: &str,
+    ) -> Result<(&'static str, Option<Result<String, String>>, String), GenerateError> {
+        Ok(match shape.form() {
+            v1::StreamForm::Elements => {
+                // The metadata loop above requires an element for this form.
+                let reference = shape.element.as_ref().expect("validated element");
+                let max_size = shape
+                    .sizes
+                    .as_ref()
+                    .and_then(|sizes| sizes.flatbuffers.as_ref())
+                    .and_then(|state| match state.state {
+                        Some(v1::size_state::State::Bounded(n)) => Some(n),
+                        _ => None,
+                    });
+                let payload = v1::Payload {
+                    r#type: Some(reference.clone()),
+                    flatbuffers_max_size: max_size,
+                    sizes: shape.sizes.clone(),
+                };
+                let element = self.payload(Some(&payload), None, path)?;
+                let ty = self.ts_type(
+                    &v1::Type {
+                        kind: Some(v1::r#type::Kind::Named(reference.clone())),
+                        ..Default::default()
+                    },
+                    path,
+                )?;
+                ("elements", Some(element), ty)
+            }
+            v1::StreamForm::Bytes => ("bytes", None, "Uint8Array".to_string()),
+            v1::StreamForm::Text => ("text", None, "string".to_string()),
+            v1::StreamForm::Unspecified => unreachable!("validated form"),
+        })
     }
 
     fn emit_stream_helpers(&self, out: &mut String) {
@@ -2132,10 +2175,14 @@ impl<'a> Codec<'a> {
         let _ = writeln!(out, "const {entry_binding} = {name}.{member};\n");
         out.push_str(&self.stream_docs(stream));
         let returns = if stream.upload {
-            let result = stream.reply.as_ref().map_or_else(
-                || "accepted: Promise<void>".to_string(),
-                |(_, ty)| format!("reply: Promise<{ty}>"),
-            );
+            let result = if let Some(reply) = &stream.duplex_reply {
+                format!("stream: ReadableStream<{}>", reply.element_type)
+            } else {
+                stream.reply.as_ref().map_or_else(
+                    || "accepted: Promise<void>".to_string(),
+                    |(_, ty)| format!("reply: Promise<{ty}>"),
+                )
+            };
             format!(
                 "{{ upload: WritableStream<{}>; {result} }}",
                 stream.element_type
@@ -2157,10 +2204,21 @@ impl<'a> Codec<'a> {
         let _ = writeln!(out, "  checkStreamSession(session, {limit});");
         out.push_str("  const requestType = session.codec.typeId(entry.request.type);\n");
         if stream.element.is_some() {
-            out.push_str("  const element = entry.streams[0].element;\n  const elementType = session.codec.typeId(element.type);\n");
+            let index = usize::from(stream.duplex_reply.is_some());
+            let _ = writeln!(
+                out,
+                "  const element = entry.streams[{index}].element;\n  const elementType = session.codec.typeId(element.type);"
+            );
         }
         if stream.reply.is_some() {
             out.push_str("  const replyType = session.codec.typeId(entry.reply.type);\n");
+        }
+        if stream
+            .duplex_reply
+            .as_ref()
+            .is_some_and(|reply| reply.element.is_some())
+        {
+            out.push_str("  const replyElement = entry.streams[0].element;\n  const replyElementType = session.codec.typeId(replyElement.type);\n");
         }
         let value = if stream.named_request {
             stream.bindings[0].clone()
@@ -2183,7 +2241,9 @@ impl<'a> Codec<'a> {
             "  const args = encodeStreamRequest(session, entry.request, requestType, {value}, {limit});"
         );
         if stream.upload {
-            let method = if stream.reply.is_some() {
+            let method = if stream.duplex_reply.is_some() {
+                "queryDuplex"
+            } else if stream.reply.is_some() {
                 "queryWithUpload"
             } else {
                 "commandStream"
@@ -2206,7 +2266,14 @@ impl<'a> Codec<'a> {
                 _ => format!("byteUpload(raw.upload, {upload_limit})"),
             };
             let _ = writeln!(out, "  const upload = {adapter};");
-            if stream.reply.is_some() {
+            if let Some(reply) = &stream.duplex_reply {
+                match reply.form {
+                    "elements" => out.push_str("  const stream = raw.stream.pipeThrough(decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));\n"),
+                    "text" => out.push_str("  const stream = raw.stream.pipeThrough(decodeTextStream());\n"),
+                    _ => out.push_str("  const stream = raw.stream;\n"),
+                }
+                out.push_str("  return { upload, stream };\n}\n");
+            } else if stream.reply.is_some() {
                 out.push_str("  const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));\n  return { upload, reply };\n}\n");
             } else {
                 out.push_str("  return { upload, accepted: raw.accepted };\n}\n");
@@ -2303,6 +2370,16 @@ impl<'a> Codec<'a> {
                         "query"
                     };
                     let no = u32::from(stream.upload);
+                    let mut streams = format!("{{ no: {no}, form: \"{}\"{element} }}", stream.form);
+                    if let Some(reply) = &stream.duplex_reply {
+                        let element = reply
+                            .element
+                            .as_ref()
+                            .map(|e| format!(", element: {e}"))
+                            .unwrap_or_default();
+                        streams =
+                            format!("{{ no: 0, form: \"{}\"{element} }}, {streams}", reply.form);
+                    }
                     let reply = stream
                         .reply
                         .as_ref()
@@ -2310,8 +2387,8 @@ impl<'a> Codec<'a> {
                         .unwrap_or_default();
                     let _ = writeln!(
                         out,
-                        "  {member}: {{ iface: {number}, ord: {}, kind: \"{kind}\", request: {}{reply}, streams: [{{ no: {no}, form: \"{}\"{element} }}]{limit} }},",
-                        slot.ordinal, stream.request, stream.form
+                        "  {member}: {{ iface: {number}, ord: {}, kind: \"{kind}\", request: {}{reply}, streams: [{streams}]{limit} }},",
+                        slot.ordinal, stream.request
                     );
                 } else if let Some(reason) = self.stream_omissions.get(&key) {
                     let _ = writeln!(out, "  // {member} has no entry: {reason}");
@@ -2541,6 +2618,9 @@ fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
         "requestType",
         "elementType",
         "replyType",
+        "replyElement",
+        "replyElementType",
+        "stream",
         "upload",
         "reply",
         "encodeUpload",

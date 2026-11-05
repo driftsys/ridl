@@ -341,6 +341,19 @@ for (const form of ["text", "bytes"] as const) {
         return gates[chunks.length - 1].promise;
       },
     });
+    // Observe submissions as well as delivery: the native raw writer queues
+    // writes, so delivery alone cannot detect unbounded adapter submissions.
+    const getWriter = raw.getWriter.bind(raw);
+    let submitted = 0;
+    raw.getWriter = () => {
+      const writer = getWriter();
+      const write = writer.write.bind(writer);
+      writer.write = (bytes) => {
+        submitted++;
+        return write(bytes);
+      };
+      return writer;
+    };
     const writer = form === "text"
       ? textUpload(raw, 4).getWriter()
       : byteUpload(raw, 4).getWriter();
@@ -354,6 +367,11 @@ for (const form of ["text", "bytes"] as const) {
       });
     try {
       await tick();
+      assertEquals(
+        submitted,
+        1,
+        "the adapter must wait before submitting another raw write",
+      );
       assertEquals(chunks, [
         form === "text" ? Uint8Array.of(97, 98) : Uint8Array.of(0, 1, 2, 3),
       ]);
@@ -364,6 +382,7 @@ for (const form of ["text", "bytes"] as const) {
       );
       gates[0].resolve();
       await tick();
+      assertEquals(submitted, 2);
       assertEquals(
         chunks,
         form === "text"
@@ -465,4 +484,22 @@ Deno.test("abort_releases_a_credit_waiter", async () => {
   assertEquals(await pending, failure);
   await abort;
   assertEquals(raw.locked, false);
+});
+
+Deno.test("empty_upload_waits_for_raw_credit", async () => {
+  const gate = Promise.withResolvers<void>();
+  const raw = new WritableStream<Uint8Array>({ write: () => gate.promise });
+  const writer = byteUpload(raw, 4).getWriter();
+  let settled = false;
+  const pending = writer.write(new Uint8Array()).then(() => {
+    settled = true;
+  });
+  try {
+    await tick();
+    assertEquals(settled, false, "empty writes also wait for raw credit");
+  } finally {
+    gate.resolve();
+    await pending;
+    await writer.close();
+  }
 });

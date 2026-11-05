@@ -102,6 +102,9 @@ function harness(chunks: Uint8Array[]) {
       calls.push({ iface, ord, args, opts });
       return raw;
     },
+    queryDuplex() {
+      assert.fail("reply streams must call queryStream");
+    },
     commandStream() {
       assert.fail("reply streams must call queryStream");
     },
@@ -744,6 +747,328 @@ Deno.test("plain_reply_is_verified_before_decode_early_FakeSocket", async () => 
         remote,
       );
     } finally {
+      session.transport.close();
+    }
+  }
+});
+
+type DuplexCall = {
+  upload: WritableStream<unknown>;
+  stream: ReadableStream<unknown>;
+};
+function duplexFunction(name = "duplexNamed") {
+  const fn = (codec as unknown as Record<string, unknown>)[`Feed_${name}`];
+  assert.equal(typeof fn, "function", `Feed_${name} must be generated`);
+  return fn as (session: StreamSession, ...args: unknown[]) => DuplexCall;
+}
+function replyChunk(socket: FakeSocket, seq: number, value: unknown) {
+  socket.deliver({
+    form: "chunk",
+    target: target("duplexNamed"),
+    correlation: 1n,
+    stream: 0,
+    envelope: { stamp: 0n, seq: BigInt(seq) },
+    payload: entry("duplexNamed").streams[0].element!.encode(value),
+  });
+}
+function uploadCredit(socket: FakeSocket) {
+  socket.deliver({
+    form: "stream_credit",
+    target: target("duplexNamed"),
+    correlation: 1n,
+    stream: 1,
+    credit: 1,
+  });
+}
+function replyEnd(socket: FakeSocket, seq: number) {
+  socket.deliver({
+    form: "stream_end",
+    target: target("duplexNamed"),
+    correlation: 1n,
+    stream: 0,
+    envelope: { stamp: 0n, seq: BigInt(seq) },
+    outcome: { kind: "end" },
+  });
+}
+
+Deno.test("generated_duplex_functions", async () => {
+  for (const name of ["duplex", "duplexNamed", "duplexText", "duplexBytes"]) {
+    const fn = duplexFunction(name);
+    const h = harness([]);
+    const row = entry(name);
+    let received: unknown;
+    const bytes: Uint8Array[] = [];
+    const upload = new WritableStream<Uint8Array>({
+      write(b) {
+        bytes.push(b);
+      },
+    });
+    h.session.transport.queryDuplex = function (iface, ord, args, opts) {
+      assert.strictEqual(this, h.session.transport);
+      received = { iface, ord, args: row.request.decode(args), opts };
+      h.events.push("request");
+      const value = name === "duplexText"
+        ? "hello 🌍"
+        : name === "duplexBytes"
+        ? Uint8Array.of(7)
+        : { value: 9 };
+      const payload = row.streams[0].element?.encode(value) ??
+        (typeof value === "string"
+          ? new TextEncoder().encode(value)
+          : value as Uint8Array);
+      return { upload, stream: source([payload]) };
+    };
+    const opts = { bound: 94 };
+    const call = name === "duplexNamed"
+      ? fn(h.session, 7, 8, opts)
+      : fn(h.session, opts);
+    assert.deepEqual(received, {
+      iface: row.iface,
+      ord: row.ord,
+      args: name === "duplexNamed" ? { seed: 7, tail: 8 } : {},
+      opts,
+    });
+    assert.deepEqual(
+      row.streams.map((s) => [s.no, s.form]),
+      name === "duplex"
+        ? [[0, "elements"], [1, "bytes"]]
+        : name === "duplexNamed"
+        ? [[0, "elements"], [1, "elements"]]
+        : name === "duplexText"
+        ? [[0, "text"], [1, "text"]]
+        : [[0, "bytes"], [1, "elements"]],
+    );
+    const writer = call.upload.getWriter();
+    const value = name === "duplexText"
+      ? "hello 🌍"
+      : name === "duplex"
+      ? Uint8Array.of(4)
+      : { value: 5 };
+    await writer.write(value);
+    await writer.close();
+    assert.deepEqual(
+      row.streams[1].element?.decode(bytes[0]) ??
+        (name === "duplexText" ? new TextDecoder().decode(bytes[0]) : bytes[0]),
+      value,
+    );
+    assert.deepEqual(await collect(call.stream), [
+      name === "duplexText"
+        ? "hello 🌍"
+        : name === "duplexBytes"
+        ? Uint8Array.of(7)
+        : { value: 9 },
+    ]);
+    assert.ok(h.events.indexOf("verify:1") < h.events.indexOf("request"));
+  }
+});
+
+Deno.test("duplex_adapters_preserve_credit_and_close", async () => {
+  const fn = duplexFunction();
+  const { session, socket } = await socketHarness();
+  try {
+    const call = fn(session, 7, 8, { bound: 1000 });
+    const writer = call.upload.getWriter();
+    const reader = call.stream.getReader();
+    writer.closed.catch(() => {});
+    reader.closed.catch(() => {});
+    const { fifth, state } = await spend(writer);
+    // Four reply credits are independent of the exhausted upload credits.
+    for (let n = 0; n < 4; n++) replyChunk(socket, n + 1, { value: n });
+    await tick();
+    const credits = () =>
+      frames(socket).filter((f) => f.form === "stream_credit" && f.stream === 0)
+        .reduce(
+          (sum, f) => sum + (f.form === "stream_credit" ? f.credit : 0),
+          0,
+        );
+    const bufferedCredits = credits();
+    assert.ok(
+      bufferedCredits <= 1,
+      "idle typed reader must not drain the raw reply queue",
+    );
+    assert.equal(
+      state.settled,
+      false,
+      "reply progress must not grant upload credit",
+    );
+    const values: unknown[] = [];
+    for (let n = 0; n < 4; n++) values.push((await reader.read()).value);
+    await tick();
+    assert.equal(credits(), 4, "typed reads return reply credit");
+    uploadCredit(socket);
+    await fifth;
+    for (let n = 5; n < 64; n++) {
+      const pending = writer.write({ value: n });
+      const blocked = observe(pending);
+      await tick();
+      assert.equal(
+        blocked.settled,
+        false,
+        "each subsequent write waits for raw credit",
+      );
+      uploadCredit(socket);
+      await pending;
+    }
+    await writer.close();
+    const pendingReply = reader.read();
+    const replyState = observe(pendingReply);
+    await tick();
+    assert.equal(
+      replyState.settled,
+      false,
+      "upload close leaves typed reply open",
+    );
+    replyChunk(socket, 5, { value: 4 });
+    values.push((await pendingReply).value);
+    for (let n = 5; n < 64; n++) {
+      replyChunk(socket, n + 1, { value: n });
+      values.push((await reader.read()).value);
+    }
+    replyEnd(socket, 65);
+    assert.deepEqual(await reader.read(), { done: true, value: undefined });
+    const expected = Array.from({ length: 64 }, (_, value) => ({ value }));
+    assert.deepEqual(values, expected);
+    const sent = frames(socket).filter((f) => f.form === "chunk");
+    assert.deepEqual(
+      sent.map((f) =>
+        entry("duplexNamed").streams[1].element!.decode(f.payload)
+      ),
+      expected,
+    );
+    assert.deepEqual(
+      sent.map((f) => [f.stream, f.envelope.seq]),
+      expected.map((_, n) => [1, BigInt(n + 1)]),
+    );
+    const ends = frames(socket).filter((f) => f.form === "stream_end");
+    assert.deepEqual(ends.map((f) => [f.stream, f.outcome.kind]), [[1, "end"]]);
+  } finally {
+    session.transport.close();
+  }
+});
+
+Deno.test("duplex_adapters_propagate_failure", async () => {
+  const fn = duplexFunction();
+  for (
+    const mode of [
+      "encode",
+      "uploadVerify",
+      "replyVerify",
+      "cancel",
+      "abort",
+      "remote",
+    ] as const
+  ) {
+    const { session, socket } = await socketHarness();
+    const row = entry("duplexNamed");
+    const replyPayload = row.streams[0].element!;
+    const originalDecode = replyPayload.decode;
+    let decodes = 0;
+    replyPayload.decode = (b) => {
+      decodes++;
+      return originalDecode(b);
+    };
+    try {
+      const call = fn(session, 7, 8, { bound: 1000 });
+      const writer = call.upload.getWriter();
+      const reader = call.stream.getReader();
+      const closed = writer.closed.catch((e) => e);
+      reader.closed.catch(() => {});
+      const read = reader.read().catch((e) => e);
+      const readState = observe(read);
+      const pending = mode === "encode" || mode === "uploadVerify"
+        ? undefined
+        : (await spend(writer)).fifth.catch((e) => e);
+      const pendingState = pending && observe(pending);
+      const close = mode === "remote"
+        ? writer.close().catch((e) => e)
+        : undefined;
+      let failedWrite: Promise<unknown> | undefined;
+      const abortReason = new Error("stop upload");
+      if (mode === "uploadVerify") {
+        session.codec.verify = () => ({
+          ok: false,
+          kind: "rule",
+          rule: "range",
+          code: 4,
+        });
+        failedWrite = writer.write({ value: 99 }).catch((e) => e);
+      } else if (mode === "encode") {
+        failedWrite = writer.write(null).catch((e) => e);
+      } else if (mode === "replyVerify") {
+        session.codec.verify = () => ({
+          ok: false,
+          kind: "malformed",
+          code: 1,
+        });
+        replyChunk(socket, 1, { value: 1 });
+      } else if (mode === "cancel") {
+        await reader.cancel();
+      } else if (mode === "abort") {
+        await writer.abort(abortReason);
+      } else {
+        socket.deliver({
+          form: "stream_end",
+          target: target("duplexNamed"),
+          correlation: 1n,
+          stream: 1,
+          envelope: { stamp: 0n, seq: 1n },
+          outcome: { kind: "busy" },
+        });
+      }
+      await tick();
+      await tick();
+      assert.equal(
+        readState.settled,
+        true,
+        `${mode} releases the typed reader`,
+      );
+      if (pendingState) {
+        assert.equal(
+          pendingState.settled,
+          true,
+          `${mode} releases a typed credit waiter`,
+        );
+      }
+      const writerError = await closed;
+      const remote = mode === "abort" ? await read : writerError;
+      if (mode === "abort") assert.strictEqual(writerError, abortReason);
+      assert.ok(
+        remote instanceof
+          (mode === "encode" || mode === "uploadVerify"
+            ? StreamError
+            : SessionError),
+        mode,
+      );
+      if (pending) assert.strictEqual(await pending, remote);
+      if (close) assert.strictEqual(await close, remote);
+      assert.strictEqual(
+        await writer.write({ value: 9 }).catch((e) => e),
+        writerError,
+      );
+      if (mode === "remote" || mode === "abort") {
+        assert.strictEqual(await read, remote);
+      }
+      if (mode === "encode" || mode === "uploadVerify") {
+        const replyError = await read;
+        assert.ok(replyError instanceof SessionError);
+        assert.equal(replyError.failure.category, "interrupted");
+      }
+      if (mode === "replyVerify") {
+        assert.ok(await read instanceof StreamError);
+        assert.equal(decodes, 0, "unverified reply must never be decoded");
+      }
+      if (failedWrite) assert.ok(await failedWrite instanceof StreamError);
+      const ends = frames(socket).filter((f) => f.form === "stream_end");
+      assert.deepEqual(
+        ends.map((f) => [f.stream, f.outcome.kind]),
+        mode === "remote"
+          ? []
+          : mode === "replyVerify" || mode === "cancel"
+          ? [[0, "interrupted"]]
+          : [[1, "interrupted"], [0, "interrupted"]],
+      );
+    } finally {
+      replyPayload.decode = originalDecode;
       session.transport.close();
     }
   }

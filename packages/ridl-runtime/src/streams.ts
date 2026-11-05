@@ -15,6 +15,12 @@ export interface StreamTransport {
     args: Uint8Array,
     opts: StreamOptions,
   ): ReadableStream<Uint8Array>;
+  queryDuplex(
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: StreamOptions,
+  ): { upload: WritableStream<Uint8Array>; stream: ReadableStream<Uint8Array> };
   commandStream(
     iface: number,
     ord: number,

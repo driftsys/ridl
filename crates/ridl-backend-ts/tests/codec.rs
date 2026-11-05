@@ -1235,8 +1235,7 @@ interface Cabin {
 ";
 
 /// Every parameter-stream member gets a table entry and a typed upload function.
-/// Its request holds only the non-stream parameters. A member of the same
-/// interface without a stream keeps its ordinary entry.
+/// A member of the same interface without a stream keeps its ordinary entry.
 #[test]
 fn parameter_stream_members_have_entries_in_the_interface_table() {
     let output = ridlc::compile("stream-parameters.ridl", STREAM_PARAMETERS);
@@ -1793,6 +1792,7 @@ fn stream_reply_exports_match_model() {
             !name.starts_with("encode")
                 && !name.starts_with("decode")
                 && !name.starts_with("Feed_upload")
+                && !name.starts_with("Feed_duplex")
         })
         .collect();
     assert_eq!(
@@ -1907,7 +1907,6 @@ fn stream_names_and_unsupported_shapes_are_explicit() {
     let source = module(&model, "streams.demo");
     for (member, reason) in [
         ("uploadFallible", "inline fallible replies have no codec"),
-        ("duplex", "duplex streams are not generated yet"),
         ("multiple", "multiple parameter streams are not supported"),
     ] {
         assert!(
@@ -2394,6 +2393,103 @@ fn upload_helper_and_function_names_are_checked() {
     let error = refusal(&model);
     assert!(
         error.contains("Feed.uploadNamed") && error.contains("Feed_uploadNamed"),
+        "{error}"
+    );
+}
+
+#[test]
+fn generated_duplex_functions() {
+    let source = module(&streams_model(), "streams.demo");
+    for (member, upload, reply) in [
+        ("duplex", "Uint8Array", "t.Chunk"),
+        ("duplexNamed", "t.Chunk", "t.Chunk"),
+        ("duplexText", "string", "string"),
+        ("duplexBytes", "t.Chunk", "Uint8Array"),
+    ] {
+        let start = source.find(&format!("export function Feed_{member}("));
+        assert!(start.is_some(), "missing duplex function {member}");
+        let body = source[start.unwrap()..].split("\n}\n").next().unwrap();
+        assert!(
+            body.contains(&format!(
+                "upload: WritableStream<{upload}>; stream: ReadableStream<{reply}>"
+            )),
+            "{body}"
+        );
+        assert!(
+            body.contains("session.transport.queryDuplex(entry.iface, entry.ord, args, opts)"),
+            "{body}"
+        );
+        assert!(!body.lines().next().unwrap().contains("values:"), "{body}");
+        if member == "duplexNamed" {
+            assert!(body.contains("{ seed: seed, tail: tail }"), "{body}");
+            assert!(body.contains("encodeUpload(raw.upload"), "{body}");
+            assert!(body.contains("decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes))"), "{body}");
+        }
+    }
+    assert!(!source.contains("duplex streams are not generated yet"));
+    let signature = source.find("export function Feed_duplexNamed(").unwrap();
+    let doc_start = source[..signature].rfind("/**").unwrap();
+    let doc = &source[doc_start..signature];
+    assert!(
+        doc.contains("Exchanges numbered elements for {@link t.Count}."),
+        "{doc}"
+    );
+    assert!(
+        doc.contains("@param seed - The first {@link t.Count}."),
+        "{doc}"
+    );
+
+    // A duplex-only module must discover its reply helper without a reply-only call.
+    let mut model = streams_model();
+    model.interfaces.truncate(1);
+    model.interfaces[0].slots.retain(|slot| {
+        matches!(&slot.occupant,
+        Some(v1::interaction_slot::Occupant::Interaction(i))
+            if i.name.as_ref().is_some_and(|n| n.declared == "duplexNamed"))
+    });
+    let source = module(&model, "streams.demo");
+    assert!(
+        source.contains("StreamError, decodeStream, encodeUpload }"),
+        "{source}"
+    );
+    let v1::interaction::Shape::Query(q) = stream_member_mut(&mut model, "duplexNamed")
+        .shape
+        .as_mut()
+        .unwrap()
+    else {
+        panic!()
+    };
+    q.params[0].name.as_mut().unwrap().declared = "replyElement".into();
+    q.params[2].name.as_mut().unwrap().declared = "replyElementType".into();
+    let source = module(&model, "streams.demo");
+    let signature = source
+        .lines()
+        .find(|l| l.starts_with("export function Feed_duplexNamed("))
+        .unwrap();
+    assert!(
+        signature.contains("replyElement1: t.Count, replyElementType1: t.Count"),
+        "{signature}"
+    );
+    let mut collision = model.interfaces[0].clone();
+    collision.slots.clear();
+    collision.identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+        declared: "decodeStream".into(),
+        ..Default::default()
+    }));
+    model.interfaces.push(collision);
+    let error = refusal(&model);
+    assert!(
+        error.contains("decodeStream") && error.contains("runtime"),
+        "{error}"
+    );
+    model.interfaces.last_mut().unwrap().identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "Feed_duplexNamed".into(),
+            ..Default::default()
+        }));
+    let error = refusal(&model);
+    assert!(
+        error.contains("Feed_duplexNamed") && error.contains("Feed.duplexNamed"),
         "{error}"
     );
 }

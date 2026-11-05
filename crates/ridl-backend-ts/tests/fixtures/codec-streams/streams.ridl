@@ -70,6 +70,19 @@ interface Feed {
   command upload(data: <bytes>) @[..50ms]
   /// Receives and replies concurrently.
   query duplex(data: <bytes>): <Chunk> @[..50ms]
+  /// Exchanges numbered elements for [Count].
+  query duplexNamed(
+    /// The first [Count].
+    seed: Count,
+    /// The numbered values.
+    values: <Chunk>,
+    /// The last [Count].
+    tail: Count
+  ): <Chunk> @[..50ms]
+  /// Exchanges UTF-8 text.
+  query duplexText(values: <string>): <string> @[..50ms]
+  /// Sends numbered elements and receives bytes.
+  query duplexBytes(values: <Chunk>): <bytes> @[..50ms]
   /// Receives two streams.
   command multiple(first: <bytes>, second: <string>) @[..50ms]
   /// Reads the last live streamed member.

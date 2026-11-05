@@ -97,14 +97,14 @@ payload type, for example
 `byteUpload(upload, limit)` splits byte writes into chunks of at most `limit`
 bytes. `textUpload(upload, limit)` encodes strings as UTF-8 and splits only
 between complete code points. It refuses lone JavaScript surrogates instead of
-replacing them. Both adapters preserve empty writes as empty chunks.
+replacing them. Both adapters preserve empty writes as empty chunks when `limit`
+is positive; a zero or negative limit fails as corrupt before an empty chunk can
+be written.
 
 Each typed write waits until every raw write it produces has completed, in
-order. Closing waits for pending writes before closing the raw upload. A named
-element or a single text code point that exceeds the limit fails locally as
-corrupt; an invalid text string fails with the `utf8` rule. Local failures error
-the typed stream and abort the raw upload once. Aborting also reaches a raw
-write waiting for credit.
+order. Closing waits for pending writes before closing the raw upload. Local
+failures use the error categories described below, error the typed stream and
+abort the raw upload once. Aborting also reaches a raw write waiting for credit.
 
 Remote failures preserve the original error object: pending and later writes,
 `writer.closed`, and a close queued before the failure reject with that same
@@ -134,7 +134,6 @@ addition of `utf8` widens the generated rule union and changes the previous
 - `verify` is synchronous and copies the payload into the module memory on each
   call. It frees the copy before it returns, also when the call throws.
 - The package verifies named payloads with wasm; stream adapters use the encoder
-  and decoder supplied by the caller for named stream elements. Raw byte uploads
-  are split at the supplied limit; raw text uses the platform text encoder and
-  decoder with complete code points in each chunk.
+  and decoder supplied by the caller for named stream elements. For raw byte
+  splitting and complete text code points, see the upload adapters above.
 - The package is not yet published.
