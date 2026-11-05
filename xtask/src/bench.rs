@@ -180,16 +180,17 @@ fn push_signals(
     out: &mut Vec<String>,
 ) {
     let Some(owner) = owner else { return };
+    let prefix = if package.is_empty() {
+        String::new()
+    } else {
+        format!("{package}.")
+    };
     for interaction in shape["interactions"].as_array().into_iter().flatten() {
-        if interaction.get("signalDef").is_some() {
-            if let Some(name) = interaction["name"].as_str() {
-                let prefix = if package.is_empty() {
-                    String::new()
-                } else {
-                    format!("{package}.")
-                };
-                out.push(format!("{prefix}{owner}.{name}"));
-            }
+        if interaction.get("signalDef").is_none() {
+            continue;
+        }
+        if let Some(name) = interaction["name"].as_str() {
+            out.push(format!("{prefix}{owner}.{name}"));
         }
     }
 }
