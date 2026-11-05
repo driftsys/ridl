@@ -2493,3 +2493,80 @@ fn generated_duplex_functions() {
         "{error}"
     );
 }
+
+// Mutation: omit interface-table metadata reservations from check_names.
+#[test]
+fn streamed_iface_member_is_refused_as_table_metadata_collision() {
+    let mut model = streams_model();
+    stream_member_mut(&mut model, "readBytes")
+        .name
+        .as_mut()
+        .unwrap()
+        .declared = "iface".into();
+    let message = refusal(&model);
+    assert!(message.contains("Feed.iface"), "{message}");
+    assert!(
+        message.contains("interface-table metadata key `iface`"),
+        "{message}"
+    );
+}
+
+// Mutation: reserve metadata names only for streamed members.
+#[test]
+fn plain_iface_member_is_refused_as_table_metadata_collision() {
+    let output = ridlc::compile(
+        "metadata.ridl",
+        r#"package metadata.demo
+type Count: integer [0..10]
+interface Feed {
+  query iface(): Count @[..50ms]
+}
+"#,
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let message = refusal(&codegen::lower(&output.package, &[]));
+    assert!(message.contains("Feed.iface"), "{message}");
+    assert!(
+        message.contains("interface-table metadata key `iface`"),
+        "{message}"
+    );
+}
+
+// Mutation: treat every public model declaration as an emitted domain export.
+#[test]
+fn stream_docs_do_not_link_to_omitted_bytes_constants() {
+    let output = ridlc::compile(
+        "constant-docs.ridl",
+        r#"package constant.docs
+type Block: bytes [0..10]
+const DEFAULT: Block = "00"
+interface Feed {
+  /// Reads [DEFAULT].
+  query read(): <Block> @[..50ms]
+}
+"#,
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let domain = ridl_backend_ts::generate(&output.package).unwrap().source;
+    assert!(!domain.contains("export const DEFAULT"), "{domain}");
+    let source = module(&codegen::lower(&output.package, &[]), "constant.docs");
+    let signature = source.find("export function Feed_read(").unwrap();
+    let start = source[..signature].rfind("/**").unwrap();
+    let doc = &source[start..signature];
+    assert!(doc.contains("Reads `constant.docs.DEFAULT`."), "{doc}");
+    assert!(!doc.contains("{@link t.DEFAULT}"), "{doc}");
+}

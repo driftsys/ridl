@@ -543,7 +543,25 @@ impl<'a> Codec<'a> {
         for interface in &self.model.interfaces {
             if let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity {
                 register(spelled.declared.clone(), spelled.declared.clone())?;
+                register(
+                    format!("{}.iface", spelled.declared),
+                    format!("{} interface-table metadata key `iface`", spelled.declared),
+                )?;
                 for slot in &interface.slots {
+                    if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                        &slot.occupant
+                        && (interaction.streams.is_empty()
+                            || self
+                                .stream_calls
+                                .contains_key(&(interface.number, slot.ordinal)))
+                    {
+                        let member = interaction
+                            .name
+                            .as_ref()
+                            .map_or("", |n| n.declared.as_str());
+                        let path = format!("{}.{member}", spelled.declared);
+                        register(path.clone(), path)?;
+                    }
                     if let Some(stream) = self.stream_calls.get(&(interface.number, slot.ordinal)) {
                         let member = stream
                             .interaction
@@ -2299,7 +2317,11 @@ impl<'a> Codec<'a> {
                 .model
                 .declarations
                 .iter()
-                .filter(|d| self.has_domain_types() && d.visibility() != v1::Visibility::Internal)
+                .filter(|d| {
+                    self.has_domain_types()
+                        && d.visibility() != v1::Visibility::Internal
+                        && crate::foreign_module_emits(self.model, self.package, d)
+                })
                 .map(|d| declared_name(d).to_string())
                 .collect(),
         };
