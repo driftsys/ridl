@@ -265,6 +265,12 @@ The rename entry is the one that differs from protobuf's own guidance, which
 reasons about the binary wire format where a rename is invisible. The canonical
 encoding is the contract here, and in it a rename is visible.
 
+One rename was made in place, against this rule: `ridl.codegen.v1` renamed
+`PodbufForm.descriptor` to `tail_descriptor` (driftsys/ridl#1254), because
+protoc's Java output for a field named `descriptor` does not compile. The JSON
+key changed from `descriptor` to `tailDescriptor`; the field number did not
+change.
+
 ## 7. Versioning
 
 A breaking change is a new schema package, never an edit to the old one.
