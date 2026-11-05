@@ -69,10 +69,12 @@ framing. It changes no codec.
   includes the cost of the sleep and of the wake-up of the thread. The tables
   give it next to the derived figure and their difference. The derived figure is
   the headline because the paced one is not stable and is far from the derived
-  one: in the host tables the paced figure ranges from 0.6 % to 3.8 % for signal
-  payloads whose derived load is below 0.02 %, so the update is a small part of
-  what the paced run measures. A paced run cannot be split between the three
-  encodings, so the paced runs are one cell after the other, not interleaved.
+  one: the paced figure of the signal payloads ranges from 0.68 % to 5.90 % in
+  the host tables, from 8.9 % to 11.8 % on the Pixel 5 A55 core and from 1.9 %
+  to 4.2 % on the A76 core, where the derived load is at most 0.0146 %, 0.180 %
+  and 0.064 %, so the update is a small part of what the paced run measures. A
+  paced run cannot be split between the three encodings, so the paced runs are
+  one cell after the other, not interleaved.
 - **Pinning.** On the Pixel 5, `taskset` pins the run to one Cortex-A55 core
   (cpu2) and, in a second run, to one Cortex-A76 core (cpu6). The harness does
   not pin itself. The governor is `schedutil` and the phone is not rooted, so
@@ -137,10 +139,13 @@ None of the three applies a length check in `verify` (ADR-0030 decision 19).
 - **Time per operation** is the CPU time of encode, of verify or of decode
   alone, on a warm cache with the same value every time. The decode of a small
   scalar payload takes 0.5 ns to 7 ns on the host, and the podbuf decode of the
-  cheapest payloads takes 7.2 ns on the A55 core and 2.0 ns on the A76 core. It
-  includes a few ns of harness cost (the `black_box` calls, the copy of the
-  proof and the return of the value), so a decode time below about 10 ns is an
-  upper bound and is not comparable between encodings.
+  cheapest payloads takes 7.2 ns on the A55 core and 2.0 ns on the A76 core. Any
+  per-operation figure includes some harness cost (the `black_box` calls around
+  the input and the result, and for decode the copy of the proof), so a figure
+  below about 10 ns is an upper bound and is not comparable between encodings.
+  The limit of 10 ns was established for decode, where the copy of the proof
+  adds to the cost; the harness cost of encode and verify was not measured
+  separately.
 - **Time per update** is the sum of the three operation medians, on a warm cache
   with the same value every time. It does not show the cost of a cold cache, of
   branch mispredictions on varying data, or of a value that changes between
@@ -148,11 +153,11 @@ None of the three applies a length check in `verify` (ADR-0030 decision 19).
 - **CPU load at 4 000 updates per second (derived)** is the time per update
   scaled to the rate. It shows the codec's share of a core. It does not include
   the transport, the application, the scheduler or the timer.
-- **Paced load** shows what a program that waits between updates measures; in
-  the host tables it varies from 0.6 % to 3.8 % for payloads whose derived load
-  is below 0.02 %, so it is dominated by something other than the codec (the
-  cost of the timer and of the wake-up on an unpinned machine is the likely
-  cause; it is not a measurement).
+- **Paced load** shows what a program that waits between updates measures; for
+  the signal payloads it varies from 0.68 % to 5.90 % in the host tables, where
+  the derived load is at most 0.0146 %, so it is dominated by something other
+  than the codec (the cost of the timer and of the wake-up on an unpinned
+  machine is the likely cause; it is not a measurement).
 - **Ratios** divide each encoding by podbuf. A ratio above 1.00 means the
   encoding is larger or slower than podbuf on that payload. A ratio per
   operation divides by the podbuf time of the same operation. A ratio is
@@ -264,7 +269,8 @@ last column gives how many.
 Equal-weight mix, per signal: each signal counts once, so a payload type that
 several signals share counts once for each of them. Only signals whose three
 encodings are measured are counted; the last column gives how many. The rows are
-per operation.
+per operation. A time under about 10 ns includes harness cost and is an upper
+bound, so a ratio whose podbuf time is under 10 ns is not comparable.
 
 | Metric                                                         | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
 | -------------------------------------------------------------- | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
@@ -281,7 +287,9 @@ per operation.
 Equal-weight mix, per payload type: each payload type counts once, however many
 signals share it (the value of a type is the mean over its signals). Only
 payload types whose signals are measured in all three encodings are counted; the
-last column gives how many. The rows are per operation.
+last column gives how many. The rows are per operation. A time under about 10 ns
+includes harness cost and is an upper bound, so a ratio whose podbuf time is
+under 10 ns is not comparable.
 
 | Metric                                                         | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
 | -------------------------------------------------------------- | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
@@ -563,7 +571,8 @@ an encoding add up to its derived load of one update.
 Time of each operation of each encoding divided by the time of the same
 operation in podbuf: above 1.00 the encoding is slower than podbuf in that
 operation, below 1.00 faster. A refused or not-built cell has no ratio and is
-marked.
+marked. A time under about 10 ns includes harness cost and is an upper bound, so
+a ratio whose podbuf time is under 10 ns is not comparable.
 
 | Payload                                 | Encode: FlatBuffers / podbuf | Encode: proto3 / podbuf | Verify: FlatBuffers / podbuf | Verify: proto3 / podbuf | Decode: FlatBuffers / podbuf | Decode: proto3 / podbuf |
 | --------------------------------------- | ---------------------------- | ----------------------- | ---------------------------- | ----------------------- | ---------------------------- | ----------------------- |
@@ -731,18 +740,20 @@ refused. The commands were `just bench-pixel`, then `cargo xtask bench report`.
 
 ### What the split into operations shows, and what it does not
 
-The numbers are those of the per-operation tables below; "median signal" is
-`veh.cluster.VehicleStatus.currentSpeed`, and "over the signals" is the median
-over the 15 signals of each signal's median.
+The numbers are those of the per-operation tables below.
+`veh.cluster.VehicleStatus.currentSpeed` is used as an example signal: a figure
+given for `currentSpeed` is that payload's own value, not a statistic. A figure
+given "over the signals" is the median over the 15 signals of each signal's
+median.
 
-- **Where the time goes.** On the A55 core the median signal costs 441.1 ns per
+- **Where the time goes.** On the A55 core `currentSpeed` costs 441.1 ns per
   update for FlatBuffers (encode 180.5, verify 220.2, decode 40.5 ns), 376.5 ns
   for proto3 (76.0, 236.2, 64.3) and 333.5 ns for podbuf (75.7, 220.7, 37.2).
   Verify is the largest share for proto3 (63 %) and podbuf (66 %) and 50 % for
-  FlatBuffers. On the A76 core the median signal costs 160.9 ns for FlatBuffers
+  FlatBuffers. On the A76 core `currentSpeed` costs 160.9 ns for FlatBuffers
   (81.2, 65.4, 14.3), 117.3 ns for proto3 (26.4, 66.8, 24.0) and 106.2 ns for
   podbuf (29.0, 63.8, 13.3); there verify is the largest share for proto3 (57 %)
-  and podbuf (60 %), and encode is the largest for FlatBuffers (51 %).
+  and podbuf (60 %), and encode is the largest operation for FlatBuffers (50 %).
 - **Verify.** Over the signals, verify takes 220.2 ns (FlatBuffers), 236.2 ns
   (proto3) and 220.7 ns (podbuf) on the A55 core, and 65.4, 66.8 and 63.8 ns on
   the A76 core. The verify time of one encoding varies a lot between payloads:
@@ -806,7 +817,8 @@ last column gives how many.
 Equal-weight mix, per signal: each signal counts once, so a payload type that
 several signals share counts once for each of them. Only signals whose three
 encodings are measured are counted; the last column gives how many. The rows are
-per operation.
+per operation. A time under about 10 ns includes harness cost and is an upper
+bound, so a ratio whose podbuf time is under 10 ns is not comparable.
 
 | Metric                                                         | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
 | -------------------------------------------------------------- | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
@@ -823,7 +835,9 @@ per operation.
 Equal-weight mix, per payload type: each payload type counts once, however many
 signals share it (the value of a type is the mean over its signals). Only
 payload types whose signals are measured in all three encodings are counted; the
-last column gives how many. The rows are per operation.
+last column gives how many. The rows are per operation. A time under about 10 ns
+includes harness cost and is an upper bound, so a ratio whose podbuf time is
+under 10 ns is not comparable.
 
 | Metric                                                         | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
 | -------------------------------------------------------------- | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
@@ -1105,7 +1119,8 @@ an encoding add up to its derived load of one update.
 Time of each operation of each encoding divided by the time of the same
 operation in podbuf: above 1.00 the encoding is slower than podbuf in that
 operation, below 1.00 faster. A refused or not-built cell has no ratio and is
-marked.
+marked. A time under about 10 ns includes harness cost and is an upper bound, so
+a ratio whose podbuf time is under 10 ns is not comparable.
 
 | Payload                                 | Encode: FlatBuffers / podbuf | Encode: proto3 / podbuf | Verify: FlatBuffers / podbuf | Verify: proto3 / podbuf | Decode: FlatBuffers / podbuf | Decode: proto3 / podbuf |
 | --------------------------------------- | ---------------------------- | ----------------------- | ---------------------------- | ----------------------- | ---------------------------- | ----------------------- |
@@ -1239,7 +1254,8 @@ last column gives how many.
 Equal-weight mix, per signal: each signal counts once, so a payload type that
 several signals share counts once for each of them. Only signals whose three
 encodings are measured are counted; the last column gives how many. The rows are
-per operation.
+per operation. A time under about 10 ns includes harness cost and is an upper
+bound, so a ratio whose podbuf time is under 10 ns is not comparable.
 
 | Metric                                                         | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
 | -------------------------------------------------------------- | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
@@ -1256,7 +1272,9 @@ per operation.
 Equal-weight mix, per payload type: each payload type counts once, however many
 signals share it (the value of a type is the mean over its signals). Only
 payload types whose signals are measured in all three encodings are counted; the
-last column gives how many. The rows are per operation.
+last column gives how many. The rows are per operation. A time under about 10 ns
+includes harness cost and is an upper bound, so a ratio whose podbuf time is
+under 10 ns is not comparable.
 
 | Metric                                                         | FlatBuffers | proto3 | podbuf | FlatBuffers / podbuf | proto3 / podbuf | Units |
 | -------------------------------------------------------------- | ----------- | ------ | ------ | -------------------- | --------------- | ----- |
@@ -1538,7 +1556,8 @@ an encoding add up to its derived load of one update.
 Time of each operation of each encoding divided by the time of the same
 operation in podbuf: above 1.00 the encoding is slower than podbuf in that
 operation, below 1.00 faster. A refused or not-built cell has no ratio and is
-marked.
+marked. A time under about 10 ns includes harness cost and is an upper bound, so
+a ratio whose podbuf time is under 10 ns is not comparable.
 
 | Payload                                 | Encode: FlatBuffers / podbuf | Encode: proto3 / podbuf | Verify: FlatBuffers / podbuf | Verify: proto3 / podbuf | Decode: FlatBuffers / podbuf | Decode: proto3 / podbuf |
 | --------------------------------------- | ---------------------------- | ----------------------- | ---------------------------- | ----------------------- | ---------------------------- | ----------------------- |
