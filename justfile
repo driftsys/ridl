@@ -3034,6 +3034,10 @@ _cabin-web-generate name:
 # crates/ridl-backend-ts/tests/fixtures/codec-strict, whose strict enums and
 # strict enum sets refuse one with the `variant` rule. `cabin-ws-demo` runs it
 # once, after `_cabin-web-generate` has checked the `flatc` and `deno` versions.
+# The codec-streams fixture checks named reply element verification, raw bytes,
+# UTF-8 text decoding, request verification for every form, and table-name
+# collisions with stream locals. Its raw-only module checks an induced request
+# without a domain namespace import.
 [private]
 _codec-ts-check:
     #!/usr/bin/env bash
@@ -3084,7 +3088,8 @@ _codec-ts-check:
     deno lint --config "$strict/deno.json" "$strict/strict.demo.codec.ts"
     deno check --config "$strict/deno.json" "$strict/strict.demo.codec.ts" "$strict/strict.demo.ts"
     deno test --config "$strict/deno.json" "$strict/strict_test.ts"
-    # The fifth fixture: verified named, byte and text reply streams.
+    # The fifth fixture: verified named elements, raw bytes and UTF-8 text
+    # replies, with request verification for all three forms.
     streams="$tmp/streams"
     mkdir -p "$streams"
     "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-streams --emit typescript --emit flatbuffers --out-dir "$streams"

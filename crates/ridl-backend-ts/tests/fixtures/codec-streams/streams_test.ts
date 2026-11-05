@@ -253,3 +253,34 @@ Deno.test("request_failures_send_no_request", () => {
     (error: unknown) => error === sentinel,
   );
 });
+
+// Mutation: access a bare table name inside the generated function body.
+Deno.test("stream_table_names_do_not_shadow_captured_entries", async () => {
+  for (
+    const name of [
+      "session",
+      "opts",
+      "entry",
+      "args",
+      "raw",
+      "element",
+      "requestType",
+      "elementType",
+      "streamEntry",
+      "streamEntry1",
+    ]
+  ) {
+    const h = harness([]);
+    let result: ReadableStream<unknown> | undefined;
+    assert.doesNotThrow(() => {
+      result = generated(`${name}_fetch`)(h.session, 7, 8, { bound: 50 });
+    }, name);
+    if (name !== "element" && name !== "elementType") {
+      assert.strictEqual(result, h.raw, name);
+    }
+    assert.deepEqual(await collect(result!), [], name);
+    const table = (codec as unknown as Record<string, { iface: number }>)[name];
+    assert.equal(h.calls[0].iface, table.iface, name);
+    assert.equal(h.calls[0].ord, 1, name);
+  }
+});

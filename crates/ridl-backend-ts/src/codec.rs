@@ -140,6 +140,7 @@ struct ReplyStream<'a> {
     element: Option<String>,
     element_type: String,
     form: &'static str,
+    entry_binding: String,
     bindings: Vec<String>,
     param_types: Vec<String>,
 }
@@ -319,7 +320,17 @@ impl<'a> Codec<'a> {
                 codec.roles(interaction, &spelled.declared, member)?;
             }
         }
-        codec.check_names()?;
+        let mut names = codec.check_names()?;
+        for stream in codec.reply_streams.values_mut() {
+            let mut binding = "streamEntry".to_string();
+            let mut suffix = 1;
+            while !names.insert(binding.clone()) {
+                binding = format!("streamEntry{suffix}");
+                suffix += 1;
+            }
+            stream.bindings = stream_bindings(&stream.query.params, &binding);
+            stream.entry_binding = binding;
+        }
         Ok(codec)
     }
 
@@ -352,7 +363,7 @@ impl<'a> Codec<'a> {
     /// module) taken by an interface or an induced tuple, and two
     /// `codec<Name>` constants that spell the same. Each name is registered
     /// with the declaration it stands for, and the second one is refused.
-    fn check_names(&self) -> Result<(), GenerateError> {
+    fn check_names(&self) -> Result<BTreeSet<String>, GenerateError> {
         let mut names: BTreeMap<String, String> = BTreeMap::new();
         let mut register = |identifier: String, label: String| -> Result<(), GenerateError> {
             match names.get(&identifier) {
@@ -509,7 +520,7 @@ impl<'a> Codec<'a> {
                 }
             }
         }
-        Ok(())
+        Ok(names.into_keys().collect())
     }
 
     /// Whether a converter of the module throws a `RuleError`: some enum or
@@ -1230,9 +1241,8 @@ impl<'a> Codec<'a> {
         if local {
             out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
         }
-        // The one import from the runtime package, written only when a
-        // `codec<Name>` constant uses it, so that `deno lint` reads nothing
-        // unused in a module with no interface.
+        // Import the payload codec type only when a `codec<Name>` constant
+        // uses it, so that modules without one have no unused type import.
         if !self.used_locals.is_empty() || !self.foreign_payloads.is_empty() {
             out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
         }
@@ -1997,7 +2007,8 @@ impl<'a> Codec<'a> {
                 element: element.map(|e| e.expect("bounded element")),
                 element_type,
                 form,
-                bindings: stream_bindings(&query.params, name),
+                entry_binding: String::new(),
+                bindings: Vec::new(),
                 param_types,
             },
         );
@@ -2032,6 +2043,8 @@ impl<'a> Codec<'a> {
         signature.extend(params);
         signature.push("opts: StreamOptions".to_string());
         out.push('\n');
+        let entry_binding = &stream.entry_binding;
+        let _ = writeln!(out, "const {entry_binding} = {name}.{member};\n");
         out.push_str(&self.stream_docs(stream));
         let _ = writeln!(
             out,
@@ -2039,7 +2052,7 @@ impl<'a> Codec<'a> {
             signature.join(", "),
             stream.element_type
         );
-        let _ = writeln!(out, "  const entry = {name}.{member};");
+        let _ = writeln!(out, "  const entry = {entry_binding};");
         let limit = if stream.interaction.limit.is_some() {
             "entry.limit"
         } else {
@@ -2119,8 +2132,20 @@ impl<'a> Codec<'a> {
         // Local domain types live in the imported namespace of a codec module.
         for declaration in &self.model.declarations {
             let name = declared_name(declaration);
-            doc = doc.replace(&format!("{{@link {name}}}"), &format!("{{@link t.{name}}}"));
-            doc = doc.replace(&format!("{{@link {name}."), &format!("{{@link t.{name}."));
+            let mut spellings = vec![name.to_string()];
+            if matches!(declaration.kind, Some(v1::declaration::Kind::EnumSet(_))) {
+                spellings.push(format!("{name}Bits"));
+            }
+            for spelling in spellings {
+                doc = doc.replace(
+                    &format!("{{@link {spelling}}}"),
+                    &format!("{{@link t.{spelling}}}"),
+                );
+                doc = doc.replace(
+                    &format!("{{@link {spelling}."),
+                    &format!("{{@link t.{spelling}."),
+                );
+            }
         }
         doc
     }
@@ -2384,7 +2409,7 @@ impl<'a> Codec<'a> {
 }
 
 /// Allocates local bindings without shadowing generated locals or helper imports.
-fn stream_bindings(params: &[v1::Param], interface: &str) -> Vec<String> {
+fn stream_bindings(params: &[v1::Param], entry_binding: &str) -> Vec<String> {
     let reserved = [
         "session",
         "opts",
@@ -2451,7 +2476,7 @@ fn stream_bindings(params: &[v1::Param], interface: &str) -> Vec<String> {
         "with",
     ];
     let mut occupied: HashSet<String> = reserved.into_iter().map(str::to_string).collect();
-    occupied.insert(interface.to_string());
+    occupied.insert(entry_binding.to_string());
     let declared: HashSet<&str> = params
         .iter()
         .filter_map(|p| p.name.as_ref())

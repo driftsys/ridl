@@ -24,13 +24,17 @@ export class RuleError extends RangeError {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "streams.demo";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([86, 34, 78, 114, 55, 240, 150, 35, 158, 50, 119, 109, 104, 190, 39, 84, 88, 98, 245, 107, 103, 10, 161, 71, 113, 155, 134, 116, 187, 144, 198, 56]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([120, 148, 68, 121, 97, 213, 63, 18, 30, 92, 226, 185, 230, 52, 67, 85, 237, 242, 44, 26, 55, 182, 3, 155, 160, 142, 17, 61, 190, 98, 211, 68]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
+  "streams.demo.ArgsFetchParams",
   "streams.demo.Choice",
   "streams.demo.Chunk",
   "streams.demo.Count",
   "streams.demo.Data",
+  "streams.demo.ElementFetchParams",
+  "streams.demo.ElementTypeFetchParams",
+  "streams.demo.EntryFetchParams",
   "streams.demo.FeedDataParams",
   "streams.demo.FeedDuplexParams",
   "streams.demo.FeedFetchParams",
@@ -43,8 +47,16 @@ export const PAYLOAD_TYPES = [
   "streams.demo.FeedUnionsParams",
   "streams.demo.FeedUploadParams",
   "streams.demo.FeedZeroParams",
+  "streams.demo.Flags",
+  "streams.demo.OptsFetchParams",
   "streams.demo.OtherFetchParams",
+  "streams.demo.Permission",
+  "streams.demo.RawFetchParams",
+  "streams.demo.RequestTypeFetchParams",
+  "streams.demo.SessionFetchParams",
   "streams.demo.Status",
+  "streams.demo.StreamEntry1FetchParams",
+  "streams.demo.StreamEntryFetchParams",
   "streams.demo.Text",
 ] as const;
 /** The text of each rule code the wasm module reports, rule code n at index n - 2. */
@@ -92,6 +104,66 @@ export type FeedFetchParams = Record<string, never>;
 
 /** The induced tuple of `Other.fetch`. */
 export type OtherFetchParams = Record<string, never>;
+
+/** The induced tuple of `session.fetch`. */
+export interface SessionFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `opts.fetch`. */
+export interface OptsFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `entry.fetch`. */
+export interface EntryFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `args.fetch`. */
+export interface ArgsFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `raw.fetch`. */
+export interface RawFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `element.fetch`. */
+export interface ElementFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `requestType.fetch`. */
+export interface RequestTypeFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `elementType.fetch`. */
+export interface ElementTypeFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `streamEntry.fetch`. */
+export interface StreamEntryFetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
+
+/** The induced tuple of `streamEntry1.fetch`. */
+export interface StreamEntry1FetchParams {
+  streamEntry13: t.Count;
+  streamEntry14: t.Count;
+}
 
 /** Encodes a `streams.demo.Count` payload. */
 export function encodeCount(value: t.Count): Uint8Array {
@@ -205,6 +277,43 @@ function unpackStatus(raw: bigint | null): t.StatusValue {
   return ([0, 1] as readonly number[]).includes(n)
     ? n as t.Status
     : { unknown: n };
+}
+
+/** Encodes a `streams.demo.Permission` payload. */
+export function encodePermission(value: t.Permission): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.PermissionBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Permission` payload the codec has verified. */
+export function decodePermission(bytes: Uint8Array): t.Permission {
+  return unpackPermission(fb.PermissionBox.getRootAsPermissionBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackPermission(raw: number | bigint): t.Permission {
+  const n = Number(raw);
+  if (!([0] as readonly number[]).includes(n)) {
+    throw new RuleError("variant", `value ${raw} is not a value of streams.demo.Permission`);
+  }
+  return n as t.Permission;
+}
+
+/** Encodes a `streams.demo.Flags` payload. */
+export function encodeFlags(value: t.Flags): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.FlagsBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.Flags` payload the codec has verified. */
+export function decodeFlags(bytes: Uint8Array): t.Flags {
+  return unpackFlags(fb.FlagsBox.getRootAsFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+function unpackFlags(value: number): t.Flags {
+  if ((value & ~1) !== 0) {
+    throw new RuleError("variant", `value ${value} has a bit that streams.demo.Flags does not declare`);
+  }
+  return value as t.Flags;
 }
 
 /** Encodes a `streams.demo.FeedScalarsParams` payload. */
@@ -457,6 +566,216 @@ function unpackOtherFetchParams(_object: fb.OtherFetchParamsT): OtherFetchParams
   return {};
 }
 
+/** Encodes a `streams.demo.SessionFetchParams` payload. */
+export function encodeSessionFetchParams(value: SessionFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSessionFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.SessionFetchParams` payload the codec has verified. */
+export function decodeSessionFetchParams(bytes: Uint8Array): SessionFetchParams {
+  return unpackSessionFetchParams(fb.SessionFetchParams.getRootAsSessionFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSessionFetchParams(value: SessionFetchParams): fb.SessionFetchParamsT {
+  const tuple = new fb.SessionFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackSessionFetchParams(object: fb.SessionFetchParamsT): SessionFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.OptsFetchParams` payload. */
+export function encodeOptsFetchParams(value: OptsFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packOptsFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.OptsFetchParams` payload the codec has verified. */
+export function decodeOptsFetchParams(bytes: Uint8Array): OptsFetchParams {
+  return unpackOptsFetchParams(fb.OptsFetchParams.getRootAsOptsFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packOptsFetchParams(value: OptsFetchParams): fb.OptsFetchParamsT {
+  const tuple = new fb.OptsFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackOptsFetchParams(object: fb.OptsFetchParamsT): OptsFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.EntryFetchParams` payload. */
+export function encodeEntryFetchParams(value: EntryFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packEntryFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.EntryFetchParams` payload the codec has verified. */
+export function decodeEntryFetchParams(bytes: Uint8Array): EntryFetchParams {
+  return unpackEntryFetchParams(fb.EntryFetchParams.getRootAsEntryFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packEntryFetchParams(value: EntryFetchParams): fb.EntryFetchParamsT {
+  const tuple = new fb.EntryFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackEntryFetchParams(object: fb.EntryFetchParamsT): EntryFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.ArgsFetchParams` payload. */
+export function encodeArgsFetchParams(value: ArgsFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packArgsFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.ArgsFetchParams` payload the codec has verified. */
+export function decodeArgsFetchParams(bytes: Uint8Array): ArgsFetchParams {
+  return unpackArgsFetchParams(fb.ArgsFetchParams.getRootAsArgsFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packArgsFetchParams(value: ArgsFetchParams): fb.ArgsFetchParamsT {
+  const tuple = new fb.ArgsFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackArgsFetchParams(object: fb.ArgsFetchParamsT): ArgsFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.RawFetchParams` payload. */
+export function encodeRawFetchParams(value: RawFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packRawFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.RawFetchParams` payload the codec has verified. */
+export function decodeRawFetchParams(bytes: Uint8Array): RawFetchParams {
+  return unpackRawFetchParams(fb.RawFetchParams.getRootAsRawFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packRawFetchParams(value: RawFetchParams): fb.RawFetchParamsT {
+  const tuple = new fb.RawFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackRawFetchParams(object: fb.RawFetchParamsT): RawFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.ElementFetchParams` payload. */
+export function encodeElementFetchParams(value: ElementFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packElementFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.ElementFetchParams` payload the codec has verified. */
+export function decodeElementFetchParams(bytes: Uint8Array): ElementFetchParams {
+  return unpackElementFetchParams(fb.ElementFetchParams.getRootAsElementFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packElementFetchParams(value: ElementFetchParams): fb.ElementFetchParamsT {
+  const tuple = new fb.ElementFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackElementFetchParams(object: fb.ElementFetchParamsT): ElementFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.RequestTypeFetchParams` payload. */
+export function encodeRequestTypeFetchParams(value: RequestTypeFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packRequestTypeFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.RequestTypeFetchParams` payload the codec has verified. */
+export function decodeRequestTypeFetchParams(bytes: Uint8Array): RequestTypeFetchParams {
+  return unpackRequestTypeFetchParams(fb.RequestTypeFetchParams.getRootAsRequestTypeFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packRequestTypeFetchParams(value: RequestTypeFetchParams): fb.RequestTypeFetchParamsT {
+  const tuple = new fb.RequestTypeFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackRequestTypeFetchParams(object: fb.RequestTypeFetchParamsT): RequestTypeFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.ElementTypeFetchParams` payload. */
+export function encodeElementTypeFetchParams(value: ElementTypeFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packElementTypeFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.ElementTypeFetchParams` payload the codec has verified. */
+export function decodeElementTypeFetchParams(bytes: Uint8Array): ElementTypeFetchParams {
+  return unpackElementTypeFetchParams(fb.ElementTypeFetchParams.getRootAsElementTypeFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packElementTypeFetchParams(value: ElementTypeFetchParams): fb.ElementTypeFetchParamsT {
+  const tuple = new fb.ElementTypeFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackElementTypeFetchParams(object: fb.ElementTypeFetchParamsT): ElementTypeFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.StreamEntryFetchParams` payload. */
+export function encodeStreamEntryFetchParams(value: StreamEntryFetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packStreamEntryFetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.StreamEntryFetchParams` payload the codec has verified. */
+export function decodeStreamEntryFetchParams(bytes: Uint8Array): StreamEntryFetchParams {
+  return unpackStreamEntryFetchParams(fb.StreamEntryFetchParams.getRootAsStreamEntryFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packStreamEntryFetchParams(value: StreamEntryFetchParams): fb.StreamEntryFetchParamsT {
+  const tuple = new fb.StreamEntryFetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackStreamEntryFetchParams(object: fb.StreamEntryFetchParamsT): StreamEntryFetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
+/** Encodes a `streams.demo.StreamEntry1FetchParams` payload. */
+export function encodeStreamEntry1FetchParams(value: StreamEntry1FetchParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packStreamEntry1FetchParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.StreamEntry1FetchParams` payload the codec has verified. */
+export function decodeStreamEntry1FetchParams(bytes: Uint8Array): StreamEntry1FetchParams {
+  return unpackStreamEntry1FetchParams(fb.StreamEntry1FetchParams.getRootAsStreamEntry1FetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packStreamEntry1FetchParams(value: StreamEntry1FetchParams): fb.StreamEntry1FetchParamsT {
+  const tuple = new fb.StreamEntry1FetchParamsT();
+  tuple.field1 = value.streamEntry13;
+  tuple.field2 = value.streamEntry14;
+  return tuple;
+}
+function unpackStreamEntry1FetchParams(object: fb.StreamEntry1FetchParamsT): StreamEntry1FetchParams {
+  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+}
+
 const codecCount: PayloadCodec<t.Count> = { type: "streams.demo.Count", encode: encodeCount, decode: decodeCount };
 const codecData: PayloadCodec<t.Data> = { type: "streams.demo.Data", encode: encodeData, decode: decodeData };
 const codecText: PayloadCodec<t.Text> = { type: "streams.demo.Text", encode: encodeText, decode: decodeText };
@@ -473,6 +792,16 @@ const codecFeedZeroParams: PayloadCodec<FeedZeroParams> = { type: "streams.demo.
 const codecFeedLatestParams: PayloadCodec<FeedLatestParams> = { type: "streams.demo.FeedLatestParams", encode: encodeFeedLatestParams, decode: decodeFeedLatestParams };
 const codecFeedFetchParams: PayloadCodec<FeedFetchParams> = { type: "streams.demo.FeedFetchParams", encode: encodeFeedFetchParams, decode: decodeFeedFetchParams };
 const codecOtherFetchParams: PayloadCodec<OtherFetchParams> = { type: "streams.demo.OtherFetchParams", encode: encodeOtherFetchParams, decode: decodeOtherFetchParams };
+const codecSessionFetchParams: PayloadCodec<SessionFetchParams> = { type: "streams.demo.SessionFetchParams", encode: encodeSessionFetchParams, decode: decodeSessionFetchParams };
+const codecOptsFetchParams: PayloadCodec<OptsFetchParams> = { type: "streams.demo.OptsFetchParams", encode: encodeOptsFetchParams, decode: decodeOptsFetchParams };
+const codecEntryFetchParams: PayloadCodec<EntryFetchParams> = { type: "streams.demo.EntryFetchParams", encode: encodeEntryFetchParams, decode: decodeEntryFetchParams };
+const codecArgsFetchParams: PayloadCodec<ArgsFetchParams> = { type: "streams.demo.ArgsFetchParams", encode: encodeArgsFetchParams, decode: decodeArgsFetchParams };
+const codecRawFetchParams: PayloadCodec<RawFetchParams> = { type: "streams.demo.RawFetchParams", encode: encodeRawFetchParams, decode: decodeRawFetchParams };
+const codecElementFetchParams: PayloadCodec<ElementFetchParams> = { type: "streams.demo.ElementFetchParams", encode: encodeElementFetchParams, decode: decodeElementFetchParams };
+const codecRequestTypeFetchParams: PayloadCodec<RequestTypeFetchParams> = { type: "streams.demo.RequestTypeFetchParams", encode: encodeRequestTypeFetchParams, decode: decodeRequestTypeFetchParams };
+const codecElementTypeFetchParams: PayloadCodec<ElementTypeFetchParams> = { type: "streams.demo.ElementTypeFetchParams", encode: encodeElementTypeFetchParams, decode: decodeElementTypeFetchParams };
+const codecStreamEntryFetchParams: PayloadCodec<StreamEntryFetchParams> = { type: "streams.demo.StreamEntryFetchParams", encode: encodeStreamEntryFetchParams, decode: decodeStreamEntryFetchParams };
+const codecStreamEntry1FetchParams: PayloadCodec<StreamEntry1FetchParams> = { type: "streams.demo.StreamEntry1FetchParams", encode: encodeStreamEntry1FetchParams, decode: decodeStreamEntry1FetchParams };
 
 function checkStreamSession(session: StreamSession, limit: number | undefined): void {
   const hash = session.codec.catalogHash;
@@ -526,6 +855,8 @@ export const Feed = {
   fetch: { iface: 1, ord: 15, kind: "query", request: codecFeedFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
+const streamEntry2 = Feed.scalars;
+
 /**
  * Reads sequence numbers.
  *
@@ -534,7 +865,7 @@ export const Feed = {
  * - response within 50000 us
  */
 export function Feed_scalars(session: StreamSession, opts: StreamOptions): ReadableStream<t.Count> {
-  const entry = Feed.scalars;
+  const entry = streamEntry2;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -543,6 +874,8 @@ export function Feed_scalars(session: StreamSession, opts: StreamOptions): Reada
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
+
+const streamEntry3 = Feed.structs;
 
 /**
  * Reads numbered elements for {@link t.Count}.
@@ -556,7 +889,7 @@ export function Feed_scalars(session: StreamSession, opts: StreamOptions): Reada
  * @deprecated Use scalars.
  */
 export function Feed_structs(session: StreamSession, seed: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
-  const entry = Feed.structs;
+  const entry = streamEntry3;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -565,6 +898,8 @@ export function Feed_structs(session: StreamSession, seed: t.Count, opts: Stream
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
+
+const streamEntry4 = Feed.unions;
 
 /**
  * Reads results with parameter names also used by generated bindings.
@@ -578,7 +913,7 @@ export function Feed_structs(session: StreamSession, seed: t.Count, opts: Stream
  * @param opts1 - A selection.
  */
 export function Feed_unions(session: StreamSession, session2: t.Count, session1: t.Count, opts1: t.Count, opts: StreamOptions): ReadableStream<t.Choice> {
-  const entry = Feed.unions;
+  const entry = streamEntry4;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -588,6 +923,8 @@ export function Feed_unions(session: StreamSession, session2: t.Count, session1:
   return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
+const streamEntry5 = Feed.statuses;
+
 /**
  * Reads statuses.
  *
@@ -596,7 +933,7 @@ export function Feed_unions(session: StreamSession, session2: t.Count, session1:
  * - response within 50000 us
  */
 export function Feed_statuses(session: StreamSession, opts: StreamOptions): ReadableStream<t.StatusValue> {
-  const entry = Feed.statuses;
+  const entry = streamEntry5;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -605,6 +942,8 @@ export function Feed_statuses(session: StreamSession, opts: StreamOptions): Read
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
+
+const streamEntry6 = Feed.data;
 
 /**
  * Reads bounded byte elements.
@@ -614,7 +953,7 @@ export function Feed_statuses(session: StreamSession, opts: StreamOptions): Read
  * - response within 50000 us
  */
 export function Feed_data(session: StreamSession, opts: StreamOptions): ReadableStream<t.Data> {
-  const entry = Feed.data;
+  const entry = streamEntry6;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -623,6 +962,8 @@ export function Feed_data(session: StreamSession, opts: StreamOptions): Readable
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
+
+const streamEntry7 = Feed.labels;
 
 /**
  * Reads bounded text elements.
@@ -632,7 +973,7 @@ export function Feed_data(session: StreamSession, opts: StreamOptions): Readable
  * - response within 50000 us
  */
 export function Feed_labels(session: StreamSession, opts: StreamOptions): ReadableStream<t.Text> {
-  const entry = Feed.labels;
+  const entry = streamEntry7;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -642,6 +983,8 @@ export function Feed_labels(session: StreamSession, opts: StreamOptions): Readab
   return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
+const streamEntry8 = Feed.readBytes;
+
 /**
  * Reads raw bytes for a sequence number.
  *
@@ -650,13 +993,15 @@ export function Feed_labels(session: StreamSession, opts: StreamOptions): Readab
  * - response within 50000 us
  */
 export function Feed_readBytes(session: StreamSession, seed: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
-  const entry = Feed.readBytes;
+  const entry = streamEntry8;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, seed, entry.limit);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw;
 }
+
+const streamEntry9 = Feed.text;
 
 /**
  * Reads UTF-8 text.
@@ -666,7 +1011,7 @@ export function Feed_readBytes(session: StreamSession, seed: t.Count, opts: Stre
  * - response within 50000 us
  */
 export function Feed_text(session: StreamSession, opts: StreamOptions): ReadableStream<string> {
-  const entry = Feed.text;
+  const entry = streamEntry9;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
@@ -674,21 +1019,25 @@ export function Feed_text(session: StreamSession, opts: StreamOptions): Readable
   return raw.pipeThrough(decodeTextStream());
 }
 
+const streamEntry10 = Feed.zero;
+
 /**
- * A zero limit prevents a call.
+ * Reads raw bytes with a 64-byte payload limit.
  *
  * @remarks
  * Rules:
  * - response within 50000 us
  */
 export function Feed_zero(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
-  const entry = Feed.zero;
+  const entry = streamEntry10;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw;
 }
+
+const streamEntry11 = Feed.fetch;
 
 /**
  * Reads the last live streamed member.
@@ -698,7 +1047,7 @@ export function Feed_zero(session: StreamSession, opts: StreamOptions): Readable
  * - response within 50000 us
  */
 export function Feed_fetch(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
-  const entry = Feed.fetch;
+  const entry = streamEntry11;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
@@ -712,6 +1061,8 @@ export const Other = {
   fetch: { iface: 2, ord: 1, kind: "query", request: codecOtherFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
+const streamEntry12 = Other.fetch;
+
 /**
  * Reads bytes.
  *
@@ -720,10 +1071,254 @@ export const Other = {
  * - response within 50000 us
  */
 export function Other_fetch(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
-  const entry = Other.fetch;
+  const entry = streamEntry12;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `session`, interface number `10`. */
+export const session = {
+  iface: 10,
+  fetch: { iface: 10, ord: 1, kind: "query", request: codecSessionFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry20 = session.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function session_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry20;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `opts`, interface number `7`. */
+export const opts = {
+  iface: 7,
+  fetch: { iface: 7, ord: 1, kind: "query", request: codecOptsFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry17 = opts.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function opts_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry17;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `entry`, interface number `6`. */
+export const entry = {
+  iface: 6,
+  fetch: { iface: 6, ord: 1, kind: "query", request: codecEntryFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry16 = entry.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function entry_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry16;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `args`, interface number `3`. */
+export const args = {
+  iface: 3,
+  fetch: { iface: 3, ord: 1, kind: "query", request: codecArgsFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry13 = args.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function args_fetch(session: StreamSession, streamEntry131: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry13;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry131, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `raw`, interface number `8`. */
+export const raw = {
+  iface: 8,
+  fetch: { iface: 8, ord: 1, kind: "query", request: codecRawFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry18 = raw.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function raw_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry18;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `element`, interface number `4`. */
+export const element = {
+  iface: 4,
+  fetch: { iface: 4, ord: 1, kind: "query", request: codecElementFetchParams, streams: [{ no: 0, form: "elements", element: codecChunk }] },
+} as const;
+
+const streamEntry14 = element.fetch;
+
+/**
+ * Reads numbered elements.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function element_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry141: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
+  const entry = streamEntry14;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry141 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/** The members of interface `requestType`, interface number `9`. */
+export const requestType = {
+  iface: 9,
+  fetch: { iface: 9, ord: 1, kind: "query", request: codecRequestTypeFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry19 = requestType.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function requestType_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry19;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `elementType`, interface number `5`. */
+export const elementType = {
+  iface: 5,
+  fetch: { iface: 5, ord: 1, kind: "query", request: codecElementTypeFetchParams, streams: [{ no: 0, form: "elements", element: codecChunk }] },
+} as const;
+
+const streamEntry15 = elementType.fetch;
+
+/**
+ * Reads numbered elements.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function elementType_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
+  const entry = streamEntry15;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const element = entry.streams[0].element;
+  const elementType = session.codec.typeId(element.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+}
+
+/** The members of interface `streamEntry`, interface number `11`. */
+export const streamEntry = {
+  iface: 11,
+  fetch: { iface: 11, ord: 1, kind: "query", request: codecStreamEntryFetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry21 = streamEntry.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function streamEntry_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry21;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
+  return raw;
+}
+
+/** The members of interface `streamEntry1`, interface number `12`. */
+export const streamEntry1 = {
+  iface: 12,
+  fetch: { iface: 12, ord: 1, kind: "query", request: codecStreamEntry1FetchParams, streams: [{ no: 0, form: "bytes" }] },
+} as const;
+
+const streamEntry22 = streamEntry1.fetch;
+
+/**
+ * Reads raw bytes.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function streamEntry1_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+  const entry = streamEntry22;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw;
 }

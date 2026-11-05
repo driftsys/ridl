@@ -62,7 +62,7 @@ interface Feed {
   query readBytes(seed: Count): <bytes> @[..50ms]
   /// Reads UTF-8 text.
   query text(): <string> @[..50ms]
-  /// A zero limit prevents a call.
+  /// Reads raw bytes with a 64-byte payload limit.
   query zero(): <bytes> @[..50ms]
   /// Reads one ordinary value.
   query latest(): Count @[..50ms]
@@ -80,4 +80,73 @@ interface Feed {
 interface Other {
   /// Reads bytes.
   query fetch(): <bytes> @[..50ms]
+}
+
+/// Permission values.
+enum Permission {
+  /// Read access.
+  READ = 0
+}
+
+/// Permission bits.
+enumset Flags : Permission
+
+/// A table named session.
+interface session {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named opts.
+interface opts {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named entry.
+interface entry {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named args.
+interface args {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named raw.
+interface raw {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named element.
+interface element {
+  /// Reads numbered elements.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <Chunk> @[..50ms]
+}
+
+/// A table named requestType.
+interface requestType {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named elementType.
+interface elementType {
+  /// Reads numbered elements.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <Chunk> @[..50ms]
+}
+
+/// A table named streamEntry.
+interface streamEntry {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
+}
+
+/// A table named streamEntry1.
+interface streamEntry1 {
+  /// Reads raw bytes.
+  query fetch(streamEntry13: Count, streamEntry14: Count): <bytes> @[..50ms]
 }

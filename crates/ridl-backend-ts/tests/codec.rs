@@ -1780,6 +1780,16 @@ fn stream_reply_exports_match_model() {
         ("Feed_zero", "Uint8Array"),
         ("Feed_fetch", "Uint8Array"),
         ("Other_fetch", "Uint8Array"),
+        ("session_fetch", "Uint8Array"),
+        ("opts_fetch", "Uint8Array"),
+        ("entry_fetch", "Uint8Array"),
+        ("args_fetch", "Uint8Array"),
+        ("raw_fetch", "Uint8Array"),
+        ("element_fetch", "t.Chunk"),
+        ("requestType_fetch", "Uint8Array"),
+        ("elementType_fetch", "t.Chunk"),
+        ("streamEntry_fetch", "Uint8Array"),
+        ("streamEntry1_fetch", "Uint8Array"),
     ];
     let actual: BTreeSet<_> = exported_functions(&source, "")
         .into_iter()
@@ -2117,4 +2127,111 @@ fn stream_codec_limits_and_malformed_metadata_are_explicit() {
         error.contains("internal") && error.contains("Count"),
         "{error}"
     );
+}
+
+// Mutation: use the bare interface table in a function, skip module-name
+// reservation for the capture, or allow a parameter to shadow that capture.
+#[test]
+fn stream_entry_bindings_avoid_interfaces_and_parameters() {
+    let source = module(&streams_model(), "streams.demo");
+    let names = [
+        "session",
+        "opts",
+        "entry",
+        "args",
+        "raw",
+        "element",
+        "requestType",
+        "elementType",
+        "streamEntry",
+        "streamEntry1",
+    ];
+    for binding in source.lines().filter_map(|line| {
+        line.strip_prefix("const ")?
+            .split_once(" = ")
+            .map(|(name, _)| name)
+    }) {
+        assert!(
+            !names.contains(&binding),
+            "module binding shadows table {binding}"
+        );
+    }
+    let mut captures = BTreeSet::new();
+    for name in names {
+        let capture = source
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("const ")?
+                    .strip_suffix(&format!(" = {name}.fetch;"))
+            })
+            .unwrap_or_else(|| panic!("{name}.fetch needs a module capture"));
+        assert!(!names.contains(&capture), "capture shadows table {capture}");
+        assert!(captures.insert(capture), "duplicate capture {capture}");
+        let signature = source
+            .lines()
+            .find(|line| line.starts_with(&format!("export function {name}_fetch(")))
+            .unwrap();
+        assert!(!signature.contains(&format!(" {capture}:")), "{signature}");
+        let body = source
+            .split(&format!("export function {name}_fetch("))
+            .nth(1)
+            .unwrap()
+            .split("\n}")
+            .next()
+            .unwrap();
+        assert!(
+            body.contains(&format!("const entry = {capture};")),
+            "{body}"
+        );
+    }
+}
+
+// Mutation: omit domain qualification for generated enumset bit objects.
+#[test]
+fn stream_doc_links_qualify_every_local_target_spelling() {
+    let mut model = streams_model();
+    let targets = [
+        "Count",
+        "Chunk",
+        "Chunk.value",
+        "Status",
+        "Status.ACTIVE",
+        "Flags",
+        "Flags.READ",
+    ];
+    let expected = [
+        "t.Count",
+        "t.Chunk",
+        "t.Chunk.value",
+        "t.Status",
+        "t.Status.ACTIVE",
+        "t.Flags",
+        "t.FlagsBits.READ",
+    ];
+    for (target, expected) in targets.into_iter().zip(expected) {
+        let i = stream_member_mut(&mut model, "structs");
+        i.doc = "Target.".into();
+        i.links = vec![v1::DocLink {
+            offset: 0,
+            len: 6,
+            target: format!("streams.demo.{target}"),
+            ..Default::default()
+        }];
+        i.see = vec![v1::DocLink {
+            target: format!("streams.demo.{target}"),
+            ..Default::default()
+        }];
+        let source = module(&model, "streams.demo");
+        let signature = source.find("export function Feed_structs(").unwrap();
+        let start = source[..signature].rfind("/**").unwrap();
+        let doc = &source[start..signature];
+        assert!(
+            doc.contains(&format!("{{@link {expected}}}.")),
+            "{target}: {doc}"
+        );
+        assert!(
+            doc.contains(&format!("@see {{@link {expected}}}")),
+            "{target}: {doc}"
+        );
+    }
 }

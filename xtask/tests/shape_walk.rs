@@ -429,11 +429,13 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-ts/tests/codec.rs",
-        lines: 9,
+        lines: 20,
         why: "a test fixture over `ridl_ir::codegen::v1::Model::interfaces`, \
               which is lowered from `Package::shapes()` and so holds an inline \
               shape too: the tests edit and rename the lowered model's \
-              interfaces to build the refused shapes",
+              interfaces to build refused shapes, compare every streamed entry \
+              with its model address, and isolate stream-only cases by removing \
+              unrelated interfaces or slots",
     },
     Allowed {
         path: "crates/ridlc/src/design_lints/limits.rs",
