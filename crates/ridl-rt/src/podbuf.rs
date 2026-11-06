@@ -114,6 +114,7 @@ pub struct Region<'a> {
 macro_rules! loads {
     ($($name:ident => $ty:ty),* $(,)?) => {$(
         #[doc = concat!("Loads a little-endian `", stringify!($ty), "` at `off`.")]
+        #[inline]
         pub fn $name(&self, off: usize) -> $ty {
             <$ty>::from_le_bytes(self.array(off))
         }
@@ -126,7 +127,20 @@ impl<'a> Region<'a> {
         Region { buf, start, size }
     }
 
+    #[inline]
     fn array<const N: usize>(&self, off: usize) -> [u8; N] {
+        // One range check when all N bytes are inside the window and the buffer;
+        // a load that crosses either end reads each byte like `u8_at`.
+        let whole = off
+            .checked_add(N)
+            .filter(|end| *end <= self.size)
+            .and_then(|end| Some((self.start.checked_add(off)?, self.start.checked_add(end)?)))
+            .and_then(|(from, to)| self.buf.get(from..to));
+        if let Some(bytes) = whole {
+            if let Ok(out) = <[u8; N]>::try_from(bytes) {
+                return out;
+            }
+        }
         let mut out = [0u8; N];
         for (i, slot) in out.iter_mut().enumerate() {
             *slot = self.u8_at(off.saturating_add(i));
@@ -135,6 +149,7 @@ impl<'a> Region<'a> {
     }
 
     /// Loads the byte at `off`.
+    #[inline]
     pub fn u8_at(&self, off: usize) -> u8 {
         if off >= self.size {
             return 0;
@@ -147,6 +162,7 @@ impl<'a> Region<'a> {
     }
 
     /// Loads the signed byte at `off`.
+    #[inline]
     pub fn i8_at(&self, off: usize) -> i8 {
         i8::from_le_bytes([self.u8_at(off)])
     }
@@ -300,6 +316,7 @@ pub struct Writer<'o> {
 macro_rules! puts {
     ($($name:ident => $ty:ty),* $(,)?) => {$(
         #[doc = concat!("Stores a little-endian `", stringify!($ty), "` at `at`.")]
+        #[inline]
         pub fn $name(&mut self, at: usize, v: $ty) {
             self.store(at, &v.to_le_bytes());
         }
@@ -367,6 +384,7 @@ impl<'o> Writer<'o> {
         }
     }
 
+    #[inline]
     fn store(&mut self, at: usize, bytes: &[u8]) {
         let range = at
             .checked_add(bytes.len())
@@ -382,17 +400,20 @@ impl<'o> Writer<'o> {
     }
 
     /// Stores the byte `v` at `at`.
+    #[inline]
     pub fn put_u8(&mut self, at: usize, v: u8) {
         self.store(at, &[v]);
     }
 
     /// Stores `bytes` at `at`: the data of a string or a bytes field, which
     /// the encoder has reserved with [`Writer::tail`].
+    #[inline]
     pub fn put_bytes(&mut self, at: usize, bytes: &[u8]) {
         self.store(at, bytes);
     }
 
     /// Stores the signed byte `v` at `at`.
+    #[inline]
     pub fn put_i8(&mut self, at: usize, v: i8) {
         self.store(at, &v.to_le_bytes());
     }
@@ -470,6 +491,52 @@ mod tests {
         // An empty window at the maximum start reads zeros.
         let r = Region::new(&buf.0, usize::MAX, usize::MAX);
         assert_eq!(r.u64_at(usize::MAX), 0);
+    }
+
+    #[test]
+    fn a_load_that_crosses_the_window_or_the_buffer_reads_zero_past_the_end() {
+        let buf = Aligned([
+            1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ]);
+        // The window is bytes 4..12 of the buffer.
+        let r = Region::new(&buf.0, 4, 8);
+        assert_eq!(r.u32_at(0), u32::from_le_bytes([5, 6, 7, 8]));
+        assert_eq!(r.u64_at(0), u64::from_le_bytes([5, 6, 7, 8, 9, 10, 11, 12]));
+        // Inside the window, ending at its last byte.
+        assert_eq!(r.u16_at(6), u16::from_le_bytes([11, 12]));
+        // Crossing the window end: the bytes past it read zero, not the
+        // buffer's bytes 12 and 13.
+        assert_eq!(r.u32_at(6), u32::from_le_bytes([11, 12, 0, 0]));
+        assert_eq!(r.u16_at(7), u16::from_le_bytes([12, 0]));
+        // At and past the window end.
+        assert_eq!(r.u16_at(8), 0);
+        assert_eq!(r.u64_at(100), 0);
+        // A window that extends past the buffer: bytes past the buffer read zero.
+        let r = Region::new(&buf.0[..8], 4, 100);
+        assert_eq!(r.u64_at(0), u64::from_le_bytes([5, 6, 7, 8, 0, 0, 0, 0]));
+        assert_eq!(r.u32_at(2), u32::from_le_bytes([7, 8, 0, 0]));
+        assert_eq!(r.i16_at(4), 0);
+        // A start so large that start + off overflows reads zero; the buffer's
+        // first bytes are not read through a wrapped address.
+        for start in [usize::MAX, usize::MAX - 3] {
+            let r = Region::new(&buf.0, start, 8);
+            assert_eq!(r.u32_at(1), 0);
+            assert_eq!(r.u64_at(0), 0);
+        }
+        // Every load shares the path: the other widths and the float loads.
+        let r = Region::new(&buf.0, 0, 16);
+        assert_eq!(r.i32_at(4), i32::from_le_bytes([5, 6, 7, 8]));
+        assert_eq!(
+            r.i64_at(8),
+            i64::from_le_bytes([9, 10, 11, 12, 13, 14, 15, 16])
+        );
+        assert_eq!(r.f32_at(0), f32::from_le_bytes([1, 2, 3, 4]));
+        assert_eq!(
+            r.f64_at(8),
+            f64::from_le_bytes([9, 10, 11, 12, 13, 14, 15, 16])
+        );
+        assert_eq!(r.i32_at(14), i32::from_le_bytes([15, 16, 0, 0]));
     }
 
     #[test]
