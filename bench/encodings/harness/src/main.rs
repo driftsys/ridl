@@ -7,7 +7,9 @@
 //! of a cell and encoding, default 0.5), `--paced` (also run each cell at 4 000 updates per
 //! second and read process CPU time), `--date YYYY-MM-DD` (for a device with a
 //! wrong clock), `--commit HASH` (for a device without git), `--only TEXT`
-//! (run only the corpus entries whose name contains the text, for profiling).
+//! (run only the corpus entries whose name contains the text, for profiling),
+//! `--vary` (time encode, verify and decode on a pool of 64 distinct values for
+//! the payloads that have one; needs `--out`).
 
 use encoding_bench::corpus::{corpus, Cell, Kind, Recorder};
 use encoding_bench::report::{collect_provenance, to_json, RunInfo};
@@ -25,6 +27,7 @@ struct Args {
     commit: Option<String>,
     date: Option<String>,
     only: Option<String>,
+    vary: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -36,6 +39,7 @@ fn parse_args() -> Result<Args, String> {
         commit: None,
         date: None,
         only: None,
+        vary: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -55,11 +59,15 @@ fn parse_args() -> Result<Args, String> {
             }
             "--only" => args.only = Some(value("--only")?),
             "--paced" => args.paced = true,
+            "--vary" => args.vary = true,
             other => return Err(format!("unknown flag {other}")),
         }
     }
     if args.paced && args.out.is_none() {
         return Err("--paced needs --out".into());
+    }
+    if args.vary && args.out.is_none() {
+        return Err("--vary needs --out".into());
     }
     Ok(args)
 }
@@ -79,6 +87,7 @@ fn main() {
     let mut rec = Recorder {
         timing: timing.clone(),
         paced: args.paced,
+        vary: args.vary,
         ..Recorder::default()
     };
     for entry in corpus() {
@@ -103,6 +112,7 @@ fn main() {
             samples: cfg.samples,
             duration_s: cfg.duration_s,
             paced: args.paced,
+            vary: args.vary,
         };
         let json = to_json(&provenance, &run, &rec.rows);
         let text = serde_json::to_string_pretty(&json).expect("the result is JSON");

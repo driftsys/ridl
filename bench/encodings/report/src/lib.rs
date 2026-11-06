@@ -130,6 +130,9 @@ pub struct ResultFile {
     pub samples: u64,
     pub duration_s: f64,
     pub paced: bool,
+    /// Whether the run cycled through a pool of values; absent in a file
+    /// written before the flag existed, which then reads as false.
+    pub vary: bool,
     pub rows: Vec<Row>,
 }
 
@@ -250,6 +253,7 @@ pub fn parse(text_in: &str) -> Result<ResultFile, String> {
         samples: run["samples"].as_u64().ok_or("missing `samples`")?,
         duration_s: num(run, "duration_s")?,
         paced: run["paced"].as_bool().ok_or("missing `paced`")?,
+        vary: run["vary"].as_bool().unwrap_or(false),
         rows,
     })
 }
@@ -789,7 +793,7 @@ pub fn render(name: &str, r: &ResultFile) -> String {
          - Date: {}\n- Commit: {}\n- Platform: {}\n- Core: {}\n\
          - Frequency of the core: {freq}; governor: {gov}\n- Toolchain: {}\n\
          - Run: {:.0} updates per second, {} samples per cell, {} s of CPU time \
-         per operation of a cell and encoding, paced run: {}\n\n",
+         per operation of a cell and encoding, paced run: {}, changing values: {}\n\n",
         r.date,
         r.commit,
         r.platform,
@@ -799,6 +803,7 @@ pub fn render(name: &str, r: &ResultFile) -> String {
         r.samples,
         r.duration_s,
         if r.paced { "yes" } else { "no" },
+        if r.vary { "yes" } else { "no" },
     );
     out.push_str("## Mix\n\n");
     out.push_str(&mix_table(r, Weighting::PerSignal));

@@ -242,48 +242,68 @@ pub fn runner<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> Runner<'a> {
     }
 }
 
-/// The three operations of `E` on `value`, each a runner of its own. A batch
-/// of `n` repeats one operation `n` times and nothing else:
+/// The three operations of `E` on `value`, each a runner of its own. See
+/// `op_runners_pool`; this is the pool of one value.
+pub fn op_runners<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> [Runner<'a>; 3] {
+    op_runners_pool::<T, E>(std::slice::from_ref(value))
+}
+
+/// The three operations of `E` on a pool of values, each a runner of its own.
+/// A batch of `n` repeats one operation `n` times and nothing else, and the
+/// k-th repetition works on element `k % pool.len()` of the pool, so that a
+/// pool of distinct values keeps the work from being hoisted out of the loop:
 ///
-/// - encode writes `value` into the same buffer each time;
-/// - verify checks the same already-encoded bytes each time;
-/// - decode builds a value from a proof that `Ref::verify` built once, here,
-///   before any batch. `Ref::decode` takes the proof by value and the proof
-///   cannot be cloned, so each decode reads a bitwise copy of it. That is
-///   sound only when the proof owns nothing that is dropped; the function
-///   panics otherwise. The bytes of the proof are leaked, a few bytes per
-///   call, so that the proof can live in the runner.
+/// - encode writes the next value into the same buffer each time;
+/// - verify checks the next of the already-encoded buffers each time (one
+///   buffer per value, built here before any batch);
+/// - decode builds a value from the next of the proofs that `Ref::verify`
+///   built once, here, before any batch. `Ref::decode` takes the proof by
+///   value and the proof cannot be cloned, so each decode reads a bitwise
+///   copy of it. That is sound only when the proof owns nothing that is
+///   dropped; the function panics otherwise. The bytes of the proofs are
+///   leaked, a few kilobytes per call at most, so that the proofs can live
+///   in the runner.
 ///
 /// Every input and every result goes through `black_box`. Panics when `E`
-/// refuses the value; the caller times only a value that `try_measure_counts`
-/// accepted.
-pub fn op_runners<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> [Runner<'a>; 3] {
+/// refuses a value or the pool is empty; the caller times only values that
+/// `try_measure_counts` accepted.
+pub fn op_runners_pool<'a, T: Payload<E>, E: Encoding>(pool: &'a [T]) -> [Runner<'a>; 3] {
+    assert!(!pool.is_empty(), "the pool holds at least one value");
     let mut buf = T::BUFFER;
-    let bytes: &'static [u8] = {
-        let mut scratch = T::BUFFER;
-        let encoded =
-            Ref::<T, E>::encode(value, scratch.as_mut()).expect("the encoding accepts the value");
-        Box::leak(encoded.bytes().to_vec().into_boxed_slice())
-    };
-    let proof = Ref::<T, E>::verify(bytes).expect("the encoding verifies its own bytes");
+    let buffers: Vec<&'static [u8]> = pool
+        .iter()
+        .map(|value| {
+            let mut scratch = T::BUFFER;
+            let encoded = Ref::<T, E>::encode(value, scratch.as_mut())
+                .expect("the encoding accepts the value");
+            &*Box::leak(encoded.bytes().to_vec().into_boxed_slice())
+        })
+        .collect();
+    let proofs: Vec<Ref<'static, T, E>> = buffers
+        .iter()
+        .map(|&bytes| Ref::<T, E>::verify(bytes).expect("the encoding verifies its own bytes"))
+        .collect();
     assert!(
-        !std::mem::needs_drop::<Ref<'a, T, E>>(),
+        !std::mem::needs_drop::<Ref<'static, T, E>>(),
         "the proof of this payload owns data that is dropped, so it cannot be copied"
     );
     let encode = Runner {
         encoding: E::NAME,
         op: Op::Encode,
         run: Box::new(move |n| {
-            for _ in 0..n {
+            for k in 0..n as usize {
+                let value = &pool[k % pool.len()];
                 let _ = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()));
             }
         }),
     };
+    let verify_buffers = buffers.clone();
     let verify = Runner {
         encoding: E::NAME,
         op: Op::Verify,
         run: Box::new(move |n| {
-            for _ in 0..n {
+            for k in 0..n as usize {
+                let bytes = verify_buffers[k % verify_buffers.len()];
                 let _ = black_box(Ref::<T, E>::verify(black_box(bytes)));
             }
         }),
@@ -292,11 +312,12 @@ pub fn op_runners<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> [Runner<'a>; 
         encoding: E::NAME,
         op: Op::Decode,
         run: Box::new(move |n| {
-            for _ in 0..n {
+            for k in 0..n as usize {
+                let proof = &proofs[k % proofs.len()];
                 // SAFETY: `Ref` has no `Drop` implementation and the assertion
                 // above shows that its view needs none, so a bitwise copy owns
                 // nothing and the original is never used after the copies.
-                let copy = unsafe { std::ptr::read(black_box(&proof)) };
+                let copy = unsafe { std::ptr::read(black_box(proof)) };
                 black_box(copy.decode());
             }
         }),

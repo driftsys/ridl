@@ -667,3 +667,19 @@ fn operation_ratio_and_mix_tables_warn_that_times_under_10_ns_are_not_comparable
     assert!(flat(op_mix_table(&r, Weighting::PerSignal)).contains(&note));
     assert!(flat(op_mix_table(&r, Weighting::PerPayloadType)).contains(&note));
 }
+
+#[test]
+fn the_header_states_whether_the_values_changed_and_an_old_file_reads_as_unchanged() {
+    let mut v = json!({
+        "provenance": {"date":"d","commit":"c","platform":{"os":"o","arch":"a"},
+                       "core_label":"x","toolchain":"t","frequency_khz":null,"governor":null},
+        "run": {"rate_per_s": 4000.0, "samples": 30, "duration_s": 1.0, "paced": false},
+        "rows": []
+    });
+    let old = parse(&v.to_string()).expect("a file without `vary` parses");
+    assert!(!old.vary);
+    assert!(render("f", &old).contains("changing values: no"));
+    v["run"]["vary"] = json!(true);
+    let varied = parse(&v.to_string()).expect("parses");
+    assert!(render("f", &varied).contains("changing values: yes"));
+}

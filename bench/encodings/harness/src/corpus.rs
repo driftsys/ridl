@@ -4,7 +4,7 @@ use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf, Proto3};
 use ridl_rt::payload::Payload;
 
 use crate::timing::{
-    op_runners, paced_run, runner, sustained_cpu_percent, thread_cpu_ns, time_cells, OpStats,
+    op_runners_pool, paced_run, runner, sustained_cpu_percent, thread_cpu_ns, time_cells, OpStats,
     Paced, Runner, Stat, TimingConfig, RATE_PER_S,
 };
 use crate::{try_measure_counts, Counts};
@@ -72,6 +72,9 @@ pub struct Recorder {
     /// With `timing` set: also run each timed cell paced at `RATE_PER_S`
     /// for `timing.duration_s` of wall time.
     pub paced: bool,
+    /// Time encode, verify and decode on a pool of distinct values, for the
+    /// payloads declared with `stress_pool!`.
+    pub vary: bool,
 }
 
 /// A payload and the code that measures it.
@@ -88,6 +91,25 @@ impl Recorder {
     where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
+        self.record_values(payload, kind, std::slice::from_ref(value), false);
+    }
+
+    /// Like `record`, for a payload with a pool of distinct values of one
+    /// shape. Size and allocations come from the first value. With `vary` set
+    /// on the recorder, encode, verify and decode cycle through the pool; with
+    /// it unset they repeat the first value, as `record` does.
+    pub fn record_pool<T>(&mut self, payload: &'static str, kind: Kind, pool: &[T])
+    where
+        T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
+    {
+        self.record_values(payload, kind, pool, self.vary);
+    }
+
+    fn record_values<T>(&mut self, payload: &'static str, kind: Kind, pool: &[T], cycle: bool)
+    where
+        T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
+    {
+        let value = &pool[0];
         let first = self.rows.len();
         self.push::<T>(
             payload,
@@ -108,7 +130,8 @@ impl Recorder {
             try_measure_counts::<T, Podbuf>(value),
         );
         if let Some(cfg) = self.timing.clone() {
-            self.time_rows::<T>(first, value, &cfg);
+            let timed_pool = if cycle { pool } else { &pool[..1] };
+            self.time_rows::<T>(first, timed_pool, &cfg);
         }
     }
 
@@ -116,7 +139,7 @@ impl Recorder {
     /// of the encodings that accepted the value, each operation in batches of
     /// its own, interleaved in rotation; then the paced run of each encoding,
     /// which repeats the whole update.
-    fn time_rows<T>(&mut self, first: usize, value: &T, cfg: &TimingConfig)
+    fn time_rows<T>(&mut self, first: usize, pool: &[T], cfg: &TimingConfig)
     where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
@@ -127,16 +150,16 @@ impl Recorder {
         let mut runners: Vec<Runner> = Vec::new();
         let mut whole: Vec<Runner> = Vec::new();
         if measured(&self.rows[first..], FlatBuffers::NAME) {
-            runners.extend(op_runners::<T, FlatBuffers>(value));
-            whole.push(runner::<T, FlatBuffers>(value));
+            runners.extend(op_runners_pool::<T, FlatBuffers>(pool));
+            whole.push(runner::<T, FlatBuffers>(&pool[0]));
         }
         if measured(&self.rows[first..], Proto3::NAME) {
-            runners.extend(op_runners::<T, Proto3>(value));
-            whole.push(runner::<T, Proto3>(value));
+            runners.extend(op_runners_pool::<T, Proto3>(pool));
+            whole.push(runner::<T, Proto3>(&pool[0]));
         }
         if measured(&self.rows[first..], Podbuf::NAME) {
-            runners.extend(op_runners::<T, Podbuf>(value));
-            whole.push(runner::<T, Podbuf>(value));
+            runners.extend(op_runners_pool::<T, Podbuf>(pool));
+            whole.push(runner::<T, Podbuf>(&pool[0]));
         }
         if runners.is_empty() {
             return;
@@ -246,6 +269,24 @@ macro_rules! stress {
     };
 }
 
+/// The number of distinct values in a pool.
+pub const POOL_SIZE: i64 = 64;
+
+/// A stress entry with a pool: `$build(seed)` makes one value, and seed 0 is
+/// the fixed value. With `--vary` the pool is the values of seeds 0 to 63.
+macro_rules! stress_pool {
+    ($name:literal, $build:expr) => {
+        entry!($name, Kind::Stress, |r| {
+            let pool: Vec<_> = if r.vary {
+                (0..POOL_SIZE).map($build).collect()
+            } else {
+                vec![$build(0)]
+            };
+            r.record_pool($name, Kind::Stress, &pool)
+        })
+    };
+}
+
 use bench_cabin::veh::cabin;
 use bench_stress::bench::stress as st;
 use bench_veh_cluster::veh::cluster as cl;
@@ -275,6 +316,46 @@ fn count(n: i64) -> st::Count {
     st::Count::new(n % 65536).unwrap()
 }
 
+/// 100 items. The seed changes the counts and nothing else; seed 0 is the
+/// fixed value.
+fn big_item_list(seed: i64) -> st::BigItemListPayload {
+    st::BigItemListPayload {
+        items: (0..100i64)
+            .map(|i| st::Item {
+                label: label(format!("item-{i:03}")),
+                count: count(i * 300 + seed * 7),
+            })
+            .collect(),
+    }
+}
+
+/// 1500 samples. The seed shifts every sample.
+fn big_samples(seed: i64) -> st::BigSamplesPayload {
+    st::BigSamplesPayload {
+        samples: (0..1500i64)
+            .map(|i| count_sample(i * 40 + seed * 3))
+            .collect(),
+    }
+}
+
+fn count_sample(n: i64) -> st::Sample {
+    st::Sample::new(n % 65536).unwrap()
+}
+
+/// 120 map entries. The seed changes the counts and rotates the keys.
+fn big_map(seed: i64) -> st::BigMapPayload {
+    st::BigMapPayload {
+        counts: (0..120i64)
+            .map(|i| {
+                (
+                    label(format!("key-{:03}", (i + seed) % 120)),
+                    count(i * 100 + seed * 5),
+                )
+            })
+            .collect(),
+    }
+}
+
 /// Ten rows of four cells each: the deepest payload that stays under the
 /// interaction ceiling.
 fn deep_nested(seed: i64) -> st::DeepNestedPayload {
@@ -300,7 +381,7 @@ fn deep_nested(seed: i64) -> st::DeepNestedPayload {
 /// The arm of the union and the mode cycle with the seed, so that a pool of
 /// values holds every arm and a mode that no name covers.
 fn variant(seed: i64) -> st::UnionPayload {
-    let reading = match seed % 3 {
+    let reading = match (seed + 2) % 3 {
         0 => st::Reading::Count(count(seed * 977)),
         1 => st::Reading::Text(label(format!("text-{seed:03}"))),
         _ => st::Reading::Item(st::Item {
@@ -308,7 +389,7 @@ fn variant(seed: i64) -> st::UnionPayload {
             count: count(seed * 313),
         }),
     };
-    let mode = st::Mode::from(seed % 4);
+    let mode = st::Mode::from((seed + 2) % 4);
     st::UnionPayload { reading, mode }
 }
 
@@ -446,39 +527,12 @@ pub fn corpus() -> Vec<CorpusEntry> {
                 text: st::BigText::new("x".repeat(3000)).unwrap()
             }
         ),
-        stress!(
-            "bench.stress.Stress.bigItemList",
-            st::BigItemListPayload {
-                items: (0..100i64)
-                    .map(|i| st::Item {
-                        label: st::Label::new(format!("item-{i:03}")).unwrap(),
-                        count: st::Count::new(i * 300).unwrap(),
-                    })
-                    .collect()
-            }
-        ),
-        stress!(
-            "bench.stress.Stress.bigSamples",
-            st::BigSamplesPayload {
-                samples: (0..1500i64)
-                    .map(|i| st::Sample::new(i * 40).unwrap())
-                    .collect()
-            }
-        ),
-        stress!(
-            "bench.stress.Stress.bigMap",
-            st::BigMapPayload {
-                counts: (0..120i64)
-                    .map(|i| (
-                        st::Label::new(format!("key-{i:03}")).unwrap(),
-                        st::Count::new(i * 100).unwrap()
-                    ))
-                    .collect()
-            }
-        ),
-        stress!("bench.stress.Stress.deepNested", deep_nested(0)),
-        stress!("bench.stress.Stress.variant", variant(1)),
-        stress!("bench.stress.Stress.deepSparse", deep_sparse(0)),
-        stress!("bench.stress.Stress.deepFull", deep_full(0)),
+        stress_pool!("bench.stress.Stress.bigItemList", big_item_list),
+        stress_pool!("bench.stress.Stress.bigSamples", big_samples),
+        stress_pool!("bench.stress.Stress.bigMap", big_map),
+        stress_pool!("bench.stress.Stress.deepNested", deep_nested),
+        stress_pool!("bench.stress.Stress.variant", variant),
+        stress_pool!("bench.stress.Stress.deepSparse", deep_sparse),
+        stress_pool!("bench.stress.Stress.deepFull", deep_full),
     ]
 }

@@ -30,6 +30,8 @@ pub struct RunInfo {
     pub samples: usize,
     pub duration_s: f64,
     pub paced: bool,
+    /// Whether encode, verify and decode cycled through a pool of values.
+    pub vary: bool,
 }
 
 /// The UTC date, `YYYY-MM-DD`, of a Unix time in seconds.
@@ -217,6 +219,7 @@ pub fn to_json(provenance: &Provenance, run: &RunInfo, rows: &[Row]) -> Value {
             "samples": run.samples,
             "duration_s": run.duration_s,
             "paced": run.paced,
+            "vary": run.vary,
         },
         "rows": rows.iter().map(|r| row_json(r, run.rate_per_s)).collect::<Vec<_>>(),
     })

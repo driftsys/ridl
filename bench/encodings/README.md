@@ -37,6 +37,16 @@ written with their reasons and are not timed.
   next tick, and reads process CPU time (`getrusage`) over the run. The JSON
   holds that figure, the figure derived from the unpaced cost, and the
   difference. It needs `--out`.
+- `--vary` makes encode, verify and decode cycle through a pool of 64 distinct
+  values of one shape, 64 encoded buffers and 64 proofs, so that the work cannot
+  be hoisted out of the batch loop. Without it every batch repeats one value.
+  Only the stress payloads `bigItemList`, `bigSamples`, `bigMap`, `deepNested`,
+  `variant`, `deepSparse` and `deepFull` have a pool; every other payload
+  repeats its one value with or without the flag. Size and allocation counts
+  always come from the first value of the pool, which is the fixed value. The
+  paced run repeats that value. The JSON records the flag as `run.vary` and the
+  report header states it. It needs `--out`.
+- `--only TEXT` runs only the corpus entries whose name contains the text.
 - `--commit HASH` states the commit when the machine has no `git`.
 - `--date YYYY-MM-DD` states the date of the run when the clock of the machine
   is wrong; without it the date is the UTC date of the clock.

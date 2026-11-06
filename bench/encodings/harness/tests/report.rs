@@ -30,6 +30,7 @@ fn info(paced: bool) -> RunInfo {
         samples: 30,
         duration_s: 1.0,
         paced,
+        vary: false,
     }
 }
 
@@ -92,6 +93,7 @@ fn provenance_and_run_info_are_in_the_json() {
     assert_eq!(v["run"]["rate_per_s"], 4000.0);
     assert_eq!(v["run"]["samples"], 30);
     assert_eq!(v["run"]["paced"], false);
+    assert_eq!(v["run"]["vary"], false);
     let mut unreadable = prov();
     unreadable.frequency_khz = None;
     unreadable.governor = None;
@@ -355,4 +357,60 @@ fn a_timed_row_sums_its_operation_medians() {
         assert_eq!(t.ops.verify.reps, 30);
         assert_eq!(t.ops.decode.reps, 30);
     }
+}
+
+#[test]
+fn the_result_file_records_whether_the_values_changed() {
+    let mut run = info(false);
+    run.vary = true;
+    let v = to_json(&prov(), &run, &[]);
+    assert_eq!(v["run"]["vary"], true);
+}
+
+fn item_list(n: usize) -> ItemListPayload {
+    use bench_stress::bench::stress::{Count, Item, Label};
+    ItemListPayload {
+        items: (0..n)
+            .map(|i| Item {
+                label: Label::new(format!("i{i}")).unwrap(),
+                count: Count::new(i as i64).unwrap(),
+            })
+            .collect(),
+    }
+}
+
+/// The second value of the pool is invalid (an empty list), so only a run
+/// that reaches the second value fails. The recorder reads size and counts
+/// from the first value alone.
+#[test]
+#[should_panic(expected = "the encoding accepts the value")]
+fn with_vary_the_timed_operations_reach_every_value_of_the_pool() {
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.03)),
+        vary: true,
+        ..Recorder::default()
+    };
+    rec.record_pool("a.b.c", Kind::Stress, &[item_list(3), item_list(0)]);
+}
+
+#[test]
+fn without_vary_the_timed_operations_repeat_the_first_value_of_the_pool() {
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.03)),
+        ..Recorder::default()
+    };
+    rec.record_pool("a.b.c", Kind::Stress, &[item_list(3), item_list(0)]);
+    assert!(rec.rows.iter().all(|r| r.timing.is_some()));
+}
+
+#[test]
+fn a_varied_pool_of_distinct_values_is_timed() {
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.03)),
+        vary: true,
+        ..Recorder::default()
+    };
+    let pool: Vec<_> = (1..=8).map(item_list).collect();
+    rec.record_pool("a.b.c", Kind::Stress, &pool);
+    assert!(rec.rows.iter().all(|r| r.timing.is_some()));
 }
