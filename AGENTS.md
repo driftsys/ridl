@@ -341,7 +341,7 @@ member; rsdl is the apex.
                          (local testing)
     just release         on a main commit whose ci passed: freeze check
                          --release, git std bump --no-commit, release-sync, a
-                         lockfile and derived-pin check, then the release
+                         lockfile, derived-pin and identity-fixture check, then the release
                          commit and the v and editor-v tags, all local
     just release-sync    update the version pins git std bump cannot write
     just release-push    push main, wait for ci on the release commit, then
