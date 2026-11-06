@@ -6,7 +6,8 @@
 //! the run is pinned to), `--duration SECONDS` (CPU time per operation
 //! of a cell and encoding, default 0.5), `--paced` (also run each cell at 4 000 updates per
 //! second and read process CPU time), `--date YYYY-MM-DD` (for a device with a
-//! wrong clock), `--commit HASH` (for a device without git).
+//! wrong clock), `--commit HASH` (for a device without git), `--only TEXT`
+//! (run only the corpus entries whose name contains the text, for profiling).
 
 use encoding_bench::corpus::{corpus, Cell, Kind, Recorder};
 use encoding_bench::report::{collect_provenance, to_json, RunInfo};
@@ -23,6 +24,7 @@ struct Args {
     paced: bool,
     commit: Option<String>,
     date: Option<String>,
+    only: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -33,6 +35,7 @@ fn parse_args() -> Result<Args, String> {
         paced: false,
         commit: None,
         date: None,
+        only: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -50,6 +53,7 @@ fn parse_args() -> Result<Args, String> {
                     return Err("--duration must be above zero".into());
                 }
             }
+            "--only" => args.only = Some(value("--only")?),
             "--paced" => args.paced = true,
             other => return Err(format!("unknown flag {other}")),
         }
@@ -78,6 +82,9 @@ fn main() {
         ..Recorder::default()
     };
     for entry in corpus() {
+        if args.only.as_deref().is_some_and(|only| !entry.name.contains(only)) {
+            continue;
+        }
         (entry.run)(&mut rec);
     }
     print_table(&rec);

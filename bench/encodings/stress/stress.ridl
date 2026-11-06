@@ -9,6 +9,12 @@ type Label: string [1..16] = "-"
 /// A small count.
 type Count: integer [0..65535]
 
+/// A string of several kilobytes.
+type BigText: string [1..3000] = "-"
+
+/// A list of integers of several kilobytes.
+type Sample: integer [0..65535]
+
 /// A signal payload that holds one long string.
 struct LongStringPayload {
   /// The text.
@@ -57,6 +63,30 @@ struct MapPayload {
   counts: [Label : Count; 0..16]
 }
 
+/// A signal payload that holds a string of several kilobytes.
+struct BigStringPayload {
+  /// The text.
+  text: BigText
+}
+
+/// A signal payload that holds a long list of structs.
+struct BigItemListPayload {
+  /// The elements.
+  items: [Item; 1..100]
+}
+
+/// A signal payload that holds a long list of integers.
+struct BigSamplesPayload {
+  /// The samples.
+  samples: [Sample; 1..1500]
+}
+
+/// A signal payload that holds a large map.
+struct BigMapPayload {
+  /// Counts by label.
+  counts: [Label : Count; 0..120]
+}
+
 /// Interface that makes the stress shapes interaction payloads.
 interface Stress {
   /// A long string.
@@ -67,4 +97,12 @@ interface Stress {
   signal nestedOptional: NestedOptionalPayload @10ms
   /// A map.
   signal map: MapPayload @10ms
+  /// A string of several kilobytes.
+  signal bigString: BigStringPayload @10ms
+  /// A long list of structs.
+  signal bigItemList: BigItemListPayload @10ms
+  /// A long list of integers.
+  signal bigSamples: BigSamplesPayload @10ms
+  /// A large map.
+  signal bigMap: BigMapPayload @10ms
 }

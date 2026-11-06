@@ -346,5 +346,41 @@ pub fn corpus() -> Vec<CorpusEntry> {
                     .collect()
             }
         ),
+        stress!(
+            "bench.stress.Stress.bigString",
+            st::BigStringPayload {
+                text: st::BigText::new("x".repeat(3000)).unwrap()
+            }
+        ),
+        stress!(
+            "bench.stress.Stress.bigItemList",
+            st::BigItemListPayload {
+                items: (0..100i64)
+                    .map(|i| st::Item {
+                        label: st::Label::new(format!("item-{i:03}")).unwrap(),
+                        count: st::Count::new(i * 300).unwrap(),
+                    })
+                    .collect()
+            }
+        ),
+        stress!(
+            "bench.stress.Stress.bigSamples",
+            st::BigSamplesPayload {
+                samples: (0..1500i64)
+                    .map(|i| st::Sample::new(i * 40).unwrap())
+                    .collect()
+            }
+        ),
+        stress!(
+            "bench.stress.Stress.bigMap",
+            st::BigMapPayload {
+                counts: (0..120i64)
+                    .map(|i| (
+                        st::Label::new(format!("key-{i:03}")).unwrap(),
+                        st::Count::new(i * 100).unwrap()
+                    ))
+                    .collect()
+            }
+        ),
     ]
 }
