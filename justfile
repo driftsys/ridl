@@ -3547,6 +3547,11 @@ release-sync:
     # crates.io.
     just _cabin-generate
     (cd examples/cabin && cargo update --workspace --offline)
+    # The docstore lockfiles name the workspace crates by version. Their
+    # manifests depend on the generated crate, so it is generated first.
+    cargo run --locked -p ridl-cli -- build examples/docstore --emit rust --emit catalog --out-dir examples/docstore/generated
+    (cd examples/docstore/server && cargo update --workspace --offline)
+    (cd examples/docstore/consumer && cargo update --workspace --offline)
     cargo run --locked --package xtask -- freeze update
     # The identity fixture embeds the compiler version. The procedure is the
     # one in crates/ridl-rt-conformance/fixtures/identity/README.md.
