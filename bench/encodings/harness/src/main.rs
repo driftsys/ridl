@@ -126,7 +126,7 @@ fn main() {
 
 fn print_table(rec: &Recorder) {
     println!(
-        "{:<48} {:<7} {:<12} {:>6} {:>7} {:>7} {:>7} {:>10} {:>8}  enc/ver/dec ns",
+        "{:<48} {:<7} {:<12} {:>6} {:>7} {:>7} {:>7} {:>10} {:>8}  enc/ver/dec ns (access)",
         "payload", "kind", "encoding", "size", "enc_al", "ver_al", "dec_al", "ns/update", "cpu%@4k"
     );
     for row in &rec.rows {
@@ -151,8 +151,13 @@ fn print_table(rec: &Recorder) {
                             )
                         ),
                         format!(
-                            "{:.0}/{:.0}/{:.0}",
-                            t.ops.encode.median_ns, t.ops.verify.median_ns, t.ops.decode.median_ns
+                            "{:.0}/{:.0}/{:.0}{}",
+                            t.ops.encode.median_ns,
+                            t.ops.verify.median_ns,
+                            t.ops.decode.median_ns,
+                            t.ops
+                                .access
+                                .map_or(String::new(), |a| format!(" access {:.0}", a.median_ns))
                         ),
                     ),
                     None => ("-".into(), "-".into(), "-".into()),

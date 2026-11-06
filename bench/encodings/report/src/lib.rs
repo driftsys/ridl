@@ -98,6 +98,9 @@ pub struct Measured {
     pub cpu_percent: Option<f64>,
     /// Encode, verify and decode apart, in `Op::ALL` order.
     pub ops: Option<Box<[OpTiming; 3]>>,
+    /// The read of one scalar through the view, when the payload and the
+    /// encoding have an accessor.
+    pub access: Option<OpTiming>,
     pub paced: Option<Paced>,
 }
 
@@ -179,6 +182,13 @@ fn parse_row(v: &Value) -> Result<Row, String> {
                 Some(t) => Some(parse_timing(t)?),
                 None => None,
             };
+            let access = match v.get("per_op_ns").and_then(|o| o.get("access")) {
+                Some(t) => Some(OpTiming {
+                    timing: parse_timing(t)?,
+                    cpu_percent: num(t, "cpu_percent_at_rate")?,
+                }),
+                None => None,
+            };
             let ops = match v.get("per_op_ns") {
                 Some(o) => {
                     let mut out = Vec::new();
@@ -210,6 +220,7 @@ fn parse_row(v: &Value) -> Result<Row, String> {
                 decode_allocs: num(v, "decode_allocs")?,
                 timing,
                 ops,
+                access,
                 cpu_percent: v["cpu_percent_at_rate"].as_f64(),
                 paced,
             })
@@ -676,6 +687,47 @@ pub fn op_time_table(r: &ResultFile, op: Op) -> String {
     )
 }
 
+/// The access operation, for the payloads that have an accessor. proto3
+/// generates no accessors, so its cells say so.
+pub fn access_time_table(r: &ResultFile) -> String {
+    let has_access = |p: &str| {
+        Encoding::ALL
+            .iter()
+            .any(|&e| measured(r, p, e).is_some_and(|m| m.access.is_some()))
+    };
+    let rows: Vec<Vec<String>> = payloads(r)
+        .into_iter()
+        .filter(|p| has_access(p))
+        .map(|p| {
+            let mut row = vec![esc(p)];
+            for e in Encoding::ALL {
+                row.push(match (marker(cell(r, p, e)), measured(r, p, e)) {
+                    (Some(m), _) => m.to_string(),
+                    (None, Some(m)) => match &m.access {
+                        Some(a) => fmt_timing(&a.timing),
+                        None => "n/a: no accessors".to_string(),
+                    },
+                    (None, None) => "absent".to_string(),
+                });
+            }
+            row
+        })
+        .collect();
+    if rows.is_empty() {
+        return "No payload of this file has an accessor timing.\n".to_string();
+    }
+    format!(
+        "CPU time of reading one scalar field, deep in the payload, through the view of \
+         verified bytes, in ns: the median of {} samples, with the fastest and the slowest \
+         sample and the range as a share of the median. It replaces the decode when a \
+         consumer needs one field, and it is not part of the time per update. proto3 \
+         generates no accessors, so its cells are n/a. {FLAG} spread above 10 %: the \
+         figure is not stable.\n\n{}",
+        r.samples,
+        table(&header("Payload"), &rows)
+    )
+}
+
 pub fn op_cpu_table(r: &ResultFile) -> String {
     let mut headers = vec!["Payload".to_string()];
     for op in Op::ALL {
@@ -823,6 +875,7 @@ pub fn render(name: &str, r: &ResultFile) -> String {
         ("Time per operation, encode", op_time_table(r, Op::Encode)),
         ("Time per operation, verify", op_time_table(r, Op::Verify)),
         ("Time per operation, decode", op_time_table(r, Op::Decode)),
+        ("Time per operation, access", access_time_table(r)),
         ("CPU load per operation", op_cpu_table(r)),
         ("Ratios per operation", op_ratio_table(r)),
         ("CPU load, paced and derived", paced_table(r)),

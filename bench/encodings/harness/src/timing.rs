@@ -5,7 +5,7 @@
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-use ridl_rt::encoding::Encoding;
+use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf};
 use ridl_rt::payload::{Payload, Ref};
 
 /// The update rate of the headline figure, in updates per second.
@@ -152,6 +152,9 @@ pub enum Op {
     Verify,
     /// Decode from a proof that was built once, before the batch.
     Decode,
+    /// Read one scalar field through the accessors of a verified view,
+    /// without decoding the whole value. Not part of an update.
+    Access,
     /// The whole update: encode, verify and decode.
     Update,
 }
@@ -162,6 +165,7 @@ impl Op {
             Op::Encode => "encode",
             Op::Verify => "verify",
             Op::Decode => "decode",
+            Op::Access => "access",
             Op::Update => "update",
         }
     }
@@ -191,6 +195,9 @@ pub struct OpStats {
     pub encode: Stat,
     pub verify: Stat,
     pub decode: Stat,
+    /// The read of one scalar through the view, for a payload and an encoding
+    /// that have an accessor. It is not part of the per-update figure.
+    pub access: Option<Stat>,
 }
 
 impl OpStats {
@@ -208,17 +215,25 @@ impl OpStats {
             encode: find(Op::Encode),
             verify: find(Op::Verify),
             decode: find(Op::Decode),
+            access: timed
+                .iter()
+                .find(|t| t.encoding == encoding && t.op == Op::Access)
+                .map(|t| t.stat),
         }
     }
 
-    /// The per-update stat: the sum of the three operations (see `Stat::sum`).
+    /// The per-update stat: the sum of encode, verify and decode (see
+    /// `Stat::sum`); the access is not part of it.
     pub fn per_update(&self) -> Stat {
         Stat::sum(&[self.encode, self.verify, self.decode])
     }
 
     /// Whether any operation is flagged.
     pub fn flagged(&self) -> bool {
-        self.encode.spread_flagged() || self.verify.spread_flagged() || self.decode.spread_flagged()
+        self.encode.spread_flagged()
+            || self.verify.spread_flagged()
+            || self.decode.spread_flagged()
+            || self.access.is_some_and(|a| a.spread_flagged())
     }
 }
 
@@ -248,6 +263,56 @@ pub fn op_runners<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> [Runner<'a>; 
     op_runners_pool::<T, E>(std::slice::from_ref(value))
 }
 
+/// The encoded bytes of each value of the pool, leaked so that proofs over
+/// them can live in a runner.
+fn encoded_pool<T: Payload<E>, E: Encoding>(pool: &[T]) -> Vec<&'static [u8]> {
+    pool.iter()
+        .map(|value| {
+            let mut scratch = T::BUFFER;
+            let encoded = Ref::<T, E>::encode(value, scratch.as_mut())
+                .expect("the encoding accepts the value");
+            &*Box::leak(encoded.bytes().to_vec().into_boxed_slice())
+        })
+        .collect()
+}
+
+fn proofs_of<T: Payload<E>, E: Encoding>(buffers: &[&'static [u8]]) -> Vec<Ref<'static, T, E>> {
+    buffers
+        .iter()
+        .map(|&bytes| Ref::<T, E>::verify(bytes).expect("the encoding verifies its own bytes"))
+        .collect()
+}
+
+/// Reads one scalar out of a verified view.
+pub type Accessor<T, E> = for<'v> fn(&<T as Payload<E>>::View<'v>) -> u64;
+
+/// The accessors of a payload: one function per encoding that has accessors
+/// on its view. proto3 has none, so it has no entry.
+pub struct Accessors<T: Payload<FlatBuffers> + Payload<Podbuf>> {
+    pub flatbuffers: Accessor<T, FlatBuffers>,
+    pub podbuf: Accessor<T, Podbuf>,
+}
+
+/// A runner of the access operation: each repetition reads one scalar through
+/// the view of the next of the proofs that `Ref::verify` built once, here,
+/// before any batch. The result goes through `black_box`.
+pub fn access_runner<'a, T: Payload<E>, E: Encoding>(
+    pool: &'a [T],
+    read: Accessor<T, E>,
+) -> Runner<'a> {
+    let proofs = proofs_of::<T, E>(&encoded_pool::<T, E>(pool));
+    Runner {
+        encoding: E::NAME,
+        op: Op::Access,
+        run: Box::new(move |n| {
+            for k in 0..n as usize {
+                let proof = &proofs[k % proofs.len()];
+                black_box(read(black_box(proof).view()));
+            }
+        }),
+    }
+}
+
 /// The three operations of `E` on a pool of values, each a runner of its own.
 /// A batch of `n` repeats one operation `n` times and nothing else, and the
 /// k-th repetition works on element `k % pool.len()` of the pool, so that a
@@ -270,19 +335,8 @@ pub fn op_runners<'a, T: Payload<E>, E: Encoding>(value: &'a T) -> [Runner<'a>; 
 pub fn op_runners_pool<'a, T: Payload<E>, E: Encoding>(pool: &'a [T]) -> [Runner<'a>; 3] {
     assert!(!pool.is_empty(), "the pool holds at least one value");
     let mut buf = T::BUFFER;
-    let buffers: Vec<&'static [u8]> = pool
-        .iter()
-        .map(|value| {
-            let mut scratch = T::BUFFER;
-            let encoded = Ref::<T, E>::encode(value, scratch.as_mut())
-                .expect("the encoding accepts the value");
-            &*Box::leak(encoded.bytes().to_vec().into_boxed_slice())
-        })
-        .collect();
-    let proofs: Vec<Ref<'static, T, E>> = buffers
-        .iter()
-        .map(|&bytes| Ref::<T, E>::verify(bytes).expect("the encoding verifies its own bytes"))
-        .collect();
+    let buffers = encoded_pool::<T, E>(pool);
+    let proofs = proofs_of::<T, E>(&buffers);
     assert!(
         !std::mem::needs_drop::<Ref<'static, T, E>>(),
         "the proof of this payload owns data that is dropped, so it cannot be copied"

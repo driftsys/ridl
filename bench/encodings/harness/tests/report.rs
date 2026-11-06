@@ -66,6 +66,7 @@ fn timing_of(median: f64, p05: f64, p95: f64) -> RowTiming {
         encode: part(1.0),
         verify: part(1.0),
         decode: part(3.0),
+        access: None,
     };
     RowTiming {
         stat: ops.per_update(),
@@ -413,4 +414,38 @@ fn a_varied_pool_of_distinct_values_is_timed() {
     let pool: Vec<_> = (1..=8).map(item_list).collect();
     rec.record_pool("a.b.c", Kind::Stress, &pool);
     assert!(rec.rows.iter().all(|r| r.timing.is_some()));
+}
+
+#[test]
+fn the_access_operation_is_timed_for_encodings_with_accessors_only() {
+    use encoding_bench::timing::{Accessors, Op};
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.03)),
+        ..Recorder::default()
+    };
+    let access = Accessors::<ItemListPayload> {
+        flatbuffers: |v| v.items().len() as u64,
+        podbuf: |v| v.items().count() as u64,
+    };
+    rec.record_pool_access("a.b.c", Kind::Stress, &[item_list(3)], &access);
+    for r in &rec.rows {
+        let t = r.timing.expect("timed");
+        match r.encoding {
+            "proto3" => assert!(t.ops.access.is_none()),
+            _ => assert!(t.ops.access.is_some(), "{}", r.encoding),
+        }
+    }
+    assert_eq!(Op::Access.name(), "access");
+}
+
+#[test]
+fn the_access_stat_is_in_the_json_only_when_it_was_timed() {
+    let mut with = measured_row("flatbuffers", 100.0, 90.0, 110.0);
+    let t = with.timing.as_mut().unwrap();
+    t.ops.access = Some(t.ops.encode);
+    let without = measured_row("proto3", 100.0, 90.0, 110.0);
+    let v = to_json(&prov(), &info(false), &[with, without]);
+    let out = rows_of(&v);
+    assert!(out[0]["per_op_ns"]["access"]["median"].is_number());
+    assert!(out[1]["per_op_ns"]["access"].is_null());
 }

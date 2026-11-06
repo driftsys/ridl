@@ -327,6 +327,7 @@ fn one_noisy_operation_flags_the_cell() {
             encode: v[0],
             verify: v[1],
             decode: v[2],
+            access: None,
         };
         assert!(ops.flagged(), "operation {k}");
     }
@@ -384,4 +385,18 @@ fn a_batch_of_one_operation_repeats_only_that_operation() {
     assert_eq!(batch_allocs(&mut pb, 5), [0, 0, 85]);
     let mut p3 = op_runners::<_, Proto3>(&v);
     assert_eq!(batch_allocs(&mut p3, 5), [0, 0, 95]);
+}
+
+#[test]
+fn a_noisy_access_flags_the_cell_and_is_not_part_of_the_per_update_figure() {
+    let quiet = stat_of(100.0, 100.0, 100.0, 100.0, 100.0, 30);
+    let noisy = stat_of(100.0, 100.0, 100.0, 100.0, 200.0, 30);
+    let ops = OpStats {
+        encode: quiet,
+        verify: quiet,
+        decode: quiet,
+        access: Some(noisy),
+    };
+    assert!(ops.flagged());
+    assert_eq!(ops.per_update().median_ns, 300.0);
 }

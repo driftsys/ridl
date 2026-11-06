@@ -46,6 +46,16 @@ written with their reasons and are not timed.
   always come from the first value of the pool, which is the fixed value. The
   paced run repeats that value. The JSON records the flag as `run.vary` and the
   report header states it. It needs `--out`.
+- The access operation reads one scalar field, deep in the payload, through the
+  accessors of the verified view, and returns it through `black_box`, without
+  decoding the whole value. It is timed for `bigItemList`, `deepNested`,
+  `deepSparse` and `deepFull`, in FlatBuffers and podbuf. proto3 generates no
+  accessors (`docs/design/proto3-codec.md`), so its cell is `n/a: no accessors`
+  in the report. The access is not part of the per-update figure, and the report
+  shows it in its own table, "Time per operation, access". The FlatBuffers
+  accessor of a list returns the decoded list, so reading one element through it
+  costs the decode of the list; the podbuf accessor of a list is an iterator
+  over views.
 - `--only TEXT` runs only the corpus entries whose name contains the text.
 - `--commit HASH` states the commit when the machine has no `git`.
 - `--date YYYY-MM-DD` states the date of the run when the clock of the machine

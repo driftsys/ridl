@@ -683,3 +683,35 @@ fn the_header_states_whether_the_values_changed_and_an_old_file_reads_as_unchang
     let varied = parse(&v.to_string()).expect("parses");
     assert!(render("f", &varied).contains("changing values: yes"));
 }
+
+fn with_access(mut row: Value, ns: f64) -> Value {
+    let stat = json!({
+        "median": ns, "p05": ns, "p95": ns, "min": ns, "max": ns, "range_spread": 0.0,
+        "reps": 30, "spread": 0.0, "spread_flagged": false, "cpu_percent_at_rate": 0.01
+    });
+    row["per_op_ns"] = json!({
+        "encode": stat, "verify": stat, "decode": stat, "access": stat
+    });
+    row
+}
+
+#[test]
+fn the_access_table_lists_payloads_with_an_accessor_and_marks_proto3_as_having_none() {
+    let mut with = trio("p.deep", "D", [10; 3], [10.0; 3]);
+    with[0] = with_access(with[0].clone(), 12.5);
+    with[2] = with_access(with[2].clone(), 3.5);
+    let mut rows = with;
+    rows.extend(trio("p.plain", "P", [10; 3], [10.0; 3]));
+    let t = access_time_table(&file(rows));
+    assert!(t.contains("p.deep"), "{t}");
+    assert!(!t.contains("p.plain"), "{t}");
+    assert!(t.contains("12.5"), "{t}");
+    assert!(t.contains("3.5"), "{t}");
+    assert!(t.contains("n/a: no accessors"), "{t}");
+}
+
+#[test]
+fn the_access_table_says_so_when_no_payload_has_an_accessor() {
+    let t = access_time_table(&file(trio("p.plain", "P", [10; 3], [10.0; 3])));
+    assert!(t.contains("No payload"), "{t}");
+}

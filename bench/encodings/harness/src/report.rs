@@ -163,14 +163,19 @@ fn row_json(row: &Row, rate_per_s: f64) -> Value {
                     .remove("cpu_percent_at_rate");
                 obj.insert("per_update_ns".into(), per_update);
                 let op = |s: &Stat| stat_json(s, s.spread_flagged(), rate_per_s);
-                obj.insert(
-                    "per_op_ns".into(),
-                    json!({
-                        "encode": op(&t.ops.encode),
-                        "verify": op(&t.ops.verify),
-                        "decode": op(&t.ops.decode),
-                    }),
-                );
+                let mut per_op = json!({
+                    "encode": op(&t.ops.encode),
+                    "verify": op(&t.ops.verify),
+                    "decode": op(&t.ops.decode),
+                });
+                // Present only for a payload and an encoding with an accessor.
+                if let Some(access) = &t.ops.access {
+                    per_op
+                        .as_object_mut()
+                        .expect("an object")
+                        .insert("access".into(), op(access));
+                }
+                obj.insert("per_op_ns".into(), per_op);
                 obj.insert(
                     "cpu_percent_at_rate".into(),
                     sustained_cpu_percent(t.stat.median_ns, rate_per_s).into(),

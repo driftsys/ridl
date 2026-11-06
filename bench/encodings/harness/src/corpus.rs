@@ -4,8 +4,8 @@ use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf, Proto3};
 use ridl_rt::payload::Payload;
 
 use crate::timing::{
-    op_runners_pool, paced_run, runner, sustained_cpu_percent, thread_cpu_ns, time_cells, OpStats,
-    Paced, Runner, Stat, TimingConfig, RATE_PER_S,
+    access_runner, op_runners_pool, paced_run, runner, sustained_cpu_percent, thread_cpu_ns,
+    time_cells, Accessors, OpStats, Paced, Runner, Stat, TimingConfig, RATE_PER_S,
 };
 use crate::{try_measure_counts, Counts};
 
@@ -91,7 +91,7 @@ impl Recorder {
     where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
-        self.record_values(payload, kind, std::slice::from_ref(value), false);
+        self.record_values(payload, kind, std::slice::from_ref(value), false, None);
     }
 
     /// Like `record`, for a payload with a pool of distinct values of one
@@ -102,11 +102,31 @@ impl Recorder {
     where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
-        self.record_values(payload, kind, pool, self.vary);
+        self.record_values(payload, kind, pool, self.vary, None);
     }
 
-    fn record_values<T>(&mut self, payload: &'static str, kind: Kind, pool: &[T], cycle: bool)
-    where
+    /// Like `record_pool`, and also times the access operation of the
+    /// encodings that have accessors (FlatBuffers and podbuf).
+    pub fn record_pool_access<T>(
+        &mut self,
+        payload: &'static str,
+        kind: Kind,
+        pool: &[T],
+        access: &Accessors<T>,
+    ) where
+        T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
+    {
+        self.record_values(payload, kind, pool, self.vary, Some(access));
+    }
+
+    fn record_values<T>(
+        &mut self,
+        payload: &'static str,
+        kind: Kind,
+        pool: &[T],
+        cycle: bool,
+        access: Option<&Accessors<T>>,
+    ) where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
         let value = &pool[0];
@@ -131,7 +151,7 @@ impl Recorder {
         );
         if let Some(cfg) = self.timing.clone() {
             let timed_pool = if cycle { pool } else { &pool[..1] };
-            self.time_rows::<T>(first, timed_pool, &cfg);
+            self.time_rows::<T>(first, timed_pool, &cfg, access);
         }
     }
 
@@ -139,8 +159,13 @@ impl Recorder {
     /// of the encodings that accepted the value, each operation in batches of
     /// its own, interleaved in rotation; then the paced run of each encoding,
     /// which repeats the whole update.
-    fn time_rows<T>(&mut self, first: usize, pool: &[T], cfg: &TimingConfig)
-    where
+    fn time_rows<T>(
+        &mut self,
+        first: usize,
+        pool: &[T],
+        cfg: &TimingConfig,
+        access: Option<&Accessors<T>>,
+    ) where
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
         let measured = |rows: &[Row], enc: &str| {
@@ -151,6 +176,9 @@ impl Recorder {
         let mut whole: Vec<Runner> = Vec::new();
         if measured(&self.rows[first..], FlatBuffers::NAME) {
             runners.extend(op_runners_pool::<T, FlatBuffers>(pool));
+            if let Some(a) = access {
+                runners.push(access_runner::<T, FlatBuffers>(pool, a.flatbuffers));
+            }
             whole.push(runner::<T, FlatBuffers>(&pool[0]));
         }
         if measured(&self.rows[first..], Proto3::NAME) {
@@ -159,6 +187,9 @@ impl Recorder {
         }
         if measured(&self.rows[first..], Podbuf::NAME) {
             runners.extend(op_runners_pool::<T, Podbuf>(pool));
+            if let Some(a) = access {
+                runners.push(access_runner::<T, Podbuf>(pool, a.podbuf));
+            }
             whole.push(runner::<T, Podbuf>(&pool[0]));
         }
         if runners.is_empty() {
@@ -285,6 +316,16 @@ macro_rules! stress_pool {
             r.record_pool($name, Kind::Stress, &pool)
         })
     };
+    ($name:literal, $build:expr, $access:expr) => {
+        entry!($name, Kind::Stress, |r| {
+            let pool: Vec<_> = if r.vary {
+                (0..POOL_SIZE).map($build).collect()
+            } else {
+                vec![$build(0)]
+            };
+            r.record_pool_access($name, Kind::Stress, &pool, &$access)
+        })
+    };
 }
 
 use bench_cabin::veh::cabin;
@@ -318,7 +359,7 @@ fn count(n: i64) -> st::Count {
 
 /// 100 items. The seed changes the counts and nothing else; seed 0 is the
 /// fixed value.
-fn big_item_list(seed: i64) -> st::BigItemListPayload {
+pub fn big_item_list(seed: i64) -> st::BigItemListPayload {
     st::BigItemListPayload {
         items: (0..100i64)
             .map(|i| st::Item {
@@ -358,7 +399,7 @@ fn big_map(seed: i64) -> st::BigMapPayload {
 
 /// Ten rows of four cells each: the deepest payload that stays under the
 /// interaction ceiling.
-fn deep_nested(seed: i64) -> st::DeepNestedPayload {
+pub fn deep_nested(seed: i64) -> st::DeepNestedPayload {
     st::DeepNestedPayload {
         rows: (0..10i64)
             .map(|r| st::DeepRow {
@@ -396,7 +437,7 @@ fn variant(seed: i64) -> st::UnionPayload {
 /// Two of the 30 optional fields set: one in the outer layer, one in the
 /// innermost layer.
 #[allow(clippy::field_reassign_with_default)]
-fn deep_sparse(seed: i64) -> st::DeepSparsePayload {
+pub fn deep_sparse(seed: i64) -> st::DeepSparsePayload {
     let mut v = st::DeepSparsePayload::default();
     v.a0 = Some(count(seed * 53 + 5));
     v.mid.inner.z9 = Some(label(format!("z-{seed:03}")));
@@ -405,7 +446,7 @@ fn deep_sparse(seed: i64) -> st::DeepSparsePayload {
 
 /// All 30 optional fields set.
 #[allow(clippy::field_reassign_with_default)]
-fn deep_full(seed: i64) -> st::DeepSparsePayload {
+pub fn deep_full(seed: i64) -> st::DeepSparsePayload {
     let c = |i: i64| Some(count(seed * 59 + i * 11));
     let l = |i: i64| Some(label(format!("f{i:02}-{seed:03}")));
     let mut v = st::DeepSparsePayload::default();
@@ -440,6 +481,35 @@ fn deep_full(seed: i64) -> st::DeepSparsePayload {
     v.mid.inner.z8 = c(28);
     v.mid.inner.z9 = l(29);
     v
+}
+
+/// The accessors of `BigItemListPayload`: one scalar read through each view.
+pub fn big_item_list_access() -> Accessors<st::BigItemListPayload> {
+    Accessors {
+        flatbuffers: |v| v.items()[50].count.get() as u64,
+        podbuf: |v| v.items().nth(50).map_or(0, |i| i.count().get() as u64),
+    }
+}
+
+/// The accessors of `DeepNestedPayload`: one scalar read through each view.
+pub fn deep_nested_access() -> Accessors<st::DeepNestedPayload> {
+    Accessors {
+        flatbuffers: |v| v.rows()[5].cells[2].value.get() as u64,
+        podbuf: |v| {
+            v.rows()
+                .nth(5)
+                .and_then(|r| r.cells().nth(2))
+                .map_or(0, |c| c.value().get() as u64)
+        },
+    }
+}
+
+/// The accessors of `DeepSparsePayload`: one scalar read through each view.
+pub fn deep_sparse_access() -> Accessors<st::DeepSparsePayload> {
+    Accessors {
+        flatbuffers: |v| v.mid().inner().z9().map_or(0, |z| z.len() as u64),
+        podbuf: |v| v.mid().inner().z9().map_or(0, |z| z.len() as u64),
+    }
 }
 
 /// Every entry of the corpus: one per signal of the veh-cluster corpus and of
@@ -527,12 +597,28 @@ pub fn corpus() -> Vec<CorpusEntry> {
                 text: st::BigText::new("x".repeat(3000)).unwrap()
             }
         ),
-        stress_pool!("bench.stress.Stress.bigItemList", big_item_list),
+        stress_pool!(
+            "bench.stress.Stress.bigItemList",
+            big_item_list,
+            big_item_list_access()
+        ),
         stress_pool!("bench.stress.Stress.bigSamples", big_samples),
         stress_pool!("bench.stress.Stress.bigMap", big_map),
-        stress_pool!("bench.stress.Stress.deepNested", deep_nested),
+        stress_pool!(
+            "bench.stress.Stress.deepNested",
+            deep_nested,
+            deep_nested_access()
+        ),
         stress_pool!("bench.stress.Stress.variant", variant),
-        stress_pool!("bench.stress.Stress.deepSparse", deep_sparse),
-        stress_pool!("bench.stress.Stress.deepFull", deep_full),
+        stress_pool!(
+            "bench.stress.Stress.deepSparse",
+            deep_sparse,
+            deep_sparse_access()
+        ),
+        stress_pool!(
+            "bench.stress.Stress.deepFull",
+            deep_full,
+            deep_sparse_access()
+        ),
     ]
 }

@@ -181,3 +181,39 @@ fn a_payload_that_cannot_be_built_is_not_built_and_a_refusal_is_refused() {
         assert!(matches!(&row.cell, Cell::Refused { .. }), "{row:?}");
     }
 }
+
+/// Reads `value` through each accessor and checks the number against the
+/// field it names, for a seed that changes the content.
+fn read_both<T>(value: &T, access: &encoding_bench::timing::Accessors<T>) -> (u64, u64)
+where
+    T: ridl_rt::payload::Payload<ridl_rt::encoding::FlatBuffers>
+        + ridl_rt::payload::Payload<ridl_rt::encoding::Podbuf>,
+{
+    use ridl_rt::encoding::{FlatBuffers, Podbuf};
+    use ridl_rt::payload::Ref;
+    let mut fb = <T as ridl_rt::payload::Payload<FlatBuffers>>::BUFFER;
+    let mut pb = <T as ridl_rt::payload::Payload<Podbuf>>::BUFFER;
+    let f = Ref::<T, FlatBuffers>::encode(value, fb.as_mut()).unwrap();
+    let p = Ref::<T, Podbuf>::encode(value, pb.as_mut()).unwrap();
+    ((access.flatbuffers)(f.view()), (access.podbuf)(p.view()))
+}
+
+#[test]
+fn each_accessor_reads_the_field_it_names_in_both_encodings() {
+    use encoding_bench::corpus::*;
+    for seed in [0, 7] {
+        let v = big_item_list(seed);
+        let want = v.items[50].count.get() as u64;
+        assert_eq!(read_both(&v, &big_item_list_access()), (want, want));
+
+        let v = deep_nested(seed);
+        let want = v.rows[5].cells[2].value.get() as u64;
+        assert_eq!(read_both(&v, &deep_nested_access()), (want, want));
+
+        for v in [deep_sparse(seed), deep_full(seed)] {
+            let want = v.mid.inner.z9.as_ref().unwrap().get().len() as u64;
+            assert!(want > 0);
+            assert_eq!(read_both(&v, &deep_sparse_access()), (want, want));
+        }
+    }
+}
