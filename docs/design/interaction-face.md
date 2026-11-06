@@ -737,8 +737,9 @@ assertions share, and nothing in the fixture isolates one type enough to do that
 safely under the test binary's parallel execution.
 
 **A `SettleError` is left to the handler** — which already owns that claim's
-settlement — and is not turned into a different `CallError`; the step continues
-to the next claim. `round_trip_dispatch_counts_only_accepted_settlements` in
+settlement — and is not turned into a different `CallError`, except the one case
+below; the step continues to the next claim.
+`round_trip_dispatch_counts_only_accepted_settlements` in
 `tests/interaction_face.rs` injects one settlement failure followed by one
 successful claim and asserts the counts are `0` then `1`.
 
@@ -1281,10 +1282,11 @@ than 16,128 bytes on the stack
 face itself refuses no payload for its size: the one refusal on send is the
 port's `TooLarge { cap }`, which the runtime raises against the member's limit
 (ADR-0030 decision 19) and the face returns unchanged, as it returns every port
-error. A reply the port refuses with `SettleError::TooLarge` is left to the
-handler: the claim stays unsettled, and the dispatch pass continues with the
-next claim. A claim whose arguments do not fit `MAX_BUFFER_SIZE` is a different
-case: it is settled `corrupt` without being read
+error. A reply the port refuses with `SettleError::TooLarge` is settled again
+`corrupt`, so that the claim does not stay unsettled, and the dispatch pass
+continues with the next claim. A claim whose arguments do not fit
+`MAX_BUFFER_SIZE` is a different case: it is settled `corrupt` without being
+read
 (`round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_served`
 in `crates/ridl-backend-rust/tests/interaction_face.rs`). The two ways to a
 smaller frame are named here so that a consumer on a target with a smaller stack
