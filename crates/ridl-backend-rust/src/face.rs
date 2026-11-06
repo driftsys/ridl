@@ -1702,6 +1702,25 @@ fn encode_into(
     }
 }
 
+/// The settlement of a query's encoded reply: when the handler refuses the
+/// reply as too large, the claim is settled again as `Transport::Corrupt`, the
+/// outcome `ridl-transport-ws` settles it with. Without the second settlement
+/// no code settles the claim, because the handler is the port that refused
+/// (driftsys/ridl#1260). The result is that of the last settlement.
+fn settle_reply(claim: TokenStream) -> TokenStream {
+    quote! {
+        match h.settle(#claim, Ok(bytes)) {
+            Err(::ridl_rt::port::SettleError::TooLarge { .. }) => h.settle(
+                #claim,
+                Err(::ridl_rt::error::CallError::Transport(
+                    ::ridl_rt::error::Transport::Corrupt,
+                )),
+            ),
+            settled => settled,
+        }
+    }
+}
+
 /// The same encode where the outcome is a settlement rather than a return:
 /// the expression evaluates to `ok`, with the encoded bytes bound as `bytes`,
 /// or to `contract`, with the encoder's violation bound as `__violation`.

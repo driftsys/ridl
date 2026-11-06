@@ -380,7 +380,7 @@ fn driver(call: &Call) -> TokenStream {
             quote! {buf},
             "the reply buffer",
             &ident("H"),
-            quote! {h.settle(stream.claim,Ok(bytes))},
+            super::settle_reply(quote! {stream.claim}),
             quote! {h.settle(stream.claim,Err(::ridl_rt::error::CallError::Contract(::ridl_rt::error::Contract::InvalidValue(__violation))))},
         );
         quote! {

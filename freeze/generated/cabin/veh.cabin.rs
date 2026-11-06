@@ -4229,7 +4229,19 @@ pub mod cabin {
                                                         >::encode(&reply, buf) {
                                                             Ok(encoded) => {
                                                                 let bytes = encoded.bytes();
-                                                                h.settle(claim.id, Ok(bytes))
+                                                                match h.settle(claim.id, Ok(bytes)) {
+                                                                    Err(::ridl_rt::port::SettleError::TooLarge { .. }) => {
+                                                                        h.settle(
+                                                                            claim.id,
+                                                                            Err(
+                                                                                ::ridl_rt::error::CallError::Transport(
+                                                                                    ::ridl_rt::error::Transport::Corrupt,
+                                                                                ),
+                                                                            ),
+                                                                        )
+                                                                    }
+                                                                    settled => settled,
+                                                                }
                                                             }
                                                             Err(
                                                                 ::ridl_rt::payload::EncodeError::Contract(__violation),

@@ -482,6 +482,28 @@ fn dropping_serve_settles_an_upload_query_as_interrupted() {
     assert_eq!(*operations.borrow(), vec!["abort_upload", "settle_error"]);
 }
 
+/// A reply the handler refuses as too large is settled again as
+/// `Transport::Corrupt` (driftsys/ridl#1260), as for a query without an upload.
+#[test]
+fn a_refused_reply_of_an_upload_query_is_settled_again_as_corrupt() {
+    let (mut rt, _s, mut provider) = setup();
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.summarize(generated::LogSummarizeParams {});
+    pending(&mut call);
+    pending(&mut serve);
+    sink.send(&reading(1)).unwrap();
+    pending(&mut serve);
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    rt.fail_next_settle();
+    pending(&mut serve);
+    assert_eq!(
+        poll(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Corrupt
+        ))))
+    );
+}
 #[test]
 fn a_broken_ensure_on_an_upload_query_settles_contract_broken() {
     let (rt, s, mut provider) = setup();

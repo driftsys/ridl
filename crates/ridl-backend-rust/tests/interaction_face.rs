@@ -700,6 +700,36 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     assert_eq!(provider.set_level_calls, vec![1, 2]);
 }
 
+/// A query reply the handler refuses as too large is settled again as
+/// `Transport::Corrupt`, so the caller receives that outcome and the call's
+/// slot is released (driftsys/ridl#1260). Before the fix nothing settled the
+/// claim again: the caller timed out, and after `Loopback::SLOTS` such calls
+/// every call failed with `Send(Busy)`.
+#[test]
+fn a_refused_query_settlement_is_settled_again_as_corrupt() {
+    let mut rt = loopback();
+    let mut provider = TestProvider::new(7);
+    let mut serve = generated::cabin::serve(rt.handler(), &mut provider);
+    let mut client = generated::cabin::Client::new(RecordingPorts::new(&rt));
+    for i in 0..(Loopback::SLOTS + 2) {
+        rt.fail_next_settle();
+        let mut call = client.average(generated::Window::new_unchecked(10));
+        let _ = poll_once(&mut call);
+        for _ in 0..50 {
+            let _ = poll_once(&mut serve);
+        }
+        assert!(
+            matches!(
+                poll_once(&mut call),
+                Poll::Ready(Err(ClientError::Call(CallError::Transport(
+                    Transport::Corrupt
+                ))))
+            ),
+            "call {i}: the refused reply is settled again as corrupt"
+        );
+    }
+}
+
 #[test]
 fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
     let mut port = loopback();
