@@ -10,3 +10,7 @@ encodings = ["flatbuffers", "proto3", "podbuf"]
 "Stress.bigItemList" = 16128
 "Stress.bigSamples" = 16128
 "Stress.bigMap" = 16128
+"Stress.deepNested" = 16128
+"Stress.variant" = 16128
+"Stress.deepSparse" = 16128
+"Stress.deepFull" = 16128

@@ -267,6 +267,100 @@ fn fan() -> cl::FanLevel {
     cl::FanLevel::new(3).unwrap()
 }
 
+fn label(text: String) -> st::Label {
+    st::Label::new(text).unwrap()
+}
+
+fn count(n: i64) -> st::Count {
+    st::Count::new(n % 65536).unwrap()
+}
+
+/// Ten rows of four cells each: the deepest payload that stays under the
+/// interaction ceiling.
+fn deep_nested(seed: i64) -> st::DeepNestedPayload {
+    st::DeepNestedPayload {
+        rows: (0..10i64)
+            .map(|r| st::DeepRow {
+                label: label(format!("row-{:03}", (seed * 10 + r) % 1000)),
+                pair: st::DeepPair {
+                    first: count(seed * 31 + r * 7),
+                    second: count(seed * 17 + r * 13),
+                },
+                cells: (0..4i64)
+                    .map(|c| st::DeepCell {
+                        name: label(format!("cell-{:03}", (seed * 4 + c + r) % 1000)),
+                        value: count(seed * 101 + r * 1000 + c * 37),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+/// The arm of the union and the mode cycle with the seed, so that a pool of
+/// values holds every arm and a mode that no name covers.
+fn variant(seed: i64) -> st::UnionPayload {
+    let reading = match seed % 3 {
+        0 => st::Reading::Count(count(seed * 977)),
+        1 => st::Reading::Text(label(format!("text-{seed:03}"))),
+        _ => st::Reading::Item(st::Item {
+            label: label(format!("item-{seed:03}")),
+            count: count(seed * 313),
+        }),
+    };
+    let mode = st::Mode::from(seed % 4);
+    st::UnionPayload { reading, mode }
+}
+
+/// Two of the 30 optional fields set: one in the outer layer, one in the
+/// innermost layer.
+#[allow(clippy::field_reassign_with_default)]
+fn deep_sparse(seed: i64) -> st::DeepSparsePayload {
+    let mut v = st::DeepSparsePayload::default();
+    v.a0 = Some(count(seed * 53 + 5));
+    v.mid.inner.z9 = Some(label(format!("z-{seed:03}")));
+    v
+}
+
+/// All 30 optional fields set.
+#[allow(clippy::field_reassign_with_default)]
+fn deep_full(seed: i64) -> st::DeepSparsePayload {
+    let c = |i: i64| Some(count(seed * 59 + i * 11));
+    let l = |i: i64| Some(label(format!("f{i:02}-{seed:03}")));
+    let mut v = st::DeepSparsePayload::default();
+    v.a0 = c(0);
+    v.a1 = l(1);
+    v.a2 = c(2);
+    v.a3 = l(3);
+    v.a4 = c(4);
+    v.a5 = l(5);
+    v.a6 = c(6);
+    v.a7 = l(7);
+    v.a8 = c(8);
+    v.a9 = l(9);
+    v.mid.m0 = c(10);
+    v.mid.m1 = l(11);
+    v.mid.m2 = c(12);
+    v.mid.m3 = l(13);
+    v.mid.m4 = c(14);
+    v.mid.m5 = l(15);
+    v.mid.m6 = c(16);
+    v.mid.m7 = l(17);
+    v.mid.m8 = c(18);
+    v.mid.m9 = l(19);
+    v.mid.inner.z0 = c(20);
+    v.mid.inner.z1 = l(21);
+    v.mid.inner.z2 = c(22);
+    v.mid.inner.z3 = l(23);
+    v.mid.inner.z4 = c(24);
+    v.mid.inner.z5 = l(25);
+    v.mid.inner.z6 = c(26);
+    v.mid.inner.z7 = l(27);
+    v.mid.inner.z8 = c(28);
+    v.mid.inner.z9 = l(29);
+    v
+}
+
 /// Every entry of the corpus: one per signal of the veh-cluster corpus and of
 /// examples/cabin, then one per stress payload. Each builds a representative
 /// value by hand.
@@ -382,5 +476,9 @@ pub fn corpus() -> Vec<CorpusEntry> {
                     .collect()
             }
         ),
+        stress!("bench.stress.Stress.deepNested", deep_nested(0)),
+        stress!("bench.stress.Stress.variant", variant(1)),
+        stress!("bench.stress.Stress.deepSparse", deep_sparse(0)),
+        stress!("bench.stress.Stress.deepFull", deep_full(0)),
     ]
 }

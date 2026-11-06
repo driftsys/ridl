@@ -82,7 +82,11 @@ fn main() {
         ..Recorder::default()
     };
     for entry in corpus() {
-        if args.only.as_deref().is_some_and(|only| !entry.name.contains(only)) {
+        if args
+            .only
+            .as_deref()
+            .is_some_and(|only| !entry.name.contains(only))
+        {
             continue;
         }
         (entry.run)(&mut rec);

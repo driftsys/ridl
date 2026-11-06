@@ -87,6 +87,144 @@ struct BigMapPayload {
   counts: [Label : Count; 0..120]
 }
 
+/// A line of a deeply nested payload: a label, a pair of scalars and a short
+/// list.
+struct DeepRow {
+  /// The row label.
+  label: Label
+  /// The row measurements.
+  pair: DeepPair
+  /// The cells of the row.
+  cells: [DeepCell; 1..4]
+}
+
+/// Two scalars.
+struct DeepPair {
+  /// The first scalar.
+  first: Count
+  /// The second scalar.
+  second: Count
+}
+
+/// A cell of a row.
+struct DeepCell {
+  /// The cell name.
+  name: Label
+  /// The cell value.
+  value: Count
+}
+
+/// A signal payload that nests lists of structs three levels deep.
+struct DeepNestedPayload {
+  /// The rows.
+  rows: [DeepRow; 1..10]
+}
+
+/// A mode that a peer may extend.
+open enum Mode {
+  /// Off.
+  OFF = 0
+  /// On.
+  ON = 1
+  /// Chosen by the device.
+  AUTO = 2
+}
+
+/// A reading that is a count, a text or an item.
+union Reading {
+  /// A count.
+  count: Count
+  /// A text.
+  text: Label
+  /// An item.
+  item: Item
+}
+
+/// A signal payload that holds a union and an open enum.
+struct UnionPayload {
+  /// The reading.
+  reading: Reading
+  /// The mode.
+  mode: Mode
+}
+
+/// The innermost layer of the sparse payload.
+struct SparseInner {
+  /// Innermost field 0.
+  z0: Count?
+  /// Innermost field 1.
+  z1: Label?
+  /// Innermost field 2.
+  z2: Count?
+  /// Innermost field 3.
+  z3: Label?
+  /// Innermost field 4.
+  z4: Count?
+  /// Innermost field 5.
+  z5: Label?
+  /// Innermost field 6.
+  z6: Count?
+  /// Innermost field 7.
+  z7: Label?
+  /// Innermost field 8.
+  z8: Count?
+  /// Innermost field 9.
+  z9: Label?
+}
+
+/// The middle layer of the sparse payload.
+struct SparseMid {
+  /// Middle field 0.
+  m0: Count?
+  /// Middle field 1.
+  m1: Label?
+  /// Middle field 2.
+  m2: Count?
+  /// Middle field 3.
+  m3: Label?
+  /// Middle field 4.
+  m4: Count?
+  /// Middle field 5.
+  m5: Label?
+  /// Middle field 6.
+  m6: Count?
+  /// Middle field 7.
+  m7: Label?
+  /// Middle field 8.
+  m8: Count?
+  /// Middle field 9.
+  m9: Label?
+  /// The inner layer.
+  inner: SparseInner
+}
+
+/// A signal payload of three nested layers whose fields are almost all
+/// optional.
+struct DeepSparsePayload {
+  /// Outer field 0.
+  a0: Count?
+  /// Outer field 1.
+  a1: Label?
+  /// Outer field 2.
+  a2: Count?
+  /// Outer field 3.
+  a3: Label?
+  /// Outer field 4.
+  a4: Count?
+  /// Outer field 5.
+  a5: Label?
+  /// Outer field 6.
+  a6: Count?
+  /// Outer field 7.
+  a7: Label?
+  /// Outer field 8.
+  a8: Count?
+  /// Outer field 9.
+  a9: Label?
+  /// The middle layer.
+  mid: SparseMid
+}
+
 /// Interface that makes the stress shapes interaction payloads.
 interface Stress {
   /// A long string.
@@ -105,4 +243,12 @@ interface Stress {
   signal bigSamples: BigSamplesPayload @10ms
   /// A large map.
   signal bigMap: BigMapPayload @10ms
+  /// Rows of structs that hold structs and lists.
+  signal deepNested: DeepNestedPayload @10ms
+  /// A union and an open enum.
+  signal variant: UnionPayload @10ms
+  /// A sparse three-layer struct with 30 optional fields.
+  signal deepSparse: DeepSparsePayload @10ms
+  /// The same struct with every field set.
+  signal deepFull: DeepSparsePayload @10ms
 }
