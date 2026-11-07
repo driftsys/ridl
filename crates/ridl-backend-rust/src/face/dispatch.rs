@@ -245,7 +245,7 @@ pub(super) fn dispatch(
     // claims although `Handler::settle` was not called for it. Every other
     // claim is counted only once `Handler::settle` has accepted it. When the
     // handler refuses a query's reply as `SettleError::TooLarge`, the claim
-    // is settled again `Transport::Corrupt`, because the claim stays
+    // is settled again with `Transport::Corrupt`, because the claim stays
     // settleable and no other code settles it (driftsys/ridl#1260). Any
     // other `SettleError` is left to the handler, which already owns that
     // claim's settlement. The pass continues with the next claim, except

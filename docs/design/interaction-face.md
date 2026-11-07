@@ -746,8 +746,9 @@ successful claim and asserts the counts are `0` then `1`.
 **One refusal is not left to the handler: `SettleError::TooLarge` on a query's
 reply.** The claim stays settleable and the handler is the port that refused, so
 no other code settles it, and the call's slot would never be released. The face
-settles the claim again `Transport::Corrupt`, the outcome `ridl-transport-ws`
-settles it with, and counts the claim by the result of that second settlement.
+settles the claim again with `Transport::Corrupt`, the outcome
+`ridl-transport-ws` settles it with. `dispatch` counts the claim by the result
+of that second settlement; the upload query's reply path does not count.
 `a_refused_query_settlement_is_settled_again_as_corrupt` in
 `tests/interaction_face.rs` and
 `a_refused_reply_of_an_upload_query_is_settled_again_as_corrupt` in

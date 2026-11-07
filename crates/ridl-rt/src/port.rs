@@ -1034,7 +1034,9 @@ pub enum SettleError {
     /// entry of the manifest gives it, else the default ceiling of a
     /// command or a query
     /// ([`contract::default_ceiling`](crate::contract::default_ceiling)).
-    /// No outcome is recorded, and the claim stays settleable. This is the
+    /// No outcome is recorded, and the claim stays settleable. The generated
+    /// interaction face settles a refused query reply again with
+    /// `Transport::Corrupt` (driftsys/ridl#1260). This is the
     /// one refusal of a payload's size on send (ADR-0030 decision 19).
     TooLarge {
         /// The limit in bytes.
