@@ -700,6 +700,109 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     assert_eq!(provider.set_level_calls, vec![1, 2]);
 }
 
+/// Sends one `average` query and returns its call, with the provider and the
+/// handler a `dispatch` pass over it needs.
+fn dispatch_one_refused_query(
+    refusals: &[SettleError],
+) -> (
+    Result<usize, ReadError>,
+    usize,
+    Poll<Result<generated::Average, ClientError>>,
+) {
+    let mut rt = loopback();
+    let mut handler = FailingHandler::refusing_settles(rt.handler(), refusals);
+    let settles = handler.settle_calls();
+    let mut client = generated::cabin::Client::new(RecordingPorts::new(&rt));
+    let mut call = client.average(generated::Window::new_unchecked(10));
+    let _ = poll_once(&mut call);
+    let mut provider = TestProvider::new(7);
+    let mut buf = [0u8; CLAIM_MAX];
+    let counted = generated::cabin::dispatch(&mut handler, &mut provider, &mut buf, &mut 8);
+    rt.advance(AVERAGE_MAX);
+    rt.advance(Duration(1));
+    (
+        counted,
+        settles.load(Ordering::Relaxed),
+        poll_once(&mut call),
+    )
+}
+
+/// A query reply the handler accepts at once is counted, and settled once.
+#[test]
+fn a_query_settled_at_once_is_counted() {
+    let (counted, settles, call) = dispatch_one_refused_query(&[]);
+    assert_eq!(counted, Ok(1));
+    assert_eq!(settles, 1);
+    assert!(matches!(call, Poll::Ready(Ok(_))));
+}
+
+/// `dispatch` counts a claim by the result of the settlement that follows a
+/// refusal: a second settlement the handler accepts counts it
+/// (driftsys/ridl#1260).
+#[test]
+fn a_query_settled_again_after_a_refusal_is_counted() {
+    let (counted, settles, call) = dispatch_one_refused_query(&[SettleError::TooLarge { cap: 0 }]);
+    assert_eq!(counted, Ok(1));
+    assert_eq!(settles, 2, "the reply, then the corrupt outcome");
+    assert!(matches!(
+        call,
+        Poll::Ready(Err(ClientError::Call(CallError::Transport(
+            Transport::Corrupt
+        ))))
+    ));
+}
+
+/// A second settlement the handler also refuses does not count the claim, and
+/// is not attempted a third time.
+#[test]
+fn a_query_whose_second_settlement_is_also_refused_is_not_counted() {
+    let (counted, settles, _) = dispatch_one_refused_query(&[
+        SettleError::TooLarge { cap: 0 },
+        SettleError::TooLarge { cap: 0 },
+    ]);
+    assert_eq!(counted, Ok(0));
+    assert_eq!(settles, 2);
+}
+
+/// Only `TooLarge` is settled again: any other refusal is left to the
+/// handler, which already owns the claim's settlement.
+#[test]
+fn a_query_reply_refused_with_unknown_claim_is_not_settled_again() {
+    let (counted, settles, _) = dispatch_one_refused_query(&[SettleError::UnknownClaim]);
+    assert_eq!(counted, Ok(0));
+    assert_eq!(settles, 1);
+}
+
+/// A query reply the handler refuses as too large is settled again as
+/// `Transport::Corrupt`, so the caller receives that outcome and the call's
+/// slot is released (driftsys/ridl#1260). Before the fix nothing settled the
+/// claim again: the caller timed out, and after `Loopback::SLOTS` such calls
+/// every call failed with `Send(Busy)`.
+#[test]
+fn a_refused_query_settlement_is_settled_again_as_corrupt() {
+    let mut rt = loopback();
+    let mut provider = TestProvider::new(7);
+    let mut serve = generated::cabin::serve(rt.handler(), &mut provider);
+    let mut client = generated::cabin::Client::new(RecordingPorts::new(&rt));
+    for i in 0..(Loopback::SLOTS + 2) {
+        rt.fail_next_settle();
+        let mut call = client.average(generated::Window::new_unchecked(10));
+        let _ = poll_once(&mut call);
+        for _ in 0..50 {
+            let _ = poll_once(&mut serve);
+        }
+        assert!(
+            matches!(
+                poll_once(&mut call),
+                Poll::Ready(Err(ClientError::Call(CallError::Transport(
+                    Transport::Corrupt
+                ))))
+            ),
+            "call {i}: the refused reply is settled again as corrupt"
+        );
+    }
+}
+
 #[test]
 fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
     let mut port = loopback();

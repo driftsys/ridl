@@ -90,6 +90,17 @@ which the decision left to a design note, is in the frame specification (frame
 version 2, binding version 2 under `ridl-ws-v2`, blocks of 4,096 bytes). No
 other number changes.
 
+Amended 2026-11-06 from driftsys/ridl#1260 and the owner's decision of that day:
+when a handler refuses a provider's reply with `SettleError::TooLarge`, the
+generated interaction face settles the claim again with `Transport::Corrupt`,
+the outcome `ridl-transport-ws` already uses. The claim stays settleable after
+the refusal, and the handler is the port that refused, so without this
+settlement nothing settles the claim and its call slot is never released. The
+rule applies to a query's reply and to the reply of a query with an upload. The
+sentence of decision 4 that answered a refused reply with `corrupt` went with
+the withdrawn codec rule; this amendment states the rule for the refusal of the
+port instead.
+
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and

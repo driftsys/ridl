@@ -298,6 +298,11 @@ pub struct FailingHandler {
     fail_after: Option<usize>,
     /// `serve` answers this refusal instead of registering the members.
     refusal: Option<ServeError>,
+    /// The next `settle` calls answer these errors in order, without
+    /// settling the claim, until the list is spent.
+    settle_refusals: std::collections::VecDeque<SettleError>,
+    /// `settle` calls so far, refused or not.
+    settles: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl FailingHandler {
@@ -309,6 +314,8 @@ impl FailingHandler {
             presented: 0,
             fail_after: Some(presented),
             refusal: None,
+            settle_refusals: Default::default(),
+            settles: Default::default(),
         }
     }
 
@@ -319,7 +326,24 @@ impl FailingHandler {
             presented: 0,
             fail_after: None,
             refusal: Some(refusal),
+            settle_refusals: Default::default(),
+            settles: Default::default(),
         }
+    }
+
+    /// A handler whose first `settle` calls refuse with `refusals`, in order,
+    /// without settling the claim, and whose later calls reach the runtime.
+    pub fn refusing_settles(inner: HandlerHandle, refusals: &[SettleError]) -> Self {
+        FailingHandler {
+            settle_refusals: refusals.iter().copied().collect(),
+            ..FailingHandler::failing_after(inner, usize::MAX)
+        }
+    }
+
+    /// The `settle` call count, for the test to read while `serve` or
+    /// `dispatch` holds the handler.
+    pub fn settle_calls(&self) -> Arc<std::sync::atomic::AtomicUsize> {
+        Arc::clone(&self.settles)
     }
 }
 
@@ -359,6 +383,11 @@ impl Handler for FailingHandler {
         claim: ClaimId,
         outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError> {
+        self.settles
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if let Some(refusal) = self.settle_refusals.pop_front() {
+            return Err(refusal);
+        }
         self.inner.settle(claim, outcome)
     }
 }

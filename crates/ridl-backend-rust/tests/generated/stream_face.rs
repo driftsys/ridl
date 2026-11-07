@@ -8395,7 +8395,19 @@ pub mod log {
                         >::encode(&reply, buf) {
                             Ok(encoded) => {
                                 let bytes = encoded.bytes();
-                                h.settle(stream.claim, Ok(bytes))
+                                match h.settle(stream.claim, Ok(bytes)) {
+                                    Err(::ridl_rt::port::SettleError::TooLarge { .. }) => {
+                                        h.settle(
+                                            stream.claim,
+                                            Err(
+                                                ::ridl_rt::error::CallError::Transport(
+                                                    ::ridl_rt::error::Transport::Corrupt,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                    settled => settled,
+                                }
                             }
                             Err(
                                 ::ridl_rt::payload::EncodeError::Contract(__violation),
@@ -8618,7 +8630,19 @@ pub mod log {
                         >::encode(&reply, buf) {
                             Ok(encoded) => {
                                 let bytes = encoded.bytes();
-                                h.settle(stream.claim, Ok(bytes))
+                                match h.settle(stream.claim, Ok(bytes)) {
+                                    Err(::ridl_rt::port::SettleError::TooLarge { .. }) => {
+                                        h.settle(
+                                            stream.claim,
+                                            Err(
+                                                ::ridl_rt::error::CallError::Transport(
+                                                    ::ridl_rt::error::Transport::Corrupt,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                    settled => settled,
+                                }
                             }
                             Err(
                                 ::ridl_rt::payload::EncodeError::Contract(__violation),
@@ -9964,7 +9988,19 @@ pub mod plain {
                                                         >::encode(&reply, buf) {
                                                             Ok(encoded) => {
                                                                 let bytes = encoded.bytes();
-                                                                h.settle(claim.id, Ok(bytes))
+                                                                match h.settle(claim.id, Ok(bytes)) {
+                                                                    Err(::ridl_rt::port::SettleError::TooLarge { .. }) => {
+                                                                        h.settle(
+                                                                            claim.id,
+                                                                            Err(
+                                                                                ::ridl_rt::error::CallError::Transport(
+                                                                                    ::ridl_rt::error::Transport::Corrupt,
+                                                                                ),
+                                                                            ),
+                                                                        )
+                                                                    }
+                                                                    settled => settled,
+                                                                }
                                                             }
                                                             Err(
                                                                 ::ridl_rt::payload::EncodeError::Contract(__violation),
@@ -16718,7 +16754,19 @@ pub mod raw_queries {
                         >::encode(&reply, buf) {
                             Ok(encoded) => {
                                 let bytes = encoded.bytes();
-                                h.settle(stream.claim, Ok(bytes))
+                                match h.settle(stream.claim, Ok(bytes)) {
+                                    Err(::ridl_rt::port::SettleError::TooLarge { .. }) => {
+                                        h.settle(
+                                            stream.claim,
+                                            Err(
+                                                ::ridl_rt::error::CallError::Transport(
+                                                    ::ridl_rt::error::Transport::Corrupt,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                    settled => settled,
+                                }
                             }
                             Err(
                                 ::ridl_rt::payload::EncodeError::Contract(__violation),
