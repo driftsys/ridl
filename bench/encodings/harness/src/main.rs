@@ -8,9 +8,10 @@
 //! second and read process CPU time), `--date YYYY-MM-DD` (for a device with a
 //! wrong clock), `--commit HASH` (for a device without git), `--only TEXT`
 //! (run only the corpus entries whose name contains the text, for profiling),
-//! `--vary` (time encode, verify and decode on a pool of 64 distinct values for
-//! the payloads that have one; needs `--out`).
+//! `--vary` (time encode, verify, decode and access on a pool of 64 distinct
+//! values for the payloads that have one; needs `--out`).
 
+use encoding_bench::args::parse_args;
 use encoding_bench::corpus::{corpus, Cell, Kind, Recorder};
 use encoding_bench::report::{collect_provenance, to_json, RunInfo};
 use encoding_bench::timing::{TimingConfig, RATE_PER_S};
@@ -19,61 +20,9 @@ use encoding_bench::CountingAlloc;
 #[global_allocator]
 static ALLOC: CountingAlloc = CountingAlloc;
 
-struct Args {
-    out: Option<String>,
-    core_label: String,
-    duration_s: f64,
-    paced: bool,
-    commit: Option<String>,
-    date: Option<String>,
-    only: Option<String>,
-    vary: bool,
-}
-
-fn parse_args() -> Result<Args, String> {
-    let mut args = Args {
-        out: None,
-        core_label: "unlabeled".into(),
-        duration_s: 0.5,
-        paced: false,
-        commit: None,
-        date: None,
-        only: None,
-        vary: false,
-    };
-    let mut it = std::env::args().skip(1);
-    while let Some(flag) = it.next() {
-        let mut value = |name: &str| it.next().ok_or(format!("{name} needs a value"));
-        match flag.as_str() {
-            "--out" => args.out = Some(value("--out")?),
-            "--core-label" => args.core_label = value("--core-label")?,
-            "--commit" => args.commit = Some(value("--commit")?),
-            "--date" => args.date = Some(value("--date")?),
-            "--duration" => {
-                args.duration_s = value("--duration")?
-                    .parse()
-                    .map_err(|e| format!("--duration: {e}"))?;
-                if args.duration_s.is_nan() || args.duration_s <= 0.0 {
-                    return Err("--duration must be above zero".into());
-                }
-            }
-            "--only" => args.only = Some(value("--only")?),
-            "--paced" => args.paced = true,
-            "--vary" => args.vary = true,
-            other => return Err(format!("unknown flag {other}")),
-        }
-    }
-    if args.paced && args.out.is_none() {
-        return Err("--paced needs --out".into());
-    }
-    if args.vary && args.out.is_none() {
-        return Err("--vary needs --out".into());
-    }
-    Ok(args)
-}
-
 fn main() {
-    let args = match parse_args() {
+    let flags: Vec<String> = std::env::args().skip(1).collect();
+    let args = match parse_args(&flags) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("error: {e}");

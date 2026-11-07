@@ -715,3 +715,53 @@ fn the_access_table_says_so_when_no_payload_has_an_accessor() {
     let t = access_time_table(&file(trio("p.plain", "P", [10; 3], [10.0; 3])));
     assert!(t.contains("No payload"), "{t}");
 }
+
+/// The cells of the table row that starts with `payload`, without the
+/// payload column.
+fn table_cells(t: &str, payload: &str) -> Vec<String> {
+    let line = t
+        .lines()
+        .find(|l| l.starts_with(&format!("| {payload} ")))
+        .unwrap_or_else(|| panic!("no row for {payload}:\n{t}"));
+    line.trim_matches('|')
+        .split('|')
+        .skip(1)
+        .map(|c| c.trim().to_string())
+        .collect()
+}
+
+#[test]
+fn each_access_value_sits_in_the_column_of_its_encoding() {
+    let mut rows = trio("p.deep", "D", [10; 3], [10.0; 3]);
+    rows[0] = with_access(rows[0].clone(), 12.5);
+    rows[2] = with_access(rows[2].clone(), 3.5);
+    let t = access_time_table(&file(rows));
+    assert_eq!(
+        t.lines().find(|l| l.starts_with("| Payload")).map(|l| l
+            .trim_matches('|')
+            .split('|')
+            .map(|c| c.trim())
+            .collect::<Vec<_>>()),
+        Some(vec!["Payload", "FlatBuffers", "proto3", "podbuf"]),
+        "{t}"
+    );
+    let cells = table_cells(&t, "p.deep");
+    assert!(cells[0].starts_with("12.5"), "{cells:?}");
+    assert_eq!(cells[1], "n/a: no accessors", "{cells:?}");
+    assert!(cells[2].starts_with("3.5"), "{cells:?}");
+}
+
+#[test]
+fn the_access_table_marks_a_refused_cell_and_an_absent_row() {
+    let mut rows = vec![with_access(
+        measured("p.deep", "D", "flatbuffers", 10, 10.0, false, 0.1),
+        12.5,
+    )];
+    rows.push(refused("p.deep", "D", "proto3"));
+    // No row for podbuf.
+    let t = access_time_table(&file(rows));
+    let cells = table_cells(&t, "p.deep");
+    assert!(cells[0].starts_with("12.5"), "{cells:?}");
+    assert_eq!(cells[1], "refused", "{cells:?}");
+    assert_eq!(cells[2], "absent", "{cells:?}");
+}

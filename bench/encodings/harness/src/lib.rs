@@ -56,6 +56,7 @@ pub struct Counts {
     pub decode_allocs: u64,
 }
 
+pub mod args;
 pub mod corpus;
 pub mod report;
 pub mod timing;

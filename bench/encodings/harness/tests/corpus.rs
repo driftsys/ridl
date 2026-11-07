@@ -217,3 +217,194 @@ fn each_accessor_reads_the_field_it_names_in_both_encodings() {
         }
     }
 }
+
+use encoding_bench::corpus::{
+    big_item_list, big_map, big_samples, deep_full, deep_nested, deep_sparse, deep_sparse_access,
+    variant, POOL_SIZE,
+};
+use encoding_bench::timing::TimingConfig;
+use encoding_bench::try_measure_counts;
+use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf, Proto3};
+use ridl_rt::payload::{Payload, Ref};
+
+const POOLED: [&str; 7] = [
+    "bench.stress.Stress.bigItemList",
+    "bench.stress.Stress.bigSamples",
+    "bench.stress.Stress.bigMap",
+    "bench.stress.Stress.deepNested",
+    "bench.stress.Stress.variant",
+    "bench.stress.Stress.deepSparse",
+    "bench.stress.Stress.deepFull",
+];
+
+/// With `vary`, the seven pooled payloads are timed on 64 values and every
+/// other payload on one.
+#[test]
+fn vary_gives_the_pooled_entries_a_pool_of_64_and_the_others_one_value() {
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.01)),
+        vary: true,
+        ..Recorder::default()
+    };
+    for entry in corpus() {
+        (entry.run)(&mut rec);
+    }
+    assert_eq!(POOL_SIZE, 64);
+    for (name, size) in &rec.pool_sizes {
+        let want = if POOLED.contains(name) { 64 } else { 1 };
+        assert_eq!(*size, want, "{name}");
+    }
+    for name in POOLED {
+        assert!(rec.pool_sizes.iter().any(|(n, _)| *n == name), "{name}");
+    }
+    // Every measured row of a pooled entry was timed.
+    for row in rec.rows.iter().filter(|r| POOLED.contains(&r.payload)) {
+        assert!(row.timing.is_some(), "{} {}", row.payload, row.encoding);
+    }
+}
+
+#[test]
+fn without_vary_every_entry_is_timed_on_one_value() {
+    let mut rec = Recorder::default();
+    for entry in corpus() {
+        (entry.run)(&mut rec);
+    }
+    assert!(rec.pool_sizes.iter().all(|(_, size)| *size == 1));
+}
+
+fn encoded<T: Payload<E>, E: Encoding>(v: &T) -> Vec<u8> {
+    let mut buf = T::BUFFER;
+    let bytes = Ref::<T, E>::encode(v, buf.as_mut())
+        .unwrap()
+        .bytes()
+        .to_vec();
+    bytes
+}
+
+/// The 64 values of the pool of `build` differ pairwise, and so do their
+/// bytes in FlatBuffers and in podbuf.
+fn assert_pool_is_distinct<T>(name: &str, build: fn(i64) -> T)
+where
+    T: Payload<FlatBuffers> + Payload<Podbuf> + PartialEq + std::fmt::Debug,
+{
+    let pool: Vec<T> = (0..POOL_SIZE).map(build).collect();
+    assert_ne!(build(1), build(0), "{name}");
+    for (i, a) in pool.iter().enumerate() {
+        for b in &pool[i + 1..] {
+            assert_ne!(a, b, "{name}");
+        }
+    }
+    let mut fb: Vec<_> = pool.iter().map(encoded::<T, FlatBuffers>).collect();
+    let mut pb: Vec<_> = pool.iter().map(encoded::<T, Podbuf>).collect();
+    for bytes in [&mut fb, &mut pb] {
+        bytes.sort();
+        bytes.dedup();
+        assert_eq!(bytes.len(), 64, "{name}");
+    }
+}
+
+#[test]
+fn the_seed_changes_every_value_of_every_pool() {
+    assert_pool_is_distinct("bigItemList", big_item_list);
+    assert_pool_is_distinct("bigSamples", big_samples);
+    assert_pool_is_distinct("bigMap", big_map);
+    assert_pool_is_distinct("deepNested", deep_nested);
+    assert_pool_is_distinct("variant", variant);
+    assert_pool_is_distinct("deepSparse", deep_sparse);
+    assert_pool_is_distinct("deepFull", deep_full);
+}
+
+#[test]
+fn the_variant_pool_holds_every_arm_and_a_mode_no_name_covers() {
+    use bench_stress::bench::stress::{Mode, Reading};
+    let pool: Vec<_> = (0..POOL_SIZE).map(variant).collect();
+    let has = |f: fn(&Reading) -> bool| pool.iter().any(|v| f(&v.reading));
+    assert!(has(|r| matches!(r, Reading::Count(_))));
+    assert!(has(|r| matches!(r, Reading::Text(_))));
+    assert!(has(|r| matches!(r, Reading::Item(_))));
+    assert!(pool.iter().any(|v| matches!(v.mode, Mode::Unknown(_))));
+    assert!(pool.iter().any(|v| matches!(v.mode, Mode::Off)));
+    assert!(pool.iter().any(|v| matches!(v.mode, Mode::On)));
+    assert!(pool.iter().any(|v| matches!(v.mode, Mode::Auto)));
+}
+
+fn sizes<T>(v: &T) -> [usize; 3]
+where
+    T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
+{
+    [
+        try_measure_counts::<T, FlatBuffers>(v).unwrap().size,
+        try_measure_counts::<T, Proto3>(v).unwrap().size,
+        try_measure_counts::<T, Podbuf>(v).unwrap().size,
+    ]
+}
+
+/// Seed 0 is the documented fixed value: its fields and its sizes in
+/// FlatBuffers, proto3 and podbuf are the ones recorded before the seed
+/// existed.
+#[test]
+fn seed_zero_is_the_fixed_value_of_each_payload() {
+    use bench_stress::bench::stress::{Mode, Reading};
+    let v = big_item_list(0);
+    assert_eq!(v.items.len(), 100);
+    assert_eq!(v.items[50].label.get(), "item-050");
+    assert_eq!(v.items[50].count.get(), 15000);
+    assert_eq!(sizes(&v), [4024, 1542, 2516]);
+
+    let v = big_samples(0);
+    assert_eq!(v.samples.len(), 1500);
+    assert_eq!(v.samples[10].get(), 400);
+    assert_eq!(sizes(&v), [3024, 4089, 3016]);
+
+    let v = big_map(0);
+    assert_eq!(v.counts.len(), 120);
+    assert_eq!(v.counts[5].0.get(), "key-005");
+    assert_eq!(v.counts[5].1.get(), 500);
+    assert_eq!(sizes(&v), [4344, 1676, 2896]);
+
+    let v = deep_nested(0);
+    assert_eq!(v.rows.len(), 10);
+    assert_eq!(v.rows[5].label.get(), "row-005");
+    assert_eq!(v.rows[5].cells.len(), 4);
+    assert_eq!(v.rows[5].cells[2].value.get(), 5074);
+    assert_eq!(sizes(&v), [2264, 760, 1372]);
+
+    let v = variant(0);
+    let Reading::Item(item) = &v.reading else {
+        panic!("{:?}", v.reading)
+    };
+    assert_eq!(item.label.get(), "item-000");
+    assert_eq!(item.count.get(), 0);
+    assert!(matches!(v.mode, Mode::Auto));
+    assert_eq!(sizes(&v), [88, 16, 57]);
+
+    let v = deep_sparse(0);
+    assert_eq!(v.a0.map(|c| c.get()), Some(5));
+    assert_eq!(v.mid.inner.z9.as_ref().unwrap().get(), "z-000");
+    assert!(v.a1.is_none() && v.mid.m0.is_none() && v.mid.inner.z0.is_none());
+    assert_eq!(sizes(&v), [240, 13, 182]);
+
+    let v = deep_full(0);
+    assert_eq!(v.a0.map(|c| c.get()), Some(0));
+    assert_eq!(v.mid.inner.z9.as_ref().unwrap().get(), "f29-000");
+    assert!(v.a9.is_some() && v.mid.m9.is_some() && v.mid.inner.z0.is_some());
+    assert_eq!(sizes(&v), [408, 178, 296]);
+}
+
+/// The accessor of the sparse payloads reads the length of `z9` and no other
+/// field: every optional field of this value has a length of its own.
+#[test]
+fn the_sparse_accessor_reads_z9_and_no_other_field() {
+    use bench_stress::bench::stress::{Count, Label};
+    let l = |n: usize| Some(Label::new("x".repeat(n)).unwrap());
+    let mut v = deep_full(0);
+    v.a1 = l(1);
+    v.a9 = l(2);
+    v.mid.m1 = l(3);
+    v.mid.m9 = l(4);
+    v.mid.inner.z1 = l(5);
+    v.mid.inner.z7 = l(6);
+    v.mid.inner.z9 = l(11);
+    v.mid.inner.z0 = Some(Count::new(12).unwrap());
+    assert_eq!(read_both(&v, &deep_sparse_access()), (11, 11));
+}

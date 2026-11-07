@@ -75,6 +75,9 @@ pub struct Recorder {
     /// Time encode, verify and decode on a pool of distinct values, for the
     /// payloads declared with `stress_pool!`.
     pub vary: bool,
+    /// The number of values each payload was timed on: the pool length when
+    /// the run cycles, else 1.
+    pub pool_sizes: Vec<(&'static str, usize)>,
 }
 
 /// A payload and the code that measures it.
@@ -130,6 +133,8 @@ impl Recorder {
         T: Payload<FlatBuffers> + Payload<Proto3> + Payload<Podbuf>,
     {
         let value = &pool[0];
+        self.pool_sizes
+            .push((payload, if cycle { pool.len() } else { 1 }));
         let first = self.rows.len();
         self.push::<T>(
             payload,
@@ -371,7 +376,7 @@ pub fn big_item_list(seed: i64) -> st::BigItemListPayload {
 }
 
 /// 1500 samples. The seed shifts every sample.
-fn big_samples(seed: i64) -> st::BigSamplesPayload {
+pub fn big_samples(seed: i64) -> st::BigSamplesPayload {
     st::BigSamplesPayload {
         samples: (0..1500i64)
             .map(|i| count_sample(i * 40 + seed * 3))
@@ -384,7 +389,7 @@ fn count_sample(n: i64) -> st::Sample {
 }
 
 /// 120 map entries. The seed changes the counts and rotates the keys.
-fn big_map(seed: i64) -> st::BigMapPayload {
+pub fn big_map(seed: i64) -> st::BigMapPayload {
     st::BigMapPayload {
         counts: (0..120i64)
             .map(|i| {
@@ -421,7 +426,7 @@ pub fn deep_nested(seed: i64) -> st::DeepNestedPayload {
 
 /// The arm of the union and the mode cycle with the seed, so that a pool of
 /// values holds every arm and a mode that no name covers.
-fn variant(seed: i64) -> st::UnionPayload {
+pub fn variant(seed: i64) -> st::UnionPayload {
     let reading = match (seed + 2) % 3 {
         0 => st::Reading::Count(count(seed * 977)),
         1 => st::Reading::Text(label(format!("text-{seed:03}"))),
@@ -483,7 +488,7 @@ pub fn deep_full(seed: i64) -> st::DeepSparsePayload {
     v
 }
 
-/// The accessors of `BigItemListPayload`: one scalar read through each view.
+/// The accessors of `BigItemListPayload`: one number read through each view.
 pub fn big_item_list_access() -> Accessors<st::BigItemListPayload> {
     Accessors {
         flatbuffers: |v| v.items()[50].count.get() as u64,
@@ -491,7 +496,7 @@ pub fn big_item_list_access() -> Accessors<st::BigItemListPayload> {
     }
 }
 
-/// The accessors of `DeepNestedPayload`: one scalar read through each view.
+/// The accessors of `DeepNestedPayload`: one number read through each view.
 pub fn deep_nested_access() -> Accessors<st::DeepNestedPayload> {
     Accessors {
         flatbuffers: |v| v.rows()[5].cells[2].value.get() as u64,
@@ -504,7 +509,8 @@ pub fn deep_nested_access() -> Accessors<st::DeepNestedPayload> {
     }
 }
 
-/// The accessors of `DeepSparsePayload`: one scalar read through each view.
+/// The accessors of `DeepSparsePayload`: the length of the string field `z9` of
+/// the innermost layer, read through each view.
 pub fn deep_sparse_access() -> Accessors<st::DeepSparsePayload> {
     Accessors {
         flatbuffers: |v| v.mid().inner().z9().map_or(0, |z| z.len() as u64),

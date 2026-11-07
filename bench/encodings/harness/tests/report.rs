@@ -380,18 +380,74 @@ fn item_list(n: usize) -> ItemListPayload {
     }
 }
 
-/// The second value of the pool is invalid (an empty list), so only a run
-/// that reaches the second value fails. The recorder reads size and counts
-/// from the first value alone.
+static SEEN_VARY: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+static SEEN_FIXED: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+fn see_vary_fb(v: &bench_stress::bench::stress::ItemListPayloadFbView<'_>) -> u64 {
+    let n = v.items().len() as u64;
+    SEEN_VARY.lock().unwrap().push(n);
+    n
+}
+
+fn see_vary_pb(v: &bench_stress::bench::stress::ItemListPayloadPodbufView<'_>) -> u64 {
+    let n = v.items().count() as u64;
+    SEEN_VARY.lock().unwrap().push(n);
+    n
+}
+
+fn see_fixed_fb(v: &bench_stress::bench::stress::ItemListPayloadFbView<'_>) -> u64 {
+    let n = v.items().len() as u64;
+    SEEN_FIXED.lock().unwrap().push(n);
+    n
+}
+
+fn see_fixed_pb(v: &bench_stress::bench::stress::ItemListPayloadPodbufView<'_>) -> u64 {
+    let n = v.items().count() as u64;
+    SEEN_FIXED.lock().unwrap().push(n);
+    n
+}
+
+/// With `vary`, the access operation of both encodings reads every value of
+/// the pool; the pool has items lists of 1, 2 and 3 elements.
 #[test]
-#[should_panic(expected = "the encoding accepts the value")]
-fn with_vary_the_timed_operations_reach_every_value_of_the_pool() {
+fn with_vary_the_access_operation_reads_every_value_of_the_pool() {
+    use encoding_bench::timing::Accessors;
     let mut rec = Recorder {
         timing: Some(TimingConfig::new(0.03)),
         vary: true,
         ..Recorder::default()
     };
-    rec.record_pool("a.b.c", Kind::Stress, &[item_list(3), item_list(0)]);
+    let pool: Vec<_> = (1..=3).map(item_list).collect();
+    let access = Accessors::<ItemListPayload> {
+        flatbuffers: see_vary_fb,
+        podbuf: see_vary_pb,
+    };
+    rec.record_pool_access("a.b.c", Kind::Stress, &pool, &access);
+    let mut seen = SEEN_VARY.lock().unwrap().clone();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen, [1, 2, 3]);
+    assert_eq!(rec.pool_sizes, [("a.b.c", 3)]);
+}
+
+#[test]
+fn without_vary_the_access_operation_reads_the_first_value_only() {
+    use encoding_bench::timing::Accessors;
+    let mut rec = Recorder {
+        timing: Some(TimingConfig::new(0.03)),
+        ..Recorder::default()
+    };
+    let pool: Vec<_> = (1..=3).map(item_list).collect();
+    let access = Accessors::<ItemListPayload> {
+        flatbuffers: see_fixed_fb,
+        podbuf: see_fixed_pb,
+    };
+    rec.record_pool_access("a.b.c", Kind::Stress, &pool, &access);
+    let mut seen = SEEN_FIXED.lock().unwrap().clone();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen, [1]);
+    assert_eq!(rec.pool_sizes, [("a.b.c", 1)]);
 }
 
 #[test]
