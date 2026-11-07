@@ -152,8 +152,10 @@ pub enum Op {
     Verify,
     /// Decode from a proof that was built once, before the batch.
     Decode,
-    /// Read one scalar field through the accessors of a verified view,
-    /// without decoding the whole value. Not part of an update.
+    /// Read one number through the accessors of a verified view: a scalar
+    /// field, or the length of a string field. Whether the read avoids
+    /// decoding the rest of the value depends on the encoding's accessor. Not
+    /// part of an update.
     Access,
     /// The whole update: encode, verify and decode.
     Update,
@@ -195,8 +197,8 @@ pub struct OpStats {
     pub encode: Stat,
     pub verify: Stat,
     pub decode: Stat,
-    /// The read of one scalar through the view, for a payload and an encoding
-    /// that have an accessor. It is not part of the per-update figure.
+    /// The read of one number through the view (see `Op::Access`), for a
+    /// payload and an encoding that have an accessor. It is not part of the per-update figure.
     pub access: Option<Stat>,
 }
 
@@ -283,7 +285,8 @@ fn proofs_of<T: Payload<E>, E: Encoding>(buffers: &[&'static [u8]]) -> Vec<Ref<'
         .collect()
 }
 
-/// Reads one scalar out of a verified view.
+/// Reads one number out of a verified view: a scalar field, or the length of
+/// a string field.
 pub type Accessor<T, E> = for<'v> fn(&<T as Payload<E>>::View<'v>) -> u64;
 
 /// The accessors of a payload: one function per encoding that has accessors
@@ -293,30 +296,44 @@ pub struct Accessors<T: Payload<FlatBuffers> + Payload<Podbuf>> {
     pub podbuf: Accessor<T, Podbuf>,
 }
 
-/// A runner of the access operation: each repetition reads one scalar through
+/// A runner of the access operation: each repetition reads one number through
 /// the view of the next of the proofs that `Ref::verify` built once, here,
-/// before any batch. The result goes through `black_box`.
+/// before any batch. The result goes through `black_box`. The pool has the
+/// bytes of every value, leaked as in `op_runners_pool`: one buffer per value.
+/// A pool of one value does no indexing.
 pub fn access_runner<'a, T: Payload<E>, E: Encoding>(
     pool: &'a [T],
     read: Accessor<T, E>,
 ) -> Runner<'a> {
     let proofs = proofs_of::<T, E>(&encoded_pool::<T, E>(pool));
-    Runner {
-        encoding: E::NAME,
-        op: Op::Access,
-        run: Box::new(move |n| {
+    let run: Box<dyn FnMut(u64) + 'a> = if proofs.len() == 1 {
+        let proof = proofs.into_iter().next().expect("one proof");
+        Box::new(move |n| {
+            for _ in 0..n {
+                black_box(read(black_box(&proof).view()));
+            }
+        })
+    } else {
+        Box::new(move |n| {
             for k in 0..n as usize {
                 let proof = &proofs[k % proofs.len()];
                 black_box(read(black_box(proof).view()));
             }
-        }),
+        })
+    };
+    Runner {
+        encoding: E::NAME,
+        op: Op::Access,
+        run,
     }
 }
 
 /// The three operations of `E` on a pool of values, each a runner of its own.
-/// A batch of `n` repeats one operation `n` times and nothing else, and the
-/// k-th repetition works on element `k % pool.len()` of the pool, so that a
-/// pool of distinct values keeps the work from being hoisted out of the loop:
+/// A batch of `n` repeats one operation `n` times and nothing else. With a
+/// pool of one value every repetition works on that value and the loop does
+/// no indexing. With a larger pool the k-th repetition works on element
+/// `k % pool.len()`, so that a pool of distinct values keeps the work from
+/// being hoisted out of the loop:
 ///
 /// - encode writes the next value into the same buffer each time;
 /// - verify checks the next of the already-encoded buffers each time (one
@@ -326,8 +343,9 @@ pub fn access_runner<'a, T: Payload<E>, E: Encoding>(
 ///   value and the proof cannot be cloned, so each decode reads a bitwise
 ///   copy of it. That is sound only when the proof owns nothing that is
 ///   dropped; the function panics otherwise. The bytes of the proofs are
-///   leaked, a few kilobytes per call at most, so that the proofs can live
-///   in the runner.
+///   leaked, one buffer per value of the pool and so up to 64 buffers of up
+///   to the maximum encoded size per call, so that the proofs can live in the
+///   runner.
 ///
 /// Every input and every result goes through `black_box`. Panics when `E`
 /// refuses a value or the pool is empty; the caller times only values that
@@ -341,42 +359,78 @@ pub fn op_runners_pool<'a, T: Payload<E>, E: Encoding>(pool: &'a [T]) -> [Runner
         !std::mem::needs_drop::<Ref<'static, T, E>>(),
         "the proof of this payload owns data that is dropped, so it cannot be copied"
     );
-    let encode = Runner {
-        encoding: E::NAME,
-        op: Op::Encode,
-        run: Box::new(move |n| {
-            for k in 0..n as usize {
-                let value = &pool[k % pool.len()];
-                let _ = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()));
-            }
-        }),
+    let (encode_run, verify_run, decode_run): (
+        Box<dyn FnMut(u64) + 'a>,
+        Box<dyn FnMut(u64) + 'a>,
+        Box<dyn FnMut(u64) + 'a>,
+    ) = if pool.len() == 1 {
+        let value = &pool[0];
+        let bytes = buffers[0];
+        let proof = proofs.into_iter().next().expect("one proof");
+        (
+            Box::new(move |n| {
+                for _ in 0..n {
+                    let _ = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()));
+                }
+            }),
+            Box::new(move |n| {
+                for _ in 0..n {
+                    let _ = black_box(Ref::<T, E>::verify(black_box(bytes)));
+                }
+            }),
+            Box::new(move |n| {
+                for _ in 0..n {
+                    // SAFETY: see the indexed decode below.
+                    let copy = unsafe { std::ptr::read(black_box(&proof)) };
+                    black_box(copy.decode());
+                }
+            }),
+        )
+    } else {
+        let verify_buffers = buffers.clone();
+        (
+            Box::new(move |n| {
+                for k in 0..n as usize {
+                    let value = &pool[k % pool.len()];
+                    let _ = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()));
+                }
+            }),
+            Box::new(move |n| {
+                for k in 0..n as usize {
+                    let bytes = verify_buffers[k % verify_buffers.len()];
+                    let _ = black_box(Ref::<T, E>::verify(black_box(bytes)));
+                }
+            }),
+            Box::new(move |n| {
+                for k in 0..n as usize {
+                    let proof = &proofs[k % proofs.len()];
+                    // SAFETY: `Ref` has no `Drop` implementation and the
+                    // assertion above shows that its view needs none, so a
+                    // bitwise copy owns nothing and the original is never
+                    // used after the copies.
+                    let copy = unsafe { std::ptr::read(black_box(proof)) };
+                    black_box(copy.decode());
+                }
+            }),
+        )
     };
-    let verify_buffers = buffers.clone();
-    let verify = Runner {
-        encoding: E::NAME,
-        op: Op::Verify,
-        run: Box::new(move |n| {
-            for k in 0..n as usize {
-                let bytes = verify_buffers[k % verify_buffers.len()];
-                let _ = black_box(Ref::<T, E>::verify(black_box(bytes)));
-            }
-        }),
-    };
-    let decode = Runner {
-        encoding: E::NAME,
-        op: Op::Decode,
-        run: Box::new(move |n| {
-            for k in 0..n as usize {
-                let proof = &proofs[k % proofs.len()];
-                // SAFETY: `Ref` has no `Drop` implementation and the assertion
-                // above shows that its view needs none, so a bitwise copy owns
-                // nothing and the original is never used after the copies.
-                let copy = unsafe { std::ptr::read(black_box(proof)) };
-                black_box(copy.decode());
-            }
-        }),
-    };
-    [encode, verify, decode]
+    [
+        Runner {
+            encoding: E::NAME,
+            op: Op::Encode,
+            run: encode_run,
+        },
+        Runner {
+            encoding: E::NAME,
+            op: Op::Verify,
+            run: verify_run,
+        },
+        Runner {
+            encoding: E::NAME,
+            op: Op::Decode,
+            run: decode_run,
+        },
+    ]
 }
 
 /// Thread CPU time in nanoseconds.
