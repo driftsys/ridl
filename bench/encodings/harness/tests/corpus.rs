@@ -408,3 +408,70 @@ fn the_sparse_accessor_reads_z9_and_no_other_field() {
     v.mid.inner.z0 = Some(Count::new(12).unwrap());
     assert_eq!(read_both(&v, &deep_sparse_access()), (11, 11));
 }
+
+fn full_fields(v: &bench_stress::bench::stress::DeepSparsePayload) -> Vec<String> {
+    let mid = &v.mid;
+    let inner = &mid.inner;
+    vec![
+        format!("{:?}", v.a0),
+        format!("{:?}", v.a1),
+        format!("{:?}", v.a2),
+        format!("{:?}", v.a3),
+        format!("{:?}", v.a4),
+        format!("{:?}", v.a5),
+        format!("{:?}", v.a6),
+        format!("{:?}", v.a7),
+        format!("{:?}", v.a8),
+        format!("{:?}", v.a9),
+        format!("{:?}", mid.m0),
+        format!("{:?}", mid.m1),
+        format!("{:?}", mid.m2),
+        format!("{:?}", mid.m3),
+        format!("{:?}", mid.m4),
+        format!("{:?}", mid.m5),
+        format!("{:?}", mid.m6),
+        format!("{:?}", mid.m7),
+        format!("{:?}", mid.m8),
+        format!("{:?}", mid.m9),
+        format!("{:?}", inner.z0),
+        format!("{:?}", inner.z1),
+        format!("{:?}", inner.z2),
+        format!("{:?}", inner.z3),
+        format!("{:?}", inner.z4),
+        format!("{:?}", inner.z5),
+        format!("{:?}", inner.z6),
+        format!("{:?}", inner.z7),
+        format!("{:?}", inner.z8),
+        format!("{:?}", inner.z9),
+    ]
+}
+
+/// Each seed-dependent part of a value changes with the seed, so a builder
+/// that keeps the seed in one field only does not pass.
+#[test]
+fn the_seed_changes_each_part_that_it_is_meant_to_change() {
+    let (a, b) = (big_item_list(0), big_item_list(1));
+    assert_ne!(a.items[0].count, b.items[0].count);
+    let (a, b) = (big_samples(0), big_samples(1));
+    assert_ne!(a.samples[0], b.samples[0]);
+    let (a, b) = (big_map(0), big_map(1));
+    assert_ne!(a.counts[0].0, b.counts[0].0);
+    assert_ne!(a.counts[0].1, b.counts[0].1);
+    let (a, b) = (deep_nested(0), deep_nested(1));
+    let (ra, rb) = (&a.rows[0], &b.rows[0]);
+    assert_ne!(ra.label, rb.label);
+    assert_ne!(ra.pair.first, rb.pair.first);
+    assert_ne!(ra.pair.second, rb.pair.second);
+    assert_ne!(ra.cells[0].name, rb.cells[0].name);
+    assert_ne!(ra.cells[0].value, rb.cells[0].value);
+    let (a, b) = (deep_sparse(0), deep_sparse(1));
+    assert_ne!(a.a0, b.a0);
+    assert_ne!(a.mid.inner.z9, b.mid.inner.z9);
+    let (a, b) = (full_fields(&deep_full(0)), full_fields(&deep_full(1)));
+    for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+        assert_ne!(x, y, "field {i}");
+    }
+    let v = variant(0);
+    let w = variant(3);
+    assert_ne!(format!("{:?}", v.reading), format!("{:?}", w.reading));
+}
