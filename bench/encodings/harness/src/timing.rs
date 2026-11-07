@@ -359,15 +359,11 @@ pub fn op_runners_pool<'a, T: Payload<E>, E: Encoding>(pool: &'a [T]) -> [Runner
         !std::mem::needs_drop::<Ref<'static, T, E>>(),
         "the proof of this payload owns data that is dropped, so it cannot be copied"
     );
-    let (encode_run, verify_run, decode_run): (
-        Box<dyn FnMut(u64) + 'a>,
-        Box<dyn FnMut(u64) + 'a>,
-        Box<dyn FnMut(u64) + 'a>,
-    ) = if pool.len() == 1 {
+    let [encode_run, verify_run, decode_run]: [Box<dyn FnMut(u64) + 'a>; 3] = if pool.len() == 1 {
         let value = &pool[0];
         let bytes = buffers[0];
         let proof = proofs.into_iter().next().expect("one proof");
-        (
+        [
             Box::new(move |n| {
                 for _ in 0..n {
                     let _ = black_box(Ref::<T, E>::encode(black_box(value), buf.as_mut()));
@@ -385,10 +381,10 @@ pub fn op_runners_pool<'a, T: Payload<E>, E: Encoding>(pool: &'a [T]) -> [Runner
                     black_box(copy.decode());
                 }
             }),
-        )
+        ]
     } else {
         let verify_buffers = buffers.clone();
-        (
+        [
             Box::new(move |n| {
                 for k in 0..n as usize {
                     let value = &pool[k % pool.len()];
@@ -412,7 +408,7 @@ pub fn op_runners_pool<'a, T: Payload<E>, E: Encoding>(pool: &'a [T]) -> [Runner
                     black_box(copy.decode());
                 }
             }),
-        )
+        ]
     };
     [
         Runner {
