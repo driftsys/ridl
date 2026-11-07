@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.16.1] (2026-11-07)
+
+### Bug Fixes
+
+- **ridl-backend-rust:** settle a refused query reply again as corrupt ([#1261])
+  ([aabdb6a]), fixes [#1260], refs [#1260], [#1260], [#1260]
+
+### Performance
+
+- **ridl-rt:** read a podbuf scalar with one range check and inline the loads
+  and stores ([#1259]) ([079a899])
+
+[0.16.1]: https://github.com/driftsys/ridl/compare/v0.16.0...v0.16.1
+[aabdb6a]: https://github.com/driftsys/ridl/commit/aabdb6a
+[#1261]: https://github.com/driftsys/ridl/issues/1261
+[#1260]: https://github.com/driftsys/ridl/issues/1260
+[079a899]: https://github.com/driftsys/ridl/commit/079a899
+[#1259]: https://github.com/driftsys/ridl/issues/1259
+
 ## [0.16.0] (2026-11-05)
 
 ### Bug Fixes

@@ -20,11 +20,11 @@ dependencies = [
 
 [[package]]
 name = "ridl-loopback"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "ridl-rt",
 ]
 
 [[package]]
 name = "ridl-rt"
-version = "0.16.0"
+version = "0.16.1"

@@ -60,8 +60,8 @@ the same three dependencies in `examples/cabin/consumer/Cargo.toml`:
 ```toml
 [dependencies]
 veh_cabin = { path = "generated", features = ["std"] }
-ridl-loopback = "0.16.0"
-ridl-rt = { version = "0.16.0", features = ["std"] }
+ridl-loopback = "0.16.1"
+ridl-rt = { version = "0.16.1", features = ["std"] }
 ```
 
 The program imports `CatalogRef`, `Interface` and `Provenance` from `ridl-rt`
