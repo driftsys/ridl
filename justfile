@@ -3446,7 +3446,8 @@ verify: lint-commits build
 # `git std bump --no-commit` write the version, the `version_files` pins and
 # the changelog, runs `release-sync` for the pins git-std cannot write, and
 # checks that the lockfiles agree with their manifests and that the pins
-# `release-sync` wrote follow the version, before it commits and tags. The
+# `release-sync` wrote follow the version, and runs `_release-locked-check`,
+# before it commits and tags. The
 # `version_files` pins and the build gate are left to the `ci` run on the
 # release commit, which `release-push` waits for.
 release *ARGS: toolchain-check
@@ -3490,6 +3491,7 @@ release *ARGS: toolchain-check
     cargo metadata --locked --format-version 1 >/dev/null
     (cd examples/cabin && cargo metadata --locked --format-version 1 >/dev/null)
     cargo test --locked --package xtask --test release_derived_pins
+    just _release-locked-check
     version="$(cargo metadata --no-deps --format-version 1 \
         | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
     if [ -n "$(git ls-files --others --exclude-standard)" ]; then
@@ -3512,6 +3514,31 @@ release *ARGS: toolchain-check
     echo "release: $version is committed and tagged locally. Review the"
     echo "release: changelog, then run: just release-push"
     echo "release: (not the git push --follow-tags that git std bump printed)"
+
+# Fail a release before it commits when a file that names the version is
+# stale. `release-sync` has to know every such file, so a new example or
+# fixture it does not know about is caught here instead of in the `ci` run on
+# the release commit. Every tracked `Cargo.lock` outside the root must agree
+# with its manifest (`cargo metadata --locked` fails on a lockfile that names
+# an old version of a workspace crate), and the identity fixture must match
+# the compiler version. Run after `release-sync`, which generates the crates
+# that the nested workspaces depend on. Not a member of `build`.
+_release-locked-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git ls-files '*Cargo.lock' | while read -r lock; do
+        [ "$lock" = Cargo.lock ] && continue
+        dir="$(dirname "$lock")"
+        if ! cargo metadata --locked --offline --format-version 1 \
+            --manifest-path "$dir/Cargo.toml" >/dev/null; then
+            echo "release: $lock is stale; update it in release-sync" >&2
+            exit 1
+        fi
+    done
+    if ! cargo test --locked --package ridl-cli --test identity_fixture; then
+        echo "release: the identity fixture is stale; regenerate it in release-sync" >&2
+        exit 1
+    fi
 
 # Update the version pins that `git std bump` cannot write, after the bump:
 # the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the

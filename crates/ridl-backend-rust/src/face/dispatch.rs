@@ -84,7 +84,7 @@ pub(super) fn dispatch(
             quote! { buf },
             "the dispatch buffer",
             &port,
-            quote! { h.settle(claim.id, Ok(bytes)) },
+            super::settle_reply(quote! { claim.id }),
             quote! {
                 h.settle(
                     claim.id,
@@ -243,11 +243,14 @@ pub(super) fn dispatch(
     // reply is a stream and whose source was kept: `serve` settles it when it
     // ends or stops the stream, and the pass counts it with the settled
     // claims although `Handler::settle` was not called for it. Every other
-    // claim is counted only once `Handler::settle` has accepted it; a
-    // `SettleError` is left to the
-    // handler, which already owns that claim's settlement, and the pass
-    // continues with the next claim, except for an oversized claim, whose
-    // refused settlement ends the pass as stated above.
+    // claim is counted only once `Handler::settle` has accepted it. When the
+    // handler refuses a query's reply as `SettleError::TooLarge`, the claim
+    // is settled again with `Transport::Corrupt`, because the claim stays
+    // settleable and no other code settles it (driftsys/ridl#1260). Any
+    // other `SettleError` is left to the handler, which already owns that
+    // claim's settlement. The pass continues with the next claim, except
+    // for an oversized claim, whose refused settlement ends the pass as
+    // stated above.
     //
     // A command is settled `Ok(&[])` once its arguments and its `require`
     // clauses pass and **before** the application's method runs, because a
