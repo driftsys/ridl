@@ -717,10 +717,13 @@ pub fn access_time_table(r: &ResultFile) -> String {
         return "No payload of this file has an accessor timing.\n".to_string();
     }
     format!(
-        "CPU time of reading one scalar field, deep in the payload, through the view of \
-         verified bytes, in ns: the median of {} samples, with the fastest and the slowest \
-         sample and the range as a share of the median. It replaces the decode when a \
-         consumer needs one field, and it is not part of the time per update. proto3 \
+        "CPU time of reading one number, deep in the payload, through the view of \
+         verified bytes, in ns: a count, or for the sparse payloads the length of a string \
+         field. The median of {} samples, with the fastest and the slowest \
+         sample and the range as a share of the median. It stands for the decode when a \
+         consumer needs one field, and it is not part of the time per update. The \
+         FlatBuffers accessor of a list returns the decoded list, so there the \
+         access of a list element costs the decode of the list. proto3 \
          generates no accessors, so its cells are n/a. {FLAG} spread above 10 %: the \
          figure is not stable.\n\n{}",
         r.samples,

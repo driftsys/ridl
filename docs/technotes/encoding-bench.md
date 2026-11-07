@@ -22,9 +22,13 @@ framing. It changes no codec.
 ## Method
 
 - **Corpus.** Every signal of the `veh-cluster` corpus and of `examples/cabin`,
-  and four stress payloads from `bench/encodings/stress/` (a long string, a list
-  of structs, nested optionals, a map). A signal whose payload type the bench
-  cannot build a value of is listed as not built.
+  and twelve stress payloads from `bench/encodings/stress/`: a long string, a
+  list of structs, nested optionals and a map; the same four shapes at several
+  kilobytes (`bigString`, `bigItemList`, `bigSamples`, `bigMap`); a list of rows
+  that hold a pair and a list of cells (`deepNested`); a union beside an open
+  enum (`variant`); and a three-layer struct of 30 optional fields, set at two
+  fields (`deepSparse`) and at all fields (`deepFull`). A signal whose payload
+  type the bench cannot build a value of is listed as not built.
 - **Equal work.** One update is: encode a value into a stack buffer, verify the
   bytes, decode a value from the verified bytes. The code path is generic over
   the encoding (`Ref::<T, E>::encode`, `verify`, `decode`), so the three
@@ -38,12 +42,23 @@ framing. It changes no codec.
   it. That is sound for the corpus because every view of the corpus holds only
   borrowed slices and integers, and an assertion on `needs_drop` stops the run
   for a payload whose proof owns data that is dropped. The bytes of the proof
-  are leaked, a few bytes per payload and encoding. The time of one update is
-  the sum of the medians of its three operations.
+  are leaked: one buffer per value of the pool, so one buffer without `--vary`
+  and 64 buffers of up to the maximum encoded size with it, per payload and
+  encoding. Without `--vary` every batch repeats one value. With `--vary`, for
+  the seven payloads that have a pool, the k-th repetition of a batch works on
+  value `k mod 64` of 64 values of one shape and different content, with the
+  encoded buffer and the proof of that value. The time of one update is the sum
+  of the medians of its three operations.
+- **Access.** For four payloads (`bigItemList`, `deepNested`, `deepSparse`,
+  `deepFull`) FlatBuffers and podbuf have a fourth runner that reads one number
+  through the view of verified bytes: a count of a list element, a count of a
+  cell, or the length of a string field. It is not part of the time of one
+  update. proto3 generates no accessors, so it has no access runner.
 - **Interleave.** The nine runners of a payload (three encodings, three
-  operations) are timed in rotation inside the same run: sample `k` starts with
-  runner `k mod 9`. Frequency changes and thermal throttling therefore affect
-  them alike.
+  operations; eleven for a payload with an access runner in two encodings) are
+  timed in rotation inside the same run: sample `k` starts with runner `k mod 9`
+  (`k mod 11`). Frequency changes and thermal throttling therefore affect them
+  alike.
 - **Warm-up and samples.** The batch size is calibrated so that a batch lasts at
   least 200 microseconds; 3 warm-up batches are discarded; 30 samples follow.
   The time of one operation is the time of one batch divided by the batch size.
@@ -53,8 +68,9 @@ framing. It changes no codec.
   slowest sample are the sums of the three operations' fastest and slowest
   samples: an envelope of summed bounds, not a percentile of summed samples.
   `--duration` is the CPU time of the samples of one operation of one encoding
-  of one payload, so one cell takes three times that; the Pixel runs used 2 s,
-  the host run 0.5 s. A cell whose `(p95 - p05) / median` or
+  of one payload, so one cell takes three times that (four times for the
+  FlatBuffers and podbuf cells of a payload with an access runner); the Pixel
+  runs used 2 s, the host run 0.5 s. A cell whose `(p95 - p05) / median` or
   `(max - min) / median` is above 10 % carries the marker `†`: its median is not
   stable.
 - **Clock.** Thread CPU time (`CLOCK_THREAD_CPUTIME_ID`). It does not advance
@@ -104,10 +120,12 @@ that.
   values, the zero bytes of an absent optional, and the typl constraints. It
   allocates nothing and copies nothing. `decode` builds the owned value from the
   view that `verify` returned; it allocates only for `String`, `Vec` and maps.
-  The bench does not use the in-place accessors, which are the reason podbuf
-  exists ([the podbuf design](../archive/2026-10-24-podbuf-design.md), section
-  1); a consumer that reads two fields of a large payload pays less than the
-  bench shows. See [the podbuf codec record](../design/podbuf-codec.md).
+  The access runner of four payloads uses the in-place accessors, which are the
+  reason podbuf exists
+  ([the podbuf design](../archive/2026-10-24-podbuf-design.md), section 1); the
+  other operations do not use them, so a consumer that reads two fields of a
+  large payload pays less than the update figure shows. See
+  [the podbuf codec record](../design/podbuf-codec.md).
 - **FlatBuffers** `verify` walks the structure (the root offset, the vtables,
   the offsets, the string and vector headers) and checks the typl constraints it
   can reach, including the uniqueness of map keys by pairwise comparison
@@ -137,19 +155,21 @@ None of the three applies a length check in `verify` (ADR-0030 decision 19).
   allocations in code the bench does not run. A count of zero means that the
   codec itself did not call the allocator for that payload.
 - **Time per operation** is the CPU time of encode, of verify or of decode
-  alone, on a warm cache with the same value every time. The decode of a small
-  scalar payload takes 0.5 ns to 7 ns on the host, and the podbuf decode of the
-  cheapest payloads takes 7.2 ns on the A55 core and 2.0 ns on the A76 core. Any
-  per-operation figure includes some harness cost (the `black_box` calls around
-  the input and the result, and for decode the copy of the proof), so a figure
-  below about 10 ns is an upper bound and is not comparable between encodings.
-  The limit of 10 ns was established for decode, where the copy of the proof
-  adds to the cost; the harness cost of encode and verify was not measured
-  separately.
+  alone, on a warm cache. Without `--vary` it is the same value every time. The
+  decode of a small scalar payload takes 0.5 ns to 7 ns on the host, and the
+  podbuf decode of the cheapest payloads takes 7.2 ns on the A55 core and 2.0 ns
+  on the A76 core. Any per-operation figure includes some harness cost (the
+  `black_box` calls around the input and the result, and for decode the copy of
+  the proof), so a figure below about 10 ns is an upper bound and is not
+  comparable between encodings. The limit of 10 ns was established for decode,
+  where the copy of the proof adds to the cost; the harness cost of encode and
+  verify was not measured separately.
 - **Time per update** is the sum of the three operation medians, on a warm cache
-  with the same value every time. It does not show the cost of a cold cache, of
-  branch mispredictions on varying data, or of a value that changes between
-  updates. A payload that changes size or shape is not modelled.
+  and, without `--vary`, with the same value every time. It does not show the
+  cost of a cold cache. Without `--vary` it does not show the cost of branch
+  mispredictions on varying data or of a value that changes between updates.
+  With `--vary`, seven payloads change content between repetitions. A payload
+  that changes size or shape is not modelled.
 - **CPU load at 4 000 updates per second (derived)** is the time per update
   scaled to the rate. It shows the codec's share of a core. It does not include
   the transport, the application, the scheduler or the timer.

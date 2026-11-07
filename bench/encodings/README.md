@@ -31,31 +31,34 @@ written with their reasons and are not timed.
 - `--core-label TEXT` names the core the run is pinned to (for example `A55`);
   the harness does not pin itself, use `taskset`.
 - `--duration SECONDS` is the CPU time spent in the samples of one operation of
-  one cell and encoding, so a payload takes three times this per encoding. The
-  default is 0.5.
+  one cell and encoding, so a payload takes three times this per encoding, and
+  four times this in FlatBuffers and podbuf for a payload with an access runner.
+  The default is 0.5.
 - `--paced` also runs each cell at 4 000 updates per second, sleeping to the
   next tick, and reads process CPU time (`getrusage`) over the run. The JSON
   holds that figure, the figure derived from the unpaced cost, and the
   difference. It needs `--out`.
 - `--vary` makes encode, verify and decode cycle through a pool of 64 distinct
-  values of one shape, 64 encoded buffers and 64 proofs, so that the work cannot
-  be hoisted out of the batch loop. Without it every batch repeats one value.
-  Only the stress payloads `bigItemList`, `bigSamples`, `bigMap`, `deepNested`,
-  `variant`, `deepSparse` and `deepFull` have a pool; every other payload
-  repeats its one value with or without the flag. Size and allocation counts
-  always come from the first value of the pool, which is the fixed value. The
-  paced run repeats that value. The JSON records the flag as `run.vary` and the
-  report header states it. It needs `--out`.
-- The access operation reads one scalar field, deep in the payload, through the
-  accessors of the verified view, and returns it through `black_box`, without
-  decoding the whole value. It is timed for `bigItemList`, `deepNested`,
-  `deepSparse` and `deepFull`, in FlatBuffers and podbuf. proto3 generates no
-  accessors (`docs/design/proto3-codec.md`), so its cell is `n/a: no accessors`
-  in the report. The access is not part of the per-update figure, and the report
-  shows it in its own table, "Time per operation, access". The FlatBuffers
-  accessor of a list returns the decoded list, so reading one element through it
-  costs the decode of the list; the podbuf accessor of a list is an iterator
-  over views.
+  values of one shape, 64 encoded buffers and 64 proofs, and the access
+  operation cycles through 64 proofs, so that the work cannot be hoisted out of
+  the batch loop. Without it every batch repeats one value. Only the stress
+  payloads `bigItemList`, `bigSamples`, `bigMap`, `deepNested`, `variant`,
+  `deepSparse` and `deepFull` have a pool; every other payload repeats its one
+  value with or without the flag. Size and allocation counts always come from
+  the first value of the pool, which is the fixed value. The JSON records the
+  flag as `run.vary` and the report header states it. It needs `--out`.
+- The access operation reads one number through the accessors of the verified
+  view and returns it through `black_box`: a count, or for the sparse payloads
+  the length of the string field `mid.inner.z9`. It is timed for `bigItemList`,
+  `deepNested`, `deepSparse` and `deepFull`, in FlatBuffers and podbuf. proto3
+  generates no accessors (`docs/design/proto3-codec.md`), so its cell is
+  `n/a: no
+  accessors` in the report. The access is not part of the per-update
+  figure, and the report shows it in its own table, "Time per operation,
+  access". Under FlatBuffers the accessor of a list returns the decoded list, so
+  the accessors of `bigItemList` and `deepNested` decode the whole list
+  (`v.items()`, `v.rows()`) to read one element; under podbuf the accessor of a
+  list is an iterator over views and decodes nothing else.
 - `--only TEXT` runs only the corpus entries whose name contains the text.
 - `--commit HASH` states the commit when the machine has no `git`.
 - `--date YYYY-MM-DD` states the date of the run when the clock of the machine
@@ -79,12 +82,14 @@ JSON fields of a measured row, beyond the payload, its type and the counts:
 `per_update_ns` (median, p05, p95, min, max, range_spread, reps, spread,
 spread_flagged), `cpu_percent_at_rate` (the per-update median at the rate),
 `per_op_ns` with `encode`, `verify` and `decode`, each with the same fields as
-`per_update_ns` and its own `cpu_percent_at_rate`, and `paced` when asked for.
-`encode_allocs`, `verify_allocs` and `decode_allocs` each count that call alone.
-Each JSON row names its payload and its payload type, so that a report can
-weight the signals or the distinct payload types equally. The provenance block
-holds the date, the commit, the platform, the core label, the toolchain, and the
-frequency and governor of the core when the system exposes them.
+`per_update_ns` and its own `cpu_percent_at_rate`, and also `access` in the
+FlatBuffers and podbuf rows of a payload with an access runner, and `paced` when
+asked for. `encode_allocs`, `verify_allocs` and `decode_allocs` each count that
+call alone. Each JSON row names its payload and its payload type, so that a
+report can weight the signals or the distinct payload types equally. The
+provenance block holds the date, the commit, the platform, the core label, the
+toolchain, and the frequency and governor of the core when the system exposes
+them.
 
 ## Pixel 5
 

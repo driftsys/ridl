@@ -12,7 +12,7 @@ type Count: integer [0..65535]
 /// A string of several kilobytes.
 type BigText: string [1..3000] = "-"
 
-/// A list of integers of several kilobytes.
+/// One integer of a long list of samples.
 type Sample: integer [0..65535]
 
 /// A signal payload that holds one long string.
