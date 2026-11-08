@@ -1,2 +1,9 @@
 # Preserve the upstream licence text when checking out binary-release notices.
 THIRD-PARTY-NOTICES.txt text eol=lf
+
+# GitLab has no lexer for the RIDL family, so it highlights the sources with
+# its TypeScript lexer, which colours their package, interface, type and enum
+# keywords and draws the fewest error tokens on them.
+*.typl gitlab-language=typescript
+*.ridl gitlab-language=typescript
+*.rsdl gitlab-language=typescript
