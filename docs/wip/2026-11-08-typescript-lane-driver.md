@@ -1,10 +1,12 @@
 # TypeScript lane driver — finish the TypeScript surface of step 2
 
-Status: driver, 2026-11-08. Three parallel tracks, one task at a time inside
-each track. This document is written for an agent with no prior context, of any
-vendor. Where it says "stop", stop and report to Sebastien; do not guess past
-it. Where this document and an ADR disagree, the ADR wins. This document
-summarizes; it does not decide.
+Status: driver, 2026-11-08. Three tracks run in parallel (backend, design and
+transport), one task at a time inside each track. Two groups of tasks follow
+them (faces and consumers), because they depend on tasks of the tracks. This
+document is written for an agent with no prior context, of any vendor. Where it
+says "stop", stop and report to Sebastien; do not guess past it. Where this
+document and an ADR disagree, the ADR wins. This document summarizes; it does
+not decide.
 
 **THIS SESSION RUNS:** set this line to one task id (for example `A1`) before a
 session starts, and do only that task.
@@ -41,7 +43,7 @@ faces, so the faces come first.
 | Backend   | A2   | #923  | A checking constructor and an unchecked one; the decoder uses the latter | A1         |
 | Backend   | A3   | #1197 | Export the instance constants in the TypeScript codec module             | A2         |
 | Design    | B0   | #1262 | Settle how a generated face reaches a transport; amend ADR-0020 d7       | none       |
-| Design    | B1   | #399  | The runtime package rejects a lone surrogate before the codec sees it    | none       |
+| Runtime   | B1   | #399  | The runtime package rejects a lone surrogate before the codec sees it    | none       |
 | Faces     | B2   | #1262 | The typed client face for commands, queries and signals                  | A1, A2, B0 |
 | Transport | C1   | #994  | A bound or an `AbortSignal` on connect, subscribe and read               | none       |
 | Transport | C2   | #1236 | A signal check, and keep the last good value                             | C1         |
@@ -53,6 +55,13 @@ faces, so the faces come first.
 | Consumers | D1   | #290  | The emulator                                                             | B2, C1     |
 | Consumers | D2   | #291  | Test-harness drivers                                                     | D1         |
 | Consumers | D3   | #288  | The observability server                                                 | B2, C1     |
+
+B1 is small code in `packages/ridl-runtime`, taken alone and early; the text of
+#399 says the TypeScript packages do not exist yet, which is out of date. The
+dependencies of D1 to D3 are a judgement of this document: the issues state
+none, except that #1262 lists them as blocked. D1 and D3 wait for C1 because
+they connect through the transport, and a connect with no bound can hang a
+program.
 
 Debt that fits the backend track and is taken after A3 if time allows: #1028
 (keep the wasm rule list in one place) and #1029 (round-trip the codec fixture
@@ -85,9 +94,10 @@ These belong to Sebastien. A task that needs one stops and reports.
    relates to the range check of the wasm codec, and whether the pattern check
    is optional. ADR-0013 decision 8 already says a pattern check may be
    optional.
-3. **The release.** A1 to A3 and B2 are probably breaking for generated
-   TypeScript. The lane assumes one breaking release for A1 to A3, and a second
-   one for B2. Sebastien confirms before a release.
+3. **The release.** A2 and B2 are probably breaking for generated TypeScript. A1
+   changes generated import paths and A3 adds exports; neither is confirmed
+   breaking. The lane assumes one release for A1 to A3 and a second one for B2.
+   Sebastien confirms before a release.
 4. **The scope of the lane.** The lane assumes D1 is in scope. D2 and D3 stay in
    scope only if Sebastien says so.
 
@@ -113,8 +123,7 @@ No model runs at xhigh. Nothing in this lane needs Fable.
   `CARGO_TARGET_DIR`. Run `./bootstrap` in it. Never use `git stash`: the stash
   is shared by every worktree.
 - One pull request per task. Stage explicit paths. Run
-  `git branch
-  --show-current` before every commit and push. Run
+  `git branch --show-current` before every commit and push. Run
   `cargo fmt --all` before a Rust commit and `just fmt` before a Markdown, TOML
   or YAML commit.
 - Conventional Commits, with scopes from `.git-std.toml`.
