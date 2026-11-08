@@ -263,8 +263,9 @@ What the tables show, without a recommendation:
   217 ns on `deepNested`: the FlatBuffers accessor of a list decodes the whole
   list. On `deepSparse` and `deepFull` the access takes 6.7 and 7.2 ns with
   podbuf (upper bounds, below 10 ns) and 17.4 and 18.3 ns with FlatBuffers. The
-  podbuf cells of `bigItemList` and `deepNested` and the FlatBuffers cell of
-  `deepSparse` are flagged.
+  podbuf cells of `bigItemList`, `deepNested` and `deepSparse` and the
+  FlatBuffers cells of `deepSparse` and `deepFull` are flagged, so the 6.7 ns
+  podbuf figure of `deepSparse` is flagged as well as below 10 ns.
 - Map keys: from `map` (at most 16 entries) to `bigMap` (at most 120 entries,
   7.5 times as many) the verify time grows 45.8 times for FlatBuffers and 46.9
   times for proto3, and 7.6 times for podbuf. On `bigMap` verify is 90 % of the
@@ -283,8 +284,8 @@ What the tables show, without a recommendation:
   the strings, `variant` and `deepSparse`; 101 to 126 for `bigItemList` and
   `bigMap`). Encode allocates for FlatBuffers (once for `itemList`, `map`,
   `bigItemList`, `bigSamples` and `bigMap`; 11 times for `deepNested`), for
-  podbuf (once for `map`, `bigSamples` and `bigMap`) and for proto3 never; the
-  cause of the podbuf allocations is not established here.
+  podbuf (once for `map` and `bigMap`) and for proto3 never; the cause of the
+  podbuf allocations is not established here.
 - Paced against derived: the paced figure is 1.00 % to 4.51 % for the signal
   payloads and the derived figure is at most 0.0142 %; the paced figure is above
   the derived one in every cell. The paced figure is not a codec figure, as the
