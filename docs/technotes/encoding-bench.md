@@ -195,6 +195,20 @@ None of the three applies a length check in `verify` (ADR-0030 decision 19).
 - **Floating point.** The bench does not isolate the cost of floating-point
   checks, which the podbuf design also puts out of scope.
 
+## Alternatives considered
+
+- **Per-operation microbenchmarks only** (in the style of criterion). Not the
+  headline, because the question is the CPU load under a sustained rate, which
+  includes cache and allocator effects. The time per operation and per update is
+  still reported, so the load at any rate can be computed.
+- **Measuring through `ridl-transport-ws`.** Not done: the bench covers the
+  codec only. The result can be extended to the transport later.
+- **Host-only measurement.** Not enough: the absolute times of the development
+  machine do not transfer to a target-class core, so the bench also runs on the
+  Pixel 5.
+- **Hardware counters on the Pixel 5.** Not used: the phone is not rooted, and
+  the counters are usually unavailable without root.
+
 ## Relation to the podbuf design spike
 
 [The podbuf design](../archive/2026-10-24-podbuf-design.md), section 12, holds a
