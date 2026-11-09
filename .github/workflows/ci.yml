@@ -42,7 +42,7 @@ env:
   # applies rust-toolchain.toml to a contributor too, but nothing applies these
   # two, so a contributor runs whatever their package manager gave them.
   # ADR-0009 decision 8 records that asymmetry and why it is not closed here.
-  # The Deno pin is not here: it is in .deno-version, because `./bootstrap`
+  # The Deno pin is not here: it is in .deno-version (with its checksums in .deno-sha256), because `./bootstrap`
   # reads it too and installs that version when a contributor has no `deno`.
   # The flatc pin is not here either: it is in .flatc-version, for the same
   # reason.

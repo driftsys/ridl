@@ -127,6 +127,8 @@ member; rsdl is the apex.
     just fmt             reformat connective tissue with prim
     just check           lint gate — prim fmt --check + prim lint (no writes)
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
+    just deno-pin-check  .deno-sha256 names the version in .deno-version and holds
+                         a SHA-256 for every target ./bootstrap downloads
     just gate-parity     CI invokes every member of just build, and the members
                          of build match the expected list in the recipe
     just install-check   end-to-end test of install.sh and, where pwsh
@@ -254,7 +256,8 @@ member; rsdl is the apex.
                          deno fmt --check, deno lint, deno check for Deno
                          and against the DOM library, the unit tests under
                          tests/, and deno publish --dry-run. The Deno version
-                         is pinned in .deno-version
+                         is pinned in .deno-version, and the SHA-256 of its release zips in
+                         .deno-sha256
     just ts-e2e          build the ridl-transport-ws examples loopback_server
                          and debug_gateway_fixture (with descriptor), then run
                          the package's Deno e2e/deno_test.ts and
@@ -310,7 +313,7 @@ member; rsdl is the apex.
                          on PATH and network access. Not a member of pre-push.
                          .github/workflows/npm-release.yml publishes the
                          packages to npm on a v* tag
-    just build           toolchain-check + gate-parity + install-check +
+    just build           toolchain-check + gate-parity + deno-pin-check + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +
                          test + lint + wasm-check + compat-check + demo +

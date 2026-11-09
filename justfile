@@ -2593,6 +2593,32 @@ story-id-check root="":
         run_gate .
     fi
 
+# The Deno checksum pin covers the pinned version: .deno-sha256 names the
+# version in .deno-version, and holds a SHA-256 for every target that
+# ./bootstrap downloads and for the one CI downloads.
+deno-pin-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(tr -d '[:space:]' < .deno-version)"
+    pinned="$(sed -n 's/^# version[[:space:]]*//p' .deno-sha256 | tr -d '[:space:]')"
+    if [ "$pinned" != "$version" ]; then
+        echo "deno-pin-check: .deno-sha256 is for deno '$pinned', and .deno-version pins '$version'." >&2
+        exit 1
+    fi
+    targets="$(sed -n 's/.*deno_target=\([a-z0-9_-]*\) ;;.*/\1/p' bootstrap)"
+    targets="$(printf '%s\n' $targets x86_64-unknown-linux-gnu | sort -u)"
+    if [ "$(printf '%s\n' $targets | wc -l | tr -d ' ')" -ne 4 ]; then
+        echo "deno-pin-check: could not read the four targets from ./bootstrap." >&2
+        exit 1
+    fi
+    for target in $targets; do
+        if ! grep -Eq "^[0-9a-f]{64}  deno-${target}\.zip\$" .deno-sha256; then
+            echo "deno-pin-check: .deno-sha256 has no SHA-256 for deno-${target}.zip." >&2
+            exit 1
+        fi
+    done
+    echo "deno-pin-check: .deno-sha256 covers deno $version for $(printf '%s\n' $targets | wc -l | tr -d ' ') targets"
+
 # Check that CI still invokes every recipe the local gate is made of.
 #
 # The other half of gate parity. CI runs these recipes rather than its own copy
@@ -2627,32 +2653,6 @@ story-id-check root="":
 # divergence — but five install steps in that workflow already use `run: |`, so
 # wrapping a gate step is a plausible edit, and the message will name the member
 # rather than the form that defeated the pattern.
-# The Deno checksum pin covers the pinned version: .deno-sha256 names the
-# version in .deno-version, and holds a SHA-256 for every target that
-# ./bootstrap downloads and for the one CI downloads.
-deno-pin-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    version="$(tr -d '[:space:]' < .deno-version)"
-    pinned="$(sed -n 's/^# version[[:space:]]*//p' .deno-sha256 | tr -d '[:space:]')"
-    if [ "$pinned" != "$version" ]; then
-        echo "deno-pin-check: .deno-sha256 is for deno '$pinned', and .deno-version pins '$version'." >&2
-        exit 1
-    fi
-    targets="$(sed -n 's/.*deno_target=\([a-z0-9_-]*\) ;;.*/\1/p' bootstrap)"
-    targets="$(printf '%s\n' $targets x86_64-unknown-linux-gnu | sort -u)"
-    if [ "$(printf '%s\n' $targets | wc -l | tr -d ' ')" -ne 4 ]; then
-        echo "deno-pin-check: could not read the four targets from ./bootstrap." >&2
-        exit 1
-    fi
-    for target in $targets; do
-        if ! grep -Eq "^[0-9a-f]{64}  deno-${target}\.zip\$" .deno-sha256; then
-            echo "deno-pin-check: .deno-sha256 has no SHA-256 for deno-${target}.zip." >&2
-            exit 1
-        fi
-    done
-    echo "deno-pin-check: .deno-sha256 covers deno $version for $(printf '%s\n' $targets | wc -l | tr -d ' ') targets"
-
 gate-parity:
     #!/usr/bin/env bash
     set -euo pipefail

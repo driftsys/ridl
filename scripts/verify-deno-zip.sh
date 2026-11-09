@@ -11,8 +11,12 @@ target="${2:?usage: verify-deno-zip.sh <zip> <target> [pin-file]}"
 pins="${3:-$(dirname "$0")/../.deno-sha256}"
 name="deno-${target}.zip"
 
+if [ ! -f "$pins" ]; then
+  echo "deno checksum: the pin file $pins does not exist" >&2
+  exit 1
+fi
 expected="$(awk -v f="$name" '$2 == f { print $1 }' "$pins")"
-if ! printf '%s' "$expected" | grep -Eq '^[0-9a-f]{64}$'; then
+if ! printf '%s' "$expected" | grep -Eqx '[0-9a-f]{64}'; then
   echo "deno checksum: no valid SHA-256 for $name in $pins" >&2
   exit 1
 fi
