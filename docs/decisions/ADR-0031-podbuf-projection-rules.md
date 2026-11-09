@@ -50,8 +50,9 @@ the dated clarification.
 driftsys/ridl#1211.** Remote podbuf widths remain judged by remote inline
 growth; FlatBuffers and proto3 report their own remote integer changes.
 
-**Amended 2026-11-09 — decision 13, remote strict enum appends.** The dated
-amendment under decision 13 extends strict append reporting to remote context.
+**Amended 2026-11-09 — decision 13, remote strict enum appends, from
+driftsys/ridl#1229.** The dated amendment under decision 13 extends strict
+append reporting to remote context.
 
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -923,20 +924,21 @@ a field is appended.
       baseline. Amended 2026-10-31, from driftsys/ridl#1095: this replaces the
       known gap the decision recorded.
 
-      _Amended 2026-11-09 — remote strict enum appends._ A pure append to a
-      remote enum or enum set that is not `open` is `strict_enum_append`,
-      breaking for every encoding, even when only the consumer's import pin
-      changes. Report it at the consumer path, once per path and remote
-      declaration reached by a surviving old consumer use. Each side supplies
-      its own remote context; a side without that context supplies no line, and
-      shared-context entry points do not report remote strict appends. The
-      before/after values are `<remote declaration>: <names>`, listing the old
-      and new members in declaration order. Reorders, removals, value changes
-      and changes without an appended member draw no line from this rule. Local
-      declarations retain the local rule above and receive no duplicate
-      consumer-path line from the remote pass. The remote rule uses the same
-      old-use and surviving-use gates as remote width reporting; it does not
-      change the width or inline-growth rules.
+      _Amended 2026-11-09 — remote strict enum appends, from
+      driftsys/ridl#1229._ A pure append to a remote enum or enum set that is
+      not `open` is `strict_enum_append`, breaking for every encoding, even when
+      only the consumer's import pin changes. Report it at the consumer path,
+      once per path and remote declaration reached by a surviving old consumer
+      use. Each side supplies its own remote context; a side without that
+      context supplies no line, and shared-context entry points do not report
+      remote strict appends. The before/after values are
+      `<remote declaration>: <names>`, listing the old and new members in
+      declaration order. Reorders, removals, value changes and changes without
+      an appended member draw no line from this rule. Local declarations retain
+      the local rule above and receive no duplicate consumer-path line from the
+      remote pass. The remote rule uses the same old-use and surviving-use gates
+      as remote width reporting. A strict append draws no width line, as for the
+      local rule. The inline-growth rule is unchanged.
 
       _Amended 2026-11-02, from driftsys/ridl#1163; supersedes the shared
       context amendment of 2026-10-31 from driftsys/ridl#1141._ CLI and MCP
@@ -1198,6 +1200,9 @@ rationale are preserved in the
 | [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                     |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-03: reported remote declaration kinds, fixed union heads and context issues                                           |
 | [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-02: baseline context, separate comparison scopes, recovery, exit codes and publication guarantees                     |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: remote strict append reporting follows decision 13 (driftsys/ridl#1229)                                           |
+| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: compared-package strict append reporting and a link to decision 13 for remote reporting (driftsys/ridl#1229)      |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-09: strict append comparison without layout and its remote source map (driftsys/ridl#1229)                            |
 | [ADR-0029](ADR-0029-stability-policy.md) and [Stability](../book/stability.md)                 | amended 2026-11-02: approved minor-release adoption and minimum supporting tool version                                               |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                         |

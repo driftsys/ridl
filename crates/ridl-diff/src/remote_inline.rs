@@ -400,6 +400,7 @@ impl Pass<'_> {
                     after: Some(format!("{identity}: {}", names(after))),
                 },
             );
+            return;
         }
         let facts = match (&decl.kind, &new_decl.kind) {
             (Some(Kind::EnumSetDef(old)), Some(Kind::EnumSetDef(new))) => vec![

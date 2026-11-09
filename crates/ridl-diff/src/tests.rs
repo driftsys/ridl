@@ -2709,6 +2709,85 @@ mod podbuf {
     }
 
     #[test]
+    fn remote_strict_enum_set_append_at_bit_32_draws_no_width_line() {
+        let local = remote_holder(array(named("dep.types.Flags"), 0, 4));
+        assert_remote_strict_flags_only(&local, "app.api/Sample/reading");
+    }
+
+    #[test]
+    fn remote_strict_enum_set_append_at_bit_32_in_a_stream_draws_no_width_line() {
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![query("receive", 1, vec![], named_flags_stream())],
+        )];
+        assert_remote_strict_flags_only(&local, "app.api/Api/receive");
+    }
+
+    #[track_caller]
+    fn assert_remote_strict_flags_only(local: &v2::Package, path: &str) {
+        let strict_flags = |count, width| {
+            let mut remote = remote_flags(count, width);
+            if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut remote.decls[0].kind {
+                def.open = false;
+            }
+            remote
+        };
+        let old = strict_flags(32, v2::IntWidth::U32);
+        let new = strict_flags(33, v2::IntWidth::U64);
+        for encodings in [
+            vec![],
+            vec!["proto3"],
+            vec!["flatbuffers"],
+            vec!["podbuf"],
+            vec!["proto3", "flatbuffers", "podbuf"],
+        ] {
+            let report = checked_remote(local, &old, &new, &encodings);
+            assert_eq!(report.changes.len(), 1, "{report:?}");
+            let change = &report.changes[0];
+            assert_eq!(change.category, Category::StrictEnumAppend);
+            assert_eq!(change.path, path);
+            assert_eq!(change.verdict, Verdict::Breaking);
+            assert_eq!(report.verdict, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_reaches_a_stream_parameter() {
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![command(
+                "send",
+                1,
+                vec![param(
+                    "items",
+                    v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                            element: Some(v2::stream_type::Element::Named("dep.types.Mode".into())),
+                        })),
+                    },
+                )],
+            )],
+        )];
+        let report = checked_remote(
+            &local,
+            &remote_enums(&[("A", 0)], false),
+            &remote_enums(&[("A", 0), ("B", 1)], false),
+            &[],
+        );
+        assert_eq!(report.changes.len(), 1, "{report:?}");
+        let change = &report.changes[0];
+        assert_eq!(change.category, Category::StrictEnumAppend);
+        assert_eq!(change.path, "app.api/Api/send");
+        assert_eq!(change.before.as_deref(), Some("dep.types.Mode: A"));
+        assert_eq!(change.after.as_deref(), Some("dep.types.Mode: A, B"));
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
     fn remote_strict_enum_append_ignores_open_declarations() {
         // Mutation: drop the open gate.
         let local = remote_holder(named("dep.types.Pair"));
