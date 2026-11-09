@@ -109,12 +109,6 @@ state this minimum, the evidence/category/failure changes and the recovery
 procedure. After 1.0 an incompatible public-contract change requires a major
 release.
 
-On 2026-11-09 catalog history extended the same missing-evidence failure
-behavior to FlatBuffers and proto3: exit 2 on publication and omitted compatible
-catalogs at build time (driftsys/ridl#1228). This is the change requested in the
-issue filed by the owner, under the same declared pre-1.0 minor-release
-requirement and duty to describe the change in the release notes.
-
 ## How the promise is checked
 
 The repository checks each frozen surface that has a recorded baseline against
