@@ -680,8 +680,9 @@ fn distinct_f32_map_keys_verify_and_round_trip() {
     assert_eq!(out, ["true"]);
 }
 
-/// Rule 8 at `f32` width: two equal keys are refused with `KeyOrder`, which
-/// is why the encoder refuses keys that narrow to one `f32` value.
+/// Rule 8 at `f32` width: keys that are equal, signed zeros or descending are
+/// refused with `KeyOrder`, which is why the encoder refuses keys that narrow
+/// to one `f32` value. Ascending and adjacent keys are accepted.
 #[test]
 fn equal_f32_map_keys_are_refused_as_key_order() {
     let out = run(
@@ -691,10 +692,14 @@ fn equal_f32_map_keys_are_refused_as_key_order() {
             r#"check!(Narrowed, narrowed(&[1.0, 2.0]))"#,
             r#"check!(Narrowed, narrowed(&[2.0, 1.0]))"#,
             r#"check!(Narrowed, narrowed(&[0.0, -0.0]))"#,
+            r#"check!(Narrowed, narrowed(&[-0.0, 0.0]))"#,
             r#"check!(Narrowed, narrowed(&[0.5, 0.5 + 2f32.powi(-24)]))"#,
         ],
     );
-    assert_eq!(out, ["KeyOrder", "OK", "KeyOrder", "KeyOrder", "OK"]);
+    assert_eq!(
+        out,
+        ["KeyOrder", "OK", "KeyOrder", "KeyOrder", "KeyOrder", "OK"]
+    );
 }
 
 /// ADR-0031 decision 8 rule 7 for an arm whose head has no field: the arm
