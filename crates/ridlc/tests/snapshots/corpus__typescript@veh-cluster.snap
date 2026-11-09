@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
 // ===== package veh.common =====
-import { ConstraintError } from '@driftsys/ridl-runtime';
+import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
 import * as ridl_std from './ridl.std.js';
 
 /**
@@ -33,6 +33,9 @@ export function makeSpeed(value: number): Speed {
   }
   if (value > 250) {
     throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0');
   }
   return value as Speed;
 }
@@ -73,6 +76,9 @@ export function makeTemperature(value: number): Temperature {
   if (value > 125) {
     throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
   }
+  if (offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
+    throw new ConstraintError('step', 'veh.common.Temperature', value, 'step 0.1 from -40');
+  }
   return value as Temperature;
 }
 
@@ -112,6 +118,9 @@ export function makeRPM(value: number): RPM {
   if (value > 8000) {
     throw new ConstraintError('range', 'veh.common.RPM', value, '[0..8000]');
   }
+  if (offFloatStep(value, true, [1.0, 10.0, 10.0, 0.0, 0.0, 0.0])) {
+    throw new ConstraintError('step', 'veh.common.RPM', value, 'step 10 from 0');
+  }
   return value as RPM;
 }
 
@@ -150,6 +159,9 @@ export function makeRatio(value: number): Ratio {
   }
   if (value > 100) {
     throw new ConstraintError('range', 'veh.common.Ratio', value, '[0..100]');
+  }
+  if (offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
+    throw new ConstraintError('step', 'veh.common.Ratio', value, 'step 0.1 from 0');
   }
   return value as Ratio;
 }
@@ -219,6 +231,9 @@ export function makeGain(value: number): Gain {
   }
   if (value > 1) {
     throw new ConstraintError('range', 'veh.common.Gain', value, '[0..1]');
+  }
+  if (offFloatStep(value, true, [1.0, 0.01, 0.01, -2.0816681711721684e-19, 0.0, 0.0])) {
+    throw new ConstraintError('step', 'veh.common.Gain', value, 'step 0.01 from 0');
   }
   return value as Gain;
 }
