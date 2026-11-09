@@ -2553,7 +2553,7 @@ impl<'a> Codec<'a> {
             "\nfunction signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {\n  const typeId = codec.typeId(entry.payload.type);\n  return {\n    iface: entry.iface,\n    ord: entry.ord,\n    check: (bytes) => {\n      const result = codec.verify(typeId, bytes);\n      if (result.ok) return undefined;\n      if (result.kind !== \"rule\") return \"corrupt\";\n      const rule = (RULES as readonly string[]).find((known) => known === result.rule);\n      if (rule === undefined) throw new CodecError(\"unknown rule during signal verification\");\n      return { rule: rule as (typeof RULES)[number] };\n    },\n  };\n}\n",
         );
         out.push_str(
-            "\n/** Returns the check of each signal of the catalog, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */\nexport function signalChecks(codec: Codec): readonly SignalCheckEntry[] {\n  return [\n",
+            "\n/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */\nexport function signalChecks(codec: Codec): readonly SignalCheckEntry[] {\n  return [\n",
         );
         for entry in &self.signal_entries {
             let _ = writeln!(out, "    signalCheck(codec, {entry}),");

@@ -700,7 +700,7 @@ function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord
   };
 }
 
-/** Returns the check of each signal of the catalog, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */
+/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */
 export function signalChecks(codec: Codec): readonly SignalCheckEntry[] {
   return [
     signalCheck(codec, Sensors.latest),
