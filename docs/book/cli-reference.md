@@ -780,7 +780,7 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`. Also writes `__ridl_instances.ts` when the workspace declares a system
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
           - podbuf:          The podbuf C header, written to `<base>.h`
@@ -2910,7 +2910,7 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`. Also writes `__ridl_instances.ts` when the workspace declares a system
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
           - podbuf:          The podbuf C header, written to `<base>.h`

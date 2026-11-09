@@ -1,0 +1,28 @@
+---
+source: crates/ridl-backend-ts/src/instances.rs
+expression: source
+---
+export const instances = {
+  default: {
+    '2nd': {
+      /**
+       * `default.2nd/Unit` in `instances.lock`.
+       */
+      UNIT: 3,
+    },
+  },
+  veh: {
+    http_server: {
+      lane_keep: {
+        /**
+         * `veh.HTTPServer.LaneKeep/2nd` in `instances.lock`.
+         */
+        '2ND': 2,
+        /**
+         * `veh.HTTPServer.LaneKeep/primaryUnit` in `instances.lock`.
+         */
+        PRIMARY_UNIT: 1,
+      },
+    },
+  },
+} as const;

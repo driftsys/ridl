@@ -651,6 +651,7 @@ pub enum Emit {
     IrBinary,
     /// Idiomatic TypeScript source, written to `<base>.ts`, and the codec
     /// module `<base>.codec.ts` with `[backend.typescript] codec = true`.
+    /// Also writes `__ridl_instances.ts` when the workspace declares a system.
     ///
     /// The flag value is spelled `typescript` rather than the derived
     /// `type-script`: the language emits are named after the language, as
@@ -1739,21 +1740,41 @@ fn run_build_inner<E: From<std::io::Error>>(
         // package-scoped names and `--out-dir` is any directory the caller
         // names, so this is the check that keeps a build from truncating
         // sources a person wrote.
-        if writes_crate_files {
-            let refusals = crate_file_refusals(
+        let mut refusals = if writes_crate_files {
+            crate_file_refusals(
                 out_dir,
                 wasm_backends.contains("rust"),
                 lowered_system.is_some(),
-            )?;
-            if !refusals.is_empty() {
-                diagnostics.extend(refusals);
-                return Ok(CliRun {
-                    diagnostics,
-                    sources,
-                    lints,
-                    usage_error: false,
-                });
-            }
+            )?
+        } else {
+            Vec::new()
+        };
+        if emits.contains(&Emit::TypeScript) && single_file && file_stem == "__ridl_instances" {
+            refusals.push(error_diagnostic(
+                "",
+                "the standalone file stem `__ridl_instances` is reserved for the generated \
+                 instance constants when TypeScript emission is requested. This build wrote \
+                 nothing at all. Rename the input file"
+                    .to_string(),
+                FileId::DETACHED,
+                TextRange::default(),
+            ));
+        }
+        if emits.contains(&Emit::TypeScript)
+            && lowered_system.is_some()
+            && let Some(diagnostic) =
+                refuse_overwrite(&out_dir.join(TS_INSTANCES_FILE), "//", None)?
+        {
+            refusals.push(diagnostic);
+        }
+        if !refusals.is_empty() {
+            diagnostics.extend(refusals);
+            return Ok(CliRun {
+                diagnostics,
+                sources,
+                lints,
+                usage_error: false,
+            });
         }
 
         for package in &checked {
@@ -1904,6 +1925,16 @@ fn run_build_inner<E: From<std::io::Error>>(
                 wasm_source.as_deref(),
                 instances_source.as_deref(),
                 &diagnostics,
+            )?;
+        }
+
+        if emits.contains(&Emit::TypeScript) {
+            write_typescript_instances(
+                out_dir,
+                lowered_system.as_ref(),
+                root_package.as_deref(),
+                codegen_header.as_deref(),
+                &mut diagnostics,
             )?;
         }
 
@@ -2405,6 +2436,47 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool, instances
 /// package writes it: a package file is `<package name>.rs`, and a package
 /// name starts with a letter.
 const INSTANCES_FILE: &str = "__ridl_instances.rs";
+
+/// The system-wide TypeScript instances object, beside the package modules.
+const TS_INSTANCES_FILE: &str = "__ridl_instances.ts";
+
+/// Writes the system's instance constants for a TypeScript emit, or removes
+/// a generated file from an earlier build when there is no system.
+fn write_typescript_instances(
+    out_dir: &Path,
+    system: Option<&ridl_ir::v2::System>,
+    root_package: Option<&str>,
+    header: Option<&str>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> std::io::Result<()> {
+    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        return Ok(());
+    }
+    let path = out_dir.join(TS_INSTANCES_FILE);
+    if let Some(system) = system {
+        match ridl_backend_ts::generate_instances_module(system) {
+            Ok(source) => {
+                let marker = codegen::generated_marker(root_package);
+                let preamble = codegen::comment_preamble(&marker, header.unwrap_or_default(), "//");
+                std::fs::write(path, format!("{preamble}{source}"))?;
+            }
+            Err(ridl_backend_ts::GenerateError::Unrepresentable(message)) => {
+                diagnostics.push(error_diagnostic(
+                    "",
+                    message,
+                    FileId::DETACHED,
+                    TextRange::default(),
+                ));
+            }
+        }
+    } else if path.is_file() {
+        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&path)?.starts_with(&marker) {
+            std::fs::remove_file(path)?;
+        }
+    }
+    Ok(())
+}
 
 /// The source of the `instances` module for the lowered `system`, or `None`
 /// with an error diagnostic pushed when the build cannot have one: a package

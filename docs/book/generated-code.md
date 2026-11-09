@@ -459,6 +459,18 @@ file: branded scalars, interfaces, enums, enum sets, discriminated unions and
 init functions. This domain module has no interaction face or feature selection.
 The optional codec module also emits stream functions, using platform streams.
 
+A workspace that declares a `system` also writes `__ridl_instances.ts`, which
+exports an `instances` object with `as const` literal types. Import it from that
+file to read a number such as `instances.veh.adas.cruise.PRIMARY`. It is written
+even when the codec option is off. The
+[deployment descriptor record](../design/deployment-descriptor.md#identifying-an-instance)
+defines the names, numbers and documentation shared with the Rust `instances`
+module. A build without a system removes an earlier generated instances file; a
+hand-written file of that name is preserved and refused when a system would
+overwrite it. A standalone file with the stem `__ridl_instances` is refused when
+TypeScript emission is requested because the stem is reserved for the generated
+instance constants.
+
 With `[backend.typescript] codec = true` it also writes `<base>.codec.ts`, for
 every package that has a payload root with a codec (its own, or one of another
 package that its interfaces name) or a supported stream interaction: one

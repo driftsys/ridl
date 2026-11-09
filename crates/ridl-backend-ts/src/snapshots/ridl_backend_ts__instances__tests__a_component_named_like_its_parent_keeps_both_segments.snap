@@ -1,0 +1,22 @@
+---
+source: crates/ridl-backend-ts/src/instances.rs
+expression: source
+---
+export const instances = {
+  veh: {
+    adas: {
+      adas: {
+        /**
+         * `veh.adas.Adas/Unit` in `instances.lock`.
+         */
+        UNIT: 1,
+      },
+      cruise: {
+        /**
+         * `veh.adas.Cruise/Unit` in `instances.lock`.
+         */
+        UNIT: 2,
+      },
+    },
+  },
+} as const;
