@@ -139,8 +139,8 @@ enum Target<'a> {
 struct Rule {
     pack: String,
     unpack: String,
-    /// The conversion is a type assertion or nothing: an array of such
-    /// elements is copied, not mapped.
+    /// The conversion is a type assertion or nothing on the pack side: an
+    /// array of such elements is copied, not mapped.
     plain: bool,
     /// The `flatc` object API holds the value as `T | null`: a nested table.
     nullable: bool,

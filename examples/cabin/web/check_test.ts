@@ -410,9 +410,9 @@ function verified<T>(subject: Subject<T>, value: T): Outcome {
 // width of its backing (`Temperature` is an `i8`, `Level` a `u8`, `Average` a
 // `u16`, `Window` a `u32`), so the encoded bytes hold the value itself, and
 // `verify` judges the same number that `make<Name>` judges. A float list has
-// no 0: the `flatc` writer omits a field equal to the schema default 0.0, and
-// the wasm codec reports a payload without it as malformed, which is not a
-// constraint verdict.
+// no 0 for `Setpoint`: the `flatc` writer omits a field equal to the schema
+// default 0.0, and the wasm codec reports that payload as malformed, which is
+// not a constraint verdict (`Tenth` takes 0 and answers as expected).
 const subjects = [
   subject<number>({
     name: "Temperature",
@@ -461,7 +461,7 @@ const subjects = [
     name: "Tenth",
     make: makeTenth,
     encode: (v) => encodeTenth(v as Tenth),
-    values: [0.1, 0.2, 0.3, 0.5, 0.7, 0.75, 0.05, 0.9, 1, 1.1, -0.1, 2],
+    values: [0, 0.1, 0.2, 0.3, 0.5, 0.7, 0.75, 0.05, 0.9, 1, 1.1, -0.1, 2],
   }),
   subject<string>({
     name: "Tag",

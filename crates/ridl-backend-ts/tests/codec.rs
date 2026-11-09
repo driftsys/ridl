@@ -1948,7 +1948,7 @@ fn stream_tables_keep_limits_and_roles() {
     let raw = module(&codegen::lower(&output.package, &[]), "raw.only");
     assert!(raw.contains("export function Raw_fetch("), "{raw}");
     assert!(
-        !raw.contains("import type * as t"),
+        !raw.contains("* as t from"),
         "induced requests use no domain namespace: {raw}"
     );
     // The induced empty request has a flatc table, so this barrel does exist.
@@ -2103,7 +2103,7 @@ fn generated_stream_docs_render_model_contract() {
         .roots
         .retain(|r| r.tuple == Some(tuple));
     let source = module(&model, "streams.demo");
-    assert!(!source.contains("import type * as t"));
+    assert!(!source.contains("* as t from"));
     assert!(source.contains("Reads `streams.demo.Count`."), "{source}");
 }
 
