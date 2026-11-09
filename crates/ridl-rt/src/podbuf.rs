@@ -292,9 +292,9 @@ pub fn text(bytes: &[u8]) -> Result<&str, VerifyError> {
 
 /// Whether `bytes` holds a NUL byte.
 ///
-/// The scan takes the smallest byte of each 64-byte block, which the compiler
-/// turns into vector minimum instructions; `<[u8]>::contains` tests one machine
-/// word per step.
+/// The scan takes the smallest byte of each 64-byte block, a reduction that a
+/// compiler can turn into vector minimum instructions on a target that has
+/// them; `<[u8]>::contains` tests one machine word per step.
 #[inline]
 pub fn has_nul(bytes: &[u8]) -> bool {
     let (blocks, rest) = bytes.as_chunks::<64>();
