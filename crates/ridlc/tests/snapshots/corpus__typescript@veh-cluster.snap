@@ -426,7 +426,7 @@ interface RawWheelFrame {
 
 
 // ===== package veh.cluster =====
-import { ConstraintError } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength } from '@driftsys/ridl-runtime';
 import * as ridl_std from './ridl.std.js';
 import * as veh_common from './veh.common.js';
 
@@ -669,11 +669,29 @@ export const FAN_LIMIT = 7;
 /**
  * The label a cabin fan reports itself under.
  *
+ * Build a value with `makeFanTag`.
+ *
  * @remarks
  * Rules:
  * - length 1 ..= 32
  */
 export type FanTag = string & { readonly __ridl: 'veh.cluster.FanTag' };
+
+/** Builds a `FanTag`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeFanTag(value: string): FanTag {
+  if (codePointLength(value) < 1) {
+    throw new ConstraintError('length', 'veh.cluster.FanTag', value, '[1..32]');
+  }
+  if (codePointLength(value) > 32) {
+    throw new ConstraintError('length', 'veh.cluster.FanTag', value, '[1..32]');
+  }
+  return value as FanTag;
+}
+
+/** Builds a `FanTag` without checking a value already known to satisfy its constraints. */
+export function makeFanTagUnchecked(value: string): FanTag {
+  return value as FanTag;
+}
 
 export function initFanTag(): FanTag {
   return 'unset' as FanTag;

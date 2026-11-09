@@ -136,6 +136,7 @@ try {
     "StreamError",
     "UnknownPayloadType",
     "byteUpload",
+    "codePointLength",
     "decodeStream",
     "decodeTextStream",
     "encodeUpload",

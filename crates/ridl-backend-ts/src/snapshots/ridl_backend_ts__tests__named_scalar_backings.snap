@@ -82,13 +82,29 @@ export function initEnabled(): Enabled {
   return false as Enabled;
 }
 
+/**
+ * Build a value with `makeLabel`.
+ */
 export type Label = string & { readonly __ridl: 'veh.common.Label' };
+
+/** Builds a `Label`. */
+export function makeLabel(value: string): Label {
+  return value as Label;
+}
 
 export function initLabel(): Label {
   return '' as Label;
 }
 
+/**
+ * Build a value with `makeBlob`.
+ */
 export type Blob = Uint8Array & { readonly __ridl: 'veh.common.Blob' };
+
+/** Builds a `Blob`. */
+export function makeBlob(value: Uint8Array): Blob {
+  return value as Blob;
+}
 
 export function initBlob(): Blob {
   return new Uint8Array(0) as Blob;

@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: ts_for(documented_decls())
 ---
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -47,12 +47,35 @@ export function initSpeed(): Speed {
 }
 
 /**
+ * Build a value with `makeVin`.
+ *
  * @remarks
  * Rules:
  * - length 17
  * - pattern `/[A-HJ-NPR-Z0-9]{17}/`
  */
 export type Vin = string & { readonly __ridl: 'veh.common.Vin' };
+
+const __ridlPatternVin = new globalThis.RegExp('[A-HJ-NPR-Z0-9]{17}');
+
+/** Builds a `Vin`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeVin(value: string): Vin {
+  if (codePointLength(value) < 17) {
+    throw new ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
+  }
+  if (codePointLength(value) > 17) {
+    throw new ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
+  }
+  if (!__ridlPatternVin.test(value)) {
+    throw new ConstraintError('pattern', 'veh.common.Vin', value, '/[A-HJ-NPR-Z0-9]{17}/');
+  }
+  return value as Vin;
+}
+
+/** Builds a `Vin` without checking a value already known to satisfy its constraints. */
+export function makeVinUnchecked(value: string): Vin {
+  return value as Vin;
+}
 
 /**
  * Build a value with `makeHidden`.

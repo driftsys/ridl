@@ -133,7 +133,7 @@ pub(crate) fn generate_with(
     let mut has_checks = false;
     for decl in &package.decls {
         if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind {
-            for check in numeric_checks(td) {
+            for check in scalar_checks(td, &decl.name) {
                 has_checks = true;
                 helpers.extend(check.helper);
             }
@@ -383,7 +383,7 @@ fn emit_type_def(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> String {
     source
 }
 
-/// One numeric check of a constructor: the condition that refuses a value,
+/// One check of a constructor: the condition that refuses a value,
 /// the rule it breaks, the constraint text of the message, and the runtime
 /// helper the condition calls, if any.
 struct Check {
@@ -406,15 +406,25 @@ impl Check {
 
 /// Names that a domain module imports from `@driftsys/ridl-runtime`. A
 /// declaration with one of these names is refused.
-const RESERVED_NAMES: [&str; 3] = ["ConstraintError", "offFloatPoints", "offFloatStep"];
+const RESERVED_NAMES: [&str; 4] = [
+    "ConstraintError",
+    "codePointLength",
+    "offFloatPoints",
+    "offFloatStep",
+];
 
-/// Numeric checks in contract order: range, then step. Bigint-backed integers
+/// The checks of a scalar in contract order. A string or bytes scalar checks
+/// its length, then a string checks its pattern. A number checks its range,
+/// then its step. Bigint-backed integers
 /// check both bounds of the declared range intersected with the language
 /// domain: i64 for I64, and 0 through i64::MAX for U64. TypeScript bigint has
 /// no finite backing limit, unlike Rust's i64 parameter. Number-backed
 /// integers must be safe and check the declared bounds.
-fn numeric_checks(td: &v2::TypeDef) -> Vec<Check> {
+fn scalar_checks(td: &v2::TypeDef, name: &str) -> Vec<Check> {
     let backing = backing_scalar(td);
+    if matches!(backing, ScalarBacking::String | ScalarBacking::Bytes) {
+        return text_checks(td, name, backing == ScalarBacking::String);
+    }
     let integer = backing == ScalarBacking::Integer;
     if !integer && backing != ScalarBacking::Float {
         return Vec::new();
@@ -476,6 +486,69 @@ fn numeric_checks(td: &v2::TypeDef) -> Vec<Check> {
     }
     checks.extend(step_check(td));
     checks
+}
+
+/// The length and pattern checks of a string or bytes scalar, in the order of
+/// the Rust `check`: a positive minimum, the maximum, then the pattern. A
+/// string length counts code points (typl §5.3), as `chars()` does in Rust, and
+/// a bytes length counts bytes (typl §5.4). A minimum of 0 is the default bound
+/// and cannot be broken, and a maximum beyond the safe number interval cannot
+/// be exceeded, so neither emits a comparison. Bytes carry no pattern.
+fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
+    let Some(c) = &td.constraint else {
+        return Vec::new();
+    };
+    let (length, helper) = if string {
+        ("codePointLength(value)", Some("codePointLength"))
+    } else {
+        ("value.length", None)
+    };
+    let bounds = format!(
+        "[{}..{}]",
+        c.len_min.map(|min| min.to_string()).unwrap_or_default(),
+        c.len_max.map(|max| max.to_string()).unwrap_or_default()
+    );
+    let mut checks = Vec::new();
+    let mut length_check = |condition: String| {
+        checks.push(Check {
+            rule: "length",
+            condition,
+            constraint: bounds.clone(),
+            helper,
+        });
+    };
+    if let Some(min) = c.len_min.filter(|min| *min > 0) {
+        length_check(format!("{length} < {min}"));
+    }
+    if let Some(max) = c.len_max.filter(|max| *max <= MAX_SAFE_INTEGER) {
+        length_check(format!("{length} > {max}"));
+    }
+    if let Some(pattern) = pattern_source(td).filter(|_| string) {
+        checks.push(Check {
+            rule: "pattern",
+            condition: format!("!{}.test(value)", pattern_constant(name)),
+            constraint: format!("/{pattern}/"),
+            helper: None,
+        });
+    }
+    checks
+}
+
+/// The pattern source of a string scalar. Bytes carry no pattern.
+fn pattern_source(td: &v2::TypeDef) -> Option<&str> {
+    if backing_scalar(td) != ScalarBacking::String {
+        return None;
+    }
+    td.constraint
+        .as_ref()?
+        .pattern
+        .as_deref()
+        .map(strip_regex_delimiters)
+}
+
+/// The module-level constant that holds the `RegExp` of a pattern-checked type.
+fn pattern_constant(name: &str) -> String {
+    format!("__ridlPattern{name}")
 }
 
 /// The step check of a numeric type. The origin of the lattice is the declared
@@ -575,13 +648,7 @@ fn check_constructor_names(package: &v2::Package) -> Result<(), GenerateError> {
         let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind else {
             continue;
         };
-        if matches!(
-            backing_scalar(td),
-            ScalarBacking::String | ScalarBacking::Bytes
-        ) {
-            continue;
-        }
-        let suffixes: &[&str] = if numeric_checks(td).is_empty() {
+        let suffixes: &[&str] = if scalar_checks(td, &decl.name).is_empty() {
             &[""]
         } else {
             &["", "Unchecked"]
@@ -599,27 +666,30 @@ fn check_constructor_names(package: &v2::Package) -> Result<(), GenerateError> {
     Ok(())
 }
 
-/// Constructs numeric and boolean brands; string and byte checks are tracked
-/// by driftsys/ridl#923. The unchecked form exists only when a check is emitted.
+/// Constructs a brand and checks the constraints of its backing. The unchecked
+/// form exists only when a check is emitted. A pattern lives in a module-level
+/// `RegExp`, built once.
 fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<String> {
-    if matches!(
-        backing_scalar(td),
-        ScalarBacking::String | ScalarBacking::Bytes
-    ) {
-        return None;
-    }
     let name = &decl.name;
     let base = scalar_base(td);
     let export = export_kw(decl.visibility);
-    let checks = numeric_checks(td);
+    let checks = scalar_checks(td, name);
     let throws = if checks.is_empty() {
         ""
     } else {
         " Throws a `ConstraintError` when a checked constraint is broken."
     };
-    let mut source = format!(
+    let mut source = String::new();
+    if let Some(pattern) = pattern_source(td) {
+        source.push_str(&format!(
+            "const {} = new globalThis.RegExp({});\n\n",
+            pattern_constant(name),
+            ts_string(pattern)
+        ));
+    }
+    source.push_str(&format!(
         "/** Builds a `{name}`.{throws} */\n{export}function make{name}(value: {base}): {name} {{\n"
-    );
+    ));
     let qualified = ts_string(&format!("{}.{name}", ctx.package));
     for check in &checks {
         source.push_str(&format!(
