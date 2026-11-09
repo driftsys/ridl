@@ -1199,6 +1199,25 @@ needed for the first Kotlin demo.
 
 ---
 
+# The next release
+
+**Scheduled on 2026-11-09 by the maintainer.** The release after 0.17.0 carries
+one story of Epic 11. It adds a provided method to a port, so it does not depend
+on the items of the next breaking release.
+
+| ID     | Story                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                                              | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| E11.23 | A provided method of `StreamHandler` that tells a provider that a caller forgot a claim's call, without a push or a pull and per claim, so that a call with only a stream parameter is covered (driftsys/ridl#1170) | the generated `serve` drops a `Pending` source and frees its member when the caller forgets the call, before the source yields another element; `ridl-rt-conformance` covers the forget on the reply stream and on a call with only a stream parameter | M    |
+
+A forget already wakes the provider's `Interest::ClaimStream` waker. The story
+adds the check that a woken provider makes, and `serve` registers that waker
+while its source is `Pending`. The default of the method answers that the call
+was not forgotten, so a runtime that does not override it keeps its present
+behaviour. The Kotlin face needs the same signal
+(driftsys/ridlc-gen-kotlin#126).
+
+---
+
 # The next breaking release
 
 **Scheduled on 2026-10-26 by the maintainer.** The next release marked breaking,
