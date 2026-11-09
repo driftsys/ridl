@@ -1529,6 +1529,67 @@ fn remote_inline_source(dir: &TempDir, side: &str, grown: bool, inline: bool) ->
     root
 }
 
+fn remote_strict_enum_source(dir: &TempDir, side: &str, kind: &str, appended: bool) -> PathBuf {
+    let root = remote_flags_source(dir, side, false);
+    let extra = if appended { "  C = 2\n  D = 3\n" } else { "" };
+    dir.write(
+        &format!("{side}/vendor/dep/types.typl"),
+        &format!("package dep\n{kind} Flags {{\n  A = 0\n  B = 1\n{extra}}}\n"),
+    );
+    let lock_path = root.join("ridl.lock");
+    let mut lock = ridl_core::lock::read_lockfile(&lock_path).0.unwrap();
+    lock.entries
+        .get_mut("https://example.invalid/dep.tar")
+        .unwrap()
+        .tree = Some(ridl_core::tree_hash(&root.join("vendor/dep")).unwrap());
+    ridl_core::lock::write_lockfile(&lock_path, &lock).unwrap();
+    root
+}
+
+#[test]
+fn remote_pin_only_strict_enum_append_breaks_sources_and_enriched_baselines() {
+    // Mutations: discard remote strict appends at the CLI boundary; skip enum
+    // sets; restrict the verdict to podbuf; substitute missing baseline context.
+    let dir = TempDir::new("remote-strict-append");
+    for kind in ["enum", "enumset"] {
+        let old = remote_strict_enum_source(&dir, &format!("{kind}-old"), kind, false);
+        let new = remote_strict_enum_source(&dir, &format!("{kind}-new"), kind, true);
+        let baseline = dir.path().join(format!("{kind}-baseline"));
+        remote_inline_baseline(&old, &baseline, true);
+        let legacy = dir.path().join(format!("{kind}-legacy"));
+        remote_inline_baseline(&old, &legacy, false);
+        for before in [&old, &baseline] {
+            for encoding in [None, Some("podbuf"), Some("flatbuffers"), Some("proto3")] {
+                let mut args: Vec<&std::ffi::OsStr> = vec![
+                    "diff".as_ref(),
+                    before.as_os_str(),
+                    new.as_os_str(),
+                    "--format".as_ref(),
+                    "json".as_ref(),
+                ];
+                if let Some(encoding) = encoding {
+                    args.push("--encoding".as_ref());
+                    args.push(encoding.as_ref());
+                }
+                let (code, stdout, stderr) = ridl(&args);
+                assert_eq!(code, 1, "{kind}: {stdout}\n{stderr}");
+                let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+                assert_eq!(report["verdict"], "breaking");
+                let changes = report["changes"].as_array().unwrap();
+                assert_eq!(changes.len(), 1, "{report}");
+                assert_eq!(changes[0]["category"], "strict_enum_append");
+                assert_eq!(changes[0]["path"], "app/Sample/flags");
+                assert_eq!(changes[0]["verdict"], "breaking");
+                assert_eq!(changes[0]["before"], "dep.Flags: A, B");
+                assert_eq!(changes[0]["after"], "dep.Flags: A, B, C, D");
+            }
+        }
+        let (code, stdout, stderr) = ridl(&["diff".as_ref(), legacy.as_os_str(), new.as_os_str()]);
+        assert_eq!(code, 0, "{stdout}\n{stderr}");
+        assert!(!stdout.contains("strict_enum_append"), "{stdout}");
+    }
+}
+
 fn remote_flags_source(dir: &TempDir, side: &str, widened: bool) -> PathBuf {
     let root = dir.path().join(side);
     let vendor = root.join("vendor/dep");

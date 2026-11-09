@@ -1799,9 +1799,9 @@ definitions. With explicit `--encoding podbuf`, inability to judge remote inline
 compatibility exits 2 with consumer paths and repair/reset guidance; it is not
 exit 1, which means a proved break. Without podbuf, the command returns its
 ordinary report without an affirmative remote inline or remote width
-compatibility judgment; a side without remote context draws no remote width
-line. Malformed enriched context is exit 2 with or without that flag. See
-[baseline context](#baseline-context) for snapshot pairing and
+compatibility judgment; a side without remote context draws no remote width or
+strict-append line. Malformed enriched context is exit 2 with or without that
+flag. See [baseline context](#baseline-context) for snapshot pairing and
 [recovery](#baseline-publication-and-recovery) for migration.
 
 ```sh
@@ -1825,12 +1825,14 @@ changes are deferred; this category judges only remote inline growth.
 ```
 
 An enum value or an enum-set flag appended to a declaration that is not `open`
-is `strict_enum_append`, reported once per declaration with the appended names
-and breaking under every encoding, with or without `--encoding`; the same append
-to an `open` declaration is compatible, and `enum_opened` and `enum_closed`
-report the keyword gained or lost. A name outside the three is a usage error,
-exit 2. With `Reading` held inline by `Bounds` and an eight-byte field appended
-to it, which grows its head:
+is `strict_enum_append`, reported once per compared declaration with the
+appended names and breaking under every encoding, with or without `--encoding`.
+For remote declarations reached through a pin change, see [ADR-0031][adr-0031]
+decision 13's remote strict enum amendment. The same append to an `open`
+declaration is compatible, and `enum_opened` and `enum_closed` report the
+keyword gained or lost. A name outside the three is a usage error, exit 2. With
+`Reading` held inline by `Bounds` and an eight-byte field appended to it, which
+grows its head:
 
 ```sh
 ridl diff --encoding podbuf v1.typl v2.typl

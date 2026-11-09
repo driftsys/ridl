@@ -8,6 +8,10 @@
 //! `ridlc`, so the compiler stays a pure source→IR function (the ISO 26262
 //! tool-qualification boundary, ADR-0008 decision 9).
 //!
+//! Per-side context entry points also attribute remote layout growth, integer
+//! width changes and strict enum appends to surviving old consumer uses
+//! (ADR-0031 decision 13).
+//!
 //! The comparison has two halves. The walk ([`walk`]) says *what* structurally
 //! differs, emitting one [`Change`] per difference with a [`Category`]; the
 //! classifier ([`classify`]) says which *direction* that difference moved
@@ -292,9 +296,15 @@ declare_categories! {
         /// the old declaration refuses a value or a flag it does not name, in
         /// the `verify` of podbuf and in the codec of every other encoding
         /// that checks the declaration, so the append is breaking for every
-        /// encoding. Reported once per declaration, at `<package>/<decl>`,
-        /// with the appended names in the detail. The same append to an
-        /// `open` declaration is compatible.
+        /// encoding. Reported once per compared declaration, at
+        /// `<package>/<decl>`, with the appended names in the detail. With
+        /// per-side contexts, a remote append is reported once per consumer
+        /// path and remote declaration reached by a surviving old use, at the
+        /// consumer path,
+        /// with `<remote declaration>: <names>` values. A side without remote
+        /// context draws no remote strict-append line; shared-context entry
+        /// points do not report remote appends. The same append to an `open`
+        /// declaration is compatible.
         StrictEnumAppend,
         /// An enum or an enum set that gained the `open` keyword: every
         /// reader of the old declaration already accepts the values it
@@ -651,8 +661,11 @@ pub fn diff_refs_with_contexts(
 /// Remote FlatBuffers and proto3 widths are reported once per consumer path
 /// and remote declaration reached by a surviving old consumer use, at the
 /// consumer path, with `<remote declaration>: <integer>` values. Only the
-/// per-side context entry points report remote widths; a side without remote
-/// context draws no such line.
+/// per-side context entry points report remote widths. They also report remote
+/// strict enum and enum-set appends under the same consumer-use gates, always
+/// breaking, with `<remote declaration>: <names>` values (ADR-0031 decision 13).
+/// A side without remote context draws neither remote width nor strict-append
+/// lines.
 pub fn diff_refs_with_contexts_partial(
     old: &[&Package],
     new: &[&Package],

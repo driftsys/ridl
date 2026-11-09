@@ -2625,6 +2625,344 @@ mod podbuf {
         }
     }
 
+    fn remote_enums(values: &[(&str, i64)], open: bool) -> v2::Package {
+        let mut mode = super::enum_def(values);
+        let mut flags = super::enum_set_def(values);
+        if let v2::decl::Kind::EnumDef(def) = &mut mode {
+            def.open = open;
+        }
+        if let v2::decl::Kind::EnumSetDef(def) = &mut flags {
+            def.width = v2::IntWidth::U8 as i32;
+            def.open = open;
+        }
+        package(
+            "dep.types",
+            vec![
+                typl_decl("Mode", mode),
+                typl_decl("Flags", flags),
+                struct_decl(
+                    "Pair",
+                    vec![
+                        field("mode", 1, named("Mode")),
+                        field("mode_again", 2, named("Mode")),
+                        field("flags", 3, named("Flags")),
+                        field("flags_again", 4, named("Flags")),
+                    ],
+                ),
+            ],
+        )
+    }
+
+    fn strict_appends(report: &crate::DiffReport) -> Vec<&crate::Change> {
+        report
+            .changes
+            .iter()
+            .filter(|c| c.category == Category::StrictEnumAppend)
+            .collect()
+    }
+
+    #[test]
+    fn remote_strict_enum_appends_break_every_encoding_once_per_path_and_declaration() {
+        // Mutations: skip enum sets; report per use; deduplicate across paths
+        // or declarations; make severity depend on the selected encoding.
+        let local = package(
+            "app.api",
+            vec![struct_decl(
+                "Sample",
+                vec![
+                    field("first", 1, named("dep.types.Pair")),
+                    field("second", 2, named("dep.types.Pair")),
+                ],
+            )],
+        );
+        let old = remote_enums(&[("A", 0), ("B", 1)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1), ("C", 2), ("D", 3)], false);
+        for encodings in [
+            vec![],
+            vec!["proto3"],
+            vec!["flatbuffers"],
+            vec!["podbuf"],
+            vec!["proto3", "flatbuffers", "podbuf"],
+        ] {
+            let report = checked_remote(&local, &old, &new, &encodings);
+            let changes = strict_appends(&report);
+            assert_eq!(changes.len(), 4, "{report:?}");
+            assert_eq!(report.verdict, Verdict::Breaking);
+            for path in ["app.api/Sample/first", "app.api/Sample/second"] {
+                for declaration in ["dep.types.Mode", "dep.types.Flags"] {
+                    let matching: Vec<_> = changes
+                        .iter()
+                        .filter(|c| {
+                            c.path == path
+                                && c.before.as_deref() == Some(&format!("{declaration}: A, B"))
+                        })
+                        .collect();
+                    assert_eq!(matching.len(), 1, "{report:?}");
+                    assert_eq!(
+                        matching[0].after.as_deref(),
+                        Some(format!("{declaration}: A, B, C, D").as_str())
+                    );
+                    assert_eq!(matching[0].verdict, Verdict::Breaking);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_set_append_at_bit_32_draws_no_width_line() {
+        let local = remote_holder(array(named("dep.types.Flags"), 0, 4));
+        assert_remote_strict_flags_only(&local, "app.api/Sample/reading");
+    }
+
+    #[test]
+    fn remote_strict_enum_set_append_at_bit_32_in_a_stream_draws_no_width_line() {
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![query("receive", 1, vec![], named_flags_stream())],
+        )];
+        assert_remote_strict_flags_only(&local, "app.api/Api/receive");
+    }
+
+    #[track_caller]
+    fn assert_remote_strict_flags_only(local: &v2::Package, path: &str) {
+        let strict_flags = |count, width| {
+            let mut remote = remote_flags(count, width);
+            if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut remote.decls[0].kind {
+                def.open = false;
+            }
+            remote
+        };
+        let old = strict_flags(32, v2::IntWidth::U32);
+        let new = strict_flags(33, v2::IntWidth::U64);
+        for encodings in [
+            vec![],
+            vec!["proto3"],
+            vec!["flatbuffers"],
+            vec!["podbuf"],
+            vec!["proto3", "flatbuffers", "podbuf"],
+        ] {
+            let report = checked_remote(local, &old, &new, &encodings);
+            assert_eq!(report.changes.len(), 1, "{report:?}");
+            let change = &report.changes[0];
+            assert_eq!(change.category, Category::StrictEnumAppend);
+            assert_eq!(change.path, path);
+            assert_eq!(change.verdict, Verdict::Breaking);
+            assert_eq!(report.verdict, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_beside_podbuf_remote_inline_growth() {
+        // Mutations: suppress strict appends or inline growth at the same consumer path.
+        let fixed_struct = |name, members| {
+            typl_decl(
+                name,
+                v2::decl::Kind::StructDef(v2::StructDef {
+                    members,
+                    fixed_layout: true,
+                }),
+            )
+        };
+        let local = package(
+            "app.api",
+            vec![fixed_struct(
+                "Sample",
+                vec![
+                    field("reading", 1, named("dep.types.Reading")),
+                    field("sequence", 2, wide()),
+                ],
+            )],
+        );
+        let remote = |count, width| {
+            let mut remote = remote_flags(count, width);
+            if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut remote.decls[0].kind {
+                def.open = false;
+            }
+            remote.decls.push(fixed_struct(
+                "Reading",
+                vec![
+                    field("first", 1, named("Flags")),
+                    field("second", 2, named("Flags")),
+                ],
+            ));
+            remote
+        };
+        let old = remote(32, v2::IntWidth::U32);
+        let new = remote(33, v2::IntWidth::U64);
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        let changes: Vec<_> = report
+            .changes
+            .iter()
+            .map(|change| {
+                (
+                    change.category,
+                    change.path.as_str(),
+                    change.before.as_deref(),
+                    change.after.as_deref(),
+                    change.verdict,
+                )
+            })
+            .collect();
+        assert_eq!(
+            changes,
+            vec![
+                (
+                    Category::PodbufRemoteInlineGrowth,
+                    "app.api/Sample/reading",
+                    Some("dep.types.Flags: 4"),
+                    Some("dep.types.Flags: 8"),
+                    Verdict::Breaking,
+                ),
+                (
+                    Category::PodbufRemoteInlineGrowth,
+                    "app.api/Sample/reading",
+                    Some("dep.types.Reading: 8"),
+                    Some("dep.types.Reading: 16"),
+                    Verdict::Breaking,
+                ),
+                (
+                    Category::StrictEnumAppend,
+                    "app.api/Sample/reading",
+                    Some(concat!(
+                        "dep.types.Flags: F0, F1, F2, F3, F4, F5, F6, F7, ",
+                        "F8, F9, F10, F11, F12, F13, F14, F15, F16, F17, ",
+                        "F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, ",
+                        "F28, F29, F30, F31"
+                    )),
+                    Some(concat!(
+                        "dep.types.Flags: F0, F1, F2, F3, F4, F5, F6, F7, ",
+                        "F8, F9, F10, F11, F12, F13, F14, F15, F16, F17, ",
+                        "F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, ",
+                        "F28, F29, F30, F31, F32"
+                    )),
+                    Verdict::Breaking,
+                ),
+            ],
+            "{report:?}"
+        );
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert!(report.system.is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn remote_strict_enum_append_reaches_a_stream_parameter() {
+        let mut local = package("app.api", vec![]);
+        local.interfaces = vec![super::interface(
+            "Api",
+            vec![command(
+                "send",
+                1,
+                vec![param(
+                    "items",
+                    v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                            element: Some(v2::stream_type::Element::Named("dep.types.Mode".into())),
+                        })),
+                    },
+                )],
+            )],
+        )];
+        let report = checked_remote(
+            &local,
+            &remote_enums(&[("A", 0)], false),
+            &remote_enums(&[("A", 0), ("B", 1)], false),
+            &[],
+        );
+        assert_eq!(report.changes.len(), 1, "{report:?}");
+        let change = &report.changes[0];
+        assert_eq!(change.category, Category::StrictEnumAppend);
+        assert_eq!(change.path, "app.api/Api/send");
+        assert_eq!(change.before.as_deref(), Some("dep.types.Mode: A"));
+        assert_eq!(change.after.as_deref(), Some("dep.types.Mode: A, B"));
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn remote_strict_enum_append_ignores_open_declarations() {
+        // Mutation: drop the open gate.
+        let local = remote_holder(named("dep.types.Pair"));
+        let report = checked_remote(
+            &local,
+            &remote_enums(&[("A", 0)], true),
+            &remote_enums(&[("A", 0), ("B", 1)], true),
+            &[],
+        );
+        assert!(strict_appends(&report).is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn remote_strict_enum_append_ignores_non_appends() {
+        // Mutations: accept reorder, removal, renumber, insertion, or no addition.
+        let local = remote_holder(named("dep.types.Pair"));
+        let old = remote_enums(&[("A", 0), ("B", 2)], false);
+        for values in [
+            vec![("A", 0), ("B", 2)],
+            vec![("B", 2), ("A", 0)],
+            vec![("B", 2), ("A", 0), ("C", 3)],
+            vec![("A", 0), ("C", 3)],
+            vec![("A", 0), ("B", 1), ("C", 3)],
+            vec![("A", 0), ("B", 2), ("C", 1)],
+        ] {
+            let report = checked_remote(&local, &old, &remote_enums(&values, false), &[]);
+            assert!(strict_appends(&report).is_empty(), "{values:?}: {report:?}");
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_does_not_duplicate_local_reporting() {
+        // Mutation: visit local declarations in the remote pass.
+        let local = remote_holder(named("dep.types.Pair"));
+        let old = remote_enums(&[("A", 0)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1)], false);
+        let report =
+            crate::diff_refs_with_contexts(&[&local, &old], &[&local, &new], &[], &[], &[])
+                .unwrap();
+        let changes = strict_appends(&report);
+        assert_eq!(changes.len(), 2, "{report:?}");
+        assert!(
+            changes
+                .iter()
+                .all(|c| c.path == "dep.types/Mode" || c.path == "dep.types/Flags"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn remote_strict_enum_append_requires_a_surviving_old_use() {
+        // Mutations: visit new uses for appends; drop require_new.
+        let local = remote_holder(named("dep.types.Pair"));
+        let other = remote_holder(wide());
+        let old = remote_enums(&[("A", 0)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1)], false);
+        for (before, after) in [
+            (&local, &other),
+            (&other, &local),
+            (&local, &dropped_remote_holder()),
+        ] {
+            let report =
+                crate::diff_refs_with_contexts(&[before], &[after], &[&old], &[&new], &[]).unwrap();
+            assert!(strict_appends(&report).is_empty(), "{report:?}");
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_requires_per_side_remote_context() {
+        // Mutation: substitute one side's evidence, or report in shared context.
+        let local = remote_holder(named("dep.types.Pair"));
+        let old = remote_enums(&[("A", 0)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1)], false);
+        for (before, after) in [(vec![&old], vec![]), (vec![], vec![&new])] {
+            let (report, _) =
+                crate::diff_refs_with_contexts_partial(&[&local], &[&local], &before, &after, &[]);
+            assert!(strict_appends(&report).is_empty(), "{report:?}");
+        }
+        let report = crate::diff_refs_with(&[&local], &[&local], &[&old, &new], &[]);
+        assert!(strict_appends(&report).is_empty(), "{report:?}");
+    }
+
     fn remote_flags(count: u64, width: v2::IntWidth) -> v2::Package {
         package(
             "dep.types",

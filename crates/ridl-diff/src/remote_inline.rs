@@ -1,7 +1,11 @@
-//! Remote layout growth and integer widths attributed to published consumer uses.
+//! Remote layout growth, integer widths and strict enum appends attributed to
+//! published consumer uses (ADR-0031 decision 13).
 //!
-//! Reports `podbuf_remote_inline_growth`, `flatbuffers_width_change` and
-//! `proto3_width_change` at consumer paths.
+//! Reports `podbuf_remote_inline_growth`, `flatbuffers_width_change`,
+//! `proto3_width_change` and `strict_enum_append` at consumer paths, once per
+//! path and remote declaration reached by a surviving old use. Strict appends
+//! are breaking for every encoding. Local declarations use the local rules;
+//! missing per-side remote context supplies no remote comparison.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -111,7 +115,8 @@ fn walk_holders(
                     _ => &[],
                 };
                 // Streams are excluded from request heads. Visit their elements
-                // only for integer widths, at the interaction's consumer path.
+                // only for per-declaration checks (integer widths and strict enum
+                // appends), not for inline growth, at the interaction's consumer path.
                 roots.extend(params.iter().filter_map(|param| {
                     param
                         .r#type
@@ -354,6 +359,49 @@ impl Pass<'_> {
         else {
             return;
         };
+        let values = match (&decl.kind, &new_decl.kind) {
+            (Some(Kind::EnumDef(old)), Some(Kind::EnumDef(new))) => {
+                Some((&old.values, &new.values))
+            }
+            (Some(Kind::EnumSetDef(old)), Some(Kind::EnumSetDef(new))) => {
+                Some((&old.bits, &new.bits))
+            }
+            _ => None,
+        };
+        // The local caller establishes additions. Here require a nonempty
+        // append that preserves the old names, values and order.
+        if let Some((before, after)) = values
+            && crate::classify::is_strict_enum_append(decl, new_decl)
+            && after.len() > before.len()
+            && before
+                .iter()
+                .zip(after)
+                .all(|(old, new)| old.name == new.name && old.value == new.value)
+        {
+            let names = |values: &[v2::EnumValue]| {
+                values
+                    .iter()
+                    .map(|value| value.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let category = Category::StrictEnumAppend;
+            self.width_changes.insert(
+                (
+                    path.to_string(),
+                    identity.to_string(),
+                    category_word(category),
+                ),
+                Change {
+                    path: path.to_string(),
+                    category,
+                    verdict: Verdict::Breaking,
+                    before: Some(format!("{identity}: {}", names(before))),
+                    after: Some(format!("{identity}: {}", names(after))),
+                },
+            );
+            return;
+        }
         let facts = match (&decl.kind, &new_decl.kind) {
             (Some(Kind::EnumSetDef(old)), Some(Kind::EnumSetDef(new))) => vec![
                 (

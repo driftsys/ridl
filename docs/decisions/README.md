@@ -633,7 +633,9 @@ other entry below is Accepted.
   rule covers structs, unions, enums, enum sets and scalar typedefs. Amended
   2026-11-01, decision 7: an importing header names a foreign tuple's head by
   the declaring package's own lowering, whatever order the importer reaches that
-  package's declarations in (driftsys/ridl#1150).
+  package's declarations in (driftsys/ridl#1150). Amended 2026-11-09, decision
+  13: strict appends reached through remote context are reported at surviving
+  consumer paths, once per path and remote declaration (driftsys/ridl#1229).
 
 - **ADR-0032 — Byte streams.** Fourteen decisions: the use case is a file or
   document of unknown size, downloaded or uploaded and read or written as I/O;

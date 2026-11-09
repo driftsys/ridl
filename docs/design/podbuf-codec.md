@@ -28,25 +28,25 @@ buffer, or does not raise the member
 
 ## Where the code is
 
-| What                                                                     | Where                                          |
-| ------------------------------------------------------------------------ | ---------------------------------------------- |
-| The layout law: placements, flags, descriptors, `elem_size`, enum widths | `crates/ridl-ir/src/projection/podbuf.rs`      |
-| The size bound (`max_size`)                                              | `crates/ridl-ir/src/projection/podbuf.rs`      |
-| The size state of a payload, as the sizer reports it                     | `crates/ridl-ir/src/projection/size/podbuf.rs` |
-| The layout carried in the codegen model (`Model.podbuf`)                 | `crates/ridl-ir/src/codegen/podbuf.rs`         |
-| The reading and writing the emitted code calls                           | `crates/ridl-rt/src/podbuf.rs`                 |
-| The Rust codec emitter                                                   | `crates/ridl-backend-rust/src/codec_podbuf.rs` |
-| The `Sizes<Podbuf>` table and the aligned buffers                        | `crates/ridl-backend-rust/src/descriptors.rs`  |
-| The claim table entries for the generated names                          | `crates/ridl-backend-rust/src/claims.rs`       |
-| The C header emitter                                                     | `crates/ridl-backend-podbuf/src/lib.rs`        |
-| RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`      |
-| RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
-| `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
-| `podbuf_remote_inline_growth`, the remote-growth rule                    | `crates/ridl-diff/src/remote_inline.rs`        |
-| `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |
-| `strict_enum_append`, the strict-enum rule of `ridl diff`                | `crates/ridl-diff/src/walk.rs`                 |
-| The `encodings` list (`WireEncoding`) the entry points take              | `crates/ridl-backend-rust/src/lib.rs`          |
-| The marker `Podbuf` and the `Payload`, `View` and `Malformed` it shares  | `crates/ridl-rt/src/encoding.rs`, `payload.rs` |
+| What                                                                     | Where                                                                   |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| The layout law: placements, flags, descriptors, `elem_size`, enum widths | `crates/ridl-ir/src/projection/podbuf.rs`                               |
+| The size bound (`max_size`)                                              | `crates/ridl-ir/src/projection/podbuf.rs`                               |
+| The size state of a payload, as the sizer reports it                     | `crates/ridl-ir/src/projection/size/podbuf.rs`                          |
+| The layout carried in the codegen model (`Model.podbuf`)                 | `crates/ridl-ir/src/codegen/podbuf.rs`                                  |
+| The reading and writing the emitted code calls                           | `crates/ridl-rt/src/podbuf.rs`                                          |
+| The Rust codec emitter                                                   | `crates/ridl-backend-rust/src/codec_podbuf.rs`                          |
+| The `Sizes<Podbuf>` table and the aligned buffers                        | `crates/ridl-backend-rust/src/descriptors.rs`                           |
+| The claim table entries for the generated names                          | `crates/ridl-backend-rust/src/claims.rs`                                |
+| The C header emitter                                                     | `crates/ridl-backend-podbuf/src/lib.rs`                                 |
+| RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`                               |
+| RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`                                     |
+| `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                                          |
+| `podbuf_remote_inline_growth`, the remote-growth rule                    | `crates/ridl-diff/src/remote_inline.rs`                                 |
+| `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                                          |
+| `strict_enum_append`, the strict-enum rule of `ridl diff`                | `crates/ridl-diff/src/walk.rs`, `crates/ridl-diff/src/remote_inline.rs` |
+| The `encodings` list (`WireEncoding`) the entry points take              | `crates/ridl-backend-rust/src/lib.rs`                                   |
+| The marker `Podbuf` and the `Payload`, `View` and `Malformed` it shares  | `crates/ridl-rt/src/encoding.rs`, `payload.rs`                          |
 
 ## The layout is computed once, outside the emitters
 
@@ -61,8 +61,11 @@ decisions 8 and 9; the model's layout is described in
 [`codegen-plugins.md`](codegen-plugins.md), "The podbuf projection"). Analysis
 consumers call the shared projection over their IR package scopes; diff uses the
 respective old and new resolution scopes. Nothing in the projection spells a
-Rust or C name. The `strict_enum_append` rule of `ridl diff` reads no layout,
-only the kind of the declaration and whether it is `open`.
+Rust or C name. The `strict_enum_append` rule of `ridl diff` compares the
+declaration's members and whether it is `open`, without reading a layout. Remote
+reporting follows
+[ADR-0031 decision 13](../decisions/ADR-0031-podbuf-projection-rules.md)'s
+remote strict enum amendment.
 
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.
