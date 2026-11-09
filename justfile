@@ -3092,6 +3092,10 @@ _cabin-web-generate name:
 # calls the separate reply credit, upload close and cancel, abort and refusal. The separate
 # generated-only.deno.json check excludes transport imports. Its raw-only module
 # checks an induced request without a domain namespace import.
+# The codec fixture's tests also run `signalChecks` over a fake codec: one
+# `typeId` call per signal at registration, and the mapping of each verify
+# result to a detection. `cabin-ws-demo` runs the same function against the real
+# wasm codec in examples/cabin/web/check_test.ts.
 # The codec-single fixture keeps flatc output under flatc_out/ so its barrel does
 # not overwrite the domain module of a single-component package.
 [private]

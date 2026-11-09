@@ -422,7 +422,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-ts/src/codec.rs",
-        lines: 4,
+        lines: 5,
         why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, not \
               of `Package::interfaces`: the model's list is lowered from \
               `Package::shapes()`, so the codec module's interface tables and \

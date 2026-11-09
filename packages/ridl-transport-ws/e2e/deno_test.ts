@@ -119,6 +119,89 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
   }
 });
 
+Deno.test("a signal check refuses a live publish, keeps the last good bytes and recovers", async () => {
+  const server = await startServer();
+  const notes: Note[] = [];
+  let next = waiter<Sample>("publish", 2000);
+  try {
+    const session = await connect(`ws://127.0.0.1:${server.port}`, {
+      catalog: { name: catalog.NAME, hash: catalog.HASH },
+      encoding: catalog.ENCODING,
+      checks: catalog.SIGNAL_CHECKS,
+      onPublish(target, sample) {
+        if (target.iface === catalog.IFACE && target.ord === catalog.SIGNAL) {
+          next.accept(sample);
+        }
+      },
+      onNote(note) {
+        notes.push(note);
+      },
+    });
+    const signal = {
+      kind: Kind.Signal,
+      iface: catalog.IFACE,
+      ord: catalog.SIGNAL,
+    };
+    /** Sends a command whose argument the provider copies to the signal. */
+    const publishAfter = async (args: Uint8Array): Promise<Sample> => {
+      next = waiter<Sample>("publish", 2000);
+      next.start();
+      await session.command(catalog.IFACE, catalog.COMMAND, args, {
+        bound: 2000,
+      });
+      return await next.promise;
+    };
+
+    next.start();
+    await session.subscribe(signal, { bound: 2000 });
+    const init = await next.promise;
+    assert.equal(init.provenance, "init");
+    assert.equal(init.lastGood, null);
+
+    const good = await publishAfter(catalog.GOOD_FIRST);
+    assert.equal(good.provenance, "live");
+    assert.deepEqual(good.payload, catalog.GOOD_FIRST);
+    assert.deepEqual(good.lastGood, catalog.GOOD_FIRST);
+    assert.equal(good.detected, undefined);
+
+    const refused = await publishAfter(catalog.REFUSED);
+    assert.equal(refused.provenance, "invalid");
+    assert.equal(refused.payload, null);
+    assert.deepEqual(refused.detected, { rule: "range" });
+    assert.deepEqual(refused.lastGood, catalog.GOOD_FIRST);
+    assert.deepEqual(session.sample(catalog.IFACE, catalog.SIGNAL), refused);
+
+    // The provider still holds the refused bytes, so a read is answered with
+    // them and resolves with the invalid sample instead of rejecting.
+    const read = await session.read(signal, { bound: 2000 });
+    assert.equal(read.provenance, "invalid");
+    assert.equal(read.payload, null);
+    assert.deepEqual(read.detected, { rule: "range" });
+    assert.deepEqual(read.lastGood, catalog.GOOD_FIRST);
+
+    const recovered = await publishAfter(catalog.GOOD_SECOND);
+    assert.equal(recovered.provenance, "live");
+    assert.deepEqual(recovered.payload, catalog.GOOD_SECOND);
+    assert.deepEqual(recovered.lastGood, catalog.GOOD_SECOND);
+    assert.equal(recovered.detected, undefined);
+    assert.deepEqual(
+      session.sample(catalog.IFACE, catalog.SIGNAL),
+      recovered,
+    );
+
+    session.close();
+    const ended = await session.closed;
+    assert.equal(ended.code, 1000);
+    assert.deepEqual(
+      notes.filter((n) => n.note === "violation" || n.note === "check-failed"),
+      [],
+    );
+  } finally {
+    next.cancel();
+    await server.stop();
+  }
+});
+
 Deno.test("queryStream_receives_64_elements_over_loopback_server", async () => {
   const server = await startServer();
   const notes: Note[] = [];

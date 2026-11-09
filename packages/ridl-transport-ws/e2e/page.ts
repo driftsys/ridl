@@ -2,7 +2,9 @@
 // whose port is the `port` parameter of the page's query string, runs the
 // signal half of the end-to-end sequence, and sets `globalThis.result` to a
 // promise of what it received: the provenance and the payload, as hex, of
-// the signal's first publish and of its publish after the command, the length
+// the signal's first publish and of its publish after the command, the
+// outcome of the signal check scenario (a good publish, a refused publish, a
+// read after it and a recovery), the length
 // and the byte-for-byte match of each large `fixed`, the count and the match
 // of the chunks of a streamed reply of 64 elements, the length and match of
 // an upload read back through a streamed reply, and the count of discard notes.
@@ -12,7 +14,7 @@ import type { Sample } from "../mod.ts";
 import * as catalog from "./catalog.ts";
 import { waiter } from "./waiter.ts";
 
-/** What the page received, each as `<provenance>:<hex payload>`. */
+/** What the page received. `init` and `live` are `<provenance>:<hex payload>`. */
 export interface Result {
   init: string;
   live: string;
@@ -22,16 +24,36 @@ export interface Result {
   stream: string;
   /** The upload read back through FETCH: `<length>:<match>`. */
   upload: string;
+  /**
+   * The signal check scenario: `<provenance>:<hex payload>:<hex lastGood>:<rule>`
+   * of a good publish, a refused publish, a read after it, and a recovery.
+   */
+  checked: string[];
   /** The count of `discarded` notes. */
   discarded: number;
 }
 
+function hex(bytes: Uint8Array | null): string {
+  return Array.from(bytes ?? [], (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+/** A sample as `<provenance>:<payload>:<lastGood>:<rule>`, each part hex or text. */
+function describeChecked(sample: Sample): string {
+  const detected = sample.detected;
+  const rule = detected === undefined
+    ? ""
+    : typeof detected === "string"
+    ? detected
+    : detected.rule;
+  return `${sample.provenance}:${hex(sample.payload)}:${
+    hex(sample.lastGood)
+  }:${rule}`;
+}
+
 function describe(sample: Sample): string {
-  const hex = Array.from(
-    sample.payload ?? [],
-    (b) => b.toString(16).padStart(2, "0"),
-  ).join("");
-  return `${sample.provenance}:${hex}`;
+  return `${sample.provenance}:${hex(sample.payload)}`;
 }
 
 /**
@@ -59,18 +81,23 @@ async function run(): Promise<Result> {
   const init = waiter<Sample>("init publish", 2000);
   const live = waiter<Sample>("live publish", 2000);
   let discarded = 0;
+  // The signal check scenario waits for each publish through `step`.
+  let checking = false;
+  let step = waiter<Sample>("checked publish", 2000);
   const session = await at(
     "connect",
     connect(`ws://127.0.0.1:${port}`, {
       bound: STEP_BOUND,
       catalog: { name: catalog.NAME, hash: catalog.HASH },
       encoding: catalog.ENCODING,
+      checks: catalog.SIGNAL_CHECKS,
       onPublish(target, sample) {
         if (target.iface !== catalog.IFACE || target.ord !== catalog.SIGNAL) {
           return;
         }
         if (sample.provenance === "init") init.accept(sample);
         if (sample.provenance === "live") live.accept(sample);
+        if (checking) step.accept(sample);
       },
       onNote(note) {
         if (note.note === "discarded") discarded++;
@@ -113,6 +140,40 @@ async function run(): Promise<Result> {
       { bound: 2000 },
     );
     const second = await live.promise;
+    // The check scenario: the provider sets the signal to each command's
+    // argument, and the registered check refuses the one whose first byte is 255.
+    checking = true;
+    const checked: string[] = [];
+    const publishAfter = async (stage: string, args: Uint8Array) => {
+      step = waiter<Sample>(`${stage} publish`, 2000);
+      step.start();
+      await at(
+        `${stage} command`,
+        session.command(catalog.IFACE, catalog.COMMAND, args, { bound: 2000 }),
+      );
+      return await at(`${stage} publish`, step.promise);
+    };
+    checked.push(describeChecked(
+      await publishAfter("good", catalog.GOOD_FIRST),
+    ));
+    checked.push(describeChecked(
+      await publishAfter("refused", catalog.REFUSED),
+    ));
+    checked.push(describeChecked(
+      await at(
+        "read after refusal",
+        session.read({
+          kind: Kind.Signal,
+          iface: catalog.IFACE,
+          ord: catalog.SIGNAL,
+        }, { bound: STEP_BOUND }),
+      ),
+    ));
+    checked.push(describeChecked(
+      await publishAfter("recovery", catalog.GOOD_SECOND),
+    ));
+    checking = false;
+    step.cancel();
     const elements = await catalog.readElements(
       session.queryStream(
         catalog.IFACE,
@@ -142,6 +203,7 @@ async function run(): Promise<Result> {
       init: describe(first),
       live: describe(second),
       fixed,
+      checked,
       stream: `${elements.count}:${elements.match}`,
       upload: `${fetched.length}:${match}`,
       discarded,
@@ -149,6 +211,7 @@ async function run(): Promise<Result> {
   } finally {
     init.cancel();
     live.cancel();
+    step.cancel();
     session.close();
   }
 }

@@ -1150,6 +1150,28 @@ fn every_reserved_name_is_refused() {
     }
 }
 
+/// Every helper name of `signalChecks`, taken by an interface of a package
+/// with a signal, is refused.
+#[test]
+fn every_signal_helper_name_is_refused() {
+    for reserved in [
+        "signalChecks",
+        "signalCheck",
+        "Codec",
+        "SignalCheckEntry",
+        "CodecError",
+    ] {
+        let mut model = common_model();
+        rename_sensors(&mut model, reserved);
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`{reserved}` in package `veh.common` collides with `runtime signal helper {reserved}`, which the codec module also declares"
+            )
+        );
+    }
+}
+
 /// The alias of a foreign package reached through a field only (`ridl_std`
 /// for `DriverProfile.name`) is a name of the file, so an interface of that
 /// name is refused.
