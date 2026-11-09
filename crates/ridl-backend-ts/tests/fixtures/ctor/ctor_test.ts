@@ -6,20 +6,34 @@ import {
   makeLowerReal,
   makeMaximum,
   makeNarrowReal,
+  makePrecise,
   makeReal,
+  makeShifted,
   makeSmall,
   makeSmallUnchecked,
+  makeTenth,
   makeUnbounded,
   makeUpper,
   makeUpperReal,
   makeWide,
 } from "./ctor.ts";
-import { makeSafeNumber } from "./number.ts";
+import {
+  makeFromZero,
+  makeHugeStep,
+  makeSafeNumber,
+  makeStepped,
+  makeWideFromZero,
+  makeWideStepped,
+} from "./number.ts";
 
-function refuses(type: string, build: () => unknown) {
+function refuses(
+  type: string,
+  build: () => unknown,
+  rule: ConstraintError["rule"] = "range",
+) {
   assert.throws(build, (error: unknown) => {
     assert(error instanceof ConstraintError);
-    assert.equal(error.rule, "range");
+    assert.equal(error.rule, rule);
     assert.equal(error.type, `ctor.${type}`);
     return true;
   });
@@ -119,5 +133,99 @@ Deno.test("32-bit float bounds are inclusive and require finite values", () => {
   refuses("NarrowReal", () => makeNarrowReal(3));
   for (const value of [NaN, Infinity, -Infinity]) {
     refuses("NarrowReal", () => makeNarrowReal(value));
+  }
+});
+
+Deno.test("an integer step counts from the minimum", () => {
+  for (const value of [-10, -5, 0, 5, 10, 15, 20]) {
+    assert.equal(makeStepped(value), value);
+  }
+  for (const value of [-9, -6, 1, 4, 19]) {
+    refuses("Stepped", () => makeStepped(value), "step");
+  }
+});
+
+Deno.test("an integer step message names the step and the origin", () => {
+  assert.throws(
+    () => makeStepped(1),
+    { message: "ctor.Stepped: 1 breaks the step rule step 5 from -10" },
+  );
+});
+
+Deno.test("the range is checked before the step", () => {
+  // 25 is on the grid and 21 is not; both are out of range.
+  refuses("Stepped", () => makeStepped(25));
+  refuses("Stepped", () => makeStepped(21));
+  refuses("Stepped", () => makeStepped(-15));
+  refuses("Stepped", () => makeStepped(1.5));
+});
+
+Deno.test("an integer step with no minimum counts from zero", () => {
+  for (const value of [-100, -5, 0, 5, 20]) {
+    assert.equal(makeFromZero(value), value);
+  }
+  for (const value of [-7, -3, 3, 19]) {
+    refuses("FromZero", () => makeFromZero(value), "step");
+  }
+});
+
+Deno.test("a step larger than the range admits only the minimum", () => {
+  assert.equal(makeHugeStep(-3), -3);
+  for (const value of [-2, 0, 100]) {
+    refuses("HugeStep", () => makeHugeStep(value), "step");
+  }
+});
+
+Deno.test("a bigint step is exact beyond the safe number interval", () => {
+  const min = -9007199254740993n;
+  for (const value of [min, min + 4n, -1n, 3n, 9007199254740991n]) {
+    assert.equal(makeWideStepped(value), value);
+  }
+  for (const value of [min + 1n, min + 2n, 0n, 1n, 9007199254740993n]) {
+    refuses("WideStepped", () => makeWideStepped(value), "step");
+  }
+  refuses("WideStepped", () => makeWideStepped(min - 4n));
+});
+
+Deno.test("an unsigned bigint step counts from zero", () => {
+  for (const value of [0n, 3n, 9223372036854775806n]) {
+    assert.equal(makeWideFromZero(value), value);
+  }
+  for (const value of [1n, 4n, 9223372036854775807n]) {
+    refuses("WideFromZero", () => makeWideFromZero(value), "step");
+  }
+});
+
+Deno.test("a 32-bit float step accepts the rounded decimal grid", () => {
+  for (const value of [0, 0.1, 0.2, 0.3, 0.1 + 0.2, 0.5, 0.1 * 7, 1]) {
+    assert.equal(makeTenth(value), value);
+  }
+  for (const value of [0.05, 0.15, 0.25, 0.35, 0.99]) {
+    refuses("Tenth", () => makeTenth(value), "step");
+  }
+});
+
+Deno.test("a 32-bit float is projected before the step is checked", () => {
+  // The offset is below the 32-bit resolution at 0.3, so the value rounds to
+  // the grid point. A larger offset is a different 32-bit value.
+  assert.equal(makeTenth(0.3 + 1e-9), 0.3 + 1e-9);
+  refuses("Tenth", () => makeTenth(0.3 + 1e-6), "step");
+});
+
+Deno.test("a float step counts from a minimum between two multiples", () => {
+  for (const value of [0.05, 0.15, 0.25, 0.05 + 0.1 * 3, 1.05]) {
+    assert.equal(makeShifted(value), value);
+  }
+  for (const value of [0.1, 0.2, 1]) {
+    refuses("Shifted", () => makeShifted(value), "step");
+  }
+});
+
+Deno.test("a 64-bit float step tolerates only a few units of rounding", () => {
+  for (const value of [-1, -1 + 1e-10, 0, 0.5, 1, 0.1 + 2e-17]) {
+    assert.equal(makePrecise(value), value);
+  }
+  for (const value of [5e-11, 1e-11, 0.1 + 1e-16]) {
+    refuses("Precise", () => makePrecise(value), "step");
   }
 });
