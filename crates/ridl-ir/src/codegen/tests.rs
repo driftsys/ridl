@@ -5754,6 +5754,46 @@ fn an_upload_clause_with_the_stream_first_keeps_the_declared_subject_index() {
 }
 
 #[test]
+fn an_upload_clause_with_only_a_stream_parameter_is_refused_with_a_reason() {
+    let mut package = package();
+    package.interfaces = vec![v2::Interface {
+        name: "Calls".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![call_decl(
+            "put",
+            v2::decl::Kind::CommandDef(v2::CommandDef {
+                params: vec![v2::Param {
+                    name: "data".to_string(),
+                    r#type: Some(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                            element: Some(v2::stream_type::Element::Named("SpeedKph".to_string())),
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+                contracts: vec![v2::Contract {
+                    kind: v2::ContractKind::Require as i32,
+                    source: "data > 0".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        )],
+        ..Default::default()
+    }];
+    let model = lower(&package, &[]);
+    let Some(v1::interaction::Shape::Command(command)) = call_named(&model, "put").shape.as_ref()
+    else {
+        panic!("a command");
+    };
+    assert!(matches!(
+        command.clauses[0].translation.as_ref(),
+        Some(v1::clause::Translation::Refused(reason)) if !reason.is_empty()
+    ));
+}
+
+#[test]
 fn an_upload_clause_with_two_ordinary_parameters_is_refused() {
     for command in [false, true] {
         for stream_first in [false, true] {

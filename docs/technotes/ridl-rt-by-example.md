@@ -940,7 +940,7 @@ The clause translator is worth one extra sentence, because it fails loudly. The
 IR carries a contract clause only as canonical ridl text, not as an expression
 tree, so the translator accepts exactly one form —
 `<subject> <comparison> <numeric literal>`, where the subject is the
-interaction's single declared parameter or `result` on an `ensure` — and
+interaction's single non-stream parameter or `result` on an `ensure` — and
 **refuses every other form with a `GenerateError` rather than dropping it**. A
 dropped clause would generate a provider that accepts arguments its own contract
 forbids, which is worse than refusing to generate. driftsys/ridl#704 replaces it
