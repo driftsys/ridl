@@ -1,4 +1,5 @@
 use super::*;
+use crate::server::upload::UploadState;
 use ridl_rt::port::ClaimId;
 
 const UPLOAD: Target = Target {
@@ -1375,4 +1376,166 @@ fn a_duplex_idle_on_both_streams_is_abandoned_once() {
         claim,
         Pull::Failed(CallError::Transport(Transport::Interrupted)),
     );
+}
+
+/// Fills the backend window and the credit window of the upload of `r`:
+/// eight chunks, of which the backend takes four and the server queues four.
+fn exhaust_credit(r: &mut Rig) {
+    for seq in 1..=8 {
+        assert_eq!(chunk(r, seq, 1, &[seq as u8]).0, Step::Continue);
+    }
+    assert_eq!(r.s.calls.in_flight()[0].uploads[0].credit, 0);
+}
+
+// Mutation: delete the stopped or ended guard of `receive_chunk` or
+// `end_upload` in the session. A late frame with a wrong sequence, or with no
+// credit left, would then interrupt the upload again or close the session.
+#[test]
+fn late_frames_on_a_stopped_or_ended_upload_are_dropped() {
+    for (exhausted, ended) in [(false, false), (true, false), (false, true)] {
+        let mut r = rig(3, 4);
+        start(&mut r, None);
+        if exhausted {
+            exhaust_credit(&mut r);
+        } else {
+            assert_eq!(chunk(&mut r, 1, 1, &[1]).0, Step::Continue);
+        }
+        let next = if exhausted { 9 } else { 2 };
+        if ended {
+            assert_eq!(
+                end(&mut r, next, StreamOutcome::End),
+                (Step::Continue, vec![])
+            );
+            assert_eq!(
+                r.s.calls.in_flight()[0].uploads[0].state,
+                UploadState::Ended
+            );
+        } else {
+            // A sequence gap in the client's end stops the upload.
+            let (step, out) = end(&mut r, 99, StreamOutcome::End);
+            assert_eq!(step, Step::Continue);
+            assert_end(&out, StreamOutcome::Interrupted);
+            assert_eq!(
+                r.s.calls.in_flight()[0].uploads[0].state,
+                UploadState::Stopped
+            );
+        }
+        assert_eq!(chunk(&mut r, 99, 1, &[1]), (Step::Continue, vec![]));
+        assert_eq!(chunk(&mut r, next, 1, &[1]), (Step::Continue, vec![]));
+        assert_eq!(
+            end(&mut r, 99, StreamOutcome::End),
+            (Step::Continue, vec![])
+        );
+        assert_eq!(
+            end(&mut r, 99, StreamOutcome::Interrupted),
+            (Step::Continue, vec![])
+        );
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+}
+
+// Mutation: check the sequence before the credit in `receive_chunk`.
+#[test]
+fn a_chunk_without_credit_and_with_a_wrong_seq_closes_1002() {
+    let mut r = rig(3, 4);
+    start(&mut r, None);
+    exhaust_credit(&mut r);
+    assert_eq!(chunk(&mut r, 20, 1, &[1]), (Step::Close(1002), vec![]));
+    assert_eq!(
+        *r.notes.lock().unwrap(),
+        vec![Note::StreamCreditExceeded { seq: 1 }]
+    );
+}
+
+// Mutation: restart the clocks at the upload end for a command.
+#[test]
+fn a_command_upload_end_keeps_the_request_clocks() {
+    let mut r = rig(3, 4);
+    start(&mut r, None);
+    let request_call = r.s.calls.in_flight().pop().unwrap();
+    r.p.advance(ridl_rt::sample::Duration(5_000_000));
+    r.now += std::time::Duration::from_secs(5);
+    assert_eq!(
+        query_end(&mut r, 1, Timestamp(5_000_000)),
+        (Step::Continue, vec![])
+    );
+    let call = r.s.calls.in_flight().pop().unwrap();
+    assert_eq!(call.sent, request_call.sent, "sent stays at the request");
+    assert_eq!(call.stamp, request_call.stamp, "stamp stays at the request");
+    assert_eq!(
+        call.receipt, request_call.receipt,
+        "receipt stays at the request"
+    );
+}
+
+// Mutation: change the `stream_end` outcome that a refusal of the backend
+// maps to, for a contract error, a too large chunk or an ended stream.
+#[test]
+fn a_backend_push_failure_maps_to_the_upload_stream_end() {
+    for (fail, outcome) in [
+        (
+            Fail::PushContract,
+            StreamOutcome::Contract(Contract::PreconditionFailed),
+        ),
+        (Fail::PushTooLarge, StreamOutcome::Corrupt),
+        (Fail::PushEnded, StreamOutcome::Interrupted),
+    ] {
+        let mut r = rig(3, 4);
+        start(&mut r, None);
+        r.fail.set(fail);
+        let (step, out) = chunk(&mut r, 1, 1, &[1]);
+        assert_eq!(step, Step::Continue, "{fail:?}");
+        assert_end(&out, outcome);
+        assert_eq!(
+            r.s.calls.in_flight()[0].uploads[0].state,
+            UploadState::Stopped,
+            "{fail:?}"
+        );
+        assert!(r.notes.lock().unwrap().is_empty());
+    }
+}
+
+// Mutation: answer a detached port with anything but a 1001 close.
+#[test]
+fn a_detached_backend_port_closes_1001_on_an_upload_chunk() {
+    let mut r = rig(3, 4);
+    start(&mut r, None);
+    r.fail.set(Fail::PushDetached);
+    assert_eq!(chunk(&mut r, 1, 1, &[1]), (Step::Close(1001), vec![]));
+}
+
+// Mutation: delete `interrupt_uploads` from `stop_stream`.
+#[test]
+fn a_client_stop_of_a_duplex_reply_interrupts_the_open_upload() {
+    let mut r = query_rig(DUPLEX);
+    let claim = start(&mut r, None);
+    r.p.push_claim(claim, REPLY_STREAM, &[1]).unwrap();
+    let now = r.now;
+    assert_eq!(poll(&mut r, now).1.len(), 1);
+    let stop = msg(Frame::StreamEnd {
+        target: DUPLEX,
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq: 1,
+        },
+        correlation: 1,
+        stream: 0,
+        outcome: StreamOutcome::Interrupted,
+    });
+    let (step, out) = send_at(&mut r, &stop, now);
+    assert_eq!(step, Step::Continue);
+    assert_eq!(out.len(), 1);
+    check_upload_end(&out[0], DUPLEX, StreamOutcome::Interrupted);
+    pull(
+        &mut r,
+        claim,
+        Pull::Failed(CallError::Transport(Transport::Interrupted)),
+    );
+    assert!(r.s.calls.in_flight().is_empty());
+    assert!(r
+        .notes
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|n| matches!(n, Note::StreamStopped { .. })));
 }
