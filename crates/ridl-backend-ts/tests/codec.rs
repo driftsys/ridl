@@ -76,6 +76,46 @@ fn the_cabin_codec_module() {
     insta::assert_snapshot!("cabin", module(&cabin_model(), "veh.cabin"));
 }
 
+#[test]
+fn codec_barrel_imports_keep_domain_modules_distinct() {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-single");
+    let output = ridlc::compile_workspace(&mut db, &entry).expect("load the single fixture");
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != ridl_core::diag::Severity::Error),
+        "the fixture must compile with no error, got: {:?}",
+        output.diagnostics,
+    );
+    let package = &output
+        .checked
+        .iter()
+        .find(|checked| checked.ir.name == "single")
+        .expect("the fixture declares single")
+        .ir;
+    let source = module(&codegen::lower(package, &[&output.std_ir]), "single");
+    assert!(
+        source.contains("import * as fb from \"./flatc/single.js\";"),
+        "the single-component barrel must be under flatc/:\n{source}"
+    );
+    assert!(
+        source.contains("import type * as t from \"./single.js\";"),
+        "the domain module must stay beside the codec module:\n{source}"
+    );
+
+    let source = module(&common_model(), "veh.common");
+    assert!(
+        source.contains("import * as fb from \"./veh/common.js\";"),
+        "the two-component barrel path must stay unchanged:\n{source}"
+    );
+    assert!(
+        source.contains("import type * as t from \"./veh.common.js\";"),
+        "the two-component domain path must stay unchanged:\n{source}"
+    );
+}
+
 /// The names `<prefix><Name>(` of the functions the source exports.
 fn exported_functions(source: &str, prefix: &str) -> BTreeSet<String> {
     let start = format!("export function {prefix}");

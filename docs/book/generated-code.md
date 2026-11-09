@@ -468,20 +468,33 @@ generates; one table per interface, which gives each interaction its interface
 number, its ordinal, its kind and the functions of its payloads; generated typed
 stream functions and stream metadata for supported interactions; and the
 catalog's name and hash, the payload type names and the rule texts that the wasm
-codec takes at load. `ridl` does not run `flatc`. Build the files in two steps:
+codec takes at load. `ridl` does not run `flatc`. For a package with two or more
+name components, build the files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
 flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs
 ```
 
-The codec file imports `flatc`'s output from `./<package path>.js` (for
-`veh.cabin`, `./veh/cabin.js`), so `flatc`'s `-o` is the directory of the
-TypeScript files. When a payload type of an interaction is a named scalar or an
-enum set of another package (`ridl.std.Name` as the request of a query, for
-example), the codec file goes through that package's own codec file,
-`<package>.codec.ts`, which the build writes beside it; `flatc` then runs on
-that package's schema too, in the same directory:
+For a package with two or more name components, the codec file imports `flatc`'s
+output from `./<package path>.js` (for `veh.cabin`, `./veh/cabin.js`), so
+`flatc`'s `-o` is the directory of the TypeScript files, as above. For a
+single-component package, it imports `./flatc/<package>.js` and keeps the domain
+import at `./<package>.js`. Run `flatc` with its output under `flatc/` so it
+does not overwrite the domain module. For package `single`:
+
+```sh
+ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
+mkdir -p <out-dir>/flatc
+flatc --ts --gen-object-api -I <out-dir> -o <out-dir>/flatc <out-dir>/single.fbs
+```
+
+When a payload type of an interaction is a named scalar or an enum set of
+another package (`ridl.std.Name` as the request of a query, for example), the
+codec file goes through that package's own codec file, `<package>.codec.ts`,
+which the build writes beside it; `flatc` then runs on that package's schema
+too, with the output directory chosen by its package name. For packages with two
+or more components:
 
 ```sh
 flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs <out-dir>/<package>.fbs
