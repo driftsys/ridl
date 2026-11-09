@@ -2385,3 +2385,171 @@ fn legacy_type_only_podbuf_unit_requires_explicit_context_recovery() {
     );
     assert!(!root.join(".ridl/baseline.previous.1").exists());
 }
+
+fn constraint_history(received: bool) {
+    let dir = TempDir::new("constraint-history");
+    let before = TempDir::new("constraint-before");
+    let after = TempDir::new("constraint-after");
+    let interaction = if received {
+        "signal read: S @10ms"
+    } else {
+        "command send(v: S)"
+    };
+    let source =
+        format!("package veh.cluster\ntype S: integer [0..100]\ninterface I {{ {interaction} }}\n");
+    let root = set_source(&dir, &source);
+    publish(&root);
+    let old_hash = describe_hash(&root, before.path(), UNIT);
+    let prior = baseline_inventory(&root);
+    set_source(&dir, &source.replace("100", "200"));
+    let (code, stdout, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        root.join(".ridl/baseline").as_os_str(),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+    assert!(!stderr.contains("RIDL-407"), "{stderr}");
+    let new_hash = describe_hash(&root, after.path(), UNIT);
+    assert_ne!(old_hash, new_hash);
+    let expected = if received {
+        vec![]
+    } else {
+        vec![old_hash.clone()]
+    };
+    assert_eq!(compatible_of(after.path(), UNIT), expected);
+    let (code, stderr) = baseline(&root);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("RIDL-408"), "{stderr}");
+    let expected = if received {
+        vec![new_hash]
+    } else {
+        vec![new_hash, old_hash]
+    };
+    assert_eq!(history_lines(&root), expected);
+    let backup = root.join(".ridl/baseline.previous.1");
+    if received {
+        assert_eq!(
+            directory_inventory(&backup),
+            prior,
+            "a breaking verdict preserves the prior baseline"
+        );
+    } else {
+        assert!(
+            !backup.exists(),
+            "a compatible publication needs no retained backup"
+        );
+    }
+}
+#[test]
+fn widened_received_constraint_restarts_history_without_ordinal_diagnostics() {
+    constraint_history(true);
+}
+#[test]
+fn widened_send_only_constraint_keeps_history() {
+    constraint_history(false);
+}
+
+#[test]
+fn unreached_widening_keeps_history_through_the_unchanged_hash() {
+    let dir = TempDir::new("unreached-widening");
+    let before = TempDir::new("unreached-before");
+    let after = TempDir::new("unreached-after");
+    let source = "package veh.cluster\ntype S: integer [0..100]\ninterface I { command first() }\n";
+    let root = set_source(&dir, source);
+    publish(&root);
+    let first_hash = describe_hash(&root, before.path(), UNIT);
+    let source = source.replace("command first()", "command first() command second()");
+    set_source(&dir, &source);
+    publish(&root);
+    let old_hash = describe_hash(&root, before.path(), UNIT);
+    assert_ne!(first_hash, old_hash);
+    assert_eq!(
+        history_lines(&root),
+        vec![old_hash.clone(), first_hash.clone()]
+    );
+    let baseline_path = baseline_dir(&root);
+    set_source(&dir, &source.replace("100", "200"));
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        baseline_path.as_os_str(),
+        root.as_os_str(),
+        "--format".as_ref(),
+        "json".as_ref(),
+    ]);
+    assert_eq!(code, 1, "{stdout}\n{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["changes"][0]["category"], "constraint_changed");
+    let new_hash = describe_hash(&root, after.path(), UNIT);
+    assert_eq!(new_hash, old_hash);
+    assert_eq!(compatible_of(after.path(), UNIT), vec![first_hash.clone()]);
+    publish(&root);
+    assert_eq!(history_lines(&root), vec![old_hash, first_hash]);
+}
+
+fn vendored_scalar_pin(dir: &TempDir, max: u32) {
+    dir.write("ridl.toml", "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n[imports]\ndep = \"https://example.invalid/dep.tar\"\n");
+    dir.write(
+        "vendor/dep/ridl.toml",
+        "[package]\nname = \"dep\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "vendor/dep/types.typl",
+        &format!("package dep\ntype S: integer [0..{max}]\n"),
+    );
+    let tree = ridl_core::tree_hash(&dir.path().join("vendor/dep")).unwrap();
+    ridl_core::lock::write_lockfile(
+        &dir.path().join("ridl.lock"),
+        &ridl_core::lock::Lockfile {
+            entries: [(
+                "https://example.invalid/dep.tar".into(),
+                ridl_core::lock::LockEntry {
+                    sha256: tree.clone(),
+                    tree: Some(tree),
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn remote_pin_widening_received_by_a_signal_empties_history() {
+    let dir = TempDir::new("remote-scalar-history");
+    let home = TempDir::new("remote-scalar-home");
+    let out = TempDir::new("remote-scalar-out");
+    vendored_scalar_pin(&dir, 100);
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster\nimport dep.S\ninterface I { signal read: S @10ms }\n",
+    );
+    let root = dir.path();
+    remote_command(root, home.path(), &["lock"]);
+    remote_command(root, home.path(), &["baseline"]);
+    let old_hash = history_lines_of(root, UNIT)[0].clone();
+    let old_snapshot = std::fs::read(baseline_dir(root).join("veh.cluster.ir.json")).unwrap();
+    vendored_scalar_pin(&dir, 200);
+    remote_command(
+        root,
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(new_hash, old_hash);
+    assert!(compatible_of(out.path(), UNIT).is_empty());
+    remote_command(root, home.path(), &["baseline"]);
+    assert_eq!(history_lines_of(root, UNIT), vec![new_hash]);
+    assert_eq!(
+        std::fs::read(baseline_dir(root).join("veh.cluster.ir.json")).unwrap(),
+        old_snapshot,
+        "only the remote pin changed"
+    );
+}

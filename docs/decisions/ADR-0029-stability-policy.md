@@ -163,8 +163,8 @@ owns adoption and release-note requirements;
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) owns the comparison/history
 decisions and the [CLI reference](../book/cli-reference.md#baseline-context)
 owns the artifact and recovery contract. This approval covers only these
-assessed changes and the 2026-11-09 amendment below; passing dump checks does
-not approve other policy-frozen changes.
+assessed changes and the two 2026-11-09 amendments below; passing dump checks
+does not approve other policy-frozen changes.
 
 **Amended 2026-11-09 — catalog history failure behavior for FlatBuffers and
 proto3, from driftsys/ridl#1228.** The owner approved extending the explicit
@@ -176,6 +176,29 @@ decision 1. No dump row is removed and no wire layout, canonical catalog-hash
 input or IR package schema changes. The release requirements of the previous
 amendment apply. [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13
 owns the rule.
+
+**Amended 2026-11-09 — constraint verdicts, from the decision on
+driftsys/ridl#926.** The owner approved the change to the output and verdicts of
+`ridl diff`: a widened scalar constraint is breaking on a received value, on a
+value reached in both directions, and on an unreached local declaration. Only a
+send-only widening is compatible. The assessed change also adds rows of existing
+categories on the remote path at the surviving consumer interaction path:
+`constraint_changed` for remote scalar widening and narrowing, and breaking
+`width_changed` for a remote scalar's changed width or backing, including on
+send-only paths. This follows the strict enum append precedent in
+[ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13. These are
+policy-frozen contracts under decisions 1, 3 and 4. No dump row exists for these
+verdicts, so no row is removed and no baseline is weakened;
+`cargo xtask freeze check` verifies that no dump changes. On 2026-11-10 the
+owner confirmed the remote rows.
+
+This change must ship in a declared pre-1.0 minor release, never a patch. The
+release notes must state that a widened range on a received value now exits 1
+and empties the compatible catalog history, and that per-side remote comparisons
+now report `constraint_changed` for widening and narrowing and breaking
+`width_changed` for a scalar width or backing change at the consumer interaction
+path, including on send-only paths. The rule is recorded in
+[ADR-0008](ADR-0008-e2-execution.md) decision 14; no IR or wire format changes.
 
 ## Context
 

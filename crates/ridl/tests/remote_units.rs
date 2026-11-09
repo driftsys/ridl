@@ -635,8 +635,8 @@ fn test_runs_the_consumers_packages_only() {
 }
 
 /// `ridl diff` over two source trees compares the consumer's packages only:
-/// a dependency whose type changed between the two sides is not the
-/// consumer's breaking change.
+/// a changed remote scalar is reported at its consumer use, without walking
+/// the remote package as a compared package.
 #[test]
 fn diff_compares_the_consumers_packages_only() {
     let dir = TempDir::new("diff");
@@ -666,12 +666,28 @@ fn diff_compares_the_consumers_packages_only() {
             new_root.to_str().unwrap(),
         ],
     );
-    assert_eq!(code, 0, "the consumer did not change: {stderr}");
-    assert!(stdout.contains("\"identical\""), "{stdout}");
-    assert!(!stdout.contains("veh.common"), "{stdout}");
+    assert_eq!(
+        code, 1,
+        "the received remote constraint changed: {stdout}{stderr}"
+    );
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["verdict"], "breaking", "{report}");
+    let changes = report["changes"].as_array().unwrap();
+    assert!(
+        changes
+            .iter()
+            .all(|change| { !change["path"].as_str().unwrap().starts_with("veh.common/") }),
+        "{report}"
+    );
+    let constraints: Vec<_> = changes
+        .iter()
+        .filter(|c| c["category"] == "constraint_changed")
+        .collect();
+    assert_eq!(constraints.len(), 1, "{report}");
+    assert_eq!(constraints[0]["path"], "app/Dash/speed", "{report}");
+    assert_eq!(constraints[0]["verdict"], "breaking", "{report}");
 
-    // The positive half: the same change in the consumer's own type is its
-    // breaking change.
+    // A change to the consumer's own interaction is reported as well.
     new.write(
         "app/app.ridl",
         "package app\n\nimport veh.common.Speed\n\n/// The dashboard.\ninterface Dash {\n  /// The speed.\n  signal speed: Speed @20ms\n}\n",
@@ -687,8 +703,21 @@ fn diff_compares_the_consumers_packages_only() {
             new_root.to_str().unwrap(),
         ],
     );
-    assert_ne!(code, 0, "the consumer's own change is reported: {stdout}");
-    assert!(stdout.contains("app"), "{stdout}");
+    assert_eq!(code, 1, "the consumer's own change is reported: {stdout}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let changes = report["changes"].as_array().unwrap();
+    assert!(
+        changes.iter().any(|change| {
+            change["path"] == "app/Dash/speed" && change["category"] == "timing_changed"
+        }),
+        "{report}"
+    );
+    assert!(
+        changes
+            .iter()
+            .all(|change| { !change["path"].as_str().unwrap().starts_with("veh.common/") }),
+        "{report}"
+    );
 }
 
 /// The note `ridl build` prints beside a compatible list says a remote

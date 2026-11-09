@@ -9,8 +9,8 @@
 //! tool-qualification boundary, ADR-0008 decision 9).
 //!
 //! Per-side context entry points also attribute remote layout growth, integer
-//! width changes and strict enum appends to surviving old consumer uses
-//! (ADR-0031 decision 13).
+//! width changes, scalar constraint changes and strict enum appends to surviving old consumer uses
+//! (ADR-0031 decision 13; ADR-0008 decision 14 for scalar constraints).
 //!
 //! The comparison has two halves. The walk ([`walk`]) says *what* structurally
 //! differs, emitting one [`Change`] per difference with a [`Category`]; the
@@ -31,6 +31,7 @@
 use ridl_ir::v2::{Package, System};
 
 mod classify;
+mod direction;
 mod remote_inline;
 pub mod system;
 pub mod unit_verdict;
@@ -666,8 +667,12 @@ pub fn diff_refs_with_contexts(
 /// per-side context entry points report remote widths. They also report remote
 /// strict enum and enum-set appends under the same consumer-use gates, always
 /// breaking, with `<remote declaration>: <names>` values (ADR-0031 decision 13).
-/// A side without remote context draws neither remote width nor strict-append
-/// lines.
+/// They also report scalar constraint changes at surviving consumer interaction
+/// paths, with the direction rule of `constraint_changed`. A side without remote
+/// context draws no remote width, constraint or strict-append lines.
+/// A remote scalar's changed backing or resolved width also reports a breaking
+/// `width_changed` at each surviving consumer interaction path, even on send-only
+/// uses, once per path and remote declaration.
 pub fn diff_refs_with_contexts_partial(
     old: &[&Package],
     new: &[&Package],

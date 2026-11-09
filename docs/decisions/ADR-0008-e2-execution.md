@@ -9,12 +9,15 @@ is historical. Decision 14 was amended in place on 2026-09-30, from the decision
 on driftsys/ridl#598: an appended non-optional struct field is breaking unless
 its type is a scalar, enum or enum set that allows the value 0. `ridl diff`
 resolves the field's type against the new snapshot and the built-in `ridl.std`,
-and any other type it cannot resolve is reported as breaking. Each numbered
-decision below was taken to unblock the epic E2 execution plan, which lives at
-`docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` (moved from
-`docs/wip/` at epic close), and is reversible at the cost of a small refactor
-before a later epic builds on it. This ADR follows the pattern of ADR-0006 (E0)
-and ADR-0007 (E1).
+and any other type it cannot resolve is reported as breaking. Decision 14 was
+also amended in place on 2026-11-09, from the decision on driftsys/ridl#926:
+scalar widening is judged by consumer direction, and reached remote scalar
+constraint and representation changes are reported at consumer interaction
+paths. Each numbered decision below was taken to unblock the epic E2 execution
+plan, which lives at `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md`
+(moved from `docs/wip/` at epic close), and is reversible at the cost of a small
+refactor before a later epic builds on it. This ADR follows the pattern of
+ADR-0006 (E0) and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
 sentence describing the state they replaced, or written a new one that was false
@@ -610,18 +613,53 @@ disagreeing sources is the correct one.
     attempt to prove that one clause implies another, so any `require`/`ensure`
     text change is treated as breaking. A change is compatible (exit 0) when it
     only relaxes or appends — a new interaction at the end, a `reserved`
-    tombstone, a new declaration, interface, or service, a widened constraint, a
-    timing floor raised (`min` up) or staleness bound lowered (`max` down) with
-    the mode unchanged, a `require` removed, an `ensure` added, or
-    `default_applied` flipped with identical resolved bounds. Because diff
-    compares the resolved IR, editing `[defaults].timing` surfaces as the timing
-    change it is on every defaulted interaction. The desk-time baseline is
-    stored under `.ridl/baseline/` and written by `ridl baseline`; `ridl diff`
-    and the baseline-aware desk check read it (a registry or git ref can supply
-    it later). This realizes general form §6.3's "baseline-aware ridlc" in the
-    facade, not in `ridlc`, consistent with decision 9. Contract clauses are
-    carried in IR v2 as their canonical source text; a full expression tree
-    arrives when the E5.1 function layer restructures the representation.
+    tombstone, a new declaration, interface, or service, a constraint widened
+    only on values the consumer sends, a timing floor raised (`min` up) or
+    staleness bound lowered (`max` down) with the mode unchanged, a `require`
+    removed, an `ensure` added, or `default_applied` flipped with identical
+    resolved bounds. Because diff compares the resolved IR, editing
+    `[defaults].timing` surfaces as the timing change it is on every defaulted
+    interaction. The desk-time baseline is stored under `.ridl/baseline/` and
+    written by `ridl baseline`; `ridl diff` and the baseline-aware desk check
+    read it (a registry or git ref can supply it later). This realizes general
+    form §6.3's "baseline-aware ridlc" in the facade, not in `ridlc`, consistent
+    with decision 9. Contract clauses are carried in IR v2 as their canonical
+    source text; a full expression tree arrives when the E5.1 function layer
+    restructures the representation.
+
+    **Amended (2026-11-09), from the decision on driftsys/ridl#926:** a widened
+    scalar constraint is breaking when any new-side interaction reaches the type
+    as a received value: a signal, event or fixed payload, or a query reply,
+    including both fallible arms and stream elements. It is compatible only when
+    at least one interaction reaches it and every reaching interaction only
+    sends it, through command or query parameters, including stream parameters.
+    Reachability follows struct fields, union arms, tuples, arrays, maps,
+    optional values and streams across the new snapshot and its context,
+    resolving a bare name in the declaring package and a qualified name by its
+    package. A type reached in both directions is breaking. A type reached by no
+    interaction is breaking, following the classifier's unlisted-is-breaking
+    rule. Lowering a minimum, raising a maximum, loosening length bounds,
+    removing a step or pattern, and dropping the whole constraint all use this
+    rule. Narrowing any facet and changing a composite body in place remain
+    breaking.
+
+    With per-side remote context, a pin change that moves a reached remote
+    scalar constraint reports `constraint_changed` at the surviving consumer
+    interaction path, once per path and remote declaration. Widening uses the
+    same new-side direction rule; narrowing is always breaking. A remote scalar
+    that no interaction reaches draws no row even when narrowed, while a local
+    unreached scalar change is breaking. A changed scalar backing or resolved
+    wire width also reports a breaking `width_changed` row at the consumer path,
+    once per path and remote declaration, including on send-only uses, as for a
+    local scalar. A side without remote context supplies no comparison. Before
+    this amendment the remote pass reported neither widening nor narrowing; both
+    are now reported.
+
+    **Alternatives considered (options 1 and 3).** Keeping every widening
+    compatible would admit values an older receiver rejects. Making every
+    widening breaking would reject a send-only change even though every value
+    the older consumer sends remains legal. Direction distinguishes these cases
+    without a new category, flag or wire representation.
 
     **Amended (2026-09-30), from the decision on driftsys/ridl#598:** an
     appended struct field is compatible only when a reader of the new version

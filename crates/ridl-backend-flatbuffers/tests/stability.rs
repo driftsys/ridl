@@ -19,7 +19,7 @@
 //! - `DeclAdded` — a new package-level struct; a struct field, an enum value,
 //!   an enum-set bit, and a union arm each appended above the high-water
 //!   ordinal or value.
-//! - `ConstraintChanged` — a declared range widened.
+//! - `ConstraintChanged` — a send-only declared range widened.
 //! - `TimingChanged` — a signal's rate floor raised.
 //! - `RpcBoundChanged` — a command's call throttle lowered.
 //! - `ContractChanged` — a `require` clause removed.
@@ -297,9 +297,9 @@ fn signal(payload: &str) -> v2::decl::Kind {
 
 /// A self-contained package holding one target for every mutation: a named
 /// scalar with a declared range (`Bound`), an enum (`Mode`), an enum set
-/// (`Flags`), an internal union (`Choice`), a struct referencing all of them
-/// (`Data`), and an interface (`Ctrl`) with signals and a command carrying a
-/// contract and a declared RPC bound.
+/// (`Flags`), an internal union (`Choice`), a struct (`Data`) that receives
+/// `ReceivedBound`, and an interface (`Ctrl`) with signals and a command carrying
+/// the send-only `Bound`, a contract and a declared RPC bound.
 fn base_package(shape: &BaseShape) -> v2::Package {
     let bound = v2::TypeDef {
         backing: Some(v2::Backing {
@@ -412,7 +412,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
     members.push(live_member(field(
         "limit",
         field_count + 1,
-        named_type("Bound"),
+        named_type("ReceivedBound"),
     )));
     members.push(live_member(field(
         "flags",
@@ -486,6 +486,11 @@ fn base_package(shape: &BaseShape) -> v2::Package {
     v2::Package {
         name: "stability.base".to_string(),
         decls: vec![
+            decl(
+                "ReceivedBound",
+                v2::Visibility::Public,
+                v2::decl::Kind::TypeDef(bound.clone()),
+            ),
             decl(
                 "Bound",
                 v2::Visibility::Public,
@@ -706,8 +711,7 @@ fn apply_mutation(old: &v2::Package, index: usize) -> v2::Package {
             let name = slot.name.clone();
             *slot = interaction_tombstone(&name, slot.ordinal);
         }
-        // ConstraintChanged, widened: the declared range's ceiling raised
-        // (`constraint` → `narrows` is false).
+        // ConstraintChanged: the ceiling of the send-only range is raised.
         8 => {
             let Some(v2::decl::Kind::TypeDef(def)) = &mut decl_mut(&mut new, "Bound").kind else {
                 unreachable!("Bound is a named scalar");

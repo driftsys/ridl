@@ -2116,8 +2116,9 @@ the wire.
 values. Ranges containing negatives map to `sint32`/`sint64` (ZigZag encoding);
 plain `int32` varint would cost 10 bytes for every negative value. Field numbers
 are the typl ordinals (§7.4); `reserved` tombstones emit proto `reserved`
-statements. Range widening never breaks proto wire (varint absorbs it) but
-remains a contract-breaking change per `ridl-diff`.
+statements. Range widening never breaks proto wire (varint absorbs it), but its
+contract verdict follows the consumer-direction rule in
+[ADR-0008](../decisions/ADR-0008-e2-execution.md) decision 14.
 
 **FlatBuffers.** Full `uint8..uint64` palette — the cleanest width mapping.
 Field ids are the typl ordinals emitted as `(id: N)` attributes. FlatBuffers is
