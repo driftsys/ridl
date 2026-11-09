@@ -3566,7 +3566,8 @@ _release-locked-check:
 # the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
 # full version, except for a pre-release, which only a requirement that names
 # the same pre-release matches), the cabin example's manifests, lockfiles and
-# `deno.lock`, the encoding bench's manifests and lockfile, the editor manifest (an `editor-v` tag must equal it), the root
+# `deno.lock`, the encoding bench's manifests and lockfile, the editor manifest
+# (an `editor-v` tag must equal it), the root
 # `Cargo.lock` (one entry per crate, and a `version_files` entry rewrites only
 # the first match), the frozen generated manifests and the identity fixture of
 # ridl-rt-conformance, which embeds the compiler version.

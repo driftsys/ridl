@@ -44,7 +44,8 @@ const CABIN_COMMENT_PREFIX: &str = "requires `ridl-rt = \"";
 const RIDL_RUNTIME_LINK_PREFIX: &str = "jsr:@driftsys/ridl-runtime@";
 
 /// The manifests whose `ridl-rt` dependency carries the `<mm>` requirement.
-const RIDL_RT_MANIFESTS: [&str; 4] = [
+const RIDL_RT_MANIFESTS: [&str; 5] = [
+    "bench/encodings/harness/Cargo.toml",
     "examples/cabin/consumer/Cargo.toml",
     "examples/cabin/server/Cargo.toml",
     "freeze/generated/cabin/Cargo.toml",
