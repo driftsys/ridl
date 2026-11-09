@@ -256,10 +256,11 @@ differing only in the list have the same hash. The rule is
   hash `ridl build --emit catalog` writes. The following lines are copied from
   the file of the replaced baseline, as they are, when the unit's verdict from
   the replaced snapshots to the fresh ones is `Compatible` or `Identical`, or
-  when the new hash is the first line of that file. Both cases require usable
-  inline evidence and no proved podbuf break for the unit. A proved podbuf break
-  restarts the affected chain even at the same hash; missing inline evidence for
-  an affected podbuf unit refuses normal publication with exit 2 and leaves the
+  when the new hash is the first line of that file. Both cases require remote
+  evidence meeting [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md)
+  decision 13 and no proved podbuf break for the unit. A proved podbuf break
+  restarts the affected chain even at the same hash; remote evidence that does
+  not meet decision 13 refuses normal publication with exit 2 and leaves the
   prior baseline unchanged. Otherwise a `Breaking` verdict with a changed hash,
   a unit with no snapshot in the replaced baseline, and a replaced baseline with
   no file for the unit each write the one new hash. A hash recorded at
@@ -316,23 +317,24 @@ differing only in the list have the same hash. The rule is
   and a package in the baseline, `ridl build` reads the unit's `<unit>.catalogs`
   file and lists its hashes, less the current catalog's hash, when the unit's
   verdict from the baseline to the tree is `Compatible` or `Identical`, or when
-  the current catalog's hash is the file's first hash. Both cases require usable
-  inline evidence and no proved podbuf break for the unit. The list is empty for
-  a proved podbuf break or missing inline evidence, even when the hash is
-  unchanged; missing evidence also draws a warning. It is also empty for a
-  `Breaking` verdict when the current hash is not the file's first hash, for a
-  file whose first hash is not the hash recomputed from the baseline's own
-  snapshots and context of the unit, for a workspace with no `.ridl/baseline/`
-  directory or one holding no `.ir.json` snapshot, for a unit with no package in
-  the baseline (a file left under its name is not read), and for a unit with no
-  file. A tree with a proved podbuf break, or a changed catalog and a breaking
-  verdict, is built with an empty list, and the recorded chain is not changed
-  until the next publication. A baseline with at least one `<unit>.catalogs`
-  file that cannot be loaded, and a file that cannot be read, are exit 2; a
-  baseline with no such file is not loaded. A compile with an error diagnostic
-  gets no list, and its baseline is not read. When the workspace names
-  `[imports]` and a list is computed, the build prints a note that a unit's list
-  covers the workspace's own packages only.
+  the current catalog's hash is the file's first hash. Both cases require remote
+  evidence meeting [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md)
+  decision 13 and no proved podbuf break for the unit. The list is empty for a
+  proved podbuf break or remote evidence that does not meet decision 13, even
+  when the hash is unchanged; insufficient evidence also draws a warning. It is
+  also empty for a `Breaking` verdict when the current hash is not the file's
+  first hash, for a file whose first hash is not the hash recomputed from the
+  baseline's own snapshots and context of the unit, for a workspace with no
+  `.ridl/baseline/` directory or one holding no `.ir.json` snapshot, for a unit
+  with no package in the baseline (a file left under its name is not read), and
+  for a unit with no file. A tree with a proved podbuf break, or a changed
+  catalog and a breaking verdict, is built with an empty list, and the recorded
+  chain is not changed until the next publication. A baseline with at least one
+  `<unit>.catalogs` file that cannot be loaded, and a file that cannot be read,
+  are exit 2; a baseline with no such file is not loaded. A compile with an
+  error diagnostic gets no list, and its baseline is not read. When the
+  workspace names `[imports]` and a list is computed, the build prints a note
+  that a unit's list covers the workspace's own packages only.
 - **One runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no generated code accepts an `attach` on
   the strength of the list. The frame specification (its As-built note and §6.1)

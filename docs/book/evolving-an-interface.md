@@ -127,14 +127,14 @@ hash only. The last column states what the frame specification
 ([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an
 older consumer, built against the version before the change.
 
-| Kind of change                                                                                                                   | Verdict    | The catalog hash | The list in the descriptor and in the history file                                | At `attach`, by §6.1                                            |
-| -------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| None                                                                                                                             | identical  | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
-| A doc comment, a label or `deprecated` changes                                                                                   | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
-| A declaration is added that no interface reaches                                                                                 | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
-| A compatible change to an interface, or to a declaration that an interface reaches                                               | compatible | changes          | the earlier hashes stay, and the previous one joins                               | accepted: the earlier hash is in the list                       |
-| A breaking change to an interface, or to a declaration that an interface reaches                                                 | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone | refused with `catalog_mismatch`: the earlier hash is not listed |
-| A breaking change to a declaration of the unit that no interface reaches, with no proved podbuf break and usable inline evidence | breaking   | unchanged        | unchanged: the hash did not change                                                | accepted: the hash is the provider's own                        |
+| Kind of change                                                                                                                                                        | Verdict    | The catalog hash | The list in the descriptor and in the history file                                | At `attach`, by §6.1                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| None                                                                                                                                                                  | identical  | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
+| A doc comment, a label or `deprecated` changes                                                                                                                        | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
+| A declaration is added that no interface reaches                                                                                                                      | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
+| A compatible change to an interface, or to a declaration that an interface reaches                                                                                    | compatible | changes          | the earlier hashes stay, and the previous one joins                               | accepted: the earlier hash is in the list                       |
+| A breaking change to an interface, or to a declaration that an interface reaches                                                                                      | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone | refused with `catalog_mismatch`: the earlier hash is not listed |
+| A breaking change to a declaration of the unit that no interface reaches, with no proved podbuf break and remote evidence that meets [ADR-0031][adr-0031] decision 13 | breaking   | unchanged        | unchanged: the hash did not change                                                | accepted: the hash is the provider's own                        |
 
 The "compatible" and "breaking" rows cover the categories that `ridl diff`
 prints. The rules are in the [CLI reference](cli-reference.md#ridl-diff), and
@@ -231,10 +231,9 @@ in a declaration of another unit that the unit does not reach leaves the unit's
 chain as it was, although `ridl diff` still exits 1 for the report as a whole. A
 breaking change in a declaration of the unit's own packages that no interface
 reaches is breaking for the unit, although the hash stays as it was. The chain
-is then carried only if inline evidence is usable and no proved podbuf break
-affects the unit. A proved podbuf break overrides the unchanged hash; missing
-evidence for an affected podbuf unit refuses normal publication and omits its
-build list.
+is then carried only if remote evidence meets [ADR-0031][adr-0031] decision 13
+and no proved podbuf break affects the unit. A proved podbuf break overrides the
+unchanged hash; decision 13 also owns the missing-evidence rule.
 
 ## The compatible catalogs
 
@@ -265,10 +264,11 @@ a5973898ecf39cce4b375906dfdbcafc795108832593b70dd49f3e75a90ca841
 The first hash is the catalog hash of the baseline being published, the same
 hash that `ridl build --emit catalog` computes. The hashes after it are copied
 from the replaced file when the change is compatible or the hash is unchanged,
-provided the history's first hash matches its own snapshots and context, inline
-evidence is usable, and no proved podbuf break affects the unit. A proved podbuf
-break, even at an unchanged hash, or another breaking change that changes the
-hash restarts the file with the new hash alone; the rules are in the
+provided the history's first hash matches its own snapshots and context, remote
+evidence meets [ADR-0031][adr-0031] decision 13, and no proved podbuf break
+affects the unit. A proved podbuf break, even at an unchanged hash, or another
+breaking change that changes the hash restarts the file with the new hash alone;
+the rules are in the
 [`ridl baseline` reference](cli-reference.md#ridl-baseline). `ridl baseline` and
 `ridl build` judge the change for the encodings the root manifest's
 `[backend.<name>]` tables list, so when one lists `podbuf`, a podbuf break
@@ -276,9 +276,13 @@ restarts the file ([ADR-0031][adr-0031] decision 13). A struct held inline whose
 head reaches a type from a remote package (an `[imports]` unit) is laid out with
 each side's own context: retained evidence for a snapshot directory, and
 verified remote packages from that side's compile for source. Neither side
-borrows remote definitions from the other. Missing inline evidence for an
-affected podbuf unit refuses normal publication with exit 2, leaving the prior
-baseline unchanged. A build warns and omits that unit's compatible catalogs;
+borrows remote definitions from the other. When `podbuf`, `flatbuffers` or
+`proto3` is enabled, missing remote evidence for an affected unit refuses normal
+publication with exit 2, leaving the prior baseline unchanged. A build warns and
+omits that unit's compatible catalogs; without any of those encodings, missing
+remote evidence does not prevent publication or carrying compatible catalogs.
+[ADR-0031][adr-0031] decision 13 owns the evidence requirements, including
+unusable podbuf evidence;
 [repair or reset](cli-reference.md#baseline-publication-and-recovery) is
 explicit.
 
@@ -297,11 +301,11 @@ lists the hashes of the unit's `<unit>.catalogs` file, less the current catalog
 hash, when the unit's verdict from the baseline to the working tree is
 compatible or identical, or when the current hash equals the first hash of the
 file. Carrying the list also requires the file's first hash to match its own
-snapshots and context, usable inline evidence and no proved podbuf break for the
-unit. It writes the list into the descriptor, which `ridl describe` prints as
-`compatible`, and into the `catalog.compatible` field of the codegen model that
-a plugin receives. The recorded file is not changed by a build; only
-`ridl baseline` changes it.
+snapshots and context, remote evidence that meets [ADR-0031][adr-0031] decision
+13 and no proved podbuf break for the unit. It writes the list into the
+descriptor, which `ridl describe` prints as `compatible`, and into the
+`catalog.compatible` field of the codegen model that a plugin receives. The
+recorded file is not changed by a build; only `ridl baseline` changes it.
 
 The list is empty in these cases:
 
@@ -311,8 +315,8 @@ The list is empty in these cases:
 - the unit has no `<unit>.catalogs` file;
 - the file's first hash does not match its own snapshots and context;
 - a proved podbuf break affects the unit, even at an unchanged hash;
-- inline evidence for an affected podbuf unit is missing or unusable (the build
-  also warns);
+- remote evidence for an affected unit does not meet [ADR-0031][adr-0031]
+  decision 13 (the build also warns);
 - the unit's verdict from the baseline to the working tree is breaking and the
   current hash differs from the first hash of the file.
 

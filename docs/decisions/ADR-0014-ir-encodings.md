@@ -85,15 +85,16 @@ verdict is judged for the root manifest's encodings, as
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 states, from
 driftsys/ridl#1095. The hash is unchanged. Decisions 1 to 14 are unchanged.
 
-**Amended 2026-11-03 — decision 15, podbuf history requires evidence.** The
-unchanged-hash exception of 2026-10-10 does not override a proved podbuf break
-or missing inline evidence, as implemented for driftsys/ridl#1163. A proved
-podbuf break restarts the affected unit's chain at publication and emits an
-empty compatible list at build time, even when the hash is unchanged. Missing or
-unusable inline evidence for an affected podbuf unit refuses normal publication
-with exit 2 and leaves the baseline unchanged; a build warns and omits that
-unit's compatible catalogs. Each side uses its own package context. Repair and
-reset start fresh histories and certify no earlier hash
+**Amended 2026-11-03 — decision 15, podbuf history requires evidence; clarified
+2026-11-09 for driftsys/ridl#1228.** The unchanged-hash exception of 2026-10-10
+does not override a proved podbuf break or insufficient remote evidence under
+[ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13. A proved podbuf
+break restarts the affected unit's chain at publication and emits an empty
+compatible list at build time, even when the hash is unchanged. Remote evidence
+that does not meet decision 13 refuses normal publication with exit 2 and leaves
+the baseline unchanged; a build warns and omits the affected unit's compatible
+catalogs. Each side uses its own package context. Repair and reset start fresh
+histories and certify no earlier hash
 ([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13). Decisions 1 to 14
 are unchanged.
 
@@ -666,10 +667,12 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       **Amended 2026-10-10:** when the replaced baseline holds a package of the
       unit and the fresh catalog hash equals the first hash of its file, the
       hashes are carried whatever the verdict, because the catalog did not
-      change. **Amended 2026-11-03:** that exception requires usable inline
-      evidence and no proved podbuf break. A proved podbuf break restarts the
-      affected chain even at the same hash; missing evidence refuses normal
-      publication with exit 2, leaving the prior baseline unchanged.
+      change. **Amended 2026-11-03:** that exception requires remote evidence
+      meeting [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 and no
+      proved podbuf break. A proved podbuf break restarts the affected chain
+      even at the same hash; remote evidence that does not meet decision 13
+      refuses normal publication with exit 2, leaving the prior baseline
+      unchanged.
     - **The list is emitted at the build, and the `ridl` facade computes it.**
       `ridl build` discovers `.ridl/baseline/` as `ridl check` does and, per
       unit, classifies the baseline against the current tree: `Compatible` or
@@ -680,8 +683,9 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       the current catalog hash equals the file's first hash, the file's other
       hashes are given whatever the verdict, because the catalog did not change;
       a current hash equal to an older hash of the file follows the verdict.
-      **Amended 2026-11-03:** a proved podbuf break or missing inline evidence
-      gives an empty list for the affected unit even at the same hash; missing
+      **Amended 2026-11-03:** a proved podbuf break or remote evidence that does
+      not meet [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 gives
+      an empty list for the affected unit even at the same hash; insufficient
       evidence also draws a warning. A baseline that holds a `<unit>.catalogs`
       file and cannot be loaded fails the build, exit 2; a baseline with no such
       file is not loaded. The facade gives `ridlc` a function that computes the

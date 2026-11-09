@@ -1,4 +1,4 @@
-//! Missing historical evidence and independent repair identity checks.
+//! Missing remote evidence and independent repair identity checks.
 mod remote_support;
 
 use remote_support::{TempDir, ridl, unit_tar};
@@ -359,10 +359,13 @@ fn flatbuffers_with_remote_context_carries_compatible_history() {
     flatbuffers_carries_history(true);
 }
 
-fn publication_ignores_podbuf_kind_change_issues(encoding: &str) {
-    let dir = TempDir::new("flatbuffers-kind-change");
-    let home = TempDir::new("flatbuffers-kind-change-home");
+// The new Reading changes kind but retains Word, so no remote declaration is missing.
+fn publication_with_podbuf_kind_change(encoding: &str, expected: i32) {
+    let dir = TempDir::new(&format!("{encoding}-kind-change"));
+    let home = TempDir::new(&format!("{encoding}-kind-change-home"));
     setup(&dir, &home, &format!("\"{encoding}\""));
+    let baseline = dir.path().join(".ridl/baseline");
+    let before = inventory(&baseline);
     let cache = ridl_core::cache::Cache {
         root: home.path().join(".ridl/cache"),
     };
@@ -391,18 +394,32 @@ fn publication_ignores_podbuf_kind_change_issues(encoding: &str) {
         },
     )
     .unwrap();
-    let stderr = command(dir.path(), home.path(), &["baseline"], 0);
-    assert!(!stderr.contains("missing or unusable"), "{stderr}");
+    let stderr = command(dir.path(), home.path(), &["baseline"], expected);
+    if expected == 0 {
+        assert!(!stderr.contains("missing or unusable"), "{stderr}");
+    } else {
+        assert!(
+            stderr.contains("current workspace's remote evidence is missing or unusable"),
+            "{stderr}"
+        );
+        assert_eq!(inventory(&baseline), before);
+    }
 }
 
 #[test]
 fn flatbuffers_publication_ignores_podbuf_kind_change_issues() {
-    publication_ignores_podbuf_kind_change_issues("flatbuffers");
+    publication_with_podbuf_kind_change("flatbuffers", 0);
 }
 
 #[test]
 fn proto3_publication_ignores_podbuf_kind_change_issues() {
-    publication_ignores_podbuf_kind_change_issues("proto3");
+    publication_with_podbuf_kind_change("proto3", 0);
+}
+
+#[test]
+fn podbuf_publication_refuses_kind_change_issues() {
+    // Mutation: filter context issues to Missing even when podbuf is enabled.
+    publication_with_podbuf_kind_change("podbuf", 2);
 }
 
 #[test]
@@ -626,12 +643,12 @@ fn repair_refuses_packages_mismatch_with_identical_pins() {
     });
 }
 
-#[test]
-fn baseline_new_side_issue_names_current_evidence_without_historical_repair() {
-    // Mutation: use the historical-context refusal and repair advice for every side.
-    let dir = TempDir::new("current-evidence");
-    let home = TempDir::new("current-evidence-home");
-    setup(&dir, &home, "\"podbuf\"");
+// The historical Reading reaches Word, which the current unit removes. The
+// surviving consumer use therefore has a Missing issue on the new side.
+fn new_side_issue_names_current_evidence_without_historical_repair(encoding: &str) {
+    let dir = TempDir::new(&format!("{encoding}-current-evidence"));
+    let home = TempDir::new(&format!("{encoding}-current-evidence-home"));
+    setup(&dir, &home, &format!("\"{encoding}\""));
     let baseline = dir.path().join(".ridl/baseline");
     let before = inventory(&baseline);
     let cache = ridl_core::cache::Cache {
@@ -670,4 +687,22 @@ fn baseline_new_side_issue_names_current_evidence_without_historical_repair() {
     assert!(!stderr.contains("historical remote context"), "{stderr}");
     assert!(!stderr.contains("--repair-context"), "{stderr}");
     assert_eq!(inventory(&baseline), before);
+}
+
+#[test]
+fn baseline_new_side_issue_names_current_evidence_without_historical_repair() {
+    // Mutation: use the historical-context refusal and repair advice for every side.
+    new_side_issue_names_current_evidence_without_historical_repair("podbuf");
+}
+
+#[test]
+fn flatbuffers_baseline_refuses_missing_current_remote_evidence() {
+    // Mutation: ignore New-side issues when only FlatBuffers or proto3 is enabled.
+    new_side_issue_names_current_evidence_without_historical_repair("flatbuffers");
+}
+
+#[test]
+fn proto3_baseline_refuses_missing_current_remote_evidence() {
+    // Mutation: ignore New-side issues when only FlatBuffers or proto3 is enabled.
+    new_side_issue_names_current_evidence_without_historical_repair("proto3");
 }

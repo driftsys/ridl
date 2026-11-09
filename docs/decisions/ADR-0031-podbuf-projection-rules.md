@@ -1231,6 +1231,14 @@ rationale are preserved in the
 | [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | amended 2026-11-01: RIDL-158 is retired                                                                                               |
 | [`docs/book/stability.md`](../book/stability.md)                                               | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | ledger row 42, and row 35 cites this record; row 42 amended 2026-11-01: podbuf carries an open declaration                            |
+| [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-09: catalog-history remote evidence requirements for podbuf, FlatBuffers and proto3 (driftsys/ridl#1228)              |
+| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: publication and build remote evidence requirements when no encoding is selected (driftsys/ridl#1228)              |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: baseline exit 2 table links to decision 13 for remote evidence requirements (driftsys/ridl#1228)                  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-09: catalog-history missing evidence under FlatBuffers and proto3 links to decision 13 (driftsys/ridl#1228)           |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-11-09: publication and build link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                   |
+| [`docs/specification/frame-specification.md`](../specification/frame-specification.md)         | amended 2026-11-09: compatible catalogs link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                     |
+| [`ADR-0014`](ADR-0014-ir-encodings.md)                                                         | amended 2026-11-09: decision 15 links to decision 13 for remote evidence requirements (driftsys/ridl#1228)                            |
+| [`docs/decisions/README.md`](README.md)                                                        | amended 2026-11-09: decision summaries link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                      |
 
 ## Trace
 

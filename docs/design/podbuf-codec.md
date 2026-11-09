@@ -376,7 +376,10 @@ deliberately conservative: it is broader than unresolved relevant inline uses
 alone. An unresolved remote name on the new side also records an issue when its
 consumer use survives. An issue's reason is missing evidence, a declaration that
 cannot be laid out, or a changed declaration kind. An explicit podbuf comparison
-refuses missing or unusable evidence rather than inferring compatibility.
+refuses missing or unusable evidence rather than inferring compatibility;
+catalog history also refuses missing remote evidence under FlatBuffers and
+proto3, as
+[ADR-0031 decision 13](../decisions/ADR-0031-podbuf-projection-rules.md) states.
 
 This coverage replaces the shared-current-context limitation recorded on
 2026-10-31. Local append layouts also use their respective historical scopes. It
