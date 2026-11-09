@@ -225,8 +225,8 @@ never stated.
    first instalment of E5, and E5.1 replaces it with a translator driven by the
    structured expression tree the IR does not carry yet.
 
-   A float literal is emitted as the binary64 bound that keeps the comparison
-   exact; the book's
+   A float literal that has such a bound is emitted as the binary64 bound that
+   keeps the comparison exact, and the translator refuses the others; the book's
    [Contract clause translation](../book/generated-code.md#contract-clause-translation)
    states the rule.
 

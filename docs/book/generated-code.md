@@ -202,8 +202,8 @@ no fraction or exponent (`100` becomes `100.0`). An inexact literal on `==` or
 `!=` is refused because no binary64 value equals it. A literal whose exponent
 cannot be read or has magnitude above 10000, or whose required bound is
 infinite, is also refused. A literal above the finite range can still have a
-finite lower bound: `<= 1e999` uses `f64::MAX`. Integer comparisons are
-unchanged.
+finite lower bound: `<= 1e999`, which only hand-built IR can carry because the
+lexer has no exponent form, uses `f64::MAX`. Integer comparisons are unchanged.
 
 ## Async calls
 
