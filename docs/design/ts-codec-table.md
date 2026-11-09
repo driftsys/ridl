@@ -62,6 +62,18 @@ Its exports:
   `Payload<FlatBuffers>` impl and an entry in `WASM_PAYLOAD_TYPES` (D-2). `Name`
   is the type `<base>.ts` exports. `flatc`'s classes, builders and `<Name>Box`
   tables never appear in a signature.
+- `signalChecks(codec: Codec): readonly SignalCheckEntry[]` — written when a
+  declared interface has a signal. It returns one entry per signal that has a
+  table entry, for the `checks` option of `connect` in
+  `@driftsys/ridl-transport-ws`. Each entry's check calls
+  `codec.verify(typeId, bytes)` with a type id that `codec.typeId` resolved
+  once, when `signalChecks` ran, and passes the payload when verification
+  succeeds. A `malformed` or `unknown-type` result is `"corrupt"`; a `rule`
+  result whose text is in `RULES` is `{ rule }`; any other `rule` result throws
+  `CodecError`, which the session counts as `"corrupt"` and reports as a
+  `check-failed` note. The module imports only `Codec`, `SignalCheckEntry` and
+  `CodecError` of `@driftsys/ridl-runtime` for it, and nothing from the
+  WebSocket package.
 - `export interface <InducedName.rust>` for every induced tuple that is a
   payload type — the parameter list of a call that is not exactly one named
   type, and a tuple reply of a query (D-9). An induced tuple with no field is
@@ -113,19 +125,21 @@ output, one alias per foreign package), and every relative import carries the
 `.js` suffix (D-15). Ordinary entries import only the runtime's `PayloadCodec`
 type when needed and satisfy `MemberRef` structurally. Stream functions also
 import the runtime types, errors and adapters described in D-17; they import
-nothing from the WebSocket package. The names the file declares are checked
-before anything is written, and a second declaration of one is refused with an
-error that names both: an interface or an induced tuple named after a reserved
-name of the file (`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`,
-`PayloadCodec`, `RuleError` when the module reaches an enum or an enum set, an
-import alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two
-enum sets of other packages whose `pack_<alias>_<Name>` or
-`unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
-`d`), two foreign payload types whose `codec<Package><Name>` constants spell the
-same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
-spells a foreign one. An interaction named `iface` is refused because it
-collides with the interface table metadata key of that name; the error names
-both sources.
+nothing from the WebSocket package. A module with a signal also imports the
+runtime's `Codec`, `SignalCheckEntry` and `CodecError` types for `signalChecks`.
+The names the file declares are checked before anything is written, and a second
+declaration of one is refused with an error that names both: an interface or an
+induced tuple named after a reserved name of the file (`CATALOG_NAME`,
+`CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `PayloadCodec`, `RuleError` when the
+module reaches an enum or an enum set, `signalChecks`, `signalCheck`, `Codec`,
+`SignalCheckEntry` and `CodecError` when the package has a signal, an import
+alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two enum sets
+of other packages whose `pack_<alias>_<Name>` or `unpack_<alias>_<Name>`
+functions spell the same (`a.b` / `c_d` and `a.b.c` / `d`), two foreign payload
+types whose `codec<Package><Name>` constants spell the same (`a.b` / `C` and `a`
+/ `BC`), and a local payload type whose `codec<Name>` spells a foreign one. An
+interaction named `iface` is refused because it collides with the interface
+table metadata key of that name; the error names both sources.
 
 ## Stream functions
 
