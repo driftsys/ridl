@@ -479,7 +479,7 @@ fn missing_evidence_affects_a_unit_reaching_another_units_declaration() {
     let home = TempDir::new("reaching-evidence-home");
     let out = TempDir::new("reaching-evidence-out");
     setup(&dir, &home, "\"podbuf\"");
-    // Mutation: omit the reachable-declaration branch of Judgment::unknown.
+    // Mutation: omit the reachable-declaration branch of Judgment::unknown_side.
     let baseline = dir.path().join(".ridl/baseline");
     let earlier = ridl_core::catalog_history::parse(
         &std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap(),
@@ -645,12 +645,8 @@ fn repair_refuses_packages_mismatch_with_identical_pins() {
 
 // The historical Reading reaches Word, which the current unit removes. The
 // surviving consumer use therefore has a Missing issue on the new side.
-fn new_side_issue_names_current_evidence_without_historical_repair(encoding: &str) {
-    let dir = TempDir::new(&format!("{encoding}-current-evidence"));
-    let home = TempDir::new(&format!("{encoding}-current-evidence-home"));
-    setup(&dir, &home, &format!("\"{encoding}\""));
-    let baseline = dir.path().join(".ridl/baseline");
-    let before = inventory(&baseline);
+fn setup_missing_current_remote_evidence(dir: &TempDir, home: &TempDir, encoding: &str) {
+    setup(dir, home, &format!("\"{encoding}\""));
     let cache = ridl_core::cache::Cache {
         root: home.path().join(".ridl/cache"),
     };
@@ -679,9 +675,54 @@ fn new_side_issue_names_current_evidence_without_historical_repair(encoding: &st
         },
     )
     .unwrap();
+}
+
+fn new_side_issue_names_current_evidence_without_historical_repair(encoding: &str) {
+    let dir = TempDir::new(&format!("{encoding}-current-evidence"));
+    let home = TempDir::new(&format!("{encoding}-current-evidence-home"));
+    setup_missing_current_remote_evidence(&dir, &home, encoding);
+    let baseline = dir.path().join(".ridl/baseline");
+    let before = inventory(&baseline);
     let stderr = command(dir.path(), home.path(), &["baseline"], 2);
     assert!(
         stderr.contains("current workspace's remote evidence is missing or unusable"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("historical remote context"), "{stderr}");
+    assert!(!stderr.contains("--repair-context"), "{stderr}");
+    assert_eq!(inventory(&baseline), before);
+}
+
+#[test]
+fn flatbuffers_build_names_missing_current_remote_evidence_without_historical_repair() {
+    // Mutation: always use the historical-context warning and repair advice.
+    let dir = TempDir::new("flatbuffers-current-build");
+    let home = TempDir::new("flatbuffers-current-build-home");
+    let out = TempDir::new("flatbuffers-current-build-out");
+    setup_missing_current_remote_evidence(&dir, &home, "flatbuffers");
+    let baseline = dir.path().join(".ridl/baseline");
+    let before = inventory(&baseline);
+    let stderr = command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    for unit in ["veh.body", "veh.cluster"] {
+        assert!(
+            stderr.contains(&format!("warning: cannot establish compatibility for unit `{unit}`: the current workspace's remote evidence is missing or unusable")),
+            "{stderr}"
+        );
+        assert!(compatible(out.path(), home.path(), unit).is_empty());
+    }
+    assert!(
+        stderr.contains("Restore usable current remote evidence"),
         "{stderr}"
     );
     assert!(!stderr.contains("historical remote context"), "{stderr}");

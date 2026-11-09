@@ -743,8 +743,8 @@ provided remote evidence meets
 [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decision 13 and no
 proved podbuf break affects the unit. A proved podbuf break restarts the
 affected chain at publication and empties the build's list even at the same
-hash. Remote evidence that does not meet decision 13 refuses normal publication
-with exit 2; a build warns and omits the affected unit's compatible catalogs.
+hash. The [CLI reference](../book/cli-reference.md#ridl-baseline) owns the
+remote evidence and recovery rules for affected units.
 [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as amended on
 2026-10-09, 2026-10-10 and 2026-11-03, states the rule. The direction is fixed:
 an **older consumer** attaches to a **newer provider**. A newer consumer

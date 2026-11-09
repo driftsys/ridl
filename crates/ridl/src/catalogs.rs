@@ -51,14 +51,20 @@ pub(crate) fn compatible_catalogs(
         let Some(history) = read_history_if_present(&published, unit)? else {
             continue;
         };
-        let unknown = judgment.unknown(unit, &published_scope, &scope);
-        if unknown {
-            eprintln!(
-                "warning: cannot establish compatibility for unit `{unit}`: historical remote context is missing or unusable; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
-            );
+        let unknown_side = judgment.unknown_side(unit, &published_scope, &scope);
+        if let Some(side) = unknown_side {
+            if side == ridl_diff::ContextSide::New {
+                eprintln!(
+                    "warning: cannot establish compatibility for unit `{unit}`: the current workspace's remote evidence is missing or unusable; omitting its compatible catalogs. Restore usable current remote evidence before building."
+                );
+            } else {
+                eprintln!(
+                    "warning: cannot establish compatibility for unit `{unit}`: historical remote context is missing or unusable; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
+                );
+            }
         }
         let current_hash = catalog_hash(unit, &scope);
-        let carried = !unknown
+        let carried = unknown_side.is_none()
             && !judgment.podbuf_break(unit, &published_scope, &scope)
             && history.hashes.first() == Some(&catalog_hash(unit, &published_scope))
             && (history.hashes.first() == Some(&current_hash)
@@ -251,10 +257,6 @@ impl Judgment {
     fn podbuf_break(&self, unit: &str, old: &[&Package], new: &[&Package]) -> bool {
         ridl_diff::UnitVerdicts::from_refs(&self.podbuf_report, old, new).verdict(unit)
             == Verdict::Breaking
-    }
-
-    fn unknown(&self, unit: &str, old: &[&Package], new: &[&Package]) -> bool {
-        self.unknown_side(unit, old, new).is_some()
     }
 
     fn unknown_side(

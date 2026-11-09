@@ -90,13 +90,10 @@ driftsys/ridl#1095. The hash is unchanged. Decisions 1 to 14 are unchanged.
 does not override a proved podbuf break or insufficient remote evidence under
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13. A proved podbuf
 break restarts the affected unit's chain at publication and emits an empty
-compatible list at build time, even when the hash is unchanged. Remote evidence
-that does not meet decision 13 refuses normal publication with exit 2 and leaves
-the baseline unchanged; a build warns and omits the affected unit's compatible
-catalogs. Each side uses its own package context. Repair and reset start fresh
-histories and certify no earlier hash
-([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13). Decisions 1 to 14
-are unchanged.
+compatible list at build time, even when the hash is unchanged. Each side uses
+its own package context. The
+[CLI reference](../book/cli-reference.md#ridl-baseline) owns the remote evidence
+and recovery rules for affected units. Decisions 1 to 14 are unchanged.
 
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
@@ -670,9 +667,9 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       change. **Amended 2026-11-03:** that exception requires remote evidence
       meeting [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 and no
       proved podbuf break. A proved podbuf break restarts the affected chain
-      even at the same hash; remote evidence that does not meet decision 13
-      refuses normal publication with exit 2, leaving the prior baseline
-      unchanged.
+      even at the same hash. The
+      [CLI reference](../book/cli-reference.md#ridl-baseline) owns the evidence
+      refusal and recovery rules for affected units.
     - **The list is emitted at the build, and the `ridl` facade computes it.**
       `ridl build` discovers `.ridl/baseline/` as `ridl check` does and, per
       unit, classifies the baseline against the current tree: `Compatible` or
@@ -683,16 +680,17 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       the current catalog hash equals the file's first hash, the file's other
       hashes are given whatever the verdict, because the catalog did not change;
       a current hash equal to an older hash of the file follows the verdict.
-      **Amended 2026-11-03:** a proved podbuf break or remote evidence that does
-      not meet [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 gives
-      an empty list for the affected unit even at the same hash; insufficient
-      evidence also draws a warning. A baseline that holds a `<unit>.catalogs`
-      file and cannot be loaded fails the build, exit 2; a baseline with no such
-      file is not loaded. The facade gives `ridlc` a function that computes the
-      per-unit lists from the build's own compile (`ridlc::run_build_computing`;
-      `ridlc::run_build_with` takes ready lists), and `ridlc` writes them into
-      the descriptor and the codegen model without reading any baseline: the
-      compiler stays the pure source → IR function of
+      **Amended 2026-11-03:** a proved podbuf break gives an empty list for the
+      affected unit even at the same hash.
+      [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 and the
+      [CLI reference](../book/cli-reference.md#ridl-build) own the remote
+      evidence requirements for affected units. A baseline that holds a
+      `<unit>.catalogs` file and cannot be loaded fails the build, exit 2; a
+      baseline with no such file is not loaded. The facade gives `ridlc` a
+      function that computes the per-unit lists from the build's own compile
+      (`ridlc::run_build_computing`; `ridlc::run_build_with` takes ready lists),
+      and `ridlc` writes them into the descriptor and the codegen model without
+      reading any baseline: the compiler stays the pure source → IR function of
       [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14, and `ridlc build`
       writes an empty list.
     - **The verdict is `ridl diff`'s, scoped to the unit.**

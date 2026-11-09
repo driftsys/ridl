@@ -193,22 +193,20 @@ The list comes from the published baseline. `ridl baseline` records, for each
 unit with an interface, a `<unit>.catalogs` file beside the snapshots, and
 `ridl build` reads it. The list is empty when there is no baseline, when the
 unit has no file, and after a proved podbuf break or a breaking change that
-changes the catalog, which restarts the chain. When `podbuf`, `flatbuffers` or
-`proto3` is enabled, missing remote evidence for an affected unit refuses normal
-publication with exit 2; a build warns and omits that unit's compatible
-catalogs. Without any of those encodings, missing remote evidence does not
-prevent publication or carrying compatible catalogs. ADR-0031 decision 13 owns
-the evidence requirements, including unusable podbuf evidence. A file is used
-only when its newest hash is the hash recomputed from the snapshots and context
-published beside it; a file that does not describe those snapshots, such as one
-left behind by a hand-edited baseline, restarts the chain instead. A breaking
-change that leaves the catalog hash as it was, such as the removal of a
-declaration no interface reaches, keeps the chain only if remote evidence meets
-ADR-0031 decision 13 and no proved podbuf break affects the unit. A change in
-another unit counts for this unit only when an interface of this unit reaches
-the changed declaration. `ridlc build` reads no baseline and writes an empty
-list. The [CLI reference](cli-reference.md#ridl-baseline) states the file format
-and the rules.
+changes the catalog, which restarts the chain. The
+[CLI reference](cli-reference.md#ridl-baseline) owns the remote evidence and
+recovery rules for affected units, including units that reach another unit's
+declarations. A file is used only when its newest hash is the hash recomputed
+from the snapshots and context published beside it; a file that does not
+describe those snapshots, such as one left behind by a hand-edited baseline,
+restarts the chain instead. A breaking change that leaves the catalog hash as it
+was, such as the removal of a declaration no interface reaches, keeps the chain
+only if remote evidence meets ADR-0031 decision 13 and no proved podbuf break
+affects the unit. A change in another unit counts for this unit only when an
+interface of this unit reaches the changed declaration. `ridlc build` reads no
+baseline and writes an empty list. The
+[CLI reference](cli-reference.md#ridl-baseline) states the file format and the
+rules.
 
 ## The catalog and the face
 

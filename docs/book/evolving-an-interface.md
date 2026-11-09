@@ -276,15 +276,10 @@ restarts the file ([ADR-0031][adr-0031] decision 13). A struct held inline whose
 head reaches a type from a remote package (an `[imports]` unit) is laid out with
 each side's own context: retained evidence for a snapshot directory, and
 verified remote packages from that side's compile for source. Neither side
-borrows remote definitions from the other. When `podbuf`, `flatbuffers` or
-`proto3` is enabled, missing remote evidence for an affected unit refuses normal
-publication with exit 2, leaving the prior baseline unchanged. A build warns and
-omits that unit's compatible catalogs; without any of those encodings, missing
-remote evidence does not prevent publication or carrying compatible catalogs.
-[ADR-0031][adr-0031] decision 13 owns the evidence requirements, including
-unusable podbuf evidence;
-[repair or reset](cli-reference.md#baseline-publication-and-recovery) is
-explicit.
+borrows remote definitions from the other. The
+[CLI reference](cli-reference.md#ridl-baseline) and [ADR-0031][adr-0031]
+decision 13 own the remote evidence and recovery rules for affected units,
+including type-only units and units that reach another unit's declarations.
 
 For a unit with a published snapshot, a file that cannot be read, or that has a
 line that is neither a comment nor a hash, or that lists a hash twice, stops
@@ -315,8 +310,8 @@ The list is empty in these cases:
 - the unit has no `<unit>.catalogs` file;
 - the file's first hash does not match its own snapshots and context;
 - a proved podbuf break affects the unit, even at an unchanged hash;
-- remote evidence for an affected unit does not meet [ADR-0031][adr-0031]
-  decision 13 (the build also warns);
+- remote evidence for an affected unit does not meet the
+  [build requirements](cli-reference.md#ridl-build);
 - the unit's verdict from the baseline to the working tree is breaking and the
   current hash differs from the first hash of the file.
 
