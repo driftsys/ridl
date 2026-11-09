@@ -317,6 +317,12 @@ fn f32_map_keys_that_round_to_one_value_are_refused_as_duplicates() {
         refused.contains("EncodeError::Contract") && refused.contains("Unique"),
         "got: {refused}"
     );
+    let apart =
+        run_result("Narrowed { by_level: smap(&[(1.0, 1), (2.0, 3), (1.0 + 2f64.powi(-40), 2)]) }");
+    assert!(
+        apart.contains("EncodeError::Contract") && apart.contains("Unique"),
+        "got: {apart}"
+    );
     let zeros = run_result("Narrowed { by_level: smap(&[(0.0, 1), (-0.0, 2)]) }");
     assert!(
         zeros.contains("EncodeError::Contract") && zeros.contains("Unique"),

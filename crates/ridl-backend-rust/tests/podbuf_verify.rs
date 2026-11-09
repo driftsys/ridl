@@ -689,9 +689,12 @@ fn equal_f32_map_keys_are_refused_as_key_order() {
         &[
             r#"check!(Narrowed, narrowed(&[1.0, 1.0]))"#,
             r#"check!(Narrowed, narrowed(&[1.0, 2.0]))"#,
+            r#"check!(Narrowed, narrowed(&[2.0, 1.0]))"#,
+            r#"check!(Narrowed, narrowed(&[0.0, -0.0]))"#,
+            r#"check!(Narrowed, narrowed(&[0.5, 0.5 + 2f32.powi(-24)]))"#,
         ],
     );
-    assert_eq!(out, ["KeyOrder", "OK"]);
+    assert_eq!(out, ["KeyOrder", "OK", "KeyOrder", "KeyOrder", "OK"]);
 }
 
 /// ADR-0031 decision 8 rule 7 for an arm whose head has no field: the arm
