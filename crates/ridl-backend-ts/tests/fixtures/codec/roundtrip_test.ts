@@ -5,6 +5,11 @@
 
 import assert from "node:assert/strict";
 import * as flatbuffers from "flatbuffers";
+import {
+  type Codec,
+  CodecError,
+  type VerifyResult,
+} from "@driftsys/ridl-runtime";
 import * as codec from "./veh.common.codec.ts";
 import * as fb from "./veh/common.ts";
 import type * as ridl_std from "./ridl.std.ts";
@@ -24,7 +29,10 @@ Deno.test("a union round-trips through each arm", () => {
     kind: "err",
     value: { code: 3 as t.Counter, message: "fault" as ridl_std.Message },
   };
-  assert.deepEqual(codec.decodeSensorResult(codec.encodeSensorResult(err)), err);
+  assert.deepEqual(
+    codec.decodeSensorResult(codec.encodeSensorResult(err)),
+    err,
+  );
 });
 
 Deno.test("a union arm keeps its declared name as the kind", () => {
@@ -44,7 +52,10 @@ Deno.test("a tuple, an array and a map round-trip", () => {
     labels: [label("a")],
     meta: [[label("k"), name("v")]],
   };
-  assert.deepEqual(codec.decodeSensorBounds(codec.encodeSensorBounds(bounds)), bounds);
+  assert.deepEqual(
+    codec.decodeSensorBounds(codec.encodeSensorBounds(bounds)),
+    bounds,
+  );
 });
 
 Deno.test("an optional field round-trips present and absent", () => {
@@ -54,7 +65,10 @@ Deno.test("an optional field round-trips present and absent", () => {
     override: speed(40),
     gears: 6 as t.DriverProfile["gears"],
   };
-  assert.deepEqual(codec.decodeDriverProfile(codec.encodeDriverProfile(present)), present);
+  assert.deepEqual(
+    codec.decodeDriverProfile(codec.encodeDriverProfile(present)),
+    present,
+  );
   const absent: t.DriverProfile = {
     name: name("bob"),
     speed: speed(30),
@@ -66,25 +80,39 @@ Deno.test("an optional field round-trips present and absent", () => {
 });
 
 Deno.test("a two-parameter call round-trips by name", () => {
-  const params: codec.SensorsSetLimitParams = { limit: speed(10), actual: speed(20) };
+  const params: codec.SensorsSetLimitParams = {
+    limit: speed(10),
+    actual: speed(20),
+  };
   assert.deepEqual(
-    codec.decodeSensorsSetLimitParams(codec.encodeSensorsSetLimitParams(params)),
+    codec.decodeSensorsSetLimitParams(
+      codec.encodeSensorsSetLimitParams(params),
+    ),
     params,
   );
-  assert.equal(codec.Sensors.setLimit.request.type, "veh.common.SensorsSetLimitParams");
+  assert.equal(
+    codec.Sensors.setLimit.request.type,
+    "veh.common.SensorsSetLimitParams",
+  );
   assert.equal(codec.Sensors.setLimit.ord, 5);
   assert.equal(codec.Sensors.result.ord, 3);
 });
 
 Deno.test("a tuple reply round-trips by name", () => {
   const reply: codec.SensorsSpanReply = { min: speed(1), max: speed(2) };
-  assert.deepEqual(codec.decodeSensorsSpanReply(codec.encodeSensorsSpanReply(reply)), reply);
+  assert.deepEqual(
+    codec.decodeSensorsSpanReply(codec.encodeSensorsSpanReply(reply)),
+    reply,
+  );
   assert.equal(codec.Sensors.span.reply.type, "veh.common.SensorsSpanReply");
 });
 
 Deno.test("an enum set, an enum and an enum field round-trip", () => {
   const flags = 3 as t.WarningFlags;
-  assert.equal(codec.decodeWarningFlags(codec.encodeWarningFlags(flags)), flags);
+  assert.equal(
+    codec.decodeWarningFlags(codec.encodeWarningFlags(flags)),
+    flags,
+  );
   assert.equal(
     codec.decodeGearPosition(codec.encodeGearPosition(t.GearPosition.REVERSE)),
     t.GearPosition.REVERSE,
@@ -139,7 +167,12 @@ Deno.test("an absent optional vector reads back as the empty vector", () => {
   assert.deepEqual(decoded.maybe, []);
   assert.deepEqual(decoded.tag, new Uint8Array());
   assert.deepEqual(decoded.notes, []);
-  const empty: t.Extras = { ...absent, maybe: [], tag: new Uint8Array(), notes: [] };
+  const empty: t.Extras = {
+    ...absent,
+    maybe: [],
+    tag: new Uint8Array(),
+    notes: [],
+  };
   assert.deepEqual(codec.decodeExtras(codec.encodeExtras(empty)), decoded);
 });
 
@@ -148,7 +181,10 @@ Deno.test("a union with a scalar arm and an enum arm round-trips through each ar
     const pick of [
       { kind: "speed", value: speed(3) },
       { kind: "gear", value: t.GearPosition.NEUTRAL },
-      { kind: "reading", value: { value: speed(1), timestamp: 2n as ridl_std.Timestamp } },
+      {
+        kind: "reading",
+        value: { value: speed(1), timestamp: 2n as ridl_std.Timestamp },
+      },
     ] as t.Pick[]
   ) {
     assert.deepEqual(codec.decodePick(codec.encodePick(pick)), pick);
@@ -165,7 +201,91 @@ Deno.test("a foreign scalar payload goes through its own package's codec", () =>
   const value = name("ann");
   assert.equal(codec.Sensors.profile.request.type, "ridl.std.Name");
   assert.equal(
-    codec.Sensors.profile.request.decode(codec.Sensors.profile.request.encode(value)),
+    codec.Sensors.profile.request.decode(
+      codec.Sensors.profile.request.encode(value),
+    ),
     value,
   );
+});
+
+/** The ids that `fakeCodec` gives each payload type, by type name. */
+const FAKE_IDS: Record<string, number> = {};
+
+/**
+ * A codec whose `verify` returns `result` for any payload of the type with
+ * the id that `typeId` gave, and records each `typeId` call.
+ */
+function fakeCodec(
+  result: VerifyResult,
+  calls: string[],
+  seen: number[] = [],
+): Codec {
+  return {
+    catalogHash: new Uint8Array(32),
+    typeId(typeName) {
+      calls.push(typeName);
+      FAKE_IDS[typeName] ??= 100 + Object.keys(FAKE_IDS).length;
+      return FAKE_IDS[typeName];
+    },
+    verify(typeId) {
+      seen.push(typeId);
+      return result;
+    },
+  };
+}
+
+Deno.test("signalChecks resolves each signal payload type once, at registration", () => {
+  const calls: string[] = [];
+  const seen: number[] = [];
+  const checks = codec.signalChecks(fakeCodec({ ok: true }, calls, seen));
+  assert.deepEqual(calls, [
+    "veh.common.SensorReading",
+    "veh.common.Setting",
+    "veh.common.Note",
+    "veh.common.Extras",
+    "veh.common.Pick",
+  ]);
+  assert.deepEqual(
+    checks.map(({ iface, ord }) => [iface, ord]),
+    [[1, 1], [1, 8], [1, 9], [1, 11], [1, 12]],
+  );
+  for (const entry of checks) entry.check(new Uint8Array());
+  checks[0].check(new Uint8Array());
+  checks[4].check(new Uint8Array());
+  assert.equal(calls.length, 5);
+  // Each check verifies with the id of its own signal's payload type.
+  assert.deepEqual(seen.slice(0, 5), calls.map((name) => FAKE_IDS[name]));
+  assert.deepEqual(seen.slice(5), [FAKE_IDS[calls[0]], FAKE_IDS[calls[4]]]);
+});
+
+Deno.test("a signal check passes a payload the codec accepts", () => {
+  const [first] = codec.signalChecks(fakeCodec({ ok: true }, []));
+  assert.equal(first.check(new Uint8Array()), undefined);
+});
+
+Deno.test("a signal check maps malformed and unknown-type to corrupt", () => {
+  for (const kind of ["malformed", "unknown-type"] as const) {
+    const [first] = codec.signalChecks(
+      fakeCodec({ ok: false, kind, code: -1 }, []),
+    );
+    assert.equal(first.check(new Uint8Array()), "corrupt");
+  }
+});
+
+Deno.test("a signal check maps a known rule text to that rule", () => {
+  for (const rule of codec.RULES) {
+    const [first] = codec.signalChecks(
+      fakeCodec({ ok: false, kind: "rule", code: 4, rule }, []),
+    );
+    assert.deepEqual(first.check(new Uint8Array()), { rule });
+  }
+});
+
+Deno.test("a signal check throws CodecError for a missing or unknown rule text", () => {
+  for (const rule of [undefined, "nonsense", ""]) {
+    const [first] = codec.signalChecks(
+      fakeCodec({ ok: false, kind: "rule", code: 4, rule }, []),
+    );
+    assert.throws(() => first.check(new Uint8Array()), CodecError);
+  }
 });

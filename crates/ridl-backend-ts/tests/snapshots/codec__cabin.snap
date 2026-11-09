@@ -2,6 +2,8 @@
 source: crates/ridl-backend-ts/tests/codec.rs
 expression: "module(&cabin_model(), \"veh.cabin\")"
 ---
+import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
+import { CodecError } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import type * as t from "./veh.cabin.js";
@@ -201,3 +203,27 @@ export const Horn = {
   iface: 2,
   active: { iface: 2, ord: 1, kind: "signal", payload: codecHealth },
 } as const;
+
+function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {
+  const typeId = codec.typeId(entry.payload.type);
+  return {
+    iface: entry.iface,
+    ord: entry.ord,
+    check: (bytes) => {
+      const result = codec.verify(typeId, bytes);
+      if (result.ok) return undefined;
+      if (result.kind !== "rule") return "corrupt";
+      const rule = (RULES as readonly string[]).find((known) => known === result.rule);
+      if (rule === undefined) throw new CodecError("unknown rule during signal verification");
+      return { rule: rule as (typeof RULES)[number] };
+    },
+  };
+}
+
+/** Returns the check of each signal of the catalog, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */
+export function signalChecks(codec: Codec): readonly SignalCheckEntry[] {
+  return [
+    signalCheck(codec, Cabin.temperature),
+    signalCheck(codec, Horn.active),
+  ];
+}

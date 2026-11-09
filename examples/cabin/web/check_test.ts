@@ -19,6 +19,7 @@ import {
   Horn,
   PAYLOAD_TYPES,
   RULES,
+  signalChecks,
 } from "./generated/veh.cabin.codec.ts";
 import type { Temperature } from "./generated/veh.cabin.ts";
 import {
@@ -175,6 +176,23 @@ Deno.test("the codec accepts 20 and rejects -41 and 86 with the range rule", () 
     assert.equal((result as { kind: string }).kind, "rule");
     assert.equal((result as { code: number }).code, 4);
   }
+});
+
+Deno.test("signalChecks refuses a value outside the range and passes one inside it", () => {
+  const checks = signalChecks(codec);
+  const temperature = checks.find((entry) =>
+    entry.iface === Cabin.temperature.iface &&
+    entry.ord === Cabin.temperature.ord
+  );
+  assert.ok(temperature !== undefined);
+  assert.equal(temperature.check(encode(20)), undefined);
+  assert.deepEqual(temperature.check(encode(86)), { rule: "range" });
+  assert.deepEqual(temperature.check(encode(-41)), { rule: "range" });
+  assert.equal(temperature.check(encode(20).slice(0, 4)), "corrupt");
+  assert.deepEqual(
+    checks.map(({ iface, ord }) => [iface, ord]),
+    [[Cabin.iface, Cabin.temperature.ord], [Horn.iface, Horn.active.ord]],
+  );
 });
 
 Deno.test("the codec rejects a truncated payload as malformed", () => {
