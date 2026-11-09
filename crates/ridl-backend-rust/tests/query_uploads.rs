@@ -35,6 +35,10 @@ struct State {
     finished: bool,
     starts: usize,
     blocked: bool,
+    reply_blocked: bool,
+    ready_polls: usize,
+    source_polls: usize,
+    drops: usize,
     callbacks: Vec<&'static str>,
     waker: Option<Waker>,
 }
@@ -43,6 +47,7 @@ struct Upload(Rc<RefCell<State>>);
 impl Consumer for Upload {
     type Item = generated::Reading;
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
+        self.0.borrow_mut().ready_polls += 1;
         if self.0.borrow().blocked {
             Poll::Pending
         } else {
@@ -78,6 +83,10 @@ impl Source for Upload {
     type Item = generated::Reading;
     fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Interrupted>>> {
         let mut s = self.0.borrow_mut();
+        s.source_polls += 1;
+        if s.reply_blocked {
+            return Poll::Pending;
+        }
         if let Some(item) = s.queued.pop_front() {
             Poll::Ready(Some(Ok(item)))
         } else if s.finished {
@@ -86,6 +95,11 @@ impl Source for Upload {
             s.waker = Some(cx.waker().clone());
             Poll::Pending
         }
+    }
+}
+impl Drop for Upload {
+    fn drop(&mut self) {
+        self.0.borrow_mut().drops += 1;
     }
 }
 struct Provider(Upload);
@@ -793,6 +807,12 @@ impl<H: ridl_rt::port::Handler> ridl_rt::port::Handler for ObservedHandler<H> {
     }
 }
 impl<H: ridl_rt::port::StreamHandler> ridl_rt::port::StreamHandler for ObservedHandler<H> {
+    fn claim_forget(&self, c: ridl_rt::port::ClaimId) -> ridl_rt::port::ClaimForget {
+        self.inner.claim_forget(c)
+    }
+    fn wake_on_claim_forget(&self, c: ridl_rt::port::ClaimId, waker: &Waker) {
+        self.inner.wake_on_claim_forget(c, waker);
+    }
     fn pull_claim(
         &mut self,
         c: ridl_rt::port::ClaimId,
@@ -1044,4 +1064,143 @@ fn cancelling_a_query_wakes_a_named_sink_holding_an_element_before_admission() {
             Transport::Interrupted
         ))))
     );
+}
+
+#[test]
+fn forgetting_a_query_drops_its_pending_consumer_without_polling_it_again() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    for round in 1..=Loopback::SLOTS + 1 {
+        let (call, mut sink) = client.summarize(generated::LogSummarizeParams {});
+        pending(&mut serve);
+        sink.send(&reading(7)).unwrap();
+        pending(&mut serve);
+        let polls = state.borrow().ready_polls;
+        if round % 2 == 0 {
+            assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+        }
+        drop(call);
+        pending(&mut serve);
+        assert_eq!(
+            state.borrow().drops,
+            round,
+            "the forgotten consumer is dropped"
+        );
+        assert_eq!(
+            state.borrow().ready_polls,
+            polls,
+            "release does not poll the consumer"
+        );
+        drop(sink);
+    }
+    assert_eq!(state.borrow().starts, Loopback::SLOTS + 1);
+}
+
+#[test]
+fn dropping_an_acknowledged_commands_sink_drops_its_pending_consumer() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+    pending(&mut serve);
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    sink.send(&reading(7)).unwrap();
+    pending(&mut serve);
+    let polls = state.borrow().ready_polls;
+    drop(sink);
+    pending(&mut serve);
+    assert_eq!(state.borrow().drops, 1);
+    assert_eq!(state.borrow().ready_polls, polls);
+    assert_eq!(
+        state.borrow().failures,
+        vec![CallError::Transport(Transport::Interrupted)]
+    );
+}
+
+#[test]
+fn a_normally_forgotten_command_keeps_its_ended_pending_consumer_until_completion() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let ports = RecordingPorts::new(&rt);
+    let log = ports.log();
+    let mut client = generated::log::Client::new(ports);
+    let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+    pending(&mut serve);
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    sink.send(&reading(7)).unwrap();
+    pending(&mut serve);
+    sink.send(&reading(8)).unwrap();
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    assert_eq!(
+        doubles::forgets(&log).len(),
+        1,
+        "end after acknowledgment normally forgets the call"
+    );
+    drop(call);
+    drop(sink);
+    for _ in 0..3 {
+        pending(&mut serve);
+    }
+    assert_eq!(
+        state.borrow().drops,
+        0,
+        "normal forget preserves the consumer"
+    );
+    assert!(state.borrow().failures.is_empty());
+    state.borrow_mut().blocked = false;
+    for _ in 0..4 {
+        pending(&mut serve);
+    }
+    assert_eq!(state.borrow().accepted, vec![reading(7), reading(8)]);
+    assert_eq!(state.borrow().ends, 1);
+    assert_eq!(state.borrow().drops, 1);
+}
+
+#[test]
+fn forgetting_a_query_after_parameter_end_wakes_serve_and_drops_its_pending_reply() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().reply_blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (call, mut sink) = client.pipe(generated::LogPipeParams {});
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    pending(&mut serve);
+    pending(&mut serve);
+    assert_eq!(state.borrow().ends, 1);
+    let count = std::sync::Arc::new(WakeCount::default());
+    let waker = Waker::from(count.clone());
+    assert!(
+        Pin::new(&mut serve)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    assert_eq!(
+        count.0.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "an ended parameter does not wake the forget registration at once"
+    );
+    let polls = state.borrow().source_polls;
+    drop(call);
+    assert_eq!(
+        count.0.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "forget wakes serve after the parameter ended"
+    );
+    pending(&mut serve);
+    assert_eq!(state.borrow().drops, 1);
+    assert_eq!(
+        state.borrow().source_polls,
+        polls,
+        "release does not poll the pending reply"
+    );
+    assert_eq!(state.borrow().ends, 1);
+    assert!(
+        state.borrow().failures.is_empty(),
+        "an ended consumer is not failed again"
+    );
+    drop(sink);
 }

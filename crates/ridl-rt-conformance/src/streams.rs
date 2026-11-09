@@ -17,6 +17,13 @@
 //! and take its claim through the same runtime, so one value holds both
 //! sides of every stream.
 //!
+//! The `claim_forget_*` functions form the separate, opt-in `claim_forget`
+//! arm. They check runtimes that override both provided methods of
+//! `StreamHandler`; a runtime using the defaults omits that arm. Its query
+//! consumes no chunk and pushes nothing, and its registration remains valid
+//! independently of a parameter stream's end. No additional factory hook is
+//! needed.
+//!
 //! The suite attaches to a catalog with no descriptor, so a runtime under
 //! test holds no member table and does not know which streams a member
 //! declares. Such a runtime must accept [`REPLY_STREAM`] on a query, and
@@ -1211,5 +1218,209 @@ where
         rt.pull(c, REPLY_STREAM, &mut out),
         Ok(Pull::End),
         "the caller's abort dropped the unread chunk of the ended stream"
+    );
+}
+
+/// The optional claim-forget capability reports a forgotten reply stream
+/// without pushing a probe chunk or consuming a parameter chunk.
+pub fn claim_forget_reports_a_forgotten_reply_stream<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::NotForgotten
+    );
+    let (count, waker) = task();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert!(
+        wakes(&count) > 0,
+        "forget wakes the provider without a push"
+    );
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::Forgotten
+    );
+}
+
+/// A call with only a stream parameter exposes forget through its claim.
+/// Reading the query consumes no queued chunk and pushes no reply chunk.
+pub fn claim_forget_preserves_chunks_on_a_parameter_only_call<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    assert_eq!(rt.push(c, PARAM_1, &[7]), Ok(1));
+    rt.forget(c);
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::Forgotten
+    );
+    let mut out = [0; 8];
+    assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+    assert_eq!(out[0], 7, "query did not consume the chunk");
+
+    let (mut rt, c, claim) = claimed_query::<F>();
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::NotForgotten
+    );
+    assert_eq!(
+        rt.pull(c, REPLY_STREAM, &mut out),
+        Ok(Pull::Pending),
+        "query pushes nothing"
+    );
+}
+
+/// An acknowledged command retains its claim-forget signal while its open
+/// parameter stream remains available to the provider.
+pub fn claim_forget_reports_an_acknowledged_command<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let c = rt.command(IFACE, ORD, &[], None).expect("command");
+    let claim = claim_next(&mut rt);
+    assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+    rt.settle(claim, Ok(&[])).expect("acknowledge");
+    assert_eq!(rt.ack(c), Some(Ok(())));
+    let (count, waker) = task();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert!(wakes(&count) > 0);
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::Forgotten
+    );
+}
+
+/// Ending a parameter does not wake a subsequent claim-forget registration
+/// at once. Forget wakes it and reports the normal producer end, even after
+/// the provider already read that end.
+pub fn claim_forget_waits_after_a_parameter_stream_ended<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    rt.end(c, PARAM_1).expect("end parameter");
+    assert_eq!(rt.pull_claim(claim, PARAM_1, &mut []), Ok(Pull::End));
+    let (count, waker) = task();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(
+        wakes(&count),
+        0,
+        "ended stream does not satisfy forget registration"
+    );
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::NotForgotten
+    );
+    rt.forget(c);
+    assert!(wakes(&count) > 0);
+    assert_eq!(rt.claim_forget(claim), ridl_rt::port::ClaimForget::AfterEnd);
+}
+
+/// A normally forgotten acknowledged command keeps its ended parameter for
+/// the provider; every named parameter must have ended without a stop.
+pub fn claim_forget_distinguishes_ended_and_stopped_parameters<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    for stopped in [false, true] {
+        let mut rt = runtime::<F>();
+        rt.serve(IFACE, &[ORD]).expect("serve");
+        let c = rt.command(IFACE, ORD, &[], None).expect("command");
+        let claim = claim_next(&mut rt);
+        rt.end(c, PARAM_1).expect("end first parameter");
+        if stopped {
+            rt.abort(c, PARAM_2, CallError::Transport(Transport::Interrupted))
+                .expect("stop second parameter");
+        } else {
+            rt.end(c, PARAM_2).expect("end second parameter");
+        }
+        rt.settle(claim, Ok(&[])).expect("acknowledge");
+        rt.forget(c);
+        assert_eq!(
+            rt.claim_forget(claim),
+            if stopped {
+                ridl_rt::port::ClaimForget::Forgotten
+            } else {
+                ridl_rt::port::ClaimForget::AfterEnd
+            }
+        );
+    }
+}
+
+/// A claim offered through a short read is queryable before it is taken.
+/// Runtimes that present the call without a short-read offer skip this case.
+pub fn claim_forget_reports_a_claim_only_offered<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let c = rt.query(IFACE, ORD, &[1], None).expect("query");
+    let claim = match rt.next_claim(&mut []) {
+        Err(ReadError::ShortClaim { claim, .. }) => claim,
+        Ok(Some(_)) => return,
+        other => panic!("expected an offer or claim, got {other:?}"),
+    };
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::NotForgotten
+    );
+    let (count, waker) = task();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert!(wakes(&count) > 0);
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::Forgotten
+    );
+}
+
+/// A registration refresh wakes nothing; displacement wakes the old task.
+/// Already forgotten and unknown claims wake registrations immediately.
+pub fn claim_forget_registration_refreshes_displaces_and_wakes_unknown<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let (first, first_waker) = task();
+    let (second, second_waker) = task();
+    rt.wake_on_claim_forget(claim, &first_waker);
+    rt.wake_on_claim_forget(claim, &first_waker);
+    assert_eq!(wakes(&first), 0);
+    rt.wake_on_claim_forget(claim, &second_waker);
+    assert_eq!(wakes(&first), 1, "displaced registration wakes");
+    assert_eq!(wakes(&second), 0);
+    rt.forget(c);
+    assert_eq!(wakes(&second), 1);
+    rt.wake_on_claim_forget(claim, &second_waker);
+    assert_eq!(wakes(&second), 2, "already forgotten wakes immediately");
+    rt.settle(claim, Err(CallError::Transport(Transport::Interrupted)))
+        .expect("settle forgotten claim");
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::Forgotten
+    );
+    rt.wake_on_claim_forget(claim, &second_waker);
+    assert_eq!(
+        wakes(&second),
+        3,
+        "reclaimed unknown claim wakes immediately"
     );
 }

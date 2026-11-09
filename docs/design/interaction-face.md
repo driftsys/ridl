@@ -501,7 +501,7 @@ Proto3 element; zero means full only for a nonempty chunk. Byte and text sinks
 push directly from the caller's buffer and return `Pending` with stream interest
 when full. A peer refusal reaches the next push or end, including `poll_ready`
 only when the named sink holds an element; an empty sink's `poll_ready` returns
-success without a port call (driftsys/ridl#1170).
+success without a port call.
 
 The call and sink share `RefCell<P>` and inline upload state in the client; port
 borrows last one synchronous operation and the pair is not `Send`. Before
@@ -518,15 +518,28 @@ waker. An unfinished sink aborts and forgets its call once when dropped. An
 ended sink does not withdraw an unclaimed call; its call value retains ownership
 until acknowledgment or reply, or cancellation by drop.
 
+A command's caller forgets normally after both its acknowledgment and successful
+sink end. The provider may still be processing the ended upload then.
+`StreamHandler::claim_forget` distinguishes this `AfterEnd` state from an
+abandoned upload, so the normal forget does not discard the remaining input or
+stop its consumer. The [port contract](ridl-rt.md#the-ports) defines the three
+answers and their registration.
+
 The upload driver pulls a terminal outcome without waiting for consumer
 readiness when it holds no earlier element. It can retain one pulled element
 while the consumer is not ready, and accepts that element before pulling the
 next outcome. End and failure notifications are delivered once. They release the
-member slot for a command or an upload query with a plain reply. A duplex query
-retains its slot after upload end until its reply source finishes; upload
-failure releases it. The byte consumer receives every held suffix before the
-next pull. `serve` panics if `ByteConsumer::poll_write` returns zero or more
-than the offered length for a nonempty buffer.
+member slot for a command or an upload query with a plain reply. Before driving
+an active upload, `serve` registers for its claim's forget and queries the
+claim's state. A query releases its slot for either forgotten answer. A command
+releases it only for `Forgotten`, keeps driving for `AfterEnd`, and stops making
+this check once it has pulled `End`. Releasing drops the consumer without
+another readiness or write poll and uses the existing stop path to complete the
+deferred forget and return the caller's slot. A duplex query retains its slot
+after upload end until its reply source finishes; upload failure releases it.
+The byte consumer receives every held suffix before the next pull. `serve`
+panics if `ByteConsumer::poll_write` returns zero or more than the offered
+length for a nonempty buffer.
 
 A plain upload query retains ordinary arguments for `Query::ensure`, calls
 `q_reply` after notifying its consumer of end, and settles the reply then. The
@@ -615,26 +628,30 @@ parameter stream, including byte and text streams and uploads. `dispatch` checks
 the arguments and `require` as for any query, calls the method, and keeps the
 source in the member's slot of `Serve` without settling the claim; the face
 drives one stream per member at a time, and a call of a member whose slot is
-held is settled `Transport::Busy`. The handler port gives `serve` no signal of a
-caller's `forget` except through the next push, so while a member's source
-answers `Pending`, a caller that timed out or dropped its stream keeps the
-member `Busy` until the source yields its next element; that push fails, and the
-source is dropped and the member freed then. Each poll of `Serve` drives its
-streams before it takes claims. An element that found the stream's window full
-is kept, as a range of the element buffer inline in `Serve`, and pushed again on
-a later poll before the source is polled again; otherwise the source is polled
-at most once per poll, and that poll counts as one of the 32. An element is
-encoded and checked against its type before `push_claim`; one that fails stops
-the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` is
-`end_claim`, `Err(Interrupted)` and a push refused `TooLarge` are `abort_claim`
-with `Transport::Interrupted`, and a push answered `Failed(_)`, a caller that
-refused or stopped reading the stream, is `end_claim`, which settles the claim
-so that the caller's call slot is given back. The source is dropped with its
-slot. Dropping `Serve` stops every stream it still drives with `abort_claim` and
-`Transport::Interrupted` and drops its source, so that `blocking::serve`, which
-drops the future when its timeout passes, leaves no claim held. `ensure` is not
-evaluated on a streamed reply. `tests/stream_face.rs` tests these paths over
-`ridl-loopback`.
+held is settled `Transport::Busy`. Before driving each running stream slot,
+`serve` registers with `StreamHandler::wake_on_claim_forget`, then reads
+`claim_forget`. Either forgotten answer releases a reply source immediately,
+without polling it, and completes the claim through the existing stop path. The
+member is then available for the next call in that poll or the next. This works
+while the source answers `Pending` and after a parameter stream ended, because
+the registration is independent of stream state. A runtime that keeps the
+provided methods' defaults supplies no forget observation: over it a pending
+source still holds the member until its next push detects the forget. Each poll
+of `Serve` drives its streams before it takes claims. An element that found the
+stream's window full is kept, as a range of the element buffer inline in
+`Serve`, and pushed again on a later poll before the source is polled again;
+otherwise the source is polled at most once per poll, and that poll counts as
+one of the 32. An element is encoded and checked against its type before
+`push_claim`; one that fails stops the stream with `Contract::InvalidValue` and
+is not sent. `Ready(None)` is `end_claim`, `Err(Interrupted)` and a push refused
+`TooLarge` are `abort_claim` with `Transport::Interrupted`, and a push answered
+`Failed(_)`, a caller that refused or stopped reading the stream, is
+`end_claim`, which settles the claim so that the caller's call slot is given
+back. The source is dropped with its slot. Dropping `Serve` stops every stream
+it still drives with `abort_claim` and `Transport::Interrupted` and drops its
+source, so that `blocking::serve`, which drops the future when its timeout
+passes, leaves no claim held. `ensure` is not evaluated on a streamed reply.
+`tests/stream_face.rs` tests these paths over `ridl-loopback`.
 
 Byte and text reply members instead return `ByteSource`; `serve` polls each
 source once per poll under the same shared budget and stages bytes up to
@@ -650,7 +667,10 @@ Each member with an upload has its own provider slot, with the same
 arguments and `require`, settles the acknowledgment, then calls the provider.
 `serve` checks uploaded named elements before `accept` and UTF-8 before
 `poll_write`, retains a partly consumed chunk before pulling another, and
-notifies each consumer once with `end` or `failed`. A query's upload failure
+notifies each consumer once with `end` or `failed`. The claim-forget check also
+releases a pending upload consumer before another consumer poll: both forgotten
+answers release a query, while `AfterEnd` preserves a command's normal
+processing after the caller's successful sink end. A query's upload failure
 aborts stream 1 before settling the claim with the error; a command is not
 settled a second time. Dropping `Serve` aborts open uploads and notifies their
 consumers with `failed(Interrupted)` before dropping them.

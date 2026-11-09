@@ -34,7 +34,7 @@ adds:
 | `payload`     | `Payload<E>`, `check`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                                                                                             |
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                                                                                                   |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`; `SIGNAL_EVENT_CEILING`, `CALL_CEILING`, `FIXED_CEILING` and `default_ceiling`, the default ceilings of the catalog rule |
-| `port`        | `Attached`, `Encoded`, `Clock`, `Check`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                       |
+| `port`        | `Attached`, `Encoded`, `Clock`, `Check`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `ClaimForget`, `Correlation`, `Watermark`, `Changed`, the port errors                                                        |
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                                                                          |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                                                                           |
 | `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements; `Source`, `ByteSource`, `Consumer`, `ByteConsumer` and `Interrupted`, the stream traits and interruption an application supplies — the section "The face traits" below                                          |
@@ -817,8 +817,13 @@ pub trait StreamHandler: Handler {
     fn push_claim(&mut self, claim: ClaimId, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>;
     fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError>; // REPLY_STREAM: settles Ok(&[])
     fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError>;
+    fn claim_forget(&self, _claim: ClaimId) -> ClaimForget { ClaimForget::NotForgotten }
+    fn wake_on_claim_forget(&self, _claim: ClaimId, _waker: &core::task::Waker) {}
 }
 #[must_use] pub enum Pull { Chunk(usize), End, Pending, Failed(CallError) }
+#[must_use]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClaimForget { NotForgotten, AfterEnd, Forgotten }
 ```
 
 `StreamCaller` and `StreamHandler` are extensions, as `Wakeable`,
@@ -842,6 +847,52 @@ do: `ReadError`, and `PushError::Contract` and `PushError::Detached`, are the
 port call itself; `Pull::Failed` and `PushError::Failed` are the other side's
 verdict on the stream. Both traits are implemented for `&mut P`, and
 `ridl-loopback` implements both.
+
+**A provider can observe a caller's forget without moving a stream.**
+`StreamHandler::claim_forget` consumes no chunk and delivers nothing to the
+caller. It answers for every claim the provider can still name, including a
+command's claim after its acknowledgment settled it, and a claim only offered
+through `ReadError::ShortClaim`. An offered claim that was not forgotten answers
+`NotForgotten`. The three answers mean:
+
+- `NotForgotten`: the caller did not forget the call, or the runtime cannot
+  tell.
+- `AfterEnd`: the caller forgot the call after every named parameter stream
+  (`StreamNo >= 1`) was ended by its producer without a stop, and at least one
+  parameter stream was named. This classification uses the producer's end and
+  stop state, including after the provider reads the end while the claim is
+  still known.
+- `Forgotten`: the caller forgot with a named parameter stream still open or
+  stopped, no parameter stream was named, the call has no parameter stream, or
+  the runtime no longer knows the claim.
+
+`wake_on_claim_forget` stores one waker per claim independently of any stream's
+state. A new registration replaces the old one, waking the displaced waker
+unless `Waker::will_wake` says it wakes the same task. A stored waker is taken
+when woken. A registration for a call already forgotten or a claim no longer
+known wakes at once. A wake may be spurious: on each poll a provider registers
+first, then calls `claim_forget` to confirm. This order prevents a forget
+between the registration and the query from being lost. This is also the
+registration to use after a parameter stream ended: `Interest::ClaimStream` on
+that stream wakes at once and cannot wait for a later forget.
+
+Both methods are provided. Their defaults answer `NotForgotten` and store
+nothing, preserving the behaviour of a runtime that does not override them.
+`ridl-loopback` overrides both; wrappers and the `&mut P` implementation forward
+both. The generated face releases a reply source or a query's upload consumer on
+either forgotten answer without polling it again. A command's upload consumer is
+released only for `Forgotten`, because the generated caller normally forgets
+after acknowledgment and successful sink end while the provider may still be
+processing the ended upload. `AfterEnd` preserves that processing. Once the
+command driver has pulled `End`, it no longer checks for a forget.
+
+**Why two methods and three answers.** The query reports state without moving
+data, and the separate registration lets a provider wait even when its stream
+already ended. Adding a key to exhaustive `Interest` would break existing
+runtimes. A boolean cannot distinguish the normal forget after a command's end
+from an abandoned upload. Provided methods preserve existing runtimes and let a
+face retain its previous push or pull failure path when the runtime supplies no
+forget observation.
 
 `Watermark` has no sequence number; see
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10's

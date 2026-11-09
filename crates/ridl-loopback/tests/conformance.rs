@@ -1,9 +1,10 @@
 //! The port contract suite of `ridl-rt-conformance`, run over this runtime.
 //!
-//! Five extension flags run here: those of both signal extensions
+//! Six extension flags run here: those of both signal extensions
 //! (`scannable`, `coherent`), of `Wakeable`, of the two stream extensions
 //! (`streams`), which the loopback implements, and `trace`, because the
-//! loopback carries the trace context. The tests
+//! loopback carries the trace context. `claim_forget` checks the overridden
+//! claim-forget methods separately from the existing stream group. The tests
 //! of what only this runtime can express are in `tests/ports.rs`. The identity
 //! group runs with `node`, and `identity_debug` runs with `debug`.
 
@@ -63,7 +64,7 @@ impl Factory for LoopbackFactory {
     }
 }
 
-ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent, wakeable, trace, streams);
+ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent, wakeable, trace, streams, claim_forget);
 
 #[cfg(feature = "node")]
 mod identity {

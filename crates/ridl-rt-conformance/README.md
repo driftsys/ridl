@@ -54,9 +54,16 @@ The extension flags after the factory are optional. `scannable` and `coherent`
 select the tests of the two signal extensions, `wakeable` the tests of
 `Wakeable`, `trace` the tests of a runtime that carries the trace context, and
 `streams` the tests of the two stream extensions, `StreamCaller` and
-`StreamHandler`, which also require `Wakeable`. `suite!(MyFactory)` alone runs
-the tests of the ports every runtime presents. The cases of the sending ports
-require a payload above the member's limit to be refused with
+`StreamHandler`, which also require `Wakeable`. `claim_forget` checks the
+provided `StreamHandler::claim_forget` and `wake_on_claim_forget` methods for a
+runtime that overrides both. It requires the same ports as `streams`, adds no
+`Factory` hook, and is selected separately: a runtime that uses the defaults
+keeps its existing suite invocation and omits this flag. The group covers reply
+streams, parameter-only calls, acknowledged commands, already ended parameters,
+claims only offered through a short read, registration replacement and unknown
+claims, and that the query consumes and delivers no chunk. `suite!(MyFactory)`
+alone runs the tests of the ports every runtime presents. The cases of the
+sending ports require a payload above the member's limit to be refused with
 `TooLarge { cap }`, `cap` being that limit, at the default ceiling of the
 member's kind when the runtime was given no other limit (ADR-0030 decision 19).
 The reference runtime

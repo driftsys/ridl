@@ -145,8 +145,8 @@ use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal, StreamNo};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
-    EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
+    Attached, Caller, Changed, Claim, ClaimForget, ClaimId, Clock, CoherentSignals, Correlation,
+    Encoded, EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
     RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError,
     SignalReader, SignalWriter, StreamCaller, StreamHandler, SubscribeError, Wakeable, Watermark,
     WriteError,
@@ -640,6 +640,14 @@ impl<E: Encoding> StreamCaller for Loopback<E> {
 }
 
 impl<E: Encoding> StreamHandler for Loopback<E> {
+    fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        self.handles.handler.claim_forget(claim)
+    }
+
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        self.handles.handler.wake_on_claim_forget(claim, waker);
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,

@@ -621,6 +621,31 @@ pub trait StreamCaller: Caller {
 ///
 /// The errors have the two layers of [`StreamCaller`]'s.
 pub trait StreamHandler: Handler {
+    /// Reports whether the caller forgot this claim without consuming a chunk
+    /// or delivering anything to the caller. It answers for every claim the
+    /// provider can still name, including claims only offered to the provider
+    /// and acknowledged commands whose claims were settled.
+    /// A claim only offered and not forgotten answers `NotForgotten`.
+    ///
+    /// Register with [`Self::wake_on_claim_forget`] before querying, so a forget
+    /// between registration and this query is not lost. A wake may be spurious;
+    /// query again after every wake. The default cannot observe forgets and
+    /// answers `NotForgotten`, preserving a face's existing stream behavior.
+    /// A runtime that observes forgets overrides both methods.
+    fn claim_forget(&self, _claim: ClaimId) -> ClaimForget {
+        ClaimForget::NotForgotten
+    }
+
+    /// Registers one waker per claim for the caller's forget, independently of
+    /// every stream's state. In particular, an ended parameter stream does not
+    /// wake this registration at once, unlike [`Interest::ClaimStream`].
+    /// A new registration replaces the old and wakes the displaced waker when
+    /// it does not wake the same task. A stored registration is cleared when
+    /// woken. A forgotten or unknown claim wakes the
+    /// new waker at once. A wake may be spurious: register first, then confirm
+    /// with [`Self::claim_forget`]. The default stores nothing and never wakes.
+    fn wake_on_claim_forget(&self, _claim: ClaimId, _waker: &Waker) {}
+
     /// Copies the next chunk of stream `s` of the claim into the front of
     /// `out`, with the answers and errors of [`StreamCaller::pull`].
     fn pull_claim(
@@ -645,6 +670,27 @@ pub trait StreamHandler: Handler {
     /// Stops stream `s` of the claim with outcome `e`, from either side of the
     /// stream, as [`StreamCaller::abort`] does.
     fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError>;
+}
+
+/// Whether the caller forgot a claim, as [`StreamHandler::claim_forget`] reports.
+///
+/// A command caller normally forgets after its acknowledgment and the producer
+/// end of its parameter stream. `AfterEnd` lets a provider continue processing
+/// that ended stream, including chunks or consumer work still pending.
+#[must_use]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClaimForget {
+    /// The caller did not forget the call, or the runtime cannot tell.
+    NotForgotten,
+    /// The caller forgot after every named parameter stream ended without a
+    /// stop, with at least one parameter stream named. The producer end and
+    /// stop state remain relevant after the provider reads `End`, while the
+    /// claim remains known.
+    AfterEnd,
+    /// The caller forgot with a parameter stream open or stopped, with no
+    /// parameter stream named (including a call with none), or the runtime no
+    /// longer knows the claim.
+    Forgotten,
 }
 
 /// The outcome of one [`StreamCaller::pull`] or [`StreamHandler::pull_claim`].
@@ -881,6 +927,9 @@ pub enum Interest {
     /// or its end arrived, its window freed, the caller stopped it with an
     /// abort, the caller forgot the call, or a settlement released it.
     /// The waker is stored with the claim, one for each stream of the claim.
+    /// An ended stream may wake this registration at once; use
+    /// [`StreamHandler::wake_on_claim_forget`] to wait independently for the
+    /// caller's forget after a parameter stream ended.
     ClaimStream(ClaimId, StreamNo),
 }
 
@@ -1227,6 +1276,13 @@ impl<P: StreamCaller + ?Sized> StreamCaller for &mut P {
 }
 
 impl<P: StreamHandler + ?Sized> StreamHandler for &mut P {
+    fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        (**self).claim_forget(claim)
+    }
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        (**self).wake_on_claim_forget(claim, waker)
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,

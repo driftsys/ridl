@@ -138,11 +138,10 @@ pub(super) fn dispatch(
     // `Transport::Busy`, the outcome of a call refused at admission that the
     // caller may send again later; `require` is evaluated first, so a call
     // that breaks it reads `PreconditionFailed` whatever the slot holds. A
-    // slot is freed only when `serve` ends or stops its stream, and the
-    // handler port gives no signal of a caller's forget except through the
-    // next push: while the source answers `Pending`, a caller that timed out
-    // or dropped its stream keeps the member busy until the source yields
-    // its next element.
+    // slot is freed when `serve` ends or stops its stream, including a
+    // caller's forget reported by `StreamHandler::claim_forget`. A newly
+    // started source is first checked and driven on the next serve poll.
+    // With the provided defaults, a forget is detected by a failed push.
     let stream_arms = streams.iter().map(|call| {
         if call.upload() {
             return super::upload_query::dispatch(call);

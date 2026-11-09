@@ -62,8 +62,8 @@ use ridl_rt::contract::{CatalogRef, InterfaceNo, Kind, Ordinal, StreamNo};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
-    EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
+    Attached, Caller, Changed, Claim, ClaimForget, ClaimId, Clock, CoherentSignals, Correlation,
+    Encoded, EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
     RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError,
     SignalReader, SignalWriter, StreamCaller, StreamHandler, SubscribeError, Wakeable, Watermark,
     WriteError,
@@ -758,6 +758,16 @@ impl<E: Encoding> Wakeable for HandlerHandle<E> {
 /// not forgotten yet. Any other claim, and a push, an end or a pull from the
 /// wrong side, answers `Contract::UnknownInteraction`.
 impl<E: Encoding> StreamHandler for HandlerHandle<E> {
+    fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        lock(&self.shared).claim_forget(claim)
+    }
+
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        locked(&self.shared, |store, wake| {
+            store.wait_claim_forget(claim, waker, wake)
+        });
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,

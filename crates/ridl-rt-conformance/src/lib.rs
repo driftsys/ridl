@@ -18,11 +18,11 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, and those of the five
+//! // Every test of the ports every runtime presents, and those of the six
 //! // extension flags named here; `trace` is the flag of a runtime that
 //! // carries the trace context. The `identity` and `identity_debug` flags
 //! // need `IdentityFactory` as well (see the `identity` module).
-//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams);
+//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams, claim_forget);
 //! ```
 //!
 //! `ridl-loopback` is the first runtime to run it
@@ -36,6 +36,11 @@
 //! `identity_debug` adds twin exclusion, reservation lifetime and listener
 //! permissions; enable this crate's `debug` feature to select it. Both flags
 //! leave the original [`Factory`] hooks unchanged.
+//!
+//! The opt-in `claim_forget` flag checks the provided claim-forget methods of
+//! `StreamHandler` for runtimes that override both. It has the same port bounds
+//! as `streams` and adds no factory hook. A runtime using the methods' defaults
+//! omits this flag and retains its existing stream tests.
 //!
 //! # What the suite leaves out
 //!
@@ -232,6 +237,10 @@ pub trait Factory {
 /// `coherent`, the two signal extensions, `wakeable`, `trace`, and
 /// `streams`, the two stream extensions, in any combination, as in
 /// `suite!(F; scannable, coherent, wakeable, trace, streams)`.
+/// `claim_forget` selects the claim-forget capability for a runtime that
+/// overrides both provided methods of `StreamHandler`; it requires the same
+/// ports as `streams`, and leaves that existing group unchanged. A runtime
+/// using the defaults omits `claim_forget`.
 /// `identity` requires [`identity::IdentityFactory`]. `identity_debug` requires
 /// the same hook and this crate's `debug` feature; selection uses this crate's
 /// feature, regardless of features declared by the calling crate.
@@ -400,6 +409,17 @@ macro_rules! suite {
             streams::a_receivers_abort_of_an_ended_stream_drops_its_unread_chunks,
         );
     };
+    (@claim_forget $factory:ty) => {
+        $crate::suite!(@tests $factory;
+            streams::claim_forget_reports_a_forgotten_reply_stream,
+            streams::claim_forget_preserves_chunks_on_a_parameter_only_call,
+            streams::claim_forget_reports_an_acknowledged_command,
+            streams::claim_forget_waits_after_a_parameter_stream_ended,
+            streams::claim_forget_distinguishes_ended_and_stopped_parameters,
+            streams::claim_forget_reports_a_claim_only_offered,
+            streams::claim_forget_registration_refreshes_displaces_and_wakes_unknown,
+        );
+    };
     (@identity $factory:ty) => {
         $crate::suite!(@tests $factory;
             identity::identity_positive_grants,
@@ -526,7 +546,8 @@ fn blank_change() -> Changed {
 mod tests {
     /// The arm of `suite!` a test belongs in: the base arm, the arm of the
     /// one extension its signature asks `F::Runtime` for, the `streams` arm
-    /// when its signature asks for a stream extension, or the `trace` arm
+    /// when its signature asks for a stream extension (`claim_forget_` names
+    /// select the optional claim-forget capability), or the `trace` arm
     /// when it sends a trace context and asserts that the context arrives.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Arm {
@@ -536,6 +557,7 @@ mod tests {
         Wakeable,
         Trace,
         Streams,
+        ClaimForget,
         Identity,
         IdentityDebug,
     }
@@ -595,7 +617,11 @@ mod tests {
                 let streams =
                     signature.contains("StreamCaller") || signature.contains("StreamHandler");
                 let mut asked: Vec<Arm> = if streams {
-                    vec![Arm::Streams]
+                    vec![if name.starts_with("claim_forget_") {
+                        Arm::ClaimForget
+                    } else {
+                        Arm::Streams
+                    }]
                 } else {
                     [
                         ("ScannableSignals", Arm::Scannable),
@@ -629,7 +655,7 @@ mod tests {
     }
 
     /// The text of each arm of `suite!` that lists tests.
-    fn macro_arms() -> [(Arm, &'static str); 8] {
+    fn macro_arms() -> [(Arm, &'static str); 9] {
         let lib = include_str!("lib.rs");
         let between = |from: &str, to: &str| {
             let start = lib.find(from).expect("the arm's opening") + from.len();
@@ -656,7 +682,11 @@ mod tests {
             ),
             (
                 Arm::Streams,
-                between("(@streams $factory:ty) => {", "(@identity $factory:ty"),
+                between("(@streams $factory:ty) => {", "(@claim_forget $factory:ty"),
+            ),
+            (
+                Arm::ClaimForget,
+                between("(@claim_forget $factory:ty) => {", "(@identity $factory:ty"),
             ),
             (
                 Arm::Identity,

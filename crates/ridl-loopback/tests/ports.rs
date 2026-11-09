@@ -3728,3 +3728,69 @@ fn the_records_cite_only_tests_that_exist_and_the_suite_keeps_the_list_they_cite
          conformance crate's documentation no longer has"
     );
 }
+
+#[test]
+fn claim_forget_is_independent_of_the_handler_identity_and_caller_drop() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let observer = rt.handler();
+    let mut caller = rt.caller();
+    let c = caller.query(IFACE, ORD, &[1], None).unwrap();
+    let claim = rt.next_claim(&mut [0; 8]).unwrap().unwrap().id;
+    assert_eq!(observer.claim_forget(claim), ClaimForget::NotForgotten);
+    let (count, waker) = counting();
+    observer.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    drop(caller);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "caller drop wakes claim-forget registration"
+    );
+    assert_eq!(observer.claim_forget(claim), ClaimForget::Forgotten);
+    rt.settle(claim, Ok(&[])).unwrap();
+    assert_eq!(rt.ack(c), None);
+    assert_eq!(observer.claim_forget(claim), ClaimForget::Forgotten);
+}
+
+#[test]
+fn claim_forget_waker_is_woken_when_an_acknowledged_call_is_reclaimed() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let c = rt.command(IFACE, ORD, &[1], None).unwrap();
+    let claim = rt.next_claim(&mut [0; 8]).unwrap().unwrap().id;
+    rt.settle(claim, Ok(&[])).unwrap();
+    let (count, waker) = counting();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "reclaim wakes the stored claim-forget waker"
+    );
+    assert_eq!(rt.claim_forget(claim), ClaimForget::Forgotten);
+}
+
+#[test]
+fn claim_forget_on_an_offered_call_survives_withdrawal_of_its_handler() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let mut offered_to = rt.handler();
+    let c = rt.query(IFACE, ORD, &[1], None).unwrap();
+    let claim = match offered_to.next_claim(&mut []) {
+        Err(ReadError::ShortClaim { claim, .. }) => claim,
+        other => panic!("expected short claim, got {other:?}"),
+    };
+    let (count, waker) = counting();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(rt.claim_forget(claim), ClaimForget::NotForgotten);
+    drop(offered_to);
+    rt.forget(c);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "withdrawal wakes the stored waker on reclaim"
+    );
+    assert_eq!(rt.claim_forget(claim), ClaimForget::Forgotten);
+}
