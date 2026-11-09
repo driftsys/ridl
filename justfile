@@ -3365,7 +3365,8 @@ _find-browser name:
 # self-test (20 accepted, -41 and 86 rejected with the range rule), attaches
 # with the encoding `flatbuffers` (a bound of 10 s on connect and subscribe,
 # the signal checks of the generated codec module registered), verifies each
-# payload through the codec (a rejection fails the run with its cause), and
+# payload through the codec (a payload the session check or the codec refuses
+# fails the run with its cause), and
 # decodes each verified
 # payload with the `flatc` code. One 30 s limit
 # covers the page's verdict; the server is then stopped and must exit with

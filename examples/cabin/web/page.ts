@@ -83,8 +83,9 @@ async function run(): Promise<Progress> {
     // keeps the default ceiling of its kind.
     interfaces: [Cabin, Horn],
     bound: STEP_BOUND_MS,
-    // The session verifies each `temperature` payload through the wasm codec
-    // before `onPublish` sees it; a refused payload is reported by `onNote`.
+    // The session checks each `temperature` payload with the wasm codec before
+    // `onPublish` sees it. A payload the check refuses arrives as an invalid
+    // sample with `detected` set and no payload; `onPublish` fails the run on it.
     checks: signalChecks(codec),
     onNote(note) {
       if (note.note === "check-failed" && !settled) {
@@ -93,6 +94,21 @@ async function run(): Promise<Progress> {
       }
     },
     onPublish(target, sample) {
+      if (
+        !settled && sample.detected !== undefined &&
+        target.iface === Cabin.temperature.iface &&
+        target.ord === Cabin.temperature.ord
+      ) {
+        settled = true;
+        reject(
+          new Error(
+            `the signal check refused a payload: ${
+              JSON.stringify(sample.detected)
+            }`,
+          ),
+        );
+        return;
+      }
       if (settled || !sample.payload) return;
       if (
         target.iface !== Cabin.temperature.iface ||

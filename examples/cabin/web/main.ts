@@ -65,8 +65,8 @@ const DEADLINE_MS = 30_000;
 /**
  * The time `connect` and `subscribe` each wait for the server, in milliseconds.
  * The server answers within a few milliseconds; the bound makes a server that
- * never answers fail the stage with a `timeout` rejection before the deadline
- * of the whole program expires.
+ * never answers reject the call with `timeout` before the deadline of the
+ * whole program expires.
  */
 const STEP_BOUND_MS = 10_000;
 
@@ -156,9 +156,9 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
   // keeps the default ceiling of its kind.
   interfaces: [Cabin, Horn],
   bound: STEP_BOUND_MS,
-  // The session verifies each `temperature` payload through the wasm codec
-  // before `onPublish` sees it; a payload it refuses never reaches the check
-  // below, so a refusal is reported through `onNote`.
+  // The session checks each `temperature` payload with the wasm codec before
+  // `onPublish` sees it. A payload the check refuses arrives as an invalid
+  // sample with `detected` set and no payload; `onPublish` fails the run on it.
   checks: signalChecks(codec),
   onNote(note) {
     if (note.note === "check-failed") {
@@ -166,6 +166,18 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
     }
   },
   onPublish(target, sample) {
+    if (
+      sample.detected !== undefined &&
+      target.iface === Cabin.temperature.iface &&
+      target.ord === Cabin.temperature.ord && !failure
+    ) {
+      failure = `the signal check refused a payload: ${
+        JSON.stringify(sample.detected)
+      }`;
+      failureStage = stage;
+      enough();
+      return;
+    }
     if (!sample.payload || failure) return;
     if (
       target.iface !== Cabin.temperature.iface ||
