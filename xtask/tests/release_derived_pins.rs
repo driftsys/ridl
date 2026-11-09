@@ -21,8 +21,9 @@
 //!   `ridl-transport-ws` and `ridl-descriptor` among them) is at the workspace
 //!   version.
 //! - `crates/ridlc/src/lib.rs`: `RIDL_RT_REQUIREMENT` is `<mm>`.
-//! - the cabin consumer and server manifests, and the two manifests under
-//!   `freeze/generated/`: the `ridl-rt` requirement is `<mm>`.
+//! - the bench harness manifest, the cabin consumer and server manifests, and
+//!   the two manifests under `freeze/generated/`: the `ridl-rt` requirement is
+//!   `<mm>`.
 //! - `examples/cabin/Cargo.toml`: the comment that names the generated
 //!   manifest's requirement says `<mm>`.
 //! - `examples/cabin/web/deno.lock`: the `ridl-runtime` link is at the
