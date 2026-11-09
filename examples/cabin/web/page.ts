@@ -3,7 +3,8 @@
 // page's query string, rejects when that hash is not the `CATALOG_HASH` of the
 // generated codec module, fetches the cabin wasm codec from /veh_cabin.wasm
 // and loads it with the generated hash, payload types and rules, runs the
-// codec self-test of check.ts, attaches with the encoding `flatbuffers`,
+// codec self-test of check.ts, attaches with the encoding `flatbuffers` through a session with a bound of
+// 10 s on `connect` and `subscribe` and `signalChecks(codec)` as its checks,
 // subscribes to `Cabin.temperature` at the interface number and ordinal of the
 // generated `Cabin` table, verifies each payload through the codec, decodes it
 // with the generated codec module, and feeds each decoded value to the check of check.ts. It sets
@@ -28,7 +29,11 @@ import {
   Horn,
   PAYLOAD_TYPES,
   RULES,
+  signalChecks,
 } from "./generated/veh.cabin.codec.ts";
+
+// The time `connect` and `subscribe` each wait for the server, in milliseconds.
+const STEP_BOUND_MS = 10_000;
 
 async function run(): Promise<Progress> {
   const query = new URLSearchParams(location.search);
@@ -77,6 +82,16 @@ async function run(): Promise<Progress> {
     // `[limits]` entry raises or lowers; cabin has none, so every member
     // keeps the default ceiling of its kind.
     interfaces: [Cabin, Horn],
+    bound: STEP_BOUND_MS,
+    // The session verifies each `temperature` payload through the wasm codec
+    // before `onPublish` sees it; a refused payload is reported by `onNote`.
+    checks: signalChecks(codec),
+    onNote(note) {
+      if (note.note === "check-failed" && !settled) {
+        settled = true;
+        reject(new Error(`the signal check threw: ${String(note.error)}`));
+      }
+    },
     onPublish(target, sample) {
       if (settled || !sample.payload) return;
       if (
@@ -113,7 +128,7 @@ async function run(): Promise<Progress> {
       kind: Kind.Signal,
       iface: Cabin.temperature.iface,
       ord: Cabin.temperature.ord,
-    });
+    }, { bound: STEP_BOUND_MS });
     return await verdict;
   } finally {
     settled = true;

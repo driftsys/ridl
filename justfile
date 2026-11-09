@@ -3363,8 +3363,10 @@ _find-browser name:
 # wasm32-unknown-unknown target) from 127.0.0.1, and opens it in the browser.
 # The page loads the codec with the announced catalog hash, runs the same
 # self-test (20 accepted, -41 and 86 rejected with the range rule), attaches
-# with the encoding `flatbuffers`, verifies each payload through the codec
-# (a rejection fails the run with its cause), and decodes each verified
+# with the encoding `flatbuffers` (a bound of 10 s on connect and subscribe,
+# the signal checks of the generated codec module registered), verifies each
+# payload through the codec (a rejection fails the run with its cause), and
+# decodes each verified
 # payload with the `flatc` code. One 30 s limit
 # covers the page's verdict; the server is then stopped and must exit with
 # status 0. It prints the number of samples and the number of wraps.

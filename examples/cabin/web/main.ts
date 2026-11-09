@@ -13,8 +13,9 @@
 // wasm codec with the generated hash, payload types and rules, runs the codec
 // self-test (20
 // is accepted, -41 and 86 are rejected with the range rule), attaches with the
-// encoding `flatbuffers`, and subscribes to
-// `Cabin.temperature`. The server steps the value through the whole range of
+// encoding `flatbuffers` through a session whose `connect` and `subscribe`
+// each have a bound of 10 s and whose `checks` option is `signalChecks(codec)`
+// of the generated module, and subscribes to `Cabin.temperature`. The server steps the value through the whole range of
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
@@ -49,6 +50,7 @@ import {
   Horn,
   PAYLOAD_TYPES,
   RULES,
+  signalChecks,
 } from "./generated/veh.cabin.codec.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
@@ -59,6 +61,14 @@ import { type CabinServer, startServer } from "./server.ts";
  * at the default tick of 20 ms is about 12 s; 30 s leaves margin over it.
  */
 const DEADLINE_MS = 30_000;
+
+/**
+ * The time `connect` and `subscribe` each wait for the server, in milliseconds.
+ * The server answers within a few milliseconds; the bound makes a server that
+ * never answers fail the stage with a `timeout` rejection before the deadline
+ * of the whole program expires.
+ */
+const STEP_BOUND_MS = 10_000;
 
 // The stage the program is in, named in the failure message.
 let stage = "starting the server";
@@ -145,6 +155,16 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
   // `[limits]` entry raises or lowers; cabin has none, so every member
   // keeps the default ceiling of its kind.
   interfaces: [Cabin, Horn],
+  bound: STEP_BOUND_MS,
+  // The session verifies each `temperature` payload through the wasm codec
+  // before `onPublish` sees it; a payload it refuses never reaches the check
+  // below, so a refusal is reported through `onNote`.
+  checks: signalChecks(codec),
+  onNote(note) {
+    if (note.note === "check-failed") {
+      fail(`the signal check threw: ${String(note.error)}`);
+    }
+  },
   onPublish(target, sample) {
     if (!sample.payload || failure) return;
     if (
@@ -189,7 +209,7 @@ await session.subscribe({
   kind: Kind.Signal,
   iface: Cabin.temperature.iface,
   ord: Cabin.temperature.ord,
-});
+}, { bound: STEP_BOUND_MS });
 
 stage = "waiting for the highest value and the lowest after it";
 await done;
