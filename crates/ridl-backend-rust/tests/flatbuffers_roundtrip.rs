@@ -365,8 +365,8 @@ fn main() {
 }
 
 /// A union is a root table of its own, so it is a payload of its own. This is
-/// the only case that decodes the union's **table** arm: the `Report` round
-/// trip carries `Outcome::Bad`, the boxed arm.
+/// a targeted case that asserts the union's **table** arm's decoded fields:
+/// the `Report` round trip carries `Outcome::Bad`, the boxed arm.
 #[test]
 fn a_union_round_trips_as_its_own_payload() {
     let main = format!(

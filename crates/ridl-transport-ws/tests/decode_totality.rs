@@ -14,6 +14,9 @@ fn probe(bytes: &[u8]) {
             .encode(&mut out)
             .expect("an accepted frame re-encodes");
         assert_eq!(decode(&out[..len]), Ok(frame), "input: {bytes:?}");
+        // Every accepted frame preserves its input bytes. Discard is a decode
+        // error for unexpected payload bytes, so it does not reach this branch.
+        assert_eq!(&out[..len], bytes, "accepted input must re-encode exactly");
     }
 }
 
