@@ -6,6 +6,7 @@ import {
   makeLowerReal,
   makeMaximum,
   makeNarrowReal,
+  makeNegative,
   makePrecise,
   makeReal,
   makeShifted,
@@ -22,6 +23,7 @@ import {
   makeHugeStep,
   makeSafeNumber,
   makeStepped,
+  makeUnbounded32,
   makeWideFromZero,
   makeWideStepped,
 } from "./number.ts";
@@ -227,5 +229,21 @@ Deno.test("a 64-bit float step tolerates only a few units of rounding", () => {
   }
   for (const value of [5e-11, 1e-11, 0.1 + 1e-16]) {
     refuses("Precise", () => makePrecise(value), "step");
+  }
+});
+
+Deno.test("an integer step stays exact near the safe limit", () => {
+  // The exact differences are 9007199254741001 (off the grid) and
+  // 9007199254740995 (on it); a rounded subtraction swaps the two.
+  assert.equal(makeUnbounded32(9007199254740985), 9007199254740985);
+  refuses("Unbounded32", () => makeUnbounded32(9007199254740991), "step");
+});
+
+Deno.test("a float grid counts from a negative minimum between two multiples", () => {
+  for (const value of [-1.05, -0.95, -0.05, 0.05, 0.95]) {
+    assert.equal(makeNegative(value), value);
+  }
+  for (const value of [-1, -0.9, 0, 0.1, 1]) {
+    refuses("Negative", () => makeNegative(value), "step");
   }
 });

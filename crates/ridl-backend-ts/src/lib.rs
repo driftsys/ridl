@@ -501,7 +501,9 @@ fn step_check(td: &v2::TypeDef) -> Option<Check> {
         let condition = if is_wide(td) {
             format!("(value - {origin}n) % {step}n !== 0n")
         } else if fits_safe_number(step) && fits_safe_number(origin) {
-            format!("(value - {origin}) % {step} !== 0")
+            // Reducing each operand first keeps every intermediate exact:
+            // `value - origin` can leave the safe interval when no maximum bounds it.
+            format!("((value % {step}) - ({origin} % {step})) % {step} !== 0")
         } else {
             // A literal beyond 2^53 is not exact as a number.
             format!("(globalThis.BigInt(value) - {origin}n) % {step}n !== 0n")

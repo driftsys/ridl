@@ -41,3 +41,6 @@ type Shifted : float [0.05..1.05 step 0.1]
 
 /// A 64-bit float on a fine decimal grid.
 type Precise : float [-1.0..1.0 step 0.0000000001]
+
+/// A float grid whose minimum is negative and not a multiple of the step.
+type Negative : float [-1.05..1.0 step 0.1]

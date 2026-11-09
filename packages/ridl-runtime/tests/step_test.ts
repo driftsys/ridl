@@ -56,3 +56,9 @@ Deno.test("offFloatPoints refuses every value when it has no point", () => {
   assertEquals(offFloatPoints(NaN, false, [0]), true);
   assertEquals(offFloatPoints(Infinity, true, [0]), true);
 });
+
+Deno.test("offFloatStep accepts any large value when the step is finer than its rounding cell", () => {
+  const fine: FloatLattice = [1, 1e-3, 1e-3, 0, 0, 0];
+  assertEquals(offFloatStep(1e300, false, fine), false);
+  assertEquals(offFloatStep(1e30, true, fine), false);
+});

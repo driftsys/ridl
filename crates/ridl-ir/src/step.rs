@@ -192,4 +192,25 @@ mod tests {
         assert_eq!(lattice.phase_high, 0.1);
         assert_ne!(lattice.phase_low, 0.0);
     }
+
+    #[test]
+    fn a_negative_origin_that_is_not_a_multiple_gets_a_positive_phase() {
+        let FloatStepPlan::Lattice(lattice) = prepare_float_step(Some("-1.05"), "0.1", false)
+        else {
+            panic!("expected a lattice");
+        };
+        assert!((lattice.phase_high - 0.05).abs() < 1e-15, "{lattice:?}");
+    }
+
+    #[test]
+    fn points_are_rounded_to_the_wire_precision() {
+        let FloatStepPlan::Points(narrow) = prepare_float_step(Some("0.1"), "1e400", true) else {
+            panic!("expected points");
+        };
+        let FloatStepPlan::Points(wide) = prepare_float_step(Some("0.1"), "1e400", false) else {
+            panic!("expected points");
+        };
+        assert_eq!(narrow, vec![f64::from(0.1f32)]);
+        assert_eq!(wide, vec![0.1]);
+    }
 }

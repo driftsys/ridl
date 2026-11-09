@@ -27,7 +27,7 @@ export function makeValue(value: number): Value {
   if (value > 20) {
     throw new ConstraintError('range', 'test.ctor.Value', value, '[-10..20]');
   }
-  if ((value - -10) % 5 !== 0) {
+  if (((value % 5) - (-10 % 5)) % 5 !== 0) {
     throw new ConstraintError('step', 'test.ctor.Value', value, 'step 5 from -10');
   }
   return value as Value;

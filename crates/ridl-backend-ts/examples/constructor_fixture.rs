@@ -62,6 +62,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 grid(None, Some("20"), "5"),
             ),
             integer(
+                "Unbounded32",
+                "An integer with a grid and no maximum, so its values reach the safe limit.",
+                v2::IntWidth::I32,
+                grid(Some("-10"), None, "5"),
+            ),
+            integer(
                 "HugeStep",
                 "An integer whose step is beyond the safe number interval.",
                 v2::IntWidth::I32,
