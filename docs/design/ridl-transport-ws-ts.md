@@ -219,14 +219,16 @@ unit tests use to pass a fake one; the default is
   the platform fails the handshake itself, so `connect` rejects with
   `SessionError` `down` (close 1006). A URL the platform refuses rejects the
   promise; `connect` does not throw.
-- `subscribe(target)` resolves on `answer(accepted)` and rejects with a
+- `subscribe(target, opts?)` resolves on `answer(accepted)` and rejects with a
   `contract` `SessionError` on a refusing `answer`. `unsubscribe(target)` sends
-  the frame and drops what the session held for the interaction. `read(target)`
-  resolves with the sample of the next `publish` of that interaction.
-  `sample(iface, ord)` returns the held sample of a subscribed signal. An
-  interface number or an ordinal that is not an integer from 1 to 4294967295
-  makes `subscribe`, `read`, `command` and `query` reject with a `RangeError`,
-  and `unsubscribe` throw one, and nothing is sent.
+  the frame and drops what the session held for the interaction.
+  `read(target, opts?)` resolves with the sample of the next `publish` of that
+  interaction, unless a cancelled read ahead in the queue consumes that reply
+  without settling the reads behind it. `sample(iface, ord)` returns the held
+  sample of a subscribed signal. An interface number or an ordinal that is not
+  an integer from 1 to 4294967295 makes `subscribe`, `read`, `command` and
+  `query` reject with a `RangeError`, and `unsubscribe` throw one, and nothing
+  is sent.
 - A `Sample` is
   `{ provenance: "init" | "live" | "invalid", envelope, payload, detected? }`,
   with `payload` a `Uint8Array` under `live` and `null` otherwise. `invalid`
@@ -244,7 +246,8 @@ unit tests use to pass a fake one; the default is
   and the `Rule` under `invalid-value`), `corrupt` or `busy` as the provider
   answered, or, detected by the client, `corrupt` (a reply, or the arguments
   before they are sent, longer than the member's limit, D-19), `undelivered` (a
-  command's bound passed), `timeout` (a query's bound passed) or `down` (the
+  command's bound passed), `timeout` (a query's bound passed; also the category
+  when a bound passes on `connect`, `subscribe` or `read`) or `down` (the
   session ended).
 - `close()` sends a close with code 1000 and rejects every waiting operation
   with `down` at once. `closed` resolves once, with an `Ended`: the close code
@@ -296,11 +299,13 @@ limit, read from the generated tables (D-19):
   so their answers are identified by `(kind, interface, ordinal)`. The session
   keeps, per identity, a first-in first-out queue of the waiting `subscribe` and
   `read` operations: an `answer` settles the operation at the head of the queue,
-  and a `publish` settles every `read` at the head. This is exact for the server
-  as built, which handles each message as soon as it is read (the crate's D-8),
-  and §6.2 puts a signal's `answer` before its first `publish`. An `answer` with
-  nothing waiting, or an accepted `answer` whose head is a `read`, is discarded
-  and recorded (`unexpected-answer`). A refused `read` rejects with
+  and a `publish` settles consecutive live reads at the head, or consumes one
+  cancelled placeholder without settling later reads (D-11). Without
+  cancellation this is exact for the server as built, which handles each message
+  as soon as it is read (the crate's D-8), and §6.2 puts a signal's `answer`
+  before its first `publish`. An `answer` with nothing waiting, or an accepted
+  `answer` whose head is a `read`, is discarded and recorded
+  (`unexpected-answer`). A refused `read` rejects with
   `contract(unknown-interaction)`. A `publish` that answers a `read` of a
   subscribed signal with a `seq` equal to the held one settles the read and is
   not recorded as stale, because the crate reuses the session `seq` for a read
@@ -352,16 +357,37 @@ code.
 of any kind within its liveness timeout as the end of the session. A browser's
 `WebSocket` answers the server's pings and does not show them to the page, so on
 an idle session the page sees no message while the connection is healthy, and a
-timer would end healthy sessions. The session therefore ends on the platform's
-`close` and `error` events only, and the server's liveness check (the crate's
-D-22) is the one that runs. A server that is gone is detected when the
-platform's connection fails; a server host that vanished without a TCP reset is
-detected only at the operating system's timeout. A call ends at its bound if no
-answer arrives while its timer runs; a streamed reply clears that timer at its
-first chunk and then ends only with its stream end or the session. A
-`queryWithUpload` with an open upload has no reply timer until the upload closes
-(D-23). `connect`, `subscribe` and `read` have no bound: each waits until its
-answer arrives or the session ends. driftsys/ridl#991 also asks the
+timer would end healthy sessions. The client uses the platform's `close` and
+`error` events and the server's liveness check (the crate's D-22) to detect a
+lost connection. A server that is gone is detected when the platform's
+connection fails; a server host that vanished without a TCP reset is detected
+only at the operating system's timeout. A call ends at its bound if no answer
+arrives while its timer runs; a streamed reply clears that timer at its first
+chunk and then ends only with its stream end or the session. A `queryWithUpload`
+with an open upload has no reply timer until the upload closes (D-23). `connect`
+accepts optional `bound` and `signal` fields; `subscribe(target, opts?)` and
+`read(target, opts?)` accept the same fields through the exported `WaitOptions`
+interface. A bound is a finite number of milliseconds greater than 0 and at most
+2147483647; an invalid bound rejects with `RangeError` before a socket is
+created or a frame is sent. A passed bound rejects with `SessionError` category
+`timeout`, and an aborted signal rejects with `signal.reason`. An already
+aborted signal creates no socket or sends no frame. Connect's bound starts at
+the call and ends at `attached(accepted)`; timeout or abort closes the socket,
+ends the session and ignores late events. With neither option, each waits until
+its answer arrives or the session ends. Every settlement removes its timer and
+abort listener.
+
+A cancelled subscribe or read remains as a settled placeholder in the FIFO queue
+until a reply consumes it or the session ends: answers carry no correlation id,
+so the client cannot distinguish its late reply from a later operation's reply,
+and cancelling many operations whose replies never arrive retains all their
+placeholders until the session ends. A cancelled read also continues to absorb a
+payload whose blocks are being reassembled, without settling a later read. A
+cancelled subscribe is marked dropped, so late acceptance does not establish a
+subscription, but its first publish can still produce a `not-subscribed` note.
+When no subscription is established and no other live subscribe waits,
+cancellation sends `unsubscribe` without dropping a previously established
+subscription's held sample or event sequence. driftsys/ridl#991 also asks the
 specification to state what a client that cannot see pings does.
 
 **D-12. The default request stamp is wall-clock UTC in microseconds.** A
@@ -429,22 +455,24 @@ applies, and the answers to each sequence error, are frame specification §5.5;
 this record does not restate them. What the session adds is the following. A
 payload goes into one buffer of `total` bytes, allocated at the first block, and
 is handled as a `live` `publish` that arrived whole after its last block. The
-reads that the payload answers are the reads waiting for the identity when its
-first block arrived; a `read` sent while the payload is being reassembled waits
-for the next payload. The limit used at the first block is the member's limit
-held to 65,280 bytes. A message whose form is 11 on a connection that selected
-`ridl-ws-v1` ends the session, because that form is outside the table of frame
-version 1. The session refuses it before it decodes it, and before `attached`
-too, so a malformed block on that session gets the same violation code,
-`unknown-code`, as a well-formed one; the decoder itself reads form 11 on any
-session.
+reads that the payload answers are the consecutive live reads at the head of the
+identity's queue when its first block arrived; a cancelled read ahead first
+consumes one reply without settling the reads behind it. A `read` sent while the
+payload is being reassembled waits for the next payload. The limit used at the
+first block is the member's limit held to 65,280 bytes. A message whose form is
+11 on a connection that selected `ridl-ws-v1` ends the session, because that
+form is outside the table of frame version 1. The session refuses it before it
+decodes it, and before `attached` too, so a malformed block on that session gets
+the same violation code, `unknown-code`, as a well-formed one; the decoder
+itself reads form 11 on any session.
 
 The codes of the failures. A block that is wrong by itself is the violation
 `bad-block`; a `kind` outside the table stays `unknown-code` and an `interface`
 or `ordinal` 0 stays `zero-number`. A sequence error is the session violation
 `block-sequence`. A `fixed` payload refused for its size, whether it crossed
-whole or in blocks, rejects every `read` at the head of its identity's queue
-with `corrupt` and is recorded once as the note
+whole or in blocks, rejects consecutive live reads at the head of its identity's
+queue with `corrupt`, unless a cancelled read ahead first consumes the reply
+without settling the reads behind it, and is recorded once as the note
 `{ note: "discarded", reason: "over-limit", frame }`, with the `publish` or the
 first block as `frame`, in place of the `not-subscribed` note that a payload no
 `read` waits for gets. The consumer does not know the provider's message limit,

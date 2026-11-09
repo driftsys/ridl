@@ -22,6 +22,16 @@ import { type CallFailure, SessionError } from "./errors.ts";
 /** The longest bound `setTimeout` can wait, in milliseconds: 2^31 - 1. */
 const MAX_BOUND = 2_147_483_647;
 
+/** Validates a bound before a call or session operation starts its timer. */
+export function checkBound(bound: number): void {
+  // `setTimeout` takes a signed 32-bit delay; a longer one fires at once.
+  if (!Number.isFinite(bound) || bound <= 0 || bound > MAX_BOUND) {
+    throw new RangeError(
+      `a call bound must be a number of milliseconds greater than 0 and at most ${MAX_BOUND}, not ${bound}`,
+    );
+  }
+}
+
 type Response = Extract<Frame, { form: "response" }>;
 type StreamFrame = Extract<
   Frame,
@@ -652,13 +662,10 @@ export class Calls {
     reject: (e: unknown) => void,
     make: (timer: ReturnType<typeof setTimeout>) => Call,
   ): void {
-    // `setTimeout` takes a signed 32-bit delay; a longer one fires at once.
-    if (!Number.isFinite(bound) || bound <= 0 || bound > MAX_BOUND) {
-      reject(
-        new RangeError(
-          `a call bound must be a number of milliseconds greater than 0 and at most ${MAX_BOUND}, not ${bound}`,
-        ),
-      );
+    try {
+      checkBound(bound);
+    } catch (error) {
+      reject(error);
       return;
     }
     if (this.#ended) {
