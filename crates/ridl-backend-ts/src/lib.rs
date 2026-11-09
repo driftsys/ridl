@@ -58,6 +58,7 @@
 //! admit any identifier, reserved words included.
 
 use ridl_ir::codegen::v1;
+use ridl_ir::step::{FloatStepPlan, prepare_float_step};
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -105,12 +106,12 @@ pub(crate) fn generate_with(
     if let Some(decl) = package
         .decls
         .iter()
-        .find(|decl| decl.name == "ConstraintError")
+        .find(|decl| RESERVED_NAMES.contains(&decl.name.as_str()))
     {
         return Err(GenerateError::Unrepresentable(format!(
-            "`{}.{}` collides with `ConstraintError` from `@driftsys/ridl-runtime`, \
+            "`{}.{}` collides with `{}` from `@driftsys/ridl-runtime`, \
              which the domain module reserves",
-            package.name, decl.name
+            package.name, decl.name, decl.name
         )));
     }
     check_constructor_names(package)?;
@@ -128,11 +129,22 @@ pub(crate) fn generate_with(
 
     let mut source = String::new();
     let imports = ctx.imports.borrow();
-    let has_checks = package.decls.iter().any(|decl| {
-        matches!(&decl.kind, Some(v2::decl::Kind::TypeDef(td)) if !numeric_checks(td).is_empty())
-    });
+    let mut helpers = BTreeSet::new();
+    let mut has_checks = false;
+    for decl in &package.decls {
+        if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind {
+            for check in numeric_checks(td) {
+                has_checks = true;
+                helpers.extend(check.helper);
+            }
+        }
+    }
     if has_checks {
-        source.push_str("import { ConstraintError } from '@driftsys/ridl-runtime';\n");
+        let names: Vec<&str> = std::iter::once("ConstraintError").chain(helpers).collect();
+        source.push_str(&format!(
+            "import {{ {} }} from '@driftsys/ridl-runtime';\n",
+            names.join(", ")
+        ));
     }
     for import in imports.iter() {
         source.push_str(&format!(
@@ -371,12 +383,37 @@ fn emit_type_def(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> String {
     source
 }
 
-/// Numeric checks in contract order, each paired with its constraint text.
-/// Bigint-backed integers check both bounds of the declared range intersected
-/// with the language domain: i64 for I64, and 0 through i64::MAX for U64.
-/// TypeScript bigint has no finite backing limit, unlike Rust's i64 parameter.
-/// Number-backed integers must be safe and check the declared bounds.
-fn numeric_checks(td: &v2::TypeDef) -> Vec<(String, String)> {
+/// One numeric check of a constructor: the condition that refuses a value,
+/// the rule it breaks, the constraint text of the message, and the runtime
+/// helper the condition calls, if any.
+struct Check {
+    rule: &'static str,
+    condition: String,
+    constraint: String,
+    helper: Option<&'static str>,
+}
+
+impl Check {
+    fn range(condition: String, constraint: String) -> Self {
+        Self {
+            rule: "range",
+            condition,
+            constraint,
+            helper: None,
+        }
+    }
+}
+
+/// Names that a domain module imports from `@driftsys/ridl-runtime`. A
+/// declaration with one of these names is refused.
+const RESERVED_NAMES: [&str; 3] = ["ConstraintError", "offFloatPoints", "offFloatStep"];
+
+/// Numeric checks in contract order: range, then step. Bigint-backed integers
+/// check both bounds of the declared range intersected with the language
+/// domain: i64 for I64, and 0 through i64::MAX for U64. TypeScript bigint has
+/// no finite backing limit, unlike Rust's i64 parameter. Number-backed
+/// integers must be safe and check the declared bounds.
+fn numeric_checks(td: &v2::TypeDef) -> Vec<Check> {
     let backing = backing_scalar(td);
     let integer = backing == ScalarBacking::Integer;
     if !integer && backing != ScalarBacking::Float {
@@ -401,12 +438,13 @@ fn numeric_checks(td: &v2::TypeDef) -> Vec<(String, String)> {
             .and_then(|max| max.parse::<i64>().ok())
             .unwrap_or(i64::MAX);
         let range = format!("[{min}..{max}]");
-        checks.push((format!("value < {min}n"), range.clone()));
-        checks.push((format!("value > {max}n"), range));
+        checks.push(Check::range(format!("value < {min}n"), range.clone()));
+        checks.push(Check::range(format!("value > {max}n"), range));
+        checks.extend(step_check(td));
         return checks;
     }
     if integer {
-        checks.push((
+        checks.push(Check::range(
             "!globalThis.Number.isSafeInteger(value)".to_string(),
             "a safe integer".to_string(),
         ));
@@ -420,20 +458,13 @@ fn numeric_checks(td: &v2::TypeDef) -> Vec<(String, String)> {
         c.max.as_deref().unwrap_or("")
     );
     if !integer && (c.min.is_some() || c.max.is_some()) {
-        checks.push((
+        checks.push(Check::range(
             "!globalThis.Number.isFinite(value)".to_string(),
             range.clone(),
         ));
     }
-    let literal = |bound: &str| {
-        if integer && is_wide(td) {
-            format!("{bound}n")
-        } else {
-            bound.to_string()
-        }
-    };
     if let Some(min) = &c.min {
-        checks.push((format!("value < {}", literal(min)), range.clone()));
+        checks.push(Check::range(format!("value < {min}"), range.clone()));
     }
     // Safe number integers cannot exceed i64::MAX; bigint bounds are checked above.
     if let Some(max) = c
@@ -441,9 +472,100 @@ fn numeric_checks(td: &v2::TypeDef) -> Vec<(String, String)> {
         .as_deref()
         .filter(|max| !integer || max.parse::<i64>() != Ok(i64::MAX))
     {
-        checks.push((format!("value > {}", literal(max)), range));
+        checks.push(Check::range(format!("value > {max}"), range));
     }
+    checks.extend(step_check(td));
     checks
+}
+
+/// The step check of a numeric type. The origin of the lattice is the declared
+/// minimum, or 0 (typl §4.3). An integer step that is not a positive integer
+/// literal has no check: the checker refuses it before IR is built, so only
+/// hand-built IR reaches that case.
+fn step_check(td: &v2::TypeDef) -> Option<Check> {
+    let c = td.constraint.as_ref()?;
+    let step = c.step.as_deref()?;
+    let origin_text = c.min.as_deref();
+    let rule = "step";
+    let constraint = format!("step {step} from {}", origin_text.unwrap_or("0"));
+    if backing_scalar(td) == ScalarBacking::Integer {
+        let positive = is_integer_form(step)
+            && !step.trim_start_matches('0').is_empty()
+            && !step.starts_with('-');
+        if !positive {
+            return None;
+        }
+        let origin = origin_text
+            .filter(|min| is_integer_form(min))
+            .unwrap_or("0");
+        let condition = if is_wide(td) {
+            format!("(value - {origin}n) % {step}n !== 0n")
+        } else if fits_safe_number(step) && fits_safe_number(origin) {
+            // Reducing each operand first keeps every intermediate exact:
+            // `value - origin` can leave the safe interval when no maximum bounds it.
+            format!("((value % {step}) - ({origin} % {step})) % {step} !== 0")
+        } else {
+            // A literal beyond 2^53 is not exact as a number.
+            format!("(globalThis.BigInt(value) - {origin}n) % {step}n !== 0n")
+        };
+        return Some(Check {
+            rule,
+            condition,
+            constraint,
+            helper: None,
+        });
+    }
+    let wire32 = td.width == Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F32 as i32));
+    let list = |values: &[f64]| {
+        values
+            .iter()
+            .map(|value| format!("{value:?}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let (condition, helper) = match prepare_float_step(origin_text, step, wire32) {
+        FloatStepPlan::Never => (
+            format!("offFloatPoints(value, {wire32}, [])"),
+            "offFloatPoints",
+        ),
+        FloatStepPlan::Finite => {
+            let checked = if wire32 {
+                "globalThis.Math.fround(value)"
+            } else {
+                "value"
+            };
+            return Some(Check {
+                rule,
+                condition: format!("!globalThis.Number.isFinite({checked})"),
+                constraint,
+                helper: None,
+            });
+        }
+        FloatStepPlan::Points(points) => (
+            format!("offFloatPoints(value, {wire32}, [{}])", list(&points)),
+            "offFloatPoints",
+        ),
+        FloatStepPlan::Lattice(l) => (
+            format!(
+                "offFloatStep(value, {wire32}, [{}])",
+                list(&[
+                    l.factor,
+                    l.original_step,
+                    l.step_high,
+                    l.step_low,
+                    l.phase_high,
+                    l.phase_low
+                ])
+            ),
+            "offFloatStep",
+        ),
+    };
+    Some(Check {
+        rule,
+        condition,
+        constraint,
+        helper: Some(helper),
+    })
 }
 
 /// Refuses generated constructor names claimed by two scalar declarations.
@@ -499,10 +621,12 @@ fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<St
         "/** Builds a `{name}`.{throws} */\n{export}function make{name}(value: {base}): {name} {{\n"
     );
     let qualified = ts_string(&format!("{}.{name}", ctx.package));
-    for (condition, constraint) in &checks {
+    for check in &checks {
         source.push_str(&format!(
-            "  if ({condition}) {{\n    throw new ConstraintError('range', {qualified}, value, {});\n  }}\n",
-            ts_string(constraint)
+            "  if ({}) {{\n    throw new ConstraintError('{}', {qualified}, value, {});\n  }}\n",
+            check.condition,
+            check.rule,
+            ts_string(&check.constraint)
         ));
     }
     source.push_str(&format!("  return value as {name};\n}}\n"));

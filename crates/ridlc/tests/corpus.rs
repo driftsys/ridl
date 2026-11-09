@@ -2286,7 +2286,7 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     std::fs::create_dir_all(&dir).expect("the temp dir is created");
 
     // A generated module imports its constraint error from the runtime package,
-    // so the check resolves that name to the runtime's own error source.
+    // so the check resolves those names to the runtime's own sources.
     let runtime_dir = dir.join("node_modules/@driftsys/ridl-runtime");
     std::fs::create_dir_all(&runtime_dir).expect("the runtime stand-in directory is created");
     std::fs::write(
@@ -2295,8 +2295,18 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     )
     .expect("the runtime errors source is written");
     std::fs::write(
+        runtime_dir.join("step.ts"),
+        include_str!("../../../packages/ridl-runtime/src/step.ts"),
+    )
+    .expect("the runtime step source is written");
+    std::fs::write(
+        runtime_dir.join("runtime.ts"),
+        "export * from './errors.js';\nexport * from './step.js';\n",
+    )
+    .expect("the runtime entry point is written");
+    std::fs::write(
         runtime_dir.join("package.json"),
-        "{\"name\":\"@driftsys/ridl-runtime\",\"version\":\"0.0.0\",\"type\":\"module\",\"types\":\"errors.ts\"}",
+        "{\"name\":\"@driftsys/ridl-runtime\",\"version\":\"0.0.0\",\"type\":\"module\",\"types\":\"runtime.ts\"}",
     )
     .expect("the runtime stand-in manifest is written");
 

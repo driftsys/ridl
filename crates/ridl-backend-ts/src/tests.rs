@@ -1458,12 +1458,22 @@ export function initTimestamp(): Timestamp {
     )
     .expect("the runtime errors are written");
     std::fs::write(
+        dir.path().join("step.ts"),
+        include_str!("../../../packages/ridl-runtime/src/step.ts"),
+    )
+    .expect("the runtime step helpers are written");
+    std::fs::write(
+        dir.path().join("runtime.ts"),
+        "export * from './errors';\nexport * from './step';\n",
+    )
+    .expect("the runtime entry point is written");
+    std::fs::write(
         dir.path().join("tsconfig.json"),
         r#"{
           "compilerOptions": {
             "noEmit": true, "strict": true, "target": "es2020",
             "lib": ["es2022", "dom"], "module": "commonjs",
-            "paths": { "@driftsys/ridl-runtime": ["./errors.ts"] }
+            "paths": { "@driftsys/ridl-runtime": ["./runtime.ts"] }
           }
         }"#,
     )
@@ -2761,28 +2771,186 @@ fn deferred_scalar_constructors_are_absent() {
 }
 
 #[test]
-fn a_step_does_not_emit_a_check_yet() {
-    for prim in [v2::PrimitiveType::Integer, v2::PrimitiveType::Float] {
-        let mut kind = primitive_type(prim, init_value(false, None), None);
+fn the_runtime_helper_names_are_refused() {
+    for name in ["offFloatStep", "offFloatPoints"] {
+        let decl = public_decl(
+            name,
+            primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
+        );
+        let error = generate(&package("test.ctor", vec![decl])).unwrap_err();
+        let GenerateError::Unrepresentable(message) = error;
+        assert!(message.contains(&format!("test.ctor.{name}")), "{message}");
+        assert!(message.contains("@driftsys/ridl-runtime"), "{message}");
+    }
+}
+
+#[test]
+fn a_step_is_checked_after_the_range() {
+    use v2::type_def::Width;
+    let i32_width = Some(Width::IntWidth(v2::IntWidth::I32 as i32));
+    let i64_width = Some(Width::IntWidth(v2::IntWidth::I64 as i32));
+    let u64_width = Some(Width::IntWidth(v2::IntWidth::U64 as i32));
+    let f32_width = Some(Width::FloatWidth(v2::FloatWidth::F32 as i32));
+    let f64_width = Some(Width::FloatWidth(v2::FloatWidth::F64 as i32));
+    let cases = [
+        // (snapshot, primitive, width, min, max, step, helper)
+        (
+            "step_integer_number",
+            v2::PrimitiveType::Integer,
+            i32_width,
+            Some("-10"),
+            Some("20"),
+            "5",
+            None,
+        ),
+        (
+            "step_integer_number_origin_zero",
+            v2::PrimitiveType::Integer,
+            i32_width,
+            None,
+            Some("20"),
+            "5",
+            None,
+        ),
+        (
+            "step_integer_number_beyond_safe",
+            v2::PrimitiveType::Integer,
+            i32_width,
+            Some("0"),
+            Some("20"),
+            "100000000000000000000",
+            None,
+        ),
+        (
+            "step_integer_bigint",
+            v2::PrimitiveType::Integer,
+            i64_width,
+            Some("-10"),
+            Some("20"),
+            "5",
+            None,
+        ),
+        (
+            "step_integer_unsigned_bigint",
+            v2::PrimitiveType::Integer,
+            u64_width,
+            None,
+            None,
+            "3",
+            None,
+        ),
+        (
+            "step_float_f64",
+            v2::PrimitiveType::Float,
+            f64_width,
+            Some("-1.0"),
+            Some("2.0"),
+            "0.1",
+            Some("offFloatStep"),
+        ),
+        (
+            "step_float_f32",
+            v2::PrimitiveType::Float,
+            f32_width,
+            Some("-1.0"),
+            Some("2.0"),
+            "0.1",
+            Some("offFloatStep"),
+        ),
+        (
+            "step_float_finer_than_binary64",
+            v2::PrimitiveType::Float,
+            f64_width,
+            None,
+            None,
+            "1e-400",
+            None,
+        ),
+        (
+            "step_float_finer_than_binary32",
+            v2::PrimitiveType::Float,
+            f32_width,
+            None,
+            None,
+            "1e-400",
+            None,
+        ),
+        (
+            "step_float_beyond_binary64",
+            v2::PrimitiveType::Float,
+            f64_width,
+            Some("0"),
+            None,
+            "1e400",
+            Some("offFloatPoints"),
+        ),
+    ];
+    for (snapshot, prim, width, min, max, step, helper) in cases {
+        let mut kind = primitive_type(prim, init_value(false, None), width);
         if let v2::decl::Kind::TypeDef(td) = &mut kind {
-            td.constraint = Some(constraint(None, None, Some("2")));
+            td.constraint = Some(constraint(min, max, Some(step)));
         }
         let source = generate(&package("test.ctor", vec![public_decl("Value", kind)]))
             .unwrap()
             .source;
-        assert!(source.contains("function makeValue(value: number)"));
-        assert!(!source.contains("ConstraintError('step'") && !source.contains('%'));
-        assert_eq!(
-            source.contains("Number.isSafeInteger"),
-            prim == v2::PrimitiveType::Integer
+        assert!(
+            source.contains("throw new ConstraintError('step'"),
+            "{source}"
         );
-        assert_eq!(
-            source.contains("makeValueUnchecked"),
-            prim == v2::PrimitiveType::Integer
+        assert!(source.contains("function makeValueUnchecked"), "{source}");
+        let range_at = source.find("ConstraintError('range'");
+        let step_at = source.find("ConstraintError('step'").unwrap();
+        assert!(
+            range_at.is_none_or(|range_at| range_at < step_at),
+            "{source}"
         );
-        assert_eq!(
-            source.contains("import { ConstraintError }"),
-            prim == v2::PrimitiveType::Integer
+        let imports = source.lines().next().unwrap();
+        match helper {
+            Some(helper) => assert_eq!(
+                imports,
+                format!("import {{ ConstraintError, {helper} }} from '@driftsys/ridl-runtime';")
+            ),
+            None => assert_eq!(
+                imports,
+                "import { ConstraintError } from '@driftsys/ridl-runtime';"
+            ),
+        }
+        insta::assert_snapshot!(snapshot, source);
+    }
+}
+
+#[test]
+fn an_unusable_float_step_refuses_every_value() {
+    let mut kind = primitive_type(v2::PrimitiveType::Float, init_value(false, None), None);
+    if let v2::decl::Kind::TypeDef(td) = &mut kind {
+        td.constraint = Some(constraint(None, None, Some("0")));
+    }
+    let source = generate(&package("test.ctor", vec![public_decl("Value", kind)]))
+        .unwrap()
+        .source;
+    assert!(
+        source.contains("offFloatPoints(value, false, [])"),
+        "{source}"
+    );
+}
+
+#[test]
+fn an_integer_step_that_is_not_a_positive_integer_has_no_check() {
+    for step in ["0", "-5", "2.5"] {
+        let mut kind = primitive_type(
+            v2::PrimitiveType::Integer,
+            init_value(false, None),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::I32 as i32)),
+        );
+        if let v2::decl::Kind::TypeDef(td) = &mut kind {
+            td.constraint = Some(constraint(None, None, Some(step)));
+        }
+        let source = generate(&package("test.ctor", vec![public_decl("Value", kind)]))
+            .unwrap()
+            .source;
+        assert!(
+            !source.contains("ConstraintError('step'"),
+            "{step}: {source}"
         );
     }
 }

@@ -7,6 +7,10 @@ repository.workspace = true
 description = "The RIDL intermediate representation: the typl surface plus the ridl interaction layer, generated from a versioned protobuf schema."
 
 [dependencies]
+# The exact decimal arithmetic of `step::prepare_float_step`.
+num-bigint.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
 # The runtime the pbjson-generated serde impls call into (ADR-0014
 # decision 14).
 pbjson.workspace = true
