@@ -307,6 +307,25 @@ fn float_map_keys_sort_numerically_and_refuse_nan_and_signed_zero_pairs() {
     );
 }
 
+/// ADR-0031 decision 5: two keys of a float that is `f32` on the wire and
+/// that round to one `f32` value are a duplicate, refused with `Unique`,
+/// because `verify` would refuse the buffer with `KeyOrder` (driftsys/ridl#1280).
+#[test]
+fn f32_map_keys_that_round_to_one_value_are_refused_as_duplicates() {
+    let refused = run_result("Narrowed { by_level: smap(&[(1.0, 1), (1.0 + 2f64.powi(-40), 2)]) }");
+    assert!(
+        refused.contains("EncodeError::Contract") && refused.contains("Unique"),
+        "got: {refused}"
+    );
+}
+
+/// The same two keys are distinct on an `f64` wire form, so they are encoded.
+#[test]
+fn f64_map_keys_are_not_narrowed_for_the_duplicate_check() {
+    let bytes = run("Scored { by_score: smap(&[(1.0, 1), (1.0 + 2f64.powi(-40), 2)]) }");
+    assert_eq!(bytes.len(), 48);
+}
+
 /// §8.1: a deprecated field is written as its init value, 5, not as the
 /// domain value.
 #[test]

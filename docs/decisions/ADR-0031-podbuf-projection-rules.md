@@ -359,7 +359,8 @@ a field is appended.
      and floats. `+0.0` and `-0.0` are equal, so both present is a duplicate; a
      NaN key is rejected **(Sebastien)**. The encoder sorts the entries and
      refuses a duplicate key (`Unique`) and a NaN key (`Range`) with
-     `EncodeError::Contract`.
+     `EncodeError::Contract`. Float keys are compared for a duplicate at their
+     wire width, so two keys that narrow to one `f32` value are a duplicate.
    - Every typl string, bytes and collection carries a bound, explicit or the
      `[0..256]` default, so podbuf has no unbounded case.
 

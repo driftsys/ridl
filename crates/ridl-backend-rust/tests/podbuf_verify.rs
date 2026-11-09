@@ -654,6 +654,18 @@ fn rule_7_and_8_unions_and_maps() {
     );
 }
 
+/// Distinct `f32` map keys that the encoder sorted pass rule 8 and round-trip.
+#[test]
+fn distinct_f32_map_keys_verify_and_round_trip() {
+    let out = run(
+        "f32_keys",
+        &[
+            r#"roundtrip!(Narrowed, Narrowed { by_level: vec![(0.5, weight(1)), (2.0, weight(2))] })"#,
+        ],
+    );
+    assert_eq!(out, ["true"]);
+}
+
 /// ADR-0031 decision 8 rule 7 for an arm whose head has no field: the arm
 /// descriptor of `Maybe` (`off` at buffer 12, `len` at 16, the tail from 24)
 /// may carry data a later producer wrote, and that data is in the tail and
