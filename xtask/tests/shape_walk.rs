@@ -496,7 +496,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 15,
+        lines: 17,
         why: "a test mutating one fixture interface, two lines in the \
               name-stability test indexing into the single fixture interface \
               both the old and new packages share, three lines in the \
@@ -510,7 +510,8 @@ const ALLOWED: &[Allowed] = &[
               service, and the assignments construct the named store \
               rather than walk interface shapes; two more lines in the \
               remote-width stream fixtures set the consumer package's \
-              named interfaces the same way",
+              named interfaces the same way; two more lines set a fixture \
+              package's named interfaces in the remote strict-append fixtures",
     },
     Allowed {
         path: "crates/ridl-diff/src/unit_verdict.rs",
