@@ -1,0 +1,8 @@
+[package]
+name = "ctor"
+version = "1.0.0"
+
+# Open and omitted ranges are intentional constructor inputs.
+[lints]
+unbounded-float = "allow"
+unbounded-integer = "allow"

@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@driftsys/ridl-runtime": "../../../../../packages/ridl-runtime/mod.ts"
+  }
+}

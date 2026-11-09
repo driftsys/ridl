@@ -1,0 +1,13 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+/**
+ * Build a value with `makeValue`.
+ */
+export type Value = number & { readonly __ridl: 'test.ctor.Value' };
+
+/** Builds a `Value`. */
+export function makeValue(value: number): Value {
+  return value as Value;
+}

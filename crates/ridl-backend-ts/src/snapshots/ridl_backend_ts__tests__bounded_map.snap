@@ -2,8 +2,12 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
 /**
  * Vehicle speed over ground
+ *
+ * Build a value with `makeSpeed`.
  *
  * @remarks
  * Rules:
@@ -16,11 +20,46 @@ expression: source
  */
 export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 
+/** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeSpeed(value: number): Speed {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+  }
+  if (value < 0.0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+  }
+  if (value > 250.0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+  }
+  return value as Speed;
+}
+
+/** Builds a `Speed` without checking a value already known to satisfy its constraints. */
+export function makeSpeedUnchecked(value: number): Speed {
+  return value as Speed;
+}
+
 export function initSpeed(): Speed {
   return 0.0 as Speed;
 }
 
+/**
+ * Build a value with `makeCounter`.
+ */
 export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
+
+/** Builds a `Counter`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeCounter(value: number): Counter {
+  if (!globalThis.Number.isSafeInteger(value)) {
+    throw new ConstraintError('range', 'veh.common.Counter', value, 'a safe integer');
+  }
+  return value as Counter;
+}
+
+/** Builds a `Counter` without checking a value already known to satisfy its constraints. */
+export function makeCounterUnchecked(value: number): Counter {
+  return value as Counter;
+}
 
 export function initCounter(): Counter {
   return 0 as Counter;

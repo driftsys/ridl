@@ -1,6 +1,7 @@
 export {
   CatalogMismatch,
   CodecError,
+  ConstraintError,
   StreamError,
   UnknownPayloadType,
 } from "./src/errors.ts";
