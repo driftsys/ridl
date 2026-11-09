@@ -336,8 +336,12 @@ undeclared value, decodes an absent value to its zero member when it declares
 one and to `{ unknown: 0 }` when it does not, and throws the same `variant`
 error only for a value beyond the safe integers. `decode<Name>` is for bytes the
 codec has verified. `encode<Name>` builds what it is given, so that a payload
-the codec rejects can be built. A checking constructor for TypeScript is
-driftsys/ridl#923.
+the codec rejects can be built. The domain module's `make<Name>` checks the
+range, step, length and pattern of a named scalar and throws a
+`ConstraintError`; `make<Name>Unchecked` does not check. A string length counts
+code points, and a bytes length counts bytes. The pattern check uses the
+checker's ECMA-262 semantics without the `u` flag, so it can disagree with the
+Rust `regex` crate that the wasm codec uses (driftsys/ridl#597).
 
 ## Foreign declarations (D-14)
 

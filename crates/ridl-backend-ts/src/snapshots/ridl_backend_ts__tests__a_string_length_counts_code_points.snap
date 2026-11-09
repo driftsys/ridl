@@ -1,0 +1,30 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+import { ConstraintError, codePointLength } from '@driftsys/ridl-runtime';
+
+/**
+ * Build a value with `makeWord`.
+ *
+ * @remarks
+ * Rules:
+ * - length 1 ..= 4
+ */
+export type Word = string & { readonly __ridl: 'veh.common.Word' };
+
+/** Builds a `Word`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeWord(value: string): Word {
+  if (codePointLength(value) < 1) {
+    throw new ConstraintError('length', 'veh.common.Word', value, '[1..4]');
+  }
+  if (codePointLength(value) > 4) {
+    throw new ConstraintError('length', 'veh.common.Word', value, '[1..4]');
+  }
+  return value as Word;
+}
+
+/** Builds a `Word` without checking a value already known to satisfy its constraints. */
+export function makeWordUnchecked(value: string): Word {
+  return value as Word;
+}
