@@ -400,6 +400,7 @@ Deno.test("subscribe of a signal resolves on answer accepted, and the first publ
     provenance: "init",
     envelope: { stamp: 100n, seq: 0n },
     payload: null,
+    lastGood: null,
   };
   assert.deepEqual(h.session.sample(1, 2), expected);
   assert.deepEqual(h.publishes, [{ target: SIGNAL, sample: expected }]);
@@ -486,6 +487,7 @@ Deno.test("read of an unsubscribed signal settles with the publish and holds not
     provenance: "live",
     envelope: { stamp: 107n, seq: 7n },
     payload: Uint8Array.from([0xaa]),
+    lastGood: Uint8Array.from([0xaa]),
   });
   assert.equal(h.session.sample(1, 2), undefined);
   assert.deepEqual(h.publishes, []);
@@ -515,6 +517,7 @@ Deno.test("read of a fixed settles with a live publish whose seq is 0", async ()
     provenance: "live",
     envelope: { stamp: 100n, seq: 0n },
     payload: Uint8Array.from([0xf0, 0x0d]),
+    lastGood: Uint8Array.from([0xf0, 0x0d]),
   });
   assert.equal(h.session.sample(1, 5), undefined);
   assert.deepEqual(h.publishes, []);
@@ -1164,6 +1167,7 @@ Deno.test("a publish above the default ceiling of a signal is delivered invalid 
     provenance: "invalid",
     envelope: { stamp: 107n, seq: 7n },
     payload: null,
+    lastGood: null,
     detected: "corrupt",
   };
   assert.deepEqual(h.publishes, [{ target: SIGNAL, sample: invalid }]);
@@ -1356,24 +1360,25 @@ Deno.test("an occurrence on an event the generated tables raise is delivered up 
   assert.deepEqual(h.notes, []);
 });
 
-Deno.test("a read of a fixed above the default ceiling of a fixed rejects with corrupt", async () => {
+Deno.test("a read of a fixed above the default ceiling of a fixed resolves invalid", async () => {
   const h = await attached();
   const reading = h.session.read(FIXED);
   const frame = liveOf(FIXED, 0n, 65_281);
   h.socket.deliver(frame);
-  await assert.rejects(reading, isFailure("corrupt"));
+  assert.deepEqual(await reading, invalidSample(frame));
   assert.deepEqual(h.publishes, []);
   assertNotes(h.notes, [
     { note: "discarded", reason: "over-limit", frame },
   ]);
 });
 
-Deno.test("a read of a signal answered by a publish above its limit rejects with corrupt, and a subscribed signal holds the invalid sample", async () => {
+Deno.test("a read of a signal answered by a publish above its limit resolves invalid, and a subscribed signal holds the invalid sample", async () => {
   const h = await attached();
   await subscribed(h, SIGNAL);
   const reading = h.session.read(SIGNAL);
-  h.socket.deliver(liveOf(SIGNAL, 3n, 3_841));
-  await assert.rejects(reading, isFailure("corrupt"));
+  const frame = liveOf(SIGNAL, 3n, 3_841);
+  h.socket.deliver(frame);
+  assert.deepEqual(await reading, invalidSample(frame));
   assert.equal(h.session.sample(1, 2)?.detected, "corrupt");
   assert.equal(h.publishes.length, 1);
 });
@@ -1401,11 +1406,12 @@ Deno.test("a publish on a signal the generated tables lower is live up to the lo
   assert.deepEqual(h.notes, []);
 });
 
-Deno.test("a read of a signal the generated tables lower rejects with corrupt above the lowered limit", async () => {
+Deno.test("a read of a signal the generated tables lower resolves invalid above the lowered limit", async () => {
   const h = await attachedWith({ interfaces: [LOWERED] });
   const reading = h.session.read(SIGNAL);
-  h.socket.deliver(liveOf(SIGNAL, 1n, 101));
-  await assert.rejects(reading, isFailure("corrupt"));
+  const frame = liveOf(SIGNAL, 1n, 101);
+  h.socket.deliver(frame);
+  assert.deepEqual(await reading, invalidSample(frame));
 });
 
 Deno.test("an occurrence on an event the generated tables lower is delivered up to the lowered limit and detected corrupt above it", async () => {
@@ -1624,7 +1630,7 @@ Deno.test("a frame the codec discards between two blocks is recorded and the pay
   assertBytes((await reading).payload, data);
 });
 
-Deno.test("a total above the lowered limit of a fixed rejects the read with corrupt before any copy and the session goes on", async () => {
+Deno.test("a total above the lowered limit of a fixed resolves the read invalid before any copy and the session goes on", async () => {
   const h = await attachedWith({ interfaces: [BIG] });
   const first = handled(h.session.read(FIXED));
   const second = handled(h.session.read(FIXED));
@@ -1632,8 +1638,8 @@ Deno.test("a total above the lowered limit of a fixed rejects the read with corr
   assert.equal(over.length, 5);
   h.socket.deliver(over[0]);
   assertNotes(h.notes, [overLimit(over[0])]);
-  await assert.rejects(first, isFailure("corrupt"));
-  await assert.rejects(second, isFailure("corrupt"));
+  assert.deepEqual(await first, invalidSample(over[0]));
+  assert.deepEqual(await second, invalidSample(over[0]));
   // A read sent while the refused payload is skipped waits for the next
   // payload: the skipped blocks settle nothing and record nothing.
   let settled = false;
@@ -1653,13 +1659,13 @@ Deno.test("a total above the lowered limit of a fixed rejects the read with corr
   assert.deepEqual(h.socket.closes, []);
 });
 
-Deno.test("a whole publish of a fixed above its lowered limit rejects the read with corrupt and records over-limit", async () => {
+Deno.test("a whole publish of a fixed above its lowered limit resolves the read invalid and records over-limit", async () => {
   const h = await attachedWith({ interfaces: [BIG] });
   const reading = handled(h.session.read(FIXED));
   const frame = liveOf(FIXED, 0n, 20_001);
   h.socket.deliver(frame);
   assertNotes(h.notes, [overLimit(frame)]);
-  await assert.rejects(reading, isFailure("corrupt"));
+  assert.deepEqual(await reading, invalidSample(frame));
   // With no read waiting: over-limit again, and no not-subscribed note.
   h.socket.deliver(frame);
   assertNotes(h.notes, [overLimit(frame), overLimit(frame)]);
@@ -1675,7 +1681,7 @@ Deno.test("on a frame version 1 session a whole publish of a fixed above its low
   const frame = liveOf(FIXED, 0n, 20_001);
   socket.deliver(frame);
   assertNotes(h.notes, [overLimit(frame)]);
-  await assert.rejects(reading, isFailure("corrupt"));
+  assert.deepEqual(await reading, invalidSample(frame));
 });
 
 Deno.test("a total above the default ceiling of a fixed is over-limit without tables", async () => {
@@ -1698,11 +1704,11 @@ Deno.test("a fixed above a hand-written limit gets the same report whole and in 
     const whole = handled(h.session.read(FIXED));
     const frame = liveOf(FIXED, 0n, length);
     h.socket.deliver(frame);
-    await assert.rejects(whole, isFailure("corrupt"), `limit ${limit}`);
+    assert.deepEqual(await whole, invalidSample(frame), `limit ${limit}`);
     const split = handled(h.session.read(FIXED));
     const parts = blocksOf(FIXED, new Uint8Array(length));
     deliverAll(h.socket, parts);
-    await assert.rejects(split, isFailure("corrupt"), `limit ${limit}`);
+    assert.deepEqual(await split, invalidSample(parts[0]), `limit ${limit}`);
     assertNotes(h.notes, [overLimit(frame), overLimit(parts[0])]);
   }
 });
@@ -1815,7 +1821,7 @@ Deno.test("a read of a fixed is settled by the shared block-one message, a paylo
   assert.deepEqual(h.socket.closes, []);
 });
 
-Deno.test("a payload of one block above the lowered limit of a fixed rejects the read with corrupt and records over-limit", async () => {
+Deno.test("a payload of one block above the lowered limit of a fixed resolves the read invalid and records over-limit", async () => {
   const table = {
     iface: 1,
     blob: { iface: 1, ord: 5, kind: "fixed", limit: 100 },
@@ -1825,7 +1831,7 @@ Deno.test("a payload of one block above the lowered limit of a fixed rejects the
   const parts = blocksOf(FIXED, pattern(101));
   assert.equal(parts.length, 1);
   h.socket.deliver(parts[0]);
-  await assert.rejects(reading, isFailure("corrupt"));
+  assert.deepEqual(await reading, invalidSample(parts[0]));
   assertNotes(h.notes, [overLimit(parts[0])]);
   assert.deepEqual(h.socket.closes, []);
 });
@@ -1885,8 +1891,9 @@ Deno.test("a block payload no read waits for is reassembled and discarded not-su
 Deno.test("a publish of a signal above its limit keeps its report and records no over-limit note", async () => {
   const h = await attached();
   const reading = handled(h.session.read(SIGNAL));
-  h.socket.deliver(liveOf(SIGNAL, 1n, 3_841));
-  await assert.rejects(reading, isFailure("corrupt"));
+  const frame = liveOf(SIGNAL, 1n, 3_841);
+  h.socket.deliver(frame);
+  assert.deepEqual(await reading, invalidSample(frame));
   assert.deepEqual(h.notes, []);
   // With no read waiting and no subscription: not-subscribed, as before.
   const unsolicited = liveOf(SIGNAL, 2n, 3_841);
@@ -1984,3 +1991,496 @@ Deno.test("upload_preflight_rejects_both_operations_with_the_same_error_and_send
     }
   }
 });
+
+Deno.test("a refused signal retains lastGood and is published, then recovers", async () => {
+  const calls: Uint8Array[] = [];
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: (bytes) => {
+        calls.push(bytes);
+        return bytes[0] === 9 ? { rule: "range" } : undefined;
+      },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  const good = h.session.sample(1, 2)!;
+  assert.strictEqual(good.lastGood, good.payload);
+  h.socket.deliver(live(SIGNAL, 2n, [9]));
+  const invalid: Sample = {
+    provenance: "invalid",
+    envelope: { stamp: 102n, seq: 2n },
+    payload: null,
+    lastGood: good.payload,
+    detected: { rule: "range" },
+  };
+  assert.deepEqual(h.session.sample(1, 2), invalid);
+  assert.strictEqual(h.session.sample(1, 2)!.lastGood, good.payload);
+  assert.deepEqual(h.publishes[1], { target: SIGNAL, sample: invalid });
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
+  const recovered = h.session.sample(1, 2)!;
+  assert.equal(recovered.provenance, "live");
+  assert.deepEqual(recovered.payload, Uint8Array.of(3));
+  assert.strictEqual(recovered.lastGood, recovered.payload);
+  assert.equal("detected" in recovered, false);
+  assert.deepEqual(calls, [
+    Uint8Array.of(1),
+    Uint8Array.of(9),
+    Uint8Array.of(3),
+  ]);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("reads of refused signals resolve invalid with lastGood only when held", async () => {
+  for (const subscribe of [false, true]) {
+    const h = await attachedWith({
+      checks: [{
+        iface: 1,
+        ord: 2,
+        check: (bytes) => bytes[0] === 9 ? { rule: "range" } : undefined,
+      }],
+    });
+    if (subscribe) {
+      await subscribed(h, SIGNAL);
+      h.socket.deliver(live(SIGNAL, 1n, [1]));
+    }
+    const reading = h.session.read(SIGNAL);
+    h.socket.deliver(live(SIGNAL, 2n, [9]));
+    assert.deepEqual(await reading, {
+      provenance: "invalid",
+      envelope: { stamp: 102n, seq: 2n },
+      payload: null,
+      lastGood: subscribe ? Uint8Array.of(1) : null,
+      detected: { rule: "range" },
+    });
+    assert.deepEqual(h.notes, []);
+    if (!subscribe) {
+      assert.equal(h.session.sample(1, 2), undefined);
+      assert.deepEqual(h.publishes, []);
+    }
+  }
+});
+
+Deno.test("an over-limit signal read retains held lastGood without running its check", async () => {
+  let calls = 0;
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: () => {
+        calls++;
+        return undefined;
+      },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 2n, 3841));
+  const sample = await reading;
+  assert.deepEqual(sample, {
+    provenance: "invalid",
+    envelope: { stamp: 102n, seq: 2n },
+    payload: null,
+    lastGood: Uint8Array.of(1),
+    detected: "corrupt",
+  });
+  assert.strictEqual(sample, h.session.sample(1, 2));
+  assert.equal(calls, 1);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("Init clears lastGood after resubscribe and declared invalid retains it", async () => {
+  let calls = 0;
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: () => {
+        calls++;
+        return undefined;
+      },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  h.socket.deliver(publish(SIGNAL, 2n, { provenance: "invalid" }));
+  assert.deepEqual(h.session.sample(1, 2), {
+    provenance: "invalid",
+    envelope: { stamp: 102n, seq: 2n },
+    payload: null,
+    lastGood: Uint8Array.of(1),
+  });
+  h.session.unsubscribe(SIGNAL);
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(publish(SIGNAL, 0n, { provenance: "init" }));
+  assert.deepEqual(h.session.sample(1, 2), {
+    provenance: "init",
+    envelope: { stamp: 100n, seq: 0n },
+    payload: null,
+    lastGood: null,
+  });
+  assert.equal(calls, 1);
+});
+
+Deno.test("an Init publish answering a read while a sample is held resolves with lastGood null", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [1]));
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(publish(SIGNAL, 0n, { provenance: "init" }));
+  const sample = await reading;
+  assert.equal(sample.provenance, "init");
+  assert.equal(sample.lastGood, null);
+  assert.deepEqual(h.session.sample(1, 2)?.lastGood, Uint8Array.of(1));
+});
+
+Deno.test("a check that unsubscribes the signal leaves nothing held and does not notify", async () => {
+  const holder: { session?: Session } = {};
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: () => {
+        holder.session!.unsubscribe(SIGNAL);
+        return undefined;
+      },
+    }],
+  });
+  holder.session = h.session;
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  assert.equal(h.session.sample(1, 2), undefined);
+  assert.deepEqual(h.publishes, []);
+});
+
+Deno.test("a check that unsubscribes during checkWith leaves nothing held", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  h.session.checkWith(1, 2, () => {
+    h.session.unsubscribe(SIGNAL);
+    return "corrupt";
+  });
+  assert.equal(h.session.sample(1, 2), undefined);
+});
+
+Deno.test("a check that closes the session rejects the read it answers with down", async () => {
+  const h = await attached();
+  h.session.checkWith(1, 2, () => {
+    h.session.close();
+    return undefined;
+  });
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  await assert.rejects(reading, isFailure("down"));
+});
+
+Deno.test("a throwing signal check reports corrupt and the thrown error once", async () => {
+  const error = new Error("check failed");
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: () => {
+        throw error;
+      },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  assert.deepEqual(await reading, {
+    provenance: "invalid",
+    envelope: { stamp: 101n, seq: 1n },
+    payload: null,
+    lastGood: null,
+    detected: "corrupt",
+  });
+  assert.deepEqual(h.notes, [{
+    note: "check-failed",
+    iface: 1,
+    ord: 2,
+    error,
+  }]);
+  assert.strictEqual((h.notes[0] as { error: unknown }).error, error);
+});
+
+Deno.test("checkWith rechecks held live bytes without publishing or changing sequence", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 4n, [4]));
+  const held = h.session.sample(1, 2)!;
+  let calls = 0;
+  h.session.checkWith(1, 2, (bytes) => {
+    calls++;
+    assert.strictEqual(bytes, held.payload);
+    return undefined;
+  });
+  assert.strictEqual(h.session.sample(1, 2), held);
+  assert.equal(calls, 1);
+  h.session.checkWith(1, 2, () => ({ rule: "range" }));
+  const invalid = h.session.sample(1, 2)!;
+  assert.deepEqual(invalid, {
+    provenance: "invalid",
+    envelope: held.envelope,
+    payload: null,
+    lastGood: null,
+    detected: { rule: "range" },
+  });
+  assert.strictEqual(invalid.envelope, held.envelope);
+  assert.equal(h.publishes.length, 1);
+  h.socket.deliver(live(SIGNAL, 4n, [4]));
+  assert.strictEqual(h.session.sample(1, 2), invalid);
+  assert.equal(h.publishes.length, 1);
+  h.socket.deliver(live(SIGNAL, 5n, [5]));
+  assert.equal(h.session.sample(1, 2)!.envelope.seq, 5n);
+  assert.deepEqual(h.session.sample(1, 2)!.detected, { rule: "range" });
+  assert.equal(h.publishes.length, 2);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("checkWith counts a thrown recheck as corrupt and does not check invalid samples", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  const error = new Error("recheck failed");
+  h.session.checkWith(1, 2, () => {
+    throw error;
+  });
+  assert.equal(h.session.sample(1, 2)!.detected, "corrupt");
+  assert.equal(h.session.sample(1, 2)!.lastGood, null);
+  assert.deepEqual(h.notes, [{
+    note: "check-failed",
+    iface: 1,
+    ord: 2,
+    error,
+  }]);
+  let calls = 0;
+  h.session.checkWith(1, 2, () => {
+    calls++;
+    return undefined;
+  });
+  assert.equal(calls, 0);
+  assert.equal(h.publishes.length, 1);
+});
+
+Deno.test("stale and duplicate publications without unsettled reads are not checked", async () => {
+  let calls = 0;
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: () => {
+        calls++;
+        return undefined;
+      },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
+  const stale = live(SIGNAL, 2n, [2]);
+  h.socket.deliver(stale);
+  const controller = new AbortController();
+  const cancelled = h.session.read(SIGNAL, { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(cancelled);
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
+  assert.equal(calls, 1);
+  assert.equal(h.publishes.length, 1);
+  assertNotes(h.notes, [{ note: "discarded", reason: "stale", frame: stale }]);
+});
+
+Deno.test("a duplicate or stale frame answering unsettled reads is checked once", async () => {
+  for (const seq of [3n, 2n]) {
+    let calls = 0;
+    let refuse = false;
+    const h = await attachedWith({
+      checks: [{
+        iface: 1,
+        ord: 2,
+        check: () => {
+          calls++;
+          return refuse ? "corrupt" : undefined;
+        },
+      }],
+    });
+    await subscribed(h, SIGNAL);
+    h.socket.deliver(live(SIGNAL, 3n, [3]));
+    const held = h.session.sample(1, 2);
+    refuse = true;
+    const first = h.session.read(SIGNAL);
+    const second = h.session.read(SIGNAL);
+    h.socket.deliver(live(SIGNAL, seq, [3]));
+    const sample = await first;
+    assert.deepEqual(sample, {
+      provenance: "invalid",
+      envelope: { stamp: 100n + seq, seq },
+      payload: null,
+      lastGood: Uint8Array.of(3),
+      detected: "corrupt",
+    });
+    assert.strictEqual(await second, sample);
+    assert.equal(calls, 2);
+    assert.strictEqual(h.session.sample(1, 2), held);
+    assert.equal(h.publishes.length, 1);
+    assert.deepEqual(h.notes, []);
+  }
+});
+
+Deno.test("unsubscribe drops lastGood but retains the registered signal check", async () => {
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: (bytes) => bytes[0] === 9 ? "corrupt" : undefined,
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  h.session.unsubscribe(SIGNAL);
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [9]));
+  assert.deepEqual(h.session.sample(1, 2), {
+    provenance: "invalid",
+    envelope: { stamp: 101n, seq: 1n },
+    payload: null,
+    lastGood: null,
+    detected: "corrupt",
+  });
+});
+
+Deno.test("signal check numbers are validated before sockets and after session end", async () => {
+  const h = await attached();
+  for (const number of [0, 4294967296, 1.5, NaN]) {
+    for (const [iface, ord] of [[number, 2], [1, number]]) {
+      const bad = start("veh.cabin", {
+        checks: [{ iface, ord, check: () => undefined }],
+      });
+      await assert.rejects(bad.pending, RangeError);
+      assert.equal(bad.sockets.length, 0);
+      assert.throws(
+        () => h.session.checkWith(iface, ord, () => undefined),
+        RangeError,
+      );
+    }
+  }
+  h.session.close();
+  for (const number of [0, 4294967296, 1.5, NaN]) {
+    assert.throws(
+      () => h.session.checkWith(number, 2, () => undefined),
+      RangeError,
+    );
+    assert.throws(
+      () => h.session.checkWith(1, number, () => undefined),
+      RangeError,
+    );
+  }
+  const sent = h.socket.sent.length;
+  h.session.checkWith(4294967295, 4294967295, () => {
+    assert.fail("ended check ran");
+  });
+  assert.equal(h.socket.sent.length, sent);
+});
+
+Deno.test("later signal check entries replace earlier ones and do not affect other targets", async () => {
+  const h = await attachedWith({
+    checks: [
+      {
+        iface: 1,
+        ord: 2,
+        check: () => {
+          assert.fail("replaced check ran");
+        },
+      },
+      { iface: 1, ord: 2, check: () => "corrupt" },
+      {
+        iface: 1,
+        ord: 5,
+        check: () => {
+          assert.fail("fixed check ran");
+        },
+      },
+    ],
+  });
+  const other = { kind: Kind.Signal, iface: 2, ord: 2 };
+  const neighbor = { kind: Kind.Signal, iface: 1, ord: 3 };
+  for (const target of [SIGNAL, other, neighbor]) await subscribed(h, target);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  h.socket.deliver(live(other, 1n, [2]));
+  h.socket.deliver(live(neighbor, 1n, [3]));
+  assert.equal(h.session.sample(1, 2)!.detected, "corrupt");
+  assert.equal(h.session.sample(2, 2)!.provenance, "live");
+  assert.equal(h.session.sample(1, 3)!.provenance, "live");
+  const reading = h.session.read(FIXED);
+  h.socket.deliver(live(FIXED, 0n, [5]));
+  assert.equal((await reading).provenance, "live");
+  assert.deepEqual(h.notes, []);
+});
+
+/** The invalid sample of an over-limit payload with no held good value. */
+function invalidSample(frame: Frame): Sample {
+  assert.ok("envelope" in frame);
+  return {
+    provenance: "invalid",
+    envelope: frame.envelope,
+    payload: null,
+    lastGood: null,
+    detected: "corrupt",
+  };
+}
+
+for (const recheck of [false, true]) {
+  for (const end of ["close", "unsubscribe"] as const) {
+    Deno.test(`a check-failed listener can ${end} after ${recheck ? "rechecking" : "publishing"} without restoring held state`, async () => {
+      const error = new Error("check failed");
+      let refuse = false;
+      let observed: Sample | undefined;
+      let published = 0;
+      const notes: Note[] = [];
+      const h = await attachedWith({
+        checks: [{
+          iface: 1,
+          ord: 2,
+          check: () => {
+            if (refuse) throw error;
+            return undefined;
+          },
+        }],
+        onNote: (note) => {
+          notes.push(note);
+          if (note.note !== "check-failed") return;
+          observed = h.session.sample(1, 2);
+          published = h.publishes.length;
+          if (end === "close") h.session.close();
+          else h.session.unsubscribe(SIGNAL);
+        },
+      });
+      await subscribed(h, SIGNAL);
+      h.socket.deliver(live(SIGNAL, 1n, [1]));
+      refuse = true;
+      if (recheck) {
+        h.session.checkWith(1, 2, () => {
+          throw error;
+        });
+      } else {
+        const reading = handled(h.session.read(SIGNAL));
+        h.socket.deliver(live(SIGNAL, 2n, [2]));
+        assert.equal((await reading).provenance, "invalid");
+      }
+      assert.equal(observed?.provenance, "invalid");
+      assert.equal(published, recheck ? 1 : 2);
+      assert.equal(h.session.sample(1, 2), undefined);
+      assert.equal(h.publishes.length, recheck ? 1 : 2);
+      assert.deepEqual(notes, [{
+        note: "check-failed",
+        iface: 1,
+        ord: 2,
+        error,
+      }]);
+    });
+  }
+}

@@ -6,6 +6,7 @@ export {
   UnknownPayloadType,
 } from "./src/errors.ts";
 export type { PayloadRule } from "./src/errors.ts";
+export type { Detection, SignalCheck, SignalCheckEntry } from "./src/checks.ts";
 export { loadCodec } from "./src/codec.ts";
 export type {
   Codec,

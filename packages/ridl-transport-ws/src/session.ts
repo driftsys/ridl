@@ -8,8 +8,8 @@
  * of each subscribed signal, the order of a signal's publications, the
  * sequence of an event's occurrences, the reassembly of the `block` frames of
  * a `fixed`, the order and the credit of the chunks of a streamed reply, the
- * size of each received payload against its member's limit, and the end of
- * the session.
+ * size of each received payload against its member's limit, a caller's
+ * per-signal payload check, and the end of the session.
  *
  * @module
  */
@@ -35,6 +35,7 @@ import type {
   Envelope,
   Frame,
   Reason,
+  Rule,
   StreamOutcome,
   Target,
 } from "./frame.ts";
@@ -55,6 +56,32 @@ import {
 } from "./calls.ts";
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
+/**
+ * A locally detected malformed signal payload or payload rule violation.
+ * Structurally the same as `Detection` in `@driftsys/ridl-runtime`, which
+ * this transport does not import.
+ */
+export type Detection = "corrupt" | { rule: Rule };
+
+/**
+ * Returns `undefined` when the payload passes. Structurally the same as
+ * `SignalCheck` in `@driftsys/ridl-runtime`, which this transport does not import.
+ */
+export type SignalCheck = (bytes: Uint8Array) => Detection | undefined;
+
+/**
+ * A payload check registered for one signal. Structurally the same as
+ * `SignalCheckEntry` in `@driftsys/ridl-runtime`, which this transport does not import.
+ */
+export interface SignalCheckEntry {
+  /** The interface number. */
+  readonly iface: number;
+  /** The member ordinal. */
+  readonly ord: number;
+  /** The check to run on a live signal payload. */
+  readonly check: SignalCheck;
+}
+
 /** The state of a signal or a `fixed`, as one `publish` carried it. */
 export interface Sample {
   /** `init` before the first publication, `live` for a value, `invalid` for an invalidation. */
@@ -63,12 +90,15 @@ export interface Sample {
   envelope: Envelope;
   /** The value under `live`, and `null` under `init` and `invalid`. */
   payload: Uint8Array | null;
+  /** The last passing payload, or `null` when the init value applies. */
+  lastGood: Uint8Array | null;
   /**
    * Set when the session itself invalidated the sample: the `publish` carried
-   * a `live` payload longer than the member's limit. The provenance is then
-   * `invalid` and `payload` is `null`; the envelope is the frame's.
+   * a `live` payload longer than the member's limit or refused by its check.
+   * The provenance is then `invalid` and `payload` is `null`; the envelope is
+   * the frame's. A check that throws counts as `corrupt`.
    */
-  detected?: "corrupt";
+  detected?: Detection;
 }
 
 /** One occurrence of a subscribed event. */
@@ -130,10 +160,17 @@ export type InterfaceTable = {
  * A `discarded` note with reason `over-limit` records a `live` payload of a
  * `fixed` longer than the member's limit, whether it arrived in one `publish`
  * or in `block` frames: `frame` is the `publish`, or the first block. The
- * reads it answers reject with `corrupt`, and the note is recorded whether or
- * not a read waited.
+ * reads it answers resolve with an invalid sample, and the note is recorded
+ * whether or not a read waited. A `check-failed` note reports a thrown signal
+ * check; it does not end the session.
  */
 export type Note =
+  | {
+    note: "check-failed";
+    iface: number;
+    ord: number;
+    error: unknown;
+  }
   | {
     note: "violation";
     violation: SessionViolation;
@@ -183,11 +220,13 @@ export interface ConnectOptions extends WaitOptions {
    * ceiling of its kind.
    */
   interfaces?: readonly InterfaceTable[];
+  /** Per-signal payload checks; a later entry replaces an earlier one. */
+  checks?: readonly SignalCheckEntry[];
   /** Called for every accepted `publish` of a subscribed signal. */
   onPublish?: (target: Target, sample: Sample) => void;
   /** Called for every accepted occurrence, in arrival order. */
   onOccurrence?: (occurrence: Occurrence) => void;
-  /** Called for every violation, discarded frame and loss. */
+  /** Called for every violation, discarded frame, loss and throwing check. */
   onNote?: (note: Note) => void;
   /**
    * The caller's clock in microseconds, used as the `stamp` of a `request`.
@@ -228,7 +267,8 @@ export interface Ended {
  * neither option, the wait lasts until the answer or the session ends.
  *
  * The promise rejects with:
- * - a `RangeError` for an invalid `bound`, before any socket is created;
+ * - a `RangeError` for an invalid `bound` or check entry's interface number
+ *   or ordinal, before any socket is created;
  * - `signal.reason` when the signal aborts, before any socket is created if
  *   it is already aborted;
  * - a {@link SessionError} with category `timeout` when the bound passes;
@@ -254,6 +294,9 @@ export function connect(
   let first: ReturnType<typeof attach>;
   try {
     checkWait(options);
+    for (const entry of options.checks ?? []) {
+      checkNumbers(entry.iface, entry.ord);
+    }
     // `attach` builds an `attach` frame; its frame version is replaced by the
     // one of the selected subprotocol when the connection opens.
     first = attach(
@@ -445,6 +488,8 @@ export class Session {
   #signals = new Set<string>();
   /** The held sample of each subscribed signal that has received one. */
   #held = new Map<string, Sample>();
+  /** The caller's payload check for each signal, keyed `iface:ord`. */
+  #checks = new Map<string, SignalCheck>();
   /** The subscribed events, keyed `iface:ord`. */
   #events = new Set<string>();
   /** The last accepted `seq` of each subscribed event. */
@@ -473,6 +518,9 @@ export class Session {
     this.#attachFrame = attachFrame;
     this.#options = options;
     this.#limits = recordedLimits(options.interfaces);
+    for (const entry of options.checks ?? []) {
+      this.#checks.set(channel(entry.iface, entry.ord), entry.check);
+    }
     this.closed = new Promise((resolve) => {
       this.#resolveClosed = resolve;
     });
@@ -533,7 +581,8 @@ export class Session {
 
   /**
    * Ends a subscription and drops what the session held for it: the held
-   * sample of a signal, or the last `seq` of an event. Frames of the
+   * sample and its `lastGood` of a signal, or the last `seq` of an event.
+   * The registered signal check remains. Frames of the
    * interaction that arrive later are discarded. A `subscribe` of the same
    * interaction still waiting for its answer resolves on that answer, but does
    * not make the interaction subscribed. Does nothing once the session has
@@ -568,8 +617,10 @@ export class Session {
    * {@link SessionError} on a refusing `answer`. On a session of frame
    * version 2, the value of a `fixed` may arrive in `block` frames, which the
    * session reassembles into one sample; a `fixed` longer than its limit, in
-   * one `publish` or in blocks, rejects with `corrupt`. A read does not
-   * subscribe: the sample is held only when the signal is already subscribed.
+   * one `publish` or in blocks, resolves with an invalid sample. A signal
+   * refused by its check also resolves invalid, with `detected` and `lastGood`.
+   * A read does not subscribe: the sample is held only when the signal is
+   * already subscribed.
    * Rejects with a `RangeError`, and sends nothing, when the interface number
    * or the ordinal is not an integer from 1 to 4294967295, or `opts.bound`
    * is invalid. An optional `opts.bound` in milliseconds rejects with
@@ -600,6 +651,54 @@ export class Session {
   /** The held sample of a subscribed signal, or `undefined` when there is none. */
   sample(iface: number, ord: number): Sample | undefined {
     return this.#held.get(channel(iface, ord));
+  }
+
+  /**
+   * Registers or replaces a signal check and immediately checks a held live
+   * payload. Refusal clears its bytes and `lastGood`, keeping its envelope.
+   * This calls no `onPublish` and changes no sequence. A thrown check counts
+   * as `corrupt` and records `check-failed`.
+   * Does nothing after the session ends, except for number validation.
+   *
+   * @throws {RangeError} when either number is not an integer from 1 to
+   * 4294967295, also after the session has ended.
+   */
+  checkWith(iface: number, ord: number, check: SignalCheck): void {
+    checkNumbers(iface, ord);
+    if (this.#ended) return;
+    const ch = channel(iface, ord);
+    this.#checks.set(ch, check);
+    const held = this.#held.get(ch);
+    if (!this.#signals.has(ch) || held?.provenance !== "live") return;
+    const { detected, failure } = this.#checkSignal(iface, ord, held.payload!);
+    // The check is caller code: it may have unsubscribed or closed.
+    if (detected !== undefined && !this.#ended && this.#signals.has(ch)) {
+      this.#held.set(ch, {
+        provenance: "invalid",
+        envelope: held.envelope,
+        payload: null,
+        lastGood: null,
+        detected,
+      });
+    }
+    if (failure) this.#note(failure);
+  }
+
+  #checkSignal(
+    iface: number,
+    ord: number,
+    bytes: Uint8Array,
+  ): { detected: Detection | undefined; failure?: Note } {
+    try {
+      return { detected: this.#checks.get(channel(iface, ord))?.(bytes) };
+    } catch (error) {
+      // Notify only after the caller commits its state: a listener may close
+      // the session or unsubscribe, which must not be undone by a later write.
+      return {
+        detected: "corrupt",
+        failure: { note: "check-failed", iface, ord, error },
+      };
+    }
   }
 
   /**
@@ -1158,54 +1257,75 @@ export class Session {
     reads: Extract<Waiting, { op: "read" }>[] = this.#takeReads(frame.target),
   ): void {
     const t = frame.target;
-    // A `live` payload longer than the member's limit never reaches the
-    // application: the sample is invalid with `detected`, and a `read` it
-    // answers rejects `corrupt`.
+    const ch = channel(t.iface, t.ord);
+    const subscribed = t.kind === Kind.Signal && this.#signals.has(ch);
+    const held = subscribed ? this.#held.get(ch) : undefined;
+    // Size refusal resolves reads with an invalid sample, retaining only the
+    // last good bytes held for a subscribed signal.
     const oversized = frame.state.provenance === "live" &&
       frame.state.payload.length > this.#limitOf(t);
-    const sample: Sample = oversized
-      ? {
-        provenance: "invalid",
-        envelope: frame.envelope,
-        payload: null,
-        detected: "corrupt",
+    // The server reuses a session `seq` only for an identical sample (the
+    // crate's D-24), except `Init`, which always carries `seq` 0. Equal and
+    // older sequences cannot replace the held sample. A frame answering an
+    // unsettled read still needs a check before the read receives its sample.
+    const dropped = !subscribed ||
+      (held !== undefined && frame.envelope.seq <= held.envelope.seq);
+    let sample: Sample | undefined;
+    let failure: Note | undefined;
+    if (!dropped || reads.some((read) => !read.settled)) {
+      let detected: Detection | undefined = oversized ? "corrupt" : undefined;
+      if (
+        !oversized && t.kind === Kind.Signal &&
+        frame.state.provenance === "live"
+      ) {
+        ({ detected, failure } = this.#checkSignal(
+          t.iface,
+          t.ord,
+          frame.state.payload,
+        ));
       }
-      : {
-        provenance: frame.state.provenance,
+      const payload =
+        detected === undefined && frame.state.provenance === "live"
+          ? frame.state.payload
+          : null;
+      sample = {
+        provenance: detected === undefined ? frame.state.provenance : "invalid",
         envelope: frame.envelope,
-        payload: frame.state.provenance === "live" ? frame.state.payload : null,
+        payload,
+        lastGood: frame.state.provenance === "init"
+          ? null
+          : payload ?? held?.lastGood ?? null,
+        ...(detected === undefined ? {} : { detected }),
       };
-    for (const r of reads) {
-      if (oversized) r.reject(new SessionError({ category: "corrupt" }));
-      else r.resolve(sample);
+      // The check is caller code: when it closed the session, the reads that
+      // were already taken from the queue still end with `down`.
+      for (const read of reads) {
+        if (this.#ended) read.reject(new SessionError(DOWN));
+        else read.resolve(sample);
+      }
     }
 
-    const ch = channel(t.iface, t.ord);
-    if (t.kind !== Kind.Signal || !this.#signals.has(ch)) {
+    if (!subscribed) {
       if (oversized && t.kind === Kind.Fixed) {
         this.#note({ note: "discarded", reason: "over-limit", frame });
       } else if (reads.length === 0) {
         this.#note({ note: "discarded", reason: "not-subscribed", frame });
       }
-      return;
-    }
-    const held = this.#held.get(ch);
-    // The server reuses a session `seq` only for an identical sample (the
-    // crate's D-24), except `Init`, which always carries `seq` 0. A `seq` equal
-    // to the held one is the reply to a read that a live publish already
-    // settled, or a duplicate: it is dropped and not recorded. This includes an
-    // `Init` publish while an `Init` with `seq` 0 is held.
-    if (held && frame.envelope.seq === held.envelope.seq) return;
-    if (held && frame.envelope.seq < held.envelope.seq) {
+    } else if (dropped) {
       // A frame that answered a read is not a discard, though it changes nothing.
-      if (reads.length === 0) {
+      if (
+        held && frame.envelope.seq < held.envelope.seq && reads.length === 0
+      ) {
         this.#note({ note: "discarded", reason: "stale", frame });
       }
-      return;
+    } else if (this.#ended || !this.#signals.has(ch)) {
+      // The check ran caller code that ended the session or unsubscribed.
+    } else {
+      this.#held.set(ch, sample!);
+      const onPublish = this.#options.onPublish;
+      if (onPublish) this.#listen(() => onPublish(t, sample!));
     }
-    this.#held.set(ch, sample);
-    const onPublish = this.#options.onPublish;
-    if (onPublish) this.#listen(() => onPublish(t, sample));
+    if (failure) this.#note(failure);
   }
 
   /**
@@ -1233,8 +1353,9 @@ export class Session {
    * `publish` that arrived whole, and settles the reads that were at the
    * head of the identity's queue when its first block arrived: a read sent
    * later waits for the next payload. A payload whose `total` is above the
-   * member's limit rejects the reads at the head of the identity's queue with
-   * `corrupt` at its first block, is recorded `over-limit`, and its other
+   * member's limit resolves the reads at the head of the identity's queue
+   * with an invalid sample (`detected: "corrupt"`, `lastGood: null`) using
+   * its first block's envelope, is recorded `over-limit`, and its other
    * blocks change nothing. A sequence error ends the session.
    */
   #onBlock(frame: BlockFrame): void {
@@ -1254,7 +1375,13 @@ export class Session {
       }
       case "over-limit":
         for (const r of this.#takeReads(t)) {
-          r.reject(new SessionError({ category: "corrupt" }));
+          r.resolve({
+            provenance: "invalid",
+            envelope: frame.envelope,
+            payload: null,
+            lastGood: null,
+            detected: "corrupt",
+          });
         }
         this.#note({ note: "discarded", reason: "over-limit", frame });
         return;

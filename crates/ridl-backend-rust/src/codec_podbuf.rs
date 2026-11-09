@@ -1583,7 +1583,23 @@ impl<'a> Codec<'a> {
                 message: "the podbuf layout names an entry head it does not carry".to_string(),
             })?;
         let count = encode_count_check(owner, map.min, map.max, &quote! { __c });
-        let order = self.key_order(key_ty, owner)?;
+        let key_form = entry
+            .fields
+            .iter()
+            .find(|field| {
+                matches!(
+                    field
+                        .source
+                        .as_ref()
+                        .and_then(|source| source.kind.as_ref()),
+                    Some(Placed::Key(_))
+                )
+            })
+            .and_then(|field| field.form.as_ref())
+            .ok_or_else(|| GenerateError {
+                message: format!("the podbuf entry head of `{owner}` holds no key"),
+            })?;
+        let order = self.key_order(key_ty, key_form, owner)?;
         let nan = order.nan;
         let compare = order.compare;
         let equal = order.equal;
@@ -1686,8 +1702,15 @@ impl<'a> Codec<'a> {
     /// two sorted entries) and `__e` (one entry). The comparison is written
     /// as a trait call, because the method form inside `sort_by` is
     /// `clippy::unnecessary_sort_by` in a consumer's build, and a key that
-    /// borrows from its entry cannot move to `sort_by_key`.
-    fn key_order(&self, key_ty: &v1::Type, owner: &str) -> Result<KeyOrder, GenerateError> {
+    /// borrows from its entry cannot move to `sort_by_key`. `key_form` is the
+    /// form of the key on the wire: float keys are tested for a duplicate at
+    /// that width.
+    fn key_order(
+        &self,
+        key_ty: &v1::Type,
+        key_form: &v1::PodbufForm,
+        owner: &str,
+    ) -> Result<KeyOrder, GenerateError> {
         let a = Operand::owned(quote! { __a.0 });
         let b = Operand::owned(quote! { __b.0 });
         let p0 = Operand::owned(quote! { __p[0].0 });
@@ -1732,15 +1755,25 @@ impl<'a> Codec<'a> {
                 let l1 = self.lang(key_ty, &p1)?;
                 let le = self.lang(key_ty, &Operand::owned(quote! { __e.0 }))?;
                 let refused = contract_error(owner, "Range");
+                let Some(Form::Float(width)) = key_form.kind.as_ref() else {
+                    return fail(format!(
+                        "a float map key of `{owner}` has a podbuf form that is not a float"
+                    ));
+                };
+                let wire = Prim::of_float(*width)?;
+                let (w0, w1) = (wire.cast(l0), wire.cast(l1));
                 KeyOrder {
                     // A NaN key is refused first, so the partial order is
                     // total here; `+0.0` and `-0.0` compare equal and are
-                    // one key (decision 5).
+                    // one key (decision 5). Narrowing to `f32` keeps the
+                    // order, so sorting the domain values is enough, but two
+                    // keys can narrow to one value, so equality is tested at
+                    // the width `verify` reads.
                     compare: quote! {
                         ::core::cmp::PartialOrd::partial_cmp(&#la, &#lb)
                             .unwrap_or(::core::cmp::Ordering::Equal)
                     },
-                    equal: quote! { #l0 == #l1 },
+                    equal: quote! { #w0 == #w1 },
                     nan: quote! {
                         for __e in __c.iter() {
                             if #le.is_nan() {
