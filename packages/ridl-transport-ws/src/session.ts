@@ -46,7 +46,13 @@ import {
 } from "./errors.ts";
 import { endViolation } from "./violation.ts";
 import { FORM_BLOCK } from "./blocks.ts";
-import { Calls, type Unused, UPLOAD_STREAM, type UploadSend } from "./calls.ts";
+import {
+  Calls,
+  checkBound,
+  type Unused,
+  UPLOAD_STREAM,
+  type UploadSend,
+} from "./calls.ts";
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
 /** The state of a signal or a `fixed`, as one `publish` carried it. */
@@ -155,8 +161,16 @@ export type Note =
     received: bigint;
   };
 
+/** Optional limits on waiting for a session operation's answer. */
+export interface WaitOptions {
+  /** Milliseconds to wait: finite, greater than 0 and at most 2147483647. */
+  bound?: number;
+  /** Aborting rejects with this signal's reason. */
+  signal?: AbortSignal;
+}
+
 /** The options of {@link connect}. */
-export interface ConnectOptions {
+export interface ConnectOptions extends WaitOptions {
   /** The catalog the session is bound to: the unit name and its 32-byte hash. */
   catalog: { name: string; hash: Uint8Array };
   /** The payload encoding the `attach` asks for. The default is `proto3`. */
@@ -208,7 +222,16 @@ export interface Ended {
  * frame version 1 or 2, so is a message of the `chunk`, `stream_end` or
  * `stream_credit` form.
  *
+ * `bound` limits the wait from this call until `attached(accepted)`, in
+ * milliseconds. `signal` aborts the wait. Either closes the socket and makes
+ * late open, attached and close events have no effect on the result. With
+ * neither option, the wait lasts until the answer or the session ends.
+ *
  * The promise rejects with:
+ * - a `RangeError` for an invalid `bound`, before any socket is created;
+ * - `signal.reason` when the signal aborts, before any socket is created if
+ *   it is already aborted;
+ * - a {@link SessionError} with category `timeout` when the bound passes;
  * - an `AttachError` or a `RangeError` from `attach`, before any socket is
  *   created, for an empty name, a name longer than 255 UTF-8 bytes, an
  *   unknown encoding or a hash that is not 32 bytes long;
@@ -227,8 +250,10 @@ export function connect(
   url: string,
   options: ConnectOptions,
 ): Promise<Session> {
+  const started = performance.now();
   let first: ReturnType<typeof attach>;
   try {
+    checkWait(options);
     // `attach` builds an `attach` frame; its frame version is replaced by the
     // one of the selected subprotocol when the connection opens.
     first = attach(
@@ -250,23 +275,79 @@ export function connect(
     return Promise.reject(e);
   }
   return new Promise((resolve, reject) => {
-    new Session(socket, first, options, { resolve, reject });
+    new Session(socket, first, options, { resolve, reject }, started);
   });
 }
 
 type Waiting =
-  | {
-    op: "subscribe";
-    /** Set when an `unsubscribe` was sent before this subscribe's answer. */
-    dropped: boolean;
-    resolve: () => void;
-    reject: (e: SessionError) => void;
-  }
-  | {
-    op: "read";
-    resolve: (sample: Sample) => void;
-    reject: (e: SessionError) => void;
+  & { readonly settled: boolean }
+  & (
+    | {
+      op: "subscribe";
+      /** Set when unsubscribed or cancelled before this subscribe's answer. */
+      dropped: boolean;
+      resolve: () => void;
+      reject: (e: unknown) => void;
+    }
+    | {
+      op: "read";
+      resolve: (sample: Sample) => void;
+      reject: (e: unknown) => void;
+    }
+  );
+
+/** Validates before a socket is created or a frame is sent. */
+function checkWait(options: WaitOptions): void {
+  if (options.bound !== undefined) checkBound(options.bound);
+  options.signal?.throwIfAborted();
+}
+
+/** Settles once and clears the timer and abort listener for every outcome. */
+function waitFor<T>(
+  options: WaitOptions,
+  resolve: (value: T) => void,
+  reject: (error: unknown) => void,
+  cancelled: () => void,
+  started: number = performance.now(),
+) {
+  const signal = options.signal;
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cleanup = () => {
+    if (settled) return false;
+    settled = true;
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+    return true;
   };
+  const cancel = (error: unknown) => {
+    if (!cleanup()) return;
+    reject(error);
+    cancelled();
+  };
+  const abort = () => cancel(signal?.reason);
+  if (options.bound !== undefined) {
+    timer = setTimeout(
+      () => cancel(new SessionError({ category: "timeout" })),
+      Math.max(0, options.bound - (performance.now() - started)),
+    );
+  }
+  signal?.addEventListener("abort", abort, { once: true });
+  const waiting = {
+    get settled() {
+      return settled;
+    },
+    resolve: (value: T) => {
+      if (cleanup()) resolve(value);
+    },
+    reject: (error: unknown) => {
+      if (cleanup()) reject(error);
+    },
+  };
+  // A socket factory may have aborted the signal since connect's preflight.
+  if (signal?.aborted) abort();
+  return waiting;
+}
 
 interface Opening {
   resolve: (session: Session) => void;
@@ -343,7 +424,7 @@ export class Session {
 
   #socket: WebSocket;
   #options: ConnectOptions;
-  #opening: Opening | null;
+  #opening: Opening | null = null;
   #attachFrame: ReturnType<typeof attach>;
   /**
    * The frame version of the session: 3 on `ridl-ws-v3`, 2 on `ridl-ws-v2`, 1
@@ -386,11 +467,11 @@ export class Session {
     attachFrame: ReturnType<typeof attach>,
     options: ConnectOptions,
     opening: Opening,
+    started: number = performance.now(),
   ) {
     this.#socket = socket;
     this.#attachFrame = attachFrame;
     this.#options = options;
-    this.#opening = opening;
     this.#limits = recordedLimits(options.interfaces);
     this.closed = new Promise((resolve) => {
       this.#resolveClosed = resolve;
@@ -400,6 +481,19 @@ export class Session {
     socket.onmessage = (event) => this.#onMessage(event);
     socket.onclose = (event) => this.#onEnd(event.code, event.reason);
     socket.onerror = () => this.#onEnd(1006, "");
+    const waiting = waitFor(options, opening.resolve, opening.reject, () => {
+      this.#opening = null;
+      this.#fail();
+      if (!this.#closeSent) {
+        this.#closeSent = true;
+        try {
+          socket.close(1000);
+        } catch {
+          socket.close();
+        }
+      }
+    }, started);
+    this.#opening = waiting.settled ? null : waiting;
   }
 
   /**
@@ -407,19 +501,33 @@ export class Session {
    * with a `contract` {@link SessionError} on a refusing `answer`. A target of
    * another kind is sent as given, and the provider refuses it. Rejects with a
    * `RangeError`, and sends nothing, when the interface number or the ordinal
-   * is not an integer from 1 to 4294967295.
+   * is not an integer from 1 to 4294967295, or `opts.bound` is invalid.
+   * An optional `opts.bound` in milliseconds rejects with `timeout` when it
+   * passes; `opts.signal` rejects with its reason on abort, without sending
+   * if already aborted. A late answer is consumed without subscribing.
+   * Cancellation sends `unsubscribe` if there is no established subscription
+   * or other live subscribe waiting. With neither option, waits until the
+   * answer or the session ends.
    */
-  subscribe(target: Target): Promise<void> {
+  subscribe(target: Target, opts: WaitOptions = {}): Promise<void> {
     return new Promise((resolve, reject) => {
       checkNumbers(target.iface, target.ord);
+      checkWait(opts);
       if (this.#ended) return reject(new SessionError(DOWN));
-      this.#enqueue(target, {
-        op: "subscribe",
-        dropped: false,
-        resolve,
-        reject,
-      });
-      this.#send({ form: "subscribe", target });
+      const waiting = Object.assign(
+        waitFor(opts, resolve, reject, () => {
+          waiting.dropped = true;
+          this.#dropSubscribe(target);
+        }),
+        { op: "subscribe" as const, dropped: false },
+      );
+      this.#enqueue(target, waiting);
+      try {
+        this.#send({ form: "subscribe", target });
+      } catch (error) {
+        this.#removeWaiter(target, waiting);
+        waiting.reject(error);
+      }
     });
   }
 
@@ -455,21 +563,37 @@ export class Session {
 
   /**
    * Reads a signal or a `fixed` once. Resolves with the sample of the next
-   * `publish` of that interaction; rejects with a `contract`
+   * `publish` of that interaction, unless a cancelled read ahead in the queue
+   * consumes that reply without settling this read; rejects with a `contract`
    * {@link SessionError} on a refusing `answer`. On a session of frame
    * version 2, the value of a `fixed` may arrive in `block` frames, which the
    * session reassembles into one sample; a `fixed` longer than its limit, in
    * one `publish` or in blocks, rejects with `corrupt`. A read does not
    * subscribe: the sample is held only when the signal is already subscribed.
    * Rejects with a `RangeError`, and sends nothing, when the interface number
-   * or the ordinal is not an integer from 1 to 4294967295.
+   * or the ordinal is not an integer from 1 to 4294967295, or `opts.bound`
+   * is invalid. An optional `opts.bound` in milliseconds rejects with
+   * `timeout` when it passes; `opts.signal` rejects with its reason on abort,
+   * without sending if already aborted. A late answer or payload is consumed
+   * without settling a later read. With neither option, waits until the
+   * answer or the session ends.
    */
-  read(target: Target): Promise<Sample> {
+  read(target: Target, opts: WaitOptions = {}): Promise<Sample> {
     return new Promise((resolve, reject) => {
       checkNumbers(target.iface, target.ord);
+      checkWait(opts);
       if (this.#ended) return reject(new SessionError(DOWN));
-      this.#enqueue(target, { op: "read", resolve, reject });
-      this.#send({ form: "read", target });
+      const waiting = Object.assign(
+        waitFor(opts, resolve, reject, () => {}),
+        { op: "read" as const },
+      );
+      this.#enqueue(target, waiting);
+      try {
+        this.#send({ form: "read", target });
+      } catch (error) {
+        this.#removeWaiter(target, waiting);
+        waiting.reject(error);
+      }
     });
   }
 
@@ -851,6 +975,29 @@ export class Session {
     else this.#waiting.set(key, [waiting]);
   }
 
+  #removeWaiter(target: Target, waiting: Waiting): void {
+    const key = identity(target);
+    const queue = this.#waiting.get(key);
+    if (!queue) return;
+    const index = queue.indexOf(waiting);
+    if (index !== -1) queue.splice(index, 1);
+    if (queue.length === 0) this.#waiting.delete(key);
+  }
+
+  /** Stops publishing when cancellation leaves no subscription or live waiter. */
+  #dropSubscribe(target: Target): void {
+    const ch = channel(target.iface, target.ord);
+    if (
+      this.#ended ||
+      (target.kind === Kind.Signal && this.#signals.has(ch)) ||
+      (target.kind === Kind.Event && this.#events.has(ch)) ||
+      this.#waiting.get(identity(target))?.some((w) =>
+        w.op === "subscribe" && !w.settled && !w.dropped
+      )
+    ) return;
+    this.#send({ form: "unsubscribe", target });
+  }
+
   #onOpen(): void {
     if (this.#ended) return;
     switch (this.#socket.protocol) {
@@ -1004,7 +1151,7 @@ export class Session {
 
   /**
    * Applies one `publish`. `reads` are the reads it answers; by default,
-   * every `read` at the head of the identity's queue.
+   * consecutive live reads, or one settled placeholder, at the queue's head.
    */
   #onPublish(
     frame: Extract<Frame, { form: "publish" }>,
@@ -1061,14 +1208,21 @@ export class Session {
     if (onPublish) this.#listen(() => onPublish(t, sample));
   }
 
-  /** Removes and returns every `read` at the head of the identity's queue. */
+  /**
+   * Takes consecutive live reads, or one settled placeholder, from the head.
+   * A cancelled read consumes its own reply without settling later reads.
+   */
   #takeReads(t: Target): Extract<Waiting, { op: "read" }>[] {
     const reads: Extract<Waiting, { op: "read" }>[] = [];
     const key = identity(t);
     const queue = this.#waiting.get(key);
     while (queue && queue[0]?.op === "read") {
+      if (reads.length > 0 && queue[0].settled) break;
       const read = queue.shift();
-      if (read?.op === "read") reads.push(read);
+      if (read?.op === "read") {
+        reads.push(read);
+        if (read.settled) break;
+      }
     }
     if (queue && queue.length === 0) this.#waiting.delete(key);
     return reads;

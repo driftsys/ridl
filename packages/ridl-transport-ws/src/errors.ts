@@ -66,7 +66,7 @@ export class ProtocolError extends Error {
  * Why an operation failed: a contract error the provider reported, a failure
  * the provider reported for a call (`corrupt`, `busy`), or a failure the
  * client detected (`undelivered`: a command's bound passed; `timeout`: a
- * query's bound passed; `down`: the session ended).
+ * query, connect, subscribe or read bound passed; `down`: the session ended).
  */
 export type CallFailure =
   | { category: "contract"; contract: Contract }

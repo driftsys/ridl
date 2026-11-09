@@ -58,18 +58,22 @@ provider gives a `request` above the limit.
 On a session of frame version 2, the provider sends the value of a `fixed` that
 does not fit one message as `block` frames of 4,096 bytes each, except the last
 one, which holds the rest of the value. The session reassembles them and settles
-the reads that were waiting when the first block arrived with one sample, as for
-a value that arrived in one `publish`. A read sent after the first block, while
-the value is still arriving, waits for the next value. The limit of a `fixed` is
-the one its interface table gives, else `FIXED_CEILING`, and never more than
-65,280 bytes: a table limit above 65,280 counts as 65,280, and one that is not a
-finite number counts as 0. Each reassembled value goes into a new buffer of its
-own length, which the session does not write to again.
+the consecutive live reads at the head of the queue when the first block arrived
+with one sample, as for a value that arrived in one `publish`. A cancelled read
+ahead in the queue first consumes one reply without settling the reads behind
+it. A read sent after the first block, while the value is still arriving, waits
+for the next value. The limit of a `fixed` is the one its interface table gives,
+else `FIXED_CEILING`, and never more than 65,280 bytes: a table limit above
+65,280 counts as 65,280, and one that is not a finite number counts as 0. Each
+reassembled value goes into a new buffer of its own length, which the session
+does not write to again.
 
 A value of a `fixed` longer than its limit, whether it arrived in one `publish`
 or in blocks, and on either frame version:
 
-- rejects every read waiting for it with `SessionError` `corrupt`;
+- rejects the consecutive live reads at the head of the queue with
+  `SessionError` `corrupt`, unless a cancelled read ahead first consumes the
+  reply without settling the reads behind it;
 - is recorded once, through `onNote`, as
   `{ note: "discarded", reason: "over-limit", frame }`, where `frame` is the
   `publish` or the first block, also when no read waits for it. In blocks, it is
@@ -208,9 +212,27 @@ The path of the URL is the gateway's: the binding gives it no meaning.
   because the platform cannot send the codes 1002, 1003 or 1009. `provide` does
   the same and records the violation through `onNote`.
 - The client has no liveness timer, because a page cannot see the pings of the
-  server. `connect`, `subscribe` and `read` have no time limit: each waits until
-  its answer arrives or the session ends. `provide` has no timer either, and the
-  server's liveness check is the one that runs.
+  server. `provide` has no timer either, and the server's liveness check is the
+  one that runs.
+- `connect` accepts optional `bound` and `signal` fields in its options;
+  `subscribe(target, opts?)` and `read(target, opts?)` accept the same fields
+  through `WaitOptions`. The bound is in milliseconds: a finite number greater
+  than 0 and at most 2147483647. An invalid bound rejects with `RangeError`
+  before creating a socket or sending a frame. When it passes, the operation
+  rejects with `SessionError` category `timeout`. Connect's bound runs from the
+  call until `attached(accepted)`. An aborted signal rejects with
+  `signal.reason`; an already aborted signal creates no socket or sends no
+  frame. With neither option, each waits until its answer or the session ends.
+  Timers and abort listeners are removed when the operation settles.
+- A timeout or abort of `connect` closes the socket and ignores late events. A
+  cancelled subscribe or read keeps a placeholder until a reply consumes it or
+  the session ends;
+  [D-11](../../docs/design/ridl-transport-ws-ts.md#the-session-srcsessionts-srccallsts)
+  explains why unanswered cancellations accumulate. A cancelled subscribe does
+  not establish a subscription; after its late acceptance, a publish can still
+  produce a `not-subscribed` note. If no subscription is established and no
+  other live subscribe waits, cancellation sends `unsubscribe`. Existing held
+  samples and event sequences are preserved.
 - When the server selects no subprotocol, `connect` rejects with
   `ProtocolError('no-subprotocol')` in Deno. In a browser, the platform fails
   the handshake itself, so `connect` rejects with `SessionError` `down` (close
