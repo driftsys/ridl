@@ -135,6 +135,9 @@ claims-only mode, so two positions that share one entry across two declarations
 are named the same whatever order the importer reaches them in; decision 7
 carries the dated note.
 
+**Amended 2026-11-09 — decision 5, float map keys are tested for a duplicate at
+their wire width, from driftsys/ridl#1280.** Decision 5 states the rule.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a

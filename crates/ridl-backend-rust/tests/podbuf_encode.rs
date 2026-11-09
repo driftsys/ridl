@@ -317,13 +317,35 @@ fn f32_map_keys_that_round_to_one_value_are_refused_as_duplicates() {
         refused.contains("EncodeError::Contract") && refused.contains("Unique"),
         "got: {refused}"
     );
+    let zeros = run_result("Narrowed { by_level: smap(&[(0.0, 1), (-0.0, 2)]) }");
+    assert!(
+        zeros.contains("EncodeError::Contract") && zeros.contains("Unique"),
+        "got: {zeros}"
+    );
 }
 
-/// The same two keys are distinct on an `f64` wire form, so they are encoded.
+/// Two adjacent `f32` values are two keys, and they are written in order.
+/// The keys are below 1.0, where they differ by less than `f32::EPSILON`.
+#[test]
+fn adjacent_f32_map_keys_are_sorted_and_not_refused() {
+    let bytes = run("Narrowed { by_level: smap(&[(0.5 + 2f64.powi(-24), 2), (0.5, 1)]) }");
+    assert_eq!(bytes.len(), 32);
+    assert_eq!(&bytes[16..20], &0.5f32.to_le_bytes());
+    assert_eq!(bytes[20], 1);
+    assert_eq!(&bytes[24..28], &(0.5f32 + 2f32.powi(-24)).to_le_bytes());
+    assert_eq!(bytes[28], 2);
+}
+
+/// The same two keys are distinct on an `f64` wire form: both are encoded,
+/// and they are sorted at that width.
 #[test]
 fn f64_map_keys_are_not_narrowed_for_the_duplicate_check() {
-    let bytes = run("Scored { by_score: smap(&[(1.0, 1), (1.0 + 2f64.powi(-40), 2)]) }");
+    let bytes = run("Scored { by_score: smap(&[(1.0 + 2f64.powi(-40), 2), (1.0, 1)]) }");
     assert_eq!(bytes.len(), 48);
+    assert_eq!(&bytes[16..24], &1.0f64.to_le_bytes());
+    assert_eq!(bytes[24], 1);
+    assert_eq!(&bytes[32..40], &(1.0f64 + 2f64.powi(-40)).to_le_bytes());
+    assert_eq!(bytes[40], 2);
 }
 
 /// §8.1: a deprecated field is written as its init value, 5, not as the

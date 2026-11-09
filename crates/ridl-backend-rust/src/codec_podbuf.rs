@@ -1702,7 +1702,9 @@ impl<'a> Codec<'a> {
     /// two sorted entries) and `__e` (one entry). The comparison is written
     /// as a trait call, because the method form inside `sort_by` is
     /// `clippy::unnecessary_sort_by` in a consumer's build, and a key that
-    /// borrows from its entry cannot move to `sort_by_key`.
+    /// borrows from its entry cannot move to `sort_by_key`. `key_form` is the
+    /// form of the key on the wire: float keys are tested for a duplicate at
+    /// that width.
     fn key_order(
         &self,
         key_ty: &v1::Type,

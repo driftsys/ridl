@@ -197,6 +197,20 @@ fn scored(keys: &[f64]) -> Vec<u8> {
     bytes
 }
 
+/// A `Narrowed` buffer by hand: entries of `{ key: f32, value: u8 }` at 16,
+/// in the order given.
+fn narrowed(keys: &[f32]) -> Vec<u8> {
+    let mut bytes = vec![8, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0];
+    bytes.extend_from_slice(&(keys.len() as u16).to_le_bytes());
+    bytes.extend_from_slice(&8u16.to_le_bytes());
+    for (i, key) in keys.iter().enumerate() {
+        bytes.extend_from_slice(&key.to_le_bytes());
+        bytes.push(i as u8 + 1);
+        bytes.extend_from_slice(&[0; 3]);
+    }
+    bytes
+}
+
 /// Swaps the two 16-byte map entries of a `Labels` buffer.
 fn swap_entries(mut bytes: Vec<u8>) -> Vec<u8> {
     let (head, tail) = bytes.split_at_mut(32);
@@ -664,6 +678,20 @@ fn distinct_f32_map_keys_verify_and_round_trip() {
         ],
     );
     assert_eq!(out, ["true"]);
+}
+
+/// Rule 8 at `f32` width: two equal keys are refused with `KeyOrder`, which
+/// is why the encoder refuses keys that narrow to one `f32` value.
+#[test]
+fn equal_f32_map_keys_are_refused_as_key_order() {
+    let out = run(
+        "f32_key_order",
+        &[
+            r#"check!(Narrowed, narrowed(&[1.0, 1.0]))"#,
+            r#"check!(Narrowed, narrowed(&[1.0, 2.0]))"#,
+        ],
+    );
+    assert_eq!(out, ["KeyOrder", "OK"]);
 }
 
 /// ADR-0031 decision 8 rule 7 for an arm whose head has no field: the arm
