@@ -1046,12 +1046,13 @@ zip of the pinned version. Node and npm come from the runner image. The job
 reads the `rust` path filter, which runs for any path outside the skip list,
 `packages/` included.
 
-**The Deno pin.** The version is in one file, `.deno-version` at the root. CI
-reads it. `./bootstrap` downloads that release's zip from GitHub into
-`~/.deno/bin` when no `deno` is on `PATH`, edits no shell profile (the
-contributor adds `~/.deno/bin` to `PATH`), and prints a note, without replacing
-it, when another version is installed, for the reason ADR-0009 decision 8 gives
-for not forcing a global change. `just story-id-check` scans `packages/`.
+**The Deno pin.** The version is in `.deno-version` at the root, and the SHA-256
+of its release zips is in `.deno-sha256`, which is edited with it. CI reads it.
+`./bootstrap` downloads that release's zip from GitHub into `~/.deno/bin` when
+no `deno` is on `PATH`, edits no shell profile (the contributor adds
+`~/.deno/bin` to `PATH`), and prints a note, without replacing it, when another
+version is installed, for the reason ADR-0009 decision 8 gives for not forcing a
+global change. `just story-id-check` scans `packages/`.
 
 ## Records
 
