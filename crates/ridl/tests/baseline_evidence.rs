@@ -289,7 +289,7 @@ fn proto3_build_omits_catalogs_with_missing_remote_evidence() {
     missing_evidence_omits_compatible_catalogs("proto3");
 }
 
-fn flatbuffers_carries_history(remote: bool) {
+fn carries_history(encoding: &str, remote: bool) {
     let dir = TempDir::new(if remote { "known-remote" } else { "no-remote" });
     let home = TempDir::new(if remote {
         "known-remote-home"
@@ -301,7 +301,7 @@ fn flatbuffers_carries_history(remote: bool) {
     } else {
         "no-remote-out"
     });
-    setup(&dir, &home, "\"flatbuffers\"");
+    setup(&dir, &home, &format!("\"{encoding}\""));
     if !remote {
         dir.write(
             "cluster/cluster.ridl",
@@ -351,21 +351,22 @@ fn flatbuffers_carries_history(remote: bool) {
 
 #[test]
 fn flatbuffers_without_remote_reach_carries_history_without_context() {
-    flatbuffers_carries_history(false);
+    carries_history("flatbuffers", false);
 }
 
 #[test]
 fn flatbuffers_with_remote_context_carries_compatible_history() {
-    flatbuffers_carries_history(true);
+    carries_history("flatbuffers", true);
+}
+
+#[test]
+fn proto3_with_remote_context_carries_compatible_history() {
+    // Mutation: discard compatible history when only proto3 is enabled.
+    carries_history("proto3", true);
 }
 
 // The new Reading changes kind but retains Word, so no remote declaration is missing.
-fn publication_with_podbuf_kind_change(encoding: &str, expected: i32) {
-    let dir = TempDir::new(&format!("{encoding}-kind-change"));
-    let home = TempDir::new(&format!("{encoding}-kind-change-home"));
-    setup(&dir, &home, &format!("\"{encoding}\""));
-    let baseline = dir.path().join(".ridl/baseline");
-    let before = inventory(&baseline);
+fn change_remote_reading_kind(dir: &TempDir, home: &TempDir) {
     let cache = ridl_core::cache::Cache {
         root: home.path().join(".ridl/cache"),
     };
@@ -394,10 +395,20 @@ fn publication_with_podbuf_kind_change(encoding: &str, expected: i32) {
         },
     )
     .unwrap();
-    let stderr = command(dir.path(), home.path(), &["baseline"], expected);
+}
+
+fn publication_with_podbuf_kind_change(encodings: &str, expected: i32) {
+    let dir = TempDir::new("kind-change");
+    let home = TempDir::new("kind-change-home");
+    setup(&dir, &home, encodings);
+    change_remote_reading_kind(&dir, &home);
     if expected == 0 {
+        let stderr = command(dir.path(), home.path(), &["baseline"], 0);
         assert!(!stderr.contains("missing or unusable"), "{stderr}");
     } else {
+        let baseline = dir.path().join(".ridl/baseline");
+        let before = inventory(&baseline);
+        let stderr = command(dir.path(), home.path(), &["baseline"], expected);
         assert!(
             stderr.contains("current workspace's remote evidence is missing or unusable"),
             "{stderr}"
@@ -408,18 +419,88 @@ fn publication_with_podbuf_kind_change(encoding: &str, expected: i32) {
 
 #[test]
 fn flatbuffers_publication_ignores_podbuf_kind_change_issues() {
-    publication_with_podbuf_kind_change("flatbuffers", 0);
+    publication_with_podbuf_kind_change("\"flatbuffers\"", 0);
 }
 
 #[test]
 fn proto3_publication_ignores_podbuf_kind_change_issues() {
-    publication_with_podbuf_kind_change("proto3", 0);
+    publication_with_podbuf_kind_change("\"proto3\"", 0);
 }
 
 #[test]
 fn podbuf_publication_refuses_kind_change_issues() {
     // Mutation: filter context issues to Missing even when podbuf is enabled.
-    publication_with_podbuf_kind_change("podbuf", 2);
+    publication_with_podbuf_kind_change("\"podbuf\"", 2);
+}
+
+#[test]
+fn flatbuffers_and_podbuf_publication_refuses_kind_change_issues() {
+    // Mutation: check only the first encoding for podbuf in the issue filter.
+    publication_with_podbuf_kind_change("\"flatbuffers\", \"podbuf\"", 2);
+}
+
+#[test]
+fn proto3_and_podbuf_publication_refuses_kind_change_issues() {
+    // Control: the sorted root encodings put podbuf first for this selection.
+    publication_with_podbuf_kind_change("\"proto3\", \"podbuf\"", 2);
+}
+
+fn build_with_podbuf_kind_change_carries_history(encoding: &str) {
+    // Mutation: retain KindChanged issues for FlatBuffers or proto3 without podbuf.
+    let dir = TempDir::new("kind-change-build");
+    let home = TempDir::new("kind-change-build-home");
+    let out = TempDir::new("kind-change-build-out");
+    setup(&dir, &home, &format!("\"{encoding}\""));
+    // An absent optional field keeps its init when the remote kind changes.
+    dir.write(
+        "cluster/cluster.ridl",
+        &CLUSTER.replace("reading: Reading", "reading: Reading?"),
+    );
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(dir.path(), home.path(), &["baseline", "--reset-history"], 0);
+    let baseline = dir.path().join(".ridl/baseline");
+    let before = inventory(&baseline);
+    let prior = ridl_core::catalog_history::parse(
+        &std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap(),
+    )
+    .unwrap()
+    .hashes[0];
+    change_remote_reading_kind(&dir, &home);
+    // Make the catalog differ so carrying the prior head is observable.
+    append_body_signal(&dir);
+    command(dir.path(), home.path(), &["lock"], 0);
+    let stderr = command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    assert!(!stderr.contains("cannot establish"), "{stderr}");
+    assert_ne!(
+        catalog_hash(out.path(), home.path(), "veh.body"),
+        serde_json::json!(prior)
+    );
+    assert_eq!(
+        compatible(out.path(), home.path(), "veh.body"),
+        vec![serde_json::json!(prior)]
+    );
+    assert_eq!(inventory(&baseline), before);
+}
+
+#[test]
+fn flatbuffers_build_carries_history_despite_podbuf_kind_change() {
+    build_with_podbuf_kind_change_carries_history("flatbuffers");
+}
+
+#[test]
+fn proto3_build_carries_history_despite_podbuf_kind_change() {
+    build_with_podbuf_kind_change_carries_history("proto3");
 }
 
 #[test]
@@ -693,13 +774,12 @@ fn new_side_issue_names_current_evidence_without_historical_repair(encoding: &st
     assert_eq!(inventory(&baseline), before);
 }
 
-#[test]
-fn flatbuffers_build_names_missing_current_remote_evidence_without_historical_repair() {
+fn build_names_missing_current_remote_evidence_without_historical_repair(encoding: &str) {
     // Mutation: always use the historical-context warning and repair advice.
-    let dir = TempDir::new("flatbuffers-current-build");
-    let home = TempDir::new("flatbuffers-current-build-home");
-    let out = TempDir::new("flatbuffers-current-build-out");
-    setup_missing_current_remote_evidence(&dir, &home, "flatbuffers");
+    let dir = TempDir::new("current-build");
+    let home = TempDir::new("current-build-home");
+    let out = TempDir::new("current-build-out");
+    setup_missing_current_remote_evidence(&dir, &home, encoding);
     let baseline = dir.path().join(".ridl/baseline");
     let before = inventory(&baseline);
     let stderr = command(
@@ -728,6 +808,16 @@ fn flatbuffers_build_names_missing_current_remote_evidence_without_historical_re
     assert!(!stderr.contains("historical remote context"), "{stderr}");
     assert!(!stderr.contains("--repair-context"), "{stderr}");
     assert_eq!(inventory(&baseline), before);
+}
+
+#[test]
+fn flatbuffers_build_names_missing_current_remote_evidence_without_historical_repair() {
+    build_names_missing_current_remote_evidence_without_historical_repair("flatbuffers");
+}
+
+#[test]
+fn proto3_build_names_missing_current_remote_evidence_without_historical_repair() {
+    build_names_missing_current_remote_evidence_without_historical_repair("proto3");
 }
 
 #[test]

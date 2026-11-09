@@ -276,10 +276,11 @@ restarts the file ([ADR-0031][adr-0031] decision 13). A struct held inline whose
 head reaches a type from a remote package (an `[imports]` unit) is laid out with
 each side's own context: retained evidence for a snapshot directory, and
 verified remote packages from that side's compile for source. Neither side
-borrows remote definitions from the other. The
-[CLI reference](cli-reference.md#ridl-baseline) and [ADR-0031][adr-0031]
-decision 13 own the remote evidence and recovery rules for affected units,
-including type-only units and units that reach another unit's declarations.
+borrows remote definitions from the other. The [ADR-0031][adr-0031] decision 13
+owns the remote evidence rule; the
+[CLI reference](cli-reference.md#ridl-baseline) owns the recovery procedure for
+affected units, including type-only units and units that reach another unit's
+declarations.
 
 For a unit with a published snapshot, a file that cannot be read, or that has a
 line that is neither a comment nor a hash, or that lists a hash twice, stops

@@ -38,7 +38,7 @@ declared pre-1.0 minor release, with source comparisons, enrichment and recovery
 released together. [ADR-0029](ADR-0029-stability-policy.md) records the
 stability assessment; the
 [CLI reference](../book/cli-reference.md#baseline-context) owns the versioned
-artifact and operational contract.
+artifact and operational procedures.
 
 **Amended 2026-11-03 — decision 10, every remote declaration held inline, from
 driftsys/ridl#1163.** The remote-growth rule reports growth of remote structs,
@@ -56,7 +56,9 @@ append reporting to remote context.
 
 **Amended 2026-11-09 — decision 13, missing catalog-history evidence, from
 driftsys/ridl#1228.** The dated amendment under decision 13 defines when catalog
-history requires remote evidence, separately from `ridl diff`.
+history requires remote evidence, separately from `ridl diff`. Decision 13 owns
+the remote evidence rule; the CLI reference owns the publication, build and
+recovery procedures.
 
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -973,21 +975,22 @@ a field is appended.
       _Amended 2026-11-09 — missing catalog-history evidence, from
       driftsys/ridl#1228._ Catalog history requires remote evidence when the
       root manifest's encodings include `podbuf`, `flatbuffers` or `proto3`.
-      Missing evidence is cannot judge: build warns and omits compatible
-      catalogs for affected units, and normal publication refuses with exit 2
-      and keeps the prior baseline, including for type-only units. Under podbuf
-      every context issue requires recovery; under FlatBuffers or proto3 without
-      podbuf, only missing evidence does. Podbuf head-layout failures and kind
-      changes do not make those histories unjudgeable. Without any of the three
-      encodings, missing remote evidence does not prevent carrying history or
-      publication. This changes no `ridl diff` or MCP comparison outcome.
-      Explicit repair or reset is required for an unjudgeable history; neither
-      certifies earlier carried history. Proved podbuf breaks and missing
-      evidence override unchanged hashes, while unaffected known units retain
-      valid histories. Every reconstructed history starts at the same current
-      canonical hash the descriptor emits, using its complete scope; canonical
-      wire-hash inputs are unchanged. The CLI reference owns
-      [recovery, retention and rollback limits](../book/cli-reference.md#baseline-publication-and-recovery).
+      Missing historical or current evidence is cannot judge: build warns and
+      omits compatible catalogs for affected units, and normal publication
+      refuses with exit 2 and keeps the prior baseline, including for type-only
+      units. Under podbuf every context issue requires recovery; under
+      FlatBuffers or proto3 without podbuf, only missing evidence does. Podbuf
+      head-layout failures and kind changes do not make those histories
+      unjudgeable. Without any of the three encodings, missing remote evidence
+      does not prevent carrying history or publication. This changes no
+      `ridl diff` or MCP comparison outcome. Explicit repair or reset is
+      required for an unjudgeable history; neither certifies earlier carried
+      history. Proved podbuf breaks and missing evidence override unchanged
+      hashes, while unaffected known units retain valid histories. Every
+      reconstructed history starts at the same current canonical hash the
+      descriptor emits, using its complete scope; canonical wire-hash inputs are
+      unchanged. The CLI reference owns
+      [recovery procedure, retention and rollback limits](../book/cli-reference.md#baseline-publication-and-recovery).
 
 14. **What podbuf generates, and what it exposes (Sebastien).** Per type:
     - the head struct with its pad fields and assertions, and the preamble
@@ -1196,49 +1199,50 @@ rationale are preserved in the
 
 ## Documents amended
 
-| Document                                                                                       | Change                                                                                                                                |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                      | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding  |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | new: the as-built codec                                                                                                               |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                              |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                                |
-| [ADR-0014](ADR-0014-ir-encodings.md)                                                           | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                         |
-| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                      |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name      |
-| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                               | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                           |
-| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                  |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-02: remote growth detection and bounded deferred gaps replace the shared-context limit                                |
-| [ADR-0014](ADR-0014-ir-encodings.md)                                                           | amended 2026-11-03: decision 15: podbuf breaks and missing evidence end compatible history                                            |
-| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-11-03: history verdicts and publication through replacement with rollback                                                |
-| [`docs/specification/frame-specification.md`](../specification/frame-specification.md)         | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                     |
-| [`docs/design/mcp-workspace-tools.md`](../design/mcp-workspace-tools.md)                       | amended 2026-11-03: per-side contexts, remote inline growth and evidence errors                                                       |
-| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-03: baseline context, remote growth and compatible history                                                            |
-| [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                     |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-03: reported remote declaration kinds, fixed union heads and context issues                                           |
-| [ADR-0017](ADR-0017-proto3-projection-rules.md)                                                | amended 2026-11-09: remote-width rule links to decision 13 for missing catalog-history evidence (driftsys/ridl#1228)                  |
-| [ADR-0019](ADR-0019-flatbuffers-projection-rules.md)                                           | amended 2026-11-09: remote-width rule links to decision 13 for missing catalog-history evidence (driftsys/ridl#1228)                  |
-| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: baseline and build require remote evidence under FlatBuffers and proto3 too (driftsys/ridl#1228)                  |
-| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-02: baseline context, separate comparison scopes, recovery, exit codes and publication guarantees                     |
-| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: remote strict append reporting follows decision 13 (driftsys/ridl#1229)                                           |
-| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: compared-package strict append reporting and a link to decision 13 for remote reporting (driftsys/ridl#1229)      |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-09: strict append comparison without layout and its remote source map (driftsys/ridl#1229)                            |
-| [ADR-0029](ADR-0029-stability-policy.md) and [Stability](../book/stability.md)                 | amended 2026-11-02: approved minor-release adoption and minimum supporting tool version                                               |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order           |
-| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                         |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an open enum or enum set in `encode`, `verify`, `decode` and the C header, and the "Known gaps" row of #1168 goes |
-| [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | amended 2026-11-01: RIDL-158 is retired                                                                                               |
-| [`docs/book/stability.md`](../book/stability.md)                                               | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
-| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | ledger row 42, and row 35 cites this record; row 42 amended 2026-11-01: podbuf carries an open declaration                            |
-| [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-09: catalog-history remote evidence requirements for podbuf, FlatBuffers and proto3 (driftsys/ridl#1228)              |
-| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: publication and build remote evidence requirements when no encoding is selected (driftsys/ridl#1228)              |
-| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: baseline exit 2 table links to decision 13 for remote evidence requirements (driftsys/ridl#1228)                  |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-09: catalog-history missing evidence under FlatBuffers and proto3 links to decision 13 (driftsys/ridl#1228)           |
-| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-11-09: publication and build link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                   |
-| [`docs/specification/frame-specification.md`](../specification/frame-specification.md)         | amended 2026-11-09: compatible catalogs link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                     |
-| [`ADR-0014`](ADR-0014-ir-encodings.md)                                                         | amended 2026-11-09: decision 15 links to decision 13 for remote evidence requirements (driftsys/ridl#1228)                            |
-| [`docs/decisions/README.md`](README.md)                                                        | amended 2026-11-09: decision summaries link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                      |
+| Document                                                                                       | Change                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                      | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding           |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | new: the as-built codec                                                                                                                        |
+| [`docs/book/stability.md`](../book/stability.md)                                               | the `podbuf` feature and the podbuf lines of the wire dump                                                                                     |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                                       |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1095 goes                                                                                         |
+| [ADR-0014](ADR-0014-ir-encodings.md)                                                           | amended 2026-10-31: decision 15, the unit verdict is judged for the root manifest's encodings                                                  |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-10-31: the unit verdict is judged for the root manifest's encodings                                                               |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: a tuple head is shared by identity, and an importing header names it by the declaring package's induced name               |
+| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)                               | amended 2026-10-31: the 2026-10-28 amendment points at decision 7 for the head a tuple gets                                                    |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-10-31: `NestedTuple.package` and `NestedTuple.wire`, and the head an inline tuple names                                           |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the C header holds a one-field head and its accessors for each boxed root, and the "Known gaps" row of #1096 goes          |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-10-31: the "Known gaps" row of #1141 goes, and the pin-move limit of decision 13 is a row                                         |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an importing header names a shared foreign tuple head by the declaring package's lowering, in any order                    |
+| [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | amended 2026-11-01: `NestedTuple.wire` is always the declaring package's name                                                                  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-01: an open enum or enum set in `encode`, `verify`, `decode` and the C header, and the "Known gaps" row of #1168 goes          |
+| [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | amended 2026-11-01: RIDL-158 is retired                                                                                                        |
+| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | ledger row 42, and row 35 cites this record; row 42 amended 2026-11-01: podbuf carries an open declaration                                     |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-02: remote growth detection and bounded deferred gaps replace the shared-context limit                                         |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-02: baseline context, separate comparison scopes, recovery, exit codes and publication guarantees                              |
+| [ADR-0029](ADR-0029-stability-policy.md) and [Stability](../book/stability.md)                 | amended 2026-11-02: approved minor-release adoption and minimum supporting tool version                                                        |
+| [ADR-0014](ADR-0014-ir-encodings.md)                                                           | amended 2026-11-03: decision 15: podbuf breaks and missing evidence end compatible history                                                     |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-11-03: history verdicts and publication through replacement with rollback                                                         |
+| [`docs/specification/frame-specification.md`](../specification/frame-specification.md)         | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                              |
+| [`docs/design/mcp-workspace-tools.md`](../design/mcp-workspace-tools.md)                       | amended 2026-11-03: per-side contexts, remote inline growth and evidence errors                                                                |
+| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-03: baseline context, remote growth and compatible history                                                                     |
+| [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                              |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-03: reported remote declaration kinds, fixed union heads and context issues                                                    |
+| [ADR-0017](ADR-0017-proto3-projection-rules.md)                                                | amended 2026-11-09: remote-width rule links to decision 13 for missing catalog-history evidence (driftsys/ridl#1228)                           |
+| [ADR-0019](ADR-0019-flatbuffers-projection-rules.md)                                           | amended 2026-11-09: remote-width rule links to decision 13 for missing catalog-history evidence (driftsys/ridl#1228)                           |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: baseline and build require remote evidence under FlatBuffers and proto3 too (driftsys/ridl#1228)                           |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: remote strict append reporting follows decision 13 (driftsys/ridl#1229)                                                    |
+| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: compared-package strict append reporting and a link to decision 13 for remote reporting (driftsys/ridl#1229)               |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-09: strict append comparison without layout and its remote source map (driftsys/ridl#1229)                                     |
+| [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-09: catalog-history remote evidence requirements for podbuf, FlatBuffers and proto3 (driftsys/ridl#1228)                       |
+| [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: remote evidence rule links to decision 13 and recovery procedure links to the CLI reference (driftsys/ridl#1228)           |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: baseline exit 2 table links to decision 13 for remote evidence requirements (driftsys/ridl#1228)                           |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-09: catalog-history missing evidence under FlatBuffers and proto3 links to decision 13 (driftsys/ridl#1228)                    |
+| [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md)                         | amended 2026-11-09: publication and build link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                            |
+| [`docs/specification/frame-specification.md`](../specification/frame-specification.md)         | amended 2026-11-09: compatible catalogs link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                              |
+| [`ADR-0014`](ADR-0014-ir-encodings.md)                                                         | amended 2026-11-09: decision 15 links to decision 13 for remote evidence requirements (driftsys/ridl#1228)                                     |
+| [`docs/decisions/README.md`](README.md)                                                        | amended 2026-11-09: decision summaries link to decision 13 for remote evidence requirements (driftsys/ridl#1228)                               |
+| [`docs/book/stability.md`](../book/stability.md)                                               | amended 2026-11-09: FlatBuffers and proto3 missing-evidence adoption under the minor-release and release-note requirement (driftsys/ridl#1228) |
 
 ## Trace
 

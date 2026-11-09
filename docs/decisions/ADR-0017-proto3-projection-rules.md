@@ -285,8 +285,9 @@ distinct reachable cases.
    retyped holder draws no such line. Only the per-side context entry points
    report these remote widths. When a side lacks remote context, `ridl diff`
    draws no such line, including plain IR snapshots and legacy baselines without
-   `context.json`. Catalog history treats missing evidence as cannot judge under
-   [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13.
+   `context.json`. **Amended 2026-11-09, from driftsys/ridl#1228:**
+   [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 owns the
+   catalog-history remote evidence rule.
 
 ## Alternatives considered
 

@@ -260,10 +260,10 @@ differing only in the list have the same hash. The rule is
   evidence meeting [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md)
   decision 13 and no proved podbuf break for the unit. A proved podbuf break
   restarts the affected chain even at the same hash. The
-  [CLI reference](../book/cli-reference.md#ridl-baseline) owns the evidence
-  refusal and recovery rules for affected units, including type-only units.
-  Otherwise a `Breaking` verdict with a changed hash, a unit with no snapshot in
-  the replaced baseline, and a replaced baseline with no file for the unit each
+  [CLI reference](../book/cli-reference.md#ridl-baseline) owns the recovery
+  procedure for affected units, including type-only units. Otherwise a
+  `Breaking` verdict with a changed hash, a unit with no snapshot in the
+  replaced baseline, and a replaced baseline with no file for the unit each
   write the one new hash. A hash recorded at publication is never recomputed
   from a snapshot. The file of a unit with a snapshot in the replaced baseline
   is read, and one that cannot be read or parsed stops the publication, exit 2,
@@ -321,22 +321,22 @@ differing only in the list have the same hash. The rule is
   the current catalog's hash is the file's first hash. Both cases require remote
   evidence meeting [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md)
   decision 13 and no proved podbuf break for the unit; the
-  [CLI reference](../book/cli-reference.md#ridl-build) owns the build
-  requirements for affected units. The list is empty for a proved podbuf break,
-  even when the hash is unchanged. It is also empty for a `Breaking` verdict
-  when the current hash is not the file's first hash, for a file whose first
-  hash is not the hash recomputed from the baseline's own snapshots and context
-  of the unit, for a workspace with no `.ridl/baseline/` directory or one
-  holding no `.ir.json` snapshot, for a unit with no package in the baseline (a
-  file left under its name is not read), and for a unit with no file. A tree
-  with a proved podbuf break, or a changed catalog and a breaking verdict, is
-  built with an empty list, and the recorded chain is not changed until the next
-  publication. A baseline with at least one `<unit>.catalogs` file that cannot
-  be loaded, and a file that cannot be read, are exit 2; a baseline with no such
-  file is not loaded. A compile with an error diagnostic gets no list, and its
-  baseline is not read. When the workspace names `[imports]` and a list is
-  computed, the build prints a note that a unit's list covers the workspace's
-  own packages only.
+  [CLI reference](../book/cli-reference.md#ridl-build) owns the build procedure
+  for affected units. The list is empty for a proved podbuf break, even when the
+  hash is unchanged. It is also empty for a `Breaking` verdict when the current
+  hash is not the file's first hash, for a file whose first hash is not the hash
+  recomputed from the baseline's own snapshots and context of the unit, for a
+  workspace with no `.ridl/baseline/` directory or one holding no `.ir.json`
+  snapshot, for a unit with no package in the baseline (a file left under its
+  name is not read), and for a unit with no file. A tree with a proved podbuf
+  break, or a changed catalog and a breaking verdict, is built with an empty
+  list, and the recorded chain is not changed until the next publication. A
+  baseline with at least one `<unit>.catalogs` file that cannot be loaded, and a
+  file that cannot be read, are exit 2; a baseline with no such file is not
+  loaded. A compile with an error diagnostic gets no list, and its baseline is
+  not read. When the workspace names `[imports]` and a list is computed, the
+  build prints a note that a unit's list covers the workspace's own packages
+  only.
 - **One runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no generated code accepts an `attach` on
   the strength of the list. The frame specification (its As-built note and §6.1)

@@ -236,6 +236,8 @@ impl Judgment {
                             || issue.reason == ridl_diff::ContextIssueReason::Missing
                     })
                     .map(|issue| {
+                        // For every encoding, PodbufRemoteInlineGrowth is only
+                        // a carrier for the issue's path and side.
                         (
                             Change {
                                 path: issue.path,
