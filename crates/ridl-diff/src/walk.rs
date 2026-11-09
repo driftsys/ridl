@@ -516,6 +516,34 @@ impl<'a> Matching<'a> {
             .get(unit)
             .is_some_and(|numbers| numbers.contains(&number))
     }
+
+    /// Pairs old shapes by frozen number, then unmatched shapes by name and form.
+    pub(crate) fn pairs_for(
+        &self,
+        old: &'a v2::Package,
+        new: Option<&'a v2::Package>,
+    ) -> BTreeMap<ShapeKey<'a>, Held<'a>> {
+        let new_shapes = new.map(shapes_by_key).unwrap_or_default();
+        let mut pairs = BTreeMap::new();
+        let mut taken: BTreeSet<ShapeKey<'_>> = new_shapes
+            .keys()
+            .copied()
+            .filter(|key| new.is_some_and(|p| self.taken.contains(&(p.name.as_str(), *key))))
+            .collect();
+        for (old_key, old_shape) in shapes_by_key(old) {
+            if frozen(old_shape.interface) {
+                if let Some(held) = self.pairs.get(&(old.name.as_str(), old_key)) {
+                    pairs.insert(old_key, *held);
+                }
+            } else if let Some(new_shape) = new_shapes.get(&old_key)
+                && taken.insert(old_key)
+                && let Some(new) = new
+            {
+                pairs.insert(old_key, (new, *new_shape));
+            }
+        }
+        pairs
+    }
 }
 
 /// The packages of `set`, in name order.
@@ -571,23 +599,17 @@ fn diff_interfaces<'a>(
     // Old key to the new shape and its package, and the new keys of this
     // package taken so far: by pass 1, from any pair of the unit, then by
     // pass 2 here.
-    let mut pairs: BTreeMap<ShapeKey<'_>, Held<'_>> = BTreeMap::new();
+    let pairs = matching.pairs_for(old, Some(new));
     let mut taken: BTreeSet<ShapeKey<'_>> = new_shapes
         .keys()
         .copied()
         .filter(|key| matching.taken.contains(&(new.name.as_str(), *key)))
         .collect();
-    for (old_key, old_shape) in &old_shapes {
-        if frozen(old_shape.interface) {
-            if let Some(held) = matching.pairs.get(&(old.name.as_str(), *old_key)) {
-                pairs.insert(*old_key, *held);
-            }
-        } else if let Some(new_shape) = new_shapes.get(old_key)
-            && taken.insert(*old_key)
-        {
-            pairs.insert(*old_key, (new, *new_shape));
-        }
-    }
+    taken.extend(
+        pairs
+            .values()
+            .filter_map(|(package, shape)| (package.name == new.name).then_some(shape_key(shape))),
+    );
 
     for (old_key, old_shape) in &old_shapes {
         let Some((new_package, new_shape)) = pairs.get(old_key) else {
@@ -1847,7 +1869,7 @@ fn const_str(def: &v2::ConstDef) -> String {
     }
 }
 
-fn type_repr_str(def: &v2::TypeDef) -> String {
+pub(crate) fn type_repr_str(def: &v2::TypeDef) -> String {
     let backing = match def
         .backing
         .as_ref()

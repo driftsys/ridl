@@ -643,9 +643,12 @@ disagreeing sources is the correct one.
     With per-side remote context, a pin change that moves a reached remote
     scalar constraint reports `constraint_changed` at the surviving consumer
     interaction path, once per path and remote declaration. Widening uses the
-    same new-side direction rule; narrowing is always breaking. A side without
-    remote context supplies no comparison. Before this amendment the remote pass
-    reported neither widening nor narrowing; both are now reported.
+    same new-side direction rule; narrowing is always breaking. A changed scalar
+    backing or resolved wire width also reports a breaking `width_changed` row
+    at the consumer path, once per path and remote declaration, including on
+    send-only uses, as for a local scalar. A side without remote context
+    supplies no comparison. Before this amendment the remote pass reported
+    neither widening nor narrowing; both are now reported.
 
     **Alternatives considered (options 1 and 3).** Keeping every widening
     compatible would admit values an older receiver rejects. Making every

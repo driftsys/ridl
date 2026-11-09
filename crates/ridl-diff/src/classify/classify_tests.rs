@@ -3410,6 +3410,8 @@ mod constraint_direction {
     }
 
     fn check(mut interactions: Vec<v2::Decl>, expected: Verdict) {
+        // A breaking expectation adds a send-only control so that received
+        // uses and unreached types exercise different cases.
         if expected == Verdict::Breaking && !interactions.is_empty() {
             interactions.push(command(
                 "controlSend",
@@ -3642,6 +3644,185 @@ mod constraint_direction {
             assert_eq!(change.before.as_deref(), Some("dep.S: [min=10 max=100]"));
             assert_eq!(change.after.as_deref(), Some("dep.S: [min=0 max=200]"));
         }
+    }
+
+    #[test]
+    fn remote_constraint_survives_a_frozen_interface_rename() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut old = pkg(vec![signal("read", 1, "dep.S")]);
+        old.interfaces[0].number = 7;
+        let mut new = old.clone();
+        new.interfaces[0].name = "J".into();
+        let report =
+            crate::diff_refs_with_contexts(&[&old], &[&new], &[&before], &[&after], &[]).unwrap();
+        let change = row(&report, Category::ConstraintChanged);
+        assert_eq!(change.path, "veh.cluster/J/read");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(report.changes.len(), 2, "{report:?}");
+        assert_eq!(
+            row(&report, Category::InterfaceRenamed).verdict,
+            Verdict::Compatible
+        );
+    }
+
+    #[test]
+    fn remote_scalar_width_and_backing_changes_break_send_only_uses() {
+        for received in [false, true] {
+            for backing_only in [false, true] {
+                let mut before = decl_pkg(vec![scalar(
+                    "S",
+                    bounds(Some("0"), Some("100")),
+                    v2::IntWidth::U8,
+                )]);
+                before.name = "dep".into();
+                let mut after = before.clone();
+                let Some(v2::decl::Kind::TypeDef(def)) = &mut after.decls[0].kind else {
+                    unreachable!()
+                };
+                if backing_only {
+                    def.backing = Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Unit("m".into())),
+                    });
+                } else {
+                    def.constraint = Some(bounds(Some("0"), Some("300")));
+                    def.width = Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32));
+                }
+                let interaction = if received {
+                    signal("read", 1, "dep.S")
+                } else {
+                    command(
+                        "send",
+                        1,
+                        vec![param("a", named("dep.S")), param("b", named("dep.S"))],
+                        vec![],
+                    )
+                };
+                let local = pkg(vec![interaction]);
+                let report = crate::diff_refs_with_contexts(
+                    &[&local],
+                    &[&local],
+                    &[&before],
+                    &[&after],
+                    &[],
+                )
+                .unwrap();
+                let change = row(&report, Category::WidthChanged);
+                assert_eq!(
+                    change.path,
+                    if received {
+                        "veh.cluster/I/read"
+                    } else {
+                        "veh.cluster/I/send"
+                    }
+                );
+                assert_eq!(change.verdict, Verdict::Breaking);
+                assert_eq!(change.before.as_deref(), Some("dep.S: integer u8"));
+                assert_eq!(
+                    change.after.as_deref(),
+                    Some(if backing_only {
+                        "dep.S: m u8"
+                    } else {
+                        "dep.S: integer u16"
+                    })
+                );
+                assert_eq!(
+                    report
+                        .changes
+                        .iter()
+                        .filter(|c| matches!(
+                            c.category,
+                            Category::WidthChanged | Category::ConstraintChanged
+                        ))
+                        .count(),
+                    if backing_only { 1 } else { 2 },
+                    "{report:?}"
+                );
+                if !backing_only {
+                    assert_eq!(
+                        row(&report, Category::ConstraintChanged).verdict,
+                        if received {
+                            Verdict::Breaking
+                        } else {
+                            Verdict::Compatible
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn one_consumer_path_reports_each_changed_remote_scalar() {
+        let mut before = decl_pkg(vec![
+            scalar("S", bounds(Some("0"), Some("100")), v2::IntWidth::U16),
+            scalar("T", bounds(Some("0"), Some("100")), v2::IntWidth::U16),
+        ]);
+        before.name = "dep".into();
+        let mut after = before.clone();
+        for decl in &mut after.decls {
+            let Some(v2::decl::Kind::TypeDef(def)) = &mut decl.kind else {
+                unreachable!()
+            };
+            def.constraint = Some(bounds(Some("0"), Some("200")));
+        }
+        let local = pkg(vec![command(
+            "send",
+            1,
+            vec![param("s", named("dep.S")), param("t", named("dep.T"))],
+            vec![],
+        )]);
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert_eq!(report.changes.len(), 2, "{report:?}");
+        for (change, before) in report
+            .changes
+            .iter()
+            .zip(["dep.S: [min=0 max=100]", "dep.T: [min=0 max=100]"])
+        {
+            assert_eq!(change.path, "veh.cluster/I/send");
+            assert_eq!(change.category, Category::ConstraintChanged);
+            assert_eq!(change.verdict, Verdict::Compatible);
+            assert_eq!(change.before.as_deref(), Some(before));
+        }
+    }
+
+    #[test]
+    fn local_scalar_changes_have_no_remote_consumer_row() {
+        let (old, new) = pair(vec![signal("read", 1, "S")], false);
+        let report = crate::diff_refs_with_contexts(&[&old], &[&new], &[], &[], &[]).unwrap();
+        assert_eq!(report.changes.len(), 1, "{report:?}");
+        let change = &report.changes[0];
+        assert_eq!(change.path, "veh.cluster/S");
+        assert_eq!(change.category, Category::ConstraintChanged);
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(change.before.as_deref(), Some("[min=10 max=100]"));
+    }
+
+    #[test]
+    fn received_map_keys_override_send_only_uses() {
+        let map = v2::FieldType {
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(named("S"))),
+                value: Some(Box::new(named("Other"))),
+                ..Default::default()
+            }))),
+            ..Default::default()
+        };
+        check(
+            vec![query(
+                "read",
+                1,
+                vec![],
+                v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(map)),
+                },
+                vec![],
+            )],
+            Verdict::Breaking,
+        );
     }
 
     #[test]

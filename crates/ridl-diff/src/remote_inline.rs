@@ -501,26 +501,30 @@ fn constraint_changes(
     new: &[&v2::Package],
 ) -> Vec<Change> {
     let mut changes = BTreeMap::new();
-    let new_uses: BTreeMap<_, _> = new_holders
-        .iter()
-        .flat_map(|home| {
-            home.shapes().flat_map(move |shape| {
-                shape.interface.interactions.iter().map(move |interaction| {
-                    (
-                        format!("{}/{}/{}", home.name, shape.name, interaction.name),
-                        crate::direction::roots(interaction),
-                    )
-                })
-            })
-        })
-        .collect();
+    let matching = crate::walk::Matching::new(old_holders, new_holders);
     for home in old_holders {
+        let pairs = matching.pairs_for(
+            home,
+            new_holders.iter().copied().find(|p| p.name == home.name),
+        );
         for shape in home.shapes() {
+            let Some((new_home, new_shape)) = pairs.get(&(shape.is_inline(), shape.name)) else {
+                continue;
+            };
             for interaction in &shape.interface.interactions {
-                let path = format!("{}/{}/{}", home.name, shape.name, interaction.name);
-                let Some(new_roots) = new_uses.get(&path) else {
+                let Some(new_interaction) = new_shape
+                    .interface
+                    .interactions
+                    .iter()
+                    .find(|d| d.name == interaction.name)
+                else {
                     continue;
                 };
+                let path = format!(
+                    "{}/{}/{}",
+                    new_home.name, new_shape.name, new_interaction.name
+                );
+                let new_roots = crate::direction::roots(new_interaction);
                 for (ty, _) in crate::direction::roots(interaction) {
                     if !new_roots.iter().any(|(new, _)| new == &ty) {
                         continue;
@@ -545,6 +549,24 @@ fn constraint_changes(
                         else {
                             continue;
                         };
+                        if a.backing != b.backing || a.width != b.width {
+                            changes.insert(
+                                (path.clone(), identity.clone(), "width_changed"),
+                                Change {
+                                    path: path.clone(),
+                                    category: Category::WidthChanged,
+                                    verdict: Verdict::Breaking,
+                                    before: Some(format!(
+                                        "{identity}: {}",
+                                        crate::walk::type_repr_str(a)
+                                    )),
+                                    after: Some(format!(
+                                        "{identity}: {}",
+                                        crate::walk::type_repr_str(b)
+                                    )),
+                                },
+                            );
+                        }
                         if a.constraint == b.constraint {
                             continue;
                         }
@@ -557,7 +579,7 @@ fn constraint_changes(
                             crate::direction::widening_verdict(new_home, new, &identity)
                         };
                         changes.insert(
-                            (path.clone(), identity.clone()),
+                            (path.clone(), identity.clone(), "constraint_changed"),
                             Change {
                                 path: path.clone(),
                                 category: Category::ConstraintChanged,

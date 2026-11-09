@@ -147,7 +147,9 @@ arms and stream elements count. If both directions reach the type, the received
 rule applies. An unreached widening is breaking, but its unchanged hash keeps
 the history as the last table row describes. Remote constraint changes use the
 same rule and appear at consumer interaction paths when both sides supply remote
-context. Narrowing remains breaking in every direction.
+context. A remote scalar's changed backing or resolved wire width also produces
+a breaking `width_changed` row, including on send-only uses. Narrowing remains
+breaking in every direction.
 
 The "compatible" and "breaking" rows cover the categories that `ridl diff`
 prints. The rules are in the [CLI reference](cli-reference.md#ridl-diff), and

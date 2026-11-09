@@ -668,6 +668,9 @@ pub fn diff_refs_with_contexts(
 /// They also report scalar constraint changes at surviving consumer interaction
 /// paths, with the direction rule of `constraint_changed`. A side without remote
 /// context draws no remote width, constraint or strict-append lines.
+/// A remote scalar's changed backing or resolved width also reports a breaking
+/// `width_changed` at each surviving consumer interaction path, even on send-only
+/// uses, once per path and remote declaration.
 pub fn diff_refs_with_contexts_partial(
     old: &[&Package],
     new: &[&Package],
