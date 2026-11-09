@@ -40,6 +40,91 @@ fn program(main: &str) -> String {
     )
 }
 
+#[test]
+fn verify_is_total_over_arbitrary_bytes() {
+    let main = format!(
+        "{VALUE}{}",
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref};
+
+fn probe<T: Payload<FlatBuffers>>(buf: &[u8]) {
+    if let Ok(proof) = Ref::<'_, T, FlatBuffers>::verify(buf) {
+        let value = proof.decode();
+        let mut out = vec![0; T::MAX_SIZE];
+        let encoded = value.encode(&mut out).expect("an accepted value re-encodes");
+        assert!(T::verify(encoded.bytes).is_ok(), "re-encoding verifies: {buf:?}");
+    }
+}
+
+fn probe_roots(buf: &[u8]) {
+    probe::<Report>(buf);
+    probe::<Inner>(buf);
+    probe::<Outcome>(buf);
+    probe::<Count>(buf);
+    probe::<Label>(buf);
+    probe::<Health>(buf);
+}
+
+fn damage<T: Payload<FlatBuffers>>(value: &T) {
+    let mut out = vec![0; T::MAX_SIZE];
+    let mut bytes = value.encode(&mut out).expect("the seed encodes").bytes.to_vec();
+    T::verify(&bytes).expect("the seed verifies");
+    probe::<T>(&bytes);
+    for end in 0..bytes.len() {
+        probe::<T>(&bytes[..end]);
+    }
+    for at in 0..bytes.len() {
+        let original = bytes[at];
+        // Boundary values and each bit flip bound the nested re-encoding work.
+        let replacements = [0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 254, 255];
+        for replacement in replacements
+            .into_iter()
+            .chain((0..8).map(|bit| original ^ (1 << bit)))
+        {
+            bytes[at] = replacement;
+            probe::<T>(&bytes);
+        }
+        bytes[at] = original;
+    }
+}
+
+fn main() {
+    for len in 0..=2 {
+        for n in 0..(1usize << (8 * len)) {
+            probe_roots(&n.to_le_bytes()[..len]);
+        }
+    }
+    // Repeated bytes and ascending bytes exercise offsets, lengths and tags.
+    for len in [3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 256] {
+        for byte in [0, 0xff, 0x80, 0x55, 0xaa] {
+            probe_roots(&vec![byte; len]);
+        }
+        probe_roots(&(0..len).map(|i| i as u8).collect::<Vec<_>>());
+    }
+    // A root at byte four, with missing, backward or oversized vtable offsets.
+    for bytes in [
+        &[4, 0, 0, 0][..],
+        &[4, 0, 0, 0, 0, 0, 0, 0][..],
+        &[4, 0, 0, 0, 0xff, 0xff, 0xff, 0x7f][..],
+        &[4, 0, 0, 0, 0, 0, 0, 0x80][..],
+    ] {
+        probe_roots(bytes);
+    }
+    damage(&sample());
+    damage(&defaults());
+    damage(&inner(300, "inner"));
+    damage(&Outcome::Ok(inner(1, "arm")));
+    damage(&Outcome::Bad(Health::Fail));
+    damage(&Count::new_unchecked(200));
+    damage(&Label::new_unchecked(String::from("label")));
+    damage(&Health::Warn);
+}
+"#
+    );
+    rustc::run_program("fb_total", &program(&main));
+}
+
 /// The two values every case below draws on.
 ///
 /// `sample()` populates every field, with `pair` and `note` present and

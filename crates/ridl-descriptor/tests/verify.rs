@@ -23,6 +23,68 @@ fn minimal(version: u32) -> Vec<u8> {
 }
 
 #[test]
+fn verify_is_total_over_arbitrary_bytes() {
+    fn probe(bytes: &[u8]) {
+        if let Ok(view) = verify(bytes) {
+            // Conversion reads every field, including all nested tables.
+            let catalog = Catalog::try_from(view).expect("a verified catalog decodes");
+            let encoded = finish(&catalog);
+            assert!(verify(&encoded).is_ok(), "re-encoding verifies: {bytes:?}");
+        }
+    }
+
+    for len in 0..=2 {
+        for n in 0..(1usize << (8 * len)) {
+            probe(&n.to_le_bytes()[..len]);
+        }
+    }
+    for len in [3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 256] {
+        for byte in [0, 0xff, 0x80, 0x55, 0xaa] {
+            let mut bytes = vec![byte; len];
+            probe(&bytes);
+            if len >= 8 {
+                // Preserve the identifier so the body reader is also reached.
+                bytes[4..8].copy_from_slice(&FILE_IDENTIFIER);
+                probe(&bytes);
+            }
+        }
+        let mut bytes: Vec<_> = (0..len).map(|i| i as u8).collect();
+        probe(&bytes);
+        if len >= 8 {
+            bytes[4..8].copy_from_slice(&FILE_IDENTIFIER);
+            probe(&bytes);
+        }
+    }
+    for mut bytes in [
+        minimal(SCHEMA_VERSION),
+        nested(),
+        full(),
+        full_with(false, false),
+    ] {
+        verify(&bytes).expect("the seed verifies");
+        probe(&bytes);
+        for end in 0..bytes.len() {
+            probe(&bytes[..end]);
+        }
+        for at in 0..bytes.len() {
+            let original = bytes[at];
+            // Boundary values and bit flips bound the owned conversion work.
+            let replacements = [
+                0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 254, 255,
+            ];
+            for replacement in replacements
+                .into_iter()
+                .chain((0..8).map(|bit| original ^ (1 << bit)))
+            {
+                bytes[at] = replacement;
+                probe(&bytes);
+            }
+            bytes[at] = original;
+        }
+    }
+}
+
+#[test]
 fn a_finished_buffer_verifies() {
     let bytes = minimal(SCHEMA_VERSION);
     let catalog = verify(&bytes).expect("verifies");
