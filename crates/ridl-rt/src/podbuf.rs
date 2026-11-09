@@ -16,7 +16,7 @@
 //! the head, an element or a union arm that reads 0 past the size the producer
 //! wrote; [`Desc`] and [`ArrayDesc`], the two descriptor layouts;
 //! [`tail_range`], the bounds and alignment check of a descriptor's data;
-//! [`text`] and [`scalar_count`], the string checks; [`Writer`], which fills
+//! [`text`], [`has_nul`] and [`scalar_count`], the string checks; [`Writer`], which fills
 //! the caller's slice and zeroes every byte it reserves; and [`Aligned`], a
 //! wrapper that gives a byte array the 8-byte alignment of a buffer.
 //!
@@ -283,11 +283,27 @@ pub fn tail_range(
 /// ([`Malformed::Utf8`]).
 pub fn text(bytes: &[u8]) -> Result<&str, VerifyError> {
     match bytes.split_last() {
-        Some((0, data)) if !data.contains(&0) => {
+        Some((0, data)) if !has_nul(data) => {
             core::str::from_utf8(data).map_err(|_| VerifyError::Structure(Malformed::Utf8))
         }
         _ => Err(VerifyError::Structure(Malformed::Terminator)),
     }
+}
+
+/// Whether `bytes` holds a NUL byte.
+///
+/// The scan takes the smallest byte of each 64-byte block, which the compiler
+/// turns into vector minimum instructions; `<[u8]>::contains` tests one machine
+/// word per step.
+#[inline]
+pub fn has_nul(bytes: &[u8]) -> bool {
+    let (blocks, rest) = bytes.as_chunks::<64>();
+    for block in blocks {
+        if block.iter().fold(u8::MAX, |least, b| least.min(*b)) == 0 {
+            return true;
+        }
+    }
+    rest.contains(&0)
 }
 
 /// The number of Unicode scalar values of `s`, the unit of a typl string bound.
@@ -617,6 +633,19 @@ mod tests {
         let bytes = w.finish().unwrap();
         assert_eq!(&bytes[16..19], b"ab\0");
         assert_eq!(bytes.len(), 19);
+    }
+
+    #[test]
+    fn has_nul_finds_a_nul_at_every_position_and_length() {
+        for len in 0..200usize {
+            let mut data = [1u8; 200];
+            assert!(!has_nul(&data[..len]), "len {len}");
+            for at in 0..len {
+                data[at] = 0;
+                assert!(has_nul(&data[..len]), "len {len} at {at}");
+                data[at] = 1;
+            }
+        }
     }
 
     #[test]

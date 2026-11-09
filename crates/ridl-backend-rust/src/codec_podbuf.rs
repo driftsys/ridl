@@ -1450,7 +1450,7 @@ impl<'a> Codec<'a> {
             {
                 let __s: &::core::primitive::str = #text;
                 #length
-                if __s.as_bytes().contains(&0u8) {
+                if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                     #nul
                 }
                 if !__s.is_empty() {
