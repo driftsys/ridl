@@ -50,6 +50,9 @@ the dated clarification.
 driftsys/ridl#1211.** Remote podbuf widths remain judged by remote inline
 growth; FlatBuffers and proto3 report their own remote integer changes.
 
+**Amended 2026-11-09 — decision 13, remote strict enum appends.** The dated
+amendment under decision 13 extends strict append reporting to remote context.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -875,7 +878,7 @@ a field is appended.
       integer of an enum, an enum set or a union's tag, the category
       `podbuf_width_change`, reported once per declaration with the old and the
       new integer. The append to an enum or enum set that is not `open` is not
-      judged by encoding: it is `strict_enum_append`, reported once per
+      judged by encoding: it is `strict_enum_append`, reported once per compared
       declaration and breaking always (decision 12, note of 2026-11-01), and it
       draws no `podbuf_width_change` line, because that rule reads only the
       appends that are compatible. A remote declaration draws no
@@ -919,6 +922,21 @@ a field is appended.
       catches them in CI with `ridl diff --encoding podbuf` against its
       baseline. Amended 2026-10-31, from driftsys/ridl#1095: this replaces the
       known gap the decision recorded.
+
+      _Amended 2026-11-09 — remote strict enum appends._ A pure append to a
+      remote enum or enum set that is not `open` is `strict_enum_append`,
+      breaking for every encoding, even when only the consumer's import pin
+      changes. Report it at the consumer path, once per path and remote
+      declaration reached by a surviving old consumer use. Each side supplies
+      its own remote context; a side without that context supplies no line, and
+      shared-context entry points do not report remote strict appends. The
+      before/after values are `<remote declaration>: <names>`, listing the old
+      and new members in declaration order. Reorders, removals, value changes
+      and changes without an appended member draw no line from this rule. Local
+      declarations retain the local rule above and receive no duplicate
+      consumer-path line from the remote pass. The remote rule uses the same
+      old-use and surviving-use gates as remote width reporting; it does not
+      change the width or inline-growth rules.
 
       _Amended 2026-11-02, from driftsys/ridl#1163; supersedes the shared
       context amendment of 2026-10-31 from driftsys/ridl#1141._ CLI and MCP

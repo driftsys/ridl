@@ -2625,6 +2625,172 @@ mod podbuf {
         }
     }
 
+    fn remote_enums(values: &[(&str, i64)], open: bool) -> v2::Package {
+        let mut mode = super::enum_def(values);
+        let mut flags = super::enum_set_def(values);
+        if let v2::decl::Kind::EnumDef(def) = &mut mode {
+            def.open = open;
+        }
+        if let v2::decl::Kind::EnumSetDef(def) = &mut flags {
+            def.width = v2::IntWidth::U8 as i32;
+            def.open = open;
+        }
+        package(
+            "dep.types",
+            vec![
+                typl_decl("Mode", mode),
+                typl_decl("Flags", flags),
+                struct_decl(
+                    "Pair",
+                    vec![
+                        field("mode", 1, named("Mode")),
+                        field("mode_again", 2, named("Mode")),
+                        field("flags", 3, named("Flags")),
+                        field("flags_again", 4, named("Flags")),
+                    ],
+                ),
+            ],
+        )
+    }
+
+    fn strict_appends(report: &crate::DiffReport) -> Vec<&crate::Change> {
+        report
+            .changes
+            .iter()
+            .filter(|c| c.category == Category::StrictEnumAppend)
+            .collect()
+    }
+
+    #[test]
+    fn remote_strict_enum_appends_break_every_encoding_once_per_path_and_declaration() {
+        // Mutations: skip enum sets; report per use; deduplicate across paths
+        // or declarations; make severity depend on the selected encoding.
+        let local = package(
+            "app.api",
+            vec![struct_decl(
+                "Sample",
+                vec![
+                    field("first", 1, named("dep.types.Pair")),
+                    field("second", 2, named("dep.types.Pair")),
+                ],
+            )],
+        );
+        let old = remote_enums(&[("A", 0), ("B", 1)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1), ("C", 2), ("D", 3)], false);
+        for encodings in [
+            vec![],
+            vec!["proto3"],
+            vec!["flatbuffers"],
+            vec!["podbuf"],
+            vec!["proto3", "flatbuffers", "podbuf"],
+        ] {
+            let report = checked_remote(&local, &old, &new, &encodings);
+            let changes = strict_appends(&report);
+            assert_eq!(changes.len(), 4, "{report:?}");
+            assert_eq!(report.verdict, Verdict::Breaking);
+            for path in ["app.api/Sample/first", "app.api/Sample/second"] {
+                for declaration in ["dep.types.Mode", "dep.types.Flags"] {
+                    let matching: Vec<_> = changes
+                        .iter()
+                        .filter(|c| {
+                            c.path == path
+                                && c.before.as_deref() == Some(&format!("{declaration}: A, B"))
+                        })
+                        .collect();
+                    assert_eq!(matching.len(), 1, "{report:?}");
+                    assert_eq!(
+                        matching[0].after.as_deref(),
+                        Some(format!("{declaration}: A, B, C, D").as_str())
+                    );
+                    assert_eq!(matching[0].verdict, Verdict::Breaking);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_ignores_open_declarations() {
+        // Mutation: drop the open gate.
+        let local = remote_holder(named("dep.types.Pair"));
+        let report = checked_remote(
+            &local,
+            &remote_enums(&[("A", 0)], true),
+            &remote_enums(&[("A", 0), ("B", 1)], true),
+            &[],
+        );
+        assert!(strict_appends(&report).is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn remote_strict_enum_append_ignores_non_appends() {
+        // Mutations: accept reorder, removal, renumber, insertion, or no addition.
+        let local = remote_holder(named("dep.types.Pair"));
+        let old = remote_enums(&[("A", 0), ("B", 2)], false);
+        for values in [
+            vec![("A", 0), ("B", 2)],
+            vec![("B", 2), ("A", 0)],
+            vec![("B", 2), ("A", 0), ("C", 3)],
+            vec![("A", 0), ("C", 3)],
+            vec![("A", 0), ("B", 1), ("C", 3)],
+            vec![("A", 0), ("B", 2), ("C", 1)],
+        ] {
+            let report = checked_remote(&local, &old, &remote_enums(&values, false), &[]);
+            assert!(strict_appends(&report).is_empty(), "{values:?}: {report:?}");
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_does_not_duplicate_local_reporting() {
+        // Mutation: visit local declarations in the remote pass.
+        let local = remote_holder(named("dep.types.Pair"));
+        let old = remote_enums(&[("A", 0)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1)], false);
+        let report =
+            crate::diff_refs_with_contexts(&[&local, &old], &[&local, &new], &[], &[], &[])
+                .unwrap();
+        let changes = strict_appends(&report);
+        assert_eq!(changes.len(), 2, "{report:?}");
+        assert!(
+            changes
+                .iter()
+                .all(|c| c.path == "dep.types/Mode" || c.path == "dep.types/Flags"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn remote_strict_enum_append_requires_a_surviving_old_use() {
+        // Mutations: visit new uses for appends; drop require_new.
+        let local = remote_holder(named("dep.types.Pair"));
+        let other = remote_holder(wide());
+        let old = remote_enums(&[("A", 0)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1)], false);
+        for (before, after) in [
+            (&local, &other),
+            (&other, &local),
+            (&local, &dropped_remote_holder()),
+        ] {
+            let report =
+                crate::diff_refs_with_contexts(&[before], &[after], &[&old], &[&new], &[]).unwrap();
+            assert!(strict_appends(&report).is_empty(), "{report:?}");
+        }
+    }
+
+    #[test]
+    fn remote_strict_enum_append_requires_per_side_remote_context() {
+        // Mutation: substitute one side's evidence, or report in shared context.
+        let local = remote_holder(named("dep.types.Pair"));
+        let old = remote_enums(&[("A", 0)], false);
+        let new = remote_enums(&[("A", 0), ("B", 1)], false);
+        for (before, after) in [(vec![&old], vec![]), (vec![], vec![&new])] {
+            let (report, _) =
+                crate::diff_refs_with_contexts_partial(&[&local], &[&local], &before, &after, &[]);
+            assert!(strict_appends(&report).is_empty(), "{report:?}");
+        }
+        let report = crate::diff_refs_with(&[&local], &[&local], &[&old, &new], &[]);
+        assert!(strict_appends(&report).is_empty(), "{report:?}");
+    }
+
     fn remote_flags(count: u64, width: v2::IntWidth) -> v2::Package {
         package(
             "dep.types",

@@ -163,15 +163,16 @@ cases:
   changed (`decl_removed`, `member_reordered`, `interface_number_changed`).
 - **Breaking, for a declaration that is not `open`**: an enum value or an
   enum-set flag appended to an enum or an enum set (`strict_enum_append`, once
-  per declaration, with the appended names). The rule applies to every enum and
-  enum set of the package, whether or not an interface reaches it and whether or
-  not it is `internal`. The Rust codecs built from the old declaration refuse a
-  value it does not name, under every encoding, so the verdict does not depend
-  on `--encoding`. The generated TypeScript codec module, which reads
-  FlatBuffers only, refuses it too. Declare the enum or the enum set `open` to
-  make the same append compatible. Closing an `open` declaration is breaking
-  (`enum_closed`), because a producer of the old version may still send a value
-  the new reader refuses.
+  per compared declaration, with the appended names). The rule applies to every
+  enum and enum set of the compared package, whether or not an interface reaches
+  it and whether or not it is `internal`. Remote reporting follows
+  [ADR-0031][adr-0031] decision 13's remote strict enum amendment. The Rust
+  codecs built from the old declaration refuse a value it does not name, under
+  every encoding, so the verdict does not depend on `--encoding`. The generated
+  TypeScript codec module, which reads FlatBuffers only, refuses it too. Declare
+  the enum or the enum set `open` to make the same append compatible. Closing an
+  `open` declaration is breaking (`enum_closed`), because a producer of the old
+  version may still send a value the new reader refuses.
 - **Compatible, for an `open` declaration**: an enum value or an enum-set flag
   appended (no category of its own: the append is a compatible `decl_added`),
   under every encoding, podbuf included, when the podbuf integer of the

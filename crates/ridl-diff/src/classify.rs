@@ -1614,13 +1614,17 @@ pub fn explain(category: Category) -> &'static str {
             "comparison is judged for. To let readers accept values a later\n",
             "version adds, declare an open enum or an open enum set (the `open`\n",
             "keyword) before the first release that readers depend on: an append\n",
-            "to an open enum or an open enum set is compatible. The line is reported once per\n",
-            "declaration, at `<package>/<decl>`, and the detail names the\n",
-            "appended values or flags.\n",
+            "to an open enum or an open enum set is compatible. For a compared\n",
+            "declaration, the line is reported once at `<package>/<decl>`, with\n",
+            "the appended names. With per-side remote contexts, a surviving old\n",
+            "consumer use reports the line at its consumer path, once per path\n",
+            "and remote declaration, with `<remote declaration>: <names>` values\n",
+            "before and after (ADR-0031 decision 13). A side without remote\n",
+            "context draws no remote strict-append line.\n",
             "  breaking    always, for every encoding\n",
-            "  note        a value or flag that is not an append (an insert below\n",
-            "              the highest number, or a reused number) is decl_added,\n",
-            "              breaking, instead"
+            "  note        for a compared declaration, a value or flag that is\n",
+            "              not an append (an insert below the highest number, or a\n",
+            "              reused number) is decl_added, breaking, instead"
         ),
         Category::EnumOpened => concat!(
             "An enum or an enum set that gained the `open` keyword. A reader built\n",
