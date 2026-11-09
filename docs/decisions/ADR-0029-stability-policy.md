@@ -166,6 +166,17 @@ owns the artifact and recovery contract. This approval covers only these
 assessed changes; passing dump checks does not approve other policy-frozen
 changes.
 
+**Amended 2026-11-09 — catalog history failure behavior for FlatBuffers and
+proto3, from driftsys/ridl#1228.** The owner approved extending the explicit
+cannot-judge failure behavior of the 2026-11-02 amendment to catalog history of
+a workspace that builds only FlatBuffers or proto3: `ridl baseline` exits 2 when
+remote evidence is missing, and `ridl build` omits the affected unit's
+compatible catalogs. This changes a policy-frozen CLI failure behavior under
+decision 1. No dump row is removed and no wire layout, canonical catalog-hash
+input or IR package schema changes. The release requirements of the previous
+amendment apply. [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13
+owns the rule.
+
 ## Context
 
 Until 0.9.x, a breaking change could land in any release. 0.10.0 is the first
