@@ -3,7 +3,9 @@
 //!
 //! Reports `podbuf_remote_inline_growth`, `flatbuffers_width_change`,
 //! `proto3_width_change` and `strict_enum_append` at consumer paths, once per
-//! path and remote declaration reached by a surviving old use. Strict appends
+//! path and remote declaration reached by a surviving old use. Scalar constraint
+//! changes are attributed to consumer interaction paths with consumer direction.
+//! Strict appends
 //! are breaking for every encoding. Local declarations use the local rules;
 //! missing per-side remote context supplies no remote comparison.
 
@@ -66,6 +68,7 @@ pub(crate) fn compare(
         pass.changes
             .into_values()
             .chain(pass.width_changes.into_values())
+            .chain(constraint_changes(old_holders, new_holders, old, new))
             .collect(),
         pass.issues.into_iter().collect(),
     )
@@ -487,4 +490,92 @@ impl Pass<'_> {
             }
         }
     }
+}
+
+/// Scalar changes use interaction paths, including uses through local bodies.
+/// Layout reporting retains its separate nearest-field attribution.
+fn constraint_changes(
+    old_holders: &[&v2::Package],
+    new_holders: &[&v2::Package],
+    old: &[&v2::Package],
+    new: &[&v2::Package],
+) -> Vec<Change> {
+    let mut changes = BTreeMap::new();
+    let new_uses: BTreeMap<_, _> = new_holders
+        .iter()
+        .flat_map(|home| {
+            home.shapes().flat_map(move |shape| {
+                shape.interface.interactions.iter().map(move |interaction| {
+                    (
+                        format!("{}/{}/{}", home.name, shape.name, interaction.name),
+                        crate::direction::roots(interaction),
+                    )
+                })
+            })
+        })
+        .collect();
+    for home in old_holders {
+        for shape in home.shapes() {
+            for interaction in &shape.interface.interactions {
+                let path = format!("{}/{}/{}", home.name, shape.name, interaction.name);
+                let Some(new_roots) = new_uses.get(&path) else {
+                    continue;
+                };
+                for (ty, _) in crate::direction::roots(interaction) {
+                    if !new_roots.iter().any(|(new, _)| new == &ty) {
+                        continue;
+                    }
+                    for (identity, (declaring, before)) in crate::direction::reached(home, &ty, old)
+                    {
+                        if old_holders.iter().any(|p| p.name == declaring.name) {
+                            continue;
+                        }
+                        let Some((new_home, after)) =
+                            new.iter().find(|p| p.name == declaring.name).and_then(|p| {
+                                p.decls
+                                    .iter()
+                                    .find(|d| d.name == before.name)
+                                    .map(|d| (*p, d))
+                            })
+                        else {
+                            continue;
+                        };
+                        let (Some(v2::decl::Kind::TypeDef(a)), Some(v2::decl::Kind::TypeDef(b))) =
+                            (&before.kind, &after.kind)
+                        else {
+                            continue;
+                        };
+                        if a.constraint == b.constraint {
+                            continue;
+                        }
+                        let verdict = if crate::classify::narrows(
+                            a.constraint.as_ref(),
+                            b.constraint.as_ref(),
+                        ) {
+                            Verdict::Breaking
+                        } else {
+                            crate::direction::widening_verdict(new_home, new, &identity)
+                        };
+                        changes.insert(
+                            (path.clone(), identity.clone()),
+                            Change {
+                                path: path.clone(),
+                                category: Category::ConstraintChanged,
+                                verdict,
+                                before: Some(format!(
+                                    "{identity}: {}",
+                                    crate::walk::constraint_str(a.constraint.as_ref())
+                                )),
+                                after: Some(format!(
+                                    "{identity}: {}",
+                                    crate::walk::constraint_str(b.constraint.as_ref())
+                                )),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+    changes.into_values().collect()
 }

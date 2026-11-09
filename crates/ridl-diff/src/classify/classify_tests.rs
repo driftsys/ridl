@@ -627,10 +627,16 @@ fn constraint_case(
     old_bounds: v2::Constraint,
     new_bounds: v2::Constraint,
 ) -> (v2::Package, v2::Package) {
-    (
-        decl_pkg(vec![scalar("S", old_bounds, v2::IntWidth::U16)]),
-        decl_pkg(vec![scalar("S", new_bounds, v2::IntWidth::U16)]),
-    )
+    let mut old = pkg(vec![command(
+        "send",
+        1,
+        vec![param("value", named("S"))],
+        vec![],
+    )]);
+    old.decls = vec![scalar("S", old_bounds, v2::IntWidth::U16)];
+    let mut new = old.clone();
+    new.decls = vec![scalar("S", new_bounds, v2::IntWidth::U16)];
+    (old, new)
 }
 
 #[test]
@@ -770,12 +776,17 @@ fn a_constraint_added_where_there_was_none_is_breaking() {
 /// leaves the value unbounded again, which only widens.
 #[test]
 fn a_constraint_dropped_entirely_is_compatible() {
-    let old = decl_pkg(vec![scalar(
+    let mut old = decl_pkg(vec![scalar(
         "Speed",
         bounds(Some("0.0"), Some("300.0")),
         v2::IntWidth::U16,
     )]);
-    let new = decl_pkg(vec![unconstrained("Speed", v2::IntWidth::U16)]);
+    let mut new = decl_pkg(vec![unconstrained("Speed", v2::IntWidth::U16)]);
+    old.interfaces = vec![interface(
+        "I",
+        vec![command("send", 1, vec![param("v", named("Speed"))], vec![])],
+    )];
+    new.interfaces = old.interfaces.clone();
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
 }
 
@@ -3377,4 +3388,360 @@ fn absence_refused_is_false_for_a_container_that_is_not_a_struct() {
     assert!(!crate::absence_refused(
         &set, &context, "second", "Missing", "x"
     ));
+}
+
+mod constraint_direction {
+    use super::*;
+
+    fn pair(interactions: Vec<v2::Decl>, drop: bool) -> (v2::Package, v2::Package) {
+        let mut old = pkg(interactions);
+        old.decls = vec![scalar(
+            "S",
+            bounds(Some("10"), Some("100")),
+            v2::IntWidth::U16,
+        )];
+        let mut new = old.clone();
+        new.decls[0] = if drop {
+            unconstrained("S", v2::IntWidth::U16)
+        } else {
+            scalar("S", bounds(Some("0"), Some("200")), v2::IntWidth::U16)
+        };
+        (old, new)
+    }
+
+    fn check(mut interactions: Vec<v2::Decl>, expected: Verdict) {
+        if expected == Verdict::Breaking && !interactions.is_empty() {
+            interactions.push(command(
+                "controlSend",
+                100,
+                vec![param("v", named("S"))],
+                vec![],
+            ));
+        }
+        for drop in [false, true] {
+            let (old, new) = pair(interactions.clone(), drop);
+            assert_row(&old, &new, Category::ConstraintChanged, expected);
+            assert_row(&new, &old, Category::ConstraintChanged, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn signal_received() {
+        check(vec![signal("read", 1, "S")], Verdict::Breaking);
+    }
+    #[test]
+    fn event_received() {
+        check(vec![event("read", 1, "S")], Verdict::Breaking);
+    }
+    #[test]
+    fn fixed_received() {
+        check(
+            vec![decl(
+                "read",
+                1,
+                v2::decl::Kind::FixedDef(v2::FixedDef {
+                    payload: Some(named("S")),
+                }),
+            )],
+            Verdict::Breaking,
+        );
+    }
+    #[test]
+    fn query_reply_received() {
+        check(
+            vec![query("read", 1, vec![], value_return("S"), vec![])],
+            Verdict::Breaking,
+        );
+    }
+    #[test]
+    fn fallible_ok_received() {
+        check(
+            vec![query(
+                "read",
+                1,
+                vec![],
+                fallible_return("S", "Other"),
+                vec![],
+            )],
+            Verdict::Breaking,
+        );
+    }
+    #[test]
+    fn fallible_err_received_even_when_sent() {
+        check(
+            vec![
+                command("send", 1, vec![param("v", named("S"))], vec![]),
+                query("read", 2, vec![], fallible_return("Other", "S"), vec![]),
+            ],
+            Verdict::Breaking,
+        );
+    }
+    #[test]
+    fn command_send_only() {
+        check(
+            vec![command("send", 1, vec![param("v", named("S"))], vec![])],
+            Verdict::Compatible,
+        );
+    }
+    #[test]
+    fn query_send_only() {
+        check(
+            vec![query(
+                "send",
+                1,
+                vec![param("v", named("S"))],
+                value_return("Other"),
+                vec![],
+            )],
+            Verdict::Compatible,
+        );
+    }
+    #[test]
+    fn stream_parameter_send_only() {
+        check(
+            vec![command("send", 1, vec![param("v", stream("S"))], vec![])],
+            Verdict::Compatible,
+        );
+    }
+    #[test]
+    fn both_directions() {
+        check(
+            vec![
+                command("send", 1, vec![param("v", named("S"))], vec![]),
+                signal("read", 2, "S"),
+            ],
+            Verdict::Breaking,
+        );
+    }
+    #[test]
+    fn unreached() {
+        check(vec![], Verdict::Breaking);
+    }
+
+    #[test]
+    fn nested_received_overrides_direct_send() {
+        let array = v2::FieldType {
+            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(named("Choice"))),
+                min: 0,
+                max: 4,
+            }))),
+            ..Default::default()
+        };
+        let (mut old, mut new) = pair(
+            vec![
+                command("send", 1, vec![param("v", named("S"))], vec![]),
+                query(
+                    "read",
+                    2,
+                    vec![],
+                    v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(array)),
+                    },
+                    vec![],
+                ),
+            ],
+            false,
+        );
+        for p in [&mut old, &mut new] {
+            p.decls
+                .push(struct_decl("Record", vec![field("value", 1, "S")]));
+            p.decls.push(union_decl(
+                "Choice",
+                vec![union_arm("record", 1, "Record")],
+                false,
+            ));
+        }
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    }
+
+    #[test]
+    fn tuple_optional_map_and_stream_replies_are_received() {
+        let map = v2::FieldType {
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(named("Other"))),
+                value: Some(Box::new(named("S"))),
+                ..Default::default()
+            }))),
+            optional: true,
+        };
+        let tuple = v2::FieldType {
+            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                fields: vec![v2::TupleField {
+                    r#type: Some(map),
+                    ..Default::default()
+                }],
+            })),
+            ..Default::default()
+        };
+        for reply in [tuple, stream("S")] {
+            check(
+                vec![
+                    command("send", 1, vec![param("v", named("S"))], vec![]),
+                    query(
+                        "read",
+                        2,
+                        vec![],
+                        v2::ReturnType {
+                            kind: Some(v2::return_type::Kind::Value(reply)),
+                        },
+                        vec![],
+                    ),
+                ],
+                Verdict::Breaking,
+            );
+        }
+    }
+
+    #[test]
+    fn compared_package_scope() {
+        let (old, new) = pair(
+            vec![command("send", 1, vec![param("v", named("S"))], vec![])],
+            false,
+        );
+        let mut consumer = pkg(vec![signal("read", 1, "veh.cluster.S")]);
+        consumer.name = "consumer".into();
+        let report = crate::diff_sets(&[old, consumer.clone()], &[new, consumer]);
+        assert_eq!(
+            row(&report, Category::ConstraintChanged).verdict,
+            Verdict::Breaking
+        );
+    }
+
+    #[test]
+    fn remote_nested_constraint_reports_once_per_interaction_and_declaration() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut local = pkg(vec![
+            command("send", 1, vec![param("v", named("dep.S"))], vec![]),
+            query(
+                "read",
+                2,
+                vec![param("v", named("dep.S"))],
+                value_return("Record"),
+                vec![],
+            ),
+        ]);
+        local.decls = vec![struct_decl(
+            "Record",
+            vec![field("a", 1, "dep.S"), field("b", 2, "dep.S")],
+        )];
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert_eq!(report.changes.len(), 2, "{report:?}");
+        for (change, path) in report
+            .changes
+            .iter()
+            .zip(["veh.cluster/I/read", "veh.cluster/I/send"])
+        {
+            assert_eq!(change.path, path);
+            assert_eq!(change.category, Category::ConstraintChanged);
+            assert_eq!(change.verdict, Verdict::Breaking);
+            assert_eq!(change.before.as_deref(), Some("dep.S: [min=10 max=100]"));
+            assert_eq!(change.after.as_deref(), Some("dep.S: [min=0 max=200]"));
+        }
+    }
+
+    #[test]
+    fn bare_names_resolve_in_the_declaring_package_and_context_interactions_count() {
+        let (mut old, mut new) = pair(
+            vec![command("send", 1, vec![param("v", named("S"))], vec![])],
+            false,
+        );
+        for p in [&mut old, &mut new] {
+            p.decls
+                .push(struct_decl("Record", vec![field("v", 1, "S")]));
+        }
+        let mut context = pkg(vec![signal("read", 1, "veh.cluster.Record")]);
+        context.name = "consumer".into();
+        context.decls = vec![unconstrained("S", v2::IntWidth::U16)];
+        let report = crate::diff_refs_in(&[&old], &[&new], &[&context]);
+        assert_eq!(
+            row(&report, Category::ConstraintChanged).verdict,
+            Verdict::Breaking
+        );
+    }
+
+    #[test]
+    fn every_widened_facet_uses_consumer_direction() {
+        let empty = bounds(None, None);
+        let cases = vec![
+            (bounds(Some("10"), None), bounds(Some("0"), None)),
+            (bounds(None, Some("100")), bounds(None, Some("200"))),
+            (
+                v2::Constraint {
+                    len_min: Some(2),
+                    ..empty.clone()
+                },
+                v2::Constraint {
+                    len_min: Some(1),
+                    ..empty.clone()
+                },
+            ),
+            (
+                v2::Constraint {
+                    len_max: Some(8),
+                    ..empty.clone()
+                },
+                v2::Constraint {
+                    len_max: Some(16),
+                    ..empty.clone()
+                },
+            ),
+            (
+                v2::Constraint {
+                    step: Some("2".into()),
+                    ..empty.clone()
+                },
+                empty.clone(),
+            ),
+            (
+                v2::Constraint {
+                    pattern: Some("x".into()),
+                    ..empty.clone()
+                },
+                empty.clone(),
+            ),
+            (
+                v2::Constraint {
+                    pattern_const: Some("P".into()),
+                    ..empty.clone()
+                },
+                empty,
+            ),
+        ];
+        for (before, after) in cases {
+            let (mut old, mut new) = constraint_case(before, after);
+            assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+            for p in [&mut old, &mut new] {
+                p.interfaces[0].interactions.push(signal("read", 2, "S"));
+            }
+            assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+            assert_row(&new, &old, Category::ConstraintChanged, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn shadowed_context_interactions_do_not_change_direction() {
+        let (old, new) = pair(
+            vec![command("send", 1, vec![param("v", named("S"))], vec![])],
+            false,
+        );
+        let mut consumer = pkg(vec![command(
+            "send",
+            1,
+            vec![param("v", named("veh.cluster.S"))],
+            vec![],
+        )]);
+        consumer.name = "consumer".into();
+        let mut shadowed = consumer.clone();
+        shadowed.interfaces[0].interactions = vec![signal("read", 1, "veh.cluster.S")];
+        let report = crate::diff_refs_in(&[&old, &consumer], &[&new, &consumer], &[&shadowed]);
+        assert_eq!(
+            row(&report, Category::ConstraintChanged).verdict,
+            Verdict::Compatible
+        );
+    }
 }

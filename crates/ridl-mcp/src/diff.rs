@@ -626,4 +626,24 @@ mod tests {
         }
         assert_eq!(before, inventory(&copy.0));
     }
+    #[test]
+    fn widened_received_constraint_is_breaking() {
+        let root = fixture("ws");
+        let path = format!("{root}/a/a.ridl");
+        let source = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("250.0", "300.0");
+        let result = diff(&DiffInput {
+            old: root.clone(),
+            new: root,
+            overlays: Some(vec![OverlayInput { path, source }]),
+            encodings: None,
+        })
+        .unwrap();
+        assert_eq!(result["verdict"], "breaking", "{result}");
+        let changes = result["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 1, "{result}");
+        assert_eq!(changes[0]["category"], "constraint_changed");
+        assert_eq!(changes[0]["verdict"], "breaking");
+    }
 }

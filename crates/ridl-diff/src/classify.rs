@@ -3,7 +3,8 @@
 //! [`classify`] turns one structural [`Change`] from the walk into a directional
 //! [`Verdict`]. Direction is judged from the consumer's side (ADR-0008 decision
 //! 14): a change is breaking when it shifts or reuses a wire identity or narrows
-//! a consumer-visible guarantee, and compatible when it only relaxes or appends.
+//! a consumer-visible guarantee. Scalar widening is compatible only for a type
+//! reached exclusively through sent values; received and unreached types break.
 //!
 //! The classifier reads the resolved IR of both sides, never source, so every
 //! bound it compares is the bound a backend sees. That is what makes the
@@ -50,9 +51,9 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
 /// [`classify`], with `scope` — every package of the new snapshot, and the
 /// context packages such as `ridl.std` — to resolve a reference to another
 /// package's declaration, and `encodings`, the list the comparison is judged
-/// for ([`diff_refs_with`](crate::diff_refs_with)). Only the appended struct
-/// field reads `scope`: whether its type is legal at 0 is decided by the
-/// declaration the new side names (driftsys/ridl#598). The encoding-specific
+/// for ([`diff_refs_with`](crate::diff_refs_with)). Appended fields read `scope`
+/// to decide whether their types allow 0; scalar constraints read it to find
+/// every new-side interaction that reaches the type. Encoding-specific
 /// categories read `encodings`.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
@@ -147,7 +148,7 @@ pub(crate) fn classify_in(
         Category::VisibilityChanged => visibility(change, old, new),
         Category::InteractionAppended => appended(change, old, new),
         Category::DeclAdded => added(change, old, new, scope),
-        Category::ConstraintChanged => constraint(change, old, new),
+        Category::ConstraintChanged => constraint(change, old, new, scope),
         Category::TimingChanged => timing(change, old, new),
         Category::RpcBoundChanged => rpc_bound(change, old, new),
         Category::ContractChanged => contract(change, old, new),
@@ -546,14 +547,20 @@ pub fn is_above_high_water(slot: i64, held: impl IntoIterator<Item = i64>) -> bo
 // Constraints — narrowed versus widened.
 // ==========================================================================
 
-/// A scalar constraint change on a named type. Widening keeps every value the
-/// old contract admitted legal, so it is compatible; narrowing rejects values a
-/// consumer may already be sending.
+/// A scalar constraint change on a named type. Widening is compatible only
+/// when at least one new-side interaction reaches the type and every use is
+/// sent by the consumer. Any received use, or no use, is breaking. Narrowing
+/// remains breaking because it rejects values a consumer may already send.
 ///
 /// A composite body changed in place reaches here with no member path and no
 /// rendered values — the walk does not say which member changed inside it — and
 /// classifies breaking.
-fn constraint(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+fn constraint(
+    change: &Change,
+    old: &v2::Package,
+    new: &v2::Package,
+    scope: &[&v2::Package],
+) -> Verdict {
     let mut segments = change.path.split('/').skip(1);
     let (Some(name), None) = (segments.next(), segments.next()) else {
         return Verdict::Breaking;
@@ -572,7 +579,7 @@ fn constraint(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict 
     if narrows(old_def.constraint.as_ref(), new_def.constraint.as_ref()) {
         Verdict::Breaking
     } else {
-        Verdict::Compatible
+        crate::direction::widening_verdict(new, scope, &format!("{}.{}", new.name, name))
     }
 }
 
@@ -582,7 +589,7 @@ fn constraint(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict 
 /// change, so a mixed edit — a lowered `min` with a lowered `max` — is breaking
 /// on the half that narrows. A stepped minimum also defines the grid origin,
 /// so a shifted grid is breaking even when the interval widens.
-fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
+pub(crate) fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
     let (Some(old), Some(new)) = (old, new) else {
         // A constraint appearing where there was none bounds a previously
         // unbounded value; dropping one entirely only widens.
@@ -1450,12 +1457,19 @@ pub fn explain(category: Category) -> &'static str {
         ),
         Category::ConstraintChanged => concat!(
             "A scalar constraint changed, or a composite body changed in place.\n",
-            "  compatible  widened — min lowered without shifting a stepped grid, max\n",
+            "  compatible  widened only on a type reached by at least one interaction\n",
+            "              and exclusively sent by the consumer (command or query\n",
+            "              parameters, including streams). Widened means min lowered\n",
+            "              without shifting a stepped grid, max\n",
             "              raised, a length bound loosened,\n",
             "              a step removed, a match pattern removed (by literal or by\n",
             "              named constant), or the whole constraint dropped so the\n",
             "              value is unbounded again\n",
-            "  breaking    narrowed — min raised, max lowered, a length bound\n",
+            "  breaking    widened on a received value (signal, event, fixed or query\n",
+            "              reply, both fallible arms and stream elements included),\n",
+            "              on a type reached in both directions, or on an unreached\n",
+            "              type. Reachability follows nested types across packages.\n",
+            "              Narrowed — min raised, max lowered, a length bound\n",
             "              tightened, a stepped grid shifted, a step added or changed\n",
             "              (divisibility between different steps is never\n",
             "              proved), a match pattern added or rewritten (by literal or\n",
@@ -1467,7 +1481,10 @@ pub fn explain(category: Category) -> &'static str {
             "              decides the change, so a mixed edit is breaking on the half\n",
             "              that narrows. A widening that flips the resolved wire width\n",
             "              is separately reported as width_changed, which is always\n",
-            "              breaking (typl 5.6)"
+            "              breaking (typl 5.6). Per-side remote contexts report a changed\n",
+            "              scalar constraint at each surviving consumer interaction path,\n",
+            "              once per path and remote declaration, with the same rule.\n",
+            "              Missing per-side context supplies no comparison."
         ),
         Category::InitChanged => concat!(
             "A declared or resolved init value changed.\n",

@@ -291,15 +291,11 @@ language layer at `int64`/`float64`.
    emit a checking constructor: it records the constraint in the type's doc
    comment only (driftsys/ridl#923).
 
-   **`ridl diff` is unchanged.** This decision does not change how `ridl diff`
-   classifies a constraint change (`constraint_changed`); that classification
-   and its reasons are `ridl-diff`'s. Whether a widened constraint is compatible
-   for a consumer that receives the value, and not only for one that builds it,
-   is open as driftsys/ridl#926. A lowered minimum that moves a stepped grid is
-   classified breaking; an aligned widening keeps the grid and is compatible.
-   `a_narrowed_range_exits_one_and_a_widened_range_exits_zero` in
-   `crates/ridl/tests/diff_cli.rs` runs the built `ridl` binary on one case, a
-   narrowed and a widened integer maximum.
+   **`ridl diff`.** Constraint classification is owned by
+   [ADR-0008](ADR-0008-e2-execution.md) decision 14, amended 2026-11-09. A
+   lowered minimum that moves a stepped grid is breaking. An aligned widening is
+   compatible only for a type the consumer exclusively sends; a received or
+   unreached type is breaking.
 
 ## Alternatives considered
 

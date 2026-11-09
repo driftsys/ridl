@@ -441,13 +441,12 @@ fn source_dir_vs_source_dir_breaking_exits_one() {
 /// widened range is a compatible row and exits 0. Each assertion names the
 /// row's own tag, so the rendered tag is checked, not only the headline.
 #[test]
-fn a_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
-    const WIDE: &str = "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..250]\n";
-    const NARROW: &str =
-        "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..200]\n";
+fn a_send_only_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
+    const WIDE: &str = "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..250]\ninterface I { command send(value: Speed) }\n";
+    const NARROW: &str = "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..200]\ninterface I { command send(value: Speed) }\n";
     let dir = TempDir::new("range");
-    let wide = dir.write("wide.typl", WIDE);
-    let narrow = dir.write("narrow.typl", NARROW);
+    let wide = dir.write("wide.ridl", WIDE);
+    let narrow = dir.write("narrow.ridl", NARROW);
 
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), wide.as_os_str(), narrow.as_os_str()]);
     assert_eq!(code, 1, "a narrowed range exits 1, stderr:\n{stderr}");
@@ -1961,4 +1960,115 @@ fn remote_malformed_enriched_baseline_is_an_input_error() {
     assert!(stdout.is_empty());
     assert!(stderr.contains("context.json"), "{stderr}");
     assert_eq!(before, remote_input_inventory(dir.path()));
+}
+
+#[test]
+fn widened_received_constraint_exits_one() {
+    let dir = TempDir::new("received-constraint");
+    let source = "package app\ntype S: integer [0..100]\ninterface I { signal read: S @10ms }\n";
+    let old = dir.write("old.ridl", source);
+    let new = dir.write("new.ridl", &source.replace("100", "200"));
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(code, 1, "{stdout}\n{stderr}");
+    assert!(
+        stdout.contains("[breaking] constraint_changed app/S"),
+        "{stdout}"
+    );
+}
+
+fn remote_constraint_source(dir: &TempDir, side: &str, max: u32, received: bool) -> PathBuf {
+    let root = remote_flags_source(dir, side, false);
+    dir.write(
+        &format!("{side}/vendor/dep/types.typl"),
+        &format!("package dep\ntype S: integer [0..{max}]\n"),
+    );
+    let interaction = if received {
+        "signal value: S @10ms"
+    } else {
+        "command value(v: S)"
+    };
+    dir.write(
+        &format!("{side}/app.ridl"),
+        &format!("package app\nimport dep.S\ninterface I {{ {interaction} }}\n"),
+    );
+    std::fs::remove_file(root.join("app.typl")).unwrap();
+    let mut lock = ridl_core::lock::read_lockfile(&root.join("ridl.lock"))
+        .0
+        .unwrap();
+    lock.entries.values_mut().next().unwrap().tree =
+        Some(ridl_core::tree_hash(&root.join("vendor/dep")).unwrap());
+    ridl_core::lock::write_lockfile(&root.join("ridl.lock"), &lock).unwrap();
+    root
+}
+
+fn remote_constraint_comparison(received: bool, narrowed: bool) {
+    let dir = TempDir::new("remote-constraint");
+    let (a, b) = if narrowed { (200, 100) } else { (100, 200) };
+    let old = remote_constraint_source(&dir, "old", a, received);
+    let new = remote_constraint_source(&dir, "new", b, received);
+    let baseline = dir.path().join("baseline");
+    remote_inline_baseline(&old, &baseline, true);
+    let legacy = dir.path().join("legacy");
+    remote_inline_baseline(&old, &legacy, false);
+    let mut results = Vec::new();
+    for old in [&old, &baseline] {
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            old.as_os_str(),
+            new.as_os_str(),
+            "--format".as_ref(),
+            "json".as_ref(),
+        ]);
+        eprintln!("remote received={received} narrowed={narrowed}: exit={code} {stdout} {stderr}");
+        results.push((code, stdout));
+    }
+    for (code, stdout) in results {
+        let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        let changes = report["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 1, "{report}");
+        assert_eq!(code, i32::from(received || narrowed), "{report}");
+        assert_eq!(changes[0]["category"], "constraint_changed");
+        assert_eq!(changes[0]["path"], "app/I/value");
+        assert_eq!(
+            changes[0]["verdict"],
+            if received || narrowed {
+                "breaking"
+            } else {
+                "compatible"
+            }
+        );
+        assert!(
+            changes[0]["before"]
+                .as_str()
+                .unwrap()
+                .starts_with("dep.S: ")
+        );
+        assert!(changes[0]["after"].as_str().unwrap().starts_with("dep.S: "));
+    }
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        legacy.as_os_str(),
+        new.as_os_str(),
+        "--format".as_ref(),
+        "json".as_ref(),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(report["changes"].as_array().unwrap().is_empty(), "{report}");
+}
+#[test]
+fn remote_constraint_widening_received() {
+    remote_constraint_comparison(true, false);
+}
+#[test]
+fn remote_constraint_widening_send_only() {
+    remote_constraint_comparison(false, false);
+}
+#[test]
+fn remote_constraint_narrowing_received() {
+    remote_constraint_comparison(true, true);
+}
+#[test]
+fn remote_constraint_narrowing_send_only() {
+    remote_constraint_comparison(false, true);
 }

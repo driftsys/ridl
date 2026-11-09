@@ -1890,7 +1890,7 @@ fn float_width_name(width: i32) -> &'static str {
     }
 }
 
-fn constraint_str(constraint: Option<&v2::Constraint>) -> String {
+pub(crate) fn constraint_str(constraint: Option<&v2::Constraint>) -> String {
     let Some(constraint) = constraint else {
         return "(none)".to_string();
     };

@@ -42,7 +42,11 @@ other entry below is Accepted.
   amendments, decisions 16 to 21). Decision 14 amended 2026-09-30 from
   driftsys/ridl#598: an appended non-optional struct field is breaking unless
   its type is a scalar, enum or enum set that allows the value 0. A type the
-  diff cannot resolve is reported as breaking.
+  diff cannot resolve is reported as breaking. Decision 14 amended 2026-11-09:
+  scalar widening is compatible only for a reached type the consumer exclusively
+  sends; received, both-direction and unreached types are breaking. Per-side
+  remote contexts report scalar constraint changes at consumer interaction
+  paths.
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.

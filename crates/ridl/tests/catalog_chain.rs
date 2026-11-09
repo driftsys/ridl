@@ -2385,3 +2385,67 @@ fn legacy_type_only_podbuf_unit_requires_explicit_context_recovery() {
     );
     assert!(!root.join(".ridl/baseline.previous.1").exists());
 }
+
+fn constraint_history(received: bool) {
+    let dir = TempDir::new("constraint-history");
+    let before = TempDir::new("constraint-before");
+    let after = TempDir::new("constraint-after");
+    let interaction = if received {
+        "signal read: S @10ms"
+    } else {
+        "command send(v: S)"
+    };
+    let source =
+        format!("package veh.cluster\ntype S: integer [0..100]\ninterface I {{ {interaction} }}\n");
+    let root = set_source(&dir, &source);
+    publish(&root);
+    let old_hash = describe_hash(&root, before.path(), UNIT);
+    let prior = baseline_inventory(&root);
+    set_source(&dir, &source.replace("100", "200"));
+    let (code, stdout, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        root.join(".ridl/baseline").as_os_str(),
+    ]);
+    assert_eq!(code, 0, "{stdout}\n{stderr}");
+    assert!(!stderr.contains("RIDL-407"), "{stderr}");
+    let new_hash = describe_hash(&root, after.path(), UNIT);
+    assert_ne!(old_hash, new_hash);
+    let expected = if received {
+        vec![]
+    } else {
+        vec![old_hash.clone()]
+    };
+    assert_eq!(compatible_of(after.path(), UNIT), expected);
+    let (code, stderr) = baseline(&root);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("RIDL-408"), "{stderr}");
+    let expected = if received {
+        vec![new_hash]
+    } else {
+        vec![new_hash, old_hash]
+    };
+    assert_eq!(history_lines(&root), expected);
+    let backup = root.join(".ridl/baseline.previous.1");
+    if received {
+        assert_eq!(
+            directory_inventory(&backup),
+            prior,
+            "a breaking verdict preserves the prior baseline"
+        );
+    } else {
+        assert!(
+            !backup.exists(),
+            "a compatible publication needs no retained backup"
+        );
+    }
+}
+#[test]
+fn widened_received_constraint_restarts_history_without_ordinal_diagnostics() {
+    constraint_history(true);
+}
+#[test]
+fn widened_send_only_constraint_keeps_history() {
+    constraint_history(false);
+}

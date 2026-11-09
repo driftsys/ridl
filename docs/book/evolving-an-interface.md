@@ -133,8 +133,21 @@ older consumer, built against the version before the change.
 | A doc comment, a label or `deprecated` changes                                                                                   | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
 | A declaration is added that no interface reaches                                                                                 | compatible | unchanged        | unchanged                                                                         | accepted: the hash is the provider's own                        |
 | A compatible change to an interface, or to a declaration that an interface reaches                                               | compatible | changes          | the earlier hashes stay, and the previous one joins                               | accepted: the earlier hash is in the list                       |
+| A scalar constraint widened on a value the consumer only sends, without a wire-width change                                      | compatible | changes          | the earlier hashes stay, and the previous one joins                               | accepted: the earlier hash is in the list                       |
+| A scalar constraint widened on a value the consumer receives                                                                     | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone | refused with `catalog_mismatch`: the earlier hash is not listed |
 | A breaking change to an interface, or to a declaration that an interface reaches                                                 | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone | refused with `catalog_mismatch`: the earlier hash is not listed |
 | A breaking change to a declaration of the unit that no interface reaches, with no proved podbuf break and usable inline evidence | breaking   | unchanged        | unchanged: the hash did not change                                                | accepted: the hash is the provider's own                        |
+
+A widened scalar constraint reached only through command or query parameters
+keeps the earlier hashes when no other breaking change occurs. A widening that
+changes the resolved wire width has a separate breaking `width_changed` row. A
+widened constraint reached by a signal, event or fixed payload, or by a query
+reply, empties the compatible list and restarts the history. Both fallible reply
+arms and stream elements count. If both directions reach the type, the received
+rule applies. An unreached widening is breaking, but its unchanged hash keeps
+the history as the last table row describes. Remote constraint changes use the
+same rule and appear at consumer interaction paths when both sides supply remote
+context. Narrowing remains breaking in every direction.
 
 The "compatible" and "breaking" rows cover the categories that `ridl diff`
 prints. The rules are in the [CLI reference](cli-reference.md#ridl-diff), and
@@ -145,9 +158,10 @@ cases:
   (`interaction_appended`); an interaction retired to a `reserved` line in its
   own slot (`interaction_retired`); an interface added, renamed with its number
   kept, or retired (`decl_added`, `interface_renamed`, `interface_retired`); a
-  scalar constraint widened (`constraint_changed`); a signal or event bound
-  tightened (`timing_changed`); an interface joining or leaving a service's list
-  (`service_interface_added`, `service_interface_removed`).
+  scalar constraint widened on a value the consumer only sends
+  (`constraint_changed`); a signal or event bound tightened (`timing_changed`);
+  an interface joining or leaving a service's list (`service_interface_added`,
+  `service_interface_removed`).
 - **Compatible, and the hash may change**: an enum body reordered with no number
   changed (`enum_reordered`), which changes the hash when an interface reaches
   the enum, and a provisional interface number frozen by `ridl lock`
@@ -156,11 +170,12 @@ cases:
   reordered (`interaction_inserted`, `interaction_removed`,
   `interaction_reordered`); a payload, a parameter list or a return shape
   changed (`payload_changed`, `params_changed`, `return_changed`); a scalar
-  constraint narrowed or a width changed (`constraint_changed`,
-  `width_changed`); a declared payload limit raised, lowered, added or removed
-  (`limit_changed`); a signal bound loosened or removed; a struct field, a union
-  arm or an enum value removed, an enum value renumbered, or an interface number
-  changed (`decl_removed`, `member_reordered`, `interface_number_changed`).
+  constraint narrowed, or widened on a received or unreached value, or a width
+  changed (`constraint_changed`, `width_changed`); a declared payload limit
+  raised, lowered, added or removed (`limit_changed`); a signal bound loosened
+  or removed; a struct field, a union arm or an enum value removed, an enum
+  value renumbered, or an interface number changed (`decl_removed`,
+  `member_reordered`, `interface_number_changed`).
 - **Breaking, for a declaration that is not `open`**: an enum value or an
   enum-set flag appended to an enum or an enum set (`strict_enum_append`, once
   per compared declaration, with the appended names). The rule applies to every

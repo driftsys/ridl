@@ -2027,6 +2027,25 @@ ridl diff old.ridl breaking.ridl --format json
 }
 ```
 
+**Scalar constraints.** `constraint_changed` is breaking (exit 1) for any
+narrowing. A widening is compatible (exit 0) only when the type is reached by at
+least one interaction and exclusively through command or query parameters,
+including stream parameters. A signal, event or fixed payload, or a query reply
+(including either fallible arm and stream elements), makes a widening breaking.
+The search follows nested fields, union arms, tuples, arrays, maps and optional
+values across the new snapshot and context packages. Both-direction and
+unreached types are breaking. Dropping a constraint is a widening. A composite
+body changed in place remains breaking.
+
+With per-side remote context, a pin change reports remote scalar widening and
+narrowing at each surviving consumer interaction path, once per path and remote
+declaration, with `<remote declaration>: <constraint>` before/after values.
+Missing per-side context supplies no comparison. A widened received constraint
+ends the unit's compatible catalog history for both `ridl build` and
+`ridl baseline`; a send-only widening keeps the earlier hashes. The ordinal
+RIDL-407 desk check and RIDL-408 publication gate do not reject constraint
+changes. See [Evolving an interface](evolving-an-interface.md).
+
 **At the system.** When both sides are source whose workspace declares a
 `system`, `ridl diff` also lists the changes to the lowered system that are not
 contract changes, under three headings (rsdl reference §14): **placement
