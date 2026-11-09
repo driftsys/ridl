@@ -109,7 +109,7 @@ type Tag: string [2..4] = "ab"
 /// A code of capital letters.
 type Code: string [1..8 match /^[A-Z]+$/] = "A"
 
-/// A text that holds one character of any kind.
+/// A text of one character that is not a line break.
 type Glyph: string [0..4 match /^.$/] = "a"
 
 /// A text that holds a digit anywhere in it.
