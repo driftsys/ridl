@@ -6799,8 +6799,7 @@ impl Uuid {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -6980,8 +6979,7 @@ impl Ulid {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7161,8 +7159,7 @@ impl Uri {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7342,8 +7339,7 @@ impl Url {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7523,8 +7519,7 @@ impl Email {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7704,8 +7699,7 @@ impl IpV4 {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7885,8 +7879,7 @@ impl IpV6 {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8066,8 +8059,7 @@ impl Label {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8247,8 +8239,7 @@ impl Name {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8428,8 +8419,7 @@ impl Message {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8824,8 +8814,7 @@ impl Date {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9005,8 +8994,7 @@ impl TimeOfDay {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9192,8 +9180,7 @@ impl Version {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9373,8 +9360,7 @@ impl CountryCode {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9560,8 +9546,7 @@ impl LanguageCode {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -10089,8 +10074,7 @@ impl Certificate {
             let __s: &[::core::primitive::u8] = self.get();
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64, 1usize)?;
-                w.put_bytes(__data, __s);
+                let __data = w.tail_data(__s, false)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {

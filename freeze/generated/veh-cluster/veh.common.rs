@@ -7876,8 +7876,7 @@ impl DriverProfile {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8255,9 +8254,7 @@ impl SensorBounds {
                         }
                         if !__s.is_empty() {
                             let __n = __s.len();
-                            let __data = w
-                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                            w.put_bytes(__data, __s.as_bytes());
+                            let __data = w.tail_data(__s.as_bytes(), true)?;
                             w.put_desc(
                                 __ea,
                                 ::ridl_rt::podbuf::Desc {
@@ -8320,9 +8317,7 @@ impl SensorBounds {
                         }
                         if !__s.is_empty() {
                             let __n = __s.len();
-                            let __data = w
-                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                            w.put_bytes(__data, __s.as_bytes());
+                            let __data = w.tail_data(__s.as_bytes(), true)?;
                             w.put_desc(
                                 __ea,
                                 ::ridl_rt::podbuf::Desc {
@@ -8344,9 +8339,7 @@ impl SensorBounds {
                         }
                         if !__s.is_empty() {
                             let __n = __s.len();
-                            let __data = w
-                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                            w.put_bytes(__data, __s.as_bytes());
+                            let __data = w.tail_data(__s.as_bytes(), true)?;
                             w.put_desc(
                                 __ea + 8usize,
                                 ::ridl_rt::podbuf::Desc {
@@ -9467,8 +9460,7 @@ impl SensorFault {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at + 4usize,
                     ::ridl_rt::podbuf::Desc {

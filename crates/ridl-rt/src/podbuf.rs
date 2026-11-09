@@ -400,6 +400,33 @@ impl<'o> Writer<'o> {
         }
     }
 
+    /// Appends `data` at the next byte, followed by one NUL byte when
+    /// `terminated` is true, and returns the offset of `data`.
+    ///
+    /// The block has alignment 1, so no gap precedes it. Every reserved byte
+    /// is written once: unlike [`Writer::tail`] followed by
+    /// [`Writer::put_bytes`], no byte is zeroed first and then overwritten.
+    pub fn tail_data(&mut self, data: &[u8], terminated: bool) -> Result<usize, EncodeError> {
+        let start = self.len;
+        let end = start
+            .saturating_add(data.len())
+            .saturating_add(usize::from(terminated));
+        let available = self.out.len();
+        match self.out.get_mut(start..end) {
+            Some(region) => {
+                let (head, nul) = region.split_at_mut(data.len());
+                head.copy_from_slice(data);
+                nul.fill(0);
+                self.len = end;
+                Ok(start)
+            }
+            None => Err(EncodeError::Capacity {
+                needed: end,
+                available,
+            }),
+        }
+    }
+
     #[inline]
     fn store(&mut self, at: usize, bytes: &[u8]) {
         let range = at
@@ -633,6 +660,37 @@ mod tests {
         let bytes = w.finish().unwrap();
         assert_eq!(&bytes[16..19], b"ab\0");
         assert_eq!(bytes.len(), 19);
+    }
+
+    #[test]
+    fn tail_data_writes_the_data_and_a_zero_terminator_over_dirty_output() {
+        let mut out = Aligned::<[u8; 64]>::zeroed();
+        out.0.fill(0xAA);
+        let mut w = Writer::new(&mut out.0);
+        w.reserve_head(8).unwrap();
+        let a = w.tail_data(b"abc", true).unwrap();
+        let b = w.tail_data(b"xy", false).unwrap();
+        let c = w.tail_data(b"", true).unwrap();
+        assert_eq!((a, b, c), (16, 20, 22));
+        let bytes = w.finish().unwrap();
+        assert_eq!(&bytes[16..23], b"abc\0xy\0");
+    }
+
+    #[test]
+    fn tail_data_refuses_a_block_that_does_not_fit_and_leaves_the_writer_usable() {
+        let mut out = Aligned::<[u8; 24]>::zeroed();
+        let mut w = Writer::new(&mut out.0);
+        w.reserve_head(8).unwrap();
+        assert_eq!(
+            w.tail_data(b"abcdefgh", true),
+            Err(EncodeError::Capacity {
+                needed: 25,
+                available: 24
+            })
+        );
+        assert_eq!(w.tail_data(b"abcdefg", true), Ok(16));
+        assert!(w.tail_data(b"", true).is_err());
+        assert!(w.tail_data(&[], false).is_ok());
     }
 
     #[test]

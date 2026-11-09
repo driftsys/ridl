@@ -1458,8 +1458,7 @@ impl<'a> Codec<'a> {
                     // `__data`, not `__off`: `at` may name the `__off` of a
                     // union arm, and a shadowing binding would move the
                     // descriptor.
-                    let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                    w.put_bytes(__data, __s.as_bytes());
+                    let __data = w.tail_data(__s.as_bytes(), true)?;
                     w.put_desc(#at, ::ridl_rt::podbuf::Desc {
                         off: __data as ::core::primitive::u32,
                         len: __n as ::core::primitive::u32,
@@ -1486,8 +1485,7 @@ impl<'a> Codec<'a> {
                 #length
                 if !__s.is_empty() {
                     let __n = __s.len();
-                    let __data = w.tail(__n as ::core::primitive::u64, 1usize)?;
-                    w.put_bytes(__data, __s);
+                    let __data = w.tail_data(__s, false)?;
                     w.put_desc(#at, ::ridl_rt::podbuf::Desc {
                         off: __data as ::core::primitive::u32,
                         len: __n as ::core::primitive::u32,
