@@ -2753,6 +2753,99 @@ mod podbuf {
     }
 
     #[test]
+    fn remote_strict_enum_append_beside_podbuf_remote_inline_growth() {
+        // Mutations: suppress strict appends or inline growth at the same consumer path.
+        let fixed_struct = |name, members| {
+            typl_decl(
+                name,
+                v2::decl::Kind::StructDef(v2::StructDef {
+                    members,
+                    fixed_layout: true,
+                }),
+            )
+        };
+        let local = package(
+            "app.api",
+            vec![fixed_struct(
+                "Sample",
+                vec![
+                    field("reading", 1, named("dep.types.Reading")),
+                    field("sequence", 2, wide()),
+                ],
+            )],
+        );
+        let remote = |count, width| {
+            let mut remote = remote_flags(count, width);
+            if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut remote.decls[0].kind {
+                def.open = false;
+            }
+            remote.decls.push(fixed_struct(
+                "Reading",
+                vec![
+                    field("first", 1, named("Flags")),
+                    field("second", 2, named("Flags")),
+                ],
+            ));
+            remote
+        };
+        let old = remote(32, v2::IntWidth::U32);
+        let new = remote(33, v2::IntWidth::U64);
+        let report = checked_remote(&local, &old, &new, &["podbuf"]);
+        let changes: Vec<_> = report
+            .changes
+            .iter()
+            .map(|change| {
+                (
+                    change.category,
+                    change.path.as_str(),
+                    change.before.as_deref(),
+                    change.after.as_deref(),
+                    change.verdict,
+                )
+            })
+            .collect();
+        assert_eq!(
+            changes,
+            vec![
+                (
+                    Category::PodbufRemoteInlineGrowth,
+                    "app.api/Sample/reading",
+                    Some("dep.types.Flags: 4"),
+                    Some("dep.types.Flags: 8"),
+                    Verdict::Breaking,
+                ),
+                (
+                    Category::PodbufRemoteInlineGrowth,
+                    "app.api/Sample/reading",
+                    Some("dep.types.Reading: 8"),
+                    Some("dep.types.Reading: 16"),
+                    Verdict::Breaking,
+                ),
+                (
+                    Category::StrictEnumAppend,
+                    "app.api/Sample/reading",
+                    Some(concat!(
+                        "dep.types.Flags: F0, F1, F2, F3, F4, F5, F6, F7, ",
+                        "F8, F9, F10, F11, F12, F13, F14, F15, F16, F17, ",
+                        "F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, ",
+                        "F28, F29, F30, F31"
+                    )),
+                    Some(concat!(
+                        "dep.types.Flags: F0, F1, F2, F3, F4, F5, F6, F7, ",
+                        "F8, F9, F10, F11, F12, F13, F14, F15, F16, F17, ",
+                        "F18, F19, F20, F21, F22, F23, F24, F25, F26, F27, ",
+                        "F28, F29, F30, F31, F32"
+                    )),
+                    Verdict::Breaking,
+                ),
+            ],
+            "{report:?}"
+        );
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert!(report.system.is_empty(), "{report:?}");
+    }
+
+    #[test]
     fn remote_strict_enum_append_reaches_a_stream_parameter() {
         let mut local = package("app.api", vec![]);
         local.interfaces = vec![super::interface(
