@@ -84,6 +84,13 @@ where
                 SelectionError::NotFound => HttpRefusal::NotFound,
                 SelectionError::Conflict => HttpRefusal::Conflict,
             })?;
+            if let Some(note) = config.retained_short() {
+                if let Some(record) = config.record() {
+                    record(&note);
+                }
+                config_refused = true;
+                return Err(HttpRefusal::Capacity);
+            }
             if let Some((target, needed)) =
                 limit_short(selected.members(), config.max_message_bytes())
             {

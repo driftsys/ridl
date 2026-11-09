@@ -744,8 +744,8 @@ fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
-    // The signal's limit is raised to 16,128 bytes, the largest raise, in
-    // the member table, which the session applies, and on the loopback,
+    // The signal's limit is raised to 16,128 bytes, above its default
+    // ceiling, in the member table, which the session applies, and on the loopback,
     // which refuses a value above its member's limit on send.
     let limit = |t: Target| (t == SIGNAL).then_some(CALL_CEILING as u32);
     let backend = Described::new(Scanning(rt), table(limit)).unwrap();
@@ -1365,17 +1365,17 @@ fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
 #[test]
 fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let (server, client) = pair();
-    let config = config().with_max_retained_bytes(65_316).unwrap();
+    let config = config().with_max_retained_bytes(16_164).unwrap();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
     provider.serve(IFACE, &[QUERY.ord]).unwrap();
     let handle = spawn(server, Scanning(rt), config);
     let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
-    // Each `request` of the query is settled with 16,128 bytes, and its
-    // `response` is 16,164 bytes; four of them are 64,656 bytes, below the
-    // cap, and the fifth passes it.
-    let reply = vec![1u8; 16_128];
+    // Each `request` of the query is settled with 4,005 bytes, and its
+    // `response` is 4,041 bytes; four of them are 16,164 bytes, the cap, and
+    // the fifth passes it.
+    let reply = vec![1u8; 4005];
     for seq in 1..=5u64 {
         send(
             &mut ws,
@@ -1397,7 +1397,7 @@ fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
             thread::sleep(Duration::from_millis(1));
         };
         provider.settle(claim.id, Ok(&reply)).unwrap();
-        assert_eq!(recv(&mut ws).len(), 16_164, "response {seq}");
+        assert_eq!(recv(&mut ws).len(), 4041, "response {seq}");
     }
     assert_eq!(recv_close(&mut ws), Some(CloseCode::Policy));
     assert_eq!(handle.join().0, Ended::ServerClosed(1008));
@@ -1641,6 +1641,74 @@ fn a_fixed_of_65280_bytes_crosses_in_blocks_by_default_and_whole_under_a_raised_
     let first = read(config().with_max_message_bytes(65_316).unwrap());
     assert!(matches!(decode(&first).unwrap(), Frame::Publish { .. }));
     assert_eq!(first.len(), 65_307);
+}
+
+/// Serves a catalog of default ceilings under `config` and returns how the
+/// session ended and the notes: a session that passes the checks is attached
+/// and closed by the client.
+fn served_with(config: Config) -> (Ended, Vec<Note>) {
+    let notes = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&notes);
+    let config = config.with_record(move |n| sink.lock().unwrap().push(*n));
+    let (server, client) = pair();
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| None)).unwrap();
+    let handle = spawn(server, backend, config);
+    if let Ok(mut ws) = connect(client, SUBPROTOCOL) {
+        attach(&mut ws);
+        ws.close(None).unwrap();
+    }
+    let ended = handle.join().0;
+    let notes = notes.lock().unwrap().clone();
+    (ended, notes)
+}
+
+/// A retained-bytes cap of 16,164 bytes, accepted before, is still accepted
+/// with the default message limit.
+#[test]
+fn a_retained_cap_of_16164_is_served_with_the_default_message_limit() {
+    let config = config().with_max_retained_bytes(16_164).unwrap();
+    let (ended, notes) = served_with(config);
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+}
+
+/// A retained cap below the message limit is refused where the configuration
+/// is used, in either order of the builder calls.
+///
+/// Mutation: remove the check from `serve`.
+#[test]
+fn a_retained_cap_below_the_message_limit_is_refused_at_serve_in_either_order() {
+    let expected = vec![Note::RetainedBelowMessageLimit {
+        retained: 16_164,
+        message: 65_316,
+    }];
+    let first = config()
+        .with_max_retained_bytes(16_164)
+        .unwrap()
+        .with_max_message_bytes(65_316)
+        .unwrap();
+    let second = config()
+        .with_max_message_bytes(65_316)
+        .unwrap()
+        .with_max_retained_bytes(16_164)
+        .unwrap();
+    for config in [first, second] {
+        let (ended, notes) = served_with(config);
+        assert_eq!(ended, Ended::ConfigRefused);
+        assert_eq!(notes, expected);
+    }
+}
+
+#[test]
+fn a_retained_cap_equal_to_the_message_limit_is_served() {
+    let config = config()
+        .with_max_message_bytes(65_316)
+        .unwrap()
+        .with_max_retained_bytes(65_316)
+        .unwrap();
+    let (ended, notes) = served_with(config);
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
 }
 
 /// A `fixed` of the default limit needs one block message, 4,130 bytes: a

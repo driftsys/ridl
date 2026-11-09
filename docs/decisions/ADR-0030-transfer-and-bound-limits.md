@@ -64,8 +64,9 @@ RIDL-157 appear in the editor (decision 21). A type's `verify` checks structure
 only; the transport refuses a payload longer than its interaction's limit, once
 (decision 19). A transport binding carries every payload up to the limit that
 the catalog gives its interaction, a raised limit included (decision 20). The
-WebSocket binding keeps its message size of 16,164 bytes and carries a larger
-payload in blocks, in a new frame version whose layout is in the frame
+WebSocket binding keeps its default message size of 16,164 bytes, which the
+amendment of 2026-11-09 lets a deployment raise up to 65,316 bytes, and carries
+a larger fixed in blocks, in a new frame version whose layout is in the frame
 specification (decision 15, driftsys/ridl#1129). The codec guard of decision 4,
 `EncodeError::TooLarge` and `PAYLOAD_CEILING`, is withdrawn: the transport
 refuses a size, against the catalog's limit, on send and on receive (decision
@@ -119,11 +120,12 @@ default `Config`. The WebSocket binding does not send a signal, an event, a
 command or a query in blocks (decision 15). A member raised above 16,128 bytes
 pays for its own stack buffer in generated Rust (decision 5). The amendment
 lands with its code. It breaks no source that compiled before: it only accepts
-entries that drew MANI-022. It changes the published `ridl-transport-ws` API:
-the constant `MAX_MESSAGE_LIMIT` is 65,316 and a new constant
-`DEFAULT_MESSAGE_LIMIT` is 16,164, `with_max_message_bytes` accepts a value
-above 16,164, and `with_max_retained_bytes` refuses a value below 65,316, which
-it accepted down to 16,164.
+entries that drew MANI-022. It changes the published `ridl-transport-ws` API
+without breaking a caller: the constant `MAX_MESSAGE_LIMIT` is 65,316 and a new
+constant `DEFAULT_MESSAGE_LIMIT` is 16,164, `with_max_message_bytes` accepts a
+value above 16,164, and `with_max_retained_bytes` keeps its floor of 16,164. A
+retained-bytes cap below the configured message limit is refused where the
+configuration is used, whatever the order of the builder calls.
 
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
@@ -153,10 +155,11 @@ Built 2026-10-30 (driftsys/ridl#1108, driftsys/ridl#1128): the amendments of
 - `ridl-rt` exports the three default ceilings. A sending port refuses a payload
   above its member's limit with `TooLarge { cap }`, and `ridl-loopback` returns
   it. The WebSocket transport applies the limit of each member on both sides,
-  carries a message of at most 16,164 bytes, and refuses a `Config` that cannot
-  carry an allowed payload. The TypeScript client reads each member's limit from
-  the generated codec module and rejects a received payload above it before
-  `verify`, and the codegen model carries the limit.
+  carries a message of at most its configured limit (16,164 bytes by default, at
+  most 65,316 bytes after the amendment of 2026-11-09), and refuses a `Config`
+  that cannot carry an allowed payload. The TypeScript client reads each
+  member's limit from the generated codec module and rejects a received payload
+  above it before `verify`, and the codegen model carries the limit.
 
 Built 2026-11-01 (driftsys/ridl#1129): the WebSocket blocks of decisions 15 and
 20. The binding carries frame version 2 under the subprotocol `ridl-ws-v2`
@@ -587,8 +590,10 @@ When accepted, these records gain a dated note or are changed in place:
     sentence above says, naming the member, and the note tells the reader to
     raise the limit with `Config::with_max_message_bytes`. The retained-bytes
     cap keeps its role of never closing a session on one response of the largest
-    message: `with_max_retained_bytes` refuses a value below the largest value
-    of the message limit, 65,316 bytes, whatever the configured message limit.
+    message: `with_max_retained_bytes` refuses a value below the default message
+    limit, 16,164 bytes, and a cap below the configured message limit is refused
+    where the configuration is used, with `ConfigRefused` and a note, so the
+    result does not depend on the order of the builder calls.
 
 11. **Data larger than one transfer is a stream.** A firmware image, a file or
     an image larger than 16 KiB is modelled as a stream of bounded elements
@@ -771,10 +776,10 @@ When accepted, these records gain a dated note or are changed in place:
     - The binding keeps its bounded message size: 36 + 16,128 = 16,164 bytes
       (decision 10). A payload that fits one message is carried whole, as today.
       Blocks are used only for a payload larger than one message. With a message
-      limit of 16,164 bytes, a signal, an event, a command and a query always
-      fit one message, even when raised (decision 18), so only a fixed above
-      what one `publish` carries, 16,137 bytes at the 16,164-byte message limit,
-      of up to 65,280 bytes, is sent in blocks, in one direction: the provider
+      limit of 16,164 bytes, a signal, an event, a command and a query fit one
+      message while they keep their default ceilings, so only a fixed above what
+      one `publish` carries, 16,137 bytes at the 16,164-byte message limit, of
+      up to 65,280 bytes, is sent in blocks, in one direction: the provider
       splits the payload, and the consumer reassembles the blocks into a buffer
       sized from the catalog's limit, then verifies the payload. The provider
       never reassembles. A block carries 4,096 bytes of the payload, and the

@@ -6586,16 +6586,14 @@ mod tests {
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
         let config = config(&notes)
-            .with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
-            .unwrap()
-            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+            .with_max_retained_bytes(crate::frame::DEFAULT_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        let big = vec![1u8; 16_128];
-        // Four replies of 16,128 bytes are 16,164 bytes each with their
-        // headers, 64,656 bytes in all, below the cap; the fifth passes it,
-        // long before the ring holds 64.
+        let big = vec![1u8; 4005];
+        // Four replies of 4,005 bytes are 4,041 bytes each with their
+        // headers, 16,164 bytes in all, the cap; the fifth passes it, long
+        // before the ring holds 64.
         for seq in 1..=5 {
             let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
             assert!(out.is_empty());
@@ -6603,7 +6601,7 @@ mod tests {
             p.settle(c.id, Ok(&big)).unwrap();
             let (step, out) = tick(&mut s);
             assert_eq!(out.len(), 1, "reply {seq}");
-            assert_eq!(out[0].len(), 16_164, "reply {seq}");
+            assert_eq!(out[0].len(), 4041, "reply {seq}");
             let expected = if seq < 5 {
                 Step::Continue
             } else {
@@ -6619,18 +6617,15 @@ mod tests {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
-        // The cap cannot go below 65,316 bytes. Four `response`s of 16,164
-        // bytes and one of 660 bytes reach it exactly, and the next one
-        // passes it.
+        // The cap cannot go below 16,164 bytes. Four `response`s of 4,041
+        // bytes reach it exactly, and the next one passes it.
         let config = config(&notes)
-            .with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
-            .unwrap()
-            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+            .with_max_retained_bytes(crate::frame::DEFAULT_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        for (seq, size) in [(1, 16_128), (2, 16_128), (3, 16_128), (4, 16_128), (5, 624)] {
-            let reply = vec![1u8; size];
+        let reply = vec![1u8; 4005];
+        for seq in 1..=4 {
             let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
             assert!(out.is_empty());
             let c = claim(&mut p, QUERY);
@@ -6638,12 +6633,12 @@ mod tests {
             let (step, out) = tick(&mut s);
             assert_eq!(
                 (step, out.len(), out[0].len()),
-                (Step::Continue, 1, size + 36),
+                (Step::Continue, 1, 4041),
                 "response {seq}"
             );
         }
-        let (step, out) = send(&mut s, &request(SIGNAL, 6, &[]));
-        // The sixth response is still sent, then the session closes.
+        let (step, out) = send(&mut s, &request(SIGNAL, 5, &[]));
+        // The fifth response is still sent, then the session closes.
         assert_eq!((step, out.len()), (Step::Close(1008), 1));
     }
 

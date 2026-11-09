@@ -174,6 +174,22 @@ pub enum Note {
         /// The message limit the member needs.
         needed: usize,
     },
+    /// [`Config::max_retained_bytes`] is below [`Config::max_message_bytes`]:
+    /// one response of the largest message could close a session on its own.
+    /// The configuration is refused where it is used, whatever the order of
+    /// the calls that set the two values: [`serve`](crate::serve) records this
+    /// before the opening handshake and returns
+    /// [`Ended::ConfigRefused`](crate::Ended::ConfigRefused), and the selected
+    /// and provided entry points refuse in the way they refuse
+    /// [`Note::MessageLimitTooSmall`]. Raise the cap with
+    /// [`Config::with_max_retained_bytes`] or lower the message limit with
+    /// [`Config::with_max_message_bytes`].
+    RetainedBelowMessageLimit {
+        /// The cap that was set.
+        retained: usize,
+        /// The message limit that is above it.
+        message: usize,
+    },
 }
 
 /// A `max_message_bytes` outside the range [`MIN_MESSAGE_LIMIT`] to
@@ -196,8 +212,8 @@ impl fmt::Display for LimitOutOfRange {
 
 impl std::error::Error for LimitOutOfRange {}
 
-/// A `max_retained_bytes` below [`MAX_MESSAGE_LIMIT`], the largest message
-/// limit that can be configured.
+/// A `max_retained_bytes` below [`DEFAULT_MESSAGE_LIMIT`], the default message
+/// limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RetainedTooSmall {
     /// The cap asked for.
@@ -209,7 +225,7 @@ impl fmt::Display for RetainedTooSmall {
         write!(
             f,
             "a retained-bytes cap of {} bytes is below the smallest allowed, {} bytes",
-            self.given, MAX_MESSAGE_LIMIT
+            self.given, DEFAULT_MESSAGE_LIMIT
         )
     }
 }
@@ -302,15 +318,29 @@ impl Config {
     /// Sets the most bytes of the responses a session keeps for a repeated
     /// `request`. When a response sent would make the kept bytes pass `n`,
     /// the response is sent and the session is then closed with 1008. A cap
-    /// below [`MAX_MESSAGE_LIMIT`] is refused, whatever the message limit, so
-    /// that one response of the largest message that can be configured never
-    /// closes a session on its own.
+    /// below [`DEFAULT_MESSAGE_LIMIT`] is refused here, whatever the message
+    /// limit. A cap below the configured message limit is refused where the
+    /// configuration is used, with [`Note::RetainedBelowMessageLimit`], so
+    /// that one response of the largest message never closes a session on its
+    /// own, and the result does not depend on the order of the builder calls.
     pub fn with_max_retained_bytes(mut self, n: usize) -> Result<Self, RetainedTooSmall> {
-        if n < MAX_MESSAGE_LIMIT {
+        if n < DEFAULT_MESSAGE_LIMIT {
             return Err(RetainedTooSmall { given: n });
         }
         self.max_retained_bytes = n;
         Ok(self)
+    }
+
+    /// The note for a retained-bytes cap below the message limit, or `None`.
+    /// Checked where the configuration is used, so that the order of the
+    /// builder calls does not matter.
+    pub(crate) fn retained_short(&self) -> Option<Note> {
+        (self.max_retained_bytes < self.max_message_bytes).then_some(
+            Note::RetainedBelowMessageLimit {
+                retained: self.max_retained_bytes,
+                message: self.max_message_bytes,
+            },
+        )
     }
 
     /// Sets the hook the server calls with each [`Note`].
@@ -396,17 +426,17 @@ mod tests {
     }
 
     #[test]
-    fn a_retained_cap_below_the_largest_message_limit_is_refused() {
+    fn a_retained_cap_below_the_default_message_limit_is_refused() {
         let config = Config::default().with_max_message_bytes(1024).unwrap();
-        let err = config.clone().with_max_retained_bytes(65_315).err();
-        assert_eq!(err, Some(RetainedTooSmall { given: 65_315 }));
-        assert!(err.unwrap().to_string().contains("65316"));
+        let err = config.clone().with_max_retained_bytes(16_163).err();
+        assert_eq!(err, Some(RetainedTooSmall { given: 16_163 }));
+        assert!(err.unwrap().to_string().contains("16164"));
         assert_eq!(
             config
-                .with_max_retained_bytes(65_316)
+                .with_max_retained_bytes(16_164)
                 .unwrap()
                 .max_retained_bytes(),
-            65_316
+            16_164
         );
     }
 

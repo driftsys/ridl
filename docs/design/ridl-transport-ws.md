@@ -662,18 +662,18 @@ responses kept for duplicates are `server/calls.rs`.
   keeps the last 64 as before: a stated deviation from §11.1 item 6
   (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
-  by default, and never below 65,316 bytes, the largest message limit that can
-  be set); when a response makes the kept bytes pass the cap, the response is
-  sent, then the session closes with 1008, which `serve` returns as
-  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
-  server with no table, or one whose members have no bound, closes with 1008
-  when its replies are large enough to pass the cap before the ring holds 64. At
-  the default message limit, 64 replies are at most 64 × 16,164 = 1,034,496
-  bytes, below the 16 MiB default cap; an embedder that lowers the cap keeps it
-  at least 64 times its message limit, lowering the message limit too, so that
-  the ring alone bounds it. Expired responses also go when a `request` arrives,
-  before its `seq` is placed. Closing is observable, where dropping the oldest
-  response would silently break item 6.
+  by default, and never below 16,164 bytes, the default message limit, nor below
+  the configured message limit); when a response makes the kept bytes pass the
+  cap, the response is sent, then the session closes with 1008, which `serve`
+  returns as `Ended::ServerClosed(1008)`. The cap applies to the last 64 as
+  well, so a server with no table, or one whose members have no bound, closes
+  with 1008 when its replies are large enough to pass the cap before the ring
+  holds 64. At the default message limit, 64 replies are at most 64 × 16,164 =
+  1,034,496 bytes, below the 16 MiB default cap; an embedder that lowers the cap
+  keeps it at least 64 times its message limit, lowering the message limit too,
+  so that the ring alone bounds it. Expired responses also go when a `request`
+  arrives, before its `seq` is placed. Closing is observable, where dropping the
+  oldest response would silently break item 6.
 
 **The provided direction.** In the provided session (D-28) the calls run the
 other way: the local ports receive a call, and the remote client answers it. The
@@ -968,12 +968,14 @@ bytes by default, `DEFAULT_MESSAGE_LIMIT`; the limit can be lowered, or raised
 to carry a member whose limit is above 16,128 bytes, and a value outside the
 range 294 to 65,316, `MAX_MESSAGE_LIMIT`, the largest data-plane message, is
 refused with `LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value
-below 65,316 is refused with `RetainedTooSmall`, whatever the message limit, so
-that one response of the largest message that can be set never closes a session
-on its own, and a session applies the cap as set), `with_record` and
-`with_origin_check`. A `ping_interval` at or above `liveness_timeout` ends an
-idle client's session before the first ping, because a client that is not pinged
-sends nothing; the rustdoc says so.
+below 16,164, `DEFAULT_MESSAGE_LIMIT`, is refused with `RetainedTooSmall`, and a
+cap below the configured message limit is refused where the configuration is
+used, with `Note::RetainedBelowMessageLimit` and `Ended::ConfigRefused`, so that
+one response of the largest message never closes a session on its own whatever
+the order of the builder calls, and a session applies the cap as set),
+`with_record` and `with_origin_check`. A `ping_interval` at or above
+`liveness_timeout` ends an idle client's session before the first ping, because
+a client that is not pinged sends nothing; the rustdoc says so.
 
 ### The sizes
 
@@ -1010,8 +1012,9 @@ the default ceiling of a command and a query. It is the default of
 default ceilings. `MAX_MESSAGE_LIMIT` is 36 + 65,280 = 65,316 bytes: the same
 header plus the largest limit that a `[limits.interaction]` entry gives a member
 of any kind (ADR-0030 decisions 10 and 18). It is the largest value that
-`max_message_bytes` accepts, and the smallest `max_retained_bytes` accepted, so
-that one response of the largest message never closes a session on its own.
+`max_message_bytes` accepts. `DEFAULT_MESSAGE_LIMIT` is the smallest
+`max_retained_bytes` the setter accepts; `serve` also refuses a `Config` whose
+retained cap is below its message limit.
 
 **The `Config` check.** `serve_selected` runs the same check after selection, as
 D-11 says: it answers `refused(range)` (or `frame_version_unsupported` if the

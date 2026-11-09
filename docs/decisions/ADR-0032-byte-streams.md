@@ -274,11 +274,15 @@ order the questions were listed.
     interaction carries: its encoded non-stream arguments or reply, and each
     chunk or element of its stream. Decision 2's "the payload ceiling of the
     interaction's kind" becomes "the interaction's limit". For a command or a
-    query, 16,128 bytes is both the default and the largest raise (ADR-0030
-    decision 18), so a `[limits.interaction]` entry can only lower the chunk
-    size; a limit of 0 makes a stream unusable. The checker does not change: the
-    sizer gives a stream no size (`crates/ridl-ir/src/projection/size.rs`), so
-    RIDL-157 does not apply to a stream.
+    query, 16,128 bytes is the default and 65,280 bytes the largest raise
+    (ADR-0030 decision 18, amended 2026-11-09). The generated Rust face takes
+    the chunk limit from the member's limit, and from 16,128 bytes when the IR
+    records none, so an entry can lower the chunk size or raise it up to 65,280
+    bytes; the WebSocket session caps a chunk at the smaller of that limit and
+    what its message limit carries after the header. A limit of 0 makes a stream
+    unusable. The checker does not change: the sizer gives a stream no size
+    (`crates/ridl-ir/src/projection/size.rs`), so RIDL-157 does not apply to a
+    stream.
 
 ## Alternatives considered
 

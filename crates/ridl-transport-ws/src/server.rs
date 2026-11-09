@@ -283,6 +283,12 @@ const LINGER: Duration = Duration::from_millis(100);
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
 pub fn serve<C: Connection, B: Backend>(conn: C, mut backend: B, config: &Config) -> Ended {
+    if let Some(note) = config.retained_short() {
+        if let Some(record) = config.record() {
+            record(&note);
+        }
+        return Ended::ConfigRefused;
+    }
     if let Some((target, needed)) = backend
         .members()
         .and_then(|table| limit_short(table, config.max_message_bytes()))
@@ -418,6 +424,7 @@ where
         };
         let capability_short = self.frame_version == FRAME_VERSION_3
             && (backend.streams().is_none() || backend.members().is_none());
+        let retained = config.retained_short();
         let limit = backend
             .members()
             .and_then(|table| limit_short(table, config.max_message_bytes()));
@@ -425,13 +432,16 @@ where
         let mut session = Session::new(backend, config);
         session.upgraded(self.frame_version);
         let step = session.on_message(msg, now, out);
-        if step == Step::Continue && (capability_short || limit.is_some()) {
+        if step == Step::Continue && (capability_short || limit.is_some() || retained.is_some()) {
             out.clear();
             self.config_refused = true;
             if let Some((target, needed)) = limit {
                 if let Some(record) = config.record() {
                     record(&Note::MessageLimitTooSmall { target, needed });
                 }
+            }
+            if let (Some(note), Some(record)) = (retained, config.record()) {
+                record(&note);
             }
             return refuse_selected(
                 out,
