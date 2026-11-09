@@ -694,6 +694,52 @@ Deno.test("provide_publishes_a_signal_raised_to_65280_bytes_and_refuses_one_byte
     SessionError,
   );
 });
+const RAISED_ALL = members.map((m) => ({ ...m, limit: 65_280 }));
+Deno.test("provide_serves_a_command_and_a_query_raised_to_65280_bytes", async () => {
+  const h = await open({ members: RAISED_ALL });
+  h.socket.deliver(req(C, 1n, new Uint8Array(47_000)));
+  await tick();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests[0].payload.length, 47_000);
+  assert.deepEqual(last(h.socket).form, "response");
+  h.socket.deliver(req(Q, 2n, new Uint8Array(65_280)));
+  await tick();
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests[1].payload.length, 65_280);
+  // One byte above the limit is refused before the handler runs.
+  h.socket.deliver(req(Q, 3n, new Uint8Array(65_281)));
+  await tick();
+  assert.equal(h.requests.length, 2);
+  const refused = last(h.socket);
+  assert(refused.form === "response");
+  assert.deepEqual(refused.outcome, { outcome: "corrupt" });
+});
+Deno.test("provide_replies_to_a_query_raised_to_65280_bytes_up_to_its_limit", async () => {
+  const reply = new Uint8Array(50_000);
+  const h = await open({
+    members: RAISED_ALL,
+    onRequest: () => ({ outcome: "reply", payload: reply }),
+  });
+  h.socket.deliver(req(Q, 1n));
+  await tick();
+  const f = last(h.socket);
+  assert(f.form === "response");
+  assert.deepEqual(f.outcome, { outcome: "reply", payload: reply });
+});
+Deno.test("provide_raises_an_event_raised_to_65280_bytes_up_to_its_limit", async () => {
+  const h = await open({ members: RAISED_ALL });
+  h.socket.deliver({ form: "subscribe", target: E });
+  const n = h.socket.sent.length;
+  h.p.raise(1, 2, new Uint8Array(47_000), 0n);
+  assert.equal(h.socket.sent.length, n + 1);
+  h.p.raise(1, 2, new Uint8Array(65_280), 0n);
+  assert.equal(h.socket.sent.length, n + 2);
+  assert.throws(
+    () => h.p.raise(1, 2, new Uint8Array(65_281), 0n),
+    SessionError,
+  );
+  assert.equal(h.socket.sent.length, n + 2);
+});
 Deno.test("provide_failed_clock_does_not_advance_response_sequence", async () => {
   let time = 77n;
   const h = await open({ clock: () => time });

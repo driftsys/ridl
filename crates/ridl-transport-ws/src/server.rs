@@ -171,8 +171,9 @@ pub enum Ended {
     ///
     /// The same variant covers a [`Config::max_retained_bytes`] below
     /// [`Config::max_message_bytes`], recorded as
-    /// [`Note::RetainedBelowMessageLimit`] and checked before the member
-    /// table, whatever the order of the builder calls.
+    /// [`Note::RetainedBelowMessageLimit`], whatever the order of the builder
+    /// calls. [`serve`] and the provided entry points check it first and
+    /// record it alone; [`serve_selected`] records the member note first.
     ///
     /// With [`serve_selected`], this also covers an unsupported advertised
     /// capability (before reading), or a selected backend lacking the
@@ -183,8 +184,9 @@ pub enum Ended {
     /// When ordinary attach checks pass, insufficient message capacity records
     /// the same note with either reply.
     ///
-    /// With [`serve_provided_selected`], capacity is checked after selection
-    /// and before upgrade; a refusal answers HTTP 400 and records the note.
+    /// With [`serve_provided_selected`], the retained cap and the capacity
+    /// are checked after selection and before upgrade; a refusal answers HTTP
+    /// 400 and records the note.
     /// An unencodable catalog name or an encoding without a frame tag also
     /// answers HTTP 400 and returns this variant; no matching `Note` exists.
     ConfigRefused,
@@ -272,7 +274,13 @@ const LINGER: Duration = Duration::from_millis(100);
 /// at most one entry per signal or event member of the catalog. Without a
 /// table, nothing bounds it, and the paragraph above applies.
 ///
-/// With a member table, `serve` first checks that
+/// `serve` first checks, with or without a member table, that
+/// [`Config::max_retained_bytes`] is at least [`Config::max_message_bytes`],
+/// whatever the order of the builder calls; if it is not, `serve` records
+/// [`Note::RetainedBelowMessageLimit`] and returns [`Ended::ConfigRefused`]
+/// before the opening handshake.
+///
+/// With a member table, `serve` then checks that
 /// [`Config::max_message_bytes`] carries one message of every member: 36
 /// bytes of header and envelope plus the member's limit, which is the limit
 /// the table gives it or the default ceiling of its kind. A `fixed` that
@@ -284,9 +292,7 @@ const LINGER: Duration = Duration::from_millis(100);
 /// every catalog whose members keep their default ceilings. A catalog with a
 /// signal, an event, a command or a query whose limit is above 16,128 bytes
 /// needs a larger limit: set it with [`Config::with_max_message_bytes`], up to
-/// 65,316 bytes. Before the member check, `serve` refuses in the same way a
-/// [`Config`] whose retained-bytes cap is below its message limit
-/// ([`Note::RetainedBelowMessageLimit`]).
+/// 65,316 bytes.
 ///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and

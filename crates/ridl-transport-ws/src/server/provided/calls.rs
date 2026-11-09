@@ -304,6 +304,56 @@ mod tests {
             assert_eq!(calls.bytes[0], value);
         }
     }
+
+    /// The length of the claim buffer after `start`, for a table whose
+    /// command 3 and query 4 have the limits given, in that order, and none
+    /// where `None`.
+    fn buffer_after_start(command: Option<u32>, query: Option<u32>) -> usize {
+        let ports = Loopback::new(CatalogRef {
+            name: "calls",
+            hash: CatalogHash([7; 32]),
+        });
+        let mut members = MemberTable::new("calls", CatalogHash([7; 32]));
+        for (ord, kind, limit) in [(3, Kind::Command, command), (4, Kind::Query, query)] {
+            members.insert(InterfaceNo(1), Ordinal(ord), kind, None);
+            if let Some(limit) = limit {
+                members.set_limit(InterfaceNo(1), Ordinal(ord), limit);
+            }
+        }
+        let mut backend = Providing::new(ports, members).unwrap();
+        let mut calls = Calls::new(&Config::default());
+        assert!(calls.start(&mut backend));
+        calls.bytes.len()
+    }
+
+    /// The claim buffer holds the largest limit of any command or query,
+    /// whichever comes first in the table, and never less than 16,128 or more
+    /// than 65,280 bytes.
+    ///
+    /// Mutation: take `min`, `next` or `last` instead of `max` over the limits.
+    #[test]
+    fn the_claim_buffer_is_the_largest_limit_clamped_to_the_call_range() {
+        assert_eq!(buffer_after_start(Some(20_000), Some(40_000)), 40_000);
+        assert_eq!(buffer_after_start(Some(40_000), Some(20_000)), 40_000);
+        assert_eq!(buffer_after_start(Some(40_000), None), 40_000);
+        assert_eq!(buffer_after_start(None, Some(40_000)), 40_000);
+        assert_eq!(buffer_after_start(None, None), CALL_CEILING);
+        assert_eq!(buffer_after_start(Some(100), Some(200)), CALL_CEILING);
+        assert_eq!(buffer_after_start(Some(1_000_000), Some(5)), FIXED_CEILING);
+    }
+
+    #[test]
+    fn the_claim_buffer_of_an_empty_table_is_the_default_size() {
+        let ports = Loopback::new(CatalogRef {
+            name: "calls",
+            hash: CatalogHash([7; 32]),
+        });
+        let members = MemberTable::new("calls", CatalogHash([7; 32]));
+        let mut backend = Providing::new(ports, members).unwrap();
+        let mut calls = Calls::new(&Config::default());
+        assert!(calls.start(&mut backend));
+        assert_eq!(calls.bytes.len(), CALL_CEILING);
+    }
 }
 
 #[cfg(test)]

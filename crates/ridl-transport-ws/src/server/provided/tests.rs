@@ -57,6 +57,9 @@ impl ProvidedBackend for Capture {
     }
 }
 fn session() -> Provided<Capture> {
+    session_with_limit(2)
+}
+fn session_with_limit(limit: u32) -> Provided<Capture> {
     let catalog = CatalogRef {
         name: "alpha",
         hash: CatalogHash([7; 32]),
@@ -72,7 +75,7 @@ fn session() -> Provided<Capture> {
         },
     ] {
         table.insert(t.iface, t.ord, t.kind, None);
-        table.set_limit(t.iface, t.ord, 2);
+        table.set_limit(t.iface, t.ord, limit);
     }
     Provided::new(
         Capture {
@@ -1332,4 +1335,57 @@ fn provided_notes_identify_each_rejection() {
     };
     assert_eq!(s.on_message(&b, now, &mut vec![], &config), Step::Continue);
     assert_eq!(*notes.lock().unwrap(), [Note::Discarded(reason)]);
+}
+
+/// A signal and an event raised to 65,280 bytes take a `publish` and an
+/// `occurrence` of 47,000 bytes as live and delivered, well above the default
+/// message limit, and one byte above the limit as detected corrupt.
+///
+/// Mutation: take the smaller of the member limit and 16,164 for either
+/// check.
+#[test]
+fn a_raised_signal_and_event_cross_the_provided_session_up_to_their_limit() {
+    let mut s = session_with_limit(65_280);
+    let now = Instant::now();
+    ready(&mut s, now);
+    let big = vec![9u8; 47_000];
+    let over = vec![9u8; 65_281];
+    send(
+        &mut s,
+        publish(SIGNAL, 1, 90, PublishState::Live(&big)),
+        now,
+    );
+    send(
+        &mut s,
+        publish(SIGNAL, 2, 91, PublishState::Live(&over)),
+        now,
+    );
+    let samples = &s.backend.seen.samples;
+    assert_eq!(samples.len(), 2);
+    assert_eq!(
+        (samples[0].1, samples[0].2.as_deref()),
+        (Provenance::Live, Some(&big[..]))
+    );
+    assert_eq!(
+        samples[1].1,
+        Provenance::Invalid(Cause::Detected(Detection::Corrupt))
+    );
+    for (seq, payload) in [(1, &big), (2, &over)] {
+        send(
+            &mut s,
+            Frame::Occurrence {
+                target: EVENT,
+                envelope: Envelope {
+                    stamp: Timestamp(92),
+                    seq,
+                },
+                payload,
+            },
+            now,
+        );
+    }
+    let events = &s.backend.seen.events;
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].1.as_deref(), Ok(&big[..]));
+    assert_eq!(events[1].1, Err(Detection::Corrupt));
 }

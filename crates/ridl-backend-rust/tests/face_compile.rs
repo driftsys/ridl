@@ -58,16 +58,28 @@ fn compile_face_in(
     std: bool,
     encodings: &[WireEncoding],
 ) -> (String, std::process::Output) {
+    compile_face_allowing(name, source, consumer, std, encodings, &[])
+}
+
+/// [`compile_face_in`], leaving the diagnostics whose codes `allowed` names
+/// out of the errors that fail the proof.
+fn compile_face_allowing(
+    name: &str,
+    source: &str,
+    consumer: &str,
+    std: bool,
+    encodings: &[WireEncoding],
+    allowed: &[&str],
+) -> (String, std::process::Output) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
-    // and such a call is one of the shapes proven here. RIDL-157 is left out:
-    // a source with no manifest has no `[limits.interaction]` entry to raise a
-    // member above its default ceiling, and the face does not read limits.
+    // and such a call is one of the shapes proven here. A code in `allowed`
+    // is left out as well.
     let errors: Vec<_> = output
         .diagnostics
         .iter()
         .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
-        .filter(|diagnostic| diagnostic.code.as_str() != "RIDL-157")
+        .filter(|diagnostic| !allowed.contains(&diagnostic.code.as_str()))
         .collect();
     assert!(
         errors.is_empty(),
@@ -134,27 +146,65 @@ internal interface Diagnostics {
 }
 "#;
 
+/// A signal, an event, a command and a query whose payloads are between 43,000
+/// and 47,000 bytes, as a `[limits.interaction]` entry of up to 65,280 bytes
+/// allows, get a face that compiles, and each payload's buffer is its full
+/// worst-case size, not the default ceiling of its kind (ADR-0030 decision 5).
+/// A distinct payload type for each member pins the buffer of each kind. A
+/// source with no manifest has no entry to raise a member, so RIDL-157 is
+/// allowed here.
+#[test]
+fn a_face_with_members_above_16128_bytes_compiles_with_full_size_buffers() {
+    // The FlatBuffers size of a named `bytes [0..N]` payload is N + 57.
+    let payloads = [
+        ("Sig", 47_000, "signal blob: Sig @[10ms..100ms]"),
+        ("Ev", 46_000, "event ev: Ev @[10ms..100ms]"),
+        ("Cmd", 45_000, "command cmd(data: Cmd) @[..1s]"),
+        ("Req", 44_000, "query ask(data: Req): Rep @[..1s]"),
+        ("Rep", 43_000, ""),
+    ];
+    let mut source = String::from("package big\n");
+    for (name, bound, _) in payloads {
+        source.push_str(&format!("type {name}: bytes [0..{bound}]\n"));
+    }
+    source.push_str("interface Big {\n");
+    for (_, _, member) in payloads {
+        source.push_str(&format!("  {member}\n"));
+    }
+    source.push_str("}\n");
+    for std in [true, false] {
+        let (face, compiled) = compile_face_allowing(
+            "big_members",
+            &source,
+            "",
+            std,
+            &[WireEncoding::FlatBuffers],
+            &["RIDL-157"],
+        );
+        assert!(
+            compiled.status.success(),
+            "the emitted face must compile, rustc said:\n{}\nsource:\n{face}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
+    let output = ridlc::compile("big_members.ridl", &source);
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+        .expect("generate_pipeline");
+    for (name, bound, _) in payloads {
+        let literal = format!("const BUFFER: Self::Buffer = [0u8; {}usize];", bound + 57);
+        assert!(
+            generated.rust_source.contains(&literal),
+            "the buffer of `{name}` is {} bytes:\n{}",
+            bound + 57,
+            generated.rust_source
+        );
+    }
+}
+
 /// Interactions named `loop`, `while`, `mod` and `move` keep raw identifiers
 /// for their methods, and every helper function joined to those names spells the
 /// plain name: `send_loop`, not `send_r#loop`, which is not an identifier
 /// (driftsys/ridl#863).
-/// A signal, an event, a command and a query whose payload is about 47,000
-/// bytes, as a `[limits.interaction]` entry of up to 65,280 bytes allows, get
-/// a face that compiles: each member puts its own worst-case buffer on the
-/// stack (ADR-0030 decision 5).
-#[test]
-fn a_face_with_members_above_16128_bytes_compiles() {
-    let source = "package big\n\
-        type Blob: bytes [0..47000]\n\
-        interface Big {\n\
-          signal blob: Blob @[10ms..100ms]\n\
-          event ev: Blob @[10ms..100ms]\n\
-          command cmd(data: Blob) @[..1s]\n\
-          query ask(data: Blob): Blob @[..1s]\n\
-        }\n";
-    face_compiles("big_members", source);
-}
-
 #[test]
 fn an_interaction_named_with_a_rust_keyword_compiles() {
     face_compiles_with(

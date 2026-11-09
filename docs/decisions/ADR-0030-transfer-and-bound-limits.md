@@ -1275,11 +1275,11 @@ When accepted, these records gain a dated note or are changed in place:
   - The veh-cluster corpus (`crates/ridlc/tests/corpus/veh-cluster` and
     `xtask/tests/freeze-fixtures/generated/veh-cluster`): the reply of
     `VehicleStatus.getFaultPage` is up to 70,649 bytes in FlatBuffers, 67,008 in
-    proto3 and 67,152 in podbuf, above the 16,128 bytes that an entry may give a
-    query. Streams are not built (ADR-0032), so the corpus lowers the bound of
-    `FaultPage.faults` (`[0..64]`) until the reply fits 16,128 bytes in every
-    enabled encoding, and the test snapshots and freeze dumps that read the
-    corpus are updated.
+    proto3 and 67,152 in podbuf, above the 16,128 bytes that an entry could
+    give, at the time, a query. Streams are not built (ADR-0032), so the corpus
+    lowers the bound of `FaultPage.faults` (`[0..64]`) until the reply fits
+    16,128 bytes in every enabled encoding, and the test snapshots and freeze
+    dumps that read the corpus are updated.
   - The TypeScript codec fixture `crates/ridl-backend-ts/tests/fixtures/codec`
     draws RIDL-150 today only on `Sensors.note` and `Sensors.bounds`, which the
     amendment of 2026-10-28 already moves to RIDL-157.

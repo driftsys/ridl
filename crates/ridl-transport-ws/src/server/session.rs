@@ -5060,6 +5060,37 @@ mod tests {
         }
     }
 
+    /// A member raised to 40,000 bytes sends a chunk of 40,000 bytes whole
+    /// under a raised message limit, well above the default message limit,
+    /// and one byte more stops the stream with `corrupt`.
+    ///
+    /// Mutation: take the smaller of the message limit and 16,164 for the
+    /// chunk cap.
+    #[test]
+    fn a_chunk_above_the_default_message_limit_is_sent_whole_under_a_raised_limit() {
+        for (len, sent) in [(40_000, true), (40_001, false)] {
+            let mut r = stream_rig_with(Fail::None, Some(40_000), |c| {
+                c.with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+                    .expect("the largest limit")
+            });
+            r.p.set_limit(STREAMED.iface, STREAMED.ord, 65_280);
+            let claim = start_stream(&mut r);
+            let element = vec![7u8; len];
+            assert_eq!(
+                r.p.push_claim(claim, REPLY_STREAM, &element),
+                Ok(element.len())
+            );
+            let (_, out) = tick(&mut r.s);
+            assert_eq!(out.len(), 1, "{len}");
+            let want = if sent {
+                streamed_chunk(1, &element)
+            } else {
+                streamed_end(1, 1, StreamOutcome::Corrupt)
+            };
+            assert_eq!(decode(&out[0]).unwrap(), want, "{len}");
+        }
+    }
+
     /// A tick exactly `call_abandon_after` after the last activity of a
     /// stream abandons it; one just before does not.
     ///
