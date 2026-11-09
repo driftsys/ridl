@@ -15,12 +15,14 @@
 //! type. Float bounds preserve expr-core's exact rational comparisons: `<=`
 //! and `>` use the largest binary64 value at or below the exact literal; `>=`
 //! and `<` use the smallest at or above it. Exactly representable literals
-//! keep their original text. Inexact `==` and `!=`, unreadable decimals and
-//! bounds that require infinity are refused. The newtype's field is private, and the read is still legal: the
-//! subject is always a same-package named scalar, and the clause is emitted
-//! inside a descriptor `impl` block at package module scope, the same module
-//! that declares the type, where a private field is visible. Several clauses
-//! of one kind are conjoined with `&&`. Any other clause form is refused with a
+//! are printed as written, with `.0` appended when they have no fraction or
+//! exponent (`100` becomes `100.0`). Inexact `==` and `!=`, unreadable
+//! decimals and bounds that require infinity are refused. The newtype's field
+//! is private, and the read is still legal: the subject is always a
+//! same-package named scalar, and the clause is emitted inside a descriptor
+//! `impl` block at package module scope, the same module that declares the
+//! type, where a private field is visible. Several clauses of one kind are
+//! conjoined with `&&`. Any other clause form is refused with a
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.
 //!
@@ -191,7 +193,9 @@ fn render_one(
 }
 
 /// Prints an integer unchanged, or a binary64 bound that preserves the exact
-/// rational comparison. Exactly representable float literals keep their text.
+/// rational comparison. Exactly representable float literals are printed as
+/// written, with `.0` appended when they have no fraction or exponent (`100`
+/// becomes `100.0`).
 fn literal_tokens(
     value: &str,
     backing: ScalarBacking,

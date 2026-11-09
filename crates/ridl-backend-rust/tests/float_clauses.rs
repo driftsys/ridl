@@ -6,6 +6,53 @@ mod rustc;
 use num_rational::BigRational;
 
 #[test]
+fn inexact_float_equality_skips_the_interface_with_a_refusal_note() {
+    let source = r#"
+package clause_test
+type Rate: float
+interface Bounds {
+  command set(rate: Rate) @[..1s] [require rate == 0.1]
+}
+"#;
+    let compiled = ridlc::compile("inexact_float_equality.ridl", source);
+    let errors: Vec<_> = compiled
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == ridl_core::diag::Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let generated = ridl_backend_rust::generate_pipeline(
+        &compiled.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
+        &[],
+    )
+    .expect("the pipeline skips the interface rather than refusing the package")
+    .rust_source;
+    assert!(
+        generated.contains("const __RIDL_NO_FACE_Bounds: () = ();"),
+        "the refused interface must leave a note constant:\n{generated}"
+    );
+    assert!(!generated.contains("pub mod bounds {"), "{generated}");
+    let note = generated
+        .split("const __RIDL_NO_FACE_Bounds")
+        .next()
+        .expect("the note precedes its constant")
+        .rsplit_once("Interface `Bounds`")
+        .expect("the note has an interface headline")
+        .1;
+    for part in [
+        "carries no generated interaction face",
+        "cannot translate contract clause `rate == 0.1`",
+        "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
+        "`==` and `!=` require an exactly representable binary64 literal",
+        "every float comparison requires a finite binary64 bound",
+    ] {
+        assert!(note.contains(part), "missing `{part}` in note:\n{note}");
+    }
+}
+
+#[test]
 fn generated_float_clauses_match_exact_rational_comparisons() {
     let cases = [
         (

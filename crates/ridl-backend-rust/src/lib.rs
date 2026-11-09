@@ -393,9 +393,11 @@ fn skipped_interface_note(
              each query a reply that is a named type or a tuple, to get a face."
         }
         FaceGap::Clause => {
-            " A contract clause outside the form the narrow translator accepts — \
+            " A contract clause outside what the narrow translator accepts — \
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
-             Write each `require` and `ensure` clause in that form to get a face."
+             Write each `require` and `ensure` clause in that form to get a face. \
+             For float subjects, `==` and `!=` require an exactly representable binary64 literal, \
+             and every float comparison requires a finite binary64 bound."
         }
         FaceGap::Other => " The reason above is the whole of it.",
     };
