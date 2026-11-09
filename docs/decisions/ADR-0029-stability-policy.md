@@ -163,8 +163,8 @@ owns adoption and release-note requirements;
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) owns the comparison/history
 decisions and the [CLI reference](../book/cli-reference.md#baseline-context)
 owns the artifact and recovery contract. This approval covers only these
-assessed changes and the two 2026-11-09 amendments below; passing dump checks does
-not approve other policy-frozen changes.
+assessed changes and the two 2026-11-09 amendments below; passing dump checks
+does not approve other policy-frozen changes.
 
 **Amended 2026-11-09 — catalog history failure behavior for FlatBuffers and
 proto3, from driftsys/ridl#1228.** The owner approved extending the explicit
