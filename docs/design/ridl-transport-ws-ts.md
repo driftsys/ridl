@@ -886,16 +886,24 @@ bytes are the value the provider set.
   `2a 07` and gets `accepted`, receives the `live` publish whose payload is
   `2a 07` and the occurrence with the same payload, sends the query and checks
   the reply, and closes with 1000 with no violation recorded. This is the
-  sequence of the crate's scenario without its last step, so the two clients are
-  checked against one provider behaviour. The Rust scenario's last step
-  registers a signal check. The package now accepts one, but these end-to-end
-  tests do not register it yet (driftsys/ridl#1236). Between the `fixed` and the
-  signal, the test also reads the three large `fixed` values (ordinals 7 to 9 of
-  `e2e/catalog.ts`, 65,280, 16,137 and 16,138 bytes) and compares every byte
-  with the pattern. A second test opens a raw socket without the package's
-  `Session`, sends `attach` and waits for `attached`, reads the `fixed` of
-  16,137 bytes and gets one `publish`, reads the `fixed` of 16,138 bytes and
-  gets four `block` frames; the crate's scenario has no such test. A third test,
+  sequence of the crate's scenario without its last step, which the signal check
+  test covers, so the two clients are checked against one provider behaviour. A
+  separate test,
+  `a signal check
+  refuses a live publish, keeps the last good bytes and recovers`,
+  registers `SIGNAL_CHECKS` of `e2e/catalog.ts` in `checks`, which refuses one
+  payload with the rule `range`. It sends a good command argument and sees a
+  `live` sample with that `lastGood`, sends the refused argument and sees an
+  `invalid` sample with `detected` `{ rule: "range" }` and the earlier
+  `lastGood`, reads the signal and gets the same invalid sample, and sends a
+  good argument and sees `live` again, with no `violation` or `check-failed`
+  note. Between the `fixed` and the signal, the first test also reads the three
+  large `fixed` values (ordinals 7 to 9 of `e2e/catalog.ts`, 65,280, 16,137 and
+  16,138 bytes) and compares every byte with the pattern. A second test opens a
+  raw socket without the package's `Session`, sends `attach` and waits for
+  `attached`, reads the `fixed` of 16,137 bytes and gets one `publish`, reads
+  the `fixed` of 16,138 bytes and gets four `block` frames; the crate's scenario
+  has no such test. A third test,
   `queryStream_receives_64_elements_over_loopback_server`, sends the streamed
   query (ordinal 10 of `e2e/catalog.ts`, an argument `n` and a reply of `n`
   chunks of 1,024 bytes of the value `i`) with `n` 64, which is more than the
@@ -936,16 +944,16 @@ bytes are the value the provider set.
   Chromium-family browser with a temporary profile and a DevTools port, opens
   the page through the DevTools Protocol, and evaluates the promise the page
   exposes. The page runs the signal half of the sequence (attach, subscribe,
-  command, `live` publish with `2a 07`), the large fixed values and the streamed
-  reply of 64 elements. It then uploads 200,000 bytes to key 3 through
-  `commandStream` and reads them back through `FETCH`. The test requires the
-  page's `upload` result to be `"200000:true"` in addition to its earlier
-  results. The upload extension is written and type-checked against DOM types;
-  its execution in a browser is not verified by the available local results. The
-  browser is `RIDL_BROWSER`, then `google-chrome`, `google-chrome-stable`,
-  `chromium` and `chromium-browser` on `PATH`, then the Google Chrome
-  application on macOS. On Linux, `RIDL_BROWSER_NO_SANDBOX=1` adds
-  `--no-sandbox`.
+  command, `live` publish with `2a 07`), the signal check scenario of the Deno
+  test, the large fixed values and the streamed reply of 64 elements. It then
+  uploads 200,000 bytes to key 3 through `commandStream` and reads them back
+  through `FETCH`. The test requires the page's `upload` result to be
+  `"200000:true"` in addition to its earlier results. The upload extension is
+  written and type-checked against DOM types; its execution in a browser is not
+  verified by the available local results. The browser is `RIDL_BROWSER`, then
+  `google-chrome`, `google-chrome-stable`, `chromium` and `chromium-browser` on
+  `PATH`, then the Google Chrome application on macOS. On Linux,
+  `RIDL_BROWSER_NO_SANDBOX=1` adds `--no-sandbox`.
 - **The encoding.** The tests attach with `flatbuffers`, because the example
   serves `ridl-loopback`, whose encoding is FlatBuffers, and the server refuses
   any other tag with `encoding-unsupported` (the crate's D-11). The client's

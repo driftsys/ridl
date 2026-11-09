@@ -481,3 +481,9 @@ The streams stage 6 plan (`2026-11-04-streams-stage-6-plan.md`) was archived on
 [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) and
 [the generated code chapter](../book/generated-code.md) are its durable records.
 The archived streams design records the as-built result.
+
+The TypeScript signal check design (`2026-11-09-ts-signal-check-design.md`) was
+archived on 2026-11-09, once the work landed (driftsys/ridl#1236);
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
+[`../design/ts-codec-table.md`](../design/ts-codec-table.md) and
+[the generated code chapter](../book/generated-code.md) are its durable records.
