@@ -1,0 +1,19 @@
+# The encoding bench workspace (driftsys/ridl#1117). It is its own workspace,
+# outside the repository's, for the reason `examples/cabin` is: the crate under
+# `generated/` is written by `cargo xtask bench gen` and is not in git, so it
+# has no place in the workspace the gate builds. The root `Cargo.toml` lists
+# `bench` in `exclude` to state that separation.
+[workspace]
+resolver = "2"
+members = [
+  "harness",
+  "report",
+  "generated/bench_veh_cluster",
+  "generated/bench_cabin",
+  "generated/bench_stress",
+]
+
+# The generated manifest requires `ridl-rt = "0.16"`. The bench measures the
+# `ridl-rt` in this tree, so the requirement is patched to the local path.
+[patch.crates-io]
+ridl-rt = { path = "../../crates/ridl-rt" }

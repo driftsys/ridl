@@ -1,0 +1,13 @@
+[package]
+name = "encoding-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ridl-rt = { version = "0.16", features = ["flatbuffers", "proto3", "podbuf"] }
+bench_veh_cluster = { path = "../generated/bench_veh_cluster" }
+bench_cabin = { path = "../generated/bench_cabin" }
+bench_stress = { path = "../generated/bench_stress" }
+libc = "0.2"
+serde_json = "1"
