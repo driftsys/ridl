@@ -2370,7 +2370,7 @@ fn legacy_type_only_podbuf_unit_requires_explicit_context_recovery() {
     let (code, _, stderr) = remote_support::ridl(root, home.path(), &["baseline"]);
     assert_eq!(
         code, 2,
-        "type-only consumers still require historical inline evidence: {stderr}"
+        "type-only consumers still require historical remote context: {stderr}"
     );
     assert!(
         stderr.contains("unit `veh.cluster`")

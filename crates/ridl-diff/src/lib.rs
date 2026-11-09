@@ -655,9 +655,11 @@ pub fn diff_refs_with_contexts(
 }
 
 /// Compares complete scopes while retaining independent missing-evidence issues.
-/// The report is not an affirmative compatibility judgment for any unit that
-/// owns or reaches an issue's consumer declaration. Such units require recovery;
-/// callers may use the report's proved verdicts for unaffected units.
+/// Catalog history treats Missing issues as cannot judge under podbuf,
+/// FlatBuffers or proto3, and also treats Unlayable and KindChanged issues as
+/// cannot judge under podbuf. A unit that owns or reaches the issue's consumer
+/// declaration requires recovery; callers may use the report's proved verdicts
+/// for unaffected units.
 /// Remote FlatBuffers and proto3 widths are reported once per consumer path
 /// and remote declaration reached by a surviving old consumer use, at the
 /// consumer path, with `<remote declaration>: <integer>` values. Only the

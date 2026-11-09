@@ -719,9 +719,10 @@ a buffer and one that frames it.
   provider's own catalog hash or one of the earlier hashes its catalog
   descriptor lists as compatible (`Catalog.compatible`,
   [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15 as amended on
-  2026-10-09); the encoding is one the provider serves; and every interface
-  number and ordinal of the catalog the provider serves fits the binding's
-  native fields (§4). The session is open.
+  2026-10-09, 2026-10-10 and 2026-11-03, with the 2026-11-09 clarification); the
+  encoding is one the provider serves; and every interface number and ordinal of
+  the catalog the provider serves fits the binding's native fields (§4). The
+  session is open.
 - **`refused(reason)`**, with `reason` one of `unknown_catalog` (the name is not
   served), `catalog_mismatch` (the name is served, and the hash is neither the
   provider's own nor one its descriptor lists), `encoding_unsupported`,
@@ -739,17 +740,20 @@ breaking relative to the published baseline is built with an empty list, and the
 recorded chain is left as it is until the next publication. The one exception is
 a catalog that did not change: when the catalog hash equals the newest hash of
 the published chain, the chain is carried at publication and at the build
-provided inline evidence is usable and no proved podbuf break affects the unit.
-A proved podbuf break restarts the affected chain at publication and empties the
-build's list even at the same hash. Missing inline evidence for an affected
-podbuf unit refuses normal publication with exit 2; a build warns and omits its
-compatible catalogs. [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision
-15, as amended on 2026-10-09, 2026-10-10 and 2026-11-03, states the rule. The
-direction is fixed: an **older consumer** attaches to a **newer provider**. A
-newer consumer attaching to an older provider is refused `catalog_mismatch`,
-because no tool judges that direction and the provider is the authority on what
-it serves. The descriptor field, the chain file and the emit are built
-(driftsys/ridl#787). With an empty list the rule above is the exact-match rule.
+provided remote evidence meets
+[ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decision 13 and no
+proved podbuf break affects the unit. A proved podbuf break restarts the
+affected chain at publication and empties the build's list even at the same
+hash. The [CLI reference](../book/cli-reference.md#ridl-baseline) owns the
+recovery procedure for affected units.
+[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as amended on
+2026-10-09, 2026-10-10 and 2026-11-03, with the 2026-11-09 clarification, states
+the rule. The direction is fixed: an **older consumer** attaches to a **newer
+provider**. A newer consumer attaching to an older provider is refused
+`catalog_mismatch`, because no tool judges that direction and the provider is
+the authority on what it serves. The descriptor field, the chain file and the
+emit are built (driftsys/ridl#787). With an empty list the rule above is the
+exact-match rule.
 
 The catalog check is the peers' agreement on the contract, taken once. On a
 session whose `attach` named the provider's own hash, the two runtimes hold the

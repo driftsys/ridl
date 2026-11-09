@@ -139,9 +139,10 @@ other entry below is Accepted.
   `attach` naming one of them (frame specification §6.1). The 2026-10-10
   amendment carries the chain when the catalog hash equals the newest published
   hash. The 2026-11-03 amendment limits that exception: a proved podbuf break
-  restarts the affected chain even at an unchanged hash, and missing inline
-  evidence for an affected podbuf unit refuses normal publication and omits its
-  build list with a warning.
+  restarts the affected chain even at an unchanged hash.
+  [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 owns the remote
+  evidence rule; the [CLI reference](../book/cli-reference.md#ridl-baseline)
+  owns the recovery procedure for affected units.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
@@ -627,15 +628,19 @@ other entry below is Accepted.
   and new layouts use their own remote evidence; baselines retain reached remote
   packages separately from local snapshots. A remote declaration held inline
   whose podbuf size grows draws `podbuf_remote_inline_growth`, even for a
-  pin-only change. Missing inline evidence requires explicit repair or reset; a
-  proved podbuf break ends the affected chain even at an unchanged hash
-  (driftsys/ridl#1163). Clarified 2026-11-03, decision 10: the remote-growth
-  rule covers structs, unions, enums, enum sets and scalar typedefs. Amended
-  2026-11-01, decision 7: an importing header names a foreign tuple's head by
-  the declaring package's own lowering, whatever order the importer reaches that
-  package's declarations in (driftsys/ridl#1150). Amended 2026-11-09, decision
-  13: strict appends reached through remote context are reported at surviving
-  consumer paths, once per path and remote declaration (driftsys/ridl#1229).
+  pin-only change. Decision 13 owns the remote evidence rule; the
+  [CLI reference](../book/cli-reference.md#ridl-baseline) owns the recovery
+  procedure for affected units. A proved podbuf break ends the affected chain
+  even at an unchanged hash (driftsys/ridl#1163). Clarified 2026-11-03, decision
+  10: the remote-growth rule covers structs, unions, enums, enum sets and scalar
+  typedefs. Amended 2026-11-01, decision 7: an importing header names a foreign
+  tuple's head by the declaring package's own lowering, whatever order the
+  importer reaches that package's declarations in (driftsys/ridl#1150). Amended
+  2026-11-09, decision 13: strict appends reached through remote context are
+  reported at surviving consumer paths, once per path and remote declaration
+  (driftsys/ridl#1229). Amended 2026-11-09, decision 13: catalog history
+  requires remote evidence under FlatBuffers and proto3 as well as podbuf
+  (driftsys/ridl#1228).
 
 - **ADR-0032 — Byte streams.** Fourteen decisions: the use case is a file or
   document of unknown size, downloaded or uploaded and read or written as I/O;
