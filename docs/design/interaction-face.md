@@ -136,7 +136,7 @@ translator built to make the two clause-driven settlement rows real without
 pre-empting the tree:
 
 - **Accepted form:** `<subject> <comparison> <numeric literal>`, where
-  `<subject>` is the interaction's single declared parameter (or `result` on a
+  `<subject>` is the interaction's single non-stream parameter (or `result` on a
   query's `ensure`) and `<comparison>` is one of `< <= > >= == !=`. The
   subject's named type must be an integer- or float-backed scalar.
 - It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op> <literal>`
@@ -145,11 +145,13 @@ pre-empting the tree:
   and never silently emitted as `Ok(())`. A dropped clause would generate a
   provider that accepts arguments its own contract forbids.
 - A command or query declaring no clause of a kind emits `Ok(())`.
-- The translator counts a stream parameter among the declared parameters, so a
-  `require` is translated only on a call with one non-stream parameter; a call
-  with an upload and another argument has two parameters and no face when it
-  declares such a `require`, as for any call with two parameters. An `ensure` on
-  an upload query with a named numeric scalar reply is translated and enforced.
+- The translator excludes stream parameters when selecting the single parameter
+  subject and preserves its index in the declared parameter list. An upload
+  command or query can therefore require a comparison on its one ordinary
+  argument, whether the stream is declared first or last. A clause naming the
+  stream, or a parameter clause on a call with two ordinary parameters, is
+  refused. An `ensure` on an upload query with a named numeric scalar reply is
+  translated and enforced.
 
 Why the translator refuses rather than widens, and why it lives behind
 `generate_face_with` rather than `generate`, is
@@ -459,9 +461,10 @@ Every row below is built in the generated Rust face and exercised over
 [D-30](ridl-transport-ws.md); the TypeScript upload methods and their limits are
 recorded in [D-23](ridl-transport-ws-ts.md). The request argument excludes the
 stream: client methods take the ordinary argument by value and provider methods
-by reference; a stream-only request uses its induced empty parameter struct. The
-Rust face omits calls with a `require` clause beside an upload
-(driftsys/ridl#1221).
+by reference; a stream-only request uses its induced empty parameter struct. An
+upload with one ordinary named-type argument uses that type directly, regardless
+of parameter order. Its parameter clauses follow
+[the contract-clause translator's rules](#the-contract-clause-translator).
 
 | Declaration                        | Caller value and methods                                                   | Provider value                                    |
 | ---------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |

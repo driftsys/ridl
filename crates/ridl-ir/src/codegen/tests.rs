@@ -5654,3 +5654,129 @@ fn a_refusal_inside_an_arm_head_names_the_arm_in_its_path() {
         "{causes:?}"
     );
 }
+
+fn upload_clause_translation(
+    stream_first: bool,
+    second_ordinary: bool,
+    subject: &str,
+    command: bool,
+) -> v1::clause::Translation {
+    let mut scalar = package().decls.remove(0);
+    scalar.name = "Level".to_string();
+    let param = |name: &str, ty| v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+        ..Default::default()
+    };
+    let mut params = vec![param("limit", named("Level"))];
+    let stream = param(
+        "data",
+        v2::FieldType {
+            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                element: Some(v2::stream_type::Element::Named("Level".to_string())),
+            })),
+            ..Default::default()
+        },
+    );
+    params.insert(if stream_first { 0 } else { 1 }, stream);
+    if second_ordinary {
+        params.push(param("other", named("Level")));
+    }
+    let contracts = vec![v2::Contract {
+        kind: v2::ContractKind::Require as i32,
+        source: format!("{subject} > 0"),
+        ..Default::default()
+    }];
+    let kind = if command {
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params,
+            contracts,
+            ..Default::default()
+        })
+    } else {
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params,
+            contracts,
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(named("Level"))),
+            }),
+            ..Default::default()
+        })
+    };
+    let package = v2::Package {
+        name: "clauses.upload".to_string(),
+        decls: vec![scalar],
+        interfaces: vec![v2::Interface {
+            name: "Calls".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            interactions: vec![call_decl("put", kind)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&package, &[]);
+    let clauses = match call_named(&model, "put").shape.as_ref().unwrap() {
+        v1::interaction::Shape::Query(query) => &query.clauses,
+        v1::interaction::Shape::Command(command) => &command.clauses,
+        _ => panic!("a command or query"),
+    };
+    clauses[0].translation.clone().expect("a translation")
+}
+
+#[test]
+fn an_upload_clause_with_the_stream_last_keeps_the_declared_subject_index() {
+    for command in [false, true] {
+        assert_eq!(
+            upload_clause_translation(false, false, "limit", command),
+            v1::clause::Translation::Comparison(v1::Comparison {
+                op: v1::ComparisonOp::Gt as i32,
+                literal: "0".to_string(),
+                literal_class: v1::ScalarClass::Integer as i32,
+                subject: Some(v1::comparison::Subject::Param(0)),
+            })
+        );
+    }
+}
+
+#[test]
+fn an_upload_clause_with_the_stream_first_keeps_the_declared_subject_index() {
+    for command in [false, true] {
+        assert_eq!(
+            upload_clause_translation(true, false, "limit", command),
+            v1::clause::Translation::Comparison(v1::Comparison {
+                op: v1::ComparisonOp::Gt as i32,
+                literal: "0".to_string(),
+                literal_class: v1::ScalarClass::Integer as i32,
+                subject: Some(v1::comparison::Subject::Param(1)),
+            })
+        );
+    }
+}
+
+#[test]
+fn an_upload_clause_with_two_ordinary_parameters_is_refused() {
+    for command in [false, true] {
+        for stream_first in [false, true] {
+            assert_eq!(
+                upload_clause_translation(stream_first, true, "limit", command),
+                v1::clause::Translation::Refused(
+                    "a translated clause needs exactly one non-stream parameter".to_string()
+                )
+            );
+        }
+    }
+}
+
+#[test]
+fn an_upload_clause_naming_the_stream_is_refused_with_a_reason() {
+    for command in [false, true] {
+        for stream_first in [false, true] {
+            assert_eq!(
+                upload_clause_translation(stream_first, false, "data", command),
+                v1::clause::Translation::Refused(
+                    "the subject is not the interaction's declared parameter".to_string()
+                )
+            );
+        }
+    }
+}

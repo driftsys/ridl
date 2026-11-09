@@ -56,8 +56,14 @@ fn translate_accepted(
         ));
     }
 
-    let [param] = params else {
-        return Err("a translated clause needs exactly one declared parameter".to_string());
+    let mut ordinary = params.iter().enumerate().filter(|(_, param)| {
+        !matches!(
+            param.r#type.as_ref().and_then(|ty| ty.kind.as_ref()),
+            Some(v2::field_type::Kind::Stream(_))
+        )
+    });
+    let (Some((index, param)), None) = (ordinary.next(), ordinary.next()) else {
+        return Err("a translated clause needs exactly one non-stream parameter".to_string());
     };
     if param.name != subject {
         return Err("the subject is not the interaction's declared parameter".to_string());
@@ -72,7 +78,7 @@ fn translate_accepted(
         op,
         literal,
         class,
-        v1::comparison::Subject::Param(0),
+        v1::comparison::Subject::Param(index as u32),
     ))
 }
 

@@ -6,7 +6,7 @@
 //! every other:
 //!
 //! - `<subject> <comparison> <numeric literal>`, where `<subject>` is the
-//!   interaction's single declared parameter, or `result` on an `ensure`
+//!   interaction's single non-stream parameter, or `result` on an `ensure`
 //!   clause, and `<comparison>` is one of `<`, `<=`, `>`, `>=`, `==`, `!=`.
 //!   The subject's type must be a named scalar over an integer or a float.
 //!
@@ -56,8 +56,9 @@ pub(crate) struct ClauseBody {
 
 /// Renders every clause of `kind` on one interaction into a method body.
 ///
-/// `params` is the interaction's declared parameters (the face
-/// restricts a call to one). `reply` is the query's reply reference, present only for a query's
+/// `params` is the interaction's declared parameters, including streams. A
+/// parameter clause selects the single non-stream parameter by its declared
+/// index. `reply` is the query's reply reference, present only for a query's
 /// `ensure`, so `result` can be resolved and refused everywhere else.
 pub(crate) fn translate(
     ctx: &Ctx,

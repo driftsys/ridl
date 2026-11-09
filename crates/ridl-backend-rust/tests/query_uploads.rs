@@ -1045,3 +1045,169 @@ fn cancelling_a_query_wakes_a_named_sink_holding_an_element_before_admission() {
         ))))
     );
 }
+
+#[test]
+fn an_upload_require_with_the_stream_last_checks_the_ordinary_parameter() {
+    upload_require_checks_the_ordinary_parameter("limit: Level, data: <Level>");
+}
+
+#[test]
+fn an_upload_require_with_the_stream_first_checks_the_ordinary_parameter() {
+    upload_require_checks_the_ordinary_parameter("data: <Level>, limit: Level");
+}
+
+fn upload_require_checks_the_ordinary_parameter(params: &str) {
+    let source = format!(
+        r#"
+package face.upload_checks
+type Level : integer [0..100]
+interface Store {{
+   query put({params}): Level @[..100ms] [ require limit > 0 ]
+   command push({params}) @[..100ms] [ require limit > 0 ]
+   query history(limit: Level): <Level> @[..100ms] [ require limit > 0 ]
+ }}
+"#
+    );
+    let output = ridlc::compile("upload_require.ridl", &source);
+    let errors: Vec<_> = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let face = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
+        &[],
+    )
+    .expect("generate pipeline")
+    .rust_source;
+    assert!(
+        !face.contains("__RIDL_NO_FACE_"),
+        "the interface must keep its face:\n{face}"
+    );
+    let program = format!(
+        r#"
+#[allow(dead_code, unused_imports)]
+mod generated {{ {face} }}
+use generated::{{Level, Store}};
+use ridl_loopback::Loopback;
+use ridl_rt::{{
+    contract::Interface,
+    error::{{CallError, ClientError, Contract}},
+    face::{{Bind, Consumer, Interrupted, Source}},
+    port::SendError,
+}};
+use std::{{future::Future, pin::Pin, task::{{Context, Poll}}}};
+struct Upload(bool);
+impl Consumer for Upload {{
+    type Item = Level;
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {{ Poll::Ready(()) }}
+    fn accept(&mut self, _: Level) {{}}
+    fn end(&mut self) {{}}
+    fn failed(&mut self, _: CallError) {{}}
+}}
+impl Source for Upload {{
+    type Item = Level;
+    fn poll_next(&mut self, _: &mut Context<'_>) -> Poll<Option<Result<Level, Interrupted>>> {{
+        if self.0 {{
+            self.0 = false;
+            Poll::Ready(Some(Ok(Level::new_unchecked(7))))
+        }} else {{
+            Poll::Ready(None)
+        }}
+    }}
+}}
+struct Provider;
+impl generated::store::Provider for Provider {{
+    type Put = Upload;
+    type Push = Upload;
+    type History = Upload;
+    fn put(&mut self, limit: &Level) -> Upload {{ assert_eq!(limit.get(), 1); Upload(false) }}
+    fn put_reply(&mut self, _: Upload) -> Level {{ Level::new_unchecked(7) }}
+    fn push(&mut self, limit: &Level) -> Upload {{ assert_eq!(limit.get(), 1); Upload(false) }}
+    fn history(&mut self, limit: &Level) -> Upload {{ assert_eq!(limit.get(), 1); Upload(true) }}
+}}
+fn poll<F: Future + Unpin>(f: &mut F) -> Poll<F::Output> {{
+    Pin::new(f).poll(&mut Context::from_waker(&ridl_rt::task::noop_waker()))
+}}
+fn main() {{
+    let rt = Loopback::new(*<Store as Interface>::CATALOG);
+    let mut provider = Provider;
+    let mut serve = generated::store::serve(rt.handler(), &mut provider);
+    let mut client = generated::store::Client::new(rt.caller());
+    let refused = ClientError::Send(SendError::Contract(Contract::PreconditionFailed));
+    let (mut call, sink) = client.put(Level::new_unchecked(0));
+    assert_eq!(poll(&mut call), Poll::Ready(Err(refused)));
+    drop(sink);
+    drop(call);
+    let (mut call, mut sink) = client.put(Level::new_unchecked(1));
+    assert!(poll(&mut call).is_pending());
+    assert!(poll(&mut serve).is_pending());
+    assert_eq!(sink.poll_end(&mut Context::from_waker(&ridl_rt::task::noop_waker())), Poll::Ready(Ok(())));
+    assert!(poll(&mut serve).is_pending());
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(Level::new_unchecked(7))));
+    drop(sink);
+    drop(call);
+    let (mut call, sink) = client.push(Level::new_unchecked(0));
+    assert_eq!(poll(&mut call), Poll::Ready(Err(refused)));
+    drop(sink);
+    drop(call);
+    let (mut call, mut sink) = client.push(Level::new_unchecked(1));
+    assert!(poll(&mut serve).is_pending());
+    assert_eq!(sink.poll_end(&mut Context::from_waker(&ridl_rt::task::noop_waker())), Poll::Ready(Ok(())));
+    assert!(poll(&mut serve).is_pending());
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    drop(sink);
+    drop(call);
+    let mut call = client.history(Level::new_unchecked(0));
+    assert!(matches!(poll(&mut call), Poll::Ready(Err(error)) if error == refused));
+    drop(call);
+    let mut call = client.history(Level::new_unchecked(1));
+    assert!(poll(&mut serve).is_pending());
+    assert!(poll(&mut call).is_pending());
+    assert!(poll(&mut serve).is_pending());
+    let mut stream = match poll(&mut call) {{
+        Poll::Ready(Ok(stream)) => stream,
+        _ => panic!("an accepted history request must return its stream"),
+    }};
+    assert_eq!(stream.poll_next(&mut Context::from_waker(&ridl_rt::task::noop_waker())),
+        Poll::Ready(Some(Ok(Level::new_unchecked(7)))));
+}}
+"#
+    );
+    let dir = tempfile::tempdir().expect("create consumer directory");
+    std::fs::create_dir(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/main.rs"), program).unwrap();
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap();
+    let manifest = format!(
+        r#"
+[package]
+name = "upload-require-consumer"
+version = "0.0.0"
+edition = "2024"
+[features]
+default = ["std"]
+std = []
+[dependencies]
+ridl-rt = {{ path = "{}/ridl-rt", features = ["std", "flatbuffers"] }}
+ridl-loopback = {{ path = "{}/ridl-loopback" }}
+"#,
+        crates.display(),
+        crates.display()
+    );
+    std::fs::write(dir.path().join("Cargo.toml"), manifest).unwrap();
+    let run = std::process::Command::new("cargo")
+        .args(["run", "--offline", "--quiet", "--manifest-path"])
+        .arg(dir.path().join("Cargo.toml"))
+        .output()
+        .expect("run the generated upload consumer");
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
