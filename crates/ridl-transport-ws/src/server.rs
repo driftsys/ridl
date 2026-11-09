@@ -164,7 +164,9 @@ pub enum Ended {
     /// configuration error, not a session event. [`serve`] returned before
     /// the opening handshake, without reading the connection, and recorded
     /// [`Note::MessageLimitTooSmall`]; the connection closes when it is
-    /// dropped. Without a member table there is no check.
+    /// dropped. To carry a member with a limit above 16,128 bytes, raise the
+    /// limit with [`Config::with_max_message_bytes`]. Without a member table
+    /// there is no check.
     ///
     /// With [`serve_selected`], this also covers an unsupported advertised
     /// capability (before reading), or a selected backend lacking the
@@ -272,7 +274,10 @@ const LINGER: Duration = Duration::from_millis(100);
 /// smaller of that and one block message, 4,130 bytes. A limit below that
 /// is a configuration error: `serve` records [`Note::MessageLimitTooSmall`]
 /// and returns [`Ended::ConfigRefused`] before the opening handshake,
-/// without reading the connection. The default limit carries every catalog.
+/// without reading the connection. The default limit, 16,164 bytes, carries
+/// every catalog whose members keep their default ceilings. A catalog with a
+/// member whose limit is above 16,128 bytes needs a larger limit: set it with
+/// [`Config::with_max_message_bytes`], up to 65,316 bytes.
 ///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and

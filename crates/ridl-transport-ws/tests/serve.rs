@@ -1365,17 +1365,17 @@ fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
 #[test]
 fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let (server, client) = pair();
-    let config = config().with_max_retained_bytes(16_164).unwrap();
+    let config = config().with_max_retained_bytes(65_316).unwrap();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
     provider.serve(IFACE, &[QUERY.ord]).unwrap();
     let handle = spawn(server, Scanning(rt), config);
     let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
-    // Each `request` of the query is settled with 4,005 bytes, and its
-    // `response` is 4,041 bytes; four of them are 16,164 bytes, the cap, and
-    // the fifth passes it.
-    let reply = vec![1u8; 4005];
+    // Each `request` of the query is settled with 16,128 bytes, and its
+    // `response` is 16,164 bytes; four of them are 64,656 bytes, below the
+    // cap, and the fifth passes it.
+    let reply = vec![1u8; 16_128];
     for seq in 1..=5u64 {
         send(
             &mut ws,
@@ -1397,7 +1397,7 @@ fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
             thread::sleep(Duration::from_millis(1));
         };
         provider.settle(claim.id, Ok(&reply)).unwrap();
-        assert_eq!(recv(&mut ws).len(), 4041, "response {seq}");
+        assert_eq!(recv(&mut ws).len(), 16_164, "response {seq}");
     }
     assert_eq!(recv_close(&mut ws), Some(CloseCode::Policy));
     assert_eq!(handle.join().0, Ended::ServerClosed(1008));
@@ -1515,6 +1515,132 @@ fn served_under(max: usize, table: Arc<MemberTable>) -> (Ended, Vec<Note>) {
     let ended = handle.join().0;
     let notes = notes.lock().unwrap().clone();
     (ended, notes)
+}
+
+/// The table of the next tests: the signal has the largest limit that a
+/// member may have, 65,280 bytes; every other member has the default ceiling
+/// of its kind.
+fn raised_signal_table() -> Arc<MemberTable> {
+    table(|t| (t == SIGNAL).then_some(65_280))
+}
+
+/// A signal whose limit is above 16,128 bytes is carried whole, as one
+/// `publish`, when the message limit is raised to carry it: 47,000 bytes and
+/// the largest, 65,280 bytes.
+///
+/// Mutation: lower `MAX_MESSAGE_LIMIT` to 16,164.
+#[test]
+fn a_signal_above_16128_bytes_is_carried_when_the_message_limit_is_raised() {
+    let config = config().with_max_message_bytes(65_316).unwrap();
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    let mut provider = rt.attach();
+    provider.set_limit(IFACE, SIGNAL.ord, 65_280);
+    let backend = Described::new(Scanning(rt), raised_signal_table()).unwrap();
+    let handle = spawn(server, backend, config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Subscribe(SIGNAL));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Answer {
+            target: SIGNAL,
+            outcome: AnswerOutcome::Accepted,
+        }
+    );
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        publish(0, 0, PublishState::Init)
+    );
+    for (seq, len) in [(1, 47_000), (2, 65_280)] {
+        let value = pattern(len);
+        provider.set(IFACE, SIGNAL.ord, &value).unwrap();
+        provider.commit();
+        let message = recv(&mut ws);
+        assert_eq!(message.len(), len + 27);
+        assert_eq!(
+            decode(&message).unwrap(),
+            publish(0, seq, PublishState::Live(&value))
+        );
+    }
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+}
+
+/// The same catalog under the default configuration is refused before the
+/// handshake, and the note names the signal and the 65,316 bytes it needs.
+///
+/// Mutation: skip the check for a member above the default ceiling of its
+/// kind.
+#[test]
+fn a_catalog_with_a_member_above_16128_bytes_is_refused_under_the_default_config() {
+    let (config, notes) = recording();
+    assert_eq!(config.max_message_bytes(), 16_164);
+    let (server, client) = pair();
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), raised_signal_table()).unwrap();
+    let handle = spawn(server, backend, config);
+    assert_eq!(handle.join().0, Ended::ConfigRefused);
+    drop(client);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::MessageLimitTooSmall {
+            target: SIGNAL,
+            needed: 65_316,
+        }]
+    );
+}
+
+/// 65,316 bytes carries the largest member limit, and a limit of one byte
+/// more is not a configuration the crate accepts.
+#[test]
+fn a_message_limit_of_65316_is_accepted_and_65317_is_refused() {
+    let (ended, notes) = served_under(65_316, raised_signal_table());
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+    let (ended, notes) = served_under(65_315, raised_signal_table());
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: SIGNAL,
+            needed: 65_316,
+        }]
+    );
+    assert!(Config::default().with_max_message_bytes(65_316).is_ok());
+    assert!(Config::default().with_max_message_bytes(65_317).is_err());
+    assert_eq!(Config::default().max_message_bytes(), 16_164);
+}
+
+/// A `fixed` crosses in blocks under the default configuration whatever limit
+/// its member has, and whole in one `publish` when a raised message limit
+/// carries it.
+#[test]
+fn a_fixed_of_65280_bytes_crosses_in_blocks_by_default_and_whole_under_a_raised_limit() {
+    let read = |config: Config| {
+        let (server, client) = pair();
+        let mut rt = Loopback::new(CATALOG);
+        let mut provider = rt.attach();
+        provider
+            .provision_fixed(IFACE, FIXED.ord, &pattern(65_280))
+            .unwrap();
+        rt.set_limit(IFACE, FIXED.ord, 65_280);
+        let backend = Described::new(Scanning(rt), table(|_| None)).unwrap();
+        let handle = spawn(server, backend, config);
+        let mut ws = connect(client, SUBPROTOCOL).unwrap();
+        attach(&mut ws);
+        send(&mut ws, Frame::Read(FIXED));
+        let first = recv(&mut ws);
+        ws.close(None).unwrap();
+        assert_eq!(handle.join().0, Ended::ClientClosed(None));
+        first
+    };
+    let first = read(config());
+    assert!(matches!(decode(&first).unwrap(), Frame::Block { .. }));
+    assert_eq!(first.len(), 4_130);
+    let first = read(config().with_max_message_bytes(65_316).unwrap());
+    assert!(matches!(decode(&first).unwrap(), Frame::Publish { .. }));
+    assert_eq!(first.len(), 65_307);
 }
 
 /// A `fixed` of the default limit needs one block message, 4,130 bytes: a

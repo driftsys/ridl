@@ -52,11 +52,17 @@ pub const SUBPROTOCOL_V1: &str = "ridl-ws-v1";
 /// The smallest message size limit a receiver may configure: the largest
 /// header of any message, an `attach` with a 255-byte name.
 pub const MIN_MESSAGE_LIMIT: usize = 294;
-/// The largest message size limit the Rust provider accepts, and its default:
-/// the largest data-plane message, 36 bytes of header and envelope plus
-/// 16,128 bytes, the default ceiling of a command and a query, the largest
-/// payload one message carries (ADR-0030 decisions 10 and 16).
-pub const MAX_MESSAGE_LIMIT: usize = 16_164;
+/// The default message size limit of the Rust provider: the largest data-plane
+/// message of a catalog whose members keep their default ceilings, 36 bytes of
+/// header and envelope plus 16,128 bytes, the default ceiling of a command and
+/// a query (ADR-0030 decisions 10 and 16). A catalog with a member above
+/// 16,128 bytes needs a larger limit, set with `Config::with_max_message_bytes`.
+pub const DEFAULT_MESSAGE_LIMIT: usize = 16_164;
+/// The largest message size limit the Rust provider accepts: the largest
+/// data-plane message, 36 bytes of header and envelope plus 65,280 bytes, the
+/// largest limit that a member of any kind may have (ADR-0030 decisions 10
+/// and 18).
+pub const MAX_MESSAGE_LIMIT: usize = 65_316;
 /// The size of an encoded [`Envelope`] in bytes.
 pub const ENVELOPE_BYTES: usize = 16;
 /// The bytes of payload in every `block` but the last (binding version 2,

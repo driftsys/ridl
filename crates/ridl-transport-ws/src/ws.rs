@@ -1417,6 +1417,22 @@ mod tests {
         assert_eq!(parse_all(max, &bytes), [Ok(Event::Binary(expected))]);
     }
 
+    /// The parser applies the configured limit, so a message of the largest
+    /// limit, 65,316 bytes, is accepted and one byte more closes with 1009.
+    #[test]
+    fn a_message_at_the_largest_configured_limit_is_accepted() {
+        let max = frame::MAX_MESSAGE_LIMIT;
+        let payload = vec![3u8; max];
+        assert_eq!(
+            parse_all(max, &masked(0x82, &payload)),
+            [Ok(Event::Binary(payload))]
+        );
+        assert_eq!(
+            parse_all(max, &masked(0x82, &vec![3u8; max + 1])),
+            [Err(CloseCode::TOO_BIG)]
+        );
+    }
+
     #[test]
     fn fragments_that_together_pass_the_limit_close_with_1009() {
         let max = frame::MIN_MESSAGE_LIMIT;

@@ -190,13 +190,13 @@ frame the transport writes comes with the crate (driftsys/ridl#718).
 ### Blocks arrive as frame version 2 and binding version 2
 
 A `fixed` of up to 65,280 bytes does not cross in one message: the largest
-message of the Rust provider is 16,164 bytes, and a `publish` header takes 27 of
-them, so a `fixed` above 16,137 bytes needs a form that carries part of a
-payload. That form, `block`, is a new form, so it is a new frame version. A
-binding never refuses an interaction the catalog allows (ADR-0030 decision 20),
-so the answer is blocks and not a smaller limit. The rules of the form are in
-the frame specification §4, §5.5 and §11.1 "Binding version 2"; this section
-gives the reasons.
+message limit of the Rust provider is 16,164 bytes by default, and a `publish`
+header takes 27 of them, so a `fixed` above 16,137 bytes needs a form that
+carries part of a payload. That form, `block`, is a new form, so it is a new
+frame version. A binding never refuses an interaction the catalog allows
+(ADR-0030 decision 20), so the answer is blocks and not a smaller limit. The
+rules of the form are in the frame specification §4, §5.5 and §11.1 "Binding
+version 2"; this section gives the reasons.
 
 - **4,096 bytes per block, not a whole message.** ADR-0030 decision 16 asks a
   binding to copy at most 4,096 bytes between two scheduling points, so a

@@ -1194,6 +1194,47 @@ Deno.test("a publish on a member the generated tables raise is live up to the ra
   assert.deepEqual(h.notes, []);
 });
 
+Deno.test("a signal raised to 65,280 bytes is live at 47,000 and at 65,280 bytes and detected corrupt at 65,281", async () => {
+  const h = await attachedWith({
+    interfaces: [{
+      iface: 1,
+      big: { iface: 1, ord: 2, kind: "signal", limit: 65_280 },
+    }],
+  });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 47_000));
+  h.socket.deliver(liveOf(SIGNAL, 2n, 65_280));
+  h.socket.deliver(liveOf(SIGNAL, 3n, 65_281));
+  assert.deepEqual(
+    h.publishes.map((p) => [p.sample.provenance, p.sample.detected]),
+    [["live", undefined], ["live", undefined], ["invalid", "corrupt"]],
+  );
+  assert.equal(h.publishes[0].sample.payload?.length, 47_000);
+  assert.equal(h.publishes[1].sample.payload?.length, 65_280);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("an event raised to 65,280 bytes is delivered at 65,280 bytes and detected corrupt at 65,281", async () => {
+  const h = await attachedWith({
+    interfaces: [{
+      iface: 1,
+      big: { iface: 1, ord: 3, kind: "event", limit: 65_280 },
+    }],
+  });
+  await subscribed(h, EVENT);
+  for (const [seq, length] of [[1n, 65_280], [2n, 65_281]] as const) {
+    h.socket.deliver({
+      form: "occurrence",
+      target: EVENT,
+      envelope: { stamp: 201n, seq },
+      payload: new Uint8Array(length),
+    });
+  }
+  assert.equal(h.occurrences.length, 2);
+  assert.equal(h.occurrences[0].detected, undefined);
+  assert.equal(h.occurrences[1].detected, "corrupt");
+});
+
 Deno.test("the limit of a raised member is keyed by its kind: a read of a fixed with the same numbers keeps the fixed ceiling", async () => {
   const h = await attachedWith({ interfaces: [RAISED] });
   const fixed: Target = { kind: Kind.Fixed, iface: 1, ord: 2 };

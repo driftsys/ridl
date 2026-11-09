@@ -435,6 +435,25 @@ test("a reply on a query the generated tables raise resolves up to the raised li
   await assert.rejects(above, isFailure("corrupt"));
 });
 
+test("a reply on a query raised to 65,280 bytes resolves up to that limit and rejects corrupt one byte above it", async () => {
+  const { socket, session } = await attached({
+    interfaces: [{
+      iface: 1,
+      deep: { iface: 1, ord: 7, kind: "query", limit: 65_280 },
+    }],
+  });
+  const within = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(65_280) }),
+  );
+  assert.equal((await within).length, 65_280);
+  const above = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 2n, { outcome: "reply", payload: new Uint8Array(65_281) }),
+  );
+  await assert.rejects(above, isFailure("corrupt"));
+});
+
 /**
  * The generated table of an interface whose command `6` and query `7` are
  * lowered to 100 bytes, below the default ceiling of their kind.
