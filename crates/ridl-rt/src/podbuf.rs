@@ -678,6 +678,7 @@ mod tests {
         assert_eq!((a, b, c), (16, 20, 22));
         let bytes = w.finish().unwrap();
         assert_eq!(&bytes[16..23], b"abc\0xy\0");
+        assert_eq!(bytes.len(), 23);
     }
 
     #[test]
