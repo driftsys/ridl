@@ -3435,7 +3435,7 @@ ts-browser-e2e:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The eleven members before `compile` do not compile the workspace (freeze-check
+# The twelve members before `compile` do not compile the workspace (freeze-check
 # compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
