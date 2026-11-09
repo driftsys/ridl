@@ -191,19 +191,19 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
   in a file written before the field existed, so `SCHEMA_VERSION` stays 1. An
   absent limit means the default ceiling of the member's kind: 3,840 bytes for a
   signal and an event, 16,128 for a command and a query, 65,280 for a fixed
-  (ADR-0030 decision 16). A limit of a signal or an event above 3,840 bytes is
-  one that a `[limits.interaction]` entry raised, up to 16,128 (decision 18).
-  Contract clauses and a signal's initial value are not carried. `streams` is
-  the list of the member's streams, appended to `Member` and absent in a file
-  written before the field existed. Each `StreamPayload` has `no` (0 is the
-  reply stream, `k` from 1 is the `k`-th stream parameter, counting only the
-  stream parameters), `form` (`Elements`, `Bytes` or `Text`), `element` (the
-  canonical element type name under `Elements`, absent otherwise) and
-  `max_sizes` (the element's rows, as for a payload). Entries are in ascending
-  `no`. The `request` payload's `type_name` spells the non-stream parameters
-  only, so a request of stream parameters alone is `()`. The `response` payload
-  of a query that replies with a stream keeps `<T>` as its `type_name`, beside
-  its entry `no` 0.
+  (ADR-0030 decision 16). A limit of a signal or an event above 3,840 bytes, or
+  of a command or a query above 16,128, is one that a `[limits.interaction]`
+  entry raised, up to 65,280 (decision 18). Contract clauses and a signal's
+  initial value are not carried. `streams` is the list of the member's streams,
+  appended to `Member` and absent in a file written before the field existed.
+  Each `StreamPayload` has `no` (0 is the reply stream, `k` from 1 is the `k`-th
+  stream parameter, counting only the stream parameters), `form` (`Elements`,
+  `Bytes` or `Text`), `element` (the canonical element type name under
+  `Elements`, absent otherwise) and `max_sizes` (the element's rows, as for a
+  payload). Entries are in ascending `no`. The `request` payload's `type_name`
+  spells the non-stream parameters only, so a request of stream parameters alone
+  is `()`. The `response` payload of a query that replies with a stream keeps
+  `<T>` as its `type_name`, beside its entry `no` 0.
 - **Payloads.** A signal has one payload with the role `value`, an event one
   with `occurrence`, a command one with `request`, a fixed one with `value`. A
   query has a `request`, and a `response` when the IR carries a return type.

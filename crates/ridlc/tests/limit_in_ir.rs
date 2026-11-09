@@ -268,8 +268,7 @@ fn a_raised_limit_is_recorded_and_changes_the_hash() {
     assert_ne!(hash(&without), hash(&raised));
 }
 
-/// A `fixed` may be given up to 65,280 bytes (ADR-0030 decision 18), so an
-/// entry above 16,128 on a fixed is not dropped: it is recorded in the IR.
+/// An entry above 16,128 on a fixed is recorded in the IR.
 #[test]
 fn a_fixed_entry_above_the_largest_raise_is_recorded() {
     let source = "package demo\ntype Payload: bytes [0..100]\n\
@@ -291,18 +290,43 @@ fn a_clamped_default_records_the_ceiling_of_the_kind() {
     assert_eq!(limit(&output, "Iface.ask"), Some(16_128));
 }
 
-/// An interaction entry above 16,128 bytes that names a member other than a
-/// fixed is MANI-022 and is dropped, so the IR records what the next entry
-/// gives, or nothing.
+/// An interaction entry above 65,280 bytes is MANI-022 and is dropped, so the
+/// IR records what the next entry gives, or nothing.
 #[test]
 fn a_dropped_entry_records_nothing() {
-    let output = compile(SOURCE, "[limits.interaction]\n\"Iface.sig\" = 16129\n");
+    let output = compile(SOURCE, "[limits.interaction]\n\"Iface.sig\" = 65281\n");
     assert_eq!(errors(&output).len(), 1, "{:?}", errors(&output));
     assert!(errors(&output)[0].starts_with("MANI-022 "));
     assert_eq!(limit(&output, "Iface.sig"), None);
     let output = compile(
         SOURCE,
-        "[limits.kind]\nsignal = 7\n[limits.interaction]\n\"Iface.sig\" = 16129\n",
+        "[limits.kind]\nsignal = 7\n[limits.interaction]\n\"Iface.sig\" = 65281\n",
     );
     assert_eq!(limit(&output, "Iface.sig"), Some(7));
+}
+
+/// An interaction entry of 16,129 and of 65,280 bytes is accepted for a
+/// signal, an event, a command and a query, and the IR records it
+/// (ADR-0030 decision 18 as amended).
+#[test]
+fn an_entry_up_to_65280_is_recorded_for_every_kind() {
+    let source = "package demo\ntype Payload: bytes [0..100]\n\
+                  interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  \
+                  event ev: Payload\n  command cmd(data: Payload)\n  \
+                  query ask(): Payload\n}\n";
+    for value in [16_129_u32, 65_280] {
+        let manifest = format!(
+            "[limits.interaction]\n\"Iface.sig\" = {value}\n\"Iface.ev\" = {value}\n\
+             \"Iface.cmd\" = {value}\n\"Iface.ask\" = {value}\n"
+        );
+        let output = compile(source, &manifest);
+        assert_eq!(errors(&output), Vec::<String>::new(), "{value}");
+        for name in ["sig", "ev", "cmd", "ask"] {
+            assert_eq!(
+                limit(&output, &format!("Iface.{name}")),
+                Some(value),
+                "{name} at {value}"
+            );
+        }
+    }
 }

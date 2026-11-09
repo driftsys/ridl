@@ -18,10 +18,12 @@ names `podbuf`; the C header is written by `ridl build --emit podbuf`
 (`<base>.h`). Every payload also carries its own zeroed buffer,
 `Payload<Podbuf>::BUFFER`, an `Aligned` array of `MAX_SIZE` bytes, because a
 podbuf buffer starts on an 8-byte boundary. The face puts a `BUFFER` on the
-stack for a signal, an event, a command and a query only, which the catalog's
-limits keep at 16,128 bytes or less; a fixed has no face method and reserves
-nothing in the size table, and its payload, up to 65,280 bytes, is read through
-the view in place
+stack for a signal, an event, a command and a query only; a fixed has no face
+method and reserves nothing in the size table, and its payload, up to 65,280
+bytes, is read through the view in place. A member that a `[limits.interaction]`
+entry raises above 16,128 bytes pays for its own stack buffer, up to 65,280
+bytes: a target with a small stack uses the encode API that takes a caller's
+buffer, or does not raise the member
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 5).
 
 ## Where the code is

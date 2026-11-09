@@ -60,6 +60,10 @@ from 0 to 65,280. MANI-022 is a value above its range. A `[limits.interaction]`
 value between 16,129 and 65,280 for a member that is not a `fixed` is MANI-022
 too, raised by `ridlc` where the member's kind is known.
 
+Amended 2026-11-09 by ADR-0030 decision 18: a `[limits.interaction]` value is
+valid from 0 to 65,280 for a member of any kind, so the sentence above about a
+member that is not a `fixed` no longer applies, and `ridlc` raises no MANI-022.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts

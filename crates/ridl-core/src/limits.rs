@@ -25,8 +25,8 @@ pub const FIXED_CEILING: u32 = 65_280;
 pub const PAYLOAD_CEILING: u32 = FIXED_CEILING;
 
 /// The largest limit, in bytes, that a `[limits.interaction]` entry may give a
-/// member that is not a `fixed` (ADR-0030 decision 18).
-pub const RAISE_MAX: u32 = 16_128;
+/// member of any kind (ADR-0030 decision 18): the largest payload.
+pub const RAISE_MAX: u32 = PAYLOAD_CEILING;
 
 /// The largest `string` bound, in characters, that TYPL-116 accepts. A string
 /// of this many characters is a multiple of 64 and its encoding fits the
@@ -65,7 +65,7 @@ mod tests {
         assert_eq!(STRING_BOUND_MAX_CHARS, 254 * 64);
         assert_eq!(BYTES_BOUND_MAX, u64::from(PAYLOAD_CEILING));
         assert!(4 * STRING_BOUND_MAX_CHARS + 58 <= u64::from(PAYLOAD_CEILING));
-        assert_eq!(RAISE_MAX, CALL_CEILING);
+        assert_eq!(RAISE_MAX, PAYLOAD_CEILING);
     }
 
     #[test]

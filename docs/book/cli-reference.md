@@ -1149,33 +1149,31 @@ the default ceiling of its kind. The default ceiling is 3,840 bytes for a
 `fixed`. A `[limits.kind]` entry may lower the limit of its kind and may not
 raise it above the default ceiling. `default` applies to each kind up to the
 default ceiling of that kind, so `default = 4096` gives a `signal` the limit
-3,840. A `[limits.interaction]` entry may raise one member above the default
-ceiling of its kind, up to 16,128 bytes; a `fixed` is not raised, because its
-default ceiling is already the largest. No value is above 65,280. A key of
-`[limits.interaction]` is the short name of the interface, or of the inline
-`service` (the last segment of its dotted name), then `.`, then the member;
-neither the package nor a dotted service name is part of it. When two interfaces
-or inline services of one unit share a short name, a key that uses the name is
-ambiguous.
+3,840. A `[limits.interaction]` entry may raise one member of any kind above the
+default ceiling of its kind, up to 65,280 bytes; a `fixed` is not raised,
+because its default ceiling is already the largest. No value is above 65,280. A
+key of `[limits.interaction]` is the short name of the interface, or of the
+inline `service` (the last segment of its dotted name), then `.`, then the
+member; neither the package nor a dotted service name is part of it. When two
+interfaces or inline services of one unit share a short name, a key that uses
+the name is ambiguous.
 
 An unknown kind in `[limits.kind]` is MANI-021. MANI-022 is a `[limits.kind]`
 value above the default ceiling of its kind, a `default` or a
-`[limits.interaction]` value above 65,280, and a `[limits.interaction]` value
-between 16,129 and 65,280 that names a member other than a `fixed`; the last is
-reported on the value by the same pass that sizes the payloads, and the entry
-gives no limit. A key that names no interaction of the unit, or that is
-ambiguous, is RIDL-152, reported on the key. RIDL-151 is reported on an
-interaction whose payload has a largest encoded size, in an encoding that a
-`[backend.<name>]` table enables (FlatBuffers when no table names one), above
-the limit that an entry of `[limits]` gives it, or no finite bound. Where no
-entry gives a limit, the same check against the default ceiling of the kind is
-RIDL-157, so an interaction draws at most one of the two. A `command` or `query`
-checks its request and its reply against its one limit, a fallible reply is
-checked through both of its types, and a `fixed` is sized too. All three are
-errors, so they have no name and no level in `[lints]`. A package with an error
-that stops `ridl build` writing artifacts, or that depends on one, is not
-checked, and a unit with such a package reports no RIDL-152. An error in a
-manifest stops the pass only in the packages beneath that manifest.
+`[limits.interaction]` value above 65,280; the manifest reader reports it on the
+value, and the entry gives no limit. A key that names no interaction of the
+unit, or that is ambiguous, is RIDL-152, reported on the key. RIDL-151 is
+reported on an interaction whose payload has a largest encoded size, in an
+encoding that a `[backend.<name>]` table enables (FlatBuffers when no table
+names one), above the limit that an entry of `[limits]` gives it, or no finite
+bound. Where no entry gives a limit, the same check against the default ceiling
+of the kind is RIDL-157, so an interaction draws at most one of the two. A
+`command` or `query` checks its request and its reply against its one limit, a
+fallible reply is checked through both of its types, and a `fixed` is sized too.
+All three are errors, so they have no name and no level in `[lints]`. A package
+with an error that stops `ridl build` writing artifacts, or that depends on one,
+is not checked, and a unit with such a package reports no RIDL-152. An error in
+a manifest stops the pass only in the packages beneath that manifest.
 
 A `[limits]` entry that applies to an interaction is recorded in the IR, with
 `default` clamped to the default ceiling of the kind, so adding, removing or

@@ -100,7 +100,7 @@ fn a_signal_above_its_default_ceiling_draws_ridl_157() {
     assert_eq!(
         found[0].message,
         "the payload of `I.s` has up to 3842 bytes in flatbuffers; the default ceiling of a \
-         signal is 3840 bytes, and a `[limits.interaction]` entry may raise it up to 16128"
+         signal is 3840 bytes, and a `[limits.interaction]` entry may raise it up to 65280"
     );
     // Reported on the interaction, not on the type.
     let text = &source
@@ -343,11 +343,12 @@ fn default_is_clamped_to_the_ceiling_of_the_kind() {
     );
 }
 
-/// A `[limits.interaction]` entry between 16,129 and 65,280 names a fixed
-/// only: on a command or a signal it is MANI-022 from the size pass, on the
-/// value, and the entry is dropped; on a fixed it applies.
+/// A `[limits.interaction]` entry may give a member of any kind a limit up to
+/// 65,280 bytes (ADR-0030 decision 18 as amended): 16,129 and 65,280 are
+/// accepted for a signal, an event, a command, a query and a fixed, and 65,281
+/// is MANI-022 from the manifest reader, on the value.
 #[test]
-fn an_entry_above_the_largest_raise_is_mani_022_unless_it_names_a_fixed() {
+fn an_interaction_entry_up_to_65280_applies_to_every_kind() {
     let member = |body: &str, manifest: &str| {
         let source =
             format!("package demo\ntype Payload: bytes [0..100]\ninterface I {{\n  {body}\n}}\n");
@@ -365,10 +366,28 @@ fn an_entry_above_the_largest_raise_is_mani_022_unless_it_names_a_fixed() {
     };
     for body in [
         "command c(data: Payload) @[..1s]",
+        "query c(data: Payload): Payload @[..1s]",
         "signal c: Payload @[10ms..100ms]",
         "event c: Payload @[10ms..100ms]",
+        "fixed c: Payload",
     ] {
-        let run = member(body, "[limits.interaction]\n\"I.c\" = 16129\n");
+        for value in [16_129, 65_280] {
+            let run = member(body, &format!("[limits.interaction]\n\"I.c\" = {value}\n"));
+            assert_eq!(
+                size_codes(&run.diagnostics),
+                Vec::<&str>::new(),
+                "{body} at {value}: {:?}",
+                run.diagnostics
+            );
+            assert!(
+                !run.diagnostics
+                    .iter()
+                    .any(|d| d.severity == Severity::Error),
+                "{body} at {value}: {:?}",
+                run.diagnostics
+            );
+        }
+        let run = member(body, "[limits.interaction]\n\"I.c\" = 65281\n");
         assert_eq!(
             size_codes(&run.diagnostics),
             ["MANI-022"],
@@ -379,89 +398,49 @@ fn an_entry_above_the_largest_raise_is_mani_022_unless_it_names_a_fixed() {
         let text = run.sources.text(found.primary.file).unwrap();
         let value =
             &text[usize::from(found.primary.range.start())..usize::from(found.primary.range.end())];
-        assert_eq!(value, "16129", "{body}: {found:?}");
-        assert!(
-            found.message.contains("`I.c` is 16129") && found.message.contains("16128 bytes"),
-            "{body}: {}",
-            found.message
-        );
-        let kind = body.split(' ').next().unwrap();
-        let article = if kind == "event" { "an" } else { "a" };
-        assert!(
-            found.message.contains(&format!("give {article} {kind} ")),
-            "{body}: {}",
-            found.message
-        );
+        assert_eq!(value, "65281", "{body}: {found:?}");
     }
-    let run = member(
-        "fixed c: Payload",
-        "[limits.interaction]\n\"I.c\" = 16129\n",
-    );
-    assert_eq!(
-        size_codes(&run.diagnostics),
-        Vec::<&str>::new(),
-        "{:?}",
-        run.diagnostics
-    );
-    // A dropped entry gives no limit, so the kind's ceiling is checked: a
-    // signal of 4,000 bytes, within the dropped 16,129, is RIDL-157 against
-    // 3,840, not RIDL-151 against the entry.
-    let diagnostics = check_files(
-        &[(
-            "demo",
-            vec![
-                (
-                    "m.ridl",
-                    "package demo\ntype Payload: bytes [0..4000]\ninterface I {\n  \
-                     signal c: Payload @[10ms..100ms]\n}\n",
-                ),
-                (
-                    "ridl.toml",
-                    "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
-                     [limits.interaction]\n\"I.c\" = 16129\n",
-                ),
-            ],
-        )],
-        PROTO3,
-    );
-    assert_eq!(
-        size_codes(&diagnostics),
-        ["MANI-022", "RIDL-157"],
-        "{diagnostics:?}"
-    );
 }
 
-/// The MANI-022 of the size pass needs the member's kind, so a package with
-/// an error that blocks the pass draws none, and no RIDL-152, for an entry
-/// above 16,128 bytes that names one of its members.
+/// A signal of about 47,000 bytes in the worst case: with an entry of 65,280
+/// it passes; with no entry it is RIDL-157 against 3,840, and with an entry of
+/// 16,128 it is RIDL-151 against that limit.
 #[test]
-fn a_blocked_package_draws_no_mani_022_from_the_size_pass() {
-    let diagnostics = check_files(
-        &[(
-            "demo",
-            vec![
-                (
-                    "m.ridl",
-                    "package demo\ntype Payload: bytes [0..100]\ntype Broken: Nope\n\
-                     interface I {\n  signal c: Payload @[10ms..100ms]\n}\n",
-                ),
-                (
-                    "ridl.toml",
-                    "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
-                     [limits.interaction]\n\"I.c\" = 16129\n",
-                ),
-            ],
-        )],
-        "",
-    );
+fn a_signal_of_47000_bytes_needs_an_entry_of_at_least_its_size() {
+    let source = carried("type Payload: bytes [0..47000]\n");
+    let with_entry = |value: u32| {
+        check_files(
+            &[(
+                "demo",
+                vec![
+                    ("m.ridl", source.as_str()),
+                    (
+                        "ridl.toml",
+                        &format!(
+                            "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
+                             [limits.interaction]\n\"I.s\" = {value}\n"
+                        ),
+                    ),
+                ],
+            )],
+            PROTO3,
+        )
+    };
+    let passes = with_entry(65_280);
+    assert_eq!(size_codes(&passes), Vec::<&str>::new(), "{passes:?}");
     assert!(
-        diagnostics.iter().any(|d| d.severity == Severity::Error),
-        "{diagnostics:?}"
+        !passes.iter().any(|d| d.severity == Severity::Error),
+        "{passes:?}"
     );
-    assert_eq!(
-        size_codes(&diagnostics),
-        Vec::<&str>::new(),
-        "{diagnostics:?}"
+    let none = check(&source, PROTO3);
+    assert_eq!(size_codes(&none), ["RIDL-157"], "{none:?}");
+    let short = with_entry(16_128);
+    assert_eq!(size_codes(&short), ["RIDL-151"], "{short:?}");
+    assert!(
+        with("RIDL-151", &short)[0]
+            .message
+            .ends_with("its limit is 16128 bytes"),
+        "{short:?}"
     );
 }
 

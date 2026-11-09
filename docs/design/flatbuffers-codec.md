@@ -277,9 +277,11 @@ writes `type Buffer = [u8; <literal>]` and the zeroed constant
 bytes long. Code generic over the encoding names the buffer type through
 `Payload`, because a generic array length is not expressible on stable Rust. The
 face puts a `BUFFER` on the stack for a signal, an event, a command and a query
-only, which the catalog's limits keep at 16,128 bytes or less; a fixed has no
-face method and reserves nothing in the size table, and its payload, up to
-65,280 bytes, is read through the view in place
+only; a fixed has no face method and reserves nothing in the size table, and its
+payload, up to 65,280 bytes, is read through the view in place. A member that a
+`[limits.interaction]` entry raises above 16,128 bytes pays for its own stack
+buffer, up to 65,280 bytes: a target with a small stack uses the encode API that
+takes a caller's buffer, or does not raise the member
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 5).
 
 **A type with no finite bound carries no codec**, per type rather than per
