@@ -1,7 +1,9 @@
-//! Generates the constructor fixture's cases that RIDL source cannot express.
-//! An unconstrained integer in source always has I64 width, and the checker
-//! refuses `step` on an integer (TYPL-105), a length bound beyond the safe
-//! number interval, and a pattern on bytes, so these cases need IR.
+//! Generates the constructor fixture's cases that RIDL source cannot express,
+//! or that it expresses with a warning. An unconstrained integer in source
+//! always has I64 width, and the checker refuses `step` on an integer
+//! (TYPL-105) and a pattern on bytes, so these cases need IR. The string
+//! length bound beyond the safe number interval is written here so that the
+//! fixture builds without the checker's warning.
 
 use ridl_ir::v2;
 
