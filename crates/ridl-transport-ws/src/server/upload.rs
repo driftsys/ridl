@@ -270,4 +270,29 @@ mod tests {
         assert_eq!(u.state, UploadState::Stopped);
         assert!(u.queue.is_empty());
     }
+    #[test]
+    fn a_stopped_upload_drops_frames() {
+        let (mut u, _, _, _, _, now) = rig();
+        u.state = UploadState::Stopped;
+        assert_eq!(u.receive_chunk(1, &[1], now), Receive::Dropped);
+        assert_eq!(u.receive_end(1, now), Receive::Dropped);
+        assert!(u.queue.is_empty());
+        assert!(!u.end_received);
+        assert_eq!(u.seq_in, 0);
+    }
+    #[test]
+    fn an_upload_that_received_its_end_drops_frames() {
+        let (mut u, _, _, _, _, now) = rig();
+        assert_eq!(u.receive_end(1, now), Receive::Queued);
+        assert_eq!(u.receive_chunk(2, &[2], now), Receive::Dropped);
+        assert_eq!(u.receive_end(2, now), Receive::Dropped);
+        assert!(u.queue.is_empty());
+        assert_eq!(u.seq_in, 1);
+    }
+    #[test]
+    fn the_credit_check_precedes_the_sequence_check() {
+        let (mut u, _, _, _, _, now) = rig();
+        four(&mut u, now);
+        assert_eq!(u.receive_chunk(9, &[9], now), Receive::CreditExceeded);
+    }
 }
