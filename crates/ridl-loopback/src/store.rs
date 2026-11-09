@@ -51,8 +51,8 @@ use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal, StreamNo};
 use ridl_rt::correlate::{Forgotten, Settled, Table, Waiters};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
-    Changed, Check, Claim, ClaimId, Correlation, Interest, Pull, PushError, RaiseError,
-    RawOccurrence, RawSample, ReadError, SendError, SettleError, Watermark, WriteError,
+    Changed, Check, Claim, ClaimForget, ClaimId, Correlation, Interest, Pull, PushError,
+    RaiseError, RawOccurrence, RawSample, ReadError, SendError, SettleError, Watermark, WriteError,
     REPLY_STREAM,
 };
 use ridl_rt::sample::{Cause, Envelope, Freshness, Provenance, Timestamp};
@@ -280,6 +280,9 @@ struct CallEntry {
     /// table keeps the same mark, but has no query for it; a dropped
     /// handler's claim is withdrawn rather than returned by this one.
     forgotten: bool,
+    /// The provider's registration for the caller's forget, independent of
+    /// every stream's state and the handler that currently holds the claim.
+    claim_forget_waker: Option<Waker>,
     /// The claim id minted when the call was first presented, through
     /// `ReadError::ShortClaim` or through `Ok(Some)`, and reused by every
     /// later presentation of the same call, so a provider that received
@@ -839,6 +842,7 @@ impl Store {
                 sent,
                 reply: Vec::new(),
                 forgotten: false,
+                claim_forget_waker: None,
                 claim: None,
                 settled_by: None,
                 streams: BTreeMap::new(),
@@ -996,6 +1000,7 @@ impl Store {
         let entry = self.calls.get_mut(&slot).expect("looked up above");
         entry.forgotten = true;
         entry.pending_forget = true;
+        wake.extend(entry.claim_forget_waker.take());
         // The table hands back the stored `Outcome` waker when another is
         // registered in its place; the no-op waker left behind wakes nothing.
         wake.extend(self.table.wake_on(c, Waker::noop()));
@@ -1025,10 +1030,12 @@ impl Store {
             Forgotten::Marked(waker) => {
                 wake.extend(waker);
                 wake.extend(self.table.take_streams(Calls::slot(c)));
-                self.calls
+                let entry = self
+                    .calls
                     .get_mut(&Calls::slot(c))
-                    .expect("a call in flight has its entry")
-                    .forgotten = true;
+                    .expect("a call in flight has its entry");
+                entry.forgotten = true;
+                wake.extend(entry.claim_forget_waker.take());
             }
             Forgotten::Unknown => {}
         }
@@ -1081,6 +1088,7 @@ impl Store {
         let slot = Calls::slot(c);
         wake.extend(self.table.take_streams(slot));
         if let Some(entry) = self.calls.remove(&slot) {
+            wake.extend(entry.claim_forget_waker);
             for stream in entry.streams.into_values() {
                 wake.extend(stream.claim_waker);
             }
@@ -1531,6 +1539,63 @@ impl Store {
             .map(|_| slot)
     }
 
+    /// Reports forget by the entry's claim id, including an offered claim or
+    /// one a command acknowledgment settled. The handler identity does not
+    /// affect the answer. End and stop state persist after a pull of `End`.
+    pub(crate) fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        let Some(entry) = self
+            .calls
+            .values()
+            .find(|entry| entry.claim == Some(claim.0))
+        else {
+            return ClaimForget::Forgotten;
+        };
+        if !entry.forgotten {
+            return ClaimForget::NotForgotten;
+        }
+        let mut parameters = entry
+            .streams
+            .iter()
+            .filter(|(no, _)| **no != REPLY_STREAM.0)
+            .peekable();
+        if parameters.peek().is_some()
+            && parameters.all(|(_, stream)| stream.ended && stream.stopped.is_none())
+        {
+            ClaimForget::AfterEnd
+        } else {
+            ClaimForget::Forgotten
+        }
+    }
+
+    /// Stores one registration per claim, independent of stream readiness.
+    /// A forgotten or unknown claim wakes immediately. All wakes run after
+    /// the handle releases the store lock.
+    pub(crate) fn wait_claim_forget(
+        &mut self,
+        claim: ClaimId,
+        waker: &Waker,
+        wake: &mut Vec<Waker>,
+    ) {
+        let Some(entry) = self
+            .calls
+            .values_mut()
+            .find(|entry| entry.claim == Some(claim.0))
+        else {
+            wake.push(waker.clone());
+            return;
+        };
+        if entry.forgotten {
+            wake.push(waker.clone());
+            return;
+        }
+        wake.extend(
+            entry
+                .claim_forget_waker
+                .replace(waker.clone())
+                .filter(|displaced| !displaced.will_wake(waker)),
+        );
+    }
+
     /// The slot of the call `handler` holds under `claim`: a claim it took
     /// and has not settled, or one it settled whose call the caller has not
     /// forgotten yet. A claim only offered through `ReadError::ShortClaim`
@@ -1864,6 +1929,7 @@ impl Store {
             return;
         };
         let entry = self.calls.get_mut(&slot).expect("looked up above");
+        wake.extend(entry.claim_forget_waker.take());
         for stream in entry.streams.values_mut() {
             if !stream.finished() {
                 stream.stopped = Some((INTERRUPTED, Side::Caller));
