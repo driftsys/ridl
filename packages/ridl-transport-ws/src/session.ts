@@ -671,7 +671,8 @@ export class Session {
     const held = this.#held.get(ch);
     if (!this.#signals.has(ch) || held?.provenance !== "live") return;
     const { detected, failure } = this.#checkSignal(iface, ord, held.payload!);
-    if (detected !== undefined) {
+    // The check is caller code: it may have unsubscribed or closed.
+    if (detected !== undefined && !this.#ended && this.#signals.has(ch)) {
       this.#held.set(ch, {
         provenance: "invalid",
         envelope: held.envelope,
@@ -1296,7 +1297,12 @@ export class Session {
           : payload ?? held?.lastGood ?? null,
         ...(detected === undefined ? {} : { detected }),
       };
-      for (const read of reads) read.resolve(sample);
+      // The check is caller code: when it closed the session, the reads that
+      // were already taken from the queue still end with `down`.
+      for (const read of reads) {
+        if (this.#ended) read.reject(new SessionError(DOWN));
+        else read.resolve(sample);
+      }
     }
 
     if (!subscribed) {

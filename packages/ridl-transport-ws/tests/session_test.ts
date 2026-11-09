@@ -2156,6 +2156,28 @@ Deno.test("a check that unsubscribes the signal leaves nothing held and does not
   assert.deepEqual(h.publishes, []);
 });
 
+Deno.test("a check that unsubscribes during checkWith leaves nothing held", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  h.session.checkWith(1, 2, () => {
+    h.session.unsubscribe(SIGNAL);
+    return "corrupt";
+  });
+  assert.equal(h.session.sample(1, 2), undefined);
+});
+
+Deno.test("a check that closes the session rejects the read it answers with down", async () => {
+  const h = await attached();
+  h.session.checkWith(1, 2, () => {
+    h.session.close();
+    return undefined;
+  });
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  await assert.rejects(reading, isFailure("down"));
+});
+
 Deno.test("a throwing signal check reports corrupt and the thrown error once", async () => {
   const error = new Error("check failed");
   const h = await attachedWith({
