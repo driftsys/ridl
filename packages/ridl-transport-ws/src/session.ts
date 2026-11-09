@@ -1312,6 +1312,8 @@ export class Session {
       ) {
         this.#note({ note: "discarded", reason: "stale", frame });
       }
+    } else if (this.#ended || !this.#signals.has(ch)) {
+      // The check ran caller code that ended the session or unsubscribed.
     } else {
       this.#held.set(ch, sample!);
       const onPublish = this.#options.onPublish;

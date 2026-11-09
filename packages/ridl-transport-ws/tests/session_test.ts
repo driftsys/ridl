@@ -2125,6 +2125,37 @@ Deno.test("Init clears lastGood after resubscribe and declared invalid retains i
   assert.equal(calls, 1);
 });
 
+Deno.test("an Init publish answering a read while a sample is held resolves with lastGood null", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [1]));
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(publish(SIGNAL, 0n, { provenance: "init" }));
+  const sample = await reading;
+  assert.equal(sample.provenance, "init");
+  assert.equal(sample.lastGood, null);
+  assert.deepEqual(h.session.sample(1, 2)?.lastGood, Uint8Array.of(1));
+});
+
+Deno.test("a check that unsubscribes the signal leaves nothing held and does not notify", async () => {
+  const holder: { session?: Session } = {};
+  const h = await attachedWith({
+    checks: [{
+      iface: 1,
+      ord: 2,
+      check: () => {
+        holder.session!.unsubscribe(SIGNAL);
+        return undefined;
+      },
+    }],
+  });
+  holder.session = h.session;
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  assert.equal(h.session.sample(1, 2), undefined);
+  assert.deepEqual(h.publishes, []);
+});
+
 Deno.test("a throwing signal check reports corrupt and the thrown error once", async () => {
   const error = new Error("check failed");
   const h = await attachedWith({
