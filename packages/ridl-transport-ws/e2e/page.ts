@@ -2,7 +2,9 @@
 // whose port is the `port` parameter of the page's query string, runs the
 // signal half of the end-to-end sequence, and sets `globalThis.result` to a
 // promise of what it received: the provenance and the payload, as hex, of
-// the signal's first publish and of its publish after the command, the length
+// the signal's first publish and of its publish after the command, the
+// outcome of the signal check scenario (a good publish, a refused publish, a
+// read after it and a recovery), the length
 // and the byte-for-byte match of each large `fixed`, the count and the match
 // of the chunks of a streamed reply of 64 elements, the length and match of
 // an upload read back through a streamed reply, and the count of discard notes.
@@ -12,7 +14,7 @@ import type { Sample } from "../mod.ts";
 import * as catalog from "./catalog.ts";
 import { waiter } from "./waiter.ts";
 
-/** What the page received, each as `<provenance>:<hex payload>`. */
+/** What the page received. `init` and `live` are `<provenance>:<hex payload>`. */
 export interface Result {
   init: string;
   live: string;
@@ -51,11 +53,7 @@ function describeChecked(sample: Sample): string {
 }
 
 function describe(sample: Sample): string {
-  const hex = Array.from(
-    sample.payload ?? [],
-    (b) => b.toString(16).padStart(2, "0"),
-  ).join("");
-  return `${sample.provenance}:${hex}`;
+  return `${sample.provenance}:${hex(sample.payload)}`;
 }
 
 /**
