@@ -56,6 +56,25 @@ export const MODE_REFUSE_RANGE = 1;
 export const MODE_REFUSE_UTF8 = 2;
 /** The largest chunk of a fetched value. */
 export const FETCH_CHUNK = 16_128;
+/** A signal payload that {@link signalCheck} refuses: its first byte is 255. */
+export const REFUSED = Uint8Array.of(0xff, 0x01);
+/** A signal payload that {@link signalCheck} accepts. */
+export const GOOD_FIRST = Uint8Array.of(0x10, 0x01);
+/** A second signal payload that {@link signalCheck} accepts. */
+export const GOOD_SECOND = Uint8Array.of(0x20, 0x02);
+/**
+ * The check the end-to-end tests register for the signal: a plain function
+ * that refuses a payload whose first byte is 255 with the range rule.
+ */
+export function signalCheck(
+  bytes: Uint8Array,
+): { rule: "range" } | undefined {
+  return bytes[0] === 0xff ? { rule: "range" } : undefined;
+}
+/** The check entries to pass as `checks` at connect. */
+export const SIGNAL_CHECKS = [
+  { iface: IFACE, ord: SIGNAL, check: signalCheck },
+] as const;
 /** The byte count of an end-to-end upload. */
 export const UPLOAD_LEN = 200_000;
 /** The length of each large `fixed`, by ordinal. */
