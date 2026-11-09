@@ -4,8 +4,12 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
 ---
 // ===== package lint.shapes =====
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
 /**
  * A bounded integer.
+ *
+ * Build a value with `makeCount`.
  *
  * @remarks
  * Rules:
@@ -15,12 +19,33 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
  */
 export type Count = number & { readonly __ridl: 'lint.shapes.Count' };
 
+/** Builds a `Count`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeCount(value: number): Count {
+  if (!globalThis.Number.isSafeInteger(value)) {
+    throw new ConstraintError('range', 'lint.shapes.Count', value, 'a safe integer');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'lint.shapes.Count', value, '[0..200]');
+  }
+  if (value > 200) {
+    throw new ConstraintError('range', 'lint.shapes.Count', value, '[0..200]');
+  }
+  return value as Count;
+}
+
+/** Builds a `Count` without checking a value already known to satisfy its constraints. */
+export function makeCountUnchecked(value: number): Count {
+  return value as Count;
+}
+
 export function initCount(): Count {
   return 0 as Count;
 }
 
 /**
  * An integer whose range holds negative values and 0.
+ *
+ * Build a value with `makeLevel`.
  *
  * @remarks
  * Rules:
@@ -30,12 +55,33 @@ export function initCount(): Count {
  */
 export type Level = number & { readonly __ridl: 'lint.shapes.Level' };
 
+/** Builds a `Level`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeLevel(value: number): Level {
+  if (!globalThis.Number.isSafeInteger(value)) {
+    throw new ConstraintError('range', 'lint.shapes.Level', value, 'a safe integer');
+  }
+  if (value < -5) {
+    throw new ConstraintError('range', 'lint.shapes.Level', value, '[-5..10]');
+  }
+  if (value > 10) {
+    throw new ConstraintError('range', 'lint.shapes.Level', value, '[-5..10]');
+  }
+  return value as Level;
+}
+
+/** Builds a `Level` without checking a value already known to satisfy its constraints. */
+export function makeLevelUnchecked(value: number): Level {
+  return value as Level;
+}
+
 export function initLevel(): Level {
   return 0 as Level;
 }
 
 /**
  * A float with a step and a unit.
+ *
+ * Build a value with `makeHeat`.
  *
  * @remarks
  * Rules:
@@ -48,12 +94,33 @@ export function initLevel(): Level {
  */
 export type Heat = number & { readonly __ridl: 'lint.shapes.Heat' };
 
+/** Builds a `Heat`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeHeat(value: number): Heat {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
+  }
+  if (value < -40) {
+    throw new ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
+  }
+  if (value > 125) {
+    throw new ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
+  }
+  return value as Heat;
+}
+
+/** Builds a `Heat` without checking a value already known to satisfy its constraints. */
+export function makeHeatUnchecked(value: number): Heat {
+  return value as Heat;
+}
+
 export function initHeat(): Heat {
   return 0.0 as Heat;
 }
 
 /**
  * A float with a lower bound only and a step.
+ *
+ * Build a value with `makeFloor`.
  *
  * @remarks
  * Rules:
@@ -63,6 +130,22 @@ export function initHeat(): Heat {
  * @range [0.. step 0.25]
  */
 export type Floor = number & { readonly __ridl: 'lint.shapes.Floor' };
+
+/** Builds a `Floor`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeFloor(value: number): Floor {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'lint.shapes.Floor', value, '[0..]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'lint.shapes.Floor', value, '[0..]');
+  }
+  return value as Floor;
+}
+
+/** Builds a `Floor` without checking a value already known to satisfy its constraints. */
+export function makeFloorUnchecked(value: number): Floor {
+  return value as Floor;
+}
 
 export function initFloor(): Floor {
   return 0.0 as Floor;

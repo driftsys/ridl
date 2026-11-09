@@ -3191,6 +3191,19 @@ _codec-ts-check:
     deno check --config "$single/deno.json" "$single/single.codec.ts" "$single/single.ts"
     deno test --config "$single/deno.json" "$single/single_test.ts"
 
+    # Numeric constructors run without a loaded wasm codec.
+    ctor="$tmp/ctor"
+    mkdir -p "$ctor"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/ctor --emit typescript --out-dir "$ctor"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/ctor/deno.json > "$ctor/deno.json"
+    # An unconstrained integer in RIDL source always has I64 width. Generate
+    # the number-backed case from IR to isolate the safe-integer predicate.
+    cargo run -p ridl-backend-ts --example constructor_fixture -- "$ctor/number.ts"
+    cp crates/ridl-backend-ts/tests/fixtures/ctor/ctor_test.ts "$ctor/ctor_test.ts"
+    deno lint --config "$ctor/deno.json" "$ctor/ctor.ts" "$ctor/number.ts" "$ctor/ctor_test.ts"
+    deno check --config "$ctor/deno.json" "$ctor/ctor.ts" "$ctor/number.ts" "$ctor/ctor_test.ts"
+    deno test --config "$ctor/deno.json" "$ctor/ctor_test.ts"
+
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because
 # examples/cabin/ridl.toml sets `[backend.rust] wasm = true`, compiled as a

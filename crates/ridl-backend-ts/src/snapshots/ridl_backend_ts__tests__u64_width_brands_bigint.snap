@@ -2,7 +2,11 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
 /**
+ * Build a value with `makeOdometer`.
+ *
  * @remarks
  * Rules:
  * - range 0 ..= 18446744073709551615
@@ -10,6 +14,22 @@ expression: source
  * @range [0..18446744073709551615]
  */
 export type Odometer = bigint & { readonly __ridl: 'veh.common.Odometer' };
+
+/** Builds a `Odometer`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeOdometer(value: bigint): Odometer {
+  if (value < 0n) {
+    throw new ConstraintError('range', 'veh.common.Odometer', value, '[0..9223372036854775807]');
+  }
+  if (value > 9223372036854775807n) {
+    throw new ConstraintError('range', 'veh.common.Odometer', value, '[0..9223372036854775807]');
+  }
+  return value as Odometer;
+}
+
+/** Builds a `Odometer` without checking a value already known to satisfy its constraints. */
+export function makeOdometerUnchecked(value: bigint): Odometer {
+  return value as Odometer;
+}
 
 export function initOdometer(): Odometer {
   return 0n as Odometer;

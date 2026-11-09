@@ -1421,7 +1421,17 @@ fn appendix_b_compiles_with_tsc_strict() {
         return;
     };
 
-    let generated = generate(&appendix_b()).expect("Appendix B generates");
+    let mut pkg = appendix_b();
+    // A declared enum occupies the value namespace as well as the type namespace.
+    pkg.decls.push(public_decl(
+        "Number",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![enum_value("ZERO", 0)],
+            reserved: Vec::new(),
+            open: false,
+        }),
+    ));
+    let generated = generate(&pkg).expect("Appendix B generates with a Number enum");
 
     // A minimal module stands in for the `ridl.std` types the package
     // imports, matching the module specifier the cross-package references
@@ -1441,12 +1451,27 @@ export function initTimestamp(): Timestamp {
     let module_path = dir.path().join("veh.common.ts");
     std::fs::write(&module_path, &generated.source).expect("the generated source is written");
 
+    // Resolve the runtime import to its real, dependency-free error module.
+    std::fs::write(
+        dir.path().join("errors.ts"),
+        include_str!("../../../packages/ridl-runtime/src/errors.ts"),
+    )
+    .expect("the runtime errors are written");
+    std::fs::write(
+        dir.path().join("tsconfig.json"),
+        r#"{
+          "compilerOptions": {
+            "noEmit": true, "strict": true, "target": "es2020",
+            "lib": ["es2022", "dom"], "module": "commonjs",
+            "paths": { "@driftsys/ridl-runtime": ["./errors.ts"] }
+          }
+        }"#,
+    )
+    .expect("the runtime import mapping is written");
     let status = std::process::Command::new(&tsc.0)
         .args(&tsc.1)
-        .args([
-            "--noEmit", "--strict", "--target", "es2020", "--module", "commonjs",
-        ])
-        .arg(&module_path)
+        .args(["--project"])
+        .arg(dir.path().join("tsconfig.json"))
         .status()
         .expect("the discovered tsc must be runnable");
     assert!(
@@ -2539,4 +2564,247 @@ fn an_empty_open_enum_inits_to_unknown_zero_and_so_does_a_struct_holding_it() {
         "got:\n{source}"
     );
     insta::assert_snapshot!(source);
+}
+
+/// Numeric constructors cover each backing, open bound and visibility.
+#[test]
+fn numeric_constructors() {
+    use v2::type_def::Width;
+    let cases = [
+        (
+            "integer_range",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I16 as i32)),
+            Some("-10"),
+            Some("20"),
+            false,
+        ),
+        (
+            "integer_number_min",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I16 as i32)),
+            Some("-10"),
+            None,
+            false,
+        ),
+        (
+            "integer_min",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I64 as i32)),
+            Some("-10"),
+            None,
+            false,
+        ),
+        (
+            "integer_max",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::U8 as i32)),
+            None,
+            Some("20"),
+            false,
+        ),
+        (
+            "integer_bigint_max",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I64 as i32)),
+            Some("0"),
+            Some("9223372036854775807"),
+            false,
+        ),
+        (
+            "integer_bigint_range",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I64 as i32)),
+            Some("-9007199254740993"),
+            Some("9007199254740993"),
+            false,
+        ),
+        (
+            "float64_range",
+            v2::PrimitiveType::Float,
+            Some(Width::FloatWidth(v2::FloatWidth::F64 as i32)),
+            Some("-1.5"),
+            Some("2.5"),
+            false,
+        ),
+        (
+            "float32_range",
+            v2::PrimitiveType::Float,
+            Some(Width::FloatWidth(v2::FloatWidth::F32 as i32)),
+            Some("-1"),
+            Some("2"),
+            false,
+        ),
+        (
+            "float_min",
+            v2::PrimitiveType::Float,
+            None,
+            Some("-1"),
+            None,
+            false,
+        ),
+        (
+            "float_max",
+            v2::PrimitiveType::Float,
+            None,
+            None,
+            Some("2"),
+            false,
+        ),
+        (
+            "integer_unconstrained",
+            v2::PrimitiveType::Integer,
+            None,
+            None,
+            None,
+            false,
+        ),
+        (
+            "integer_bigint_unconstrained",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I64 as i32)),
+            None,
+            None,
+            false,
+        ),
+        (
+            "integer_unsigned_bigint_unconstrained",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::U64 as i32)),
+            None,
+            None,
+            false,
+        ),
+        (
+            "integer_bigint_open_max",
+            v2::PrimitiveType::Integer,
+            Some(Width::IntWidth(v2::IntWidth::I64 as i32)),
+            None,
+            Some("20"),
+            false,
+        ),
+        (
+            "float_unconstrained",
+            v2::PrimitiveType::Float,
+            None,
+            None,
+            None,
+            false,
+        ),
+        (
+            "internal_range",
+            v2::PrimitiveType::Integer,
+            None,
+            Some("0"),
+            Some("10"),
+            true,
+        ),
+        (
+            "boolean_unconstrained",
+            v2::PrimitiveType::Boolean,
+            None,
+            None,
+            None,
+            false,
+        ),
+    ];
+    for (snapshot, prim, width, min, max, internal) in cases {
+        let mut kind = primitive_type(prim, init_value(false, None), width);
+        if let v2::decl::Kind::TypeDef(td) = &mut kind {
+            td.constraint = (min.is_some() || max.is_some()).then(|| constraint(min, max, None));
+        }
+        let mut decl = public_decl("Value", kind);
+        if internal {
+            decl.visibility = v2::Visibility::Internal as i32;
+        }
+        let source = generate(&package("test.ctor", vec![decl])).unwrap().source;
+        assert!(source.contains("function makeValue(value:"), "{source}");
+        let checked = prim == v2::PrimitiveType::Integer || min.is_some() || max.is_some();
+        assert_eq!(source.contains("import { ConstraintError }"), checked);
+        assert_eq!(source.contains("function makeValueUnchecked"), checked);
+        if internal {
+            assert!(!source.contains("export "));
+        }
+        insta::assert_snapshot!(snapshot, source);
+    }
+}
+
+#[test]
+fn constraint_error_name_is_refused() {
+    let decl = public_decl(
+        "ConstraintError",
+        primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
+    );
+    let error = generate(&package("test.ctor", vec![decl])).unwrap_err();
+    let GenerateError::Unrepresentable(message) = error;
+    assert!(message.contains("test.ctor.ConstraintError"), "{message}");
+    assert!(message.contains("@driftsys/ridl-runtime"), "{message}");
+}
+
+#[test]
+fn deferred_scalar_constructors_are_absent() {
+    for prim in [v2::PrimitiveType::String, v2::PrimitiveType::Bytes] {
+        let mut kind = primitive_type(prim, init_value(false, None), None);
+        if let v2::decl::Kind::TypeDef(td) = &mut kind {
+            let mut c = constraint(None, None, None);
+            c.len_min = Some(1);
+            c.len_max = Some(10);
+            if prim == v2::PrimitiveType::String {
+                c.pattern = Some("/x/".to_string());
+            }
+            td.constraint = Some(c);
+        }
+        let decl = public_decl("Value", kind);
+        let source = generate(&package("test.ctor", vec![decl])).unwrap().source;
+        assert!(!source.contains("makeValue") && !source.contains("ConstraintError"));
+    }
+}
+
+#[test]
+fn a_step_does_not_emit_a_check_yet() {
+    for prim in [v2::PrimitiveType::Integer, v2::PrimitiveType::Float] {
+        let mut kind = primitive_type(prim, init_value(false, None), None);
+        if let v2::decl::Kind::TypeDef(td) = &mut kind {
+            td.constraint = Some(constraint(None, None, Some("2")));
+        }
+        let source = generate(&package("test.ctor", vec![public_decl("Value", kind)]))
+            .unwrap()
+            .source;
+        assert!(source.contains("function makeValue(value: number)"));
+        assert!(!source.contains("ConstraintError('step'") && !source.contains('%'));
+        assert_eq!(
+            source.contains("Number.isSafeInteger"),
+            prim == v2::PrimitiveType::Integer
+        );
+        assert_eq!(
+            source.contains("makeValueUnchecked"),
+            prim == v2::PrimitiveType::Integer
+        );
+        assert_eq!(
+            source.contains("import { ConstraintError }"),
+            prim == v2::PrimitiveType::Integer
+        );
+    }
+}
+
+#[test]
+fn scalar_constructor_name_collisions_are_refused() {
+    let decl = |name| {
+        public_decl(
+            name,
+            primitive_type(v2::PrimitiveType::Integer, init_value(false, None), None),
+        )
+    };
+    for names in [["Value", "ValueUnchecked"], ["ValueUnchecked", "Value"]] {
+        let error =
+            generate(&package("test.ctor", names.into_iter().map(decl).collect())).unwrap_err();
+        let GenerateError::Unrepresentable(message) = error;
+        for source in [
+            "test.ctor.Value",
+            "test.ctor.ValueUnchecked",
+            "makeValueUnchecked",
+        ] {
+            assert!(message.contains(source), "{message}");
+        }
+    }
 }

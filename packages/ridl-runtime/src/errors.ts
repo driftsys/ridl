@@ -76,3 +76,38 @@ export class StreamError extends Error {
     this.failure = failure;
   }
 }
+
+/** Thrown when construction of a named scalar breaks a checked constraint. */
+export class ConstraintError extends RangeError {
+  readonly rule: "range" | "step" | "length" | "pattern";
+  readonly type: string;
+
+  constructor(
+    rule: ConstraintError["rule"],
+    type: string,
+    value: unknown,
+    constraint: string,
+  ) {
+    let text: string;
+    if (value instanceof Uint8Array) {
+      text = `<${value.length} bytes>`;
+    } else if (typeof value === "string") {
+      text = "";
+      let count = 0;
+      for (const point of value) {
+        if (count === 64) {
+          text += "…";
+          break;
+        }
+        text += point;
+        count++;
+      }
+    } else {
+      text = String(value);
+    }
+    super(`${type}: ${text} breaks the ${rule} rule ${constraint}`);
+    this.name = "ConstraintError";
+    this.rule = rule;
+    this.type = type;
+  }
+}

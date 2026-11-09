@@ -1,0 +1,32 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
+/**
+ * Build a value with `makeValue`.
+ *
+ * @remarks
+ * Rules:
+ * - range -9007199254740993 ..= 9007199254740993
+ *
+ * @range [-9007199254740993..9007199254740993]
+ */
+export type Value = bigint & { readonly __ridl: 'test.ctor.Value' };
+
+/** Builds a `Value`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeValue(value: bigint): Value {
+  if (value < -9007199254740993n) {
+    throw new ConstraintError('range', 'test.ctor.Value', value, '[-9007199254740993..9007199254740993]');
+  }
+  if (value > 9007199254740993n) {
+    throw new ConstraintError('range', 'test.ctor.Value', value, '[-9007199254740993..9007199254740993]');
+  }
+  return value as Value;
+}
+
+/** Builds a `Value` without checking a value already known to satisfy its constraints. */
+export function makeValueUnchecked(value: bigint): Value {
+  return value as Value;
+}
