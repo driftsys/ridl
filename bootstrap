@@ -66,7 +66,8 @@ fi
 # Deno, for the TypeScript package's gates. The pinned version is in
 # .deno-version, which CI reads too. Unlike the tools checked below, Deno is
 # installed here when no `deno` is on PATH: the release zip of the pinned
-# version is downloaded from GitHub, the same file CI downloads, and its one
+# version is downloaded from GitHub, the same file CI downloads, checked against
+# the SHA-256 in .deno-sha256, and its one
 # file, `deno`, is unzipped into ~/.deno/bin. Nothing else is written: no shell
 # profile is edited, so ~/.deno/bin has to be added to PATH by the contributor,
 # and the `require deno` check below fails until it is. The download is skipped
@@ -106,6 +107,8 @@ else
     trap 'rm -rf "$deno_tmp"' EXIT
     curl -fsSL -o "$deno_tmp/deno.zip" \
       "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-${deno_target}.zip"
+    # The zip is unpacked only when its SHA-256 equals the one in .deno-sha256.
+    scripts/verify-deno-zip.sh "$deno_tmp/deno.zip" "$deno_target"
     mkdir -p "$deno_dir"
     unzip -o -q "$deno_tmp/deno.zip" deno -d "$deno_dir"
     chmod +x "$deno_dir/deno"
