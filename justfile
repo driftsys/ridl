@@ -3566,7 +3566,8 @@ _release-locked-check:
 # the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
 # full version, except for a pre-release, which only a requirement that names
 # the same pre-release matches), the cabin example's manifests, lockfiles and
-# `deno.lock`, the editor manifest (an `editor-v` tag must equal it), the root
+# `deno.lock`, the encoding bench's manifests and lockfile, the editor manifest
+# (an `editor-v` tag must equal it), the root
 # `Cargo.lock` (one entry per crate, and a `version_files` entry rewrites only
 # the first match), the frozen generated manifests and the identity fixture of
 # ridl-rt-conformance, which embeds the compiler version.
@@ -3587,7 +3588,8 @@ release-sync:
         crates/ridlc/src/lib.rs
     perl -pi -e 's/(ridl-rt = \{ version = ")[^"]+/${1}$ENV{MM}/' \
         examples/cabin/consumer/Cargo.toml examples/cabin/server/Cargo.toml
-    perl -pi -e 's/(requires `ridl-rt = ")[^"]+/${1}$ENV{MM}/' examples/cabin/Cargo.toml
+    perl -pi -e 's/(ridl-rt = \{ version = ")[^"]+/${1}$ENV{MM}/' bench/encodings/harness/Cargo.toml
+    perl -pi -e 's/(requires `ridl-rt = ")[^"]+/${1}$ENV{MM}/' examples/cabin/Cargo.toml bench/encodings/Cargo.toml
     perl -pi -e 's/(jsr:\@driftsys\/ridl-runtime\@)[^"]+/${1}$ENV{VERSION}/' examples/cabin/web/deno.lock
     (cd editors/vscode && npm version "$VERSION" --no-git-tag-version --allow-same-version)
     cargo update --workspace --offline
@@ -3601,6 +3603,10 @@ release-sync:
     cargo run --locked -p ridl-cli -- build examples/docstore --emit rust --emit catalog --out-dir examples/docstore/generated
     (cd examples/docstore/server && cargo update --workspace --offline)
     (cd examples/docstore/consumer && cargo update --workspace --offline)
+    # The bench lockfile names ridl-rt by version, and its workspace members
+    # include crates that are not in git, so they are generated first.
+    cargo run --locked --package xtask -- bench gen
+    (cd bench/encodings && cargo update --workspace --offline)
     cargo run --locked --package xtask -- freeze update
     # The identity fixture embeds the compiler version. The procedure is the
     # one in crates/ridl-rt-conformance/fixtures/identity/README.md.

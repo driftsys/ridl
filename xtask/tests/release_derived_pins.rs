@@ -21,8 +21,9 @@
 //!   `ridl-transport-ws` and `ridl-descriptor` among them) is at the workspace
 //!   version.
 //! - `crates/ridlc/src/lib.rs`: `RIDL_RT_REQUIREMENT` is `<mm>`.
-//! - the cabin consumer and server manifests, and the two manifests under
-//!   `freeze/generated/`: the `ridl-rt` requirement is `<mm>`.
+//! - the bench harness manifest, the cabin consumer and server manifests, and
+//!   the two manifests under `freeze/generated/`: the `ridl-rt` requirement is
+//!   `<mm>`.
 //! - `examples/cabin/Cargo.toml`: the comment that names the generated
 //!   manifest's requirement says `<mm>`.
 //! - `examples/cabin/web/deno.lock`: the `ridl-runtime` link is at the
@@ -44,7 +45,8 @@ const CABIN_COMMENT_PREFIX: &str = "requires `ridl-rt = \"";
 const RIDL_RUNTIME_LINK_PREFIX: &str = "jsr:@driftsys/ridl-runtime@";
 
 /// The manifests whose `ridl-rt` dependency carries the `<mm>` requirement.
-const RIDL_RT_MANIFESTS: [&str; 4] = [
+const RIDL_RT_MANIFESTS: [&str; 5] = [
+    "bench/encodings/harness/Cargo.toml",
     "examples/cabin/consumer/Cargo.toml",
     "examples/cabin/server/Cargo.toml",
     "freeze/generated/cabin/Cargo.toml",
