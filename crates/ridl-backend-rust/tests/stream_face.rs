@@ -1227,6 +1227,13 @@ impl Handler for Crowded {
 }
 
 impl StreamHandler for Crowded {
+    fn claim_forget(&self, claim: ClaimId) -> ridl_rt::port::ClaimForget {
+        self.inner.claim_forget(claim)
+    }
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        self.inner.wake_on_claim_forget(claim, waker);
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,
@@ -1398,14 +1405,14 @@ fn a_source_that_interrupts_after_three_elements_gives_them_then_the_interruptio
 }
 
 #[test]
-fn a_dropped_stream_fails_the_next_push_and_serve_drops_the_source() {
+fn a_handler_with_the_provided_defaults_keeps_a_pending_source_until_the_next_push() {
     let rt = loopback();
     let (mut feed, counters) = Feed::new(Script {
         endless: true,
         pending_before_each: 1,
         ..Script::default()
     });
-    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut serve = generated::log::serve(LegacyHandler(rt.handler()), &mut feed);
     let mut client = generated::log::Client::new(rt.caller());
 
     // Every round sends a call, reads its first element, and drops the
@@ -1700,7 +1707,7 @@ fn a_call_dropped_while_its_element_is_held_is_settled_and_its_source_dropped() 
     let mut client = generated::log::Client::new(rt.caller());
 
     // Every round fills the window, holds the fifth element, and drops the
-    // call. `serve`'s next push of the held element reads the forget; it must
+    // call. The next serve poll queries the forget before a push; it must
     // settle the claim, which gives the caller's call slot back, and drop
     // the source, which frees the member. One round more than the call table
     // holds shows both.
@@ -1722,7 +1729,36 @@ fn a_call_dropped_while_its_element_is_held_is_settled_and_its_source_dropped() 
 }
 
 #[test]
-fn a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_next_element() {
+fn forgetting_a_call_wakes_serve_while_its_source_ignores_the_waker() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        pending_before_each: usize::MAX,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let call = sent(&mut client, &mut serve);
+    let wakes = CountWakes::new();
+    let waker = Waker::from(wakes.clone());
+    assert!(
+        Pin::new(&mut serve)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    assert_eq!(counters.polls.get(), 1, "the source returned Pending");
+    let before = wakes.count();
+    drop(call);
+    assert!(
+        wakes.count() > before,
+        "forget wakes serve even though the source stored no waker"
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counters.dropped.get(), 1);
+    assert_eq!(counters.polls.get(), 1, "forget does not poll the source");
+}
+
+#[test]
+fn a_call_dropped_while_its_source_is_pending_releases_without_polling_the_source() {
     let rt = loopback();
     let (mut feed, counters) = Feed::new(Script {
         endless: true,
@@ -1732,39 +1768,30 @@ fn a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_ne
     let mut serve = generated::log::serve(rt.handler(), &mut feed);
     let mut client = generated::log::Client::new(rt.caller());
 
-    let call = sent(&mut client, &mut serve);
-    drop(call);
-    // The port tells `serve` nothing of the forget until a push: the member
-    // stays held while its source answers `Pending`.
-    let mut refused = sent(&mut client, &mut serve);
-    assert_eq!(counters.polls.get(), 1, "the source answered Pending");
-    assert_eq!(
-        poll_once(&mut refused).map(|outcome| outcome.map(|_| ())),
-        Poll::Ready(Err(ClientError::Call(CallError::Transport(
-            Transport::Busy
-        )))),
-        "a new call of the member is settled Busy"
-    );
-    drop(refused);
-    assert_eq!(counters.dropped.get(), 0, "the source is kept");
-    // Two more `Pending`, then the element, whose push reads the forget.
-    for _ in 0..3 {
+    for round in 1..=Loopback::SLOTS + 1 {
+        let call = sent(&mut client, &mut serve);
         assert!(poll_once(&mut serve).is_pending());
+        let polls = counters.polls.get();
+        drop(call);
+        assert!(poll_once(&mut serve).is_pending());
+        assert_eq!(
+            counters.dropped.get(),
+            round,
+            "the pending source was dropped"
+        );
+        assert_eq!(
+            counters.polls.get(),
+            polls,
+            "forget must not poll the source"
+        );
     }
-    assert_eq!(counters.polls.get(), 4);
-    assert_eq!(
-        counters.dropped.get(),
-        1,
-        "the push failed and serve dropped the source"
-    );
-    // The member is free again.
     let mut call = sent(&mut client, &mut serve);
     for _ in 0..4 {
         assert!(poll_once(&mut serve).is_pending());
     }
-    let mut stream = resolved(poll_once(&mut call), "the first element");
+    let mut stream = resolved(poll_once(&mut call), "the next call succeeds");
     assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
-    assert_eq!(counters.started.get(), 2);
+    assert_eq!(counters.started.get(), Loopback::SLOTS + 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -2797,6 +2824,13 @@ impl Handler for ByteClaims {
     }
 }
 impl StreamHandler for ByteClaims {
+    fn claim_forget(&self, claim: ClaimId) -> ridl_rt::port::ClaimForget {
+        self.inner.claim_forget(claim)
+    }
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        self.inner.wake_on_claim_forget(claim, waker);
+    }
+
     fn pull_claim(
         &mut self,
         c: ClaimId,
@@ -3214,4 +3248,162 @@ impl ridl_rt::face::Source for IgnoreUpload {
     ) -> Poll<Option<Result<Reading, ridl_rt::face::Interrupted>>> {
         Poll::Ready(None)
     }
+}
+
+/// A runtime adapter that uses the provided forget defaults.
+struct LegacyHandler(HandlerHandle);
+impl Attached for LegacyHandler {
+    fn catalog(&self) -> &CatalogRef {
+        self.0.catalog()
+    }
+}
+impl Encoded for LegacyHandler {
+    type Encoding = FlatBuffers;
+}
+impl Handler for LegacyHandler {
+    fn serve(
+        &mut self,
+        iface: InterfaceNo,
+        ords: &[Ordinal],
+    ) -> Result<(), ridl_rt::port::ServeError> {
+        self.0.serve(iface, ords)
+    }
+    fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<ridl_rt::port::Claim>, ReadError> {
+        self.0.next_claim(out)
+    }
+    fn settle(
+        &mut self,
+        claim: ClaimId,
+        outcome: Result<&[u8], CallError>,
+    ) -> Result<(), ridl_rt::port::SettleError> {
+        self.0.settle(claim, outcome)
+    }
+}
+impl StreamHandler for LegacyHandler {
+    fn pull_claim(
+        &mut self,
+        claim: ClaimId,
+        stream: ridl_rt::contract::StreamNo,
+        out: &mut [u8],
+    ) -> Result<Pull, ReadError> {
+        self.0.pull_claim(claim, stream, out)
+    }
+    fn push_claim(
+        &mut self,
+        claim: ClaimId,
+        stream: ridl_rt::contract::StreamNo,
+        chunk: &[u8],
+    ) -> Result<usize, PushError> {
+        self.0.push_claim(claim, stream, chunk)
+    }
+    fn end_claim(
+        &mut self,
+        claim: ClaimId,
+        stream: ridl_rt::contract::StreamNo,
+    ) -> Result<(), PushError> {
+        self.0.end_claim(claim, stream)
+    }
+    fn abort_claim(
+        &mut self,
+        claim: ClaimId,
+        stream: ridl_rt::contract::StreamNo,
+        error: CallError,
+    ) -> Result<(), PushError> {
+        self.0.abort_claim(claim, stream, error)
+    }
+}
+impl Wakeable for LegacyHandler {
+    fn wake_on(&self, what: Interest, waker: &Waker) {
+        self.0.wake_on(what, waker);
+    }
+}
+
+struct PendingByteSource(Rc<Counters>);
+impl ridl_rt::face::ByteSource for PendingByteSource {
+    fn poll_read(&mut self, _: &mut Context<'_>, _: &mut [u8]) -> Poll<Result<usize, Interrupted>> {
+        self.0.polls.set(self.0.polls.get() + 1);
+        Poll::Pending
+    }
+}
+impl Drop for PendingByteSource {
+    fn drop(&mut self) {
+        self.0.dropped.set(self.0.dropped.get() + 1);
+    }
+}
+struct PendingDocuments(Rc<Counters>);
+impl generated::docs::Provider for PendingDocuments {
+    type Put = IgnoreUpload;
+    type Note = IgnoreUpload;
+    type Fetch = PendingByteSource;
+    type Text = PendingByteSource;
+    fn put(&mut self, _: &generated::Info) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn note(&mut self, _: &generated::DocsNoteParams) -> IgnoreUpload {
+        IgnoreUpload
+    }
+    fn fetch(&mut self, _: &generated::Id) -> Self::Fetch {
+        self.0.started.set(self.0.started.get() + 1);
+        PendingByteSource(self.0.clone())
+    }
+    fn text(&mut self, _: &generated::Id) -> Self::Text {
+        self.fetch(&generated::Id::new_unchecked(1))
+    }
+}
+
+#[test]
+fn forgetting_pending_byte_and_text_replies_drops_without_another_source_poll() {
+    for text in [false, true] {
+        let rt = loopback();
+        let counters = Rc::new(Counters::default());
+        let mut provider = PendingDocuments(counters.clone());
+        let mut serve = generated::docs::serve(rt.handler(), &mut provider);
+        let mut caller = rt.caller();
+        for round in 1..=Loopback::SLOTS + 1 {
+            let id = generated::Id::new_unchecked(1);
+            let correlation = if text {
+                generated::docs::send_text(&mut caller, &id).unwrap().0
+            } else {
+                generated::docs::send_fetch(&mut caller, &id).unwrap().0
+            };
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(counters.started.get(), round);
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(counters.polls.get(), round);
+            caller.forget(correlation);
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(counters.dropped.get(), round);
+            assert_eq!(
+                counters.polls.get(),
+                round,
+                "release does not poll the source"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_forget_before_the_first_source_poll_admits_the_next_call_in_the_same_poll() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        endless: true,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let call = sent(&mut client, &mut serve);
+    drop(call);
+    let mut next = client.history(Level::new_unchecked(3));
+    assert!(poll_once(&mut next).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counters.polls.get(), 0, "forgotten source was never polled");
+    assert_eq!(counters.dropped.get(), 1);
+    assert_eq!(
+        counters.started.get(),
+        2,
+        "next claim started in the release poll"
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    let mut stream = resolved(poll_once(&mut next), "the next call succeeds");
+    assert!(matches!(next_once(&mut stream), Poll::Ready(Some(Ok(_)))));
 }

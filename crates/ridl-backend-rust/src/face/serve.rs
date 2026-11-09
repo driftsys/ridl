@@ -100,10 +100,31 @@ pub(super) fn serve(
             if call.query_upload(){return quote! {again |= #driver::<H,P>(&mut this.handler,&mut *this.provider,&mut this.streams.#method,cx,&mut budget);};}
             return quote! { again |= #driver::<H,P>(&mut this.handler,&mut this.streams.#method,cx,&mut budget); };
         }
+        // Reply-only slots check once before any source poll or held push.
+        // Upload drivers check their claim once for both directions of duplex.
+        let forget = quote! {
+            if let Some(stream) = this.streams.#method.as_ref() {
+                let claim = stream.claim;
+                this.handler.wake_on_claim_forget(claim, cx.waker());
+                if this.handler.claim_forget(claim) != ::ridl_rt::port::ClaimForget::NotForgotten {
+                    stop_stream(
+                        &mut this.handler,
+                        claim,
+                        ::ridl_rt::port::PushError::Failed(
+                            ::ridl_rt::error::CallError::Transport(
+                                ::ridl_rt::error::Transport::Interrupted,
+                            ),
+                        ),
+                    );
+                    this.streams.#method = None;
+                }
+            }
+        };
         if call.raw_stream() {
             let limit = Literal::usize_unsuffixed(call.limit);
             let text = call.stream_form == Some(ridl_ir::codegen::v1::StreamForm::Text);
             return quote! {
+                #forget
                 again |= drive_bytes::<H, P::#source, #limit, #text>(
                     &mut this.handler, &mut this.streams.#method, cx, &mut budget,
                 );
@@ -111,6 +132,7 @@ pub(super) fn serve(
         }
         let element = ty(call.reply_type.unwrap_or(call.arg_type));
         quote! {
+            #forget
             again |= drive_stream::<H, #element, P::#source>(
                 &mut this.handler,
                 &mut this.streams.#method,
@@ -223,8 +245,10 @@ pub(super) fn serve(
              stops it with Transport::Interrupted, and PushError::Failed ends the claim \
              with the caller's outcome. The source is dropped when its stream ends or \
              stops. One stream runs per member; a concurrent call is settled \
-             Transport::Busy. A caller's forget is detected by the next push, so a \
-             pending source can keep its member busy until it yields again. Ready \
+             Transport::Busy. Before driving a source, serve registers for the \
+             caller's forget and queries the claim. A reported forget drops the \
+             source without polling it and frees the member. On a runtime using \
+             the provided defaults, the next failed push detects the forget. Ready \
              progress wakes serve for another poll; a pending source registers its own \
              waker. Dropping serve interrupts every running stream and drops its \
              source."
@@ -252,13 +276,12 @@ pub(super) fn serve(
              ends the claim. The source is dropped once its stream ended or \
              stopped. The future drives one stream per member at a time: a \
              call of a member whose stream is still running is settled \
-             `Transport::Busy`. The handler port gives the future no signal \
-             when a caller forgets the call, by its bound passing or by \
-             dropping its stream: the future reads the forget from its next \
-             push. So while a member's source answers `Pending`, a caller \
-             that stopped keeps the member busy until the source yields its \
-             next element, whose push fails, and only then is the source \
-             dropped and the member free for a new call. Dropping the future \
+             `Transport::Busy`. Before driving a source, the future registers \
+             with `wake_on_claim_forget` and queries `claim_forget`. A reported \
+             forget drops the source without polling it and frees the member. \
+             A runtime using the provided defaults reports no forget; there a \
+             pending source keeps the member busy until its next push fails. \
+             Dropping the future \
              stops every stream it still drives with `Transport::Interrupted` \
              and drops its source."
         )
@@ -274,7 +297,13 @@ pub(super) fn serve(
              for readiness; a held element or byte suffix is offered before another \
              pull. With nothing held, end and failure are delivered immediately, \
              regardless of readiness. Terminal notifications occur once. Dropping \
-             serve interrupts unfinished uploads. ByteConsumer::poll_write must \
+             serve interrupts unfinished uploads. Before driving an upload, serve \
+             queries the caller's forget. A query registers before querying; a \
+             command queries first, then registers and queries again only on \
+             NotForgotten. A forgotten query or \
+             abandoned command drops its consumer without polling it. A command \
+             forgotten after its parameter stream ended normally keeps consuming \
+             the queued chunks through End. ByteConsumer::poll_write must \
              accept between one byte and the offered length for nonempty input; \
              violating this contract panics."
         )

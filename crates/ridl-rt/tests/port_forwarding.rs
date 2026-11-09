@@ -19,10 +19,10 @@ use ridl_rt::contract::StreamNo;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, Pull, PushError, RaiseError, RawOccurrence, RawSample,
-    ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
-    StreamCaller, StreamHandler, SubscribeError, Watermark, WriteError, REPLY_STREAM,
+    Attached, Caller, Changed, Claim, ClaimForget, ClaimId, Clock, CoherentSignals, Correlation,
+    EventSink, EventSource, FixedReader, Handler, Pull, PushError, RaiseError, RawOccurrence,
+    RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader,
+    SignalWriter, StreamCaller, StreamHandler, SubscribeError, Watermark, WriteError, REPLY_STREAM,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
 use ridl_rt::trace::TraceContext;
@@ -63,6 +63,7 @@ struct Stub {
     queried: Option<TraceContext>,
     /// The stream number of every stream call, in the order received.
     streams: Vec<StreamNo>,
+    forget_waker: std::cell::RefCell<Option<std::task::Waker>>,
 }
 
 impl Attached for Stub {
@@ -204,6 +205,15 @@ impl StreamCaller for Stub {
 }
 
 impl StreamHandler for Stub {
+    fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        assert_eq!(claim, ClaimId(9));
+        ClaimForget::AfterEnd
+    }
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &std::task::Waker) {
+        assert_eq!(claim, ClaimId(9));
+        self.forget_waker.replace(Some(waker.clone()));
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,
@@ -496,4 +506,24 @@ fn check_with_through_references_reaches_the_inner_port() {
         assert_eq!((*iface, *ord), (IFACE, ORD));
         assert_eq!(check(&[7]), Err(ridl_rt::sample::Detection::Corrupt));
     }
+}
+
+#[test]
+fn claim_forget_methods_forward_through_mut_ref() {
+    fn over<P: StreamHandler>(port: P, waker: &std::task::Waker) {
+        assert_eq!(port.claim_forget(ClaimId(9)), ClaimForget::AfterEnd);
+        port.wake_on_claim_forget(ClaimId(9), waker);
+    }
+    let mut stub = Stub::default();
+    struct Count(std::sync::atomic::AtomicUsize);
+    impl std::task::Wake for Count {
+        fn wake(self: std::sync::Arc<Self>) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let count = std::sync::Arc::new(Count(std::sync::atomic::AtomicUsize::new(0)));
+    let waker = std::task::Waker::from(count.clone());
+    over(&mut stub, &waker);
+    stub.forget_waker.borrow().as_ref().unwrap().wake_by_ref();
+    assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 1);
 }

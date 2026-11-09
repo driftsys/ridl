@@ -101,7 +101,8 @@
 //! waker under `Interest::Slot`, a source handle one waker under
 //! `Interest::Event`, and a handler handle one waker under `Interest::Claim`
 //! and one per stream of a claim under `Interest::ClaimStream`, kept with the
-//! claim's call.
+//! claim's call. A handler also stores one per-claim forget waker through
+//! `StreamHandler::wake_on_claim_forget`, independently of stream wakers.
 //! For `Event` and `Claim` the rule is one waker per kind, and a change to
 //! any key of the kind wakes the stored waker, whatever interface it was
 //! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,
@@ -145,8 +146,8 @@ use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal, StreamNo};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
-    EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
+    Attached, Caller, Changed, Claim, ClaimForget, ClaimId, Clock, CoherentSignals, Correlation,
+    Encoded, EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
     RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError,
     SignalReader, SignalWriter, StreamCaller, StreamHandler, SubscribeError, Wakeable, Watermark,
     WriteError,
@@ -640,6 +641,14 @@ impl<E: Encoding> StreamCaller for Loopback<E> {
 }
 
 impl<E: Encoding> StreamHandler for Loopback<E> {
+    fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        self.handles.handler.claim_forget(claim)
+    }
+
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        self.handles.handler.wake_on_claim_forget(claim, waker);
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,

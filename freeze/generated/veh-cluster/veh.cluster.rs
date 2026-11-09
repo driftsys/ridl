@@ -14378,7 +14378,7 @@ pub mod fault_log {
     ///
     /// # Streamed replies
     ///
-    /// A query whose reply is a stream is served from the source its `Provider` method returns, once the arguments and the `require` clauses pass. Each poll of the future first drives every stream it holds, then takes claims: a stream whose last element found the window full pushes that element again, after it registered its interest in the stream, and polls its source only once the element was taken; otherwise the source is polled once, which counts as one of the 32 claims of the poll. An element is encoded into a buffer inline in the future and checked against its type before it is pushed; one that fails stops the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` ends the stream, and the claim is settled `Ok`; `Ready(Some(Err(Interrupted)))` stops it with `Transport::Interrupted`; a push above the member's limit (`PushError::TooLarge`) stops it with `Transport::Interrupted`; a push the caller refused or stopped reading (`PushError::Failed`) ends the claim. The source is dropped once its stream ended or stopped. The future drives one stream per member at a time: a call of a member whose stream is still running is settled `Transport::Busy`. The handler port gives the future no signal when a caller forgets the call, by its bound passing or by dropping its stream: the future reads the forget from its next push. So while a member's source answers `Pending`, a caller that stopped keeps the member busy until the source yields its next element, whose push fails, and only then is the source dropped and the member free for a new call. Dropping the future stops every stream it still drives with `Transport::Interrupted` and drops its source.
+    /// A query whose reply is a stream is served from the source its `Provider` method returns, once the arguments and the `require` clauses pass. Each poll of the future first drives every stream it holds, then takes claims: a stream whose last element found the window full pushes that element again, after it registered its interest in the stream, and polls its source only once the element was taken; otherwise the source is polled once, which counts as one of the 32 claims of the poll. An element is encoded into a buffer inline in the future and checked against its type before it is pushed; one that fails stops the stream with `Contract::InvalidValue` and is not sent. `Ready(None)` ends the stream, and the claim is settled `Ok`; `Ready(Some(Err(Interrupted)))` stops it with `Transport::Interrupted`; a push above the member's limit (`PushError::TooLarge`) stops it with `Transport::Interrupted`; a push the caller refused or stopped reading (`PushError::Failed`) ends the claim. The source is dropped once its stream ended or stopped. The future drives one stream per member at a time: a call of a member whose stream is still running is settled `Transport::Busy`. Before driving a source, the future registers with `wake_on_claim_forget` and queries `claim_forget`. A reported forget drops the source without polling it and frees the member. A runtime using the provided defaults reports no forget; there a pending source keeps the member busy until its next push fails. Dropping the future stops every stream it still drives with `Transport::Interrupted` and drops its source.
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
@@ -14487,6 +14487,24 @@ pub mod fault_log {
                         );
                     let mut budget = SERVE_BUDGET;
                     let mut again = false;
+                    if let Some(stream) = this.streams.faults.as_ref() {
+                        let claim = stream.claim;
+                        this.handler.wake_on_claim_forget(claim, cx.waker());
+                        if this.handler.claim_forget(claim)
+                            != ::ridl_rt::port::ClaimForget::NotForgotten
+                        {
+                            stop_stream(
+                                &mut this.handler,
+                                claim,
+                                ::ridl_rt::port::PushError::Failed(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            );
+                            this.streams.faults = None;
+                        }
+                    }
                     again
                         |= drive_stream::<
                             H,
