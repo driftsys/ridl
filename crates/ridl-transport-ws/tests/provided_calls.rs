@@ -32,11 +32,27 @@ fn start(
     mpsc::Receiver<Ended>,
     thread::JoinHandle<()>,
 ) {
+    start_with_limit(config, ports, None)
+}
+/// Like [`start`], with `limit` as the payload limit of the command and of
+/// the query in the member table.
+fn start_with_limit(
+    config: Config,
+    ports: Loopback,
+    limit: Option<u32>,
+) -> (
+    WebSocket<TcpStream>,
+    mpsc::Receiver<Ended>,
+    thread::JoinHandle<()>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
     for (ord, kind) in [(3, Kind::Command), (4, Kind::Query)] {
         table.insert(IFACE, Ordinal(ord), kind, None);
+        if let Some(limit) = limit {
+            table.set_limit(IFACE, Ordinal(ord), limit);
+        }
     }
     let backend = Providing::new(ports, table).unwrap();
     let (tx, rx) = mpsc::channel();
@@ -287,4 +303,69 @@ fn provider_public_entry_settles_on_eof_io_close_and_protocol_exit() {
             })
         );
     }
+}
+
+/// A command and a query raised above 16,128 bytes cross `serve_provided`
+/// with a raised message limit: each `request` is sent whole, and the reply of
+/// the query settles the call.
+///
+/// Mutation: size the claim buffer of the provided session from the default
+/// ceiling of a call alone.
+#[test]
+fn provider_carries_a_raised_command_and_query_over_wire() {
+    let mut ports = Loopback::new(CATALOG);
+    let mut caller = ports.attach();
+    for ord in [3, 4] {
+        ports.set_limit(IFACE, Ordinal(ord), 65_280);
+    }
+    let command = caller
+        .command(IFACE, Ordinal(3), &vec![1; 47_000], None)
+        .unwrap();
+    let query = caller
+        .query(IFACE, Ordinal(4), &vec![2; 65_280], None)
+        .unwrap();
+    let config = Config::default().with_max_message_bytes(65_316).unwrap();
+    let (mut ws, ended, worker) = start_with_limit(config, ports, Some(65_280));
+    let mut requests = vec![];
+    for _ in 0..2 {
+        let bytes = ws.read().unwrap().into_data();
+        let Frame::Request {
+            target,
+            envelope,
+            payload,
+        } = frame::decode(&bytes).unwrap()
+        else {
+            panic!("request expected")
+        };
+        requests.push((target, envelope.seq, payload.len()));
+    }
+    assert_eq!((requests[0].0.kind, requests[0].2), (Kind::Command, 47_000));
+    assert_eq!((requests[1].0.kind, requests[1].2), (Kind::Query, 65_280));
+    for (request, outcome) in [
+        (&requests[0], ResponseOutcome::Accepted),
+        (&requests[1], ResponseOutcome::Reply(&[9; 50_000])),
+    ] {
+        send(
+            &mut ws,
+            Frame::Response {
+                target: request.0,
+                correlation: request.1,
+                envelope: Envelope {
+                    stamp: Timestamp(50),
+                    seq: 1,
+                },
+                outcome,
+            },
+        );
+    }
+    ws.close(None).unwrap();
+    let _ = ws.read();
+    assert!(matches!(
+        ended.recv_timeout(Duration::from_secs(3)).unwrap(),
+        Ended::ClientClosed(_)
+    ));
+    worker.join().unwrap();
+    assert_eq!(caller.ack(command), Some(Ok(())));
+    let mut out = vec![0; 65_280];
+    assert_eq!(caller.reply(query, &mut out), Ok(Some(Ok(50_000))));
 }

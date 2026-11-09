@@ -568,3 +568,55 @@ fn provider_unknown_correlation_has_own_note() {
         }]
     );
 }
+
+/// A command and a query whose limit is raised above 16,128 bytes cross the
+/// provided session: the claim buffer holds the largest request the member
+/// table allows, and the reply of the query is settled up to its limit.
+///
+/// Mutation: size the claim buffer from `CALL_CEILING` alone.
+#[test]
+fn provider_forwards_a_raised_command_and_query() {
+    let config = Config::default().with_max_message_bytes(65_316).unwrap();
+    let now = Instant::now();
+    let mut rt = Loopback::new(CatalogRef {
+        name: "calls",
+        hash: CatalogHash([7; 32]),
+    });
+    let mut c = rt.attach();
+    let mut table = MemberTable::new("calls", CatalogHash([7; 32]));
+    for t in [COMMAND, QUERY] {
+        table.insert(t.iface, t.ord, t.kind, Some(Duration::from_secs(1)));
+        table.set_limit(t.iface, t.ord, 65_280);
+        rt.set_limit(t.iface, t.ord, 65_280);
+    }
+    let mut s = Provided::new(Providing::new(rt, table).unwrap(), &config);
+    message(
+        &mut s,
+        Frame::Attached(AttachOutcome::Accepted),
+        now,
+        &config,
+    );
+    let cmd = c
+        .command(COMMAND.iface, COMMAND.ord, &vec![5; 47_000], None)
+        .unwrap();
+    let qry = c
+        .query(QUERY.iface, QUERY.ord, &vec![6; 65_280], None)
+        .unwrap();
+    let r = requests(&mut s, now);
+    assert_eq!(r.len(), 2);
+    assert_eq!((r[0].0, r[0].2.len()), (COMMAND, 47_000));
+    assert_eq!((r[1].0, r[1].2.len()), (QUERY, 65_280));
+    response(&mut s, COMMAND, 1, ResponseOutcome::Accepted, now, &config);
+    assert_eq!(c.ack(cmd), Some(Ok(())));
+    response(
+        &mut s,
+        QUERY,
+        2,
+        ResponseOutcome::Reply(&vec![7; 50_000]),
+        now,
+        &config,
+    );
+    let mut buf = vec![0; 65_280];
+    assert_eq!(c.reply(qry, &mut buf), Ok(Some(Ok(50_000))));
+    assert!(buf[..50_000].iter().all(|b| *b == 7));
+}

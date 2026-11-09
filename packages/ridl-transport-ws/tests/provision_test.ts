@@ -668,6 +668,32 @@ Deno.test("provide_raised_limits_match_consumer_limits", async () => {
     SessionError,
   );
 });
+Deno.test("provide_publishes_a_signal_raised_to_65280_bytes_and_refuses_one_byte_more", async () => {
+  const h = start({ members: [{ ...members[0], limit: 65_280 }] });
+  h.pending.catch(() => {});
+  h.socket.open("ridl-ws-v2-provider");
+  attach(h);
+  const p = await h.pending;
+  h.socket.deliver({ form: "subscribe", target: S });
+  const first = new Uint8Array(47_000);
+  p.publish(1, 1, first, 10n);
+  exact(
+    h.socket,
+    3,
+    sample(S, 1n, 10n, { provenance: "live", payload: first }),
+  );
+  const largest = new Uint8Array(65_280);
+  p.publish(1, 1, largest, 11n);
+  exact(
+    h.socket,
+    4,
+    sample(S, 2n, 11n, { provenance: "live", payload: largest }),
+  );
+  assert.throws(
+    () => p.publish(1, 1, new Uint8Array(65_281), 12n),
+    SessionError,
+  );
+});
 Deno.test("provide_failed_clock_does_not_advance_response_sequence", async () => {
   let time = 77n;
   const h = await open({ clock: () => time });

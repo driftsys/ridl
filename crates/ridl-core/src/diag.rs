@@ -1576,8 +1576,8 @@ diag_codes! {
         /// bytes for `signal` and `event`, 16,128 for `command` and `query`,
         /// 65,280 for `fixed`), or `default` or a `[limits.interaction]` entry
         /// above 65,280 bytes (ADR-0030 decisions 12 and 18). Reported on the
-        /// value; the entry is dropped. A value that
-        /// is not an integer from 0 up is MANI-015.
+        /// value; the entry is dropped. A value that is not an integer from 0
+        /// up is MANI-015.
         MANI_022 = "MANI-022", Error,
             "payload limit above what its entry may give";
 

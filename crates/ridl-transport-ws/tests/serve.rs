@@ -1612,9 +1612,10 @@ fn a_message_limit_of_65316_is_accepted_and_65317_is_refused() {
     assert_eq!(Config::default().max_message_bytes(), 16_164);
 }
 
-/// A `fixed` crosses in blocks under the default configuration whatever limit
-/// its member has, and whole in one `publish` when a raised message limit
-/// carries it.
+/// A `fixed` of 65,280 bytes crosses in blocks under the default
+/// configuration, because one `publish` does not carry it, and whole in one
+/// `publish` when a raised message limit carries it. A smaller `fixed` is one
+/// `publish` under either.
 #[test]
 fn a_fixed_of_65280_bytes_crosses_in_blocks_by_default_and_whole_under_a_raised_limit() {
     let read = |config: Config| {
@@ -1709,6 +1710,158 @@ fn a_retained_cap_equal_to_the_message_limit_is_served() {
     let (ended, notes) = served_with(config);
     assert_eq!(ended, Ended::ClientClosed(None));
     assert!(notes.is_empty());
+}
+
+/// A `request` of 30,000 bytes, above the default message limit, passes the
+/// reader of the socket loop and reaches the provider whole when the message
+/// limit is raised and the command's limit allows it.
+///
+/// Mutation: take the smaller of the configured message limit and 16,164 for
+/// the limit of the frame parser.
+#[test]
+fn a_request_above_the_default_message_limit_reaches_the_provider_under_a_raised_limit() {
+    let config = config().with_max_message_bytes(65_316).unwrap();
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    let mut provider = rt.attach();
+    provider.set_limit(IFACE, COMMAND.ord, 65_280);
+    provider.serve(IFACE, &[COMMAND.ord]).unwrap();
+    let limit = |t: Target| (t == COMMAND).then_some(65_280);
+    let backend = Described::new(Scanning(rt), table(limit)).unwrap();
+    let handle = spawn(server, backend, config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    let args = pattern(30_000);
+    send(
+        &mut ws,
+        Frame::Request {
+            target: COMMAND,
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            payload: &args,
+        },
+    );
+    let start = Instant::now();
+    let mut buf = vec![0u8; 65_280];
+    let claim = loop {
+        assert!(start.elapsed() < TEST_LIMIT, "no claim within the limit");
+        if let Some(claim) = provider.next_claim(&mut buf).unwrap() {
+            break claim;
+        }
+        thread::sleep(Duration::from_millis(1));
+    };
+    assert_eq!(claim.len, 30_000);
+    assert_eq!(buf[..claim.len], args[..]);
+    ws.close(None).unwrap();
+    assert!(matches!(handle.join().0, Ended::ClientClosed(_)));
+}
+
+/// A retained-bytes cap below the message limit is refused by
+/// `serve_selected` with the note, whatever the order of the builder calls.
+///
+/// Mutation: set `retained` to `None` in the selected path.
+#[test]
+fn serve_selected_refuses_a_retained_cap_below_the_message_limit() {
+    let (config, notes) = recording();
+    let config = config
+        .with_max_retained_bytes(16_164)
+        .unwrap()
+        .with_max_message_bytes(65_316)
+        .unwrap();
+    let (server, client) = pair();
+    let handle = thread::spawn(move || {
+        ridl_transport_ws::serve_selected(
+            server,
+            2,
+            |_| Some(Described::new(Scanning(Loopback::new(CATALOG)), table(|_| None)).unwrap()),
+            &config,
+        )
+    });
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Refused(Reason::Range))
+    );
+    assert_eq!(handle.join().unwrap(), Ended::ConfigRefused);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::RetainedBelowMessageLimit {
+            retained: 16_164,
+            message: 65_316,
+        }]
+    );
+}
+
+/// When the retained cap and a member limit are both too small for the
+/// message limit, `serve` records the retained cap only and returns, and
+/// `serve_selected` records the member first, then the retained cap.
+#[test]
+fn the_notes_of_a_config_with_two_faults_are_in_a_fixed_order() {
+    let faulty = |config: Config| {
+        config
+            .with_max_message_bytes(20_000)
+            .unwrap()
+            .with_max_retained_bytes(16_164)
+            .unwrap()
+    };
+    let (config, notes) = recording();
+    let (ended, served) = {
+        let (server, client) = pair();
+        let backend =
+            Described::new(Scanning(Loopback::new(CATALOG)), raised_signal_table()).unwrap();
+        let handle = spawn(server, backend, faulty(config));
+        drop(client);
+        (handle.join().0, notes.lock().unwrap().clone())
+    };
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        served,
+        vec![Note::RetainedBelowMessageLimit {
+            retained: 16_164,
+            message: 20_000,
+        }]
+    );
+    let (config, notes) = recording();
+    let config = faulty(config);
+    let (server, client) = pair();
+    let handle = thread::spawn(move || {
+        ridl_transport_ws::serve_selected(
+            server,
+            2,
+            |_| {
+                Some(
+                    Described::new(Scanning(Loopback::new(CATALOG)), raised_signal_table())
+                        .unwrap(),
+                )
+            },
+            &config,
+        )
+    });
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Refused(Reason::Range))
+    );
+    assert_eq!(handle.join().unwrap(), Ended::ConfigRefused);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![
+            Note::MessageLimitTooSmall {
+                target: SIGNAL,
+                needed: 65_316,
+            },
+            Note::RetainedBelowMessageLimit {
+                retained: 16_164,
+                message: 20_000,
+            },
+        ]
+    );
 }
 
 /// A `fixed` of the default limit needs one block message, 4,130 bytes: a

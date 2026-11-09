@@ -60,11 +60,14 @@ fn compile_face_in(
 ) -> (String, std::process::Output) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
-    // and such a call is one of the shapes proven here.
+    // and such a call is one of the shapes proven here. RIDL-157 is left out:
+    // a source with no manifest has no `[limits.interaction]` entry to raise a
+    // member above its default ceiling, and the face does not read limits.
     let errors: Vec<_> = output
         .diagnostics
         .iter()
         .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .filter(|diagnostic| diagnostic.code.as_str() != "RIDL-157")
         .collect();
     assert!(
         errors.is_empty(),
@@ -135,6 +138,23 @@ internal interface Diagnostics {
 /// for their methods, and every helper function joined to those names spells the
 /// plain name: `send_loop`, not `send_r#loop`, which is not an identifier
 /// (driftsys/ridl#863).
+/// A signal, an event, a command and a query whose payload is about 47,000
+/// bytes, as a `[limits.interaction]` entry of up to 65,280 bytes allows, get
+/// a face that compiles: each member puts its own worst-case buffer on the
+/// stack (ADR-0030 decision 5).
+#[test]
+fn a_face_with_members_above_16128_bytes_compiles() {
+    let source = "package big\n\
+        type Blob: bytes [0..47000]\n\
+        interface Big {\n\
+          signal blob: Blob @[10ms..100ms]\n\
+          event ev: Blob @[10ms..100ms]\n\
+          command cmd(data: Blob) @[..1s]\n\
+          query ask(data: Blob): Blob @[..1s]\n\
+        }\n";
+    face_compiles("big_members", source);
+}
+
 #[test]
 fn an_interaction_named_with_a_rust_keyword_compiles() {
     face_compiles_with(

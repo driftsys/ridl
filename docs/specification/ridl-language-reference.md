@@ -1365,11 +1365,11 @@ concerns. What the element says depends on its form
   carries no bound. The transport chooses the chunk boundaries, and each chunk
   is at most the interaction's limit (ADR-0030 decisions 12 and 16 to 18;
   ADR-0032 decision 14), so a `[limits.interaction]` entry for the interaction
-  can only lower the chunk size, and a limit of 0 makes the stream unusable.
-  Metadata — a content type, a size, a digest — is an ordinary typed value: the
-  reply of a separate query or a parameter beside the stream. A declared size is
-  at most a hint; the end of the stream is its end (§12.4). Resuming an
-  interrupted transfer is an ordinary `offset` parameter.
+  can lower the chunk size or raise it up to 65,280 bytes, and a limit of 0
+  makes the stream unusable. Metadata — a content type, a size, a digest — is an
+  ordinary typed value: the reply of a separate query or a parameter beside the
+  stream. A declared size is at most a hint; the end of the stream is its end
+  (§12.4). Resuming an interrupted transfer is an ordinary `offset` parameter.
 - **A bare `string` element** (`<string>`) makes a **UTF-8 text stream**: a byte
   stream whose content is UTF-8 text, with one more rule — a chunk never splits
   a code point, so each chunk on its own is a whole number of code points.

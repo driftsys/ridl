@@ -535,3 +535,43 @@ fn provider_entry_point_ignores_the_url_path() {
         ));
     }
 }
+
+/// A retained-bytes cap below the message limit is refused before the upgrade
+/// by both provided entry points, with the note, and the backend is dropped.
+///
+/// Mutation: ignore `Config::retained_short` in the provided entry point.
+#[test]
+fn a_retained_cap_below_the_message_limit_is_refused_before_the_upgrade() {
+    for selected in [false, true] {
+        let conn = connection(frame::SUBPROTOCOL_PROVIDER, "/", &[]);
+        let output = conn.output.clone();
+        let drops = Rc::new(Cell::new(0));
+        let tracked = Tracked {
+            inner: backend(),
+            drops: drops.clone(),
+        };
+        let notes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = notes.clone();
+        let config = Config::default()
+            .with_max_message_bytes(65_316)
+            .unwrap()
+            .with_max_retained_bytes(16_164)
+            .unwrap()
+            .with_record(move |n| sink.lock().unwrap().push(*n));
+        let ended = if selected {
+            serve_provided_selected(conn, |_| Ok(tracked), &config)
+        } else {
+            serve_provided(conn, tracked, &config)
+        };
+        assert_eq!(ended, Ended::ConfigRefused);
+        assert_eq!(drops.get(), 1);
+        assert!(output.borrow().starts_with(b"HTTP/1.1 400"));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![ridl_transport_ws::Note::RetainedBelowMessageLimit {
+                retained: 16_164,
+                message: 65_316,
+            }]
+        );
+    }
+}

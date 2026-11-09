@@ -89,9 +89,8 @@ pub(crate) fn check_podbuf(
     )
 }
 
-/// The size pass over one source set: RIDL-151, RIDL-152, RIDL-157 and the
-/// MANI-022 of a `[limits.interaction]` entry that raises a member above what
-/// its kind may be given (ADR-0030 decisions 12, 14 and 17). The inputs are
+/// The size pass over one source set: RIDL-151, RIDL-152 and RIDL-157
+/// (ADR-0030 decisions 12, 14 and 17). The inputs are
 /// those of [`check_podbuf`], with `limits` the `[limits]` table of each unit
 /// by unit name; FlatBuffers is sized when `encodings` is empty. The pass
 /// lowers each examined package to the codegen model. Every code is an error,

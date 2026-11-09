@@ -312,14 +312,15 @@ start of a streamed reply (ADR-0032 decision 13). So `Interrupted` is a third
 connection carries every signal, event and call of a session, so a slow reader
 of one stream must not stall the others. A chunk is the unit everywhere and is
 bounded by the member's limit, so a credit in chunks also bounds bytes: 4 chunks
-of at most 16,128 bytes are about 64 KiB per stream. Alternatives: rely on the
-transport's flow control, rejected because TCP would stall the whole session
-behind one slow reader, which is head-of-line blocking; a credit in bytes,
-rejected because the sender would have to split a chunk, which it may not do for
-a stream of elements. Cost if wrong: the initial credit of 4 is a constant of
-version 3, so another value is a new version; the credit a receiver grants after
-that is its own choice. How the TypeScript client computes it is in
-[its design record](../design/ridl-transport-ws-ts.md), D-20.
+of at most 16,128 bytes, the default ceiling of a command and a query, are about
+64 KiB per stream; a member raised to 65,280 bytes holds about 255 KiB.
+Alternatives: rely on the transport's flow control, rejected because TCP would
+stall the whole session behind one slow reader, which is head-of-line blocking;
+a credit in bytes, rejected because the sender would have to split a chunk,
+which it may not do for a stream of elements. Cost if wrong: the initial credit
+of 4 is a constant of version 3, so another value is a new version; the credit a
+receiver grants after that is its own choice. How the TypeScript client computes
+it is in [its design record](../design/ridl-transport-ws-ts.md), D-20.
 
 **One upload write is one chunk.** The TypeScript client's `commandStream`,
 `queryWithUpload` and `queryDuplex` send each write as one chunk, including an

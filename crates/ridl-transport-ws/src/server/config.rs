@@ -295,9 +295,9 @@ impl Config {
 
     /// Sets the largest message the server reads or sends. The default is
     /// [`DEFAULT_MESSAGE_LIMIT`], which carries every catalog whose members
-    /// keep their default ceilings. A catalog with a member whose limit is
-    /// above 16,128 bytes needs a larger one: 36 bytes plus the largest limit
-    /// of a member, up to [`MAX_MESSAGE_LIMIT`]. A limit above
+    /// keep their default ceilings. A catalog with a signal, an event, a
+    /// command or a query whose limit is above 16,128 bytes needs a larger one:
+    /// 36 bytes plus the largest limit of a member, up to [`MAX_MESSAGE_LIMIT`]. A limit above
     /// [`MAX_MESSAGE_LIMIT`] is refused, and so is a limit below
     /// [`MIN_MESSAGE_LIMIT`], under which no `attach` could be read.
     pub fn with_max_message_bytes(mut self, n: usize) -> Result<Self, LimitOutOfRange> {

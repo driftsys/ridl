@@ -3575,6 +3575,30 @@ mod tests {
         );
     }
 
+    /// An event raised to 65,280 bytes is sent as one `occurrence` when the
+    /// message limit carries it, well above the default message limit.
+    ///
+    /// Mutation: take the smaller of the message limit and 16,164 for the
+    /// occurrence cap.
+    #[test]
+    fn an_occurrence_above_the_default_message_limit_is_sent_whole_under_a_raised_limit() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, EVENT.ord, 65_280));
+        let (mut s, mut p, notes) = described_with(t, |c| {
+            c.with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+                .unwrap()
+        });
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        p.set_limit(EVENT.iface, EVENT.ord, 65_280);
+        let value = vec![0x5A; 40_000];
+        raise(&mut p, EVENT, &value);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), occurrence(EVENT, 0, 1, &value));
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
     // -- Bounded work per tick ------------------------------------------------
 
     /// The sequence numbers of the occurrences in `out`, in order.
@@ -6574,6 +6598,31 @@ mod tests {
         }
         let (_, again) = send(&mut s, &request_at(QUERY, 1, 0, &[]));
         assert_eq!(again, first);
+    }
+
+    /// A query raised to 65,280 bytes answers with a reply of 40,000 bytes in
+    /// one `response` when the message limit carries it.
+    ///
+    /// Mutation: take the smaller of the message limit and 16,164 for the
+    /// reply cap.
+    #[test]
+    fn a_reply_above_the_default_message_limit_is_sent_whole_under_a_raised_limit() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, QUERY.ord, 65_280));
+        let (mut s, mut p, notes) = described_with(t, |c| {
+            c.with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+                .unwrap()
+        });
+        open(&mut s);
+        p.set_limit(QUERY.iface, QUERY.ord, 65_280);
+        let reply = vec![0x33; 40_000];
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&reply));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Reply(&reply))
+        );
+        assert!(notes.lock().unwrap().is_empty());
     }
 
     /// The cap applies to the last-64 ring as well: a server with no table

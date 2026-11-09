@@ -114,18 +114,23 @@ event, 16,128 bytes for a command and a query, 65,280 bytes for a fixed), and
 65,280 bytes stays the largest payload of any interaction. The WebSocket message
 limit of the Rust provider keeps its default of 36 + 16,128 = 16,164 bytes and
 may be raised with `Config::with_max_message_bytes` up to 36 + 65,280 = 65,316
-bytes (decision 10), so a catalog with a member above 16,128 bytes needs a
-`Config` that carries it, and is refused at attach, naming the member, with the
-default `Config`. The WebSocket binding does not send a signal, an event, a
+bytes (decision 10), so a catalog with a signal, an event, a command or a query
+above 16,128 bytes needs a `Config` that carries it, and is refused at attach,
+naming the member, with the default `Config`; a fixed above one message crosses
+in blocks as before. The WebSocket binding does not send a signal, an event, a
 command or a query in blocks (decision 15). A member raised above 16,128 bytes
 pays for its own stack buffer in generated Rust (decision 5). The amendment
 lands with its code. It breaks no source that compiled before: it only accepts
-entries that drew MANI-022. It changes the published `ridl-transport-ws` API
-without breaking a caller: the constant `MAX_MESSAGE_LIMIT` is 65,316 and a new
-constant `DEFAULT_MESSAGE_LIMIT` is 16,164, `with_max_message_bytes` accepts a
-value above 16,164, and `with_max_retained_bytes` keeps its floor of 16,164. A
-retained-bytes cap below the configured message limit is refused where the
-configuration is used, whatever the order of the builder calls.
+entries that drew MANI-022. It changes the published `ridl-transport-ws` API in
+additions, and in one value: the constant `MAX_MESSAGE_LIMIT` is 65,316 where it
+was 16,164, a new constant `DEFAULT_MESSAGE_LIMIT` is 16,164,
+`with_max_message_bytes` accepts a value above 16,164, and
+`with_max_retained_bytes` keeps its floor of 16,164. A retained-bytes cap below
+the configured message limit is refused where the configuration is used,
+whatever the order of the builder calls. A caller that passes
+`MAX_MESSAGE_LIMIT` to `with_max_message_bytes` as "the default" now sets
+65,316, and with a retained cap below that gets `ConfigRefused` at `serve`; such
+a caller uses `DEFAULT_MESSAGE_LIMIT`. No other call changes its result.
 
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
@@ -283,12 +288,11 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/design/interaction-face.md`, `docs/design/ridl-rt.md`,
   `docs/design/flatbuffers-codec.md` and `docs/design/podbuf-codec.md` (the
   stack buffer of a raised member), `docs/design/ridl-transport-ws.md`,
-  `docs/design/ridl-transport-ws-ts.md`,
   `docs/technotes/websocket-binding-rationale.md` and the frame specification
-  §11.1 "The sizes" (the largest message limit and the retained cap), the family
-  overview §7 (the MANI-022 row), the ridl reference's diagnostics table (the
-  RIDL-157 and MANI-022 text), `docs/book/lints.md` and
-  `docs/book/codegen-plugins.md`.
+  §11.1 "The sizes" (the largest message limit), ADR-0032 decision 14 (the chunk
+  limit), the family overview §7 (the MANI-022 row), and the ridl reference's
+  diagnostics table and byte-stream paragraph (the RIDL-151, RIDL-157 and
+  MANI-022 text, and the chunk size).
 
 ## Context
 
@@ -563,9 +567,9 @@ When accepted, these records gain a dated note or are changed in place:
    ceiling is a hard limit at run time for every kind (decision 17 as amended),
    so that choice is withdrawn.
 
-10. **The WebSocket limit is at most one transfer.** `ridl-transport-ws` changes
-    its `max_message_bytes` default from 1 MiB to 36 + 16,256 = 16,292 bytes,
-    the largest data-plane message, within one transfer. Amended 2026-10-24:
+10. **The WebSocket limit is bounded.** `ridl-transport-ws` changes its
+    `max_message_bytes` default from 1 MiB to 36 + 16,256 = 16,292 bytes, the
+    largest data-plane message, within one transfer. Amended 2026-10-24:
     `with_max_message_bytes` may only lower the limit; a value above 16,292 is
     refused, as `with_max_retained_bytes` refuses a value outside its range
     today. The earlier text, which let a deployment set a larger value, is
@@ -741,16 +745,19 @@ When accepted, these records gain a dated note or are changed in place:
     it a rule for every receiver of the binding. `with_max_retained_bytes` keeps
     its role of sizing the memory an embedder grants a session, above that
     minimum. Amended 2026-10-28: every 16,292 in this decision reads 16,164, the
-    largest message of decision 10 as amended. A `request` whose arguments are
-    longer than a limit that an entry raised (decision 18) is still answered
-    against that member's limit in the member table. The binding carries one
-    payload per message, so until it can split a payload over several messages,
-    a provider refuses at attach a catalog that holds a fixed whose payload's
-    largest encoded size, in the session's encoding, does not fit in one message
-    within its message limit, and names the member. A fixed whose payload fits
-    is served as before, whatever its ceiling. Splitting a fixed over several
-    messages is tracked with the stream framing of ADR-0032, drafted in
-    parallel.
+    largest message of decision 10 as amended. Amended 2026-11-09: 16,164 is the
+    default message limit and the smallest valid retained cap, and the largest
+    message limit is 65,316 (decision 10); a retained cap below the configured
+    message limit is refused where the configuration is used. A `request` whose
+    arguments are longer than a limit that an entry raised (decision 18) is
+    still answered against that member's limit in the member table. The binding
+    carries one payload per message, so until it can split a payload over
+    several messages, a provider refuses at attach a catalog that holds a fixed
+    whose payload's largest encoded size, in the session's encoding, does not
+    fit in one message within its message limit, and names the member. A fixed
+    whose payload fits is served as before, whatever its ceiling. Splitting a
+    fixed over several messages is tracked with the stream framing of ADR-0032,
+    drafted in parallel.
 
     Amended 2026-10-30: the refusal at attach of the amendment of 2026-10-28 is
     withdrawn, because a binding never refuses an interaction that the catalog
@@ -986,19 +993,20 @@ When accepted, these records gain a dated note or are changed in place:
 
 21. **The language server runs the size checks** (added 2026-10-30). The checks
     of decisions 12, 14 and 17, which `ridlc` runs after lowering (RIDL-151,
-    RIDL-152, RIDL-157, and the MANI-022 that the pass of decision 12 raises for
-    an entry between 16,129 and 65,280 that does not name a fixed), also run in
-    the language server, so an author sees them in the editor, on the
-    interaction, as `ridl check` reports them. Before 2026-10-30 the lint
+    RIDL-152 and RIDL-157; amended 2026-11-09: the pass raises no MANI-022 any
+    more, because the manifest reader bounds every entry at 65,280, decision
+    12), also run in the language server, so an author sees them in the editor,
+    on the interaction, as `ridl check` reports them. Before 2026-10-30 the lint
     `payload-above-ceiling` (RIDL-150) and the errors RIDL-151 and RIDL-152 were
-    raised only by `ridl check` and `ridl build`; RIDL-157, and MANI-022 for an
-    entry between 16,129 and 65,280 that does not name a fixed, came with
-    driftsys/ridl#1108, which also built this decision. The language server
-    already read the lowered IR for its hovers and inlay hints and ran the
-    design lints of `ridlc`; the cost added on each check is the lowering of the
-    workspace where it is not already done, the sizing of each interaction's
-    payload in each enabled encoding and the resolution of the `[limits]`
-    tables. This record does not say how the server schedules that work.
+    raised only by `ridl check` and `ridl build`; RIDL-157, and, until
+    2026-11-09, MANI-022 for an entry between 16,129 and 65,280 that did not
+    name a fixed, came with driftsys/ridl#1108, which also built this decision.
+    The language server already read the lowered IR for its hovers and inlay
+    hints and ran the design lints of `ridlc`; the cost added on each check is
+    the lowering of the workspace where it is not already done, the sizing of
+    each interaction's payload in each enabled encoding and the resolution of
+    the `[limits]` tables. This record does not say how the server schedules
+    that work.
 
 ## Where the rules are stated
 

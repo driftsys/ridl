@@ -55,8 +55,10 @@ pub const MIN_MESSAGE_LIMIT: usize = 294;
 /// The default message size limit of the Rust provider: the largest data-plane
 /// message of a catalog whose members keep their default ceilings, 36 bytes of
 /// header and envelope plus 16,128 bytes, the default ceiling of a command and
-/// a query (ADR-0030 decisions 10 and 16). A catalog with a member above
-/// 16,128 bytes needs a larger limit, set with `Config::with_max_message_bytes`.
+/// a query (ADR-0030 decisions 10 and 16). A catalog with a signal, an event, a
+/// command or a query above 16,128 bytes needs a larger limit, set with
+/// `Config::with_max_message_bytes`; a `fixed` above one message crosses in
+/// blocks.
 pub const DEFAULT_MESSAGE_LIMIT: usize = 16_164;
 /// The largest message size limit the Rust provider accepts: the largest
 /// data-plane message, 36 bytes of header and envelope plus 65,280 bytes, the

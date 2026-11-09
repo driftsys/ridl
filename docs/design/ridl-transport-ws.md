@@ -931,14 +931,14 @@ the connection is dropped. A backend port that reports `Detached` from any call
 ends the session with close 1001, because the provider is going away. `serve`
 returns an `Ended`:
 
-| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, the client had not sent `attach` (or, in a provided session, `attached`) that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                                                 |
-| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000. From `serve_provided_selected`, a selected table exceeding message capacity or an unencodable attach answers HTTP 400 before upgrade |
+| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, the client had not sent `attach` (or, in a provided session, `attached`) that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26), or its retained-bytes cap is below its message limit (`Note::RetainedBelowMessageLimit`, checked before the member table); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000. From `serve_provided_selected`, a selected table exceeding message capacity or an unencodable attach answers HTTP 400 before upgrade |
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
@@ -957,7 +957,10 @@ whose messages the `Config` cannot carry, with the limit it needs; `serve`
 records it before the handshake. `serve_selected` records it after selection
 when ordinary attach checks pass, with `refused(range)` or, when the capability
 check also fails, `refused(frame_version_unsupported)`. Both return
-`ConfigRefused`, D-26).
+`ConfigRefused`, D-26) and `RetainedBelowMessageLimit` (the retained-bytes cap
+is below the message limit; `serve` records it alone and returns before it reads
+the member table, and `serve_selected` records it after `MessageLimitTooSmall`,
+D-26).
 
 ### `Config`
 
@@ -1021,24 +1024,26 @@ D-11 says: it answers `refused(range)` (or `frame_version_unsupported` if the
 capability check also fails) with close 1000 instead of returning before the
 handshake, because the backend is not known earlier. `range` is the reason for a
 limit the receiving side cannot carry, here the message limit of the `Config`
-(frame specification §6.1). With a member table, `serve` first checks that
-`max_message_bytes` is at least 36 plus the largest limit over the members of
-what one message carries: each member's limit, and for a `fixed` at most 4,130
-bytes minus 36, because a `fixed` that one message cannot carry crosses in
-blocks and a block message is at most 4,130 bytes (frame specification §11.1,
-"Binding version 2"). So a `fixed` counts the smaller of 36 plus its limit and
-4,130. A limit below that cannot carry a payload the catalog allows, which is a
-configuration error, not a session event: `serve` records `MessageLimitTooSmall`
-with the member and the limit it needs, returns `Ended::ConfigRefused` before
-the opening handshake without reading the connection, and the connection closes
-when it is dropped. This preflight sends no `attached` reply. The selected path
-uses the existing `range` reason; no new wire reason is added. The default
-`Config` carries every catalog whose members keep their default ceilings, a
-catalog with a large `fixed` included. A catalog with a signal, an event, a
-command or a query that an entry raises above 16,128 bytes needs a larger
-message limit, and the default `Config` refuses it before the handshake with the
-note that names the member; the rustdoc of the note and of
-`Ended::ConfigRefused` says to raise the limit with
+(frame specification §6.1). `serve` first checks that `max_retained_bytes` is at
+least `max_message_bytes`, whatever the order of the builder calls, and records
+`Note::RetainedBelowMessageLimit` if it is not. With a member table, `serve`
+then checks that `max_message_bytes` is at least 36 plus the largest limit over
+the members of what one message carries: each member's limit, and for a `fixed`
+at most 4,130 bytes minus 36, because a `fixed` that one message cannot carry
+crosses in blocks and a block message is at most 4,130 bytes (frame
+specification §11.1, "Binding version 2"). So a `fixed` counts the smaller of 36
+plus its limit and 4,130. A limit below that cannot carry a payload the catalog
+allows, which is a configuration error, not a session event: `serve` records
+`MessageLimitTooSmall` with the member and the limit it needs, returns
+`Ended::ConfigRefused` before the opening handshake without reading the
+connection, and the connection closes when it is dropped. This preflight sends
+no `attached` reply. The selected path uses the existing `range` reason; no new
+wire reason is added. The default `Config` carries every catalog whose members
+keep their default ceilings, a catalog with a large `fixed` included. A catalog
+with a signal, an event, a command or a query that an entry raises above 16,128
+bytes needs a larger message limit, and the default `Config` refuses it before
+the handshake with the note that names the member; the rustdoc of the note and
+of `Ended::ConfigRefused` says to raise the limit with
 `Config::with_max_message_bytes`, up to 65,316 bytes. The binding does not send
 these members in blocks, and with a message limit of 65,316 bytes it never
 refuses an allowed interaction at attach (ADR-0030 decisions 15 and 20). Without

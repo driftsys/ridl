@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use super::super::session::Step;
-use ridl_rt::contract::{Kind, CALL_CEILING};
+use ridl_rt::contract::{Kind, CALL_CEILING, FIXED_CEILING};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{ClaimId, Clock, Handler, ReadError, SettleError};
 use ridl_rt::sample::Envelope;
@@ -41,13 +41,24 @@ impl Calls {
             config: config.clone(),
         }
     }
-    pub(super) fn start(&self, backend: &mut impl ProvidedBackend) -> bool {
+    pub(super) fn start(&mut self, backend: &mut impl ProvidedBackend) -> bool {
         let targets: Vec<_> = backend
             .members()
             .iter()
             .map(|(t, _, _)| t)
             .filter(|t| matches!(t.kind, Kind::Command | Kind::Query))
             .collect();
+        // The claim buffer holds the largest request any member allows: the
+        // default ceiling of a call, or more when an entry raises a member,
+        // up to the largest payload. A catalog that raises nothing keeps the
+        // default size.
+        let largest = targets
+            .iter()
+            .map(|t| backend.members().payload_limit(*t))
+            .max()
+            .unwrap_or(0);
+        self.bytes
+            .resize(largest.clamp(CALL_CEILING, FIXED_CEILING), 0);
         for target in targets {
             if backend.ports().serve(target.iface, &[target.ord]).is_err() {
                 record(&self.config, Note::PortRefused { target });

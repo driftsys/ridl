@@ -163,8 +163,7 @@ struct Unit<'a> {
     packages: Vec<usize>,
 }
 
-/// The size pass: RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of an
-/// interaction entry that raises a member above what its kind may be given.
+/// The size pass: RIDL-151, RIDL-152 and RIDL-157.
 /// `units` holds the unit of each entry of `ctx.checked`; `limits` holds the
 /// `[limits]` table of each unit by unit name. A table applies to every
 /// package of its unit, so an entry may name an interface of any of them. The
