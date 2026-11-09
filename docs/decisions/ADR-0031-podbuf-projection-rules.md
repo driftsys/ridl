@@ -135,6 +135,9 @@ claims-only mode, so two positions that share one entry across two declarations
 are named the same whatever order the importer reaches them in; decision 7
 carries the dated note.
 
+**Amended 2026-11-09 — decision 5, float map keys are tested for a duplicate at
+their wire width, from driftsys/ridl#1280.** Decision 5 states the rule.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a
@@ -359,7 +362,8 @@ a field is appended.
      and floats. `+0.0` and `-0.0` are equal, so both present is a duplicate; a
      NaN key is rejected **(Sebastien)**. The encoder sorts the entries and
      refuses a duplicate key (`Unique`) and a NaN key (`Range`) with
-     `EncodeError::Contract`.
+     `EncodeError::Contract`. Float keys are compared for a duplicate at their
+     wire width, so two keys that narrow to one `f32` value are a duplicate.
    - Every typl string, bytes and collection carries a bound, explicit or the
      `[0..256]` default, so podbuf has no unbounded case.
 

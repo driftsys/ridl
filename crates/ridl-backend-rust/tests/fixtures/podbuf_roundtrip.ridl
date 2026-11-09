@@ -111,6 +111,12 @@ struct Scored {
   byScore : [float : Weight; 0..8]
 }
 
+/// A map keyed by a float that a range and a step lay out as `f32`: two keys
+/// that are one `f32` value are one key.
+struct Narrowed {
+  byLevel : [float [0.0..4.0 step 0.25] : Weight; 0..8]
+}
+
 /// A strict enum, one byte wide.
 enum GearPosition {
   PARK    = 0
