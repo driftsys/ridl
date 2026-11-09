@@ -115,7 +115,8 @@ fn walk_holders(
                     _ => &[],
                 };
                 // Streams are excluded from request heads. Visit their elements
-                // only for integer widths, at the interaction's consumer path.
+                // only for per-declaration checks (integer widths and strict enum
+                // appends), not for inline growth, at the interaction's consumer path.
                 roots.extend(params.iter().filter_map(|param| {
                     param
                         .r#type
