@@ -265,13 +265,17 @@ generation helper compiles and lints the server and runs the web validator
 tests; integration mutations therefore reach the generated TypeScript consumer
 instead of stopping in provider unit tests.
 
-**D-29. Single-component packages use a separate `flatc` directory.** The codec
-module of a single-component package imports `flatc`'s barrel from
-`./flatc/<package>.js`, and its domain module from `./<package>.js`. The
+**D-29. Single-component packages use a separate `flatc_out` directory.** The
+codec module of a single-component package imports `flatc`'s barrel from
+`./flatc_out/<package>.js`, and its domain module from `./<package>.js`. The
 document fixture's package name `docstore.api` is no longer needed to keep these
 paths distinct; the fixture keeps that name and its generated crate
 `docstore_api`. Packages with two or more components keep their existing import
-paths. This output-directory rule does not change runtime APIs or wire layout.
+paths. The directory is named `flatc_out` because a package name segment holds
+only lowercase letters and digits (ADR-0002), so no other package's barrel path
+can start with `flatc_out/`; a directory named `flatc` would collide with a
+package `flatc.<name>`. This output-directory rule does not change runtime APIs
+or wire layout.
 
 The stream fixture `crates/ridl-backend-ts/tests/fixtures/codec-streams` is
 checked by `_codec-ts-check`. Rust generator tests cover discovery, metadata,
@@ -408,18 +412,22 @@ components, the user runs `flatc --ts --gen-object-api -o <dir> <base>.fbs` with
 `<dir>` the directory of the TypeScript emit. The codec file imports `flatc`'s
 barrel at `./<package segments joined by '/'>.js` (`./veh/cabin.js` for
 `veh.cabin`). For a single-component package, the codec file imports the barrel
-at `./flatc/<package>.js` (`./flatc/single.js` for `single`), and the user runs:
+at `./flatc_out/<package>.js` (`./flatc_out/single.js` for `single`), and the
+user runs:
 
 ```sh
-mkdir -p <dir>/flatc
-flatc --ts --gen-object-api -I <dir> -o <dir>/flatc <dir>/<package>.fbs
+mkdir -p <dir>/flatc_out
+flatc --ts --gen-object-api -I <dir> -o <dir>/flatc_out <dir>/<package>.fbs
 ```
 
 The domain module stays at `./<package>.js`, so `flatc` does not overwrite it.
 When the codec file imports another package's codec file, `flatc` runs on that
-package's `.fbs` too, with its output directory chosen by the same rule.
-`flatbuffers` and `@driftsys/ridl-runtime` are bare specifiers that the user's
-import map or `package.json` resolves.
+package's `.fbs` too, with its output directory chosen by the same rule: the
+directory of the emit for a package with two or more components, and its own run
+with `-o <dir>/flatc_out` for a single-component package. No fixture covers a
+package that imports the codec file of a single-component package. `flatbuffers`
+and `@driftsys/ridl-runtime` are bare specifiers that the user's import map or
+`package.json` resolves.
 
 ## Frozen surfaces
 

@@ -97,8 +97,12 @@ fn codec_barrel_imports_keep_domain_modules_distinct() {
         .ir;
     let source = module(&codegen::lower(package, &[&output.std_ir]), "single");
     assert!(
-        source.contains("import * as fb from \"./flatc/single.js\";"),
-        "the single-component barrel must be under flatc/:\n{source}"
+        source.contains("import * as fb from \"./flatc_out/single.js\";"),
+        "the single-component barrel must be under flatc_out/:\n{source}"
+    );
+    assert!(
+        source.contains("`-o` is the flatc_out\n// subdirectory of this file's directory."),
+        "the comment must name the flatc_out directory:\n{source}"
     );
     assert!(
         source.contains("import type * as t from \"./single.js\";"),
@@ -109,6 +113,10 @@ fn codec_barrel_imports_keep_domain_modules_distinct() {
     assert!(
         source.contains("import * as fb from \"./veh/common.js\";"),
         "the two-component barrel path must stay unchanged:\n{source}"
+    );
+    assert!(
+        source.contains("`-o` is the directory\n// of this file."),
+        "the two-component comment must name the directory of the module:\n{source}"
     );
     assert!(
         source.contains("import type * as t from \"./veh.common.js\";"),

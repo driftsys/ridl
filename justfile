@@ -3092,7 +3092,7 @@ _cabin-web-generate name:
 # calls the separate reply credit, upload close and cancel, abort and refusal. The separate
 # generated-only.deno.json check excludes transport imports. Its raw-only module
 # checks an induced request without a domain namespace import.
-# The codec-single fixture keeps flatc output under flatc/ so its barrel does
+# The codec-single fixture keeps flatc output under flatc_out/ so its barrel does
 # not overwrite the domain module of a single-component package.
 [private]
 _codec-ts-check:
@@ -3175,8 +3175,8 @@ _codec-ts-check:
     single="$tmp/single"
     mkdir -p "$single"
     "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-single --emit typescript --emit flatbuffers --out-dir "$single"
-    mkdir -p "$single/flatc"
-    flatc --ts --gen-object-api -I "$single" -o "$single/flatc" "$single/single.fbs"
+    mkdir -p "$single/flatc_out"
+    flatc --ts --gen-object-api -I "$single" -o "$single/flatc_out" "$single/single.fbs"
     sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-single/deno.json > "$single/deno.json"
     cp crates/ridl-backend-ts/tests/fixtures/codec-single/single_test.ts "$single/single_test.ts"
     deno lint --config "$single/deno.json" "$single/single.codec.ts"

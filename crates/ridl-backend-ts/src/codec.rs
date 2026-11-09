@@ -86,16 +86,30 @@ fn refuse<T>(message: String) -> Result<T, GenerateError> {
     Err(GenerateError::Unrepresentable(message))
 }
 
-/// The path, without the `./` prefix and the `.js` suffix, from which the
-/// codec module imports `flatc`'s barrel. A package name with two or more
-/// components uses its segments, so `veh.cabin` gives `veh/cabin`. A package
-/// name with one component would give the path of its own domain module, so
-/// its barrel is under `flatc/`.
-fn flatc_barrel_path(package: &str) -> String {
+/// Where the codec module of `package` finds `flatc`'s barrel: the import path,
+/// without the `./` prefix and the `.js` suffix, and the comment that names the
+/// directory `flatc`'s `-o` has to be. Both come from one test, so they cannot
+/// disagree.
+///
+/// A package name with two or more components uses its segments, so
+/// `veh.cabin` gives `veh/cabin`, and `-o` is the directory of the module. A
+/// package name with one component would give the path of its own domain
+/// module, so its barrel is under `flatc_out/`. No package name has a segment
+/// with an underscore (ADR-0002), so that directory cannot be the first segment
+/// of another package's barrel path.
+fn flatc_barrel(package: &str) -> (String, &'static str) {
     if package.contains('.') {
-        package.replace('.', "/")
+        (
+            package.replace('.', "/"),
+            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
+             directory\n// of this file.\n",
+        )
     } else {
-        format!("flatc/{package}")
+        (
+            format!("flatc_out/{package}"),
+            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
+             flatc_out\n// subdirectory of this file's directory.\n",
+        )
     }
 }
 
@@ -1330,20 +1344,8 @@ impl<'a> Codec<'a> {
             );
         }
         if local {
-            // `-o` is this file's directory for multi-component packages,
-            // and its `flatc` subdirectory for single-component packages.
-            if self.package.contains('.') {
-                out.push_str(
-                    "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
-                     directory\n// of this file.\n",
-                );
-            } else {
-                out.push_str(
-                    "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
-                     flatc\n// subdirectory of this file's directory.\n",
-                );
-            }
-            let barrel = flatc_barrel_path(self.package);
+            let (barrel, comment) = flatc_barrel(self.package);
+            out.push_str(comment);
             let _ = writeln!(out, "import * as fb from \"./{barrel}.js\";");
         }
         let foreign_codecs: BTreeSet<&str> = self

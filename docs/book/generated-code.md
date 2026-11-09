@@ -479,26 +479,30 @@ flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs
 For a package with two or more name components, the codec file imports `flatc`'s
 output from `./<package path>.js` (for `veh.cabin`, `./veh/cabin.js`), so
 `flatc`'s `-o` is the directory of the TypeScript files, as above. For a
-single-component package, it imports `./flatc/<package>.js` and keeps the domain
-import at `./<package>.js`. Run `flatc` with its output under `flatc/` so it
-does not overwrite the domain module. For package `single`:
+single-component package, it imports `./flatc_out/<package>.js` and keeps the
+domain import at `./<package>.js`. Run `flatc` with its output under
+`flatc_out/` so it does not overwrite the domain module. For package `single`:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
-mkdir -p <out-dir>/flatc
-flatc --ts --gen-object-api -I <out-dir> -o <out-dir>/flatc <out-dir>/single.fbs
+mkdir -p <out-dir>/flatc_out
+flatc --ts --gen-object-api -I <out-dir> -o <out-dir>/flatc_out <out-dir>/single.fbs
 ```
 
 When a payload type of an interaction is a named scalar or an enum set of
 another package (`ridl.std.Name` as the request of a query, for example), the
 codec file goes through that package's own codec file, `<package>.codec.ts`,
 which the build writes beside it; `flatc` then runs on that package's schema
-too, with the output directory chosen by its package name. For packages with two
-or more components:
+too, with the output directory chosen by its package name. When both packages
+have two or more components, one run covers both:
 
 ```sh
 flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs <out-dir>/<package>.fbs
 ```
+
+When the other package has one name component, its codec file imports its barrel
+from `./flatc_out/<package>.js`, so its schema needs a run of its own with
+`-o <out-dir>/flatc_out`, as for a single-component package above.
 
 A package with neither a usable payload root nor a supported stream call gets no
 codec file; `ridl.std` gets one only when a codec file imports its module. The
