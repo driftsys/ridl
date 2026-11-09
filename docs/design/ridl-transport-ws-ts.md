@@ -11,8 +11,9 @@ consumer's rules that need no payload decoding. It is also the **providing
 side** of the reversed role, `provide`, in which the browser or Deno program
 stands in for a component (D-21). It carries payload bytes without reading them:
 a payload is a `Uint8Array` that the package hands to its caller as it arrived,
-and sends as the caller gave it. The one thing it checks of a payload is its
-length, against the member's limit from the generated interface tables (D-19).
+and sends as the caller gave it. It checks each payload's length against the
+member's limit from the generated interface tables (D-19), and runs a caller's
+registered check on live signal payloads (D-24).
 
 The Rust crate `ridl-transport-ws` is the providing side of the same binding,
 and the consuming side of the reversed role; its as-built record is
@@ -30,7 +31,7 @@ versions 1, 2 and 3).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions are numbered D-1 to D-23. D-1 to D-18 retain their numbers from the
+decisions are numbered D-1 to D-24. D-1 to D-18 retain their numbers from the
 original design, archived as
 [`2026-10-20-ts-transport-ws-design.md`](../archive/2026-10-20-ts-transport-ws-design.md),
 with its plan beside it.
@@ -58,13 +59,13 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 - Runs unchanged in Deno and in a browser: the package's own code uses only web
   platform APIs.
 
-**What it does not do.** It decodes, verifies and encodes no payload. It reads
-no catalog descriptor: no `kind` check against a catalog, no response bound read
-from one, no compatible-hash list; the one fact of the catalog it uses, each
-member's payload limit, comes from the generated interface tables the caller
-passes (D-19). It has no TLS or authentication of its own (`wss://` works
-because the platform's `WebSocket` supports it). It is not yet published to JSR
-(D-3).
+**What it does not do.** It decodes, verifies and encodes no payload itself. It
+runs the signal check the caller registers (D-24). It reads no catalog
+descriptor: no `kind` check against a catalog, no response bound read from one,
+no compatible-hash list; the one fact of the catalog it uses, each member's
+payload limit, comes from the generated interface tables the caller passes
+(D-19). It has no TLS or authentication of its own (`wss://` works because the
+platform's `WebSocket` supports it). It is not yet published to JSR (D-3).
 
 **What it must never do.** Differ from §11.1 on the wire, so that a client
 written from the specification alone and this one behave differently against the
@@ -196,7 +197,7 @@ const session = await connect("ws://127.0.0.1:9000", {
   interfaces: [Cabin, Horn], // the generated tables, for each member's limit (D-19)
   onPublish(target, sample) {}, // each accepted publish of a subscribed signal
   onOccurrence(occurrence) {}, // each accepted occurrence, in arrival order
-  onNote(note) {}, // violations, discarded frames and losses
+  onNote(note) {}, // violations, discarded frames, losses and throwing checks
   clock: () => taiMicros(), // optional; the request stamp (D-12)
 });
 ```
@@ -230,15 +231,13 @@ unit tests use to pass a fake one; the default is
   `query` reject with a `RangeError`, and `unsubscribe` throw one, and nothing
   is sent.
 - A `Sample` is
-  `{ provenance: "init" | "live" | "invalid", envelope, payload, detected? }`,
-  with `payload` a `Uint8Array` under `live` and `null` otherwise. `invalid`
-  with no `detected` is `Invalid(Declared)`, as the provider published it;
-  `invalid` with `detected: "corrupt"` is the session's own refusal of a `live`
-  payload longer than the member's limit (D-19), the one `Invalid(Detected)` the
-  package produces, because it verifies no payload (§9.6). The last good value
-  of §5.1 step 5 is kept by the caller, who sees each sample in `onPublish`. An
-  `Occurrence` carries `detected: "corrupt"` and an empty `payload` in the same
-  case.
+  `{ provenance: "init" | "live" | "invalid", envelope, payload, lastGood, detected? }`,
+  with `payload` a `Uint8Array` under `live` and `null` otherwise. `lastGood`
+  holds the last passing bytes, or `null` when the init value applies (D-24).
+  `invalid` with no `detected` is `Invalid(Declared)`, as the provider published
+  it; `invalid` with `detected: "corrupt"` or `{ rule: Rule }` is a locally
+  detected invalid value. An `Occurrence` carries `detected: "corrupt"` and an
+  empty `payload` when it exceeds its limit.
 - `command(iface, ord, args, { bound })` resolves on `accepted`;
   `query(iface, ord, args, { bound })` resolves with the reply's payload, an
   empty `Uint8Array` when the reply has no bytes. Both reject with a
@@ -427,13 +426,14 @@ have a detected invalid value reported, so that nothing fails silently:
   the limit is the one of the member the query named when it was sent, not one
   read from the response's `target`, which a `contract` echo may carry under
   another kind (§6.4);
-- a `publish` that answers a `read`, of a signal or of a `fixed`, rejects the
-  read with `corrupt`;
+- a `publish` that answers a `read`, of a signal or of a `fixed`, resolves the
+  read with an invalid sample as defined in D-24;
 - a `publish` of a subscribed signal is delivered through `onPublish` as a
   sample with provenance `invalid`, `payload` `null` and `detected: "corrupt"`,
-  with the envelope of the frame (§9.1), and becomes the held sample; the
-  sequence rules of D-9 apply to it as to any publish, and the next `publish`
-  within the limit returns the signal to `live`;
+  with the envelope of the frame (§9.1) and `lastGood` as defined in D-24, and
+  becomes the held sample; the sequence rules of D-9 apply to it as to any
+  publish. A later payload within the limit that passes its check returns the
+  signal to `live`;
 - an `occurrence` is delivered through `onOccurrence` with an empty payload and
   `detected: "corrupt"`, with the envelope of the frame (§9.2); it counts in the
   event's sequence, so no loss is recorded for it.
@@ -470,9 +470,11 @@ The codes of the failures. A block that is wrong by itself is the violation
 `bad-block`; a `kind` outside the table stays `unknown-code` and an `interface`
 or `ordinal` 0 stays `zero-number`. A sequence error is the session violation
 `block-sequence`. A `fixed` payload refused for its size, whether it crossed
-whole or in blocks, rejects consecutive live reads at the head of its identity's
-queue with `corrupt`, unless a cancelled read ahead first consumes the reply
-without settling the reads behind it, and is recorded once as the note
+whole or in blocks, resolves consecutive live reads at the head of its
+identity's queue with an invalid sample (`detected: "corrupt"`,
+`lastGood: null`), using the whole publish's or first block's envelope, unless a
+cancelled read ahead first consumes the reply without settling the reads behind
+it. It is recorded once as the note
 `{ note: "discarded", reason: "over-limit", frame }`, with the `publish` or the
 first block as `frame`, in place of the `not-subscribed` note that a payload no
 `read` waits for gets. The consumer does not know the provider's message limit,
@@ -792,6 +794,56 @@ bounds, preflight, malformed replies and send exceptions. The loopback e2e cases
 concurrent echo and interruption followed by an ordinary call on the same
 session. Their TCP execution status is recorded in D-14 below.
 
+**D-24. The signal check.** `ConnectOptions.checks` registers a readonly list of
+`SignalCheckEntry` values (`iface`, `ord`, `check`); a later entry for the same
+signal replaces an earlier one. `connect` validates every interface number and
+ordinal with `checkNumbers` in its preflight, rejecting with `RangeError` before
+creating a socket. `Session.checkWith(iface, ord, check)` registers or replaces
+one check and validates the numbers even after the session ends; valid
+registration after the end does nothing. The exported types `Detection`
+(`"corrupt" | { rule: Rule }`), `SignalCheck` and `SignalCheckEntry` are
+structurally the same as the types of `@driftsys/ridl-runtime`, which the
+transport does not import. A check returns `undefined` when its bytes pass.
+
+In `#onPublish`, the size limit and sequence tests precede the check, and the
+check precedes holding the sample. Only live signal payloads within the limit
+are checked. Duplicate and stale frames are not checked unless they answer at
+least one unsettled read. The session computes the held sample and drop decision
+first, builds a sample only for a frame it will hold or an unsettled read it
+will answer, checks at most once, resolves the reads, and then applies the drop
+decision and holds the sample. Existing `not-subscribed`, `stale` and
+`over-limit` notes retain their rules. Each held sample still reaches
+`onPublish`, including a refused one.
+
+The sample carries the frame's envelope. Its bytes follow frame specification
+§5.1:
+
+| Publish state                     | `payload` | `lastGood`                       | `detected`    |
+| --------------------------------- | --------- | -------------------------------- | ------------- |
+| Live, no check or check passes    | the bytes | the same bytes                   | absent        |
+| Live, check refuses or over limit | `null`    | the held `lastGood`, else `null` | the detection |
+| Init                              | `null`    | `null`                           | absent        |
+| Invalid (Declared)                | `null`    | the held `lastGood`, else `null` | absent        |
+
+A refused live sample has provenance `invalid`. Only a subscribed signal has
+held bytes: an unsubscribed signal read or any non-signal uses `null` for the
+held `lastGood`. `unsubscribe` drops the held sample and its good bytes; a later
+subscription starts with none. A read answered by a refused or over-limit
+payload resolves with the invalid sample, including its envelope, detection and
+`lastGood`. This also applies to an over-limit fixed payload in blocks: the
+sample uses its first block's envelope and `lastGood: null`.
+
+After registration, `checkWith` immediately checks a held live payload. Refusal
+replaces it with provenance `invalid`, `payload: null`, `lastGood: null` and the
+detection, preserving the envelope. A passing check leaves the held sample
+unchanged. Registration is not a publication: it calls no `onPublish` and
+changes no sequence. A check that throws, during publication or rechecking,
+counts as `"corrupt"` and emits one
+`{ note: "check-failed", iface, ord, error }` note with the thrown error. The
+note follows state updates and read resolution, and follows `onPublish` when a
+publication is held, so a listener can close or unsubscribe without a later
+state update restoring the sample.
+
 ## The end-to-end tests
 
 **D-13. The test server is a cargo example in the crate.**
@@ -835,15 +887,15 @@ bytes are the value the provider set.
   `2a 07` and the occurrence with the same payload, sends the query and checks
   the reply, and closes with 1000 with no violation recorded. This is the
   sequence of the crate's scenario without its last step, so the two clients are
-  checked against one provider behaviour. The last step registers a signal
-  check, which the package does not take because it verifies no payload
-  (driftsys/ridl#1236). Between the `fixed` and the signal, the test also reads
-  the three large `fixed` values (ordinals 7 to 9 of `e2e/catalog.ts`, 65,280,
-  16,137 and 16,138 bytes) and compares every byte with the pattern. A second
-  test opens a raw socket without the package's `Session`, sends `attach` and
-  waits for `attached`, reads the `fixed` of 16,137 bytes and gets one
-  `publish`, reads the `fixed` of 16,138 bytes and gets four `block` frames; the
-  crate's scenario has no such test. A third test,
+  checked against one provider behaviour. The Rust scenario's last step
+  registers a signal check. The package now accepts one, but these end-to-end
+  tests do not register it yet (driftsys/ridl#1236). Between the `fixed` and the
+  signal, the test also reads the three large `fixed` values (ordinals 7 to 9 of
+  `e2e/catalog.ts`, 65,280, 16,137 and 16,138 bytes) and compares every byte
+  with the pattern. A second test opens a raw socket without the package's
+  `Session`, sends `attach` and waits for `attached`, reads the `fixed` of
+  16,137 bytes and gets one `publish`, reads the `fixed` of 16,138 bytes and
+  gets four `block` frames; the crate's scenario has no such test. A third test,
   `queryStream_receives_64_elements_over_loopback_server`, sends the streamed
   query (ordinal 10 of `e2e/catalog.ts`, an argument `n` and a reply of `n`
   chunks of 1,024 bytes of the value `i`) with `n` 64, which is more than the
@@ -922,7 +974,9 @@ bytes are the value the provider set.
   two faults in one message, and every refusal of `attach`.
 - **The session** (`session_test.ts`). The rules of D-8 to D-10 over a fake
   `WebSocket` (`fake_socket.ts`) that the test drives frame by frame, scripting
-  only the orders that §6.2, §6.3 and the crate's D-8 and D-13 produce.
+  only the orders that §6.2, §6.3 and the crate's D-8 and D-13 produce. They
+  also cover D-24's checks, retained good bytes, read refusal, rechecking and
+  check registration validation.
 - **The calls** (`calls_test.ts`). The call rules of D-9, with Deno's op
   sanitizer turned on in every test, because Deno 2.9 leaves it off by default;
   a call's timer left running fails the test.
@@ -1009,7 +1063,7 @@ on a `v*` tag.
   [codec table record](ts-codec-table.md#stream-functions) owns their supported
   forms. The cabin signal demo still joins its generated payload codecs to this
   package by hand.
-- The upload method limits are recorded in D-23. The package checks no
+- The upload method limits are recorded in D-23. The upload methods check no
   named-element payload or UTF-8 text boundary. Rule code 7 decodes as `"utf8"`
   and reaches callers in a refusal.
 - An emulator (driftsys/ridl#290). The providing side offers no stream, and no
@@ -1042,3 +1096,4 @@ on a `v*` tag.
 | an invalid call bound thrown synchronously                                                  | rejected | an async method that sometimes throws is a trap; the returned promise rejects with a `RangeError`, as `connect` rejects (D-9)                                                            |
 | a listener exception left to end the frame's handling                                       | rejected | it would skip the close on a violation or the loss tracking; it is passed to `reportError` instead (D-9)                                                                                 |
 | `deno.land/install.sh` in `./bootstrap`                                                     | rejected | it edits the contributor's shell profile and fetches code from JSR; the release zip is the file CI downloads (D-16)                                                                      |
+| caller-managed signal checks and retained good bytes                                        | rejected | Reads need the same invalid sample as subscriptions; the session retains good bytes while the caller supplies the check (D-24)                                                           |

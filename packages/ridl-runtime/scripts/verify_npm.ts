@@ -161,7 +161,10 @@ try {
   await Deno.writeTextFile(
     `${tmp}/consumer.ts`,
     `import { CatalogMismatch, CodecError, loadCodec } from "@driftsys/ridl-runtime";
-import type { Codec, VerifyResult } from "@driftsys/ridl-runtime";
+import type { Codec, Detection, SignalCheck, SignalCheckEntry, VerifyResult } from "@driftsys/ridl-runtime";
+const detection = { rule: "range" } satisfies Detection;
+const check: SignalCheck = () => detection;
+export const entry = { iface: 1, ord: 2, check } satisfies SignalCheckEntry;
 export async function use(bytes: Uint8Array): Promise<VerifyResult> {
   const codec: Codec = await loadCodec(bytes, {
     catalogHash: new Uint8Array(32),
