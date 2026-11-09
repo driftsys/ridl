@@ -34,34 +34,60 @@ function describe(sample: Sample): string {
   return `${sample.provenance}:${hex}`;
 }
 
+/**
+ * The time limit of each connect, subscribe and read step of the page, in
+ * milliseconds. It is far above the time a step takes on a developer machine
+ * (the whole run takes about one second), and the five steps together stay
+ * below the page limit of the browser test. A step that stalls fails with its
+ * own name.
+ */
+const STEP_BOUND = 4000;
+
+/** Names `stage` in the error of a step that fails, so that a stall shows where it happened. */
+async function at<T>(stage: string, step: Promise<T>): Promise<T> {
+  try {
+    return await step;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${stage}: ${reason}`);
+  }
+}
+
 async function run(): Promise<Result> {
   const port = new URLSearchParams(location.search).get("port");
   if (!port) throw new Error("the page URL has no port parameter");
   const init = waiter<Sample>("init publish", 2000);
   const live = waiter<Sample>("live publish", 2000);
   let discarded = 0;
-  const session = await connect(`ws://127.0.0.1:${port}`, {
-    catalog: { name: catalog.NAME, hash: catalog.HASH },
-    encoding: catalog.ENCODING,
-    onPublish(target, sample) {
-      if (target.iface !== catalog.IFACE || target.ord !== catalog.SIGNAL) {
-        return;
-      }
-      if (sample.provenance === "init") init.accept(sample);
-      if (sample.provenance === "live") live.accept(sample);
-    },
-    onNote(note) {
-      if (note.note === "discarded") discarded++;
-    },
-  });
+  const session = await at(
+    "connect",
+    connect(`ws://127.0.0.1:${port}`, {
+      bound: STEP_BOUND,
+      catalog: { name: catalog.NAME, hash: catalog.HASH },
+      encoding: catalog.ENCODING,
+      onPublish(target, sample) {
+        if (target.iface !== catalog.IFACE || target.ord !== catalog.SIGNAL) {
+          return;
+        }
+        if (sample.provenance === "init") init.accept(sample);
+        if (sample.provenance === "live") live.accept(sample);
+      },
+      onNote(note) {
+        if (note.note === "discarded") discarded++;
+      },
+    }),
+  );
   try {
     const fixed: Record<string, string> = {};
     for (const [ord, length] of catalog.FIXED_LENGTHS) {
-      const sample = await session.read({
-        kind: Kind.Fixed,
-        iface: catalog.IFACE,
-        ord,
-      });
+      const sample = await at(
+        `read of fixed ${ord}`,
+        session.read({
+          kind: Kind.Fixed,
+          iface: catalog.IFACE,
+          ord,
+        }, { bound: STEP_BOUND }),
+      );
       const expected = catalog.pattern(length);
       const payload = sample.payload;
       const match = payload !== null && payload.length === expected.length &&
@@ -69,11 +95,14 @@ async function run(): Promise<Result> {
       fixed[ord] = `${payload?.length ?? 0}:${match}`;
     }
     init.start();
-    await session.subscribe({
-      kind: Kind.Signal,
-      iface: catalog.IFACE,
-      ord: catalog.SIGNAL,
-    });
+    await at(
+      "subscribe",
+      session.subscribe({
+        kind: Kind.Signal,
+        iface: catalog.IFACE,
+        ord: catalog.SIGNAL,
+      }, { bound: STEP_BOUND }),
+    );
     const first = await init.promise;
     // The time limit of the live publish counts from the command.
     live.start();
