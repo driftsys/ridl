@@ -530,8 +530,9 @@ readiness when it holds no earlier element. It can retain one pulled element
 while the consumer is not ready, and accepts that element before pulling the
 next outcome. End and failure notifications are delivered once. They release the
 member slot for a command or an upload query with a plain reply. Before driving
-an active upload, `serve` registers for its claim's forget and queries the
-claim's state. A query releases its slot for either forgotten answer. A command
+an active upload query, `serve` registers for its claim's forget and queries the
+claim's state. A command queries first, then registers and queries again only on
+`NotForgotten`. A query releases its slot for either forgotten answer. A command
 releases it only for `Forgotten`, keeps driving for `AfterEnd`, and stops making
 this check once it has pulled `End`. Releasing drops the consumer without
 another readiness or write poll and uses the existing stop path to complete the

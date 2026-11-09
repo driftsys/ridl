@@ -823,6 +823,7 @@ pub trait StreamHandler: Handler {
 #[must_use] pub enum Pull { Chunk(usize), End, Pending, Failed(CallError) }
 #[must_use]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ClaimForget { NotForgotten, AfterEnd, Forgotten }
 ```
 
@@ -861,7 +862,8 @@ through `ReadError::ShortClaim`. An offered claim that was not forgotten answers
   (`StreamNo >= 1`) was ended by its producer without a stop, and at least one
   parameter stream was named. This classification uses the producer's end and
   stop state, including after the provider reads the end while the claim is
-  still known.
+  still known. A command dropped after its sink ended and before its
+  acknowledgment also answers `AfterEnd` and keeps its consumer.
 - `Forgotten`: the caller forgot with a named parameter stream still open or
   stopped, no parameter stream was named, the call has no parameter stream, or
   the runtime no longer knows the claim.
@@ -881,11 +883,12 @@ forget.
 
 Both methods are provided. Their defaults answer `NotForgotten` and store
 nothing, preserving the behaviour of a runtime that does not override them.
-`ridl-loopback` overrides both; wrappers and the `&mut P` implementation forward
-both. The generated face releases a reply source or a query's upload consumer on
-either forgotten answer without polling it again. A command's upload consumer is
-released only for `Forgotten`, because the generated caller normally forgets
-after acknowledgment and successful sink end while the provider may still be
+`ridl-loopback` overrides both on `Loopback<E>` and `HandlerHandle<E>`. The
+`StreamHandler for &mut P` implementation forwards both methods. The generated
+face releases a reply source or a query's upload consumer on either forgotten
+answer without polling it again. A command's upload consumer is released only
+for `Forgotten`, because the generated caller normally forgets after
+acknowledgment and successful sink end while the provider may still be
 processing the ended upload. `AfterEnd` preserves that processing. Once the
 command driver has pulled `End`, it no longer checks for a forget.
 

@@ -101,7 +101,8 @@
 //! waker under `Interest::Slot`, a source handle one waker under
 //! `Interest::Event`, and a handler handle one waker under `Interest::Claim`
 //! and one per stream of a claim under `Interest::ClaimStream`, kept with the
-//! claim's call.
+//! claim's call. A handler also stores one per-claim forget waker through
+//! `StreamHandler::wake_on_claim_forget`, independently of stream wakers.
 //! For `Event` and `Claim` the rule is one waker per kind, and a change to
 //! any key of the kind wakes the stored waker, whatever interface it was
 //! registered under (ADR-0021 decision 13); an `Outcome` waker is per call,

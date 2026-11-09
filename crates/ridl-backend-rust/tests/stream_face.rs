@@ -1729,6 +1729,35 @@ fn a_call_dropped_while_its_element_is_held_is_settled_and_its_source_dropped() 
 }
 
 #[test]
+fn forgetting_a_call_wakes_serve_while_its_source_ignores_the_waker() {
+    let rt = loopback();
+    let (mut feed, counters) = Feed::new(Script {
+        pending_before_each: usize::MAX,
+        ..Script::default()
+    });
+    let mut serve = generated::log::serve(rt.handler(), &mut feed);
+    let mut client = generated::log::Client::new(rt.caller());
+    let call = sent(&mut client, &mut serve);
+    let wakes = CountWakes::new();
+    let waker = Waker::from(wakes.clone());
+    assert!(
+        Pin::new(&mut serve)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    assert_eq!(counters.polls.get(), 1, "the source returned Pending");
+    let before = wakes.count();
+    drop(call);
+    assert!(
+        wakes.count() > before,
+        "forget wakes serve even though the source stored no waker"
+    );
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(counters.dropped.get(), 1);
+    assert_eq!(counters.polls.get(), 1, "forget does not poll the source");
+}
+
+#[test]
 fn a_call_dropped_while_its_source_is_pending_releases_without_polling_the_source() {
     let rt = loopback();
     let (mut feed, counters) = Feed::new(Script {

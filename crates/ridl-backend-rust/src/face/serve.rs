@@ -298,7 +298,9 @@ pub(super) fn serve(
              pull. With nothing held, end and failure are delivered immediately, \
              regardless of readiness. Terminal notifications occur once. Dropping \
              serve interrupts unfinished uploads. Before driving an upload, serve \
-             registers for and queries the caller's forget. A forgotten query or \
+             queries the caller's forget. A query registers before querying; a \
+             command queries first, then registers and queries again only on \
+             NotForgotten. A forgotten query or \
              abandoned command drops its consumer without polling it. A command \
              forgotten after its parameter stream ended normally keeps consuming \
              the queued chunks through End. ByteConsumer::poll_write must \

@@ -1001,14 +1001,13 @@ size of the call table the suite fills, and `Loopback::advance` and
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under
 "What it cannot report" is not exercised by it. It asserts no wake the contract
-allows but does not require: because a spurious wake is allowed, it asserts that
-a change leaves a waker unwoken only where the contract rules the wake out — a
-refresh, or a waker already woken or displaced and so cleared. The
-`claim_forget` group also asserts that a registration for a forgotten or unknown
-claim is woken at once, as its contract requires. The base suite drops no handle
-(the `identity` group drops attachments, to check that an identity is released),
-and it accepts either result for a forgotten call no handler has claimed. What
-the suite leaves out, and why, is listed once, in the crate documentation of
+allows but does not require. The `claim_forget` group permits spurious wakes on
+live registrations and asserts that forget and displacement increase the wake
+count. It also asserts that a registration for a forgotten or unknown claim is
+woken at once, as its contract requires. The base suite drops no handle (the
+`identity` group drops attachments, to check that an identity is released), and
+it accepts either result for a forgotten call no handler has claimed. What the
+suite leaves out, and why, is listed once, in the crate documentation of
 `crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
 keeps the tests of this runtime's own choices — its narrower wakes, its wakes at
 once, its `Drop`, its withdrawal, and its own numbers — some of which fall under

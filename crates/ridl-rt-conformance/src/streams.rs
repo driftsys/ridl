@@ -1235,10 +1235,10 @@ where
     );
     let (count, waker) = task();
     rt.wake_on_claim_forget(claim, &waker);
-    assert_eq!(wakes(&count), 0);
+    let before = wakes(&count);
     rt.forget(c);
     assert!(
-        wakes(&count) > 0,
+        wakes(&count) > before,
         "forget wakes the provider without a push"
     );
     assert_eq!(
@@ -1293,18 +1293,17 @@ where
     assert_eq!(rt.ack(c), Some(Ok(())));
     let (count, waker) = task();
     rt.wake_on_claim_forget(claim, &waker);
-    assert_eq!(wakes(&count), 0);
+    let before = wakes(&count);
     rt.forget(c);
-    assert!(wakes(&count) > 0);
+    assert!(wakes(&count) > before);
     assert_eq!(
         rt.claim_forget(claim),
         ridl_rt::port::ClaimForget::Forgotten
     );
 }
 
-/// Ending a parameter does not wake a subsequent claim-forget registration
-/// at once. Forget wakes it and reports the normal producer end, even after
-/// the provider already read that end.
+/// After a parameter ends, forget wakes the claim-forget registration and
+/// reports the normal producer end, even after the provider already read it.
 pub fn claim_forget_waits_after_a_parameter_stream_ended<F>()
 where
     F: Factory,
@@ -1316,16 +1315,12 @@ where
     let (count, waker) = task();
     rt.wake_on_claim_forget(claim, &waker);
     assert_eq!(
-        wakes(&count),
-        0,
-        "ended stream does not satisfy forget registration"
-    );
-    assert_eq!(
         rt.claim_forget(claim),
         ridl_rt::port::ClaimForget::NotForgotten
     );
+    let before = wakes(&count);
     rt.forget(c);
-    assert!(wakes(&count) > 0);
+    assert!(wakes(&count) > before);
     assert_eq!(rt.claim_forget(claim), ridl_rt::port::ClaimForget::AfterEnd);
 }
 
@@ -1382,16 +1377,16 @@ where
     );
     let (count, waker) = task();
     rt.wake_on_claim_forget(claim, &waker);
-    assert_eq!(wakes(&count), 0);
+    let before = wakes(&count);
     rt.forget(c);
-    assert!(wakes(&count) > 0);
+    assert!(wakes(&count) > before);
     assert_eq!(
         rt.claim_forget(claim),
         ridl_rt::port::ClaimForget::Forgotten
     );
 }
 
-/// A registration refresh wakes nothing; displacement wakes the old task.
+/// Registration permits refresh; displacement wakes the old task.
 /// Already forgotten and unknown claims wake registrations immediately.
 pub fn claim_forget_registration_refreshes_displaces_and_wakes_unknown<F>()
 where
@@ -1403,24 +1398,28 @@ where
     let (second, second_waker) = task();
     rt.wake_on_claim_forget(claim, &first_waker);
     rt.wake_on_claim_forget(claim, &first_waker);
-    assert_eq!(wakes(&first), 0);
+    let before = wakes(&first);
     rt.wake_on_claim_forget(claim, &second_waker);
-    assert_eq!(wakes(&first), 1, "displaced registration wakes");
-    assert_eq!(wakes(&second), 0);
+    assert!(wakes(&first) > before, "displaced registration wakes");
+    let before = wakes(&second);
     rt.forget(c);
-    assert_eq!(wakes(&second), 1);
+    assert!(wakes(&second) > before, "forget wakes the registration");
+    let before = wakes(&second);
     rt.wake_on_claim_forget(claim, &second_waker);
-    assert_eq!(wakes(&second), 2, "already forgotten wakes immediately");
+    assert!(
+        wakes(&second) > before,
+        "already forgotten wakes immediately"
+    );
     rt.settle(claim, Err(CallError::Transport(Transport::Interrupted)))
         .expect("settle forgotten claim");
     assert_eq!(
         rt.claim_forget(claim),
         ridl_rt::port::ClaimForget::Forgotten
     );
+    let before = wakes(&second);
     rt.wake_on_claim_forget(claim, &second_waker);
-    assert_eq!(
-        wakes(&second),
-        3,
+    assert!(
+        wakes(&second) > before,
         "reclaimed unknown claim wakes immediately"
     );
 }

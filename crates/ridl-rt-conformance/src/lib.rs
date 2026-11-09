@@ -98,9 +98,11 @@
 //!   a waiter spuriously, for a change that is not its key's, so a test
 //!   asserts that a change leaves a waker unwoken only where the contract
 //!   rules the wake out: a refresh, which wakes nothing, and a waker already
-//!   woken or displaced, which the contract clears. Whether a registration
-//!   whose key already holds is woken at once is the runtime's too: the task
-//!   reads the port after it registers, and finds the change either way. So is
+//!   woken or displaced, which the contract clears. For `Wakeable`, whether a
+//!   registration whose key already holds is woken at once is the runtime's too: the task
+//!   reads the port after it registers, and finds the change either way. The
+//!   claim-forget extension requires and tests an immediate wake for forgotten
+//!   or unknown claims. Also left untested is
 //!   what a runtime does with a registration under a kind of key its handle
 //!   does not observe, or under a correlation that names no call in flight;
 //!   the port contract does not say, and the suite does not test either. The
@@ -613,7 +615,8 @@ mod tests {
                 let text = rest.split("\npub fn ").next().expect("a function");
                 // A stream test asks for `Wakeable` as well, because it
                 // registers stream wakers, so a signature that names a stream
-                // extension places the test in the `streams` arm alone.
+                // extension places the test in `streams`, or `claim_forget`
+                // for a function whose name starts with `claim_forget_`.
                 let streams =
                     signature.contains("StreamCaller") || signature.contains("StreamHandler");
                 let mut asked: Vec<Arm> = if streams {

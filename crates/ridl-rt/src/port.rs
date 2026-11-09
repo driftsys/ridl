@@ -683,13 +683,15 @@ pub trait StreamHandler: Handler {
 /// that ended stream, including chunks or consumer work still pending.
 #[must_use]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ClaimForget {
     /// The caller did not forget the call, or the runtime cannot tell.
     NotForgotten,
     /// The caller forgot after every named parameter stream ended without a
     /// stop, with at least one parameter stream named. The producer end and
     /// stop state remain relevant after the provider reads `End`, while the
-    /// claim remains known.
+    /// claim remains known. A command dropped after its sink ended and before
+    /// its acknowledgment also answers `AfterEnd` and keeps its consumer.
     AfterEnd,
     /// The caller forgot with a parameter stream open or stopped, with no
     /// parameter stream named (including a call with none), or the runtime no

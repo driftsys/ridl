@@ -3871,3 +3871,57 @@ fn reclaiming_a_call_wakes_only_the_claim_forget_registration() {
     assert_eq!(rt.claim_forget(claim), ClaimForget::Forgotten);
     assert_every_slot_is_free(&mut rt, "after reclaiming the acknowledged call");
 }
+
+#[test]
+fn claim_forget_waits_after_a_parameter_stream_ended() {
+    let mut rt = runtime();
+    let c = rt.query(IFACE, ORD, &[], None).unwrap();
+    let claim = take_claim(&mut rt);
+    rt.end(c, StreamNo(1)).expect("end parameter");
+    assert_eq!(rt.pull_claim(claim, StreamNo(1), &mut []), Ok(Pull::End));
+    let (count, waker) = counting();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(
+        wakes(&count),
+        0,
+        "ended stream does not satisfy forget registration"
+    );
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::NotForgotten
+    );
+    rt.forget(c);
+    assert!(wakes(&count) > 0);
+    assert_eq!(rt.claim_forget(claim), ridl_rt::port::ClaimForget::AfterEnd);
+}
+
+#[test]
+fn claim_forget_registration_refreshes_displaces_and_wakes_unknown() {
+    let mut rt = runtime();
+    let c = rt.query(IFACE, ORD, &[], None).unwrap();
+    let claim = take_claim(&mut rt);
+    let (first, first_waker) = counting();
+    let (second, second_waker) = counting();
+    rt.wake_on_claim_forget(claim, &first_waker);
+    rt.wake_on_claim_forget(claim, &first_waker);
+    assert_eq!(wakes(&first), 0);
+    rt.wake_on_claim_forget(claim, &second_waker);
+    assert_eq!(wakes(&first), 1, "displaced registration wakes");
+    assert_eq!(wakes(&second), 0);
+    rt.forget(c);
+    assert_eq!(wakes(&second), 1);
+    rt.wake_on_claim_forget(claim, &second_waker);
+    assert_eq!(wakes(&second), 2, "already forgotten wakes immediately");
+    rt.settle(claim, Err(CallError::Transport(Transport::Interrupted)))
+        .expect("settle forgotten claim");
+    assert_eq!(
+        rt.claim_forget(claim),
+        ridl_rt::port::ClaimForget::Forgotten
+    );
+    rt.wake_on_claim_forget(claim, &second_waker);
+    assert_eq!(
+        wakes(&second),
+        3,
+        "reclaimed unknown claim wakes immediately"
+    );
+}

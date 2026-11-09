@@ -7,12 +7,12 @@ mod generated {
 mod support;
 use ridl_loopback::Loopback;
 use ridl_rt::{
-    contract::{CatalogRef, Interface, StreamNo},
+    contract::{CatalogRef, Interaction, Interface, StreamNo},
     encoding::{FlatBuffers, Proto3},
     error::{CallError, ClientError, Contract, Transport},
     face::{Bind, Consumer, Interrupted, Source},
     payload::{Payload, Ref},
-    port::{Correlation, SendError, StreamCaller},
+    port::{Caller, Correlation, SendError, StreamCaller},
     sample::Duration,
 };
 use std::{
@@ -1190,6 +1190,49 @@ fn a_normally_forgotten_command_does_not_wake_serve_for_its_pending_consumer() {
     assert!(state.borrow().ready_polls > polls);
     assert_eq!(state.borrow().drops, 0);
     assert!(state.borrow().failures.is_empty());
+}
+
+#[test]
+fn forgetting_an_acknowledged_command_with_an_open_stream_returns_its_call_slot() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let mut probe = rt.caller();
+    for round in 1..=Loopback::SLOTS + 1 {
+        let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+        pending(&mut serve);
+        assert_eq!(poll(&mut call), Poll::Ready(Ok(())), "round {round}");
+        sink.send(&reading(7)).unwrap();
+        pending(&mut serve);
+        let polls = state.borrow().ready_polls;
+        drop(sink);
+        pending(&mut serve);
+        assert_eq!(state.borrow().ready_polls, polls);
+        assert_eq!(state.borrow().drops, round);
+
+        let mut calls = Vec::new();
+        for slot in 0..Loopback::SLOTS {
+            let sent = probe.command(
+                <generated::Log as Interface>::NUMBER,
+                <generated::LogUpload as Interaction>::MEMBER.ordinal,
+                &[],
+                None,
+            );
+            assert!(
+                sent.is_ok(),
+                "round {round}: slot {slot} is free after forget, got {sent:?}"
+            );
+            calls.push(sent.unwrap());
+        }
+        for call in calls {
+            probe.forget(call);
+        }
+    }
+    assert_eq!(
+        state.borrow().failures,
+        vec![CallError::Transport(Transport::Interrupted); Loopback::SLOTS + 1]
+    );
 }
 
 #[test]
