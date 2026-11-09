@@ -46,7 +46,15 @@ export function initSpeed(): Speed {
   return 0.0 as Speed;
 }
 
+/**
+ * Build a value with `makeLabel`.
+ */
 export type Label = string & { readonly __ridl: 'veh.common.Label' };
+
+/** Builds a `Label`. */
+export function makeLabel(value: string): Label {
+  return value as Label;
+}
 
 export interface DriverProfile {
   name: Label;

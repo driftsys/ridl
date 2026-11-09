@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
 ---
 // ===== package lint.shapes =====
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * A bounded integer.
@@ -160,12 +160,35 @@ export function initFloor(): Floor {
 /**
  * A string with a length and a pattern.
  *
+ * Build a value with `makeTag`.
+ *
  * @remarks
  * Rules:
  * - length 1 ..= 16
  * - pattern `/^[a-z][a-z0-9-]*$/`
  */
 export type Tag = string & { readonly __ridl: 'lint.shapes.Tag' };
+
+const __ridlPatternTag = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
+
+/** Builds a `Tag`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeTag(value: string): Tag {
+  if (codePointLength(value) < 1) {
+    throw new ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
+  }
+  if (codePointLength(value) > 16) {
+    throw new ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
+  }
+  if (!__ridlPatternTag.test(value)) {
+    throw new ConstraintError('pattern', 'lint.shapes.Tag', value, '/^[a-z][a-z0-9-]*$/');
+  }
+  return value as Tag;
+}
+
+/** Builds a `Tag` without checking a value already known to satisfy its constraints. */
+export function makeTagUnchecked(value: string): Tag {
+  return value as Tag;
+}
 
 export function initTag(): Tag {
   return 'unit' as Tag;
@@ -174,11 +197,26 @@ export function initTag(): Tag {
 /**
  * A string with a length only.
  *
+ * Build a value with `makeLabel`.
+ *
  * @remarks
  * Rules:
  * - length 0 ..= 32
  */
 export type Label = string & { readonly __ridl: 'lint.shapes.Label' };
+
+/** Builds a `Label`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeLabel(value: string): Label {
+  if (codePointLength(value) > 32) {
+    throw new ConstraintError('length', 'lint.shapes.Label', value, '[0..32]');
+  }
+  return value as Label;
+}
+
+/** Builds a `Label` without checking a value already known to satisfy its constraints. */
+export function makeLabelUnchecked(value: string): Label {
+  return value as Label;
+}
 
 export function initLabel(): Label {
   return '' as Label;
@@ -187,20 +225,53 @@ export function initLabel(): Label {
 /**
  * Bytes with a fixed length.
  *
+ * Build a value with `makeFrame`.
+ *
  * @remarks
  * Rules:
  * - length 8
  */
 export type Frame = Uint8Array & { readonly __ridl: 'lint.shapes.Frame' };
 
+/** Builds a `Frame`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeFrame(value: Uint8Array): Frame {
+  if (value.length < 8) {
+    throw new ConstraintError('length', 'lint.shapes.Frame', value, '[8..8]');
+  }
+  if (value.length > 8) {
+    throw new ConstraintError('length', 'lint.shapes.Frame', value, '[8..8]');
+  }
+  return value as Frame;
+}
+
+/** Builds a `Frame` without checking a value already known to satisfy its constraints. */
+export function makeFrameUnchecked(value: Uint8Array): Frame {
+  return value as Frame;
+}
+
 /**
  * Bytes with a length range.
+ *
+ * Build a value with `makeBlob`.
  *
  * @remarks
  * Rules:
  * - length 0 ..= 64
  */
 export type Blob = Uint8Array & { readonly __ridl: 'lint.shapes.Blob' };
+
+/** Builds a `Blob`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeBlob(value: Uint8Array): Blob {
+  if (value.length > 64) {
+    throw new ConstraintError('length', 'lint.shapes.Blob', value, '[0..64]');
+  }
+  return value as Blob;
+}
+
+/** Builds a `Blob` without checking a value already known to satisfy its constraints. */
+export function makeBlobUnchecked(value: Uint8Array): Blob {
+  return value as Blob;
+}
 
 export function initBlob(): Blob {
   return new Uint8Array(0) as Blob;

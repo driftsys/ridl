@@ -17,6 +17,9 @@
 //! and hash, the qualified names of the payload types, the text of the rule
 //! codes of the wasm module, and one member table per declared interface,
 //! whose entry carries the member's payload limit when the model records one.
+//! A package with a signal also gets `signalChecks(codec)`, which returns one
+//! `SignalCheckEntry` of the runtime package per signal, for the `checks` option
+//! of a session. The entry's check refuses a payload that the wasm codec rejects.
 //! Stream queries and commands get typed functions over a runtime `StreamSession`:
 //! they verify requests before sending, verify named elements before decoding,
 //! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
@@ -238,6 +241,9 @@ struct Codec<'a> {
     foreign_strict_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
     stream_calls: BTreeMap<(u32, u32), StreamCall<'a>>,
     stream_omissions: BTreeMap<(u32, u32), String>,
+    /// The member table entries of the signals that have one, as
+    /// `<Interface>.<member>`, in declaration order.
+    signal_entries: Vec<String>,
     needs_domain: bool,
 }
 
@@ -300,6 +306,7 @@ impl<'a> Codec<'a> {
             foreign_strict_sets: BTreeMap::new(),
             stream_calls: BTreeMap::new(),
             stream_omissions: BTreeMap::new(),
+            signal_entries: Vec::new(),
             needs_domain: false,
         };
         let roots = model
@@ -403,6 +410,23 @@ impl<'a> Codec<'a> {
         !self.payload_types().is_empty()
     }
 
+    /// Whether a declared interface has a signal, which gets a check in
+    /// `signalChecks`.
+    fn has_signals(&self) -> bool {
+        self.model.interfaces.iter().any(|interface| {
+            matches!(
+                interface.identity,
+                Some(v1::interface::Identity::Declared(_))
+            ) && interface.slots.iter().any(|slot| {
+                matches!(
+                    &slot.occupant,
+                    Some(v1::interaction_slot::Occupant::Interaction(interaction))
+                        if interaction.kind() == v1::Kind::Signal
+                )
+            })
+        })
+    }
+
     fn has_domain_types(&self) -> bool {
         self.needs_domain
             || self.payload_types().iter().any(|payload| {
@@ -482,6 +506,25 @@ impl<'a> Codec<'a> {
                         format!("runtime stream helper {helper}"),
                     )?;
                 }
+            }
+        }
+        if self.has_signals() {
+            let mut helpers = vec![
+                "signalChecks",
+                "signalCheck",
+                "Codec",
+                "SignalCheckEntry",
+                "CodecError",
+            ];
+            if !self.stream_calls.is_empty() {
+                // The stream helpers already registered `CodecError`.
+                helpers.pop();
+            }
+            for helper in helpers {
+                register(
+                    helper.to_string(),
+                    format!("runtime signal helper {helper}"),
+                )?;
             }
         }
         if self.needs_rule_error() {
@@ -1292,6 +1335,9 @@ impl<'a> Codec<'a> {
             };
             self.emit_interface(&mut body, interface, &spelled.declared)?;
         }
+        if !self.signal_entries.is_empty() {
+            self.emit_signal_checks(&mut body);
+        }
 
         let mut out = String::new();
         // The builder, `<base>.ts` and `flatc`'s barrel are named only by a
@@ -1299,6 +1345,14 @@ impl<'a> Codec<'a> {
         // payload roots are all foreign has no table, so `flatc` writes no
         // barrel for it to import.
         let local = self.has_local_payload();
+        if !self.signal_entries.is_empty() {
+            out.push_str(
+                "import type { Codec, SignalCheckEntry } from \"@driftsys/ridl-runtime\";\n",
+            );
+        }
+        if self.stream_calls.is_empty() && !self.signal_entries.is_empty() {
+            out.push_str("import { CodecError } from \"@driftsys/ridl-runtime\";\n");
+        }
         if !self.stream_calls.is_empty() {
             out.push_str(
                 "import type { StreamSession, StreamOptions } from \"@driftsys/ridl-runtime\";\n",
@@ -2474,6 +2528,9 @@ impl<'a> Codec<'a> {
                 slot.ordinal,
                 roles.join(", ")
             );
+            if interaction.kind() == v1::Kind::Signal {
+                self.signal_entries.push(format!("{name}.{member}"));
+            }
         }
         out.push_str("} as const;\n");
         for slot in &interface.slots {
@@ -2487,6 +2544,21 @@ impl<'a> Codec<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Writes `signalChecks`, which gives `connect` one check per signal that
+    /// has a member table entry.
+    fn emit_signal_checks(&self, out: &mut String) {
+        out.push_str(
+            "\nfunction signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {\n  const typeId = codec.typeId(entry.payload.type);\n  return {\n    iface: entry.iface,\n    ord: entry.ord,\n    check: (bytes) => {\n      const result = codec.verify(typeId, bytes);\n      if (result.ok) return undefined;\n      if (result.kind !== \"rule\") return \"corrupt\";\n      const rule = (RULES as readonly string[]).find((known) => known === result.rule);\n      if (rule === undefined) throw new CodecError(\"unknown rule during signal verification\");\n      return { rule: rule as (typeof RULES)[number] };\n    },\n  };\n}\n",
+        );
+        out.push_str(
+            "\n/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */\nexport function signalChecks(codec: Codec): readonly SignalCheckEntry[] {\n  return [\n",
+        );
+        for entry in &self.signal_entries {
+            let _ = writeln!(out, "    signalCheck(codec, {entry}),");
+        }
+        out.push_str("  ];\n}\n");
     }
 
     /// The roles of `interaction`, each with its payload type: `Ok` with the

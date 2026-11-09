@@ -478,10 +478,12 @@ package that its interfaces name) or a supported stream interaction: one
 return the plain objects of `<base>.ts` and call the object API that `flatc`
 generates; one table per interface, which gives each interaction its interface
 number, its ordinal, its kind and the functions of its payloads; generated typed
-stream functions and stream metadata for supported interactions; and the
-catalog's name and hash, the payload type names and the rule texts that the wasm
-codec takes at load. `ridl` does not run `flatc`. For a package with two or more
-name components, build the files in two steps:
+stream functions and stream metadata for supported interactions; for a package
+with a signal that has a table entry, `signalChecks(codec)`, which returns one
+`SignalCheckEntry` of `@driftsys/ridl-runtime` per signal that has a table
+entry; and the catalog's name and hash, the payload type names and the rule
+texts that the wasm codec takes at load. `ridl` does not run `flatc`. For a
+package with two or more name components, build the files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
@@ -768,19 +770,19 @@ reply that breaks an `ensure` clause.
 
 This table records, for each kind of rule, the generated item that checks it:
 
-| Rule             | Rust                                                      | TypeScript  |
-| ---------------- | --------------------------------------------------------- | ----------- |
-| range            | checked by `new`, `TryFrom` and `verify`                  | not checked |
-| step             | checked by `new`, `TryFrom` and `verify`                  | not checked |
-| unit             | not checked                                               | not checked |
-| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | not checked |
-| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | not checked |
-| collection bound | checked by `encode` and `verify`                          | not checked |
-| timing           | not checked                                               | not checked |
-| response bound   | `max` checked by the future of a `Client` call            | not checked |
-| errors           | not checked                                               | not checked |
-| `require`        | checked by the call methods of `Client` and by `serve`    | not checked |
-| `ensure`         | checked by `serve`                                        | not checked |
+| Rule             | Rust                                                      | TypeScript              |
+| ---------------- | --------------------------------------------------------- | ----------------------- |
+| range            | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
+| step             | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
+| unit             | not checked                                               | not checked             |
+| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | checked by `make<Name>` |
+| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | checked by `make<Name>` |
+| collection bound | checked by `encode` and `verify`                          | not checked             |
+| timing           | not checked                                               | not checked             |
+| response bound   | `max` checked by the future of a `Client` call            | not checked             |
+| errors           | not checked                                               | not checked             |
+| `require`        | checked by the call methods of `Client` and by `serve`    | not checked             |
+| `ensure`         | checked by `serve`                                        | not checked             |
 
 In the Rust column:
 
@@ -816,12 +818,40 @@ In the Rust column:
   `proto3` under `[backend.rust] encodings` (see
   [What the crate contains](#what-the-crate-contains)).
 
-The TypeScript domain module's types, constants, `<Name>Bits` objects and init
-functions do not validate values. The TypeScript column above describes that
-domain module. Optional codec stream functions verify named requests, elements
-and plain replies through the wasm codec, so their validation uses the Rust
-codec's enabled checks, including pattern checks only when its feature is on.
-They also enforce chunk limits and UTF-8 as
+In the TypeScript column, `make<Name>` is the constructor of a named scalar in
+the domain module. It checks the range, step, length and pattern in that order,
+stops at the first violation, and throws a `ConstraintError` from
+`@driftsys/ridl-runtime`. Its `rule` is `range`, `step`, `length` or `pattern`,
+its `type` is the qualified name of the type, and its message names the value
+and the constraint. A string length counts Unicode code points, as the Rust
+`chars().count()` does, so `"😀"` has length 1, and a bytes length counts bytes.
+The pattern is a `RegExp` built once for the module, without the `u` flag, with
+the ECMA-262 semantics of the checker; the Rust `regex` crate reads some
+constructs differently (driftsys/ridl#597). Unlike the Rust `new`, the pattern
+check has no feature switch. `make<Name>Unchecked` returns the value without a
+check, for a value already known to satisfy the constraints:
+
+```typescript
+import { ConstraintError } from "@driftsys/ridl-runtime";
+import { makeTemperature, makeTemperatureUnchecked } from "./cabin.js";
+
+makeTemperature(20); // 20, typed as Temperature
+try {
+  makeTemperature(90);
+} catch (error) {
+  // error instanceof ConstraintError, error.rule === "range"
+}
+makeTemperatureUnchecked(90); // 90, not checked
+```
+
+The type assertion `20 as Temperature` still compiles, which is a limit of
+TypeScript. The domain module's types, constants, `<Name>Bits` objects, init
+functions and struct fields do not validate values; a collection bound and a
+unit are not checked. The TypeScript column above describes that domain module.
+Optional codec stream functions verify named requests, elements and plain
+replies through the wasm codec, so their validation uses the Rust codec's
+enabled checks, including pattern checks only when its feature is on. They also
+enforce chunk limits and UTF-8 as
 [Calling generated streams](#calling-generated-streams) describes. They do not
 evaluate interaction `require` or `ensure` clauses. A standalone `encode<Name>`
 or `decode<Name>` is a converter, not a full validator.

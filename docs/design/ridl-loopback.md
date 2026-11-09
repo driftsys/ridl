@@ -318,16 +318,33 @@ of a claim, and is kept with the stream itself on the call's entry in the store,
 because `Waiters` and `Table` hold no provider-side key. The aggregate sends
 each key to the handle that observes it.
 
+`StreamHandler::wake_on_claim_forget` is a separate registration, with one waker
+on the call's entry rather than on any stream. Both `Loopback` and
+`HandlerHandle` implement it and `claim_forget`. They find an offered or taken
+claim by its entry's claim id, without requiring the registering handle to be
+the handler that holds it. The [port contract](ridl-rt.md#the-ports) defines the
+query's three answers and the defaults for other runtimes.
+
 What wakes a stored waker:
 
-| Kind          | Woken by                                                                                                                                                                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Outcome`     | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                                                                                                       |
-| `Slot`        | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, the drop of the handler that held such a call, or another caller handle's drop                          |
-| `Event`       | a raise that queues an occurrence for this source                                                                                                                                                                                                                         |
-| `Claim`       | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                                                                                                  |
-| `Stream`      | on the stream: a chunk or the end the provider pushes, an abort by the provider, or a pull by the provider that frees the window; on the call: its settlement, its `forget`, the drop of the caller handle that sent it, or the drop of the handler that settled it       |
-| `ClaimStream` | on the stream: a chunk or the end the caller pushes, an abort by the caller, or a pull by the caller that frees the window; on the call: the caller's `forget`, the drop of the caller handle, the drop of this handler, or a settlement that releases a stream parameter |
+| Kind                   | Woken by                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Outcome`              | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                                                                                                       |
+| `Slot`                 | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, the drop of the handler that held such a call, or another caller handle's drop                          |
+| `Event`                | a raise that queues an occurrence for this source                                                                                                                                                                                                                         |
+| `Claim`                | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                                                                                                  |
+| `Stream`               | on the stream: a chunk or the end the provider pushes, an abort by the provider, or a pull by the provider that frees the window; on the call: its settlement, its `forget`, the drop of the caller handle that sent it, or the drop of the handler that settled it       |
+| `ClaimStream`          | on the stream: a chunk or the end the caller pushes, an abort by the caller, or a pull by the caller that frees the window; on the call: the caller's `forget`, the drop of the caller handle, the drop of this handler, or a settlement that releases a stream parameter |
+| `wake_on_claim_forget` | the caller's `forget`, including a deferred forget and a forget caused by the caller handle's drop; reclaiming the call's entry also takes and wakes this waker                                                                                                           |
+
+A claim-forget registration replaces and refreshes its waker under the same
+`Waker::will_wake` rule as the other registrations. An already forgotten call or
+an unknown claim wakes it at once. An ended parameter stream does not: the
+registration waits for the call's forget independently of stream state. The
+provider confirms a wake with `claim_forget`; the
+[port contract](ridl-rt.md#the-ports) describes the registration order for a
+provider that keeps working after `AfterEnd`. Reclaiming an entry takes this
+waker before dropping the entry, and wakes it after releasing the lock.
 
 A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
 and puts it back, unwoken, when no call the handler now serves is waiting. A
@@ -541,31 +558,36 @@ when a handler holds or settled the call and the provider has not yet pulled
 every stream parameter to `End` or `Failed`, the store marks the call forgotten
 on its entry and does not tell the table, so the slot stays taken; the caller's
 correlation already answers as forgotten, and its `Outcome` and `Stream` waiters
-are woken. The provider's pull that reads the last of those ends, a settlement
-after it, or the handler's drop completes the forget through `Table::forget`. An
-`abort_claim` of a stream parameter counts as the provider's end of it, also
-when it answers `Ended` because the stream had already finished, and the
-settlement of a query, or of a command with an error, releases its stream
-parameters (their unread chunks are dropped, and the caller's next push answers
-`Failed(Interrupted)`); the settlement `Ok` of a command does not, because its
-stream parameters go on after the acknowledgment. A forget before any handler
-took the claim withdraws the call, with every stream it has, the ended ones too,
-because no provider has the claim to read them. The drop of a handler stops
-every unfinished stream of a claim it settled with `Interrupted` and wakes the
-caller's `Stream` waiters, so a caller still pushing to an acknowledged command
-learns the provider is gone. After the caller refused the reply stream,
-`end_claim` settles the claim with that refusal rather than `Ok`. This holds a
-slot no longer than the provider's reading, and uses no storage beyond the slot,
-at the cost of a caller finding the table full sooner. With no member table, the
-store counts only the stream parameters an operation has already named: after
-the forget of a settled call none of whose stream parameters was named, the
-forget completes at once, the claim is no longer known, and a stream operation
-on it answers `Contract::UnknownInteraction`. After every settlement and every
-forget that the table does not answer `Unknown`, the store takes the slot's
-`Stream` wakers with `Table::take_streams`, and a reclaim also takes the
-provider's wakers, before the entry, and the streams with it, are dropped. The
-stream cases are the `streams` module of the `ridl-rt-conformance` suite this
-runtime runs.
+are woken, along with the entry's claim-forget waker. `claim_forget` reports
+`AfterEnd` only if at least one parameter stream was named and all named
+parameter streams have the producer's end and no stop. Their state retains that
+distinction after a provider reads the end. It reports `Forgotten` for an open
+or stopped parameter stream, for none named, and for an unknown claim; before
+the forget it reports `NotForgotten`, including for an offered claim. The
+provider's pull that reads the last of those ends, a settlement after it, or the
+handler's drop completes the forget through `Table::forget`. An `abort_claim` of
+a stream parameter counts as the provider's end of it, also when it answers
+`Ended` because the stream had already finished, and the settlement of a query,
+or of a command with an error, releases its stream parameters (their unread
+chunks are dropped, and the caller's next push answers `Failed(Interrupted)`);
+the settlement `Ok` of a command does not, because its stream parameters go on
+after the acknowledgment. A forget before any handler took the claim withdraws
+the call, with every stream it has, the ended ones too, because no provider has
+the claim to read them. The drop of a handler stops every unfinished stream of a
+claim it settled with `Interrupted` and wakes the caller's `Stream` waiters, so
+a caller still pushing to an acknowledged command learns the provider is gone.
+After the caller refused the reply stream, `end_claim` settles the claim with
+that refusal rather than `Ok`. This holds a slot no longer than the provider's
+reading, and uses no storage beyond the slot, at the cost of a caller finding
+the table full sooner. With no member table, the store counts only the stream
+parameters an operation has already named: after the forget of a settled call
+none of whose stream parameters was named, the forget completes at once, the
+claim is no longer known, and a stream operation on it answers
+`Contract::UnknownInteraction`. After every settlement and every forget that the
+table does not answer `Unknown`, the store takes the slot's `Stream` wakers with
+`Table::take_streams`, and a reclaim also takes the provider's wakers, before
+the entry, and the streams with it, are dropped. The stream cases are the
+`streams` module of the `ridl-rt-conformance` suite this runtime runs.
 
 **An offered claim (2026-09-28, driftsys/ridl#569).** A call whose argument
 bytes do not fit the buffer passed to `next_claim` is offered rather than taken:
@@ -967,10 +989,10 @@ to a node"; this section states how the crate carries them.
 ## It runs the port contract suite
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
-`ridl-rt-conformance` over this runtime with the five base extension flags,
-including both signal extensions and `Wakeable` (driftsys/ridl#514). The two
-additional flags, `identity` and `identity_debug`, run with `node` and `debug`,
-respectively. The factory it writes for the suite is the aggregate, the
+`ridl-rt-conformance` over this runtime with the six base extension flags:
+`scannable`, `coherent`, `wakeable`, `trace`, `streams` and `claim_forget`. The
+two additional flags, `identity` and `identity_debug`, run with `node` and
+`debug`, respectively. The factory it writes for the suite is the aggregate, the
 `SourceHandle`, `CallerHandle` and `HandlerHandle` that `Loopback::source`,
 `Loopback::caller` and `Loopback::handler` hand out, `Loopback::SLOTS` as the
 size of the call table the suite fills, and `Loopback::advance` and
@@ -979,18 +1001,18 @@ size of the call table the suite fills, and `Loopback::advance` and
 The suite states only what the port contract states. Its handlers call `serve`
 before they take a claim, so the deviation from `Handler::serve` recorded under
 "What it cannot report" is not exercised by it. It asserts no wake the contract
-allows but does not require: because a spurious wake is allowed, it asserts that
-a change leaves a waker unwoken only where the contract rules the wake out — a
-refresh, or a waker already woken or displaced and so cleared — and it never
-asserts that a registration whose key already holds is woken at once. The base
-suite drops no handle (the `identity` group drops attachments, to check that an
-identity is released), and it accepts either result for a forgotten call no
-handler has claimed. What the suite leaves out, and why, is listed once, in the
-crate documentation of `crates/ridl-rt-conformance/src/lib.rs`.
-`crates/ridl-loopback/tests/ports.rs` keeps the tests of this runtime's own
-choices — its narrower wakes, its wakes at once, its `Drop`, its withdrawal, and
-its own numbers — some of which fall under that list and some of which are this
-runtime's alone, and its module documentation names each test with its reason.
+allows but does not require. The `claim_forget` group permits spurious wakes on
+live registrations and asserts that forget and displacement increase the wake
+count. It also asserts that a registration for a forgotten or unknown claim is
+woken at once, as its contract requires. The base suite drops no handle (the
+`identity` group drops attachments, to check that an identity is released), and
+it accepts either result for a forgotten call no handler has claimed. What the
+suite leaves out, and why, is listed once, in the crate documentation of
+`crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
+keeps the tests of this runtime's own choices — its narrower wakes, its wakes at
+once, its `Drop`, its withdrawal, and its own numbers — some of which fall under
+that list and some of which are this runtime's alone, and its module
+documentation names each test with its reason.
 
 ## What it replaced
 

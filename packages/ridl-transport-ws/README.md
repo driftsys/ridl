@@ -42,16 +42,50 @@ A received payload longer than its member's limit never reaches the application:
 
 - a `reply` longer than the limit rejects the query with `SessionError`
   `corrupt`;
-- a `publish` that answers a `read` rejects the read with `corrupt`;
+- a `publish` that answers a `read` resolves the read with the invalid sample of
+  the next bullet;
 - a `publish` of a subscribed signal is delivered as a sample with provenance
-  `invalid`, `payload` `null` and `detected: "corrupt"`, and becomes the held
-  sample; the next `publish` within the limit returns the signal to `live`;
+  `invalid`, `payload` `null`, `detected: "corrupt"` and `lastGood` holding the
+  last bytes that passed, and becomes the held sample; the next `publish` within
+  the limit that passes its check returns the signal to `live`;
 - an `occurrence` is delivered with an empty payload and `detected: "corrupt"`,
   and counts in the event's sequence.
 
 The arguments of a command or a query longer than the member's limit reject the
 call with `SessionError` `corrupt` before anything is sent, the answer the
 provider gives a `request` above the limit.
+
+## Checking a signal
+
+The package reads no payload, so it verifies none. The caller registers a check
+for each signal it wants verified, and the session runs it on every `live`
+payload of that signal that is within its limit, before the payload becomes the
+held value:
+
+- `connect` takes `checks`, a list of `{ iface, ord, check }` entries, in its
+  options. `Session.checkWith(iface, ord, check)` registers or replaces one
+  check later. An interface number or an ordinal outside 1 to 4,294,967,295
+  makes `connect` reject, before it creates a socket, and `checkWith` throw,
+  with `RangeError`. A check receives the payload bytes and returns `undefined`
+  when they pass, else `"corrupt"` or `{ rule }`. The generated
+  `<base>.codec.ts` module exports `signalChecks(codec)` when a signal has a
+  table entry. It returns one entry per such signal for the `checks` option.
+- A payload that fails its check is not delivered as a value. The sample has
+  provenance `invalid`, `payload` `null` and `detected` set to the result of the
+  check, and it becomes the held sample. `Sample.lastGood` holds the last bytes
+  that passed since the last `subscribe`, and `null` when the init value
+  applies. An `init` publish sets `lastGood` to `null`, and a publish that the
+  provider declares invalid keeps the held `lastGood`.
+- A `read` answered by a refused or over-limit publish resolves with the invalid
+  sample. It does not reject.
+- `checkWith` also checks a held `live` sample at once. When the check refuses
+  it, the held sample becomes `invalid` with `detected`, `payload` `null` and
+  `lastGood` `null`. Registering a check calls no `onPublish`.
+- A check that throws counts as `"corrupt"`, and `onNote` receives
+  `{ note: "check-failed", iface, ord, error }` with the thrown error.
+
+A frame that a duplicate or stale sequence number drops is not checked unless it
+answers a waiting read. `unsubscribe` drops the held sample and its `lastGood`.
 
 ## A large `fixed`
 
@@ -71,9 +105,10 @@ does not write to again.
 A value of a `fixed` longer than its limit, whether it arrived in one `publish`
 or in blocks, and on either frame version:
 
-- rejects the consecutive live reads at the head of the queue with
-  `SessionError` `corrupt`, unless a cancelled read ahead first consumes the
-  reply without settling the reads behind it;
+- resolves the consecutive live reads at the head of the queue with an invalid
+  sample (`detected: "corrupt"`, `lastGood: null`, the envelope of the `publish`
+  or of the first block), unless a cancelled read ahead first consumes the reply
+  without settling the reads behind it;
 - is recorded once, through `onNote`, as
   `{ note: "discarded", reason: "over-limit", frame }`, where `frame` is the
   `publish` or the first block, also when no read waits for it. In blocks, it is
