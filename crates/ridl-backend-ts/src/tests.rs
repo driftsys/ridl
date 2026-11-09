@@ -1463,8 +1463,13 @@ export function initTimestamp(): Timestamp {
     )
     .expect("the runtime step helpers are written");
     std::fs::write(
+        dir.path().join("length.ts"),
+        include_str!("../../../packages/ridl-runtime/src/length.ts"),
+    )
+    .expect("the runtime length helper is written");
+    std::fs::write(
         dir.path().join("runtime.ts"),
-        "export * from './errors';\nexport * from './step';\n",
+        "export * from './errors';\nexport * from './length';\nexport * from './step';\n",
     )
     .expect("the runtime entry point is written");
     std::fs::write(
@@ -2354,7 +2359,8 @@ fn comment_blocks(source: &str) -> Vec<String> {
         if let Some(block) = open.as_mut() {
             block.push_str(line);
             block.push('\n');
-            if trimmed == "*/" {
+            // A block closes on its own line, or on its only line.
+            if trimmed.ends_with("*/") {
                 blocks.extend(open.take());
             }
         }
@@ -2751,28 +2757,114 @@ fn constraint_error_name_is_refused() {
     assert!(message.contains("@driftsys/ridl-runtime"), "{message}");
 }
 
-#[test]
-fn deferred_scalar_constructors_are_absent() {
-    for prim in [v2::PrimitiveType::String, v2::PrimitiveType::Bytes] {
-        let mut kind = primitive_type(prim, init_value(false, None), None);
-        if let v2::decl::Kind::TypeDef(td) = &mut kind {
-            let mut c = constraint(None, None, None);
-            c.len_min = Some(1);
-            c.len_max = Some(10);
-            if prim == v2::PrimitiveType::String {
-                c.pattern = Some("/x/".to_string());
-            }
-            td.constraint = Some(c);
-        }
-        let decl = public_decl("Value", kind);
-        let source = generate(&package("test.ctor", vec![decl])).unwrap().source;
-        assert!(!source.contains("makeValue") && !source.contains("ConstraintError"));
+/// A string or bytes declaration with a length bound and an optional pattern.
+fn text_decl(
+    name: &str,
+    prim: v2::PrimitiveType,
+    len: (Option<u64>, Option<u64>),
+    pattern: Option<&str>,
+) -> v2::Decl {
+    let mut kind = primitive_type(prim, init_value(false, None), None);
+    if let v2::decl::Kind::TypeDef(td) = &mut kind {
+        let mut c = constraint(None, None, None);
+        c.len_min = len.0;
+        c.len_max = len.1;
+        c.pattern = pattern.map(str::to_string);
+        td.constraint = Some(c);
     }
+    public_decl(name, kind)
+}
+
+#[test]
+fn a_string_length_counts_code_points() {
+    let decl = text_decl("Word", v2::PrimitiveType::String, (Some(1), Some(4)), None);
+    let source = ts_for(vec![decl]);
+    assert!(source.contains("codePointLength(value) < 1"), "{source}");
+    assert!(source.contains("codePointLength(value) > 4"), "{source}");
+    assert!(!source.contains("value.length"), "{source}");
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_bytes_length_counts_bytes() {
+    let decl = text_decl("Blob", v2::PrimitiveType::Bytes, (Some(2), Some(4)), None);
+    let source = ts_for(vec![decl]);
+    assert!(source.contains("value.length < 2"), "{source}");
+    assert!(source.contains("value.length > 4"), "{source}");
+    assert!(!source.contains("codePointLength"), "{source}");
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_zero_minimum_and_an_unreachable_maximum_emit_no_comparison() {
+    let decl = text_decl(
+        "Open",
+        v2::PrimitiveType::String,
+        (Some(0), Some(u64::MAX)),
+        None,
+    );
+    let source = ts_for(vec![decl]);
+    assert!(!source.contains("ConstraintError"), "{source}");
+    assert!(source.contains("function makeOpen("), "{source}");
+    assert!(!source.contains("makeOpenUnchecked"), "{source}");
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_pattern_is_checked_after_the_length_with_a_module_level_regexp() {
+    let decl = text_decl(
+        "Code",
+        v2::PrimitiveType::String,
+        (Some(1), Some(8)),
+        Some("/^\\d+'x$/"),
+    );
+    let source = ts_for(vec![decl]);
+    let regexp = source
+        .find("const __ridlPatternCode = new globalThis.RegExp('^\\\\d+\\'x$');")
+        .unwrap_or_else(|| panic!("the pattern is built once at module level:\n{source}"));
+    let function = source.find("function makeCode(").expect("the constructor");
+    assert!(regexp < function, "{source}");
+    let max = source.find("codePointLength(value) > 8").expect("max");
+    let pattern = source
+        .find("!__ridlPatternCode.test(value)")
+        .expect("pattern");
+    assert!(max < pattern, "the length is checked first:\n{source}");
+    assert_eq!(source.matches("RegExp(").count(), 1, "{source}");
+    assert!(!source.contains("/u'"), "no unicode flag:\n{source}");
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_pattern_on_bytes_is_not_emitted() {
+    let decl = text_decl(
+        "Blob",
+        v2::PrimitiveType::Bytes,
+        (None, Some(4)),
+        Some("/x/"),
+    );
+    let source = ts_for(vec![decl]);
+    assert!(!source.contains("RegExp"), "{source}");
+    assert!(source.contains("value.length > 4"), "{source}");
+}
+
+#[test]
+fn an_internal_string_constructor_is_not_exported() {
+    let mut decl = text_decl(
+        "Hidden",
+        v2::PrimitiveType::String,
+        (None, Some(4)),
+        Some("/x/"),
+    );
+    decl.visibility = v2::Visibility::Internal as i32;
+    let source = ts_for(vec![decl]);
+    assert!(!source.contains("export"), "{source}");
+    assert!(source.contains("function makeHidden("), "{source}");
+    insta::assert_snapshot!(source);
 }
 
 #[test]
 fn the_runtime_helper_names_are_refused() {
-    for name in ["offFloatStep", "offFloatPoints"] {
+    for name in ["offFloatStep", "offFloatPoints", "codePointLength"] {
         let decl = public_decl(
             name,
             primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),

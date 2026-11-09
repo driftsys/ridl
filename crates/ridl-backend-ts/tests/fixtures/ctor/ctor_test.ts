@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { ConstraintError } from "@driftsys/ridl-runtime";
 import {
+  makeBlob,
+  makeCapitals,
+  makeContains,
+  makeDot,
+  makeFree,
   makeFreeInteger,
   makeLower,
   makeLowerReal,
@@ -8,19 +13,27 @@ import {
   makeNarrowReal,
   makeNegative,
   makePrecise,
+  makeQuoted,
+  makeRaw,
   makeReal,
   makeShifted,
+  makeShort,
   makeSmall,
   makeSmallUnchecked,
   makeTenth,
+  makeTriple,
   makeUnbounded,
   makeUpper,
   makeUpperReal,
   makeWide,
+  makeWord,
+  makeWordUnchecked,
 } from "./ctor.ts";
 import {
+  makeEndless,
   makeFromZero,
   makeHugeStep,
+  makePatterned,
   makeSafeNumber,
   makeStepped,
   makeUnbounded32,
@@ -246,4 +259,139 @@ Deno.test("a float grid counts from a negative minimum between two multiples", (
   for (const value of [-1, -0.9, 0, 0.1, 1]) {
     refuses("Negative", () => makeNegative(value), "step");
   }
+});
+
+Deno.test("string length bounds are inclusive and count code points", () => {
+  assert.equal(makeWord("a"), "a");
+  assert.equal(makeWord("abcd"), "abcd");
+  refuses("Word", () => makeWord(""), "length");
+  refuses("Word", () => makeWord("abcde"), "length");
+});
+
+Deno.test("string length counts a multi-byte character once", () => {
+  // Two bytes in UTF-8, one UTF-16 unit.
+  assert.equal(makeWord("éééé"), "éééé");
+  refuses("Word", () => makeWord("ééééé"), "length");
+  // Three bytes in UTF-8, one UTF-16 unit.
+  assert.equal(makeWord("€€€€"), "€€€€");
+});
+
+Deno.test("string length counts an astral code point once, not two units", () => {
+  // Four code points, eight UTF-16 units.
+  assert.equal("😀😀😀😀".length, 8);
+  assert.equal(makeWord("😀😀😀😀"), "😀😀😀😀");
+  refuses("Word", () => makeWord("😀😀😀😀😀"), "length");
+  // The minimum counts code points too: three of them in six units.
+  assert.equal(makeTriple("😀😀😀"), "😀😀😀");
+  refuses("Triple", () => makeTriple("😀😀"), "length");
+  refuses("Triple", () => makeTriple("😀😀😀😀"), "length");
+});
+
+Deno.test("string length counts a lone surrogate as one character", () => {
+  assert.equal(makeTriple("\ud83dab"), "\ud83dab");
+  refuses("Triple", () => makeTriple("\ud83dabc"), "length");
+});
+
+Deno.test("an empty string passes a zero minimum and fails a positive one", () => {
+  assert.equal(makeShort(""), "");
+  assert.equal(makeFree(""), "");
+  assert.equal(makeFree("a".repeat(256)).length, 256);
+  refuses("Free", () => makeFree("a".repeat(257)), "length");
+  refuses("Word", () => makeWord(""), "length");
+  refuses("Triple", () => makeTriple(""), "length");
+});
+
+Deno.test("a fixed string length refuses both neighbours", () => {
+  assert.equal(makeTriple("abc"), "abc");
+  refuses("Triple", () => makeTriple("ab"), "length");
+  refuses("Triple", () => makeTriple("abcd"), "length");
+});
+
+Deno.test("bytes length counts bytes and is inclusive", () => {
+  assert.equal(makeBlob(new Uint8Array(2)).length, 2);
+  assert.equal(makeBlob(new Uint8Array(4)).length, 4);
+  refuses("Blob", () => makeBlob(new Uint8Array(1)), "length");
+  refuses("Blob", () => makeBlob(new Uint8Array(5)), "length");
+  assert.equal(makeRaw(new Uint8Array(0)).length, 0);
+  assert.equal(makeRaw(new Uint8Array(8)).length, 8);
+  refuses("Raw", () => makeRaw(new Uint8Array(9)), "length");
+});
+
+Deno.test("a pattern with anchors matches the whole value", () => {
+  assert.equal(makeCapitals("ABC"), "ABC");
+  refuses("Capitals", () => makeCapitals("ABc"), "pattern");
+  refuses("Capitals", () => makeCapitals("1ABC"), "pattern");
+  refuses("Capitals", () => makeCapitals("ABC1"), "pattern");
+});
+
+Deno.test("an anchored pattern refuses a trailing newline", () => {
+  // `$` without the multiline flag matches only at the end of the input.
+  refuses("Capitals", () => makeCapitals("ABC\n"), "pattern");
+  refuses("Capitals", () => makeCapitals("AB\nC"), "pattern");
+});
+
+Deno.test("an unanchored pattern accepts a match anywhere", () => {
+  assert.equal(makeContains("xxabxx"), "xxabxx");
+  assert.equal(makeContains("ab"), "ab");
+  refuses("Contains", () => makeContains("ba"), "pattern");
+  refuses("Contains", () => makeContains(""), "pattern");
+});
+
+Deno.test("a pattern runs without the unicode flag", () => {
+  // The dot matches one UTF-16 unit, the semantics of the checker. With the
+  // `u` flag it would match the whole astral character.
+  assert.equal(makeDot("a"), "a");
+  assert.equal(makeDot("é"), "é");
+  refuses("Dot", () => makeDot("😀"), "pattern");
+  // The dot does not match a line break.
+  refuses("Dot", () => makeDot("\n"), "pattern");
+});
+
+Deno.test("a pattern checks the same value on every call", () => {
+  // A `RegExp` with the `g` or `y` flag keeps a position between calls.
+  for (let i = 0; i < 3; i++) {
+    assert.equal(makeCapitals("ABC"), "ABC");
+    assert.equal(makeContains("ab"), "ab");
+  }
+});
+
+Deno.test("a pattern with an escape and a quote is emitted literally", () => {
+  assert.equal(makeQuoted("12'x"), "12'x");
+  refuses("Quoted", () => makeQuoted("1a'x"), "pattern");
+  refuses("Quoted", () => makeQuoted("12x"), "pattern");
+});
+
+Deno.test("length is checked before the pattern", () => {
+  // Nine capitals match the pattern and break the length bound.
+  refuses("Capitals", () => makeCapitals("ABCDEFGHI"), "length");
+  refuses("Capitals", () => makeCapitals(""), "length");
+  // A length-valid value that breaks the pattern is refused for the pattern.
+  refuses("Capitals", () => makeCapitals("abc"), "pattern");
+});
+
+Deno.test("the error names the length and pattern constraints", () => {
+  assert.throws(() => makeWord("abcde"), {
+    message: "ctor.Word: abcde breaks the length rule [1..4]",
+  });
+  assert.throws(() => makeCapitals("abc"), {
+    message: "ctor.Capitals: abc breaks the pattern rule /^[A-Z]+$/",
+  });
+  assert.throws(() => makeBlob(new Uint8Array(5)), {
+    message: "ctor.Blob: <5 bytes> breaks the length rule [2..4]",
+  });
+});
+
+Deno.test("an unchecked string constructor returns the value unchanged", () => {
+  assert.equal(makeWordUnchecked("abcdefgh"), "abcdefgh");
+  assert.equal(makeWordUnchecked(""), "");
+});
+
+Deno.test("a length maximum beyond the safe numbers is never exceeded", () => {
+  assert.equal(makeEndless("a"), "a");
+  refuses("Endless", () => makeEndless(""), "length");
+});
+
+Deno.test("a pattern on bytes is ignored", () => {
+  assert.equal(makePatterned(new Uint8Array(2)).length, 2);
+  refuses("Patterned", () => makePatterned(new Uint8Array(3)), "length");
 });

@@ -355,6 +355,23 @@ fn driver(call: &Call) -> TokenStream {
         let _=h.settle(stream.claim,Err(e));
         #failed_result
     };
+    let forgotten = if call.duplex() {
+        quote! {
+            let e=::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted);
+            if !stream.reply.as_ref().expect("active reply").source.input_done {
+                stream.reply.as_mut().expect("active reply").source.input_done=true;
+                #failed
+            }
+            let _=h.abort_claim(stream.claim,::ridl_rt::contract::StreamNo(1),e);
+            let _=h.settle(stream.claim,Err(e));
+            return false;
+        }
+    } else {
+        quote! {
+            let e=::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted);
+            return {#failed};
+        }
+    };
     let assoc = ident(call.member.camel);
     let function = if call.duplex() {
         let output_ty = ty(call.reply_type.unwrap());
@@ -412,6 +429,10 @@ fn driver(call: &Call) -> TokenStream {
         fn #method<H,P>(h:&mut H,#provider_arg,slot:&mut Option<#name<H,P>>,cx:&mut ::core::task::Context<'_>,budget:&mut usize)->bool
         where H: ::ridl_rt::port::Encoded+::ridl_rt::port::StreamHandler+::ridl_rt::port::Wakeable,P:Provider,#input #output {
             let Some(mut stream)=slot.take()else{return false;};
+            h.wake_on_claim_forget(stream.claim,cx.waker());
+            if h.claim_forget(stream.claim)!=::ridl_rt::port::ClaimForget::NotForgotten {
+                #forgotten
+            }
             #function
         }
     }

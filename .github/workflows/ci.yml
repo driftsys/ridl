@@ -42,7 +42,7 @@ env:
   # applies rust-toolchain.toml to a contributor too, but nothing applies these
   # two, so a contributor runs whatever their package manager gave them.
   # ADR-0009 decision 8 records that asymmetry and why it is not closed here.
-  # The Deno pin is not here: it is in .deno-version, because `./bootstrap`
+  # The Deno pin is not here: it is in .deno-version (with its checksums in .deno-sha256), because `./bootstrap`
   # reads it too and installs that version when a contributor has no `deno`.
   # The flatc pin is not here either: it is in .flatc-version, for the same
   # reason.
@@ -223,6 +223,7 @@ jobs:
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
+      - run: just deno-pin-check
       # Needs no toolchain and no external network: it tests install.sh against
       # a local file:// fixture, and install.ps1 against a fixture served from
       # a local HTTP server.
@@ -314,7 +315,8 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
-      # The version is read from .deno-version, the one place it is pinned.
+      # The version is read from .deno-version and the zip is checked against
+      # .deno-sha256; the two are edited together.
       - name: install deno
         run: |
           set -o pipefail
@@ -322,6 +324,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           curl -fsSL -o "$RUNNER_TEMP/deno.zip" \
             "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-x86_64-unknown-linux-gnu.zip"
+          scripts/verify-deno-zip.sh "$RUNNER_TEMP/deno.zip" x86_64-unknown-linux-gnu
           unzip -o -q "$RUNNER_TEMP/deno.zip" -d "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/deno" --version

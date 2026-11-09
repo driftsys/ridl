@@ -109,6 +109,11 @@ state this minimum, the evidence/category/failure changes and the recovery
 procedure. After 1.0 an incompatible public-contract change requires a major
 release.
 
+The same failure behavior for catalog history of a workspace that builds only
+FlatBuffers or proto3 is approved in
+[ADR-0029](../decisions/ADR-0029-stability-policy.md); its release notes state
+the new exit code, as above.
+
 ## How the promise is checked
 
 The repository checks each frozen surface that has a recorded baseline against

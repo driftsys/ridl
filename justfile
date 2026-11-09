@@ -2593,6 +2593,32 @@ story-id-check root="":
         run_gate .
     fi
 
+# The Deno checksum pin covers the pinned version: .deno-sha256 names the
+# version in .deno-version, and holds a SHA-256 for every target that
+# ./bootstrap downloads and for the one CI downloads.
+deno-pin-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(tr -d '[:space:]' < .deno-version)"
+    pinned="$(sed -n 's/^# version[[:space:]]*//p' .deno-sha256 | tr -d '[:space:]')"
+    if [ "$pinned" != "$version" ]; then
+        echo "deno-pin-check: .deno-sha256 is for deno '$pinned', and .deno-version pins '$version'." >&2
+        exit 1
+    fi
+    targets="$(sed -n 's/.*deno_target=\([a-z0-9_-]*\) ;;.*/\1/p' bootstrap)"
+    targets="$(printf '%s\n' $targets x86_64-unknown-linux-gnu | sort -u)"
+    if [ "$(printf '%s\n' $targets | wc -l | tr -d ' ')" -ne 4 ]; then
+        echo "deno-pin-check: could not read the four targets from ./bootstrap." >&2
+        exit 1
+    fi
+    for target in $targets; do
+        if ! grep -Eq "^[0-9a-f]{64}  deno-${target}\.zip\$" .deno-sha256; then
+            echo "deno-pin-check: .deno-sha256 has no SHA-256 for deno-${target}.zip." >&2
+            exit 1
+        fi
+    done
+    echo "deno-pin-check: .deno-sha256 covers deno $version for $(printf '%s\n' $targets | wc -l | tr -d ' ') targets"
+
 # Check that CI still invokes every recipe the local gate is made of.
 #
 # The other half of gate parity. CI runs these recipes rather than its own copy
@@ -2644,7 +2670,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
+    expected="toolchain-check gate-parity deno-pin-check install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -3409,12 +3435,12 @@ ts-browser-e2e:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The eleven members before `compile` do not compile the workspace (freeze-check
+# The twelve members before `compile` do not compile the workspace (freeze-check
 # compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
+build: toolchain-check gate-parity deno-pin-check install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

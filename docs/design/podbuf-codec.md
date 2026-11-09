@@ -377,6 +377,9 @@ alone. An unresolved remote name on the new side also records an issue when its
 consumer use survives. An issue's reason is missing evidence, a declaration that
 cannot be laid out, or a changed declaration kind. An explicit podbuf comparison
 refuses missing or unusable evidence rather than inferring compatibility.
+[ADR-0031 decision 13](../decisions/ADR-0031-podbuf-projection-rules.md) and the
+[CLI reference](../book/cli-reference.md#ridl-baseline) own the catalog-history
+evidence requirements for affected units.
 
 This coverage replaces the shared-current-context limitation recorded on
 2026-10-31. Local append layouts also use their respective historical scopes. It

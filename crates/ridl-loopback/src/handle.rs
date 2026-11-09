@@ -29,7 +29,7 @@
 //! | [`SourceHandle`]  | `EventSource`                                                                 | `Event`, one waker                                             | `Send`        |
 //! | [`SinkHandle`]    | `EventSink`                                                                   | none                                                           | `Send`        |
 //! | [`CallerHandle`]  | `Clock`, `Caller`, `StreamCaller`                                             | `Outcome` and `Stream`, kept with each call; `Slot`, one waker | `Send`        |
-//! | [`HandlerHandle`] | `Handler`, `StreamHandler`                                                    | `Claim`, one waker; `ClaimStream`, kept with each claim's call | `Send`        |
+//! | [`HandlerHandle`] | `Handler`, `StreamHandler`                                                    | `Claim`, one waker; `ClaimStream`, kept with each claim's call; one forget waker per claim | `Send`        |
 //!
 //! A handle stores a waker only under a kind of key one of its roles
 //! observes. For `Event` and `Claim` that is one waker per kind, and a
@@ -62,8 +62,8 @@ use ridl_rt::contract::{CatalogRef, InterfaceNo, Kind, Ordinal, StreamNo};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
-    EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
+    Attached, Caller, Changed, Claim, ClaimForget, ClaimId, Clock, CoherentSignals, Correlation,
+    Encoded, EventSink, EventSource, FixedReader, Handler, Interest, Pull, PushError, RaiseError,
     RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, ServeError, SettleError,
     SignalReader, SignalWriter, StreamCaller, StreamHandler, SubscribeError, Wakeable, Watermark,
     WriteError,
@@ -755,9 +755,20 @@ impl<E: Encoding> Wakeable for HandlerHandle<E> {
 
 /// The providing side of a call's streams, by the claim this handler was
 /// presented: a claim it holds, or one it settled whose call the caller has
-/// not forgotten yet. Any other claim, and a push, an end or a pull from the
-/// wrong side, answers `Contract::UnknownInteraction`.
+/// not forgotten yet. Except for `claim_forget` and `wake_on_claim_forget`,
+/// any other claim, and a push, an end or a pull from the wrong side, answers
+/// `Contract::UnknownInteraction`.
 impl<E: Encoding> StreamHandler for HandlerHandle<E> {
+    fn claim_forget(&self, claim: ClaimId) -> ClaimForget {
+        lock(&self.shared).claim_forget(claim)
+    }
+
+    fn wake_on_claim_forget(&self, claim: ClaimId, waker: &Waker) {
+        locked(&self.shared, |store, wake| {
+            store.wait_claim_forget(claim, waker, wake)
+        });
+    }
+
     fn pull_claim(
         &mut self,
         claim: ClaimId,

@@ -44,3 +44,33 @@ type Precise : float [-1.0..1.0 step 0.0000000001]
 
 /// A float grid whose minimum is negative and not a multiple of the step.
 type Negative : float [-1.05..1.0 step 0.1]
+
+/// A string of one to four characters.
+type Word : string [1..4]
+
+/// A string of exactly three characters.
+type Triple : string [3..3]
+
+/// A string that may be empty.
+type Short : string [0..8]
+
+/// A string with the default length bound of 0 through 256 characters.
+type Free : string
+
+/// A string whose pattern is anchored at both ends.
+type Capitals : string [1..8 match /^[A-Z]+$/]
+
+/// A string whose pattern is not anchored, so a match anywhere accepts it.
+type Contains : string [0..16 match /ab/]
+
+/// A string of exactly one UTF-16 unit by pattern, which is one character.
+type Dot : string [0..4 match /^.$/]
+
+/// A string whose pattern holds an escape and a quote.
+type Quoted : string [0..16 match /^\d+'x$/]
+
+/// A byte string of two to four bytes.
+type Blob : bytes [2..4]
+
+/// A byte string that may be empty.
+type Raw : bytes [0..8]

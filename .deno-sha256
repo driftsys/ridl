@@ -1,0 +1,9 @@
+# SHA-256 of the Deno release zips for the version in .deno-version, copied from
+# the deno-<target>.zip.sha256sum files of that GitHub release. Edit this file
+# together with .deno-version; `just deno-pin-check` fails when the version on
+# the next line differs from .deno-version or a target is missing.
+# version 2.9.5
+b796aadd131f6930560c1ee040cf0d6f53933fbb987464e9ff46bd7ea4830615  deno-aarch64-apple-darwin.zip
+c1b8b89a81e91b2a8b3f96def3195d08cfe3a105651da7908d53061f7140510d  deno-x86_64-apple-darwin.zip
+8b010a3b1a4a0188a67cdb8a7a27348b2a501af78aec7fc74f2ace167368d530  deno-x86_64-unknown-linux-gnu.zip
+6b7cae3a8fc4385a59dea3146fcb8bad7fea4230e0ad36a8c692afacbc254be0  deno-aarch64-unknown-linux-gnu.zip

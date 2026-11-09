@@ -163,8 +163,19 @@ owns adoption and release-note requirements;
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) owns the comparison/history
 decisions and the [CLI reference](../book/cli-reference.md#baseline-context)
 owns the artifact and recovery contract. This approval covers only these
-assessed changes; passing dump checks does not approve other policy-frozen
-changes.
+assessed changes and the two 2026-11-09 amendments below; passing dump checks does
+not approve other policy-frozen changes.
+
+**Amended 2026-11-09 — catalog history failure behavior for FlatBuffers and
+proto3, from driftsys/ridl#1228.** The owner approved extending the explicit
+cannot-judge failure behavior of the 2026-11-02 amendment to catalog history of
+a workspace that builds only FlatBuffers or proto3: `ridl baseline` exits 2 when
+remote evidence is missing, and `ridl build` omits the affected unit's
+compatible catalogs. This changes a policy-frozen CLI failure behavior under
+decision 1. No dump row is removed and no wire layout, canonical catalog-hash
+input or IR package schema changes. The release requirements of the previous
+amendment apply. [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13
+owns the rule.
 
 **Amended 2026-11-09 — constraint verdicts, from the decision on
 driftsys/ridl#926.** The owner approved the change to the output and verdicts of
@@ -178,7 +189,8 @@ send-only paths. This follows the strict enum append precedent in
 [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13. These are
 policy-frozen contracts under decisions 1, 3 and 4. No dump row exists for these
 verdicts, so no row is removed and no baseline is weakened;
-`cargo xtask freeze check` verifies that no dump changes.
+`cargo xtask freeze check` verifies that no dump changes. On 2026-11-10 the
+owner confirmed the remote rows.
 
 This change must ship in a declared pre-1.0 minor release, never a patch. The
 release notes must state that a widened range on a received value now exits 1
