@@ -7866,7 +7866,7 @@ impl DriverProfile {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
         {
             let __s: &::core::primitive::str = self.name.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Name"),
@@ -8245,7 +8245,7 @@ impl SensorBounds {
                     let __ea = __off + __i * 8usize;
                     {
                         let __s: &::core::primitive::str = __e.get();
-                        if __s.as_bytes().contains(&0u8) {
+                        if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                             return ::core::result::Result::Err(
                                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                                     type_name: ::core::option::Option::Some("Label"),
@@ -8310,7 +8310,7 @@ impl SensorBounds {
                     let __ea = __off + __i * 16usize;
                     {
                         let __s: &::core::primitive::str = __e.0.get();
-                        if __s.as_bytes().contains(&0u8) {
+                        if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                             return ::core::result::Result::Err(
                                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                                     type_name: ::core::option::Option::Some("Label"),
@@ -8334,7 +8334,7 @@ impl SensorBounds {
                     }
                     {
                         let __s: &::core::primitive::str = __e.1.get();
-                        if __s.as_bytes().contains(&0u8) {
+                        if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                             return ::core::result::Result::Err(
                                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                                     type_name: ::core::option::Option::Some("Name"),
@@ -9457,7 +9457,7 @@ impl SensorFault {
         w.put_u16(__at, self.code.get() as ::core::primitive::u16);
         {
             let __s: &::core::primitive::str = self.message.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Message"),

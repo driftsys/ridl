@@ -638,12 +638,18 @@ mod tests {
     #[test]
     fn has_nul_finds_a_nul_at_every_position_and_length() {
         for len in 0..200usize {
-            let mut data = [1u8; 200];
+            // Non-zero fillers that differ, so that a reduction that is right
+            // only for 0 and 1 (an AND, for one) fails.
+            let mut data = [0u8; 200];
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = [1u8, 2, 0x7f, 0x80, 0xff][i % 5];
+            }
             assert!(!has_nul(&data[..len]), "len {len}");
             for at in 0..len {
+                let kept = data[at];
                 data[at] = 0;
                 assert!(has_nul(&data[..len]), "len {len} at {at}");
-                data[at] = 1;
+                data[at] = kept;
             }
         }
     }

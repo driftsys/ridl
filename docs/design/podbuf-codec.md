@@ -106,15 +106,15 @@ bounds-checked slice and returns 0 past the size the producer wrote.
 The module is behind the `podbuf` feature, takes no dependency, allocates
 nothing and has no `unsafe`. On a big-endian target it does not compile.
 
-| Item                   | What it does                                                                                               |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `Preamble`             | reads the 8-byte preamble; refuses an unaligned buffer or a bad `head_size`                                |
-| `Region`               | a window over a head, an element or an arm; every load returns 0 at or past the size the producer wrote    |
-| `Desc`, `ArrayDesc`    | the two descriptor layouts, with `is_zero`                                                                 |
-| `tail_range`           | the bounds and alignment check of a descriptor's data, by checked arithmetic                               |
-| `text`, `scalar_count` | the string checks: the closing NUL, no inner NUL, valid UTF-8, and the count of scalar values              |
-| `Writer`               | fills the caller's slice and zeroes every byte it reserves; the tail blocks are written in placement order |
-| `Aligned<T>`           | gives a byte array the 8-byte alignment of a buffer                                                        |
+| Item                              | What it does                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Preamble`                        | reads the 8-byte preamble; refuses an unaligned buffer or a bad `head_size`                                |
+| `Region`                          | a window over a head, an element or an arm; every load returns 0 at or past the size the producer wrote    |
+| `Desc`, `ArrayDesc`               | the two descriptor layouts, with `is_zero`                                                                 |
+| `tail_range`                      | the bounds and alignment check of a descriptor's data, by checked arithmetic                               |
+| `text`, `has_nul`, `scalar_count` | the string checks: the closing NUL, no inner NUL, valid UTF-8, and the count of scalar values              |
+| `Writer`                          | fills the caller's slice and zeroes every byte it reserves; the tail blocks are written in placement order |
+| `Aligned<T>`                      | gives a byte array the 8-byte alignment of a buffer                                                        |
 
 The shared error variants are `Malformed::Preamble`, `Stride`, `Terminator` and
 `KeyOrder`, and `EncodeError::Unaligned` and `EncodeError::Layout { at }`

@@ -7992,7 +7992,7 @@ impl DiagFilter {
         if let ::core::option::Option::Some(__o) = &self.category {
             {
                 let __s: &::core::primitive::str = __o.get();
-                if __s.as_bytes().contains(&0u8) {
+                if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                     return ::core::result::Result::Err(
                         ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                             type_name: ::core::option::Option::Some("Label"),
@@ -8290,7 +8290,7 @@ impl FaultEvent {
         w.put_u16(__at, self.code as ::core::primitive::u16);
         {
             let __s: &::core::primitive::str = self.message.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Message"),
@@ -12149,7 +12149,7 @@ impl FanTag {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FanTag"),
