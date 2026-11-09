@@ -12,26 +12,37 @@
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
 //! <literal>` for `result`, with the literal in the subject's Rust numeric
-//! type. The newtype's field is private, and the read is still legal: the
-//! subject is always a same-package named scalar, and the clause is emitted
-//! inside a descriptor `impl` block at package module scope, the same module
-//! that declares the type, where a private field is visible. Several clauses
-//! of one kind are conjoined with `&&`. Any other clause form is refused with a
+//! type. Float bounds preserve expr-core's exact rational comparisons: `<=`
+//! and `>` use the largest binary64 value at or below the exact literal; `>=`
+//! and `<` use the smallest at or above it. Exactly representable literals
+//! are printed as written, with `.0` appended when they have no fraction or
+//! exponent (`100` becomes `100.0`). Inexact `==` and `!=`, unreadable
+//! decimals, exponents that cannot be read or have magnitude above 10000,
+//! and bounds that require infinity are refused. The newtype's field
+//! is private, and the read is still legal: the subject is always a
+//! same-package named scalar, and the clause is emitted inside a descriptor
+//! `impl` block at package module scope, the same module that declares the
+//! type, where a private field is visible. Several clauses of one kind are
+//! conjoined with `&&`. Any other clause form is refused with a
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.
 //!
 //! The parser and the subject resolution are the lowering's
 //! (`ridl_ir::codegen`, design note D-9): the model carries either the
 //! accepted comparison or the reason the clause was refused, verbatim, and
-//! what is left here is the rendering — and the one rule this printer keeps
-//! for itself, that a subject whose scalar the scope resolved in another
-//! package is refused all the same, because this backend resolves nothing
-//! across packages (design note §3.5).
+//! what is left here is the rendering, including float-bound rounding and
+//! refusal. A subject whose scalar the scope resolved in another package is
+//! refused here because this backend resolves nothing across packages (design
+//! note §3.5). The model keeps the contract's exact literal text.
 
 use crate::{Ctx, GenerateError, ScalarBacking, class_backing, numeric_tokens};
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
 use quote::quote;
 use ridl_ir::codegen::v1;
+use std::cmp::Ordering;
 
 /// Which clause kind a translation covers.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -152,12 +163,8 @@ fn render_one(
             let backing = reply
                 .and_then(|reference| scalar_backing(ctx, reference))
                 .ok_or_else(|| refuse(source, "`result` is not a named integer or float scalar"))?;
-            let value = literal_tokens(&comparison.literal, backing).ok_or_else(|| {
-                refuse(
-                    source,
-                    "the literal does not match the reply's numeric type",
-                )
-            })?;
+            let value = literal_tokens(&comparison.literal, backing, comparison.op)
+                .map_err(|reason| refuse(source, reason))?;
             let op = operator(comparison.op);
             Ok(Rendered {
                 expr: quote! { reply.0 #op #value },
@@ -175,12 +182,8 @@ fn render_one(
                         "the parameter is not a named integer or float scalar",
                     )
                 })?;
-            let value = literal_tokens(&comparison.literal, backing).ok_or_else(|| {
-                refuse(
-                    source,
-                    "the literal does not match the parameter's numeric type",
-                )
-            })?;
+            let value = literal_tokens(&comparison.literal, backing, comparison.op)
+                .map_err(|reason| refuse(source, reason))?;
             let op = operator(comparison.op);
             Ok(Rendered {
                 expr: quote! { args.0 #op #value },
@@ -191,19 +194,74 @@ fn render_one(
     }
 }
 
-/// The literal tokens in the subject's Rust numeric type: an integer-backed
-/// scalar takes an integer literal, a float-backed one a float literal. A
-/// fractional literal on an integer subject is refused.
-fn literal_tokens(value: &str, backing: ScalarBacking) -> Option<TokenStream> {
+/// Reads the clause literal exactly; `crates/ridl-ir/src/step.rs` holds the reader for step lattices.
+fn decimal(text: &str) -> Option<BigRational> {
+    let (mantissa, exponent) = text.split_once(['e', 'E']).unwrap_or((text, "0"));
+    let exponent: i32 = exponent.parse().ok()?;
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let coefficient: BigInt = format!("{whole}{fraction}").parse().ok()?;
+    let scale = i32::try_from(fraction.len()).ok()?.checked_sub(exponent)?;
+    // Canonical source decimals are bounded by the source itself. Guard
+    // exponent spellings supplied through IR against an excessive allocation.
+    if exponent.unsigned_abs() > 10000 {
+        return None;
+    }
+    let power = BigInt::from(10).pow(scale.unsigned_abs());
+    Some(if scale >= 0 {
+        BigRational::new(coefficient, power)
+    } else {
+        BigRational::from_integer(coefficient * power)
+    })
+}
+
+/// Prints an integer unchanged, or a binary64 bound that preserves the exact
+/// rational comparison. Exactly representable float literals are printed as
+/// written, with `.0` appended when they have no fraction or exponent (`100`
+/// becomes `100.0`).
+fn literal_tokens(
+    value: &str,
+    backing: ScalarBacking,
+    op: i32,
+) -> Result<TokenStream, &'static str> {
     match backing {
-        ScalarBacking::Integer => {
-            if value.contains(['.', 'e', 'E']) {
-                return None;
-            }
-            Some(numeric_tokens(value, false))
+        ScalarBacking::Integer if !value.contains(['.', 'e', 'E']) => {
+            Ok(numeric_tokens(value, false))
         }
-        ScalarBacking::Float => Some(numeric_tokens(value, true)),
-        ScalarBacking::Boolean | ScalarBacking::String | ScalarBacking::Bytes => None,
+        ScalarBacking::Float => {
+            let exact = decimal(value).ok_or("the literal cannot be read as an exact decimal")?;
+            // Start at the nearest binary64 value, clamped to the finite range.
+            // Only the exact rational comparison below decides its direction.
+            let nearest = exact
+                .to_f64()
+                .ok_or("the literal cannot be converted to binary64")?
+                .clamp(-f64::MAX, f64::MAX);
+            let represented = BigRational::from_float(nearest)
+                .ok_or("the literal has no finite binary64 bound")?;
+            let ordering = represented.cmp(&exact);
+            if ordering == Ordering::Equal {
+                return Ok(numeric_tokens(value, true));
+            }
+            let down = match v1::ComparisonOp::try_from(op) {
+                Ok(v1::ComparisonOp::Le | v1::ComparisonOp::Gt) => true,
+                Ok(v1::ComparisonOp::Ge | v1::ComparisonOp::Lt) => false,
+                Ok(v1::ComparisonOp::Eq | v1::ComparisonOp::Ne) => {
+                    return Err(
+                        "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
+                    );
+                }
+                _ => return Err("no accepted comparison"),
+            };
+            let bound = match (down, ordering) {
+                (true, Ordering::Greater) => nearest.next_down(),
+                (false, Ordering::Less) => nearest.next_up(),
+                _ => nearest,
+            };
+            if !bound.is_finite() {
+                return Err("the required binary64 bound is infinite");
+            }
+            Ok(numeric_tokens(&format!("{bound:?}"), true))
+        }
+        _ => Err("the literal does not match the subject's numeric type"),
     }
 }
 
@@ -613,5 +671,152 @@ mod tests {
         let (params, clauses, reply) = shape_of(&model);
 
         translate(&ctx, clauses, ClauseKind::Require, params, reply).expect_err("refused");
+    }
+
+    fn float_clause(source: &str, ensure: bool) -> Result<String, crate::GenerateError> {
+        let kind = if ensure {
+            v2::ContractKind::Ensure
+        } else {
+            v2::ContractKind::Require
+        };
+        let package = call_package(
+            vec![param("rate", "Rate")],
+            vec![clause(kind, source)],
+            ensure.then_some("Rate"),
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
+        translate(
+            &ctx,
+            clauses,
+            if ensure {
+                ClauseKind::Ensure
+            } else {
+                ClauseKind::Require
+            },
+            params,
+            reply,
+        )
+        .map(|body| {
+            syn::parse2::<syn::Expr>(body.expr.clone()).expect("valid Rust expression tokens");
+            dense(&body.expr)
+        })
+    }
+
+    #[test]
+    fn float_inequalities_round_in_the_refusing_direction() {
+        // Unrounded literals and swapped up/down bounds change these outputs.
+        for (literal, down, up) in [
+            ("0.1", "0.09999999999999999", "0.1"),
+            ("1e-1", "0.09999999999999999", "0.1"),
+            ("1E-1", "0.09999999999999999", "0.1"),
+            ("-0.1", "-0.1", "-0.09999999999999999"),
+            ("1e-324", "0.0", "5e-324"),
+            ("-1e-324", "-5e-324", "-0.0"),
+            ("1e999", "1.7976931348623157e308", ""),
+            ("-1e999", "", "-1.7976931348623157e308"),
+        ] {
+            for (op, bound) in [("<=", down), (">", down), (">=", up), ("<", up)] {
+                if bound.is_empty() {
+                    continue;
+                }
+                for (subject, field, ensure) in [("rate", "args", false), ("result", "reply", true)]
+                {
+                    let source = format!("{subject} {op} {literal}");
+                    assert_eq!(
+                        float_clause(&source, ensure).map_err(|error| error.message),
+                        Ok(format!(
+                            "if{field}.0{op}{bound}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
+                        )),
+                        "{source}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn exact_float_literals_keep_the_original_tokens() {
+        // Reprinting even an exact bound loses its original spelling.
+        for literal in ["0.5", "100.0", "100", "100e0", "-0.0", "-0.5"] {
+            let expected = if literal == "100" { "100.0" } else { literal };
+            for op in ["<=", ">", ">=", "<", "==", "!="] {
+                assert_eq!(
+                    float_clause(&format!("rate {op} {literal}"), false).expect("exact"),
+                    format!(
+                        "ifargs.0{op}{expected}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
+                    )
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn inexact_float_equality_is_refused() {
+        for op in ["==", "!="] {
+            for subject in ["rate", "result"] {
+                let error = float_clause(&format!("{subject} {op} 0.1"), subject == "result")
+                    .expect_err("no binary64 value equals the exact tenth");
+                assert!(error.message.contains("cannot translate contract clause"));
+                assert!(
+                    error.message.contains("no exact binary64 value"),
+                    "{error:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn float_exponents_at_the_magnitude_limit_have_finite_lower_bounds() {
+        // Rejecting magnitude 10000 along with larger exponents loses these bounds.
+        for (literal, bound) in [("1e10000", "1.7976931348623157e308"), ("1e-10000", "0.0")] {
+            assert_eq!(
+                float_clause(&format!("rate <= {literal}"), false).map_err(|error| error.message),
+                Ok(format!(
+                    "ifargs.0<={bound}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
+                )),
+                "{literal}"
+            );
+        }
+    }
+
+    #[test]
+    fn infinite_float_bounds_and_unreadable_exponents_are_refused() {
+        // Each refusal must retain its cause; a common prefix cannot distinguish them.
+        for (expression, reason) in [
+            (
+                "== 0.1",
+                "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
+            ),
+            (
+                "!= 0.1",
+                "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
+            ),
+            (">= 1e999", "the required binary64 bound is infinite"),
+            ("< 1e999", "the required binary64 bound is infinite"),
+            ("<= -1e999", "the required binary64 bound is infinite"),
+            ("> -1e999", "the required binary64 bound is infinite"),
+            (
+                "<= 1e10001",
+                "the literal cannot be read as an exact decimal",
+            ),
+            (
+                "<= 1e-10001",
+                "the literal cannot be read as an exact decimal",
+            ),
+            (
+                "<= 1e2147483648",
+                "the literal cannot be read as an exact decimal",
+            ),
+        ] {
+            let source = format!("rate {expression}");
+            assert_eq!(
+                float_clause(&source, false).map_err(|error| error.message),
+                Err(format!(
+                    "cannot translate contract clause `{source}`: {reason}"
+                ))
+            );
+        }
     }
 }

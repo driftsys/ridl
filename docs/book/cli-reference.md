@@ -995,16 +995,17 @@ one that reaches itself, or a stream — carries no codec, and gets a
 `__RIDL_FB_NO_CODEC_<NAME>` constant whose documentation names the member and
 the reason. An interface the face cannot carry — a parameter with no declared
 type, a query whose reply is a fallible `T | E`, or a contract clause outside
-the form the translator accepts — is skipped along with its descriptors, and
-gets a `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason,
-and, when an issue tracks the limit, that issue. A query whose reply is a stream
-of named elements, bytes or text is on the face, as are commands with one stream
-parameter and queries with one stream parameter and a plain or named-element
-streamed reply. These forms run over `ridl-loopback`. The WebSocket server's
-upload support is recorded in [D-30](../design/ridl-transport-ws.md); the
-TypeScript transport methods and their limits are recorded in
-[D-23](../design/ridl-transport-ws-ts.md). Typed TypeScript stream functions are
-also emitted by the optional codec module; see
+the
+[forms and float bounds the translator accepts](generated-code.md#contract-clause-translation)
+— is skipped along with its descriptors, and gets a `__RIDL_NO_FACE_<NAME>`
+constant naming the interface and the reason, and, when an issue tracks the
+limit, that issue. A query whose reply is a stream of named elements, bytes or
+text is on the face, as are commands with one stream parameter and queries with
+one stream parameter and a plain or named-element streamed reply. These forms
+run over `ridl-loopback`. The WebSocket server's upload support is recorded in
+[D-30](../design/ridl-transport-ws.md); the TypeScript transport methods and
+their limits are recorded in [D-23](../design/ridl-transport-ws-ts.md). Typed
+TypeScript stream functions are also emitted by the optional codec module; see
 [Calling generated streams](generated-code.md#calling-generated-streams). A call
 with two or more stream parameters is left out of an otherwise emitted face
 without a note, while its descriptor row is still written (driftsys/ridl#1224).

@@ -1308,9 +1308,11 @@ The reasons for the split:
   and the policy is useful before E18.1 exists: it guarantees that every float a
   package uses has a step. Its rule on the `float` feature applies once E18.1
   adds the feature.
-- driftsys/ridl#1092 is fixed in the next release for every float, by rounding a
-  clause literal toward the side that refuses at generation. E18.1 then replaces
-  that rounding with an exact integer bound for a float with a step.
+- driftsys/ridl#1092 is fixed for every float: the Rust backend rounds clause
+  literals toward the side that refuses at generation, preserving exact rational
+  comparisons. `==` and `!=` with inexact literals, and bounds requiring
+  infinity, are refused. E18.1 will replace that rounding with an exact integer
+  bound for a float with a step.
 - One release of SafeNum before E18.1 leaves room for its MVP, if the generated
   types are to use its types.
 
@@ -1399,10 +1401,12 @@ an external standard, which a transport binding records. A rational step in typl
 waits for a contract that must own such a grid itself; the slash already starts
 a regex literal (typl §15), so its spelling is part of that question.
 
-**Carried defect.** A float `require` or `ensure` clause is evaluated in IEEE
-binary64 arithmetic, against expr-core §7: `require x <= 0.1` becomes
-`args.0 <= 0.1f64`. E18.1 removes it for a float with a step. Tracked as
-driftsys/ridl#1092.
+**Carried defect, fixed.** driftsys/ridl#1092 is fixed in the Rust backend by
+rounding float clause literals at generation. Both `require` and `ensure`
+preserve expr-core §7's exact rational comparisons against stored binary64
+values. The model retains the exact literal text. The book's
+[contract clause translation](book/generated-code.md#contract-clause-translation)
+states the rounding and refusal rules.
 
 ---
 
