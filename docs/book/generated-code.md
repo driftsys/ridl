@@ -479,11 +479,11 @@ return the plain objects of `<base>.ts` and call the object API that `flatc`
 generates; one table per interface, which gives each interaction its interface
 number, its ordinal, its kind and the functions of its payloads; generated typed
 stream functions and stream metadata for supported interactions; for a package
-with a signal, `signalChecks(codec)`, which returns one `SignalCheckEntry` of
-`@driftsys/ridl-runtime` per signal that has a table entry; and the catalog's
-name and hash, the payload type names and the rule texts that the wasm codec
-takes at load. `ridl` does not run `flatc`. For a package with two or more name
-components, build the files in two steps:
+with a signal that has a table entry, `signalChecks(codec)`, which returns one
+`SignalCheckEntry` of `@driftsys/ridl-runtime` per signal that has a table
+entry; and the catalog's name and hash, the payload type names and the rule
+texts that the wasm codec takes at load. `ridl` does not run `flatc`. For a
+package with two or more name components, build the files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>

@@ -64,12 +64,12 @@ held value:
 
 - `connect` takes `checks`, a list of `{ iface, ord, check }` entries, in its
   options. `Session.checkWith(iface, ord, check)` registers or replaces one
-  check later. Both reject an interface number or an ordinal outside 1 to
-  4,294,967,295 with `RangeError`, `connect` before it creates a socket. A check
-  receives the payload bytes and returns `undefined` when they pass, else
-  `"corrupt"` or `{ rule }`. The generated `<base>.codec.ts` module exports
-  `signalChecks(codec)`, which returns one entry per signal for the `checks`
-  option.
+  check later. An interface number or an ordinal outside 1 to 4,294,967,295
+  makes `connect` reject, before it creates a socket, and `checkWith` throw,
+  with `RangeError`. A check receives the payload bytes and returns `undefined`
+  when they pass, else `"corrupt"` or `{ rule }`. The generated
+  `<base>.codec.ts` module exports `signalChecks(codec)` when a signal has a
+  table entry. It returns one entry per such signal for the `checks` option.
 - A payload that fails its check is not delivered as a value. The sample has
   provenance `invalid`, `payload` `null` and `detected` set to the result of the
   check, and it becomes the held sample. `Sample.lastGood` holds the last bytes

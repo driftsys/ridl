@@ -62,18 +62,17 @@ Its exports:
   `Payload<FlatBuffers>` impl and an entry in `WASM_PAYLOAD_TYPES` (D-2). `Name`
   is the type `<base>.ts` exports. `flatc`'s classes, builders and `<Name>Box`
   tables never appear in a signature.
-- `signalChecks(codec: Codec): readonly SignalCheckEntry[]` — written when a
-  declared interface has a signal. It returns one entry per signal that has a
-  table entry, for the `checks` option of `connect` in
-  `@driftsys/ridl-transport-ws`. Each entry's check calls
-  `codec.verify(typeId, bytes)` with a type id that `codec.typeId` resolved
-  once, when `signalChecks` ran, and passes the payload when verification
-  succeeds. A `malformed` or `unknown-type` result is `"corrupt"`; a `rule`
-  result whose text is in `RULES` is `{ rule }`; any other `rule` result throws
-  `CodecError`, which the session counts as `"corrupt"` and reports as a
-  `check-failed` note. The module imports only `Codec`, `SignalCheckEntry` and
-  `CodecError` of `@driftsys/ridl-runtime` for it, and nothing from the
-  WebSocket package.
+- `signalChecks(codec: Codec): readonly SignalCheckEntry[]` — written when at
+  least one signal has a table entry. It returns one entry per such signal, for
+  the `checks` option of `connect` in `@driftsys/ridl-transport-ws`. Each
+  entry's check calls `codec.verify(typeId, bytes)` with a type id that
+  `codec.typeId` resolved once, when `signalChecks` ran, and passes the payload
+  when verification succeeds. A `malformed` or `unknown-type` result is
+  `"corrupt"`; a `rule` result whose text is in `RULES` is `{ rule }`; any other
+  `rule` result throws `CodecError`, which the session counts as `"corrupt"` and
+  reports as a `check-failed` note. The module imports only `Codec`,
+  `SignalCheckEntry` and `CodecError` of `@driftsys/ridl-runtime` for it, and
+  nothing from the WebSocket package.
 - `export interface <InducedName.rust>` for every induced tuple that is a
   payload type — the parameter list of a call that is not exactly one named
   type, and a tuple reply of a query (D-9). An induced tuple with no field is
