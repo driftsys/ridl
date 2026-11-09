@@ -54,6 +54,10 @@ growth; FlatBuffers and proto3 report their own remote integer changes.
 driftsys/ridl#1229.** The dated amendment under decision 13 extends strict
 append reporting to remote context.
 
+**Amended 2026-11-09 — decision 13, missing catalog-history evidence, from
+driftsys/ridl#1228.** The dated amendment under decision 13 defines when catalog
+history requires remote evidence, separately from `ridl diff`.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -962,17 +966,27 @@ a field is appended.
       Current pins never substitute for missing historical evidence.
 
       Missing evidence on an explicit podbuf comparison is exit 2, not a proved
-      break (exit 1). Without podbuf the tool returns its ordinary report
-      without an affirmative remote inline judgment; malformed retained evidence
-      is an input error in either mode. Build warns and omits compatibility for
-      affected units. Normal publication refuses missing historical evidence,
-      including in type-only units, with exit 2 and keeps the prior baseline.
-      Explicit repair or reset is required; neither certifies earlier carried
-      history. Proved podbuf breaks and missing evidence override unchanged
-      hashes, while unaffected known units retain valid histories. Every
-      reconstructed history starts at the same current canonical hash the
-      descriptor emits, using its complete scope; canonical wire-hash inputs are
-      unchanged. The CLI reference owns
+      break (exit 1). Without podbuf, `ridl diff` and the MCP tool return their
+      ordinary report without an affirmative remote context judgment; malformed
+      retained evidence is an input error in either mode.
+
+      _Amended 2026-11-09 — missing catalog-history evidence, from
+      driftsys/ridl#1228._ Catalog history requires remote evidence when the
+      root manifest's encodings include `podbuf`, `flatbuffers` or `proto3`.
+      Missing evidence is cannot judge: build warns and omits compatible
+      catalogs for affected units, and normal publication refuses with exit 2
+      and keeps the prior baseline, including for type-only units. Under podbuf
+      every context issue requires recovery; under FlatBuffers or proto3 without
+      podbuf, only missing evidence does. Podbuf head-layout failures and kind
+      changes do not make those histories unjudgeable. Without any of the three
+      encodings, missing remote evidence does not prevent carrying history or
+      publication. This changes no `ridl diff` or MCP comparison outcome.
+      Explicit repair or reset is required for an unjudgeable history; neither
+      certifies earlier carried history. Proved podbuf breaks and missing
+      evidence override unchanged hashes, while unaffected known units retain
+      valid histories. Every reconstructed history starts at the same current
+      canonical hash the descriptor emits, using its complete scope; canonical
+      wire-hash inputs are unchanged. The CLI reference owns
       [recovery, retention and rollback limits](../book/cli-reference.md#baseline-publication-and-recovery).
 
 14. **What podbuf generates, and what it exposes (Sebastien).** Per type:
@@ -1203,6 +1217,9 @@ rationale are preserved in the
 | [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-03: baseline context, remote growth and compatible history                                                            |
 | [`docs/book/catalog-descriptor.md`](../book/catalog-descriptor.md)                             | amended 2026-11-03: compatible history ends on a podbuf break or missing evidence                                                     |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                                     | amended 2026-11-03: reported remote declaration kinds, fixed union heads and context issues                                           |
+| [ADR-0017](ADR-0017-proto3-projection-rules.md)                                                | amended 2026-11-09: remote-width rule links to decision 13 for missing catalog-history evidence (driftsys/ridl#1228)                  |
+| [ADR-0019](ADR-0019-flatbuffers-projection-rules.md)                                           | amended 2026-11-09: remote-width rule links to decision 13 for missing catalog-history evidence (driftsys/ridl#1228)                  |
+| [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: baseline and build require remote evidence under FlatBuffers and proto3 too (driftsys/ridl#1228)                  |
 | [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-02: baseline context, separate comparison scopes, recovery, exit codes and publication guarantees                     |
 | [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | amended 2026-11-09: remote strict append reporting follows decision 13 (driftsys/ridl#1229)                                           |
 | [`docs/book/evolving-an-interface.md`](../book/evolving-an-interface.md)                       | amended 2026-11-09: compared-package strict append reporting and a link to decision 13 for remote reporting (driftsys/ridl#1229)      |

@@ -54,7 +54,7 @@ pub(crate) fn compatible_catalogs(
         let unknown = judgment.unknown(unit, &published_scope, &scope);
         if unknown {
             eprintln!(
-                "warning: cannot establish podbuf compatibility for unit `{unit}`: historical inline context is missing or unusable; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
+                "warning: cannot establish compatibility for unit `{unit}`: historical remote context is missing or unusable; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
             );
         }
         let current_hash = catalog_hash(unit, &scope);
@@ -85,8 +85,9 @@ pub(crate) fn compatible_catalogs(
 }
 
 /// Stages complete canonical chains. Returns whether any published unit has
-/// a proved break, including units without an interface. Missing inline evidence requires explicit
-/// repair or reset and refuses normal publication before anything is replaced.
+/// a proved break, including units without an interface. Missing remote evidence
+/// for a judged encoding requires explicit repair or reset and refuses normal
+/// publication before anything is replaced.
 pub(crate) fn write_catalog_histories(
     staging: &Path,
     published: &Path,
@@ -121,7 +122,7 @@ pub(crate) fn write_catalog_histories(
                 return Err(ExitCode::from(2));
             }
             eprintln!(
-                "error: cannot publish unit `{unit}`: historical inline context is missing or unusable; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
+                "error: cannot publish unit `{unit}`: historical remote context is missing or unusable; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
                 published.display(),
                 published.display()
             );
@@ -217,10 +218,17 @@ impl Judgment {
         Self {
             report,
             podbuf_report,
-            issues: if encodings.contains(&"podbuf") {
+            issues: if encodings
+                .iter()
+                .any(|encoding| matches!(*encoding, "podbuf" | "flatbuffers" | "proto3"))
+            {
                 // These records use only the change path accessors for attribution.
                 issues
                     .into_iter()
+                    .filter(|issue| {
+                        encodings.contains(&"podbuf")
+                            || issue.reason == ridl_diff::ContextIssueReason::Missing
+                    })
                     .map(|issue| {
                         (
                             Change {

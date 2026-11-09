@@ -457,10 +457,12 @@ package contexts, with the same hash inputs as the emitted descriptor.
 The change is judged for the root manifest's encodings ([ADR-0031][adr-0031]
 decision 13), including the step from a baseline published before `podbuf` was
 listed. This checks the latest step, without certifying earlier carried hashes.
-Missing historical remote evidence in an affected podbuf unit is uncertainty,
-not a proved break: normal publication returns 2, preserves the prior baseline,
-and requires explicit recovery. This also applies to type-only units, which have
-no catalog history. Unaffected units keep valid chains when another unit has a
+When the root encodings include `podbuf`, `flatbuffers` or `proto3`, missing
+historical remote evidence in an affected unit is uncertainty, not a proved
+break: normal publication returns 2, preserves the prior baseline, and requires
+explicit recovery. This also applies to type-only units, which have no catalog
+history. Without any of those encodings, missing remote evidence does not
+prevent publication. Unaffected units keep valid chains when another unit has a
 proved break.
 
 A replaced history is carried only when its first hash matches the hash
@@ -852,10 +854,13 @@ holds no `.ir.json` snapshot, when the baseline holds no package of the unit,
 when the unit has no `<unit>.catalogs` file (or the baseline has none at all),
 and when `ridl diff`'s classifier judges the unit breaking and the current hash
 is not the file's first hash. A proved podbuf break overrides unchanged-hash
-carry. Missing historical remote evidence warns and omits compatibility only for
-affected units; known-compatible units retain their valid lists. Both sides use
-their own complete context. The current canonical hash and the recomputed
-baseline hash use the same scope as the emitted descriptor.
+carry. Under `podbuf`, `flatbuffers` or `proto3`, missing historical remote
+evidence warns and omits compatibility only for affected units, as
+[ADR-0031][adr-0031] decision 13 specifies; known-compatible units retain their
+valid lists. Without any of those encodings, missing remote evidence does not
+prevent carrying history. Both sides use their own complete context. The current
+canonical hash and the recomputed baseline hash use the same scope as the
+emitted descriptor.
 
 The change is judged for the root manifest's encodings, as
 [`ridl baseline`](#ridl-baseline) judges it. This checks only the latest step;

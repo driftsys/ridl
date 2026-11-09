@@ -24,7 +24,7 @@ fn command(root: &Path, home: &Path, args: &[&str], expected: i32) -> String {
     stderr
 }
 
-fn setup(dir: &TempDir, home: &TempDir, podbuf: bool) {
+fn setup(dir: &TempDir, home: &TempDir, encoding: &str) {
     let cache = ridl_core::cache::Cache {
         root: home.path().join(".ridl/cache"),
     };
@@ -53,11 +53,7 @@ fn setup(dir: &TempDir, home: &TempDir, podbuf: bool) {
         },
     )
     .unwrap();
-    let backend = if podbuf {
-        "[backend.rust]\nencodings = [\"podbuf\"]\n"
-    } else {
-        "[backend.rust]\nencodings = [\"flatbuffers\"]\n"
-    };
+    let backend = format!("[backend.rust]\nencodings = [{encoding}]\n");
     dir.write(
         "ridl.toml",
         &format!(
@@ -113,7 +109,7 @@ fn a_history_head_equals_the_descriptor_hash_of_a_unit_reaching_a_remote_type() 
     let home = TempDir::new("remote-history-hash-home");
     let out = TempDir::new("remote-history-hash-out");
     let out2 = TempDir::new("remote-history-hash-out2");
-    setup(&dir, &home, true);
+    setup(&dir, &home, "\"podbuf\"");
     let baseline = dir.path().join(".ridl/baseline");
     let heads = ["veh.cluster", "veh.body"].map(|unit| {
         let history = ridl_core::catalog_history::parse(
@@ -185,14 +181,279 @@ fn a_history_head_equals_the_descriptor_hash_of_a_unit_reaching_a_remote_type() 
 }
 
 #[test]
-fn non_podbuf_baseline_accepts_missing_remote_evidence() {
+fn no_encoding_baseline_accepts_missing_remote_evidence() {
     let dir = TempDir::new("non-podbuf-evidence");
     let home = TempDir::new("non-podbuf-evidence-home");
-    setup(&dir, &home, false);
+    setup(&dir, &home, "");
     let baseline = dir.path().join(".ridl/baseline");
     std::fs::remove_file(baseline.join("context.json")).unwrap();
     command(dir.path(), home.path(), &["baseline"], 0);
     assert!(baseline.join("context.json").is_file());
+}
+
+fn append_body_signal(dir: &TempDir) {
+    dir.write(
+        "body/body.ridl",
+        &BODY.replace("@10ms }", "@10ms\n signal extra: Envelope @20ms }"),
+    );
+}
+
+fn missing_evidence_refuses_publication(encoding: &str) {
+    let dir = TempDir::new(&format!("{encoding}-missing-publication"));
+    let home = TempDir::new(&format!("{encoding}-missing-publication-home"));
+    setup(&dir, &home, &format!("\"{encoding}\""));
+    let baseline = dir.path().join(".ridl/baseline");
+    std::fs::remove_file(baseline.join("context.json")).unwrap();
+    let before = inventory(&baseline);
+    let stderr = command(dir.path(), home.path(), &["baseline"], 2);
+    assert!(
+        stderr.contains("cannot publish unit `veh.body`"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("historical remote context"), "{stderr}");
+    assert!(stderr.contains("--repair-context"), "{stderr}");
+    assert!(stderr.contains("--reset-history"), "{stderr}");
+    assert_eq!(inventory(&baseline), before);
+}
+
+#[test]
+fn flatbuffers_baseline_refuses_missing_remote_evidence() {
+    missing_evidence_refuses_publication("flatbuffers");
+}
+
+#[test]
+fn proto3_baseline_refuses_missing_remote_evidence() {
+    missing_evidence_refuses_publication("proto3");
+}
+
+fn missing_evidence_omits_compatible_catalogs(encoding: &str) {
+    let dir = TempDir::new(&format!("{encoding}-missing-build"));
+    let home = TempDir::new(&format!("{encoding}-missing-build-home"));
+    let out = TempDir::new(&format!("{encoding}-missing-build-out"));
+    setup(&dir, &home, &format!("\"{encoding}\""));
+    append_body_signal(&dir);
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    let baseline = dir.path().join(".ridl/baseline");
+    std::fs::remove_file(baseline.join("context.json")).unwrap();
+    // A legacy local-only head would carry the earlier catalog without an evidence check.
+    let old =
+        ridlc::load_diff_side(&mut ridl_core::RidlDatabase::default(), &baseline, &[]).unwrap();
+    let std = ridlc::std_ir();
+    let local: Vec<_> = old.packages.iter().collect();
+    let scope = ridlc::catalog_scope(&local, Some(&std));
+    let hash = ridl_ir::catalog_hash::catalog_hash("veh.body", &scope);
+    let hash: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
+    let previous = std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap();
+    let (_, earlier) = previous.split_once('\n').unwrap();
+    assert!(!earlier.is_empty());
+    std::fs::write(
+        baseline.join("veh.body.catalogs"),
+        format!("{hash}\n{earlier}"),
+    )
+    .unwrap();
+    let before = inventory(&baseline);
+    let stderr = command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    for unit in ["veh.body", "veh.cluster"] {
+        assert!(
+            compatible(out.path(), home.path(), unit).is_empty(),
+            "{unit}"
+        );
+        assert!(
+            stderr.contains(&format!("cannot establish compatibility for unit `{unit}`")),
+            "{stderr}"
+        );
+    }
+    assert!(stderr.contains("historical remote context"), "{stderr}");
+    assert_eq!(inventory(&baseline), before);
+}
+
+#[test]
+fn flatbuffers_build_omits_catalogs_with_missing_remote_evidence() {
+    missing_evidence_omits_compatible_catalogs("flatbuffers");
+}
+
+#[test]
+fn proto3_build_omits_catalogs_with_missing_remote_evidence() {
+    missing_evidence_omits_compatible_catalogs("proto3");
+}
+
+fn flatbuffers_carries_history(remote: bool) {
+    let dir = TempDir::new(if remote { "known-remote" } else { "no-remote" });
+    let home = TempDir::new(if remote {
+        "known-remote-home"
+    } else {
+        "no-remote-home"
+    });
+    let out = TempDir::new(if remote {
+        "known-remote-out"
+    } else {
+        "no-remote-out"
+    });
+    setup(&dir, &home, "\"flatbuffers\"");
+    if !remote {
+        dir.write(
+            "cluster/cluster.ridl",
+            "package veh.cluster\nstruct Envelope { reading: integer }\ninterface Probe { signal reading: Envelope @10ms }\n",
+        );
+        command(dir.path(), home.path(), &["lock"], 0);
+        command(dir.path(), home.path(), &["baseline", "--reset-history"], 0);
+    }
+    let baseline = dir.path().join(".ridl/baseline");
+    let prior = std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap();
+    append_body_signal(&dir);
+    command(dir.path(), home.path(), &["lock"], 0);
+    command(dir.path(), home.path(), &["baseline"], 0);
+    let published = std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap();
+    let prior_hashes = ridl_core::catalog_history::parse(&prior).unwrap().hashes;
+    let published_hashes = ridl_core::catalog_history::parse(&published)
+        .unwrap()
+        .hashes;
+    assert_eq!(published_hashes[1..], prior_hashes);
+    if !remote {
+        std::fs::remove_file(baseline.join("context.json")).unwrap();
+    }
+    let stderr = command(
+        dir.path(),
+        home.path(),
+        &[
+            "build",
+            "--emit",
+            "catalog",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    assert!(!stderr.contains("cannot establish"), "{stderr}");
+    let earlier = ridl_core::catalog_history::parse(&prior).unwrap().hashes[0];
+    assert_eq!(
+        compatible(out.path(), home.path(), "veh.body"),
+        vec![serde_json::json!(earlier)]
+    );
+    command(dir.path(), home.path(), &["baseline"], 0);
+    assert_eq!(
+        std::fs::read_to_string(baseline.join("veh.body.catalogs")).unwrap(),
+        published
+    );
+}
+
+#[test]
+fn flatbuffers_without_remote_reach_carries_history_without_context() {
+    flatbuffers_carries_history(false);
+}
+
+#[test]
+fn flatbuffers_with_remote_context_carries_compatible_history() {
+    flatbuffers_carries_history(true);
+}
+
+fn publication_ignores_podbuf_kind_change_issues(encoding: &str) {
+    let dir = TempDir::new("flatbuffers-kind-change");
+    let home = TempDir::new("flatbuffers-kind-change-home");
+    setup(&dir, &home, &format!("\"{encoding}\""));
+    let cache = ridl_core::cache::Cache {
+        root: home.path().join(".ridl/cache"),
+    };
+    let (sha256, unpacked) = cache
+        .store(
+            URL,
+            &unit_tar(&[
+                ("ridl.toml", "[package]\nname = \"veh.common\"\n"),
+                (
+                    "common.typl",
+                    "package veh.common\ntype Word: integer [0..9223372036854775807]\nenum Reading { OFF = 0 }\n",
+                ),
+            ]),
+        )
+        .unwrap();
+    write_lockfile(
+        &dir.path().join("ridl.lock"),
+        &Lockfile {
+            entries: BTreeMap::from([(
+                URL.into(),
+                LockEntry {
+                    sha256,
+                    tree: Some(ridl_core::tree_hash(&unpacked).unwrap()),
+                },
+            )]),
+        },
+    )
+    .unwrap();
+    let stderr = command(dir.path(), home.path(), &["baseline"], 0);
+    assert!(!stderr.contains("missing or unusable"), "{stderr}");
+}
+
+#[test]
+fn flatbuffers_publication_ignores_podbuf_kind_change_issues() {
+    publication_ignores_podbuf_kind_change_issues("flatbuffers");
+}
+
+#[test]
+fn proto3_publication_ignores_podbuf_kind_change_issues() {
+    publication_ignores_podbuf_kind_change_issues("proto3");
+}
+
+#[test]
+fn flatbuffers_publication_ignores_unlayable_historical_podbuf_heads() {
+    let dir = TempDir::new("flatbuffers-unlayable");
+    let home = TempDir::new("flatbuffers-unlayable-home");
+    setup(&dir, &home, "\"flatbuffers\"");
+    let baseline = dir.path().join(".ridl/baseline");
+    let old =
+        ridlc::load_diff_side(&mut ridl_core::RidlDatabase::default(), &baseline, &[]).unwrap();
+    let mut context = ridlc::baseline_context::read_context(&baseline, &old.packages)
+        .unwrap()
+        .unwrap();
+    let original = context.remote_context();
+    let reading = context.remote_units[0].packages[0]
+        .decls
+        .iter_mut()
+        .find(|decl| decl.name == "Reading")
+        .unwrap();
+    let Some(ridl_ir::v2::decl::Kind::StructDef(def)) = &mut reading.kind else {
+        panic!("Reading is a struct");
+    };
+    let Some(ridl_ir::v2::struct_member::Member::Field(field)) = &mut def.members[0].member else {
+        panic!("Reading has a field");
+    };
+    field.r#type.as_mut().unwrap().kind = Some(ridl_ir::v2::field_type::Kind::Named(
+        "veh.common.Reading".into(),
+    ));
+    write_context(&baseline, &context).unwrap();
+    let old_refs: Vec<_> = old.packages.iter().collect();
+    let historical = context.remote_context();
+    let old_context: Vec<_> = historical.packages.iter().collect();
+    let new_context: Vec<_> = original.packages.iter().collect();
+    let (_, issues) = ridl_diff::diff_refs_with_contexts_partial(
+        &old_refs,
+        &old_refs,
+        &old_context,
+        &new_context,
+        &["flatbuffers"],
+    );
+    assert!(
+        issues
+            .iter()
+            .any(|issue| issue.reason == ridl_diff::ContextIssueReason::Unlayable)
+    );
+    assert!(
+        !issues
+            .iter()
+            .any(|issue| issue.reason == ridl_diff::ContextIssueReason::Missing)
+    );
+    command(dir.path(), home.path(), &["baseline"], 0);
 }
 
 #[test]
@@ -200,7 +461,7 @@ fn missing_evidence_affects_a_unit_reaching_another_units_declaration() {
     let dir = TempDir::new("reaching-evidence");
     let home = TempDir::new("reaching-evidence-home");
     let out = TempDir::new("reaching-evidence-out");
-    setup(&dir, &home, true);
+    setup(&dir, &home, "\"podbuf\"");
     // Mutation: omit the reachable-declaration branch of Judgment::unknown.
     let baseline = dir.path().join(".ridl/baseline");
     let earlier = ridl_core::catalog_history::parse(
@@ -276,9 +537,7 @@ fn missing_evidence_affects_a_unit_reaching_another_units_declaration() {
         }
         assert!(carried.is_empty());
         assert!(
-            stderr.contains(&format!(
-                "cannot establish podbuf compatibility for unit `{unit}`"
-            )),
+            stderr.contains(&format!("cannot establish compatibility for unit `{unit}`")),
             "the reaching unit and the owner both lack evidence: {stderr}"
         );
     }
@@ -289,7 +548,7 @@ fn legacy_local_only_hash_does_not_carry_history_without_evidence() {
     let dir = TempDir::new("legacy-local-hash");
     let home = TempDir::new("legacy-local-hash-home");
     let out = TempDir::new("legacy-local-hash-out");
-    setup(&dir, &home, true);
+    setup(&dir, &home, "\"podbuf\"");
     let baseline = dir.path().join(".ridl/baseline");
     std::fs::remove_file(baseline.join("context.json")).unwrap();
     let old =
@@ -322,7 +581,7 @@ fn legacy_local_only_hash_does_not_carry_history_without_evidence() {
 fn repair_refuses_changed_context(label: &str, change: impl FnOnce(&mut BaselineContext)) {
     let dir = TempDir::new(label);
     let home = TempDir::new(&format!("{label}-home"));
-    setup(&dir, &home, true);
+    setup(&dir, &home, "\"podbuf\"");
     let baseline = dir.path().join(".ridl/baseline");
     let side =
         ridlc::load_diff_side(&mut ridl_core::RidlDatabase::default(), &baseline, &[]).unwrap();
@@ -372,7 +631,7 @@ fn baseline_new_side_issue_names_current_evidence_without_historical_repair() {
     // Mutation: use the historical-context refusal and repair advice for every side.
     let dir = TempDir::new("current-evidence");
     let home = TempDir::new("current-evidence-home");
-    setup(&dir, &home, true);
+    setup(&dir, &home, "\"podbuf\"");
     let baseline = dir.path().join(".ridl/baseline");
     let before = inventory(&baseline);
     let cache = ridl_core::cache::Cache {
@@ -408,7 +667,7 @@ fn baseline_new_side_issue_names_current_evidence_without_historical_repair() {
         stderr.contains("current workspace's remote evidence is missing or unusable"),
         "{stderr}"
     );
-    assert!(!stderr.contains("historical inline context"), "{stderr}");
+    assert!(!stderr.contains("historical remote context"), "{stderr}");
     assert!(!stderr.contains("--repair-context"), "{stderr}");
     assert_eq!(inventory(&baseline), before);
 }
