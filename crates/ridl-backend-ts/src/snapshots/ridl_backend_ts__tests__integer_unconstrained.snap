@@ -1,0 +1,23 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
+/**
+ * Build a value with `makeValue`.
+ */
+export type Value = number & { readonly __ridl: 'test.ctor.Value' };
+
+/** Builds a `Value`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeValue(value: number): Value {
+  if (!globalThis.Number.isSafeInteger(value)) {
+    throw new ConstraintError('range', 'test.ctor.Value', value, 'a safe integer');
+  }
+  return value as Value;
+}
+
+/** Builds a `Value` without checking a value already known to satisfy its constraints. */
+export function makeValueUnchecked(value: number): Value {
+  return value as Value;
+}

@@ -4,7 +4,15 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
 ---
 // ===== package veh.adas =====
+/**
+ * Build a value with `makeEngaged`.
+ */
 export type Engaged = boolean & { readonly __ridl: 'veh.adas.Engaged' };
+
+/** Builds a `Engaged`. */
+export function makeEngaged(value: boolean): Engaged {
+  return value as Engaged;
+}
 
 export function initEngaged(): Engaged {
   return false as Engaged;
@@ -12,7 +20,15 @@ export function initEngaged(): Engaged {
 
 
 // ===== package veh.ego =====
+/**
+ * Build a value with `makeMoving`.
+ */
 export type Moving = boolean & { readonly __ridl: 'veh.ego.Moving' };
+
+/** Builds a `Moving`. */
+export function makeMoving(value: boolean): Moving {
+  return value as Moving;
+}
 
 export function initMoving(): Moving {
   return false as Moving;

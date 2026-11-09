@@ -1731,3 +1731,175 @@ uploadTest(
     assert.deepEqual(socket.closes, []);
   },
 );
+
+// Mutation: delete the `clearTimeout` of an accepted command upload.
+uploadTest(
+  "an_accepted_command_upload_is_not_abandoned_by_the_call_bound",
+  async ({ session, socket }) => {
+    const { writer, promise } = uploading(session);
+    socket.deliver(response(UPLOAD, 1n, { outcome: "accepted" }));
+    await resolved(promise);
+    await sleep(60);
+    await resolved(writer.write(Uint8Array.of(1)));
+    assert.equal(sentOf(socket, "chunk").length, 1);
+  },
+);
+
+// Mutation: add 1 instead of the frame's credit to the granted credit.
+uploadTest(
+  "a_batched_stream_credit_grants_every_chunk_it_names",
+  async ({ session, socket }) => {
+    const { writer } = uploading(session);
+    await spend(writer);
+    const fifth = writer.write(Uint8Array.of(5));
+    watch(fifth);
+    await settled();
+    socket.deliver({ ...credit(), credit: 3 });
+    await resolved(fifth);
+    await resolved(writer.write(Uint8Array.of(6)));
+    await resolved(writer.write(Uint8Array.of(7)));
+    assert.equal(sentOf(socket, "chunk").length, 7);
+    const eighth = writer.write(Uint8Array.of(8));
+    const state = watch(eighth);
+    await settled();
+    assert.equal(state.status, "pending");
+    assert.equal(sentOf(socket, "chunk").length, 7);
+    socket.deliver(credit());
+    await resolved(eighth);
+  },
+);
+
+// Mutation: drop the length check of an upload query's reply, or pass
+// `Session.queryWithUpload` a limit other than the member's.
+uploadTest(
+  "a_query_upload_reply_resolves_up_to_the_member_limit_and_rejects_corrupt_above",
+  async ({ session, socket }) => {
+    for (const [length, category] of [[16_128, ""], [16_129, "corrupt"]]) {
+      const { promise } = uploading(session, true);
+      const seq = BigInt(sentOf(socket, "request").length);
+      socket.deliver(
+        response(UPLOAD_QUERY, seq, {
+          outcome: "reply",
+          payload: new Uint8Array(length as number),
+        }),
+      );
+      if (category) await rejected(promise, category as string);
+      else {assert.equal(
+          ((await resolved(promise)) as Uint8Array).length,
+          length,
+        );}
+    }
+  },
+);
+
+test("a_query_upload_reply_is_checked_against_the_limit_the_generated_tables_record", async () => {
+  const { session, socket } = await attachedV3({
+    interfaces: [{
+      iface: 1,
+      deep: { iface: 1, ord: 12, kind: "query", limit: 100 },
+    }],
+  });
+  try {
+    for (const [length, ok] of [[100, true], [101, false]] as const) {
+      const { promise } = uploading(session, true);
+      const seq = BigInt(sentOf(socket, "request").length);
+      socket.deliver(
+        response(UPLOAD_QUERY, seq, {
+          outcome: "reply",
+          payload: new Uint8Array(length),
+        }),
+      );
+      if (ok) {
+        assert.equal(((await resolved(promise)) as Uint8Array).length, length);
+      } else await rejected(promise, "corrupt");
+    }
+  } finally {
+    session.close();
+    await settled();
+  }
+});
+
+// Mutation: drop the kind check of an upload's `response`.
+uploadTest(
+  "a_response_that_does_not_fit_an_upload_is_discarded_and_the_call_stays_in_flight",
+  async ({ session, socket, notes }) => {
+    const command = uploading(session);
+    const query = uploading(session, true);
+    socket.deliver(response(UPLOAD, 2n, { outcome: "accepted" }));
+    socket.deliver(
+      response(UPLOAD_QUERY, 1n, {
+        outcome: "reply",
+        payload: Uint8Array.of(1),
+      }),
+    );
+    assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
+      "unexpected-outcome",
+      "unexpected-outcome",
+    ]);
+    await settled();
+    assert.equal(command.state.status, "pending");
+    assert.equal(query.state.status, "pending");
+    await resolved(command.writer.write(Uint8Array.of(1)));
+    await resolved(query.writer.write(Uint8Array.of(1)));
+  },
+);
+
+// Mutation: map `stream_end end` on stream 1 to its own failure instead of
+// `interrupted`.
+uploadTest(
+  "a_stream_end_end_on_an_upload_stream_interrupts_the_call",
+  async ({ session, socket }) => {
+    for (const query of [false, true]) {
+      const target = query ? UPLOAD_QUERY : UPLOAD;
+      const { writer, promise } = uploading(session, query);
+      const seq = BigInt(sentOf(socket, "request").length);
+      socket.deliver(streamEnd(seq, 1n, { kind: "end" }, target, 1));
+      await rejected(promise, "interrupted");
+      await rejected(writer.write(new Uint8Array()), "interrupted");
+    }
+  },
+);
+
+// Mutation: drop the contract payload from the failure of an upload.
+uploadTest(
+  "a_contract_response_to_an_upload_carries_its_contract",
+  async ({ session, socket }) => {
+    const contract = { category: "invalid-value", rule: "range" } as const;
+    for (const query of [false, true]) {
+      const target = query ? UPLOAD_QUERY : UPLOAD;
+      const { writer, promise } = uploading(session, query);
+      const seq = BigInt(sentOf(socket, "request").length);
+      socket.deliver(response(target, seq, { outcome: "contract", contract }));
+      const error = await rejected(promise, "contract");
+      assert.deepEqual(error.failure, { category: "contract", contract });
+      const write = await rejected(writer.write(new Uint8Array()), "contract");
+      assert.deepEqual(write.failure, { category: "contract", contract });
+    }
+  },
+);
+
+// Mutation: drop the target that `Session.command` or `Session.query` passes
+// to `Calls`.
+test("a_stream_frame_with_another_target_is_discarded_for_a_plain_command_or_query", async () => {
+  const { session, socket, notes } = await attachedV3();
+  try {
+    const command = session.command(1, 6, new Uint8Array(), BOUND);
+    const query = session.query(1, 7, new Uint8Array(), BOUND);
+    socket.deliver(chunk(1n, 1n, [1], 1, { ...COMMAND, ord: 99 }));
+    socket.deliver(chunk(2n, 1n, [1], 1, { ...QUERY, ord: 99 }));
+    assert.deepEqual(
+      notes.map((n) => n.note === "discarded" && n.reason),
+      ["unknown-correlation", "unknown-correlation"],
+    );
+    assert.deepEqual(socket.closes, []);
+    socket.deliver(response(COMMAND, 1n, { outcome: "accepted" }));
+    socket.deliver(
+      response(QUERY, 2n, { outcome: "reply", payload: Uint8Array.of(3) }),
+    );
+    await resolved(command);
+    assert.deepEqual(await resolved(query), Uint8Array.of(3));
+  } finally {
+    session.close();
+    await settled();
+  }
+});

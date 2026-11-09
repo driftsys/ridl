@@ -1,0 +1,34 @@
+package ctor
+
+/// A bounded integer.
+type Small : integer [-10..20]
+
+/// An integer with only a lower bound.
+type Lower : integer [-10..]
+
+/// An integer with only an upper bound.
+type Upper : integer [..20]
+
+/// An integer with bounds beyond the safe number interval.
+type Wide : integer [-9007199254740993..9007199254740993]
+
+/// An integer with the Rust backing's maximum.
+type Maximum : integer [0..9223372036854775807]
+
+/// An integer without bounds.
+type FreeInteger : integer
+
+/// A bounded floating-point value.
+type Real : float [-1.5..2.5]
+
+/// A floating-point value with only a lower bound.
+type LowerReal : float [-1.5..]
+
+/// A floating-point value with only an upper bound.
+type UpperReal : float [..2.5]
+
+/// A floating-point value without bounds.
+type Unbounded : float
+
+/// A floating-point range whose declared grid derives a 32-bit width.
+type NarrowReal : float [-1.0..2.0 step 1.0]

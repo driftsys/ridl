@@ -31,12 +31,26 @@ async function bundle(out: string): Promise<void> {
   }
 }
 
+/**
+ * The time limit of the whole page run, in milliseconds. The steps of the page
+ * that can stall have limits of their own and name themselves in their errors,
+ * so this limit is normally reached only by a page that does not load. One CI
+ * run took 39 s for this test and a rerun of the same tree took 7 s, while the
+ * page run takes about one second on a developer machine.
+ */
+const PAGE_LIMIT = 30_000;
+
 /** Rejects after `ms` unless `promise` settles first. */
 async function limit<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new Error(`no result within ${ms} ms`)),
+      () =>
+        reject(
+          new Error(
+            `no result within ${ms} ms: the page did not load, or a step of it with no limit of its own stalled`,
+          ),
+        ),
       ms,
     );
   });
@@ -81,7 +95,7 @@ Deno.test("a browser page receives a live signal from the Rust server", async ()
     browser = await launch();
     const result = await limit(
       browser.evaluate(pageUrl, "globalThis.result"),
-      10_000,
+      PAGE_LIMIT,
     );
     assert.deepEqual(result, {
       init: "init:",

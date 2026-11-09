@@ -2285,6 +2285,21 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     ));
     std::fs::create_dir_all(&dir).expect("the temp dir is created");
 
+    // A generated module imports its constraint error from the runtime package,
+    // so the check resolves that name to the runtime's own error source.
+    let runtime_dir = dir.join("node_modules/@driftsys/ridl-runtime");
+    std::fs::create_dir_all(&runtime_dir).expect("the runtime stand-in directory is created");
+    std::fs::write(
+        runtime_dir.join("errors.ts"),
+        include_str!("../../../packages/ridl-runtime/src/errors.ts"),
+    )
+    .expect("the runtime errors source is written");
+    std::fs::write(
+        runtime_dir.join("package.json"),
+        "{\"name\":\"@driftsys/ridl-runtime\",\"version\":\"0.0.0\",\"type\":\"module\",\"types\":\"errors.ts\"}",
+    )
+    .expect("the runtime stand-in manifest is written");
+
     let mut module_paths = Vec::new();
     for (name, source) in &packages {
         let path = dir.join(format!("{name}.ts"));
@@ -2295,7 +2310,14 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     let status = std::process::Command::new(&tsc.0)
         .args(&tsc.1)
         .args([
-            "--noEmit", "--strict", "--target", "es2020", "--module", "commonjs",
+            "--noEmit",
+            "--strict",
+            "--target",
+            "es2020",
+            "--lib",
+            "es2022,dom",
+            "--module",
+            "commonjs",
         ])
         .args(&module_paths)
         .status()
@@ -2315,6 +2337,8 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
             "--strict",
             "--target",
             "es2020",
+            "--lib",
+            "es2022,dom",
             "--module",
             "node16",
             "--moduleResolution",

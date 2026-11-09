@@ -4549,6 +4549,14 @@ mod tests {
         /// default ceiling of a `fixed`: it answers `Short` with that size
         /// when `out` is shorter, and fills that many bytes otherwise.
         FixedOverCeiling,
+        /// `StreamCaller::push` answers `Contract(PreconditionFailed)`.
+        PushContract,
+        /// `StreamCaller::push` answers `TooLarge`.
+        PushTooLarge,
+        /// `StreamCaller::push` answers `Ended`.
+        PushEnded,
+        /// `StreamCaller::push` answers `Detached`.
+        PushDetached,
     }
 
     /// Ports that delegate to a loopback, but for one call that fails, and
@@ -4755,6 +4763,15 @@ mod tests {
             self.inner.pull(c, s, out)
         }
         fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError> {
+            match self.fail.get() {
+                Fail::PushContract => {
+                    return Err(PushError::Contract(Contract::PreconditionFailed))
+                }
+                Fail::PushTooLarge => return Err(PushError::TooLarge { cap: 1 }),
+                Fail::PushEnded => return Err(PushError::Ended),
+                Fail::PushDetached => return Err(PushError::Detached),
+                _ => {}
+            }
             self.inner.push(c, s, chunk)
         }
         fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError> {

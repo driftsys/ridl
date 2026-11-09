@@ -4,8 +4,12 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
 // ===== package veh.common =====
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
 /**
  * Vehicle speed over ground
+ *
+ * Build a value with `makeSpeed`.
  *
  * @remarks
  * Rules:
@@ -18,12 +22,33 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
  */
 export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 
+/** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeSpeed(value: number): Speed {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (value > 250) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  return value as Speed;
+}
+
+/** Builds a `Speed` without checking a value already known to satisfy its constraints. */
+export function makeSpeedUnchecked(value: number): Speed {
+  return value as Speed;
+}
+
 export function initSpeed(): Speed {
   return 0.0 as Speed;
 }
 
 /**
  * Coolant temperature
+ *
+ * Build a value with `makeTemperature`.
  *
  * @remarks
  * Rules:
@@ -35,6 +60,25 @@ export function initSpeed(): Speed {
  * @range [-40..125 step 0.1]
  */
 export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' };
+
+/** Builds a `Temperature`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeTemperature(value: number): Temperature {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+  }
+  if (value < -40) {
+    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+  }
+  if (value > 125) {
+    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+  }
+  return value as Temperature;
+}
+
+/** Builds a `Temperature` without checking a value already known to satisfy its constraints. */
+export function makeTemperatureUnchecked(value: number): Temperature {
+  return value as Temperature;
+}
 
 export function initTemperature(): Temperature {
   return 0.0 as Temperature;

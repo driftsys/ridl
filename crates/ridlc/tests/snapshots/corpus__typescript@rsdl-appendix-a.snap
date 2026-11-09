@@ -7,7 +7,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 
 
 // ===== package veh.common =====
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
 /**
+ * Build a value with `makeSpeed`.
+ *
  * @remarks
  * Rules:
  * - range 0 ..= 250
@@ -19,11 +23,38 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
  */
 export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 
+/** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeSpeed(value: number): Speed {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (value > 250) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  return value as Speed;
+}
+
+/** Builds a `Speed` without checking a value already known to satisfy its constraints. */
+export function makeSpeedUnchecked(value: number): Speed {
+  return value as Speed;
+}
+
 export function initSpeed(): Speed {
   return 0.0 as Speed;
 }
 
+/**
+ * Build a value with `makeEngaged`.
+ */
 export type Engaged = boolean & { readonly __ridl: 'veh.common.Engaged' };
+
+/** Builds a `Engaged`. */
+export function makeEngaged(value: boolean): Engaged {
+  return value as Engaged;
+}
 
 export function initEngaged(): Engaged {
   return false as Engaged;

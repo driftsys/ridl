@@ -2,8 +2,12 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: ts_for(decls)
 ---
+import { ConstraintError } from '@driftsys/ridl-runtime';
+
 /**
  * Vehicle speed over ground
+ *
+ * Build a value with `makeSpeed`.
  *
  * @remarks
  * Rules:
@@ -16,6 +20,25 @@ expression: ts_for(decls)
  */
 export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 
+/** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeSpeed(value: number): Speed {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+  }
+  if (value < 0.0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+  }
+  if (value > 250.0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+  }
+  return value as Speed;
+}
+
+/** Builds a `Speed` without checking a value already known to satisfy its constraints. */
+export function makeSpeedUnchecked(value: number): Speed {
+  return value as Speed;
+}
+
 export function initSpeed(): Speed {
   return 0.0 as Speed;
 }
@@ -25,6 +48,8 @@ export const MAX_SPEED = 250.0;
 export const MAX_GEAR = 6;
 
 /**
+ * Build a value with `makeOdometer`.
+ *
  * @remarks
  * Rules:
  * - range 0 ..= 18446744073709551615
@@ -32,6 +57,22 @@ export const MAX_GEAR = 6;
  * @range [0..18446744073709551615]
  */
 export type Odometer = bigint & { readonly __ridl: 'veh.common.Odometer' };
+
+/** Builds a `Odometer`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeOdometer(value: bigint): Odometer {
+  if (value < 0n) {
+    throw new ConstraintError('range', 'veh.common.Odometer', value, '[0..9223372036854775807]');
+  }
+  if (value > 9223372036854775807n) {
+    throw new ConstraintError('range', 'veh.common.Odometer', value, '[0..9223372036854775807]');
+  }
+  return value as Odometer;
+}
+
+/** Builds a `Odometer` without checking a value already known to satisfy its constraints. */
+export function makeOdometerUnchecked(value: bigint): Odometer {
+  return value as Odometer;
+}
 
 export function initOdometer(): Odometer {
   return 0n as Odometer;

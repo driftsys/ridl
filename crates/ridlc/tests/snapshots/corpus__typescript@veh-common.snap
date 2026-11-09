@@ -4,10 +4,13 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
 // ===== package veh.common =====
+import { ConstraintError } from '@driftsys/ridl-runtime';
 import * as ridl_std from './ridl.std.js';
 
 /**
  * Vehicle speed over ground
+ *
+ * Build a value with `makeSpeed`.
  *
  * @remarks
  * Rules:
@@ -20,12 +23,33 @@ import * as ridl_std from './ridl.std.js';
  */
 export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 
+/** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeSpeed(value: number): Speed {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  if (value > 250) {
+    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+  }
+  return value as Speed;
+}
+
+/** Builds a `Speed` without checking a value already known to satisfy its constraints. */
+export function makeSpeedUnchecked(value: number): Speed {
+  return value as Speed;
+}
+
 export function initSpeed(): Speed {
   return 0.0 as Speed;
 }
 
 /**
  * Coolant / ambient temperature
+ *
+ * Build a value with `makeTemperature`.
  *
  * @remarks
  * Rules:
@@ -38,12 +62,33 @@ export function initSpeed(): Speed {
  */
 export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' };
 
+/** Builds a `Temperature`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeTemperature(value: number): Temperature {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+  }
+  if (value < -40) {
+    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+  }
+  if (value > 125) {
+    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+  }
+  return value as Temperature;
+}
+
+/** Builds a `Temperature` without checking a value already known to satisfy its constraints. */
+export function makeTemperatureUnchecked(value: number): Temperature {
+  return value as Temperature;
+}
+
 export function initTemperature(): Temperature {
   return 0.0 as Temperature;
 }
 
 /**
  * Engine crankshaft speed
+ *
+ * Build a value with `makeRPM`.
  *
  * @remarks
  * Rules:
@@ -56,12 +101,33 @@ export function initTemperature(): Temperature {
  */
 export type RPM = number & { readonly __ridl: 'veh.common.RPM' };
 
+/** Builds a `RPM`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeRPM(value: number): RPM {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.RPM', value, '[0..8000]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.RPM', value, '[0..8000]');
+  }
+  if (value > 8000) {
+    throw new ConstraintError('range', 'veh.common.RPM', value, '[0..8000]');
+  }
+  return value as RPM;
+}
+
+/** Builds a `RPM` without checking a value already known to satisfy its constraints. */
+export function makeRPMUnchecked(value: number): RPM {
+  return value as RPM;
+}
+
 export function initRPM(): RPM {
   return 0.0 as RPM;
 }
 
 /**
  * Normalised ratio
+ *
+ * Build a value with `makeRatio`.
  *
  * @remarks
  * Rules:
@@ -74,11 +140,32 @@ export function initRPM(): RPM {
  */
 export type Ratio = number & { readonly __ridl: 'veh.common.Ratio' };
 
+/** Builds a `Ratio`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeRatio(value: number): Ratio {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Ratio', value, '[0..100]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.Ratio', value, '[0..100]');
+  }
+  if (value > 100) {
+    throw new ConstraintError('range', 'veh.common.Ratio', value, '[0..100]');
+  }
+  return value as Ratio;
+}
+
+/** Builds a `Ratio` without checking a value already known to satisfy its constraints. */
+export function makeRatioUnchecked(value: number): Ratio {
+  return value as Ratio;
+}
+
 export function initRatio(): Ratio {
   return 0.0 as Ratio;
 }
 
 /**
+ * Build a value with `makeCounter`.
+ *
  * @remarks
  * Rules:
  * - range 0 ..= 65535
@@ -87,11 +174,32 @@ export function initRatio(): Ratio {
  */
 export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
 
+/** Builds a `Counter`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeCounter(value: number): Counter {
+  if (!globalThis.Number.isSafeInteger(value)) {
+    throw new ConstraintError('range', 'veh.common.Counter', value, 'a safe integer');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.Counter', value, '[0..65535]');
+  }
+  if (value > 65535) {
+    throw new ConstraintError('range', 'veh.common.Counter', value, '[0..65535]');
+  }
+  return value as Counter;
+}
+
+/** Builds a `Counter` without checking a value already known to satisfy its constraints. */
+export function makeCounterUnchecked(value: number): Counter {
+  return value as Counter;
+}
+
 export function initCounter(): Counter {
   return 0 as Counter;
 }
 
 /**
+ * Build a value with `makeGain`.
+ *
  * @remarks
  * Rules:
  * - range 0 ..= 1
@@ -100,6 +208,25 @@ export function initCounter(): Counter {
  * @range [0..1 step 0.01]
  */
 export type Gain = number & { readonly __ridl: 'veh.common.Gain' };
+
+/** Builds a `Gain`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeGain(value: number): Gain {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new ConstraintError('range', 'veh.common.Gain', value, '[0..1]');
+  }
+  if (value < 0) {
+    throw new ConstraintError('range', 'veh.common.Gain', value, '[0..1]');
+  }
+  if (value > 1) {
+    throw new ConstraintError('range', 'veh.common.Gain', value, '[0..1]');
+  }
+  return value as Gain;
+}
+
+/** Builds a `Gain` without checking a value already known to satisfy its constraints. */
+export function makeGainUnchecked(value: number): Gain {
+  return value as Gain;
+}
 
 export function initGain(): Gain {
   return 0.0 as Gain;

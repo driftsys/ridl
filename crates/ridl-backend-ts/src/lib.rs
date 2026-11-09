@@ -102,6 +102,18 @@ pub(crate) fn generate_with(
     package: &v2::Package,
     model: &v1::Model,
 ) -> Result<GeneratedTs, GenerateError> {
+    if let Some(decl) = package
+        .decls
+        .iter()
+        .find(|decl| decl.name == "ConstraintError")
+    {
+        return Err(GenerateError::Unrepresentable(format!(
+            "`{}.{}` collides with `ConstraintError` from `@driftsys/ridl-runtime`, \
+             which the domain module reserves",
+            package.name, decl.name
+        )));
+    }
+    check_constructor_names(package)?;
     // A doc link resolves only to an item this module emits or imports, and
     // both sets are known only once every declaration is emitted. A first
     // pass collects them, and its output is discarded.
@@ -116,6 +128,12 @@ pub(crate) fn generate_with(
 
     let mut source = String::new();
     let imports = ctx.imports.borrow();
+    let has_checks = package.decls.iter().any(|decl| {
+        matches!(&decl.kind, Some(v2::decl::Kind::TypeDef(td)) if !numeric_checks(td).is_empty())
+    });
+    if has_checks {
+        source.push_str("import { ConstraintError } from '@driftsys/ridl-runtime';\n");
+    }
     for import in imports.iter() {
         source.push_str(&format!(
             "import * as {} from './{}.js';\n",
@@ -123,7 +141,7 @@ pub(crate) fn generate_with(
             import
         ));
     }
-    if !imports.is_empty() && !blocks.is_empty() {
+    if (has_checks || !imports.is_empty()) && !blocks.is_empty() {
         source.push('\n');
     }
     source.push_str(&blocks.join("\n"));
@@ -315,14 +333,185 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, blocks: &mut Vec<String>) -> Result<(),
 /// base intersected with a unique literal-typed marker property, so two
 /// scalars with the same base stay non-assignable.
 fn emit_type_def(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> String {
-    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &type_def_tags(td));
+    let constructor = scalar_constructor(ctx, decl, td);
+    let parts = ctx.decl_parts(decl);
+    let text = if constructor.is_some() {
+        format!(
+            "{}{}Build a value with `make{}`.",
+            linked(ctx, parts.doc, parts.links),
+            if parts.doc.is_empty() { "" } else { "\n\n" },
+            decl.name
+        )
+    } else {
+        linked(ctx, parts.doc, parts.links)
+    };
+    // Resolve source links before appending text so an invalid source offset
+    // cannot become valid within the added constructor sentence.
+    let doc = jsdoc(
+        ctx,
+        "",
+        &TsDocParts {
+            doc: &text,
+            links: &[],
+            ..parts
+        },
+        &type_def_tags(td),
+    );
     let export = export_kw(decl.visibility);
     let base = scalar_base(td);
     let brand = ts_string(&format!("{}.{}", ctx.package, decl.name));
-    format!(
+    let mut source = format!(
         "{doc}{export}type {name} = {base} & {{ readonly __ridl: {brand} }};\n",
         name = decl.name
-    )
+    );
+    if let Some(constructor) = constructor {
+        source.push('\n');
+        source.push_str(&constructor);
+    }
+    source
+}
+
+/// Numeric checks in contract order, each paired with its constraint text.
+/// Bigint-backed integers check both bounds of the declared range intersected
+/// with the language domain: i64 for I64, and 0 through i64::MAX for U64.
+/// TypeScript bigint has no finite backing limit, unlike Rust's i64 parameter.
+/// Number-backed integers must be safe and check the declared bounds.
+fn numeric_checks(td: &v2::TypeDef) -> Vec<(String, String)> {
+    let backing = backing_scalar(td);
+    let integer = backing == ScalarBacking::Integer;
+    if !integer && backing != ScalarBacking::Float {
+        return Vec::new();
+    }
+    let mut checks = Vec::new();
+    if integer && is_wide(td) {
+        let domain_min =
+            if td.width == Some(v2::type_def::Width::IntWidth(v2::IntWidth::U64 as i32)) {
+                0
+            } else {
+                i64::MIN
+            };
+        let c = td.constraint.as_ref();
+        let min = c
+            .and_then(|c| c.min.as_deref())
+            .and_then(|min| min.parse::<i64>().ok())
+            .unwrap_or(domain_min)
+            .max(domain_min);
+        let max = c
+            .and_then(|c| c.max.as_deref())
+            .and_then(|max| max.parse::<i64>().ok())
+            .unwrap_or(i64::MAX);
+        let range = format!("[{min}..{max}]");
+        checks.push((format!("value < {min}n"), range.clone()));
+        checks.push((format!("value > {max}n"), range));
+        return checks;
+    }
+    if integer {
+        checks.push((
+            "!globalThis.Number.isSafeInteger(value)".to_string(),
+            "a safe integer".to_string(),
+        ));
+    }
+    let Some(c) = &td.constraint else {
+        return checks;
+    };
+    let range = format!(
+        "[{}..{}]",
+        c.min.as_deref().unwrap_or(""),
+        c.max.as_deref().unwrap_or("")
+    );
+    if !integer && (c.min.is_some() || c.max.is_some()) {
+        checks.push((
+            "!globalThis.Number.isFinite(value)".to_string(),
+            range.clone(),
+        ));
+    }
+    let literal = |bound: &str| {
+        if integer && is_wide(td) {
+            format!("{bound}n")
+        } else {
+            bound.to_string()
+        }
+    };
+    if let Some(min) = &c.min {
+        checks.push((format!("value < {}", literal(min)), range.clone()));
+    }
+    // Safe number integers cannot exceed i64::MAX; bigint bounds are checked above.
+    if let Some(max) = c
+        .max
+        .as_deref()
+        .filter(|max| !integer || max.parse::<i64>() != Ok(i64::MAX))
+    {
+        checks.push((format!("value > {}", literal(max)), range));
+    }
+    checks
+}
+
+/// Refuses generated constructor names claimed by two scalar declarations.
+fn check_constructor_names(package: &v2::Package) -> Result<(), GenerateError> {
+    let mut names = HashMap::new();
+    for decl in &package.decls {
+        let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind else {
+            continue;
+        };
+        if matches!(
+            backing_scalar(td),
+            ScalarBacking::String | ScalarBacking::Bytes
+        ) {
+            continue;
+        }
+        let suffixes: &[&str] = if numeric_checks(td).is_empty() {
+            &[""]
+        } else {
+            &["", "Unchecked"]
+        };
+        for suffix in suffixes {
+            let identifier = format!("make{}{suffix}", decl.name);
+            let origin = format!("{}.{}", package.name, decl.name);
+            if let Some(other) = names.insert(identifier.clone(), origin.clone()) {
+                return Err(GenerateError::Unrepresentable(format!(
+                    "constructor `{identifier}` of `{origin}` collides with the constructor of `{other}`"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Constructs numeric and boolean brands; string and byte checks are tracked
+/// by driftsys/ridl#923. The unchecked form exists only when a check is emitted.
+fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<String> {
+    if matches!(
+        backing_scalar(td),
+        ScalarBacking::String | ScalarBacking::Bytes
+    ) {
+        return None;
+    }
+    let name = &decl.name;
+    let base = scalar_base(td);
+    let export = export_kw(decl.visibility);
+    let checks = numeric_checks(td);
+    let throws = if checks.is_empty() {
+        ""
+    } else {
+        " Throws a `ConstraintError` when a checked constraint is broken."
+    };
+    let mut source = format!(
+        "/** Builds a `{name}`.{throws} */\n{export}function make{name}(value: {base}): {name} {{\n"
+    );
+    let qualified = ts_string(&format!("{}.{name}", ctx.package));
+    for (condition, constraint) in &checks {
+        source.push_str(&format!(
+            "  if ({condition}) {{\n    throw new ConstraintError('range', {qualified}, value, {});\n  }}\n",
+            ts_string(constraint)
+        ));
+    }
+    source.push_str(&format!("  return value as {name};\n}}\n"));
+    if !checks.is_empty() {
+        source.push_str(&format!(
+            "\n/** Builds a `{name}` without checking a value already known to satisfy its constraints. */\n{export}function make{name}Unchecked(value: {base}): {name} {{\n  return value as {name};\n}}\n"
+        ));
+    }
+    Some(source)
 }
 
 /// A constant becomes an `export const` with an inferred literal type
