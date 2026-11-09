@@ -528,13 +528,15 @@ induced tuple of an interaction, which the codec file exports as an `interface`
 (`export type X = Record<string,
 never>` for one with no field). An optional
 array element, map key or map value is refused, as the Rust codec refuses it. A
-named scalar of another package converts by a type assertion, and an enum set of
-another package through a checking function of the file. A payload type of
-another package that is a named scalar or an enum set goes through that
-package's own codec file; a payload type that reaches a struct, a union or an
-enum of another package is refused with an error that names both. An internal
-payload type has no `encode`/`decode`, because `<base>.ts` does not export its
-type. [The codec table design record][codec-table] gives the rules in full.
+named scalar converts through `make<Name>Unchecked` of its domain module when
+that module has one, and by a type assertion otherwise; this holds for a named
+scalar of another package too. An enum set of another package through a checking
+function of the file. A payload type of another package that is a named scalar
+or an enum set goes through that package's own codec file; a payload type that
+reaches a struct, a union or an enum of another package is refused with an error
+that names both. An internal payload type has no `encode`/`decode`, because
+`<base>.ts` does not export its type.
+[The codec table design record][codec-table] gives the rules in full.
 
 ### Calling generated streams
 

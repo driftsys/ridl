@@ -4,7 +4,7 @@ expression: source
 ---
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
-import type * as t from "./strict.demo.js";
+import * as t from "./strict.demo.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
 import * as fb from "./strict/demo.js";
@@ -130,7 +130,7 @@ export function encodeKey(value: t.Key): Uint8Array {
 }
 /** Decodes a `strict.demo.Key` payload the codec has verified. */
 export function decodeKey(bytes: Uint8Array): t.Key {
-  return fb.KeyBox.getRootAsKeyBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Key;
+  return t.makeKeyUnchecked(fb.KeyBox.getRootAsKeyBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
 }
 
 /** Encodes a `strict.demo.Report` payload. */
@@ -165,7 +165,7 @@ function unpackReport(object: fb.ReportT): t.Report {
     wide: unpackWideFlags(object.wide),
     list: object.list.map((element) => unpackDtcStatus(element)),
     sets: object.sets.map((element) => unpackFlags(element)),
-    table: object.table.map((entry) => [entry.key as t.Key, unpackMode(entry.value)] as const),
+    table: object.table.map((entry) => [t.makeKeyUnchecked(entry.key as string), unpackMode(entry.value)] as const),
   };
   if (object.maybe !== null) result.maybe = unpackDtcStatus(object.maybe);
   if (object.maybeFlags !== null) result.maybeFlags = unpackFlags(object.maybeFlags);

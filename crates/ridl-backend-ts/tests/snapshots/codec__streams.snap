@@ -6,7 +6,7 @@ import type { StreamSession, StreamOptions } from "@driftsys/ridl-runtime";
 import { CatalogMismatch, CodecError, StreamError, decodeStream, decodeTextStream, encodeUpload, byteUpload, textUpload } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
-import type * as t from "./streams.demo.js";
+import * as t from "./streams.demo.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
 import * as fb from "./streams/demo.js";
@@ -224,7 +224,7 @@ export function encodeCount(value: t.Count): Uint8Array {
 }
 /** Decodes a `streams.demo.Count` payload the codec has verified. */
 export function decodeCount(bytes: Uint8Array): t.Count {
-  return fb.CountBox.getRootAsCountBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Count;
+  return t.makeCountUnchecked(fb.CountBox.getRootAsCountBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `streams.demo.Data` payload. */
@@ -235,7 +235,7 @@ export function encodeData(value: t.Data): Uint8Array {
 }
 /** Decodes a `streams.demo.Data` payload the codec has verified. */
 export function decodeData(bytes: Uint8Array): t.Data {
-  return Uint8Array.from(fb.DataBox.getRootAsDataBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Data;
+  return t.makeDataUnchecked(Uint8Array.from(fb.DataBox.getRootAsDataBox(new flatbuffers.ByteBuffer(bytes)).unpack().value));
 }
 
 /** Encodes a `streams.demo.Text` payload. */
@@ -246,7 +246,7 @@ export function encodeText(value: t.Text): Uint8Array {
 }
 /** Decodes a `streams.demo.Text` payload the codec has verified. */
 export function decodeText(bytes: Uint8Array): t.Text {
-  return fb.TextBox.getRootAsTextBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Text;
+  return t.makeTextUnchecked(fb.TextBox.getRootAsTextBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
 }
 
 /** Encodes a `streams.demo.Chunk` payload. */
@@ -267,7 +267,7 @@ function packChunk(value: t.Chunk): fb.ChunkT {
 }
 function unpackChunk(object: fb.ChunkT): t.Chunk {
   return {
-    value: object.value as t.Count,
+    value: t.makeCountUnchecked(object.value),
   };
 }
 
@@ -295,7 +295,7 @@ function unpackChoice(object: fb.ChoiceT): t.Choice {
     case fb.ChoiceUnion.ok:
       return { kind: "ok", value: unpackChunk(object.value as fb.ChunkT) };
     case fb.ChoiceUnion.err:
-      return { kind: "err", value: (object.value as fb.ChoiceErrBoxT).value as t.Count };
+      return { kind: "err", value: t.makeCountUnchecked((object.value as fb.ChoiceErrBoxT).value) };
     default:
       throw new RangeError("union streams.demo.Choice carries no arm");
   }
@@ -480,7 +480,7 @@ function packFeedUnionsParams(value: FeedUnionsParams): fb.FeedUnionsParamsT {
   return tuple;
 }
 function unpackFeedUnionsParams(object: fb.FeedUnionsParamsT): FeedUnionsParams {
-  return { session: object.field1 as t.Count, session1: object.field2 as t.Count, opts: object.field3 as t.Count };
+  return { session: t.makeCountUnchecked(object.field1), session1: t.makeCountUnchecked(object.field2), opts: t.makeCountUnchecked(object.field3) };
 }
 
 /** Encodes a `streams.demo.FeedStatusesParams` payload. */
@@ -653,7 +653,7 @@ function packFeedDuplexNamedParams(value: FeedDuplexNamedParams): fb.FeedDuplexN
   return tuple;
 }
 function unpackFeedDuplexNamedParams(object: fb.FeedDuplexNamedParamsT): FeedDuplexNamedParams {
-  return { seed: object.field1 as t.Count, tail: object.field2 as t.Count };
+  return { seed: t.makeCountUnchecked(object.field1), tail: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.FeedDuplexTextParams` payload. */
@@ -750,7 +750,7 @@ function packFeedUploadNamedParams(value: FeedUploadNamedParams): fb.FeedUploadN
   return tuple;
 }
 function unpackFeedUploadNamedParams(object: fb.FeedUploadNamedParamsT): FeedUploadNamedParams {
-  return { seed: object.field1 as t.Count, tail: object.field2 as t.Count };
+  return { seed: t.makeCountUnchecked(object.field1), tail: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.FeedUploadDataParams` payload. */
@@ -790,7 +790,7 @@ function packFeedUploadChoiceParams(value: FeedUploadChoiceParams): fb.FeedUploa
   return tuple;
 }
 function unpackFeedUploadChoiceParams(object: fb.FeedUploadChoiceParamsT): FeedUploadChoiceParams {
-  return { seed: object.field1 as t.Count, tail: object.field2 as t.Count };
+  return { seed: t.makeCountUnchecked(object.field1), tail: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.FeedUploadTupleParams` payload. */
@@ -830,7 +830,7 @@ function packFeedUploadTupleReply(value: FeedUploadTupleReply): fb.FeedUploadTup
   return tuple;
 }
 function unpackFeedUploadTupleReply(object: fb.FeedUploadTupleReplyT): FeedUploadTupleReply {
-  return { first: object.field1 as t.Count, tail: object.field2 as t.Count };
+  return { first: t.makeCountUnchecked(object.field1), tail: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.FeedUploadFallibleParams` payload. */
@@ -889,7 +889,7 @@ function packSessionFetchParams(value: SessionFetchParams): fb.SessionFetchParam
   return tuple;
 }
 function unpackSessionFetchParams(object: fb.SessionFetchParamsT): SessionFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.OptsFetchParams` payload. */
@@ -910,7 +910,7 @@ function packOptsFetchParams(value: OptsFetchParams): fb.OptsFetchParamsT {
   return tuple;
 }
 function unpackOptsFetchParams(object: fb.OptsFetchParamsT): OptsFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.EntryFetchParams` payload. */
@@ -931,7 +931,7 @@ function packEntryFetchParams(value: EntryFetchParams): fb.EntryFetchParamsT {
   return tuple;
 }
 function unpackEntryFetchParams(object: fb.EntryFetchParamsT): EntryFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.ArgsFetchParams` payload. */
@@ -952,7 +952,7 @@ function packArgsFetchParams(value: ArgsFetchParams): fb.ArgsFetchParamsT {
   return tuple;
 }
 function unpackArgsFetchParams(object: fb.ArgsFetchParamsT): ArgsFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.RawFetchParams` payload. */
@@ -973,7 +973,7 @@ function packRawFetchParams(value: RawFetchParams): fb.RawFetchParamsT {
   return tuple;
 }
 function unpackRawFetchParams(object: fb.RawFetchParamsT): RawFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.ElementFetchParams` payload. */
@@ -994,7 +994,7 @@ function packElementFetchParams(value: ElementFetchParams): fb.ElementFetchParam
   return tuple;
 }
 function unpackElementFetchParams(object: fb.ElementFetchParamsT): ElementFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.RequestTypeFetchParams` payload. */
@@ -1015,7 +1015,7 @@ function packRequestTypeFetchParams(value: RequestTypeFetchParams): fb.RequestTy
   return tuple;
 }
 function unpackRequestTypeFetchParams(object: fb.RequestTypeFetchParamsT): RequestTypeFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.ElementTypeFetchParams` payload. */
@@ -1036,7 +1036,7 @@ function packElementTypeFetchParams(value: ElementTypeFetchParams): fb.ElementTy
   return tuple;
 }
 function unpackElementTypeFetchParams(object: fb.ElementTypeFetchParamsT): ElementTypeFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.StreamEntryFetchParams` payload. */
@@ -1057,7 +1057,7 @@ function packStreamEntryFetchParams(value: StreamEntryFetchParams): fb.StreamEnt
   return tuple;
 }
 function unpackStreamEntryFetchParams(object: fb.StreamEntryFetchParamsT): StreamEntryFetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 /** Encodes a `streams.demo.StreamEntry1FetchParams` payload. */
@@ -1078,7 +1078,7 @@ function packStreamEntry1FetchParams(value: StreamEntry1FetchParams): fb.StreamE
   return tuple;
 }
 function unpackStreamEntry1FetchParams(object: fb.StreamEntry1FetchParamsT): StreamEntry1FetchParams {
-  return { streamEntry13: object.field1 as t.Count, streamEntry14: object.field2 as t.Count };
+  return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
 const codecCount: PayloadCodec<t.Count> = { type: "streams.demo.Count", encode: encodeCount, decode: decodeCount };
