@@ -140,7 +140,13 @@ pre-empting the tree:
   query's `ensure`) and `<comparison>` is one of `< <= > >= == !=`. The
   subject's named type must be an integer- or float-backed scalar.
 - It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op> <literal>`
-  for `result`; several clauses of one kind conjoin with `&&`.
+  for `result`; several clauses of one kind conjoin with `&&`. Float literals
+  are rounded at generation to preserve exact rational comparisons. Comparisons
+  using `==` or `!=` with an inexact literal are refused, as are bounds
+  requiring infinity. The book's
+  [contract clause translation](../book/generated-code.md#contract-clause-translation)
+  states the rounding and refusal rules. The codegen model retains the exact
+  literal text.
 - **Every other clause form is refused with a `GenerateError`**, never dropped
   and never silently emitted as `Ok(())`. A dropped clause would generate a
   provider that accepts arguments its own contract forbids.
