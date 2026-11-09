@@ -17,7 +17,8 @@
 //! and `<` use the smallest at or above it. Exactly representable literals
 //! are printed as written, with `.0` appended when they have no fraction or
 //! exponent (`100` becomes `100.0`). Inexact `==` and `!=`, unreadable
-//! decimals and bounds that require infinity are refused. The newtype's field
+//! decimals, exponents that cannot be read or have magnitude above 10000,
+//! and bounds that require infinity are refused. The newtype's field
 //! is private, and the read is still legal: the subject is always a
 //! same-package named scalar, and the clause is emitted inside a descriptor
 //! `impl` block at package module scope, the same module that declares the
@@ -708,6 +709,8 @@ mod tests {
         // Unrounded literals and swapped up/down bounds change these outputs.
         for (literal, down, up) in [
             ("0.1", "0.09999999999999999", "0.1"),
+            ("1e-1", "0.09999999999999999", "0.1"),
+            ("1E-1", "0.09999999999999999", "0.1"),
             ("-0.1", "-0.1", "-0.09999999999999999"),
             ("1e-324", "0.0", "5e-324"),
             ("-1e-324", "-5e-324", "-0.0"),
@@ -722,10 +725,10 @@ mod tests {
                 {
                     let source = format!("{subject} {op} {literal}");
                     assert_eq!(
-                        float_clause(&source, ensure).expect("finite bound"),
-                        format!(
+                        float_clause(&source, ensure).map_err(|error| error.message),
+                        Ok(format!(
                             "if{field}.0{op}{bound}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
-                        ),
+                        )),
                         "{source}"
                     );
                 }
@@ -765,18 +768,55 @@ mod tests {
     }
 
     #[test]
+    fn float_exponents_at_the_magnitude_limit_have_finite_lower_bounds() {
+        // Rejecting magnitude 10000 along with larger exponents loses these bounds.
+        for (literal, bound) in [("1e10000", "1.7976931348623157e308"), ("1e-10000", "0.0")] {
+            assert_eq!(
+                float_clause(&format!("rate <= {literal}"), false).map_err(|error| error.message),
+                Ok(format!(
+                    "ifargs.0<={bound}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
+                )),
+                "{literal}"
+            );
+        }
+    }
+
+    #[test]
     fn infinite_float_bounds_and_unreadable_exponents_are_refused() {
-        for expression in [
-            ">= 1e999",
-            "< 1e999",
-            "<= -1e999",
-            "> -1e999",
-            "<= 1e10001",
-            "<= 1e2147483648",
+        // Each refusal must retain its cause; a common prefix cannot distinguish them.
+        for (expression, reason) in [
+            (
+                "== 0.1",
+                "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
+            ),
+            (
+                "!= 0.1",
+                "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
+            ),
+            (">= 1e999", "the required binary64 bound is infinite"),
+            ("< 1e999", "the required binary64 bound is infinite"),
+            ("<= -1e999", "the required binary64 bound is infinite"),
+            ("> -1e999", "the required binary64 bound is infinite"),
+            (
+                "<= 1e10001",
+                "the literal cannot be read as an exact decimal",
+            ),
+            (
+                "<= 1e-10001",
+                "the literal cannot be read as an exact decimal",
+            ),
+            (
+                "<= 1e2147483648",
+                "the literal cannot be read as an exact decimal",
+            ),
         ] {
-            let error =
-                float_clause(&format!("rate {expression}"), false).expect_err("unusable bound");
-            assert!(error.message.contains("cannot translate contract clause"));
+            let source = format!("rate {expression}");
+            assert_eq!(
+                float_clause(&source, false).map_err(|error| error.message),
+                Err(format!(
+                    "cannot translate contract clause `{source}`: {reason}"
+                ))
+            );
         }
     }
 }

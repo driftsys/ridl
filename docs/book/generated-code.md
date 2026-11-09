@@ -200,9 +200,10 @@ written as `0.1f64`, which is above the exact tenth, fails the clause. Exactly
 representable literals are printed as written, with `.0` appended when they have
 no fraction or exponent (`100` becomes `100.0`). An inexact literal on `==` or
 `!=` is refused because no binary64 value equals it. A literal whose exponent
-cannot be read, or whose required bound is infinite, is also refused. A literal
-above the finite range can still have a finite lower bound: `<= 1e999`, when
-supplied in the IR, uses `f64::MAX`. Integer comparisons are unchanged.
+cannot be read or has magnitude above 10000, or whose required bound is
+infinite, is also refused. A literal above the finite range can still have a
+finite lower bound: `<= 1e999` uses `f64::MAX`. Integer comparisons are
+unchanged.
 
 ## Async calls
 

@@ -225,6 +225,11 @@ never stated.
    first instalment of E5, and E5.1 replaces it with a translator driven by the
    structured expression tree the IR does not carry yet.
 
+   A float literal is emitted as the binary64 bound that keeps the comparison
+   exact; the book's
+   [Contract clause translation](../book/generated-code.md#contract-clause-translation)
+   states the rule.
+
    **Amendment (2026-11-09) — stream parameters do not count when selecting a
    parameter subject.** A command or query with one ordinary parameter and a
    parameter stream can translate a clause on that ordinary parameter in either
