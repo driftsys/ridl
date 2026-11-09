@@ -7866,7 +7866,7 @@ impl DriverProfile {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
         {
             let __s: &::core::primitive::str = self.name.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Name"),
@@ -7876,8 +7876,7 @@ impl DriverProfile {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8245,7 +8244,7 @@ impl SensorBounds {
                     let __ea = __off + __i * 8usize;
                     {
                         let __s: &::core::primitive::str = __e.get();
-                        if __s.as_bytes().contains(&0u8) {
+                        if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                             return ::core::result::Result::Err(
                                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                                     type_name: ::core::option::Option::Some("Label"),
@@ -8255,9 +8254,7 @@ impl SensorBounds {
                         }
                         if !__s.is_empty() {
                             let __n = __s.len();
-                            let __data = w
-                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                            w.put_bytes(__data, __s.as_bytes());
+                            let __data = w.tail_data(__s.as_bytes(), true)?;
                             w.put_desc(
                                 __ea,
                                 ::ridl_rt::podbuf::Desc {
@@ -8310,7 +8307,7 @@ impl SensorBounds {
                     let __ea = __off + __i * 16usize;
                     {
                         let __s: &::core::primitive::str = __e.0.get();
-                        if __s.as_bytes().contains(&0u8) {
+                        if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                             return ::core::result::Result::Err(
                                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                                     type_name: ::core::option::Option::Some("Label"),
@@ -8320,9 +8317,7 @@ impl SensorBounds {
                         }
                         if !__s.is_empty() {
                             let __n = __s.len();
-                            let __data = w
-                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                            w.put_bytes(__data, __s.as_bytes());
+                            let __data = w.tail_data(__s.as_bytes(), true)?;
                             w.put_desc(
                                 __ea,
                                 ::ridl_rt::podbuf::Desc {
@@ -8334,7 +8329,7 @@ impl SensorBounds {
                     }
                     {
                         let __s: &::core::primitive::str = __e.1.get();
-                        if __s.as_bytes().contains(&0u8) {
+                        if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                             return ::core::result::Result::Err(
                                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                                     type_name: ::core::option::Option::Some("Name"),
@@ -8344,9 +8339,7 @@ impl SensorBounds {
                         }
                         if !__s.is_empty() {
                             let __n = __s.len();
-                            let __data = w
-                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                            w.put_bytes(__data, __s.as_bytes());
+                            let __data = w.tail_data(__s.as_bytes(), true)?;
                             w.put_desc(
                                 __ea + 8usize,
                                 ::ridl_rt::podbuf::Desc {
@@ -9457,7 +9450,7 @@ impl SensorFault {
         w.put_u16(__at, self.code.get() as ::core::primitive::u16);
         {
             let __s: &::core::primitive::str = self.message.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Message"),
@@ -9467,8 +9460,7 @@ impl SensorFault {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at + 4usize,
                     ::ridl_rt::podbuf::Desc {

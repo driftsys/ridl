@@ -6789,7 +6789,7 @@ impl Uuid {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Uuid"),
@@ -6799,8 +6799,7 @@ impl Uuid {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -6970,7 +6969,7 @@ impl Ulid {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Ulid"),
@@ -6980,8 +6979,7 @@ impl Ulid {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7151,7 +7149,7 @@ impl Uri {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Uri"),
@@ -7161,8 +7159,7 @@ impl Uri {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7332,7 +7329,7 @@ impl Url {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Url"),
@@ -7342,8 +7339,7 @@ impl Url {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7513,7 +7509,7 @@ impl Email {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Email"),
@@ -7523,8 +7519,7 @@ impl Email {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7694,7 +7689,7 @@ impl IpV4 {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("IpV4"),
@@ -7704,8 +7699,7 @@ impl IpV4 {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -7875,7 +7869,7 @@ impl IpV6 {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("IpV6"),
@@ -7885,8 +7879,7 @@ impl IpV6 {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8056,7 +8049,7 @@ impl Label {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Label"),
@@ -8066,8 +8059,7 @@ impl Label {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8237,7 +8229,7 @@ impl Name {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Name"),
@@ -8247,8 +8239,7 @@ impl Name {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8418,7 +8409,7 @@ impl Message {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Message"),
@@ -8428,8 +8419,7 @@ impl Message {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8814,7 +8804,7 @@ impl Date {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Date"),
@@ -8824,8 +8814,7 @@ impl Date {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -8995,7 +8984,7 @@ impl TimeOfDay {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("TimeOfDay"),
@@ -9005,8 +8994,7 @@ impl TimeOfDay {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9182,7 +9170,7 @@ impl Version {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Version"),
@@ -9192,8 +9180,7 @@ impl Version {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9363,7 +9350,7 @@ impl CountryCode {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("CountryCode"),
@@ -9373,8 +9360,7 @@ impl CountryCode {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -9550,7 +9536,7 @@ impl LanguageCode {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("LanguageCode"),
@@ -9560,8 +9546,7 @@ impl LanguageCode {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {
@@ -10089,8 +10074,7 @@ impl Certificate {
             let __s: &[::core::primitive::u8] = self.get();
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64, 1usize)?;
-                w.put_bytes(__data, __s);
+                let __data = w.tail_data(__s, false)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {

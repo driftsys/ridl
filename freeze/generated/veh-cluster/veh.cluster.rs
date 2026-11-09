@@ -7992,7 +7992,7 @@ impl DiagFilter {
         if let ::core::option::Option::Some(__o) = &self.category {
             {
                 let __s: &::core::primitive::str = __o.get();
-                if __s.as_bytes().contains(&0u8) {
+                if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                     return ::core::result::Result::Err(
                         ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                             type_name: ::core::option::Option::Some("Label"),
@@ -8002,8 +8002,7 @@ impl DiagFilter {
                 }
                 if !__s.is_empty() {
                     let __n = __s.len();
-                    let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                    w.put_bytes(__data, __s.as_bytes());
+                    let __data = w.tail_data(__s.as_bytes(), true)?;
                     w.put_desc(
                         __at + 4usize,
                         ::ridl_rt::podbuf::Desc {
@@ -8290,7 +8289,7 @@ impl FaultEvent {
         w.put_u16(__at, self.code as ::core::primitive::u16);
         {
             let __s: &::core::primitive::str = self.message.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("Message"),
@@ -8300,8 +8299,7 @@ impl FaultEvent {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at + 4usize,
                     ::ridl_rt::podbuf::Desc {
@@ -12149,7 +12147,7 @@ impl FanTag {
         let __at = w.reserve_head(8u32)?;
         {
             let __s: &::core::primitive::str = self.get();
-            if __s.as_bytes().contains(&0u8) {
+            if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FanTag"),
@@ -12159,8 +12157,7 @@ impl FanTag {
             }
             if !__s.is_empty() {
                 let __n = __s.len();
-                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                w.put_bytes(__data, __s.as_bytes());
+                let __data = w.tail_data(__s.as_bytes(), true)?;
                 w.put_desc(
                     __at,
                     ::ridl_rt::podbuf::Desc {

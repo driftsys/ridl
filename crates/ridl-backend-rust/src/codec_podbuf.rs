@@ -43,7 +43,8 @@
 //!
 //! The encoder's duties (decision 9): every pad byte, the preamble's
 //! `reserved` word and every byte of an absent optional are zero, which
-//! `Writer` guarantees by zero-filling what it reserves; the tail holds only
+//! `Writer` guarantees by zero-filling what it reserves and the encoder
+//! does not write; the tail holds only
 //! the data present, in the order of the head's placements, depth first
 //! (decision 4, "Tail order"); a map's entries are sorted by key (decision
 //! 5); a string holding U+0000, a duplicate map key and a NaN map key are
@@ -1450,7 +1451,7 @@ impl<'a> Codec<'a> {
             {
                 let __s: &::core::primitive::str = #text;
                 #length
-                if __s.as_bytes().contains(&0u8) {
+                if ::ridl_rt::podbuf::has_nul(__s.as_bytes()) {
                     #nul
                 }
                 if !__s.is_empty() {
@@ -1458,8 +1459,7 @@ impl<'a> Codec<'a> {
                     // `__data`, not `__off`: `at` may name the `__off` of a
                     // union arm, and a shadowing binding would move the
                     // descriptor.
-                    let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                    w.put_bytes(__data, __s.as_bytes());
+                    let __data = w.tail_data(__s.as_bytes(), true)?;
                     w.put_desc(#at, ::ridl_rt::podbuf::Desc {
                         off: __data as ::core::primitive::u32,
                         len: __n as ::core::primitive::u32,
@@ -1486,8 +1486,7 @@ impl<'a> Codec<'a> {
                 #length
                 if !__s.is_empty() {
                     let __n = __s.len();
-                    let __data = w.tail(__n as ::core::primitive::u64, 1usize)?;
-                    w.put_bytes(__data, __s);
+                    let __data = w.tail_data(__s, false)?;
                     w.put_desc(#at, ::ridl_rt::podbuf::Desc {
                         off: __data as ::core::primitive::u32,
                         len: __n as ::core::primitive::u32,

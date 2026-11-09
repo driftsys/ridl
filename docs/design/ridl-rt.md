@@ -41,7 +41,7 @@ adds:
 | `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                                                                                                    |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                                                                                                       |
 | `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                                                                                                   |
-| `podbuf`      | under the feature of the same name: `PREAMBLE_SIZE`, `Preamble`, `Region`, `Desc`, `ArrayDesc`, `tail_range`, `text`, `scalar_count`, `Writer`, `Aligned`                                                                                                                                                                                                      |
+| `podbuf`      | under the feature of the same name: `PREAMBLE_SIZE`, `Preamble`, `Region`, `Desc`, `ArrayDesc`, `tail_range`, `text`, `has_nul`, `scalar_count`, `Writer`, `Aligned`                                                                                                                                                                                           |
 | `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                                                                                                          |
 
 Generated code names every item by its full path and imports none, because
@@ -628,9 +628,10 @@ module is [the proto3 codec record](proto3-codec.md).
 that reads 0 past the size the producer wrote, the two descriptor layouts, the
 bounds and alignment check of a descriptor's data (`tail_range`, with checked
 arithmetic), the string checks, `Writer`, which fills the caller's slice, zeroes
-what it reserves and reports a store outside the written bytes, and `Aligned`,
-an 8-byte aligned array wrapper. It decides no layout, takes no dependency,
-allocates nothing, and holds a `compile_error!` for a big-endian target.
+what the encoder does not write and reports a store outside the written bytes,
+and `Aligned`, an 8-byte aligned array wrapper. It decides no layout, takes no
+dependency, allocates nothing, and holds a `compile_error!` for a big-endian
+target.
 
 **Since 2026-09-25 a fourth feature, `std`, exists, off by default.** It is not
 an encoding: it links the standard library and gates the `task` module, whose

@@ -16,8 +16,8 @@
 //! the head, an element or a union arm that reads 0 past the size the producer
 //! wrote; [`Desc`] and [`ArrayDesc`], the two descriptor layouts;
 //! [`tail_range`], the bounds and alignment check of a descriptor's data;
-//! [`text`] and [`scalar_count`], the string checks; [`Writer`], which fills
-//! the caller's slice and zeroes every byte it reserves; and [`Aligned`], a
+//! [`text`], [`has_nul`] and [`scalar_count`], the string checks; [`Writer`], which fills
+//! the caller's slice and leaves no reserved byte unwritten; and [`Aligned`], a
 //! wrapper that gives a byte array the 8-byte alignment of a buffer.
 //!
 //! **This module decides no layout.** It is handed sizes, offsets and
@@ -283,11 +283,27 @@ pub fn tail_range(
 /// ([`Malformed::Utf8`]).
 pub fn text(bytes: &[u8]) -> Result<&str, VerifyError> {
     match bytes.split_last() {
-        Some((0, data)) if !data.contains(&0) => {
+        Some((0, data)) if !has_nul(data) => {
             core::str::from_utf8(data).map_err(|_| VerifyError::Structure(Malformed::Utf8))
         }
         _ => Err(VerifyError::Structure(Malformed::Terminator)),
     }
+}
+
+/// Whether `bytes` holds a NUL byte.
+///
+/// The scan takes the smallest byte of each 64-byte block, a reduction that a
+/// compiler can turn into vector minimum instructions on a target that has
+/// them; `<[u8]>::contains` tests one machine word per step.
+#[inline]
+pub fn has_nul(bytes: &[u8]) -> bool {
+    let (blocks, rest) = bytes.as_chunks::<64>();
+    for block in blocks {
+        if block.iter().fold(u8::MAX, |least, b| least.min(*b)) == 0 {
+            return true;
+        }
+    }
+    rest.contains(&0)
 }
 
 /// The number of Unicode scalar values of `s`, the unit of a typl string bound.
@@ -295,12 +311,15 @@ pub fn scalar_count(s: &str) -> usize {
     s.chars().count()
 }
 
-/// Writes a buffer into the caller's slice and zeroes every byte it reserves.
+/// Writes a buffer into the caller's slice. Every byte it reserves is either
+/// zeroed or written by the encoder, so no byte of the caller's slice before
+/// the end of the buffer keeps an older value.
 ///
 /// The encoder reserves the head with [`Writer::reserve_head`], stores the head
-/// fields with the `put_*` methods, and appends the tail blocks with
-/// [`Writer::tail`] in the order of the head's fields, depth first. A tail
-/// block starts at its alignment; the gap before it is zero-filled.
+/// fields with the `put_*` methods, and appends the tail blocks in the order of
+/// the head's fields, depth first: [`Writer::tail_data`] for a string or a bytes
+/// field, [`Writer::tail`] for any other block. A tail block starts at its
+/// alignment; the gap before it is zero-filled.
 ///
 /// A store outside the written bytes is a defect of the encoder that issued
 /// it. The writer drops the store and remembers the first such offset, and
@@ -384,6 +403,33 @@ impl<'o> Writer<'o> {
         }
     }
 
+    /// Appends `data` at the next byte, followed by one NUL byte when
+    /// `terminated` is true, and returns the offset of `data`.
+    ///
+    /// The block has alignment 1, so no gap precedes it. Every reserved byte
+    /// is written once: unlike [`Writer::tail`] followed by
+    /// [`Writer::put_bytes`], no byte is zeroed first and then overwritten.
+    pub fn tail_data(&mut self, data: &[u8], terminated: bool) -> Result<usize, EncodeError> {
+        let start = self.len;
+        let end = start
+            .saturating_add(data.len())
+            .saturating_add(usize::from(terminated));
+        let available = self.out.len();
+        match self.out.get_mut(start..end) {
+            Some(region) => {
+                let (head, nul) = region.split_at_mut(data.len());
+                head.copy_from_slice(data);
+                nul.fill(0);
+                self.len = end;
+                Ok(start)
+            }
+            None => Err(EncodeError::Capacity {
+                needed: end,
+                available,
+            }),
+        }
+    }
+
     #[inline]
     fn store(&mut self, at: usize, bytes: &[u8]) {
         let range = at
@@ -405,8 +451,9 @@ impl<'o> Writer<'o> {
         self.store(at, &[v]);
     }
 
-    /// Stores `bytes` at `at`: the data of a string or a bytes field, which
-    /// the encoder has reserved with [`Writer::tail`].
+    /// Stores `bytes` at `at`: the data of a fixed-size bytes array in the head,
+    /// which [`Writer::reserve_head`] has reserved. A string or a bytes field
+    /// in the tail is appended with [`Writer::tail_data`] instead.
     #[inline]
     pub fn put_bytes(&mut self, at: usize, bytes: &[u8]) {
         self.store(at, bytes);
@@ -617,6 +664,57 @@ mod tests {
         let bytes = w.finish().unwrap();
         assert_eq!(&bytes[16..19], b"ab\0");
         assert_eq!(bytes.len(), 19);
+    }
+
+    #[test]
+    fn tail_data_writes_the_data_and_a_zero_terminator_over_dirty_output() {
+        let mut out = Aligned::<[u8; 64]>::zeroed();
+        out.0.fill(0xAA);
+        let mut w = Writer::new(&mut out.0);
+        w.reserve_head(8).unwrap();
+        let a = w.tail_data(b"abc", true).unwrap();
+        let b = w.tail_data(b"xy", false).unwrap();
+        let c = w.tail_data(b"", true).unwrap();
+        assert_eq!((a, b, c), (16, 20, 22));
+        let bytes = w.finish().unwrap();
+        assert_eq!(&bytes[16..23], b"abc\0xy\0");
+        assert_eq!(bytes.len(), 23);
+    }
+
+    #[test]
+    fn tail_data_refuses_a_block_that_does_not_fit_and_leaves_the_writer_usable() {
+        let mut out = Aligned::<[u8; 24]>::zeroed();
+        let mut w = Writer::new(&mut out.0);
+        w.reserve_head(8).unwrap();
+        assert_eq!(
+            w.tail_data(b"abcdefgh", true),
+            Err(EncodeError::Capacity {
+                needed: 25,
+                available: 24
+            })
+        );
+        assert_eq!(w.tail_data(b"abcdefg", true), Ok(16));
+        assert!(w.tail_data(b"", true).is_err());
+        assert!(w.tail_data(&[], false).is_ok());
+    }
+
+    #[test]
+    fn has_nul_finds_a_nul_at_every_position_and_length() {
+        for len in 0..200usize {
+            // Non-zero fillers that differ, so that a reduction that is right
+            // only for 0 and 1 (an AND, for one) fails.
+            let mut data = [0u8; 200];
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = [1u8, 2, 0x7f, 0x80, 0xff][i % 5];
+            }
+            assert!(!has_nul(&data[..len]), "len {len}");
+            for at in 0..len {
+                let kept = data[at];
+                data[at] = 0;
+                assert!(has_nul(&data[..len]), "len {len} at {at}");
+                data[at] = kept;
+            }
+        }
     }
 
     #[test]

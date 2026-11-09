@@ -1104,6 +1104,39 @@ What the tables show:
   one small cell of the A76 core is therefore inside what the two runs of
   unchanged code differ by.
 
+### Effect of the podbuf string path change
+
+Two changes to the podbuf string path are compared here with the run of
+2026-11-08 at commit ec63ebf8, the "after" columns of the previous section: the
+NUL scan of a string (`podbuf::has_nul`) and the one-pass write of a string or
+bytes block (`Writer::tail_data`). The new run is of 2026-11-09 at commit
+2f5152d4. The medians are `per_op_ns[op].median` of each file. No cell of these
+rows is flagged in the new run.
+
+podbuf, median time in ns (before, after):
+
+| Core | Payload                        | Encode before | Encode after | Verify before | Verify after | Decode before | Decode after |
+| ---- | ------------------------------ | ------------- | ------------ | ------------- | ------------ | ------------- | ------------ |
+| A55  | bench.stress.Stress.longString | 997.2         | 336.5        | 758.0         | 678.7        | 387.6         | 388.3        |
+| A55  | bench.stress.Stress.bigString  | 5164.2        | 1365.2       | 3770.1        | 3335.3       | 1359.6        | 1361.3       |
+| A76  | bench.stress.Stress.longString | 385.2         | 73.8         | 273.6         | 225.3        | 115.7         | 111.0        |
+| A76  | bench.stress.Stress.bigString  | 1981.7        | 247.7        | 1423.3        | 1143.7       | 430.1         | 378.7        |
+
+Encode is 3 to 8 times faster and verify 10 to 20 % faster. Decode does not
+change.
+
+Most of the encode gain comes from `Writer::tail_data`. `Writer::tail` zeroes
+the bytes it reserves and the encoder then copied the string over them. The
+bench binary is a static musl build, and in a separate measurement on cpu6 its
+`memset` of 3,000 bytes took about 1,400 ns while a copy of the same bytes took
+about 110 ns. The encode times before the change therefore include a `memset`
+cost that depends on the C library of the build, and a device build with a
+different C library can show a smaller gain. proto3 writes each byte once and
+does not zero a buffer.
+
+Verify keeps the UTF-8 validation of `core::str::from_utf8`, which ADR-0031
+requires, so the change in verify comes from the NUL scan alone.
+
 ### Cortex-A55 (cpu2)
 
 #### Mix
