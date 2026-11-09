@@ -1,0 +1,13 @@
+package single
+
+/// A measured value.
+struct Reading {
+  /// The value, in percent.
+  value: integer [0..100]
+}
+
+/// Accepts readings.
+interface Sensor {
+  /// Reports a reading.
+  command report(reading: Reading) @[..50ms]
+}

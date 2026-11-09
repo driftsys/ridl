@@ -86,6 +86,33 @@ fn refuse<T>(message: String) -> Result<T, GenerateError> {
     Err(GenerateError::Unrepresentable(message))
 }
 
+/// Where the codec module of `package` finds `flatc`'s barrel: the import path,
+/// without the `./` prefix and the `.js` suffix, and the comment that names the
+/// directory `flatc`'s `-o` has to be. Both come from one test, so they cannot
+/// disagree.
+///
+/// A package name with two or more components uses its segments, so
+/// `veh.cabin` gives `veh/cabin`, and `-o` is the directory of the module. A
+/// package name with one component would give the path of its own domain
+/// module, so its barrel is under `flatc_out/`. No package name has a segment
+/// with an underscore (ADR-0002), so that directory cannot be the first segment
+/// of another package's barrel path.
+fn flatc_barrel(package: &str) -> (String, &'static str) {
+    if package.contains('.') {
+        (
+            package.replace('.', "/"),
+            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
+             directory\n// of this file.\n",
+        )
+    } else {
+        (
+            format!("flatc_out/{package}"),
+            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
+             flatc_out\n// subdirectory of this file's directory.\n",
+        )
+    }
+}
+
 /// One payload type: a FlatBuffers root of the package with a finite bound.
 struct PayloadType<'a> {
     /// The declared name, or the induced tuple's `InducedName.rust`.
@@ -1267,7 +1294,6 @@ impl<'a> Codec<'a> {
         }
 
         let mut out = String::new();
-        let segments = self.package.replace('.', "/");
         // The builder, `<base>.ts` and `flatc`'s barrel are named only by a
         // local payload type's functions and converters; a package whose
         // payload roots are all foreign has no table, so `flatc` writes no
@@ -1318,11 +1344,9 @@ impl<'a> Codec<'a> {
             );
         }
         if local {
-            out.push_str(
-                "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
-                 directory\n// of this file.\n",
-            );
-            let _ = writeln!(out, "import * as fb from \"./{segments}.js\";");
+            let (barrel, comment) = flatc_barrel(self.package);
+            out.push_str(comment);
+            let _ = writeln!(out, "import * as fb from \"./{barrel}.js\";");
         }
         let foreign_codecs: BTreeSet<&str> = self
             .foreign_payloads
