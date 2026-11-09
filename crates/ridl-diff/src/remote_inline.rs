@@ -493,6 +493,8 @@ impl Pass<'_> {
 }
 
 /// Scalar changes use interaction paths, including uses through local bodies.
+/// A remote scalar that no interaction reaches draws no row even when narrowed,
+/// while a local unreached scalar change is breaking.
 /// Layout reporting retains its separate nearest-field attribution.
 fn constraint_changes(
     old_holders: &[&v2::Package],

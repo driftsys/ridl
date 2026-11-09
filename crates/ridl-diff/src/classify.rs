@@ -44,6 +44,12 @@ mod classify_tests;
 /// field typed from another package classifies breaking.
 /// [`diff_sets_in`](crate::diff_sets_in) resolves such a reference against every
 /// package of the new snapshot and the context packages, such as `ridl.std`.
+///
+/// Scalar reachability reads interactions in `new` and the supplied `scope`
+/// only; `classify` supplies an empty scope. If `new` only sends a widened type
+/// and another, unlisted package receives it, `classify` alone returns
+/// [`Verdict::Compatible`]. Callers that need the fail-closed result pass the
+/// full scope through [`diff_sets_in`](crate::diff_sets_in).
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     classify_in(change, old, new, &[], &[])
 }

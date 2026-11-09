@@ -9,12 +9,15 @@ is historical. Decision 14 was amended in place on 2026-09-30, from the decision
 on driftsys/ridl#598: an appended non-optional struct field is breaking unless
 its type is a scalar, enum or enum set that allows the value 0. `ridl diff`
 resolves the field's type against the new snapshot and the built-in `ridl.std`,
-and any other type it cannot resolve is reported as breaking. Each numbered
-decision below was taken to unblock the epic E2 execution plan, which lives at
-`docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` (moved from
-`docs/wip/` at epic close), and is reversible at the cost of a small refactor
-before a later epic builds on it. This ADR follows the pattern of ADR-0006 (E0)
-and ADR-0007 (E1).
+and any other type it cannot resolve is reported as breaking. Decision 14 was
+also amended in place on 2026-11-09, from the decision on driftsys/ridl#926:
+scalar widening is judged by consumer direction, and reached remote scalar
+constraint and representation changes are reported at consumer interaction
+paths. Each numbered decision below was taken to unblock the epic E2 execution
+plan, which lives at `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md`
+(moved from `docs/wip/` at epic close), and is reversible at the cost of a small
+refactor before a later epic builds on it. This ADR follows the pattern of
+ADR-0006 (E0) and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
 sentence describing the state they replaced, or written a new one that was false
@@ -643,12 +646,14 @@ disagreeing sources is the correct one.
     With per-side remote context, a pin change that moves a reached remote
     scalar constraint reports `constraint_changed` at the surviving consumer
     interaction path, once per path and remote declaration. Widening uses the
-    same new-side direction rule; narrowing is always breaking. A changed scalar
-    backing or resolved wire width also reports a breaking `width_changed` row
-    at the consumer path, once per path and remote declaration, including on
-    send-only uses, as for a local scalar. A side without remote context
-    supplies no comparison. Before this amendment the remote pass reported
-    neither widening nor narrowing; both are now reported.
+    same new-side direction rule; narrowing is always breaking. A remote scalar
+    that no interaction reaches draws no row even when narrowed, while a local
+    unreached scalar change is breaking. A changed scalar backing or resolved
+    wire width also reports a breaking `width_changed` row at the consumer path,
+    once per path and remote declaration, including on send-only uses, as for a
+    local scalar. A side without remote context supplies no comparison. Before
+    this amendment the remote pass reported neither widening nor narrowing; both
+    are now reported.
 
     **Alternatives considered (options 1 and 3).** Keeping every widening
     compatible would admit values an older receiver rejects. Making every

@@ -3668,6 +3668,101 @@ mod constraint_direction {
     }
 
     #[test]
+    fn retyped_remote_uses_have_no_scalar_change_rows() {
+        for received in [false, true] {
+            let mut before = decl_pkg(vec![
+                scalar("S", bounds(Some("0"), Some("100")), v2::IntWidth::U8),
+                unconstrained("Other", v2::IntWidth::U16),
+            ]);
+            before.name = "dep".into();
+            let mut after = before.clone();
+            after.decls[0] = scalar("S", bounds(Some("0"), Some("300")), v2::IntWidth::U16);
+            let consumer = |ty| {
+                pkg(vec![if received {
+                    signal("value", 1, ty)
+                } else {
+                    command("value", 1, vec![param("v", named(ty))], vec![])
+                }])
+            };
+            let old = consumer("dep.S");
+            let new = consumer("dep.Other");
+            let report =
+                crate::diff_refs_with_contexts(&[&old], &[&new], &[&before], &[&after], &[])
+                    .unwrap();
+            assert!(
+                report.changes.iter().any(|change| change.category
+                    == if received {
+                        Category::PayloadChanged
+                    } else {
+                        Category::ParamsChanged
+                    }),
+                "{report:?}"
+            );
+            for category in [Category::ConstraintChanged, Category::WidthChanged] {
+                assert!(
+                    !report.changes.iter().any(|change| {
+                        change.category == category
+                            && change.path == "veh.cluster/I/value"
+                            && change
+                                .before
+                                .as_deref()
+                                .is_some_and(|value| value.starts_with("dep.S: "))
+                    }),
+                    "retyped received={received}: {report:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn remote_scalar_rows_use_the_new_consumer_package() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let Some(v2::decl::Kind::TypeDef(def)) = &mut after.decls[0].kind else {
+            unreachable!()
+        };
+        def.width = Some(v2::type_def::Width::IntWidth(v2::IntWidth::U32 as i32));
+        let mut old = pkg(vec![signal("read", 1, "dep.S")]);
+        old.unit = "consumer".into();
+        old.interfaces[0].number = 7;
+        let mut new = old.clone();
+        new.name = "consumer.renamed".into();
+        let report =
+            crate::diff_refs_with_contexts(&[&old], &[&new], &[&before], &[&after], &[]).unwrap();
+        for category in [Category::ConstraintChanged, Category::WidthChanged] {
+            let change = row(&report, category);
+            assert_eq!(change.path, "consumer.renamed/I/read");
+            assert_eq!(change.verdict, Verdict::Breaking);
+        }
+    }
+
+    #[test]
+    fn remote_constraint_pairs_an_inline_service_shape() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut local = decl_pkg(vec![]);
+        local.services.push(v2::Service {
+            name: "veh.cluster.readings".into(),
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::Inline(interface(
+                    "",
+                    vec![signal("read", 1, "dep.S")],
+                ))),
+            }],
+            ..Default::default()
+        });
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert_eq!(report.changes.len(), 1, "{report:?}");
+        let change = row(&report, Category::ConstraintChanged);
+        assert_eq!(change.path, "veh.cluster/veh.cluster.readings/read");
+        assert_eq!(change.verdict, Verdict::Breaking);
+    }
+
+    #[test]
     fn remote_scalar_width_and_backing_changes_break_send_only_uses() {
         for received in [false, true] {
             for backing_only in [false, true] {

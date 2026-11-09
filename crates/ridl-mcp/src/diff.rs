@@ -627,6 +627,37 @@ mod tests {
         assert_eq!(before, inventory(&copy.0));
     }
     #[test]
+    fn widened_send_only_constraint_is_compatible() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
+        let root = copy.0.join("send-only");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("ridl.toml"),
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let path = root.join("app.ridl");
+        let source = "package app\ntype S: integer [0..100]\ninterface I { command send(v: S) }\n";
+        std::fs::write(&path, source).unwrap();
+        let result = diff(&DiffInput {
+            old: root.display().to_string(),
+            new: root.display().to_string(),
+            overlays: Some(vec![OverlayInput {
+                path: path.display().to_string(),
+                source: source.replace("100", "200"),
+            }]),
+            encodings: None,
+        })
+        .unwrap();
+        assert_eq!(result["verdict"], "compatible", "{result}");
+        let changes = result["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 1, "{result}");
+        assert_eq!(changes[0]["category"], "constraint_changed");
+        assert_eq!(changes[0]["path"], "app/S");
+        assert_eq!(changes[0]["verdict"], "compatible");
+    }
+
+    #[test]
     fn widened_received_constraint_is_breaking() {
         let root = fixture("ws");
         let path = format!("{root}/a/a.ridl");

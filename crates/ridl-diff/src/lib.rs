@@ -10,7 +10,7 @@
 //!
 //! Per-side context entry points also attribute remote layout growth, integer
 //! width changes, scalar constraint changes and strict enum appends to surviving old consumer uses
-//! (ADR-0031 decision 13).
+//! (ADR-0031 decision 13; ADR-0008 decision 14 for scalar constraints).
 //!
 //! The comparison has two halves. The walk ([`walk`]) says *what* structurally
 //! differs, emitting one [`Change`] per difference with a [`Category`]; the

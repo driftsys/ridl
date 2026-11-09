@@ -2039,15 +2039,16 @@ body changed in place remains breaking.
 
 With per-side remote context, a pin change reports remote scalar widening and
 narrowing at each surviving consumer interaction path, once per path and remote
-declaration, with `<remote declaration>: <constraint>` before/after values.
-Changed scalar backing or resolved wire width produces a separate breaking
-`width_changed` row at the same consumer path, including on send-only uses, with
-`<remote declaration>: <representation>` before/after values. Missing per-side
-context supplies no comparison. A widened received constraint ends the unit's
-compatible catalog history for both `ridl build` and `ridl baseline`; a
-send-only widening keeps the earlier hashes when no other breaking change
-occurs. The ordinal RIDL-407 desk check and RIDL-408 publication gate do not
-reject constraint changes. See
+declaration, with `<remote declaration>: <constraint>` before/after values. A
+remote scalar that no interaction reaches draws no row even when narrowed, while
+a local unreached scalar change is breaking. Changed scalar backing or resolved
+wire width produces a separate breaking `width_changed` row at the same consumer
+path, including on send-only uses, with `<remote declaration>: <representation>`
+before/after values. Missing per-side context supplies no comparison. A widened
+received constraint ends the unit's compatible catalog history for both
+`ridl build` and `ridl baseline`; a send-only widening keeps the earlier hashes
+when no other breaking change occurs. The ordinal RIDL-407 desk check and
+RIDL-408 publication gate do not reject constraint changes. See
 [Evolving an interface](evolving-an-interface.md).
 
 **At the system.** When both sides are source whose workspace declares a
