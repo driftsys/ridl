@@ -43,6 +43,7 @@ one file per deployment.
 | The numbering step, and the `RSDL-314` and `RSDL-315` diagnostics                                            | `crates/ridl-sem/src/rsdl/numbering.rs`                      |
 | `ridl lock` for instances, and the merge driver                                                              | `crates/ridl/src/lock.rs`                                    |
 | The `instances` module of the generated Rust crate                                                           | `crates/ridl-backend-rust/src/instances.rs`                  |
+| The `instances` object of the generated TypeScript module                                                    | `crates/ridl-backend-ts/src/instances.rs`                    |
 | The `instance number changed` heading of `ridl diff`                                                         | `crates/ridl-diff/src/system.rs`                             |
 
 `finish`, `verify` and the generated accessors need no standard library. `lower`
@@ -136,11 +137,18 @@ an integer reads `number` from the descriptor, and a plugin reads the same value
 from the section.
 
 `ridl build` also writes each instance's number as a constant in the `instances`
-module of the generated Rust crate. A component is a module and an instance is a
+module of the generated Rust crate and in the `instances` object of
+`__ridl_instances.ts` when the TypeScript emit is selected, independently of
+`[backend.typescript] codec`. A component is a nested path and an instance is a
 constant, so the number of instance `primary` of component `veh.adas.Cruise` is
-`instances::veh::adas::cruise::PRIMARY`. The module is not per deployment: the
-numbers belong to the system, and every deployment of the system shares them. A
-constant of a provisional number says so in its documentation.
+`instances::veh::adas::cruise::PRIMARY` in Rust and
+`instances.veh.adas.cruise.PRIMARY` in TypeScript. Each component path segment
+uses snake case, and each constant uses screaming snake case; TypeScript quotes
+property names that are not valid identifiers. These constants are per system:
+every deployment of the system shares them. Each constant's documentation names
+its key in `instances.lock` and says when the number is provisional. The
+[generated-code chapter](../book/generated-code.md#typescript) describes the
+TypeScript file's export.
 
 `provisional` is true when the instance has no live entry in `instances.lock`.
 Its number is then the next free one at the time of the build, and a later
@@ -324,8 +332,9 @@ reason. They bind later changes to the artifact.
   same number to the same instance, so the diff does not report it (rsdl
   reference section 14). A provisional old number was never a promise and is
   never reported.
-- **The constants are an integer, from the system artifact, with no constants
-  for a bare file.** The type is `i32`, the type of the attach field; a newtype
+- **The Rust crate's constants are an integer, from the system artifact, with no
+  constants for a bare file.** The TypeScript constants are plain `number`
+  literal types. The Rust type is `i32`, the type of the attach field; a newtype
   has since been added in `ridl-rt` as `InstanceNo` (see "Attaching to a node");
   the generated constants stay `i32`. A single-file build writes no crate
   `lib.rs`, so it gets no `instances` module; its numbers still reach the IR and

@@ -150,6 +150,116 @@ fn the_crate_holds_the_locked_constants() {
 }
 
 #[test]
+fn typescript_holds_the_same_locked_constants_as_rust() {
+    let out = tempfile::tempdir().unwrap();
+    for emit in ["rust", "typescript"] {
+        let output = build(&corpus_entry(), out.path(), emit);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let rust = std::fs::read_to_string(out.path().join("__ridl_instances.rs")).unwrap();
+    let ts = std::fs::read_to_string(out.path().join("__ridl_instances.ts"))
+        .expect("the TypeScript emit writes the instances module without codec = true");
+    assert!(ts.contains("export const instances = {"), "{ts}");
+    for (name, value) in [("PRIMARY", 1), ("BACKUP", 2), ("UNIT", 3)] {
+        assert!(
+            rust.contains(&format!("pub const {name}: i32 = {value};")),
+            "{rust}"
+        );
+        assert!(ts.contains(&format!("{name}: {value},")), "{ts}");
+    }
+    assert!(!ts.contains("Provisional:"), "{ts}");
+}
+
+#[test]
+fn typescript_without_a_system_removes_only_generated_instances() {
+    let entry = entry_with_instances_package("instances", false);
+    let out = tempfile::tempdir().unwrap();
+    let output = build(&corpus_entry(), out.path(), "typescript");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let path = out.path().join("__ridl_instances.ts");
+    assert!(path.is_file());
+    let output = build(entry.path(), out.path(), "typescript");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!path.exists());
+    let handwritten = "export const personal = 42;\n";
+    std::fs::write(&path, handwritten).unwrap();
+    let output = build(entry.path(), out.path(), "typescript");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(std::fs::read_to_string(path).unwrap(), handwritten);
+}
+
+#[test]
+fn typescript_refuses_to_overwrite_handwritten_instances_before_writing_packages() {
+    let out = tempfile::tempdir().unwrap();
+    let path = out.path().join("__ridl_instances.ts");
+    let handwritten = "export const personal = 42;\n";
+    std::fs::write(&path, handwritten).unwrap();
+    let output = build(&corpus_entry(), out.path(), "typescript");
+    assert_eq!(output.status.code(), Some(1));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        text.contains("__ridl_instances.ts") && text.contains("This build wrote nothing at all"),
+        "{text}"
+    );
+    assert_eq!(std::fs::read_to_string(path).unwrap(), handwritten);
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn typescript_refuses_the_reserved_stem_for_a_standalone_type_file() {
+    assert_typescript_refuses_reserved_stem("typl", "package sample\n\ntype Flag: boolean\n");
+}
+
+#[test]
+fn typescript_refuses_the_reserved_stem_for_a_standalone_system_file() {
+    assert_typescript_refuses_reserved_stem(
+        "rsdl",
+        "package sample\n\ncomponent Unit {}\nsystem World { Unit }\n",
+    );
+}
+
+fn assert_typescript_refuses_reserved_stem(extension: &str, source: &str) {
+    let entry = tempfile::tempdir().unwrap();
+    let path = entry.path().join(format!("__ridl_instances.{extension}"));
+    std::fs::write(&path, source).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let output = build(&path, out.path(), "rust,typescript");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.status.code(), Some(1), "{text}");
+    assert!(text.contains("__ridl_instances"), "{text}");
+    assert!(
+        text.contains("reserved for the generated instance constants"),
+        "{text}"
+    );
+    assert!(text.contains("This build wrote nothing at all"), "{text}");
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn the_lock_changes_no_catalog_hash() {
     let catalogs = |with_lock: bool| {
         let entry = tempfile::tempdir().unwrap();

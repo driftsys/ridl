@@ -1,0 +1,30 @@
+---
+source: crates/ridl-backend-ts/src/instances.rs
+expression: source
+---
+export const instances = {
+  veh: {
+    adas: {
+      cruise: {
+        /**
+         * `veh.adas.Cruise/backup` in `instances.lock`.
+         */
+        BACKUP: 2,
+        /**
+         * `veh.adas.Cruise/primary` in `instances.lock`.
+         */
+        PRIMARY: 1,
+      },
+    },
+    ego: {
+      status: {
+        /**
+         * `veh.ego.status/Unit` in `instances.lock`.
+         *
+         * Provisional: no entry of `instances.lock` holds this number yet, and `ridl lock` writes it.
+         */
+        UNIT: 3,
+      },
+    },
+  },
+} as const;

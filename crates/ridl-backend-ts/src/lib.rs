@@ -1632,9 +1632,11 @@ fn ts_string(text: &str) -> String {
 
 mod codec;
 mod contract;
+mod instances;
 
 pub use codec::{codec_imports, generate_codec};
 pub use contract::Backend;
+pub use instances::generate_instances_module;
 
 #[cfg(test)]
 mod tests;
