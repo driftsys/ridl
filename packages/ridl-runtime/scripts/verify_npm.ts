@@ -140,6 +140,8 @@ try {
     "decodeTextStream",
     "encodeUpload",
     "loadCodec",
+    "offFloatPoints",
+    "offFloatStep",
     "textUpload",
   ]);
 

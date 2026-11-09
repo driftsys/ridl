@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
-import { ConstraintError } from '@driftsys/ridl-runtime';
+import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeDoorId`.
@@ -64,6 +64,9 @@ export function makePercent(value: number): Percent {
   }
   if (value > 100) {
     throw new ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
+  }
+  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new ConstraintError('step', 'fleet.contracts.Percent', value, 'step 0.5 from 0');
   }
   return value as Percent;
 }

@@ -7,6 +7,8 @@ export {
 } from "./src/errors.ts";
 export type { PayloadRule } from "./src/errors.ts";
 export type { Detection, SignalCheck, SignalCheckEntry } from "./src/checks.ts";
+export { offFloatPoints, offFloatStep } from "./src/step.ts";
+export type { FloatLattice } from "./src/step.ts";
 export { loadCodec } from "./src/codec.ts";
 export type {
   Codec,

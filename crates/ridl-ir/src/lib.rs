@@ -1162,6 +1162,7 @@ pub mod codegen;
 pub mod name;
 pub mod projection;
 pub mod rules;
+pub mod step;
 pub mod zero;
 
 #[cfg(test)]

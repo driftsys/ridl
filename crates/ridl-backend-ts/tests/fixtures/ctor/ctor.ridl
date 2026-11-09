@@ -32,3 +32,15 @@ type Unbounded : float
 
 /// A floating-point range whose declared grid derives a 32-bit width.
 type NarrowReal : float [-1.0..2.0 step 1.0]
+
+/// A 32-bit float on a decimal grid.
+type Tenth : float [0.0..1.0 step 0.1]
+
+/// A 32-bit float on a decimal grid that starts between two multiples of the step.
+type Shifted : float [0.05..1.05 step 0.1]
+
+/// A 64-bit float on a fine decimal grid.
+type Precise : float [-1.0..1.0 step 0.0000000001]
+
+/// A float grid whose minimum is negative and not a multiple of the step.
+type Negative : float [-1.05..1.0 step 0.1]

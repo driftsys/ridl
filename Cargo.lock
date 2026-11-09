@@ -2029,8 +2029,6 @@ version = "0.17.0"
 dependencies = [
  "insta",
  "num-bigint",
- "num-rational",
- "num-traits",
  "opentelemetry",
  "opentelemetry_sdk",
  "planus",
@@ -2157,6 +2155,9 @@ dependencies = [
 name = "ridl-ir"
 version = "0.17.0"
 dependencies = [
+ "num-bigint",
+ "num-rational",
+ "num-traits",
  "pbjson",
  "pbjson-build",
  "prost",
