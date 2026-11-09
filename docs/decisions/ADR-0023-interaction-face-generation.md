@@ -212,8 +212,8 @@ never stated.
 1. **The Rust backend gets a narrow, total contract-clause translator; it
    refuses every clause form it does not accept, and never drops one.** The
    accepted form is `<subject> <comparison> <numeric literal>`, where
-   `<subject>` is the interaction's single declared parameter (or `result` on a
-   query's `ensure`) and `<comparison>` is one of `< <= > >= == !=`, over an
+   `<subject>` is the interaction's single non-stream parameter (or `result` on
+   a query's `ensure`) and `<comparison>` is one of `< <= > >= == !=`, over an
    integer- or float-backed named scalar. It emits `args.0 <op> <literal>` or
    `reply.0 <op> <literal>`, conjoining several clauses of one kind with `&&`. A
    clause outside this form is refused with a `GenerateError`, because dropping
@@ -224,6 +224,13 @@ never stated.
    settlement rows (`PreconditionFailed`, `ContractBroken`) real; it is not a
    first instalment of E5, and E5.1 replaces it with a translator driven by the
    structured expression tree the IR does not carry yet.
+
+   **Amendment (2026-11-09) — stream parameters do not count when selecting a
+   parameter subject.** A command or query with one ordinary parameter and a
+   parameter stream can translate a clause on that ordinary parameter in either
+   declaration order. The model keeps the subject's index in the full declared
+   parameter list. A clause naming the stream, or a parameter clause on a call
+   with two ordinary parameters, remains refused.
 
 2. **The face is emitted from a companion entry point, `generate_face`;
    `generate` is left producing exactly what it produced before this story.**

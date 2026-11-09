@@ -344,7 +344,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 7,
+        lines: 8,
         why: "one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
@@ -357,7 +357,9 @@ const ALLOWED: &[Allowed] = &[
               limit on one named interaction of the budget fixture, to pin \
               that the model copies it; the sixth and seventh read the lowered \
               model's own `Model.interfaces` field, which the lowering filled \
-              from a `shapes()` walk, to find the stream fixture's members",
+              from a `shapes()` walk, to find the stream fixture's members; \
+              an eighth test fixture sets a package's named interface to \
+              build a call with only a stream parameter",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",
