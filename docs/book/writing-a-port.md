@@ -140,10 +140,10 @@ to the suite, so a runtime that wants a fixed set of tests pins the crate with
 
 ```toml
 [dependencies]
-ridl-rt = "0.16.1"
+ridl-rt = "0.17.0"
 
 [dev-dependencies]
-ridl-rt-conformance = "=0.16.1"
+ridl-rt-conformance = "=0.17.0"
 ```
 
 In the test crate, implement the `Factory` trait on a type of that crate — a

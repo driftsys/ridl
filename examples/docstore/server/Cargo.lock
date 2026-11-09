@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-descriptor"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "planus",
  "serde",
@@ -62,18 +62,18 @@ dependencies = [
 
 [[package]]
 name = "ridl-loopback"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "ridl-rt",
 ]
 
 [[package]]
 name = "ridl-rt"
-version = "0.16.1"
+version = "0.17.0"
 
 [[package]]
 name = "ridl-transport-ws"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "ridl-descriptor",
  "ridl-rt",

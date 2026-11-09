@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.17.0] (2026-11-09)
+
+### Features
+
+- **ridlc:** let a limits entry raise a member of any kind up to 65280 bytes
+  ([#1268]) ([7a1d130])
+- **ridl-backend-ts:** export the instance constants from __ridl_instances.ts
+  ([#1269]) ([a26ad50]), closes [#1197]
+
+### Documentation
+
+- **docs:** record the TypeScript lane decisions and the A2 design note
+  ([#1267]) ([955d78d])
+- **docs:** measure encode, verify and decode of the three payload encodings
+  ([#1117]) ([#1265]) ([ed18506])
+- **docs:** add the driver of the TypeScript lane ([#1263]) ([45b665c])
+
+### Performance
+
+- **ridl-rt:** scan and write podbuf strings in one pass ([#1273]) ([866eb1b])
+
+### Bug Fixes
+
+- **repo:** update the encoding bench pins in release-sync ([#1275]) ([8ce6093])
+- **ridl-backend-ts:** import flatc's barrel of a single-component package from
+  flatc_out ([#1266]) ([c2f8b1b]), fixes [#1252]
+
+[0.17.0]: https://github.com/driftsys/ridl/compare/v0.16.1...v0.17.0
+[7a1d130]: https://github.com/driftsys/ridl/commit/7a1d130
+[#1268]: https://github.com/driftsys/ridl/issues/1268
+[a26ad50]: https://github.com/driftsys/ridl/commit/a26ad50
+[#1269]: https://github.com/driftsys/ridl/issues/1269
+[#1197]: https://github.com/driftsys/ridl/issues/1197
+[955d78d]: https://github.com/driftsys/ridl/commit/955d78d
+[#1267]: https://github.com/driftsys/ridl/issues/1267
+[ed18506]: https://github.com/driftsys/ridl/commit/ed18506
+[#1117]: https://github.com/driftsys/ridl/issues/1117
+[#1265]: https://github.com/driftsys/ridl/issues/1265
+[45b665c]: https://github.com/driftsys/ridl/commit/45b665c
+[#1263]: https://github.com/driftsys/ridl/issues/1263
+[866eb1b]: https://github.com/driftsys/ridl/commit/866eb1b
+[#1273]: https://github.com/driftsys/ridl/issues/1273
+[8ce6093]: https://github.com/driftsys/ridl/commit/8ce6093
+[#1275]: https://github.com/driftsys/ridl/issues/1275
+[c2f8b1b]: https://github.com/driftsys/ridl/commit/c2f8b1b
+[#1266]: https://github.com/driftsys/ridl/issues/1266
+[#1252]: https://github.com/driftsys/ridl/issues/1252
+
 ## [0.16.1] (2026-11-07)
 
 ### Bug Fixes
