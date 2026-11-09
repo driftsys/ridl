@@ -101,6 +101,12 @@ Deno.test("a browser page receives a live signal from the Rust server", async ()
       init: "init:",
       live: "live:2a07",
       fixed: { "7": "65280:true", "8": "16137:true", "9": "16138:true" },
+      checked: [
+        "live:1001:1001:",
+        "invalid::1001:range",
+        "invalid::1001:range",
+        "live:2002:2002:",
+      ],
       stream: "64:true",
       upload: "200000:true",
       discarded: 0,
