@@ -170,8 +170,8 @@ changes.
 driftsys/ridl#926.** The owner approved the change to the output and verdicts of
 `ridl diff`: a widened scalar constraint is breaking on a received value, on a
 value reached in both directions, and on an unreached local declaration. Only a
-send-only widening is compatible. The assessed change also adds row categories
-on the remote path at the surviving consumer interaction path:
+send-only widening is compatible. The assessed change also adds rows of existing
+categories on the remote path at the surviving consumer interaction path:
 `constraint_changed` for remote scalar widening and narrowing, and breaking
 `width_changed` for a remote scalar's changed width or backing, including on
 send-only paths. This follows the strict enum append precedent in
