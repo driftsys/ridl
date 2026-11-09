@@ -125,6 +125,18 @@ when that interest may have changed. A runtime that serves a generated async
 client implements `Wakeable`, because every face future that waits is bounded on
 it.
 
+`StreamHandler` also provides `claim_forget` and `wake_on_claim_forget`. A
+provider registers first, then queries whether the caller forgot the call,
+without pulling or pushing a chunk. The registration is independent of stream
+state, so it can wait after a parameter stream ended. `NotForgotten` also means
+the runtime cannot tell; `AfterEnd` means a forgotten call had at least one
+named parameter stream and all named parameter streams ended without a stop;
+`Forgotten` covers other forgotten calls and unknown claims. A command's normal
+forget after acknowledgment and sink end must let its provider finish processing
+the upload. The defaults answer `NotForgotten` and store no waker. The complete
+[port contract](../design/ridl-rt.md#the-ports) defines replacement, immediate
+wakes and the generated face's release rules.
+
 The documentation of the event and call traits also states how a runtime
 delivers the trace context a sender passes. Every error enum of `ridl_rt::port`
 is `#[non_exhaustive]`.
@@ -194,9 +206,12 @@ The `wakeable` flag also requires that the three role handles implement
 `Wakeable`, and that the factory and the handles are `'static`, because one test
 runs on a thread of its own. The `streams` flag runs the tests of `StreamCaller`
 and `StreamHandler`, and requires that the runtime implements both and
-`Wakeable`. The working example is
+`Wakeable`. The separate `claim_forget` flag tests the provided claim-forget
+methods for a runtime that overrides them; a runtime retaining their defaults
+omits this flag while still running `streams`. It requires the same stream and
+wake ports and adds no requirement to `Factory`. The working example is
 [`crates/ridl-loopback/tests/conformance.rs`][loopback-conformance], which runs
-the suite over `ridl-loopback` with its five base extension flags. Of the seven
+the suite over `ridl-loopback` with its six base extension flags. Of the eight
 available flags, `identity` additionally runs with `node`, and `identity_debug`
 runs with `debug`.
 

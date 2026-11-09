@@ -83,7 +83,15 @@ export function initOdometer(): Odometer {
 
 export const MAX_ODOMETER = 18446744073709551615n;
 
+/**
+ * Build a value with `makeGreeting`.
+ */
 export type Greeting = string & { readonly __ridl: 'veh.common.Greeting' };
+
+/** Builds a `Greeting`. */
+export function makeGreeting(value: string): Greeting {
+  return value as Greeting;
+}
 
 export function initGreeting(): Greeting {
   return '' as Greeting;

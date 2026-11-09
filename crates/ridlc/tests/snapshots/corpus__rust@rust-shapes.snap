@@ -15492,6 +15492,25 @@ pub mod station {
         let Some(mut stream) = slot.take() else {
             return false;
         };
+        h.wake_on_claim_forget(stream.claim, cx.waker());
+        if h.claim_forget(stream.claim) != ::ridl_rt::port::ClaimForget::NotForgotten {
+            let e = ::ridl_rt::error::CallError::Transport(
+                ::ridl_rt::error::Transport::Interrupted,
+            );
+            if !stream.reply.as_ref().expect("active reply").source.input_done {
+                stream.reply.as_mut().expect("active reply").source.input_done = true;
+                let _ = h.abort_claim(stream.claim, ::ridl_rt::contract::StreamNo(1), e);
+                ::ridl_rt::face::Consumer::failed(
+                    &mut stream.reply.as_mut().expect("active reply").source.inner,
+                    e,
+                );
+                let _ = h.settle(stream.claim, Err(e));
+                return false;
+            }
+            let _ = h.abort_claim(stream.claim, ::ridl_rt::contract::StreamNo(1), e);
+            let _ = h.settle(stream.claim, Err(e));
+            return false;
+        }
         let step = if stream.reply.as_ref().expect("active reply").source.input_done {
             __RidlUploadStep::Pending
         } else {
@@ -15556,14 +15575,27 @@ pub mod station {
             + ::ridl_rt::port::Wakeable,
         P: Provider,
     {
-        if slot.is_none() {
+        let Some(mut stream) = slot.take() else {
+            return false;
+        };
+        let mut forgotten = h.claim_forget(stream.claim);
+        if forgotten == ::ridl_rt::port::ClaimForget::NotForgotten {
+            h.wake_on_claim_forget(stream.claim, cx.waker());
+            forgotten = h.claim_forget(stream.claim);
+        }
+        if forgotten == ::ridl_rt::port::ClaimForget::Forgotten {
+            let e = ::ridl_rt::error::CallError::Transport(
+                ::ridl_rt::error::Transport::Interrupted,
+            );
+            let _ = h.abort_claim(stream.claim, ::ridl_rt::contract::StreamNo(1), e);
+            ::ridl_rt::face::ByteConsumer::failed(&mut stream.consumer, e);
             return false;
         }
         if *budget == 0 {
+            *slot = Some(stream);
             return true;
         }
         *budget -= 1;
-        let mut stream = slot.take().expect("checked above");
         if let Some((start, end)) = stream.held {
             if start != end {
                 match ::ridl_rt::face::ByteConsumer::poll_write(
@@ -15645,14 +15677,27 @@ pub mod station {
         P: Provider,
         super::Inner: ::ridl_rt::payload::Payload<H::Encoding>,
     {
-        if slot.is_none() {
+        let Some(mut stream) = slot.take() else {
+            return false;
+        };
+        let mut forgotten = h.claim_forget(stream.claim);
+        if forgotten == ::ridl_rt::port::ClaimForget::NotForgotten {
+            h.wake_on_claim_forget(stream.claim, cx.waker());
+            forgotten = h.claim_forget(stream.claim);
+        }
+        if forgotten == ::ridl_rt::port::ClaimForget::Forgotten {
+            let e = ::ridl_rt::error::CallError::Transport(
+                ::ridl_rt::error::Transport::Interrupted,
+            );
+            let _ = h.abort_claim(stream.claim, ::ridl_rt::contract::StreamNo(1), e);
+            ::ridl_rt::face::Consumer::failed(&mut stream.consumer, e);
             return false;
         }
         if *budget == 0 {
+            *slot = Some(stream);
             return true;
         }
         *budget -= 1;
-        let mut stream = slot.take().expect("checked above");
         if let Some(n) = stream.held {
             if ::ridl_rt::face::Consumer::poll_ready(&mut stream.consumer, cx)
                 .is_pending()
@@ -16087,11 +16132,11 @@ pub mod station {
     ///
     /// A named-element source uses Source::poll_next: each element is encoded and checked in an inline Payload buffer before transmission. Ready(None) ends it; Ready(Some(Err(Interrupted))) interrupts it. A byte or text source uses ByteSource::poll_read and fills an inline byte buffer without element encoding: Ready(Ok(0)) ends it and Ready(Err(Interrupted)) interrupts it. A partial buffer is pushed when the source is pending or ends. Text chunks preserve complete code points; invalid text or an incomplete code point at normal end is refused with Contract::InvalidValue and Rule::Utf8, after the valid prefix.
     ///
-    /// An end settles the reply claim successfully; an interruption stops it with Transport::Interrupted. PushError::TooLarge stops it with Transport::Interrupted, and PushError::Failed ends the claim with the caller's outcome. The source is dropped when its stream ends or stops. One stream runs per member; a concurrent call is settled Transport::Busy. A caller's forget is detected by the next push, so a pending source can keep its member busy until it yields again. Ready progress wakes serve for another poll; a pending source registers its own waker. Dropping serve interrupts every running stream and drops its source.
+    /// An end settles the reply claim successfully; an interruption stops it with Transport::Interrupted. PushError::TooLarge stops it with Transport::Interrupted, and PushError::Failed ends the claim with the caller's outcome. The source is dropped when its stream ends or stops. One stream runs per member; a concurrent call is settled Transport::Busy. Before driving a source, serve registers for the caller's forget and queries the claim. A reported forget drops the source without polling it and frees the member. On a runtime using the provided defaults, the next failed push detects the forget. Ready progress wakes serve for another poll; a pending source registers its own waker. Dropping serve interrupts every running stream and drops its source.
     ///
     /// # Parameter streams
     ///
-    /// Commands and queries with one parameter stream return a Consumer for named elements or a ByteConsumer for bytes and text. Commands acknowledge delivery before driving the consumer. A plain query reply is computed after the upload ends; a duplex query drives the consumer and its named-element reply Source concurrently. Each member has one active slot. Checked elements wait for readiness; a held element or byte suffix is offered before another pull. With nothing held, end and failure are delivered immediately, regardless of readiness. Terminal notifications occur once. Dropping serve interrupts unfinished uploads. ByteConsumer::poll_write must accept between one byte and the offered length for nonempty input; violating this contract panics.
+    /// Commands and queries with one parameter stream return a Consumer for named elements or a ByteConsumer for bytes and text. Commands acknowledge delivery before driving the consumer. A plain query reply is computed after the upload ends; a duplex query drives the consumer and its named-element reply Source concurrently. Each member has one active slot. Checked elements wait for readiness; a held element or byte suffix is offered before another pull. With nothing held, end and failure are delivered immediately, regardless of readiness. Terminal notifications occur once. Dropping serve interrupts unfinished uploads. Before driving an upload, serve queries the caller's forget. A query registers before querying; a command queries first, then registers and queries again only on NotForgotten. A forgotten query or abandoned command drops its consumer without polling it. A command forgotten after its parameter stream ended normally keeps consuming the queued chunks through End. ByteConsumer::poll_write must accept between one byte and the offered length for nonempty input; violating this contract panics.
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
@@ -16264,6 +16309,24 @@ pub mod station {
                         );
                     let mut budget = SERVE_BUDGET;
                     let mut again = false;
+                    if let Some(stream) = this.streams.dump.as_ref() {
+                        let claim = stream.claim;
+                        this.handler.wake_on_claim_forget(claim, cx.waker());
+                        if this.handler.claim_forget(claim)
+                            != ::ridl_rt::port::ClaimForget::NotForgotten
+                        {
+                            stop_stream(
+                                &mut this.handler,
+                                claim,
+                                ::ridl_rt::port::PushError::Failed(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Interrupted,
+                                    ),
+                                ),
+                            );
+                            this.streams.dump = None;
+                        }
+                    }
                     again
                         |= drive_bytes::<
                             H,

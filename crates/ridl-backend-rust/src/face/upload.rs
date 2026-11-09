@@ -493,8 +493,19 @@ fn driver(call: &Call) -> TokenStream {
     quote! {
         fn #name<H,P>(h:&mut H,slot:&mut #slot_type,cx:&mut ::core::task::Context<'_>,budget:&mut usize)->bool
         where H: ::ridl_rt::port::Encoded+::ridl_rt::port::StreamHandler+::ridl_rt::port::Wakeable,P:Provider,#bounds {
-            if slot.is_none(){return false;} if *budget==0{return true;} *budget-=1;
-            let mut stream=slot.take().expect("checked above");
+            let Some(mut stream)=slot.take()else{return false;};
+            let mut forgotten=h.claim_forget(stream.claim);
+            if forgotten==::ridl_rt::port::ClaimForget::NotForgotten {
+                h.wake_on_claim_forget(stream.claim,cx.waker());
+                forgotten=h.claim_forget(stream.claim);
+            }
+            if forgotten==::ridl_rt::port::ClaimForget::Forgotten {
+                let e=::ridl_rt::error::CallError::Transport(::ridl_rt::error::Transport::Interrupted);
+                let _=h.abort_claim(stream.claim,::ridl_rt::contract::StreamNo(1),e);
+                #consumer::failed(&mut stream.consumer,e);
+                return false;
+            }
+            if *budget==0{*slot=Some(stream);return true;} *budget-=1;
             #partial
             h.wake_on(::ridl_rt::port::Interest::ClaimStream(stream.claim,::ridl_rt::contract::StreamNo(1)),cx.waker());
             match h.pull_claim(stream.claim,::ridl_rt::contract::StreamNo(1),::core::convert::AsMut::as_mut(&mut stream.buffer)) {

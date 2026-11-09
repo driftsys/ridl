@@ -2300,8 +2300,13 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     )
     .expect("the runtime step source is written");
     std::fs::write(
+        runtime_dir.join("length.ts"),
+        include_str!("../../../packages/ridl-runtime/src/length.ts"),
+    )
+    .expect("the runtime length source is written");
+    std::fs::write(
         runtime_dir.join("runtime.ts"),
-        "export * from './errors.js';\nexport * from './step.js';\n",
+        "export * from './errors.js';\nexport * from './length.js';\nexport * from './step.js';\n",
     )
     .expect("the runtime entry point is written");
     std::fs::write(

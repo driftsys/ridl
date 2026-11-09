@@ -902,3 +902,14 @@ provenance. Nothing here is normative — the current references live in
   [the generated code chapter](../book/generated-code.md). Its rulings are
   mapped to decision numbers in the archived
   [shared streams design](2026-10-31-streams-design.md).
+
+- **2026-11-09-ts-signal-check-design.md** — the design note for a signal check
+  in the TypeScript client: a `checks` option and `Session.checkWith`,
+  `Sample.lastGood`, the `check-failed` note, a `read` that resolves with the
+  invalid sample, and the generated `signalChecks` function. Archived verbatim,
+  on 2026-11-09, once the work landed in driftsys/ridl#1286, driftsys/ridl#1295
+  and driftsys/ridl#1296 (issue driftsys/ridl#1236). The durable records are
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md) (D-24),
+  [the codec table design](../design/ts-codec-table.md) and
+  [the generated code chapter](../book/generated-code.md). The open question of
+  the note was answered as it recommended.

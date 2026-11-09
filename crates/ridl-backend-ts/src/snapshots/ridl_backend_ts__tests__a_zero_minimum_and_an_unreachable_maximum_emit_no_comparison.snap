@@ -1,0 +1,17 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+/**
+ * Build a value with `makeOpen`.
+ *
+ * @remarks
+ * Rules:
+ * - length 0 ..= 18446744073709551615
+ */
+export type Open = string & { readonly __ridl: 'veh.common.Open' };
+
+/** Builds a `Open`. */
+export function makeOpen(value: string): Open {
+  return value as Open;
+}
