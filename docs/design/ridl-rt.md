@@ -627,9 +627,10 @@ module is [the proto3 codec record](proto3-codec.md).
 that reads 0 past the size the producer wrote, the two descriptor layouts, the
 bounds and alignment check of a descriptor's data (`tail_range`, with checked
 arithmetic), the string checks, `Writer`, which fills the caller's slice, zeroes
-what it reserves and reports a store outside the written bytes, and `Aligned`,
-an 8-byte aligned array wrapper. It decides no layout, takes no dependency,
-allocates nothing, and holds a `compile_error!` for a big-endian target.
+what the encoder does not write and reports a store outside the written bytes,
+and `Aligned`, an 8-byte aligned array wrapper. It decides no layout, takes no
+dependency, allocates nothing, and holds a `compile_error!` for a big-endian
+target.
 
 **Since 2026-09-25 a fourth feature, `std`, exists, off by default.** It is not
 an encoding: it links the standard library and gates the `task` module, whose

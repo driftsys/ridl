@@ -615,8 +615,8 @@ a field is appended.
    Zeroed pads close the leak of stale memory to a consumer. `verify` checks
    absent optionals but neither pads nor unused tail capacity, so its cost does
    not grow with capacity. `ridl_rt::podbuf::Writer` enforces the zero fill: it
-   zeroes every byte it reserves, and a store outside the bytes it wrote makes
-   `finish` return `EncodeError::Layout`.
+   zeroes every byte it reserves that the encoder does not write, and a store
+   outside the bytes it wrote makes `finish` return `EncodeError::Layout`.
 
 10. **Evolution within one type version.** typl assigns field identity by
     declaration order and is append-only (typl §7.4). That is the first-fit

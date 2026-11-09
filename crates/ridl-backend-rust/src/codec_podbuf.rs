@@ -43,7 +43,8 @@
 //!
 //! The encoder's duties (decision 9): every pad byte, the preamble's
 //! `reserved` word and every byte of an absent optional are zero, which
-//! `Writer` guarantees by zero-filling what it reserves; the tail holds only
+//! `Writer` guarantees by zero-filling what it reserves and the encoder
+//! does not write; the tail holds only
 //! the data present, in the order of the head's placements, depth first
 //! (decision 4, "Tail order"); a map's entries are sorted by key (decision
 //! 5); a string holding U+0000, a duplicate map key and a NaN map key are

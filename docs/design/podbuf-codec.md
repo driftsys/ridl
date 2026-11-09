@@ -106,15 +106,15 @@ bounds-checked slice and returns 0 past the size the producer wrote.
 The module is behind the `podbuf` feature, takes no dependency, allocates
 nothing and has no `unsafe`. On a big-endian target it does not compile.
 
-| Item                              | What it does                                                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `Preamble`                        | reads the 8-byte preamble; refuses an unaligned buffer or a bad `head_size`                                |
-| `Region`                          | a window over a head, an element or an arm; every load returns 0 at or past the size the producer wrote    |
-| `Desc`, `ArrayDesc`               | the two descriptor layouts, with `is_zero`                                                                 |
-| `tail_range`                      | the bounds and alignment check of a descriptor's data, by checked arithmetic                               |
-| `text`, `has_nul`, `scalar_count` | the string checks: the closing NUL, no inner NUL, valid UTF-8, and the count of scalar values              |
-| `Writer`                          | fills the caller's slice and zeroes every byte it reserves; the tail blocks are written in placement order |
-| `Aligned<T>`                      | gives a byte array the 8-byte alignment of a buffer                                                        |
+| Item                              | What it does                                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `Preamble`                        | reads the 8-byte preamble; refuses an unaligned buffer or a bad `head_size`                                                      |
+| `Region`                          | a window over a head, an element or an arm; every load returns 0 at or past the size the producer wrote                          |
+| `Desc`, `ArrayDesc`               | the two descriptor layouts, with `is_zero`                                                                                       |
+| `tail_range`                      | the bounds and alignment check of a descriptor's data, by checked arithmetic                                                     |
+| `text`, `has_nul`, `scalar_count` | the string checks: the closing NUL, no inner NUL, valid UTF-8, and the count of scalar values                                    |
+| `Writer`                          | fills the caller's slice, zeroing every reserved byte the encoder does not write; the tail blocks are written in placement order |
+| `Aligned<T>`                      | gives a byte array the 8-byte alignment of a buffer                                                                              |
 
 The shared error variants are `Malformed::Preamble`, `Stride`, `Terminator` and
 `KeyOrder`, and `EncodeError::Unaligned` and `EncodeError::Layout { at }`
@@ -125,16 +125,18 @@ The shared error variants are `Malformed::Preamble`, `Stride`, `Terminator` and
 
 **`encode`** reserves the head with `Writer::reserve_head`, stores each field,
 and appends each tail block in the order of the head's placements, depth first.
-The writer zero-fills every byte it reserves, so pads, the preamble's `reserved`
-word and an absent optional's bytes are zero without a separate write. The
-encoder sorts the entries of a map by key; it refuses with
-`EncodeError::Contract` a string that holds U+0000 (`Pattern`), a duplicate map
-key (`Unique`) and a NaN map key (`Range`), a collection outside its bounds
-(`Length`), a value outside its typl constraints, and a value of an `open` enum
-or enum set whose integer does not fit the width its declared values infer, when
-that width is below 64 bits (`Range`, naming the declaration). A deprecated
-field is written as its init value. A buffer that does not start on an 8-byte
-boundary gives `EncodeError::Unaligned`; a store outside the bytes written gives
+The writer zeroes every reserved byte that the encoder does not write
+(`tail_data` copies the data of a string or bytes field over its block and
+writes only the closing NUL), so pads, the preamble's `reserved` word and an
+absent optional's bytes are zero without a separate write. The encoder sorts the
+entries of a map by key; it refuses with `EncodeError::Contract` a string that
+holds U+0000 (`Pattern`), a duplicate map key (`Unique`) and a NaN map key
+(`Range`), a collection outside its bounds (`Length`), a value outside its typl
+constraints, and a value of an `open` enum or enum set whose integer does not
+fit the width its declared values infer, when that width is below 64 bits
+(`Range`, naming the declaration). A deprecated field is written as its init
+value. A buffer that does not start on an 8-byte boundary gives
+`EncodeError::Unaligned`; a store outside the bytes written gives
 `EncodeError::Layout`.
 
 **`verify`** is a call tree, not a worklist: each head type has its own

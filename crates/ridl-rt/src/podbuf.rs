@@ -17,7 +17,7 @@
 //! wrote; [`Desc`] and [`ArrayDesc`], the two descriptor layouts;
 //! [`tail_range`], the bounds and alignment check of a descriptor's data;
 //! [`text`], [`has_nul`] and [`scalar_count`], the string checks; [`Writer`], which fills
-//! the caller's slice and zeroes every byte it reserves; and [`Aligned`], a
+//! the caller's slice and leaves no reserved byte unwritten; and [`Aligned`], a
 //! wrapper that gives a byte array the 8-byte alignment of a buffer.
 //!
 //! **This module decides no layout.** It is handed sizes, offsets and
@@ -311,12 +311,15 @@ pub fn scalar_count(s: &str) -> usize {
     s.chars().count()
 }
 
-/// Writes a buffer into the caller's slice and zeroes every byte it reserves.
+/// Writes a buffer into the caller's slice. Every byte it reserves is either
+/// zeroed or written by the encoder, so no byte of the caller's slice before
+/// the end of the buffer keeps an older value.
 ///
 /// The encoder reserves the head with [`Writer::reserve_head`], stores the head
-/// fields with the `put_*` methods, and appends the tail blocks with
-/// [`Writer::tail`] in the order of the head's fields, depth first. A tail
-/// block starts at its alignment; the gap before it is zero-filled.
+/// fields with the `put_*` methods, and appends the tail blocks in the order of
+/// the head's fields, depth first: [`Writer::tail_data`] for a string or a bytes
+/// field, [`Writer::tail`] for any other block. A tail block starts at its
+/// alignment; the gap before it is zero-filled.
 ///
 /// A store outside the written bytes is a defect of the encoder that issued
 /// it. The writer drops the store and remembers the first such offset, and
@@ -448,8 +451,9 @@ impl<'o> Writer<'o> {
         self.store(at, &[v]);
     }
 
-    /// Stores `bytes` at `at`: the data of a string or a bytes field, which
-    /// the encoder has reserved with [`Writer::tail`].
+    /// Stores `bytes` at `at`: the data of a fixed-size bytes array in the head,
+    /// which [`Writer::reserve_head`] has reserved. A string or a bytes field
+    /// in the tail is appended with [`Writer::tail_data`] instead.
     #[inline]
     pub fn put_bytes(&mut self, at: usize, bytes: &[u8]) {
         self.store(at, bytes);
