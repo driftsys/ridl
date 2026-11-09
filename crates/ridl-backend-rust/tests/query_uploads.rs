@@ -1161,6 +1161,73 @@ fn a_normally_forgotten_command_keeps_its_ended_pending_consumer_until_completio
 }
 
 #[test]
+fn a_normally_forgotten_command_does_not_wake_serve_for_its_pending_consumer() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+    pending(&mut serve);
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    sink.send(&reading(7)).unwrap();
+    pending(&mut serve);
+    assert_eq!(with_cx(|cx| sink.poll_end(cx)), Poll::Ready(Ok(())));
+    let count = std::sync::Arc::new(WakeCount::default());
+    let waker = Waker::from(count.clone());
+    let polls = state.borrow().ready_polls;
+    for _ in 0..3 {
+        assert!(
+            Pin::new(&mut serve)
+                .poll(&mut Context::from_waker(&waker))
+                .is_pending()
+        );
+        assert_eq!(
+            count.0.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "normal forget does not wake serve while the consumer is pending"
+        );
+    }
+    assert!(state.borrow().ready_polls > polls);
+    assert_eq!(state.borrow().drops, 0);
+    assert!(state.borrow().failures.is_empty());
+}
+
+#[test]
+fn forgetting_a_command_with_an_open_stream_wakes_serve_for_its_pending_consumer() {
+    let (rt, state, mut provider) = setup();
+    state.borrow_mut().blocked = true;
+    let mut serve = generated::log::serve(rt.handler(), &mut provider);
+    let mut client = generated::log::Client::new(rt.caller());
+    let (mut call, mut sink) = client.upload(generated::LogUploadParams {});
+    pending(&mut serve);
+    assert_eq!(poll(&mut call), Poll::Ready(Ok(())));
+    sink.send(&reading(7)).unwrap();
+    pending(&mut serve);
+    let count = std::sync::Arc::new(WakeCount::default());
+    let waker = Waker::from(count.clone());
+    assert!(
+        Pin::new(&mut serve)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending()
+    );
+    assert_eq!(count.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+    let polls = state.borrow().ready_polls;
+    drop(sink);
+    assert_eq!(
+        count.0.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "forget of an open stream wakes serve while the consumer is pending"
+    );
+    pending(&mut serve);
+    assert_eq!(state.borrow().ready_polls, polls);
+    assert_eq!(state.borrow().drops, 1);
+    assert_eq!(
+        state.borrow().failures,
+        vec![CallError::Transport(Transport::Interrupted)]
+    );
+}
+
+#[test]
 fn forgetting_a_query_after_parameter_end_wakes_serve_and_drops_its_pending_reply() {
     let (rt, state, mut provider) = setup();
     state.borrow_mut().reply_blocked = true;

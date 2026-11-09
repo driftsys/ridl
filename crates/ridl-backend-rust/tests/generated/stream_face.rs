@@ -8752,8 +8752,12 @@ pub mod log {
         let Some(mut stream) = slot.take() else {
             return false;
         };
-        h.wake_on_claim_forget(stream.claim, cx.waker());
-        if h.claim_forget(stream.claim) == ::ridl_rt::port::ClaimForget::Forgotten {
+        let mut forgotten = h.claim_forget(stream.claim);
+        if forgotten == ::ridl_rt::port::ClaimForget::NotForgotten {
+            h.wake_on_claim_forget(stream.claim, cx.waker());
+            forgotten = h.claim_forget(stream.claim);
+        }
+        if forgotten == ::ridl_rt::port::ClaimForget::Forgotten {
             let e = ::ridl_rt::error::CallError::Transport(
                 ::ridl_rt::error::Transport::Interrupted,
             );
@@ -14378,8 +14382,12 @@ pub mod docs {
         let Some(mut stream) = slot.take() else {
             return false;
         };
-        h.wake_on_claim_forget(stream.claim, cx.waker());
-        if h.claim_forget(stream.claim) == ::ridl_rt::port::ClaimForget::Forgotten {
+        let mut forgotten = h.claim_forget(stream.claim);
+        if forgotten == ::ridl_rt::port::ClaimForget::NotForgotten {
+            h.wake_on_claim_forget(stream.claim, cx.waker());
+            forgotten = h.claim_forget(stream.claim);
+        }
+        if forgotten == ::ridl_rt::port::ClaimForget::Forgotten {
             let e = ::ridl_rt::error::CallError::Transport(
                 ::ridl_rt::error::Transport::Interrupted,
             );
@@ -14475,8 +14483,12 @@ pub mod docs {
         let Some(mut stream) = slot.take() else {
             return false;
         };
-        h.wake_on_claim_forget(stream.claim, cx.waker());
-        if h.claim_forget(stream.claim) == ::ridl_rt::port::ClaimForget::Forgotten {
+        let mut forgotten = h.claim_forget(stream.claim);
+        if forgotten == ::ridl_rt::port::ClaimForget::NotForgotten {
+            h.wake_on_claim_forget(stream.claim, cx.waker());
+            forgotten = h.claim_forget(stream.claim);
+        }
+        if forgotten == ::ridl_rt::port::ClaimForget::Forgotten {
             let e = ::ridl_rt::error::CallError::Transport(
                 ::ridl_rt::error::Transport::Interrupted,
             );

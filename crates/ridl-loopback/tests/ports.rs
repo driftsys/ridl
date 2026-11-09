@@ -3794,3 +3794,80 @@ fn claim_forget_on_an_offered_call_survives_withdrawal_of_its_handler() {
     );
     assert_eq!(rt.claim_forget(claim), ClaimForget::Forgotten);
 }
+
+#[test]
+fn a_deferred_forget_wakes_only_the_claim_forget_registration() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let c = rt.command(IFACE, ORD, &[1], None).unwrap();
+    let claim = take_claim(&mut rt);
+    rt.settle(claim, Ok(&[])).unwrap();
+    assert_eq!(rt.push(c, StreamNo(1), &[1]), Ok(1));
+    rt.end(c, StreamNo(1)).unwrap();
+    let (count, waker) = counting();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert_eq!(wakes(&count), 1, "deferred forget wakes its claim waiter");
+    assert_eq!(rt.claim_forget(claim), ClaimForget::AfterEnd);
+    assert_eq!(
+        rt.pull_claim(claim, StreamNo(1), &mut [0; 8]),
+        Ok(Pull::Chunk(1))
+    );
+}
+
+#[test]
+fn forgetting_a_call_in_flight_wakes_only_the_claim_forget_registration() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let c = rt.query(IFACE, ORD, &[1], None).unwrap();
+    let claim = take_claim(&mut rt);
+    let (count, waker) = counting();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert_eq!(
+        wakes(&count),
+        1,
+        "forget of a call in flight wakes its claim waiter"
+    );
+    assert_eq!(rt.claim_forget(claim), ClaimForget::Forgotten);
+    rt.settle(claim, Ok(&[])).unwrap();
+    assert_eq!(
+        wakes(&count),
+        1,
+        "settlement does not wake a cleared waiter"
+    );
+}
+
+#[test]
+fn after_end_ignores_an_open_reply_stream() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let c = rt.query(IFACE, ORD, &[1], None).unwrap();
+    let claim = take_claim(&mut rt);
+    assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[2]), Ok(1));
+    rt.end(c, StreamNo(1)).unwrap();
+    rt.forget(c);
+    assert_eq!(
+        rt.claim_forget(claim),
+        ClaimForget::AfterEnd,
+        "only parameter streams determine AfterEnd"
+    );
+}
+
+#[test]
+fn reclaiming_a_call_wakes_only_the_claim_forget_registration() {
+    use ridl_rt::port::ClaimForget;
+    let mut rt = runtime();
+    let c = rt.command(IFACE, ORD, &[1], None).unwrap();
+    let claim = take_claim(&mut rt);
+    rt.settle(claim, Ok(&[])).unwrap();
+    let (count, waker) = counting();
+    rt.wake_on_claim_forget(claim, &waker);
+    assert_eq!(wakes(&count), 0);
+    rt.forget(c);
+    assert_eq!(wakes(&count), 1, "reclaim wakes its claim waiter");
+    assert_eq!(rt.claim_forget(claim), ClaimForget::Forgotten);
+    assert_every_slot_is_free(&mut rt, "after reclaiming the acknowledged call");
+}

@@ -643,7 +643,11 @@ pub trait StreamHandler: Handler {
     /// it does not wake the same task. A stored registration is cleared when
     /// woken. A forgotten or unknown claim wakes the
     /// new waker at once. A wake may be spurious: register first, then confirm
-    /// with [`Self::claim_forget`]. The default stores nothing and never wakes.
+    /// with [`Self::claim_forget`]. A provider that keeps working after
+    /// [`ClaimForget::AfterEnd`] does not register again, because a registration
+    /// is woken at once. It queries first and, only on `NotForgotten`, registers
+    /// and queries again to catch a forget during registration.
+    /// The default stores nothing and never wakes.
     fn wake_on_claim_forget(&self, _claim: ClaimId, _waker: &Waker) {}
 
     /// Copies the next chunk of stream `s` of the claim into the front of

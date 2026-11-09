@@ -341,8 +341,9 @@ A claim-forget registration replaces and refreshes its waker under the same
 `Waker::will_wake` rule as the other registrations. An already forgotten call or
 an unknown claim wakes it at once. An ended parameter stream does not: the
 registration waits for the call's forget independently of stream state. The
-provider registers first and then calls `claim_forget`, because a wake may be
-spurious and the query confirms what happened. Reclaiming an entry takes this
+provider confirms a wake with `claim_forget`; the
+[port contract](ridl-rt.md#the-ports) describes the registration order for a
+provider that keeps working after `AfterEnd`. Reclaiming an entry takes this
 waker before dropping the entry, and wakes it after releasing the lock.
 
 A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
@@ -988,10 +989,10 @@ to a node"; this section states how the crate carries them.
 ## It runs the port contract suite
 
 `crates/ridl-loopback/tests/conformance.rs` runs every test of
-`ridl-rt-conformance` over this runtime with the five base extension flags,
-including both signal extensions and `Wakeable` (driftsys/ridl#514). The two
-additional flags, `identity` and `identity_debug`, run with `node` and `debug`,
-respectively. The factory it writes for the suite is the aggregate, the
+`ridl-rt-conformance` over this runtime with the six base extension flags:
+`scannable`, `coherent`, `wakeable`, `trace`, `streams` and `claim_forget`. The
+two additional flags, `identity` and `identity_debug`, run with `node` and
+`debug`, respectively. The factory it writes for the suite is the aggregate, the
 `SourceHandle`, `CallerHandle` and `HandlerHandle` that `Loopback::source`,
 `Loopback::caller` and `Loopback::handler` hand out, `Loopback::SLOTS` as the
 size of the call table the suite fills, and `Loopback::advance` and
@@ -1002,16 +1003,17 @@ before they take a claim, so the deviation from `Handler::serve` recorded under
 "What it cannot report" is not exercised by it. It asserts no wake the contract
 allows but does not require: because a spurious wake is allowed, it asserts that
 a change leaves a waker unwoken only where the contract rules the wake out — a
-refresh, or a waker already woken or displaced and so cleared — and it never
-asserts that a registration whose key already holds is woken at once. The base
-suite drops no handle (the `identity` group drops attachments, to check that an
-identity is released), and it accepts either result for a forgotten call no
-handler has claimed. What the suite leaves out, and why, is listed once, in the
-crate documentation of `crates/ridl-rt-conformance/src/lib.rs`.
-`crates/ridl-loopback/tests/ports.rs` keeps the tests of this runtime's own
-choices — its narrower wakes, its wakes at once, its `Drop`, its withdrawal, and
-its own numbers — some of which fall under that list and some of which are this
-runtime's alone, and its module documentation names each test with its reason.
+refresh, or a waker already woken or displaced and so cleared. The
+`claim_forget` group also asserts that a registration for a forgotten or unknown
+claim is woken at once, as its contract requires. The base suite drops no handle
+(the `identity` group drops attachments, to check that an identity is released),
+and it accepts either result for a forgotten call no handler has claimed. What
+the suite leaves out, and why, is listed once, in the crate documentation of
+`crates/ridl-rt-conformance/src/lib.rs`. `crates/ridl-loopback/tests/ports.rs`
+keeps the tests of this runtime's own choices — its narrower wakes, its wakes at
+once, its `Drop`, its withdrawal, and its own numbers — some of which fall under
+that list and some of which are this runtime's alone, and its module
+documentation names each test with its reason.
 
 ## What it replaced
 

@@ -870,11 +870,14 @@ through `ReadError::ShortClaim`. An offered claim that was not forgotten answers
 state. A new registration replaces the old one, waking the displaced waker
 unless `Waker::will_wake` says it wakes the same task. A stored waker is taken
 when woken. A registration for a call already forgotten or a claim no longer
-known wakes at once. A wake may be spurious: on each poll a provider registers
-first, then calls `claim_forget` to confirm. This order prevents a forget
-between the registration and the query from being lost. This is also the
-registration to use after a parameter stream ended: `Interest::ClaimStream` on
-that stream wakes at once and cannot wait for a later forget.
+known wakes at once. A wake may be spurious: a provider registers first, then
+calls `claim_forget` to confirm. A provider that keeps working after `AfterEnd`
+does not register again, because a registration is woken at once. It queries
+first and, only on `NotForgotten`, registers and queries again, acting on the
+second answer. This order prevents a forget during registration from being lost.
+This is also the registration to use after a parameter stream ended:
+`Interest::ClaimStream` on that stream wakes at once and cannot wait for a later
+forget.
 
 Both methods are provided. Their defaults answer `NotForgotten` and store
 nothing, preserving the behaviour of a runtime that does not override them.
