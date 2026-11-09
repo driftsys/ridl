@@ -35,6 +35,7 @@
 //! note §3.5). The model keeps the contract's exact literal text.
 
 use crate::{Ctx, GenerateError, ScalarBacking, class_backing, numeric_tokens};
+use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 use proc_macro2::TokenStream;
@@ -192,6 +193,26 @@ fn render_one(
     }
 }
 
+/// Reads the clause literal exactly; `crates/ridl-ir/src/step.rs` holds the reader for step lattices.
+fn decimal(text: &str) -> Option<BigRational> {
+    let (mantissa, exponent) = text.split_once(['e', 'E']).unwrap_or((text, "0"));
+    let exponent: i32 = exponent.parse().ok()?;
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let coefficient: BigInt = format!("{whole}{fraction}").parse().ok()?;
+    let scale = i32::try_from(fraction.len()).ok()?.checked_sub(exponent)?;
+    // Canonical source decimals are bounded by the source itself. Guard
+    // exponent spellings supplied through IR against an excessive allocation.
+    if exponent.unsigned_abs() > 10000 {
+        return None;
+    }
+    let power = BigInt::from(10).pow(scale.unsigned_abs());
+    Some(if scale >= 0 {
+        BigRational::new(coefficient, power)
+    } else {
+        BigRational::from_integer(coefficient * power)
+    })
+}
+
 /// Prints an integer unchanged, or a binary64 bound that preserves the exact
 /// rational comparison. Exactly representable float literals are printed as
 /// written, with `.0` appended when they have no fraction or exponent (`100`
@@ -206,8 +227,7 @@ fn literal_tokens(
             Ok(numeric_tokens(value, false))
         }
         ScalarBacking::Float => {
-            let exact = crate::scalar_step::decimal(value)
-                .ok_or("the literal cannot be read as an exact decimal")?;
+            let exact = decimal(value).ok_or("the literal cannot be read as an exact decimal")?;
             // Start at the nearest binary64 value, clamped to the finite range.
             // Only the exact rational comparison below decides its direction.
             let nearest = exact
