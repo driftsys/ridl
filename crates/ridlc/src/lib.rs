@@ -2986,10 +2986,8 @@ fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Ve
 /// The size pass over a checked workspace (ADR-0030 decisions 12, 14 and 17):
 /// RIDL-151 (a payload above the limit that a `[limits]` entry gives its
 /// interaction), RIDL-152 (a `[limits.interaction]` key that names no
-/// interaction of its unit), RIDL-157 (a payload above the default ceiling of
-/// its kind where no entry applies) and the MANI-022 of a
-/// `[limits.interaction]` entry above 16,128 bytes that names a member other
-/// than a fixed. Every code is an error, so lint levels do not apply, and a
+/// interaction of its unit) and RIDL-157 (a payload above the default ceiling
+/// of its kind where no entry applies). Every code is an error, so lint levels do not apply, and a
 /// remote unit's packages are read as targets and never examined.
 ///
 /// `packages`, `checked` and `resolutions` describe the same packages in the

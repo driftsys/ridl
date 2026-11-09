@@ -1276,9 +1276,12 @@ declared bound is the buffer size ([the codec design](flatbuffers-codec.md)).
 The face carries a method, and so a `BUFFER`, for a signal, an event, a command
 and a query only; a fixed is provisioned, not interacted with, so the face has
 no method for it, `MAX_BUFFER_SIZE` counts no fixed, and its payload, up to
-65,280 bytes, is read through the view in place. The catalog's limits keep every
-other payload at 16,128 bytes or less, so generated code puts no `BUFFER` larger
-than 16,128 bytes on the stack
+65,280 bytes, is read through the view in place. Every other payload keeps its
+default ceiling, 16,128 bytes or less, unless a `[limits.interaction]` entry
+raises its member, so generated code puts no `BUFFER` larger than 16,128 bytes
+on the stack for a member that keeps its default. A member raised above 16,128
+bytes, up to 65,280, pays for its own stack buffer: a target with a small stack
+uses the encode API that takes a caller's buffer, or does not raise the member
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 5). The
 face itself refuses no payload for its size: the one refusal on send is the
 port's `TooLarge { cap }`, which the runtime raises against the member's limit

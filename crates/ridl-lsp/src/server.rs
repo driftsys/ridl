@@ -31,9 +31,8 @@
 //! conversion. A lint at `allow` is not published; one at `deny` is published
 //! as an error.
 //!
-//! The size pass of `ridlc` (RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of
-//! the `[limits]` table) runs on every recompute, through the same function
-//! `ridl check` calls. The workspace is sized under the encodings of the root
+//! The size pass of `ridlc` (RIDL-151, RIDL-152 and RIDL-157) runs on every
+//! recompute, through the same function `ridl check` calls. The workspace is sized under the encodings of the root
 //! manifest's `[backend.<name>]` tables and the `[limits]` table of each unit;
 //! a standalone overlay has neither, so it is sized for FlatBuffers against
 //! the default ceilings. Each source set is passed only its own errors, so an

@@ -1870,6 +1870,7 @@ version = \"1.0.0\"
 
     #[test]
     fn an_interaction_entry_is_valid_up_to_the_largest_ceiling() {
+        assert!(limit_codes("[limits.interaction]\n\"A.b\" = 16129\n").is_empty());
         assert!(limit_codes("[limits.interaction]\n\"A.b\" = 65280\n").is_empty());
         assert_eq!(
             limit_codes("[limits.interaction]\n\"A.b\" = 65281\n"),

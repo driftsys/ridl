@@ -7256,11 +7256,11 @@ fn a_limits_entry_publishes_ridl_151_on_the_source_and_ridl_152_on_the_manifest(
 }
 
 #[test]
-fn a_raise_above_16128_on_a_signal_publishes_mani_022_on_the_manifest() {
+fn a_raise_above_65280_on_a_signal_publishes_mani_022_on_the_manifest() {
     let dir = TempDir::new("size-mani-022");
     let (manifest, _file) = write_size_unit(
         &dir,
-        "[limits.interaction]\n\"I.s\" = 16129\n",
+        "[limits.interaction]\n\"I.s\" = 65281\n",
         &size_source(100),
     );
     let (client, server) = start(uri_of(dir.path()));
@@ -7271,6 +7271,31 @@ fn a_raise_above_16128_on_a_signal_publishes_mani_022_on_the_manifest() {
         table.diagnostics[0].severity,
         Some(lt::DiagnosticSeverity::ERROR)
     );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn a_raise_to_16129_on_a_signal_applies_and_publishes_ridl_151_against_it() {
+    let dir = TempDir::new("size-raise-16129");
+    let (_manifest, file) = write_size_unit(
+        &dir,
+        "[limits.interaction]\n\"I.s\" = 16129\n",
+        &size_source(4100),
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let source = next_publish(&client, &file);
+    let sizes: Vec<_> = source
+        .diagnostics
+        .iter()
+        .filter(
+            |d| matches!(&d.code, Some(lt::NumberOrString::String(c)) if c.starts_with("RIDL-15")),
+        )
+        .collect();
+    assert_eq!(sizes.len(), 1, "{:?}", source.diagnostics);
+    assert!(sizes[0].message.contains("limit is 16129"));
 
     shut_down(&client, 2);
     server.join().expect("thread joins").expect("clean exit");

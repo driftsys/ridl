@@ -2,11 +2,11 @@
 //! deployment section against the frames this codec writes.
 
 use ridl_ir::codegen::known_bindings;
-use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING};
+use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING, FIXED_CEILING};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    Attach, Frame, PublishState, ResponseOutcome, Target, BLOCK_BYTES, ENVELOPE_BYTES,
-    FRAME_VERSION_3, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
+    Attach, Frame, PublishState, ResponseOutcome, Target, BLOCK_BYTES, DEFAULT_MESSAGE_LIMIT,
+    ENVELOPE_BYTES, FRAME_VERSION_3, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
 };
 
 /// The frame header maximum and the envelope size of the `websocket` row.
@@ -34,7 +34,7 @@ fn target(kind: Kind) -> Target {
 /// Encodes `frame` into a buffer and checks the written length against both
 /// the returned length and `encoded_len`.
 fn written_len(frame: &Frame<'_>) -> usize {
-    let mut buf = vec![0u8; 32 * 1024];
+    let mut buf = vec![0u8; 80 * 1024];
     let written = frame.encode(&mut buf).expect("the buffer is large enough");
     assert_eq!(written, frame.encoded_len());
     written
@@ -115,10 +115,23 @@ fn the_largest_attach_is_294_bytes() {
 }
 
 #[test]
+fn the_default_message_limit_is_the_largest_message_of_a_default_catalog() {
+    assert_eq!(DEFAULT_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + CALL_CEILING);
+    let payload = vec![0u8; CALL_CEILING];
+    let frame = Frame::Response {
+        target: target(Kind::Query),
+        envelope: envelope(),
+        correlation: 5,
+        outcome: ResponseOutcome::Reply(&payload),
+    };
+    assert_eq!(written_len(&frame), DEFAULT_MESSAGE_LIMIT);
+}
+
+#[test]
 fn the_largest_message_limit_is_the_largest_data_plane_message() {
-    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + 16_128);
-    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + CALL_CEILING);
-    let payload = vec![0u8; 16_128];
+    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + 65_280);
+    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + FIXED_CEILING);
+    let payload = vec![0u8; 65_280];
     let frame = Frame::Response {
         target: target(Kind::Query),
         envelope: envelope(),

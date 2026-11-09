@@ -190,13 +190,13 @@ frame the transport writes comes with the crate (driftsys/ridl#718).
 ### Blocks arrive as frame version 2 and binding version 2
 
 A `fixed` of up to 65,280 bytes does not cross in one message: the largest
-message of the Rust provider is 16,164 bytes, and a `publish` header takes 27 of
-them, so a `fixed` above 16,137 bytes needs a form that carries part of a
-payload. That form, `block`, is a new form, so it is a new frame version. A
-binding never refuses an interaction the catalog allows (ADR-0030 decision 20),
-so the answer is blocks and not a smaller limit. The rules of the form are in
-the frame specification §4, §5.5 and §11.1 "Binding version 2"; this section
-gives the reasons.
+message limit of the Rust provider is 16,164 bytes by default, and a `publish`
+header takes 27 of them, so a `fixed` above 16,137 bytes needs a form that
+carries part of a payload. That form, `block`, is a new form, so it is a new
+frame version. A binding never refuses an interaction the catalog allows
+(ADR-0030 decision 20), so the answer is blocks and not a smaller limit. The
+rules of the form are in the frame specification §4, §5.5 and §11.1 "Binding
+version 2"; this section gives the reasons.
 
 - **4,096 bytes per block, not a whole message.** ADR-0030 decision 16 asks a
   binding to copy at most 4,096 bytes between two scheduling points, so a
@@ -312,14 +312,15 @@ start of a streamed reply (ADR-0032 decision 13). So `Interrupted` is a third
 connection carries every signal, event and call of a session, so a slow reader
 of one stream must not stall the others. A chunk is the unit everywhere and is
 bounded by the member's limit, so a credit in chunks also bounds bytes: 4 chunks
-of at most 16,128 bytes are about 64 KiB per stream. Alternatives: rely on the
-transport's flow control, rejected because TCP would stall the whole session
-behind one slow reader, which is head-of-line blocking; a credit in bytes,
-rejected because the sender would have to split a chunk, which it may not do for
-a stream of elements. Cost if wrong: the initial credit of 4 is a constant of
-version 3, so another value is a new version; the credit a receiver grants after
-that is its own choice. How the TypeScript client computes it is in
-[its design record](../design/ridl-transport-ws-ts.md), D-20.
+of at most 16,128 bytes, the default ceiling of a command and a query, are about
+64 KiB per stream; a member raised to 65,280 bytes holds about 255 KiB.
+Alternatives: rely on the transport's flow control, rejected because TCP would
+stall the whole session behind one slow reader, which is head-of-line blocking;
+a credit in bytes, rejected because the sender would have to split a chunk,
+which it may not do for a stream of elements. Cost if wrong: the initial credit
+of 4 is a constant of version 3, so another value is a new version; the credit a
+receiver grants after that is its own choice. How the TypeScript client computes
+it is in [its design record](../design/ridl-transport-ws-ts.md), D-20.
 
 **One upload write is one chunk.** The TypeScript client's `commandStream`,
 `queryWithUpload` and `queryDuplex` send each write as one chunk, including an

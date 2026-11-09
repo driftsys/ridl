@@ -55,8 +55,9 @@ pub fn serve_provided<C: Connection, B: ProvidedBackend>(
 /// Selects a local providing backend from the unchanged HTTP request target.
 ///
 /// Origin and role checks precede the one selector invocation. Selection
-/// errors answer 404 or 409; insufficient message capacity answers 400 and
-/// returns [`Ended::ConfigRefused`], before upgrade. The selected backend is
+/// errors answer 404 or 409; insufficient message capacity, or a retained-bytes
+/// cap below the message limit, answers 400 and returns
+/// [`Ended::ConfigRefused`], before upgrade. The selected backend is
 /// dropped on every exit. The client checks the catalog and encoding in the
 /// server's `attach`; refusal ends the session with close 1000.
 pub fn serve_provided_selected<C, B, S>(mut conn: C, select: S, config: &Config) -> Ended
@@ -84,6 +85,13 @@ where
                 SelectionError::NotFound => HttpRefusal::NotFound,
                 SelectionError::Conflict => HttpRefusal::Conflict,
             })?;
+            if let Some(note) = config.retained_short() {
+                if let Some(record) = config.record() {
+                    record(&note);
+                }
+                config_refused = true;
+                return Err(HttpRefusal::Capacity);
+            }
             if let Some((target, needed)) =
                 limit_short(selected.members(), config.max_message_bytes())
             {

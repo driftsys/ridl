@@ -1,6 +1,5 @@
-//! The size pass: RIDL-151, RIDL-152 and RIDL-157, and the MANI-022 of a
-//! `[limits.interaction]` entry that raises a member above what its kind may
-//! be given (ADR-0030 decisions 12, 14, 17 and 18).
+//! The size pass: RIDL-151, RIDL-152 and RIDL-157 (ADR-0030 decisions 12, 14,
+//! 17 and 18).
 //!
 //! Every interaction of every examined package is sized once, in each
 //! encoding that the workspace manifest enables. The limit of an interaction
@@ -11,9 +10,9 @@
 //! where none does, a payload above the default ceiling of the kind, or with no
 //! finite bound, is RIDL-157. An interaction draws at most one of the two.
 //! RIDL-152 reports a `[limits.interaction]` key that names no interaction of
-//! its unit. A `[limits.interaction]` entry above 16,128 bytes that names a
-//! member other than a fixed is MANI-022 on the value, and the entry is
-//! dropped, as the manifest reader drops an entry above 65,280.
+//! its unit. An entry above 65,280 bytes is MANI-022 from the manifest reader,
+//! which drops it, so every entry that reaches this pass may apply to a member
+//! of any kind.
 //!
 //! An interaction is named `Interface.member`: the short name of its shape,
 //! then `.`, then the member name. The short name is the interface name, or for
@@ -45,24 +44,13 @@ fn name_entry<'a>(limits: &'a Limits, owner: Option<&str>, member: &str) -> Opti
     limits.interactions.iter().find(|entry| entry.name == name)
 }
 
-/// Whether a `[limits.interaction]` entry of `value` bytes may apply to a
-/// member of `kind` (ADR-0030 decision 18): a fixed may be given up to its
-/// default ceiling, which the manifest reader already bounds, and every other
-/// kind up to [`RAISE_MAX`].
-fn raise_allowed(kind: LimitKind, value: u32) -> bool {
-    kind == LimitKind::Fixed || value <= RAISE_MAX
-}
-
 /// The limit that a `[limits]` table gives an interaction: its entry in
 /// `[limits.interaction]`, else the entry of its kind, else `default` clamped
 /// to the default ceiling of the kind, or `None` when no entry applies
-/// (ADR-0030 decision 12). An interaction entry that [`raise_allowed`]
-/// refuses is dropped, so the next step applies. `owner` is as for
-/// [`name_entry`].
+/// (ADR-0030 decision 12). `owner` is as for [`name_entry`].
 fn resolve(limits: &Limits, kind: LimitKind, owner: Option<&str>, member: &str) -> Option<u32> {
     name_entry(limits, owner, member)
         .map(|entry| entry.value)
-        .filter(|value| raise_allowed(kind, *value))
         .or_else(|| limits.kinds.get(&kind).map(|entry| *entry.get_ref()))
         .or_else(|| {
             limits
@@ -175,8 +163,7 @@ struct Unit<'a> {
     packages: Vec<usize>,
 }
 
-/// The size pass: RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of an
-/// interaction entry that raises a member above what its kind may be given.
+/// The size pass: RIDL-151, RIDL-152 and RIDL-157.
 /// `units` holds the unit of each entry of `ctx.checked`; `limits` holds the
 /// `[limits]` table of each unit by unit name. A table applies to every
 /// package of its unit, so an entry may name an interface of any of them. The
@@ -254,27 +241,6 @@ pub(crate) fn check(
                         continue;
                     };
                     let name = format!("{short}.{}", decl.name);
-                    if let Some(unit_limits) = unit.table
-                        && let Some(entry) = name_entry(&unit_limits.limits, owner, &decl.name)
-                        && !raise_allowed(kind, entry.value)
-                    {
-                        diagnostics.push(Diagnostic {
-                            code: DiagCode::MANI_022,
-                            severity: Severity::Error,
-                            message: format!(
-                                "`{name}` is {}, above what the entry may give {} \
-                                 ({RAISE_MAX} bytes); only a `fixed` may be given more",
-                                entry.value,
-                                a_kind(kind),
-                            ),
-                            primary: Span {
-                                file: unit_limits.manifest,
-                                range: text_range(&entry.value_span),
-                            },
-                            labels: Vec::new(),
-                            fixits: Vec::new(),
-                        });
-                    }
                     let declared = table.and_then(|table| resolve(table, kind, owner, &decl.name));
                     let limit = declared.unwrap_or_else(|| default_ceiling(kind));
                     let Some(span) = ctx.sites.member(&package.name, shape.name, &decl.name) else {
@@ -468,32 +434,27 @@ mod tests {
         );
     }
 
-    /// An interaction entry above 16,128 applies to a fixed only; for another
-    /// kind it is dropped and the next step applies.
+    /// An interaction entry applies to a member of every kind, whatever its
+    /// value; the manifest reader bounds it at 65,280.
     #[test]
-    fn a_raise_above_the_largest_applies_to_a_fixed_only() {
+    fn an_interaction_entry_applies_to_every_kind() {
         let mut limits = limits();
-        limits.interactions[0].value = 16_129;
-        assert_eq!(
-            resolve(&limits, LimitKind::Fixed, Some("I"), "named"),
-            Some(16_129)
-        );
-        assert_eq!(
-            resolve(&limits, LimitKind::Command, Some("I"), "named"),
-            None
-        );
-        limits
-            .kinds
-            .insert(LimitKind::Command, toml::Spanned::new(0..0, 7));
-        assert_eq!(
-            resolve(&limits, LimitKind::Command, Some("I"), "named"),
-            Some(7)
-        );
-        limits.interactions[0].value = 16_128;
-        assert_eq!(
-            resolve(&limits, LimitKind::Command, Some("I"), "named"),
-            Some(16_128)
-        );
+        for value in [16_128, 16_129, 65_280] {
+            limits.interactions[0].value = value;
+            for kind in [
+                LimitKind::Signal,
+                LimitKind::Event,
+                LimitKind::Command,
+                LimitKind::Query,
+                LimitKind::Fixed,
+            ] {
+                assert_eq!(
+                    resolve(&limits, kind, Some("I"), "named"),
+                    Some(value),
+                    "{kind:?} at {value}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -505,10 +466,10 @@ mod tests {
 
     #[test]
     fn the_raise_hint_names_the_largest_raise_below_it_only() {
-        assert!(raise_hint(LimitKind::Signal).contains("16128"));
-        assert!(raise_hint(LimitKind::Event).contains("16128"));
-        assert!(raise_hint(LimitKind::Command).is_empty());
-        assert!(raise_hint(LimitKind::Query).is_empty());
+        assert!(raise_hint(LimitKind::Signal).contains("65280"));
+        assert!(raise_hint(LimitKind::Event).contains("65280"));
+        assert!(raise_hint(LimitKind::Command).contains("65280"));
+        assert!(raise_hint(LimitKind::Query).contains("65280"));
         assert!(raise_hint(LimitKind::Fixed).is_empty());
     }
 }

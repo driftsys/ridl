@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use super::super::session::Step;
-use ridl_rt::contract::{Kind, CALL_CEILING};
+use ridl_rt::contract::{Kind, CALL_CEILING, FIXED_CEILING};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{ClaimId, Clock, Handler, ReadError, SettleError};
 use ridl_rt::sample::Envelope;
@@ -41,13 +41,24 @@ impl Calls {
             config: config.clone(),
         }
     }
-    pub(super) fn start(&self, backend: &mut impl ProvidedBackend) -> bool {
+    pub(super) fn start(&mut self, backend: &mut impl ProvidedBackend) -> bool {
         let targets: Vec<_> = backend
             .members()
             .iter()
             .map(|(t, _, _)| t)
             .filter(|t| matches!(t.kind, Kind::Command | Kind::Query))
             .collect();
+        // The claim buffer holds the largest request any member allows: the
+        // default ceiling of a call, or more when an entry raises a member,
+        // up to the largest payload. A catalog that raises nothing keeps the
+        // default size.
+        let largest = targets
+            .iter()
+            .map(|t| backend.members().payload_limit(*t))
+            .max()
+            .unwrap_or(0);
+        self.bytes
+            .resize(largest.clamp(CALL_CEILING, FIXED_CEILING), 0);
         for target in targets {
             if backend.ports().serve(target.iface, &[target.ord]).is_err() {
                 record(&self.config, Note::PortRefused { target });
@@ -292,6 +303,56 @@ mod tests {
             assert_eq!(calls.bytes.as_ptr(), allocation);
             assert_eq!(calls.bytes[0], value);
         }
+    }
+
+    /// The length of the claim buffer after `start`, for a table whose
+    /// command 3 and query 4 have the limits given, in that order, and none
+    /// where `None`.
+    fn buffer_after_start(command: Option<u32>, query: Option<u32>) -> usize {
+        let ports = Loopback::new(CatalogRef {
+            name: "calls",
+            hash: CatalogHash([7; 32]),
+        });
+        let mut members = MemberTable::new("calls", CatalogHash([7; 32]));
+        for (ord, kind, limit) in [(3, Kind::Command, command), (4, Kind::Query, query)] {
+            members.insert(InterfaceNo(1), Ordinal(ord), kind, None);
+            if let Some(limit) = limit {
+                members.set_limit(InterfaceNo(1), Ordinal(ord), limit);
+            }
+        }
+        let mut backend = Providing::new(ports, members).unwrap();
+        let mut calls = Calls::new(&Config::default());
+        assert!(calls.start(&mut backend));
+        calls.bytes.len()
+    }
+
+    /// The claim buffer holds the largest limit of any command or query,
+    /// whichever comes first in the table, and never less than 16,128 or more
+    /// than 65,280 bytes.
+    ///
+    /// Mutation: take `min`, `next` or `last` instead of `max` over the limits.
+    #[test]
+    fn the_claim_buffer_is_the_largest_limit_clamped_to_the_call_range() {
+        assert_eq!(buffer_after_start(Some(20_000), Some(40_000)), 40_000);
+        assert_eq!(buffer_after_start(Some(40_000), Some(20_000)), 40_000);
+        assert_eq!(buffer_after_start(Some(40_000), None), 40_000);
+        assert_eq!(buffer_after_start(None, Some(40_000)), 40_000);
+        assert_eq!(buffer_after_start(None, None), CALL_CEILING);
+        assert_eq!(buffer_after_start(Some(100), Some(200)), CALL_CEILING);
+        assert_eq!(buffer_after_start(Some(1_000_000), Some(5)), FIXED_CEILING);
+    }
+
+    #[test]
+    fn the_claim_buffer_of_an_empty_table_is_the_default_size() {
+        let ports = Loopback::new(CatalogRef {
+            name: "calls",
+            hash: CatalogHash([7; 32]),
+        });
+        let members = MemberTable::new("calls", CatalogHash([7; 32]));
+        let mut backend = Providing::new(ports, members).unwrap();
+        let mut calls = Calls::new(&Config::default());
+        assert!(calls.start(&mut backend));
+        assert_eq!(calls.bytes.len(), CALL_CEILING);
     }
 }
 

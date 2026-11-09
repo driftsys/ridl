@@ -588,7 +588,16 @@ other entry below is Accepted.
   16,164-byte message limit, and its blocks are built (driftsys/ridl#1129):
   frame version 2 under `ridl-ws-v2`, blocks of 4,096 bytes, a Rust provider
   that serves version 2 only, and a TypeScript client that offers both versions
-  and reassembles within the member's limit.
+  and reassembles within the member's limit. Amended 2026-11-09: a
+  `[limits.interaction]` entry may give a member of any kind a limit up to
+  65,280 bytes, where it stopped at 16,128 bytes for a member that is not a
+  fixed, because a catalog with frames larger than 16,128 bytes must be able to
+  declare them explicitly, one member at a time; the default ceilings are
+  unchanged; the WebSocket message limit keeps its default of 16,164 bytes and
+  may be raised up to 65,316 bytes, a catalog with a signal, an event, a command
+  or a query above 16,128 bytes is refused at attach with the default, and only
+  a fixed is sent in blocks; a member raised above 16,128 bytes pays for its own
+  stack buffer in generated Rust.
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
@@ -648,11 +657,11 @@ other entry below is Accepted.
   ends a `<string>` stream as `INVALID_VALUE`; `max` on a streamed reply bounds
   its first chunk or its end, and on a query with a stream parameter is measured
   from the end of the upload; and the interaction's limit bounds each chunk, so
-  an entry can only lower the chunk size. Amended 2026-10-31: decision 10's
-  example declares a named result union instead of the inline `<A | B>`, which
-  the grammar does not admit. The stream port of `ridl-rt` (decisions 9 and 11)
-  is built, and so are frame version 3, which carries a query's streamed reply
-  over WebSocket
+  an entry can lower the chunk size, or raise it up to 65,280 bytes (amended
+  2026-11-09). Amended 2026-10-31: decision 10's example declares a named result
+  union instead of the inline `<A | B>`, which the grammar does not admit. The
+  stream port of `ridl-rt` (decisions 9 and 11) is built, and so are frame
+  version 3, which carries a query's streamed reply over WebSocket
   ([frame specification §11.1, "Binding version 3"](../specification/frame-specification.md#binding-version-3)),
   and, as amended 2026-11-04, the Rust face over `ridl-loopback` for byte, text
   and named-element reply streams and commands and queries with one parameter

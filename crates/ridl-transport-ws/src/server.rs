@@ -164,7 +164,16 @@ pub enum Ended {
     /// configuration error, not a session event. [`serve`] returned before
     /// the opening handshake, without reading the connection, and recorded
     /// [`Note::MessageLimitTooSmall`]; the connection closes when it is
-    /// dropped. Without a member table there is no check.
+    /// dropped. To carry a signal, an event, a command or a query with a limit
+    /// above 16,128 bytes, raise the limit with
+    /// [`Config::with_max_message_bytes`]. Without a member table there is no
+    /// member check.
+    ///
+    /// The same variant covers a [`Config::max_retained_bytes`] below
+    /// [`Config::max_message_bytes`], recorded as
+    /// [`Note::RetainedBelowMessageLimit`], whatever the order of the builder
+    /// calls. [`serve`] and the provided entry points check it first and
+    /// record it alone; [`serve_selected`] records the member note first.
     ///
     /// With [`serve_selected`], this also covers an unsupported advertised
     /// capability (before reading), or a selected backend lacking the
@@ -175,8 +184,9 @@ pub enum Ended {
     /// When ordinary attach checks pass, insufficient message capacity records
     /// the same note with either reply.
     ///
-    /// With [`serve_provided_selected`], capacity is checked after selection
-    /// and before upgrade; a refusal answers HTTP 400 and records the note.
+    /// With [`serve_provided_selected`], the retained cap and the capacity
+    /// are checked after selection and before upgrade; a refusal answers HTTP
+    /// 400 and records the note.
     /// An unencodable catalog name or an encoding without a frame tag also
     /// answers HTTP 400 and returns this variant; no matching `Note` exists.
     ConfigRefused,
@@ -264,7 +274,13 @@ const LINGER: Duration = Duration::from_millis(100);
 /// at most one entry per signal or event member of the catalog. Without a
 /// table, nothing bounds it, and the paragraph above applies.
 ///
-/// With a member table, `serve` first checks that
+/// `serve` first checks, with or without a member table, that
+/// [`Config::max_retained_bytes`] is at least [`Config::max_message_bytes`],
+/// whatever the order of the builder calls; if it is not, `serve` records
+/// [`Note::RetainedBelowMessageLimit`] and returns [`Ended::ConfigRefused`]
+/// before the opening handshake.
+///
+/// With a member table, `serve` then checks that
 /// [`Config::max_message_bytes`] carries one message of every member: 36
 /// bytes of header and envelope plus the member's limit, which is the limit
 /// the table gives it or the default ceiling of its kind. A `fixed` that
@@ -272,12 +288,22 @@ const LINGER: Duration = Duration::from_millis(100);
 /// smaller of that and one block message, 4,130 bytes. A limit below that
 /// is a configuration error: `serve` records [`Note::MessageLimitTooSmall`]
 /// and returns [`Ended::ConfigRefused`] before the opening handshake,
-/// without reading the connection. The default limit carries every catalog.
+/// without reading the connection. The default limit, 16,164 bytes, carries
+/// every catalog whose members keep their default ceilings. A catalog with a
+/// signal, an event, a command or a query whose limit is above 16,128 bytes
+/// needs a larger limit: set it with [`Config::with_max_message_bytes`], up to
+/// 65,316 bytes.
 ///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
 pub fn serve<C: Connection, B: Backend>(conn: C, mut backend: B, config: &Config) -> Ended {
+    if let Some(note) = config.retained_short() {
+        if let Some(record) = config.record() {
+            record(&note);
+        }
+        return Ended::ConfigRefused;
+    }
     if let Some((target, needed)) = backend
         .members()
         .and_then(|table| limit_short(table, config.max_message_bytes()))
@@ -413,6 +439,7 @@ where
         };
         let capability_short = self.frame_version == FRAME_VERSION_3
             && (backend.streams().is_none() || backend.members().is_none());
+        let retained = config.retained_short();
         let limit = backend
             .members()
             .and_then(|table| limit_short(table, config.max_message_bytes()));
@@ -420,13 +447,16 @@ where
         let mut session = Session::new(backend, config);
         session.upgraded(self.frame_version);
         let step = session.on_message(msg, now, out);
-        if step == Step::Continue && (capability_short || limit.is_some()) {
+        if step == Step::Continue && (capability_short || limit.is_some() || retained.is_some()) {
             out.clear();
             self.config_refused = true;
             if let Some((target, needed)) = limit {
                 if let Some(record) = config.record() {
                     record(&Note::MessageLimitTooSmall { target, needed });
                 }
+            }
+            if let (Some(note), Some(record)) = (retained, config.record()) {
+                record(&note);
             }
             return refuse_selected(
                 out,

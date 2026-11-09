@@ -4,7 +4,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::frame::{ProtocolViolation, Target, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT};
+use crate::frame::{
+    ProtocolViolation, Target, DEFAULT_MESSAGE_LIMIT, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT,
+};
 
 /// What the server records about a session: frames it dropped and events
 /// that no frame reports to the client. Recording is through
@@ -158,7 +160,8 @@ pub enum Note {
     /// [`Config::max_message_bytes`] is below what one message of this
     /// member needs: `needed` bytes, the 36 bytes of header and envelope
     /// plus the member's limit, and for a `fixed` the smaller of that and
-    /// one block message, 4,130 bytes. The
+    /// one block message, 4,130 bytes. Raise the limit with
+    /// [`Config::with_max_message_bytes`], up to [`MAX_MESSAGE_LIMIT`]. The
     /// configuration cannot carry a payload the catalog allows, so
     /// [`serve`](crate::serve) records this before the opening handshake.
     /// [`serve_selected`](crate::serve_selected) records it after selection,
@@ -170,6 +173,22 @@ pub enum Note {
         target: Target,
         /// The message limit the member needs.
         needed: usize,
+    },
+    /// [`Config::max_retained_bytes`] is below [`Config::max_message_bytes`]:
+    /// one response of the largest message could close a session on its own.
+    /// The configuration is refused where it is used, whatever the order of
+    /// the calls that set the two values: [`serve`](crate::serve) records this
+    /// before the opening handshake and returns
+    /// [`Ended::ConfigRefused`](crate::Ended::ConfigRefused), and the selected
+    /// and provided entry points refuse in the way they refuse
+    /// [`Note::MessageLimitTooSmall`]. Raise the cap with
+    /// [`Config::with_max_retained_bytes`] or lower the message limit with
+    /// [`Config::with_max_message_bytes`].
+    RetainedBelowMessageLimit {
+        /// The cap that was set.
+        retained: usize,
+        /// The message limit that is above it.
+        message: usize,
     },
 }
 
@@ -193,7 +212,7 @@ impl fmt::Display for LimitOutOfRange {
 
 impl std::error::Error for LimitOutOfRange {}
 
-/// A `max_retained_bytes` below [`MAX_MESSAGE_LIMIT`], the largest message
+/// A `max_retained_bytes` below [`DEFAULT_MESSAGE_LIMIT`], the default message
 /// limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RetainedTooSmall {
@@ -206,7 +225,7 @@ impl fmt::Display for RetainedTooSmall {
         write!(
             f,
             "a retained-bytes cap of {} bytes is below the smallest allowed, {} bytes",
-            self.given, MAX_MESSAGE_LIMIT
+            self.given, DEFAULT_MESSAGE_LIMIT
         )
     }
 }
@@ -252,7 +271,7 @@ pub struct Config {
 impl Default for Config {
     /// 20 ms between polls, a ping every 5 s, a liveness timeout of 15 s, a
     /// call abandoned after 60 s, a message limit of 16,164 bytes
-    /// ([`MAX_MESSAGE_LIMIT`]), a retained-bytes cap of 16 MiB, nothing
+    /// ([`DEFAULT_MESSAGE_LIMIT`]), a retained-bytes cap of 16 MiB, nothing
     /// recorded, and no origin check.
     fn default() -> Self {
         Config {
@@ -260,7 +279,7 @@ impl Default for Config {
             ping_interval: Duration::from_secs(5),
             liveness_timeout: Duration::from_secs(15),
             call_abandon_after: Duration::from_secs(60),
-            max_message_bytes: MAX_MESSAGE_LIMIT,
+            max_message_bytes: DEFAULT_MESSAGE_LIMIT,
             max_retained_bytes: 16 * 1024 * 1024,
             record: None,
             origin_check: None,
@@ -274,10 +293,14 @@ impl Config {
         self.max_message_bytes
     }
 
-    /// Sets the largest message the server reads or sends. The limit can
-    /// only be lowered from the default, [`MAX_MESSAGE_LIMIT`]: a limit above
-    /// it is refused, and so is a limit below [`MIN_MESSAGE_LIMIT`], under
-    /// which no `attach` could be read.
+    /// Sets the largest message the server reads or sends. The default is
+    /// [`DEFAULT_MESSAGE_LIMIT`], which carries every catalog whose members
+    /// keep their default ceilings. A catalog with a signal, an event, a
+    /// command or a query whose limit is above 16,128 bytes needs a larger one:
+    /// 36 bytes plus the largest limit of a member, up to
+    /// [`MAX_MESSAGE_LIMIT`]. A limit above [`MAX_MESSAGE_LIMIT`] is refused,
+    /// and so is a limit below [`MIN_MESSAGE_LIMIT`], under which no `attach`
+    /// could be read.
     pub fn with_max_message_bytes(mut self, n: usize) -> Result<Self, LimitOutOfRange> {
         if !(MIN_MESSAGE_LIMIT..=MAX_MESSAGE_LIMIT).contains(&n) {
             return Err(LimitOutOfRange { given: n });
@@ -296,15 +319,29 @@ impl Config {
     /// Sets the most bytes of the responses a session keeps for a repeated
     /// `request`. When a response sent would make the kept bytes pass `n`,
     /// the response is sent and the session is then closed with 1008. A cap
-    /// below [`MAX_MESSAGE_LIMIT`] is refused, whatever the message limit, so
-    /// that one response of the largest message never closes a session on
-    /// its own.
+    /// below [`DEFAULT_MESSAGE_LIMIT`] is refused here, whatever the message
+    /// limit. A cap below the configured message limit is refused where the
+    /// configuration is used, with [`Note::RetainedBelowMessageLimit`], so
+    /// that one response of the largest message never closes a session on its
+    /// own, and the result does not depend on the order of the builder calls.
     pub fn with_max_retained_bytes(mut self, n: usize) -> Result<Self, RetainedTooSmall> {
-        if n < MAX_MESSAGE_LIMIT {
+        if n < DEFAULT_MESSAGE_LIMIT {
             return Err(RetainedTooSmall { given: n });
         }
         self.max_retained_bytes = n;
         Ok(self)
+    }
+
+    /// The note for a retained-bytes cap below the message limit, or `None`.
+    /// Checked where the configuration is used, so that the order of the
+    /// builder calls does not matter.
+    pub(crate) fn retained_short(&self) -> Option<Note> {
+        (self.max_retained_bytes < self.max_message_bytes).then_some(
+            Note::RetainedBelowMessageLimit {
+                retained: self.max_retained_bytes,
+                message: self.max_message_bytes,
+            },
+        )
     }
 
     /// Sets the hook the server calls with each [`Note`].
@@ -359,33 +396,38 @@ mod tests {
     }
 
     #[test]
-    fn the_default_limit_is_the_largest_allowed() {
-        assert_eq!(Config::default().max_message_bytes(), MAX_MESSAGE_LIMIT);
+    fn the_default_limit_carries_a_catalog_of_default_ceilings() {
+        assert_eq!(Config::default().max_message_bytes(), DEFAULT_MESSAGE_LIMIT);
+        assert_eq!(DEFAULT_MESSAGE_LIMIT, 16_164);
     }
 
-    /// The largest limit is 36 bytes of header and envelope plus 16,128
-    /// bytes, the default ceiling of a command and a query.
+    /// The largest limit is 36 bytes of header and envelope plus 65,280
+    /// bytes, the largest limit a member of any kind may have.
     #[test]
     fn a_limit_above_the_maximum_is_refused() {
-        let err = Config::default().with_max_message_bytes(16_165).err();
-        assert_eq!(err, Some(LimitOutOfRange { given: 16_165 }));
-        assert!(err.unwrap().to_string().contains("294 to 16164"));
+        let err = Config::default().with_max_message_bytes(65_317).err();
+        assert_eq!(err, Some(LimitOutOfRange { given: 65_317 }));
+        assert!(err.unwrap().to_string().contains("294 to 65316"));
     }
 
     #[test]
-    fn the_maximum_limit_is_accepted_and_is_the_default() {
+    fn the_maximum_limit_is_accepted_and_is_not_the_default() {
         let config = Config::default()
-            .with_max_message_bytes(1024)
-            .unwrap()
-            .with_max_message_bytes(16_164)
+            .with_max_message_bytes(65_316)
             .expect("accepted");
-        assert_eq!(config.max_message_bytes(), 16_164);
-        assert_eq!(Config::default().max_message_bytes(), 16_164);
-        assert_eq!(MAX_MESSAGE_LIMIT, 16_164);
+        assert_eq!(config.max_message_bytes(), 65_316);
+        assert_eq!(MAX_MESSAGE_LIMIT, 65_316);
+        assert_ne!(MAX_MESSAGE_LIMIT, DEFAULT_MESSAGE_LIMIT);
     }
 
     #[test]
-    fn a_retained_cap_below_the_largest_message_limit_is_refused() {
+    fn a_limit_between_the_default_and_the_maximum_is_accepted() {
+        let config = Config::default().with_max_message_bytes(16_165).unwrap();
+        assert_eq!(config.max_message_bytes(), 16_165);
+    }
+
+    #[test]
+    fn a_retained_cap_below_the_default_message_limit_is_refused() {
         let config = Config::default().with_max_message_bytes(1024).unwrap();
         let err = config.clone().with_max_retained_bytes(16_163).err();
         assert_eq!(err, Some(RetainedTooSmall { given: 16_163 }));

@@ -3575,6 +3575,30 @@ mod tests {
         );
     }
 
+    /// An event raised to 65,280 bytes is sent as one `occurrence` when the
+    /// message limit carries it, well above the default message limit.
+    ///
+    /// Mutation: take the smaller of the message limit and 16,164 for the
+    /// occurrence cap.
+    #[test]
+    fn an_occurrence_above_the_default_message_limit_is_sent_whole_under_a_raised_limit() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, EVENT.ord, 65_280));
+        let (mut s, mut p, notes) = described_with(t, |c| {
+            c.with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+                .unwrap()
+        });
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        p.set_limit(EVENT.iface, EVENT.ord, 65_280);
+        let value = vec![0x5A; 40_000];
+        raise(&mut p, EVENT, &value);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), occurrence(EVENT, 0, 1, &value));
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
     // -- Bounded work per tick ------------------------------------------------
 
     /// The sequence numbers of the occurrences in `out`, in order.
@@ -5036,6 +5060,37 @@ mod tests {
         }
     }
 
+    /// A member raised to 40,000 bytes sends a chunk of 40,000 bytes whole
+    /// under a raised message limit, well above the default message limit,
+    /// and one byte more stops the stream with `corrupt`.
+    ///
+    /// Mutation: take the smaller of the message limit and 16,164 for the
+    /// chunk cap.
+    #[test]
+    fn a_chunk_above_the_default_message_limit_is_sent_whole_under_a_raised_limit() {
+        for (len, sent) in [(40_000, true), (40_001, false)] {
+            let mut r = stream_rig_with(Fail::None, Some(40_000), |c| {
+                c.with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+                    .expect("the largest limit")
+            });
+            r.p.set_limit(STREAMED.iface, STREAMED.ord, 65_280);
+            let claim = start_stream(&mut r);
+            let element = vec![7u8; len];
+            assert_eq!(
+                r.p.push_claim(claim, REPLY_STREAM, &element),
+                Ok(element.len())
+            );
+            let (_, out) = tick(&mut r.s);
+            assert_eq!(out.len(), 1, "{len}");
+            let want = if sent {
+                streamed_chunk(1, &element)
+            } else {
+                streamed_end(1, 1, StreamOutcome::Corrupt)
+            };
+            assert_eq!(decode(&out[0]).unwrap(), want, "{len}");
+        }
+    }
+
     /// A tick exactly `call_abandon_after` after the last activity of a
     /// stream abandons it; one just before does not.
     ///
@@ -5770,7 +5825,7 @@ mod tests {
         );
         let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![2; CALL_CEILING]));
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].len(), crate::frame::MAX_MESSAGE_LIMIT);
+        assert_eq!(out[0].len(), crate::frame::DEFAULT_MESSAGE_LIMIT);
     }
 
     /// The reply cap is the member's limit from the table when the table
@@ -6576,6 +6631,31 @@ mod tests {
         assert_eq!(again, first);
     }
 
+    /// A query raised to 65,280 bytes answers with a reply of 40,000 bytes in
+    /// one `response` when the message limit carries it.
+    ///
+    /// Mutation: take the smaller of the message limit and 16,164 for the
+    /// reply cap.
+    #[test]
+    fn a_reply_above_the_default_message_limit_is_sent_whole_under_a_raised_limit() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, QUERY.ord, 65_280));
+        let (mut s, mut p, notes) = described_with(t, |c| {
+            c.with_max_message_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+                .unwrap()
+        });
+        open(&mut s);
+        p.set_limit(QUERY.iface, QUERY.ord, 65_280);
+        let reply = vec![0x33; 40_000];
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&reply));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Reply(&reply))
+        );
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
     /// The cap applies to the last-64 ring as well: a server with no table
     /// whose replies are large closes with 1008 before the ring holds 64.
     ///
@@ -6586,7 +6666,7 @@ mod tests {
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
         let config = config(&notes)
-            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+            .with_max_retained_bytes(crate::frame::DEFAULT_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
@@ -6620,7 +6700,7 @@ mod tests {
         // The cap cannot go below 16,164 bytes. Four `response`s of 4,041
         // bytes reach it exactly, and the next one passes it.
         let config = config(&notes)
-            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+            .with_max_retained_bytes(crate::frame::DEFAULT_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);

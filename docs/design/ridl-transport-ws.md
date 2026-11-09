@@ -144,10 +144,10 @@ constants `FRAME_VERSION` (2), `SUBPROTOCOL` (`ridl-ws-v2`), `FRAME_VERSION_3`
 of a stream may send before the first `stream_credit`), `SUBPROTOCOL_V1`
 (`ridl-ws-v1`, selected only to refuse an `attach`, D-20),
 `SUBPROTOCOL_PROVIDER` (`ridl-ws-v2-provider`, the reversed role of D-20 and
-D-28), `MIN_MESSAGE_LIMIT` (294, the largest `attach`), `MAX_MESSAGE_LIMIT`,
-`ENVELOPE_BYTES` (16) and `BLOCK_BYTES` (4,096, the payload bytes of every
-`block` but the last), and `encoding_tag`, which maps an encoding name to the
-tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
+D-28), `MIN_MESSAGE_LIMIT` (294, the largest `attach`), `DEFAULT_MESSAGE_LIMIT`,
+`MAX_MESSAGE_LIMIT`, `ENVELOPE_BYTES` (16) and `BLOCK_BYTES` (4,096, the payload
+bytes of every `block` but the last), and `encoding_tag`, which maps an encoding
+name to the tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
 
 **D-3. One borrowed `Frame` enum, with the payload rules in the types.** A
 decoded frame borrows its payload and its unit name from the message. The
@@ -662,18 +662,18 @@ responses kept for duplicates are `server/calls.rs`.
   keeps the last 64 as before: a stated deviation from §11.1 item 6
   (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
-  by default, and never below 16,164 bytes, the largest message limit); when a
-  response makes the kept bytes pass the cap, the response is sent, then the
-  session closes with 1008, which `serve` returns as
-  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
-  server with no table, or one whose members have no bound, closes with 1008
-  when its replies are large enough to pass the cap before the ring holds 64. At
-  the default message limit, 64 replies are at most 64 × 16,164 = 1,034,496
-  bytes, below the 16 MiB default cap; an embedder that lowers the cap keeps it
-  at least 64 times its message limit, lowering the message limit too, so that
-  the ring alone bounds it. Expired responses also go when a `request` arrives,
-  before its `seq` is placed. Closing is observable, where dropping the oldest
-  response would silently break item 6.
+  by default, and never below 16,164 bytes, the default message limit, nor below
+  the configured message limit); when a response makes the kept bytes pass the
+  cap, the response is sent, then the session closes with 1008, which `serve`
+  returns as `Ended::ServerClosed(1008)`. The cap applies to the last 64 as
+  well, so a server with no table, or one whose members have no bound, closes
+  with 1008 when its replies are large enough to pass the cap before the ring
+  holds 64. At the default message limit, 64 replies are at most 64 × 16,164 =
+  1,034,496 bytes, below the 16 MiB default cap; an embedder that lowers the cap
+  keeps it at least 64 times its message limit, lowering the message limit too,
+  so that the ring alone bounds it. Expired responses also go when a `request`
+  arrives, before its `seq` is placed. Closing is observable, where dropping the
+  oldest response would silently break item 6.
 
 **The provided direction.** In the provided session (D-28) the calls run the
 other way: the local ports receive a call, and the remote client answers it. The
@@ -683,8 +683,9 @@ code is `server/provided/calls.rs`.
   `Handler::serve` once for each command and query of the backend's member table
   (D-28). A refusal by the handler records `Note::PortRefused` and closes the
   session with 1011. Each tick, the session first expires overdue calls, then
-  takes claims from `Handler::next_claim` into a buffer of the call ceiling
-  (16,128 bytes) while fewer than 64 calls are in flight, and sends one
+  takes claims from `Handler::next_claim` into a buffer that holds the largest
+  limit of a command or query in the member table, 16,128 bytes at least and
+  65,280 at most, while fewer than 64 calls are in flight, and sends one
   `request` for each. The `seq` of the `request` is the session's counter from
   1, the `stamp` is the claim's, and the payload is the claim's bytes.
 - **The cap of 64.** At most 64 calls are in flight. A claim beyond the cap is
@@ -931,14 +932,14 @@ the connection is dropped. A backend port that reports `Detached` from any call
 ends the session with close 1001, because the provider is going away. `serve`
 returns an `Ended`:
 
-| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, the client had not sent `attach` (or, in a provided session, `attached`) that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                                                 |
-| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000. From `serve_provided_selected`, a selected table exceeding message capacity or an unencodable attach answers HTTP 400 before upgrade |
+| `Ended`              | When                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ClientClosed(code)` | the client sent a close frame; the server answered with the same code, or 1000 when the client's carried none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `ServerClosed(code)` | the server sent a close frame (D-23)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `Rejected`           | the handshake was answered `400`, `403`, `404` or `409` (D-19, D-20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, the client had not sent `attach` (or, in a provided session, `attached`) that long after the upgrade (D-22), no message arrived for that long after it, or a write waited that long; no close frame is sent                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26), or its retained-bytes cap is below its message limit (`Note::RetainedBelowMessageLimit`; `serve` and the provided entry points check it before the member table, `serve_selected` records the member note first); from `serve`, returned before the handshake, nothing is read or sent. From `serve_selected`, also an unsupported `max_version` (before the handshake) or a selected backend that cannot serve the negotiated version or the message limit (D-11); then the `attach` is answered `refused` and the close is 1000. From `serve_provided_selected`, a selected table exceeding message capacity, a retained cap below the message limit, or an unencodable attach answers HTTP 400 before upgrade |
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
@@ -957,22 +958,28 @@ whose messages the `Config` cannot carry, with the limit it needs; `serve`
 records it before the handshake. `serve_selected` records it after selection
 when ordinary attach checks pass, with `refused(range)` or, when the capability
 check also fails, `refused(frame_version_unsupported)`. Both return
-`ConfigRefused`, D-26).
+`ConfigRefused`, D-26) and `RetainedBelowMessageLimit` (the retained-bytes cap
+is below the message limit; `serve` records it alone and returns before it reads
+the member table, and `serve_selected` records it after `MessageLimitTooSmall`,
+D-26).
 
 ### `Config`
 
 `Config` (`server/config.rs`) has four public durations — `poll_interval` (20
 ms), `ping_interval` (5 s), `liveness_timeout` (15 s) and `call_abandon_after`
 (60 s) — and four settings behind methods: `with_max_message_bytes` (16,164
-bytes, `MAX_MESSAGE_LIMIT`, the largest data-plane message: the limit can only
-be lowered, and a value outside the range 294 to 16,164 is refused with
-`LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value below 16,164 is
-refused with `RetainedTooSmall`, whatever the message limit, so that one
-response of the largest message never closes a session on its own, and a session
-applies the cap as set), `with_record` and `with_origin_check`. A
-`ping_interval` at or above `liveness_timeout` ends an idle client's session
-before the first ping, because a client that is not pinged sends nothing; the
-rustdoc says so.
+bytes by default, `DEFAULT_MESSAGE_LIMIT`; the limit can be lowered, or raised
+to carry a member whose limit is above 16,128 bytes, and a value outside the
+range 294 to 65,316, `MAX_MESSAGE_LIMIT`, the largest data-plane message, is
+refused with `LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value
+below 16,164, `DEFAULT_MESSAGE_LIMIT`, is refused with `RetainedTooSmall`, and a
+cap below the configured message limit is refused where the configuration is
+used, with `Note::RetainedBelowMessageLimit` and `Ended::ConfigRefused`, so that
+one response of the largest message never closes a session on its own whatever
+the order of the builder calls, and a session applies the cap as set),
+`with_record` and `with_origin_check`. A `ping_interval` at or above
+`liveness_timeout` ends an idle client's session before the first ping, because
+a client that is not pinged sends nothing; the rustdoc says so.
 
 ### The sizes
 
@@ -1002,34 +1009,48 @@ bytes for a signal and an event, 16,128 for a command and a query, 65,280 for a
   `Corrupt` (D-29, D-16). The arguments of a local call longer than the member's
   limit are refused to the local caller as `Corrupt`, and no `request` is sent.
 
-**The message limit.** `MAX_MESSAGE_LIMIT` is 36 + 16,128 = 16,164 bytes: the
-largest header with its envelope of a message that carries a payload, plus the
-default ceiling of a command and a query, the largest payload one message
-carries (ADR-0030 decision 10). It is the default of `max_message_bytes` and the
-largest value accepted, and the smallest `max_retained_bytes` accepted.
+**The message limit.** `DEFAULT_MESSAGE_LIMIT` is 36 + 16,128 = 16,164 bytes:
+the largest header with its envelope of a message that carries a payload, plus
+the default ceiling of a command and a query. It is the default of
+`max_message_bytes`, and it carries every catalog whose members keep their
+default ceilings. `MAX_MESSAGE_LIMIT` is 36 + 65,280 = 65,316 bytes: the same
+header plus the largest limit that a `[limits.interaction]` entry gives a member
+of any kind (ADR-0030 decisions 10 and 18). It is the largest value that
+`max_message_bytes` accepts. `DEFAULT_MESSAGE_LIMIT` is the smallest
+`max_retained_bytes` the setter accepts; `serve` also refuses a `Config` whose
+retained cap is below its message limit.
 
 **The `Config` check.** `serve_selected` runs the same check after selection, as
 D-11 says: it answers `refused(range)` (or `frame_version_unsupported` if the
 capability check also fails) with close 1000 instead of returning before the
 handshake, because the backend is not known earlier. `range` is the reason for a
 limit the receiving side cannot carry, here the message limit of the `Config`
-(frame specification §6.1). With a member table, `serve` first checks that
-`max_message_bytes` is at least 36 plus the largest limit over the members of
-what one message carries: each member's limit, and for a `fixed` at most 4,130
-bytes minus 36, because a `fixed` that one message cannot carry crosses in
-blocks and a block message is at most 4,130 bytes (frame specification §11.1,
-"Binding version 2"). So a `fixed` counts the smaller of 36 plus its limit and
-4,130. A limit below that cannot carry a payload the catalog allows, which is a
-configuration error, not a session event: `serve` records `MessageLimitTooSmall`
-with the member and the limit it needs, returns `Ended::ConfigRefused` before
-the opening handshake without reading the connection, and the connection closes
-when it is dropped. This preflight sends no `attached` reply. The selected path
-uses the existing `range` reason; no new wire reason is added. The default
-`Config` carries every catalog, a catalog with a large `fixed` included, so a
-binding never refuses an allowed interaction at attach (ADR-0030 decision 20).
-Without a member table there is no `Config` check: the default ceiling of the
-frame's `kind`, under the message limit, bounds what the session sends and what
-a `request` carries.
+(frame specification §6.1). `serve` first checks that `max_retained_bytes` is at
+least `max_message_bytes`, whatever the order of the builder calls, and records
+`Note::RetainedBelowMessageLimit` if it is not. With a member table, `serve`
+then checks that `max_message_bytes` is at least 36 plus the largest limit over
+the members of what one message carries: each member's limit, and for a `fixed`
+at most 4,130 bytes minus 36, because a `fixed` that one message cannot carry
+crosses in blocks and a block message is at most 4,130 bytes (frame
+specification §11.1, "Binding version 2"). So a `fixed` counts the smaller of 36
+plus its limit and 4,130. A limit below that cannot carry a payload the catalog
+allows, which is a configuration error, not a session event: `serve` records
+`MessageLimitTooSmall` with the member and the limit it needs, returns
+`Ended::ConfigRefused` before the opening handshake without reading the
+connection, and the connection closes when it is dropped. This preflight sends
+no `attached` reply. The selected path uses the existing `range` reason; no new
+wire reason is added. The default `Config` carries every catalog whose members
+keep their default ceilings, a catalog with a large `fixed` included. A catalog
+with a signal, an event, a command or a query that an entry raises above 16,128
+bytes needs a larger message limit, and the default `Config` refuses it before
+the handshake with the note that names the member; the rustdoc of the note and
+of `Ended::ConfigRefused` says to raise the limit with
+`Config::with_max_message_bytes`, up to 65,316 bytes. The binding does not send
+these members in blocks, and with a message limit of 65,316 bytes it never
+refuses an allowed interaction at attach (ADR-0030 decisions 15 and 20). Without
+a member table there is no `Config` check: the default ceiling of the frame's
+`kind`, under the message limit, bounds what the session sends and what a
+`request` carries.
 
 The check uses one header size for every member, 36 bytes, the largest
 data-plane header with its envelope. A `fixed` crosses only in a `publish`,
@@ -1121,7 +1142,7 @@ Fragmented messages are reassembled, also when a frame is split across socket
 reads. A data message whose total size passes `max_message_bytes` closes with
 1009 as soon as the length is known, before it is buffered; the limit applies to
 data messages, not to control frames, which RFC 6455 caps at 125 bytes.
-`max_message_bytes` is at least 294 and at most 16,164 (§11.1 "The sizes").
+`max_message_bytes` is at least 294 and at most 65,316 (§11.1 "The sizes").
 Client frames that are not masked close with 1002 (RFC 6455 §5.1). A ping is
 answered with a pong carrying its payload.
 
