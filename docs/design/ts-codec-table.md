@@ -310,7 +310,7 @@ rule per typl kind (D-4):
 | typl kind                       | `flatc` object API form                           | Plain object form                                | Conversion                                                                                                                                                                                                                                                                    |
 | ------------------------------- | ------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | named scalar as a payload       | `<Name>Box` table, `value`                        | the branded scalar                               | unbox or box                                                                                                                                                                                                                                                                  |
-| named scalar as a field         | the backing scalar                                | the branded scalar                               | a type assertion                                                                                                                                                                                                                                                              |
+| named scalar as a field         | the backing scalar                                | the branded scalar                               | `make<Name>Unchecked` when the domain module has one, otherwise a type assertion                                                                                                                                                                                              |
 | enum                            | `bigint` field (the `.fbs` width is `long`)       | numeric `enum`; `<Name>Value` for an `open` enum | `BigInt` to pack; to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared value of a strict enum; an `open` enum unpacks an undeclared value to `{ unknown: n }` and refuses one beyond the safe integers; as a payload, through `<Name>Box` |
 | enum set                        | integer field (`bigint` for a 64-bit width)       | branded `number` or `bigint`                     | to unpack, `unpack<Name>`, which throws a `RuleError` (rule `variant`) for an undeclared bit of a strict set; an `open` set keeps every bit and refuses a value outside its width on encode (rule `range`); as a payload, through `<Name>Box`                                 |
 | struct                          | `<Name>T` class                                   | `interface` with named fields                    | field by field; the `flatc` member is the lower camel case of `snake_case(declared)`, with the `_` `flatc` appends to a TypeScript keyword (`default_`, `new_`, `class_`)                                                                                                     |
@@ -335,24 +335,31 @@ reports a value the buffer leaves out as absent. An `open` enum keeps an
 undeclared value, decodes an absent value to its zero member when it declares
 one and to `{ unknown: 0 }` when it does not, and throws the same `variant`
 error only for a value beyond the safe integers. `decode<Name>` is for bytes the
-codec has verified. `encode<Name>` builds what it is given, so that a payload
-the codec rejects can be built. The domain module's `make<Name>` checks the
-range, step, length and pattern of a named scalar and throws a
-`ConstraintError`; `make<Name>Unchecked` does not check. A string length counts
-code points, and a bytes length counts bytes. The pattern check uses the
-checker's ECMA-262 semantics without the `u` flag, so it can disagree with the
-Rust `regex` crate that the wasm codec uses (driftsys/ridl#597).
+codec has verified, so it builds a named scalar with `make<Name>Unchecked` where
+the domain module has one and checks nothing again. `encode<Name>` builds what
+it is given, so that a payload the codec rejects can be built. The domain
+module's `make<Name>` checks the range, step, length and pattern of a named
+scalar and throws a `ConstraintError`; `make<Name>Unchecked` does not check. A
+string length counts code points, and a bytes length counts bytes. The pattern
+check uses the checker's ECMA-262 semantics without the `u` flag, so it can
+disagree with the Rust `regex` crate that the wasm codec uses
+(driftsys/ridl#597). The test `examples/cabin/web/check_test.ts` compares
+`make<Name>` with the wasm codec's `verify` over the values of the constrained
+types of `examples/cabin/cabin.ridl`, and pins each known disagreement of the
+pattern rule.
 
 ## Foreign declarations (D-14)
 
 - A payload type that reaches a struct, a union or an enum of another package is
   refused, with a message that names the payload type, the field, arm or element
   (or the interaction) that reaches it, and the foreign declaration.
-- A foreign named scalar at a field, arm or element position is converted by a
-  type assertion; a foreign enum set is converted by a function of the file that
-  checks the value (a strict set refuses an undeclared bit on read, an `open`
-  set refuses a value outside its width on encode). The file imports that
-  package's `.js` module as a type namespace.
+- A foreign named scalar at a field, arm or element position is converted by
+  that package's `make<Name>Unchecked` when its module emits one, and by a type
+  assertion otherwise; a foreign enum set is converted by a function of the file
+  that checks the value (a strict set refuses an undeclared bit on read, an
+  `open` set refuses a value outside its width on encode). The file imports that
+  package's `.js` module as a value namespace when it calls such a function, and
+  as a type namespace when it does not.
 - A foreign named scalar or enum set used as a payload root goes through its own
   package's codec file, because its `<Name>Box` table exists only in that
   package's schema: the file imports `./<package>.codec.js` and its table entry

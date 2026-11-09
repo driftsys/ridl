@@ -6,8 +6,8 @@ import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
 import { CodecError } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
-import type * as t from "./veh.common.js";
-import type * as ridl_std from "./ridl.std.js";
+import * as t from "./veh.common.js";
+import * as ridl_std from "./ridl.std.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
 import * as fb from "./veh/common.js";
@@ -88,7 +88,7 @@ export function encodeSpeed(value: t.Speed): Uint8Array {
 }
 /** Decodes a `veh.common.Speed` payload the codec has verified. */
 export function decodeSpeed(bytes: Uint8Array): t.Speed {
-  return fb.SpeedBox.getRootAsSpeedBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Speed;
+  return t.makeSpeedUnchecked(fb.SpeedBox.getRootAsSpeedBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.common.Temperature` payload. */
@@ -99,7 +99,7 @@ export function encodeTemperature(value: t.Temperature): Uint8Array {
 }
 /** Decodes a `veh.common.Temperature` payload the codec has verified. */
 export function decodeTemperature(bytes: Uint8Array): t.Temperature {
-  return fb.TemperatureBox.getRootAsTemperatureBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Temperature;
+  return t.makeTemperatureUnchecked(fb.TemperatureBox.getRootAsTemperatureBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.common.RPM` payload. */
@@ -110,7 +110,7 @@ export function encodeRPM(value: t.RPM): Uint8Array {
 }
 /** Decodes a `veh.common.RPM` payload the codec has verified. */
 export function decodeRPM(bytes: Uint8Array): t.RPM {
-  return fb.RPMBox.getRootAsRPMBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.RPM;
+  return t.makeRPMUnchecked(fb.RPMBox.getRootAsRPMBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.common.Ratio` payload. */
@@ -121,7 +121,7 @@ export function encodeRatio(value: t.Ratio): Uint8Array {
 }
 /** Decodes a `veh.common.Ratio` payload the codec has verified. */
 export function decodeRatio(bytes: Uint8Array): t.Ratio {
-  return fb.RatioBox.getRootAsRatioBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Ratio;
+  return t.makeRatioUnchecked(fb.RatioBox.getRootAsRatioBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.common.Counter` payload. */
@@ -132,7 +132,7 @@ export function encodeCounter(value: t.Counter): Uint8Array {
 }
 /** Decodes a `veh.common.Counter` payload the codec has verified. */
 export function decodeCounter(bytes: Uint8Array): t.Counter {
-  return fb.CounterBox.getRootAsCounterBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Counter;
+  return t.makeCounterUnchecked(fb.CounterBox.getRootAsCounterBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.common.Gain` payload. */
@@ -143,7 +143,7 @@ export function encodeGain(value: t.Gain): Uint8Array {
 }
 /** Decodes a `veh.common.Gain` payload the codec has verified. */
 export function decodeGain(bytes: Uint8Array): t.Gain {
-  return fb.GainBox.getRootAsGainBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Gain;
+  return t.makeGainUnchecked(fb.GainBox.getRootAsGainBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.common.GearPosition` payload. */
@@ -221,8 +221,8 @@ function packSpeedLimitPayload(value: t.SpeedLimitPayload): fb.SpeedLimitPayload
 }
 function unpackSpeedLimitPayload(object: fb.SpeedLimitPayloadT): t.SpeedLimitPayload {
   return {
-    limit: object.limit as t.Speed,
-    actual: object.actual as t.Speed,
+    limit: t.makeSpeedUnchecked(object.limit),
+    actual: t.makeSpeedUnchecked(object.actual),
   };
 }
 
@@ -247,11 +247,11 @@ function packDriverProfile(value: t.DriverProfile): fb.DriverProfileT {
 }
 function unpackDriverProfile(object: fb.DriverProfileT): t.DriverProfile {
   const result: t.DriverProfile = {
-    name: object.name as ridl_std.Name,
-    speed: object.speed as t.Speed,
+    name: ridl_std.makeNameUnchecked(object.name as string),
+    speed: t.makeSpeedUnchecked(object.speed),
     gears: object.gears,
   };
-  if (object.override !== null) result.override = object.override as t.Speed;
+  if (object.override !== null) result.override = t.makeSpeedUnchecked(object.override);
   return result;
 }
 
@@ -277,9 +277,9 @@ function packSensorBounds(value: t.SensorBounds): fb.SensorBoundsT {
 function unpackSensorBounds(object: fb.SensorBoundsT): t.SensorBounds {
   return {
     range: object.range === null ? absent("veh.common.SensorBounds", "range") : unpackSensorBoundsRange(object.range),
-    readings: object.readings.map((element) => element as t.Speed),
-    labels: object.labels.map((element) => element as ridl_std.Label),
-    meta: object.meta.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),
+    readings: object.readings.map((element) => t.makeSpeedUnchecked(element)),
+    labels: object.labels.map((element) => ridl_std.makeLabelUnchecked(element as string)),
+    meta: object.meta.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),
   };
 }
 
@@ -332,8 +332,8 @@ function packSensorReading(value: t.SensorReading): fb.SensorReadingT {
 }
 function unpackSensorReading(object: fb.SensorReadingT): t.SensorReading {
   return {
-    value: object.value as t.Speed,
-    timestamp: object.timestamp as ridl_std.Timestamp,
+    value: t.makeSpeedUnchecked(object.value),
+    timestamp: ridl_std.makeTimestampUnchecked(object.timestamp),
   };
 }
 
@@ -356,8 +356,8 @@ function packSensorFault(value: t.SensorFault): fb.SensorFaultT {
 }
 function unpackSensorFault(object: fb.SensorFaultT): t.SensorFault {
   return {
-    code: object.code as t.Counter,
-    message: object.message as ridl_std.Message,
+    code: t.makeCounterUnchecked(object.code),
+    message: ridl_std.makeMessageUnchecked(object.message as string),
   };
 }
 
@@ -440,7 +440,7 @@ export function encodeRemark(value: t.Remark): Uint8Array {
 }
 /** Decodes a `veh.common.Remark` payload the codec has verified. */
 export function decodeRemark(bytes: Uint8Array): t.Remark {
-  return fb.RemarkBox.getRootAsRemarkBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Remark;
+  return t.makeRemarkUnchecked(fb.RemarkBox.getRootAsRemarkBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
 }
 
 /** Encodes a `veh.common.Note` payload. */
@@ -461,7 +461,7 @@ function packNote(value: t.Note): fb.NoteT {
 }
 function unpackNote(object: fb.NoteT): t.Note {
   return {
-    text: object.text as t.Remark,
+    text: t.makeRemarkUnchecked(object.text as string),
   };
 }
 
@@ -485,7 +485,7 @@ function packBoundsSummary(value: t.BoundsSummary): fb.BoundsSummaryT {
 function unpackBoundsSummary(object: fb.BoundsSummaryT): t.BoundsSummary {
   return {
     range: object.range === null ? absent("veh.common.BoundsSummary", "range") : unpackBoundsSummaryRange(object.range),
-    readings: object.readings.map((element) => element as t.Speed),
+    readings: object.readings.map((element) => t.makeSpeedUnchecked(element)),
   };
 }
 
@@ -520,12 +520,12 @@ function unpackExtras(object: fb.ExtrasT): t.Extras {
     blob: Uint8Array.from(object.blob) as Uint8Array,
     readings: object.readings.map((element) => unpackSensorReading(element)),
     gears: object.gears.map((element) => unpackGearPosition(element)),
-    maybe: object.maybe.map((element) => element as t.Speed),
+    maybe: object.maybe.map((element) => t.makeSpeedUnchecked(element)),
     tag: Uint8Array.from(object.tag) as Uint8Array,
-    notes: object.notes.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),
-    default: object.default_ as t.Counter,
-    new: object.new_ as t.Counter,
-    class: object.class_ as t.Counter,
+    notes: object.notes.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),
+    default: t.makeCounterUnchecked(object.default_),
+    new: t.makeCounterUnchecked(object.new_),
+    class: t.makeCounterUnchecked(object.class_),
   };
 }
 
@@ -553,7 +553,7 @@ function packPick(value: t.Pick): fb.PickT {
 function unpackPick(object: fb.PickT): t.Pick {
   switch (object.valueType) {
     case fb.PickUnion.speed:
-      return { kind: "speed", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };
+      return { kind: "speed", value: t.makeSpeedUnchecked((object.value as fb.PickSpeedBoxT).value) };
     case fb.PickUnion.gear:
       return { kind: "gear", value: unpackGearPosition((object.value as fb.PickGearBoxT).value) };
     case fb.PickUnion.reading:
@@ -570,7 +570,7 @@ function packSensorBoundsRange(value: { min: t.Speed; max: t.Speed }): fb.Sensor
   return tuple;
 }
 function unpackSensorBoundsRange(object: fb.SensorBoundsRangeT): { min: t.Speed; max: t.Speed } {
-  return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+  return { min: t.makeSpeedUnchecked(object.field1), max: t.makeSpeedUnchecked(object.field2) };
 }
 
 function packBoundsSummaryRange(value: { min: t.Speed; max: t.Speed }): fb.BoundsSummaryRangeT {
@@ -580,7 +580,7 @@ function packBoundsSummaryRange(value: { min: t.Speed; max: t.Speed }): fb.Bound
   return tuple;
 }
 function unpackBoundsSummaryRange(object: fb.BoundsSummaryRangeT): { min: t.Speed; max: t.Speed } {
-  return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+  return { min: t.makeSpeedUnchecked(object.field1), max: t.makeSpeedUnchecked(object.field2) };
 }
 
 function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.ExtrasWideT {
@@ -590,7 +590,7 @@ function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.
   return tuple;
 }
 function unpackExtrasWide(object: fb.ExtrasWideT): { big: bigint; sparse: readonly t.Speed[] } {
-  return { big: object.field1, sparse: object.field2.map((element) => element as t.Speed) };
+  return { big: object.field1, sparse: object.field2.map((element) => t.makeSpeedUnchecked(element)) };
 }
 
 /** Encodes a `veh.common.SensorsSetLimitParams` payload. */
@@ -611,7 +611,7 @@ function packSensorsSetLimitParams(value: SensorsSetLimitParams): fb.SensorsSetL
   return tuple;
 }
 function unpackSensorsSetLimitParams(object: fb.SensorsSetLimitParamsT): SensorsSetLimitParams {
-  return { limit: object.field1 as t.Speed, actual: object.field2 as t.Speed };
+  return { limit: t.makeSpeedUnchecked(object.field1), actual: t.makeSpeedUnchecked(object.field2) };
 }
 
 /** Encodes a `veh.common.SensorsSpanParams` payload. */
@@ -651,7 +651,7 @@ function packSensorsSpanReply(value: SensorsSpanReply): fb.SensorsSpanReplyT {
   return tuple;
 }
 function unpackSensorsSpanReply(object: fb.SensorsSpanReplyT): SensorsSpanReply {
-  return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+  return { min: t.makeSpeedUnchecked(object.field1), max: t.makeSpeedUnchecked(object.field2) };
 }
 
 const codecCounter: PayloadCodec<t.Counter> = { type: "veh.common.Counter", encode: encodeCounter, decode: decodeCounter };

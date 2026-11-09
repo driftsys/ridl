@@ -119,7 +119,7 @@ fn codec_barrel_imports_keep_domain_modules_distinct() {
         "the two-component comment must name the directory of the module:\n{source}"
     );
     assert!(
-        source.contains("import type * as t from \"./veh.common.js\";"),
+        source.contains("import * as t from \"./veh.common.js\";"),
         "the two-component domain path must stay unchanged:\n{source}"
     );
 }
@@ -574,7 +574,7 @@ fn the_common_codec_module() {
         "{source}"
     );
     assert!(
-        source.contains("return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };"),
+        source.contains("return { min: t.makeSpeedUnchecked(object.field1), max: t.makeSpeedUnchecked(object.field2) };"),
         "{source}"
     );
     // The array, the map and the optional field.
@@ -583,18 +583,19 @@ fn the_common_codec_module() {
         "{source}"
     );
     assert!(
-        source.contains("readings: object.readings.map((element) => element as t.Speed),"),
+        source
+            .contains("readings: object.readings.map((element) => t.makeSpeedUnchecked(element)),"),
         "{source}"
     );
     assert!(source.contains("object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = key; entry.value = value; return entry; });"), "{source}");
-    assert!(source.contains("meta: object.meta.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),"), "{source}");
+    assert!(source.contains("meta: object.meta.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),"), "{source}");
     assert!(
         source.contains("object.override = value.override === undefined ? null : value.override;"),
         "{source}"
     );
     assert!(
         source.contains(
-            "if (object.override !== null) result.override = object.override as t.Speed;"
+            "if (object.override !== null) result.override = t.makeSpeedUnchecked(object.override);"
         ),
         "{source}"
     );
@@ -649,15 +650,15 @@ fn every_bounded_root_of_the_fixture_has_a_codec_and_every_live_interaction_an_e
 fn a_foreign_named_scalar_converts_by_assertion() {
     let source = module(&common_model(), "veh.common");
     assert!(
-        source.contains("import type * as ridl_std from \"./ridl.std.js\";"),
+        source.contains("import * as ridl_std from \"./ridl.std.js\";"),
         "{source}"
     );
     assert!(
-        source.contains("name: object.name as ridl_std.Name,"),
+        source.contains("name: ridl_std.makeNameUnchecked(object.name as string),"),
         "{source}"
     );
     assert!(
-        source.contains("timestamp: object.timestamp as ridl_std.Timestamp,"),
+        source.contains("timestamp: ridl_std.makeTimestampUnchecked(object.timestamp),"),
         "{source}"
     );
 }
@@ -960,16 +961,16 @@ fn the_extras_and_pick_conversions() {
         "  object.gears = value.gears.map((element) => BigInt(element));",
         "    gears: object.gears.map((element) => unpackGearPosition(element)),",
         "  object.maybe = value.maybe === undefined ? [] : [...value.maybe];",
-        "    maybe: object.maybe.map((element) => element as t.Speed),",
+        "    maybe: object.maybe.map((element) => t.makeSpeedUnchecked(element)),",
         "  object.tag = value.tag === undefined ? [] : Array.from(value.tag);",
         "    tag: Uint8Array.from(object.tag) as Uint8Array,",
         "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = key; entry.value = value; return entry; });",
-        "    notes: object.notes.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),",
+        "    notes: object.notes.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),",
         "  object.default_ = value.default;",
-        "    new: object.new_ as t.Counter,",
+        "    new: t.makeCounterUnchecked(object.new_),",
         "  object.class_ = value.class;",
         "      return new fb.PickT(fb.PickUnion.speed, new fb.PickSpeedBoxT(value.value));",
-        "      return { kind: \"speed\", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };",
+        "      return { kind: \"speed\", value: t.makeSpeedUnchecked((object.value as fb.PickSpeedBoxT).value) };",
         "      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(BigInt(value.value)));",
         "      return { kind: \"gear\", value: unpackGearPosition((object.value as fb.PickGearBoxT).value) };",
     ] {
@@ -1186,10 +1187,7 @@ fn an_interface_named_as_a_foreign_type_alias_is_refused() {
     });
     let source = module(&model, "veh.common");
     assert!(!source.contains("ridl_std_codec"), "{source}");
-    assert!(
-        source.contains("import type * as ridl_std from"),
-        "{source}"
-    );
+    assert!(source.contains("import * as ridl_std from"), "{source}");
     rename_sensors(&mut model, "ridl_std");
     assert_eq!(
         refusal(&model),
@@ -2674,4 +2672,68 @@ interface Feed {
     );
     assert!(!doc.contains("{@link t.RAW}"), "{doc}");
     assert!(!doc.contains("{@link t.DEFAULT}"), "{doc}");
+}
+
+/// The package and the model of the workspace at `relative`, compiled as the
+/// CLI does.
+fn workspace(relative: &str, package_name: &str) -> (v2::Package, v1::Model) {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+    let output = ridlc::compile_workspace(&mut db, &entry)
+        .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    let package = output
+        .checked
+        .iter()
+        .find(|checked| checked.ir.name == package_name)
+        .unwrap_or_else(|| panic!("{relative} declares {package_name}"))
+        .ir
+        .clone();
+    let model = codegen::lower(&package, &[]);
+    (package, model)
+}
+
+/// The decoder calls `make<Name>Unchecked` for a named scalar exactly when the
+/// domain module emits that function, and keeps the type assertion otherwise.
+#[test]
+fn the_decoder_calls_the_unchecked_constructor_where_the_domain_module_has_one() {
+    for (relative, package_name, must_have_codec) in [
+        ("../../examples/cabin", "veh.cabin", true),
+        ("tests/fixtures/ctor", "ctor", false),
+    ] {
+        let (package, model) = workspace(relative, package_name);
+        let domain = ridl_backend_ts::generate(&package)
+            .expect("the domain module generates")
+            .source;
+        let Some(codec) = generate_codec(&model, "base").expect("the codec generates") else {
+            assert!(!must_have_codec, "{package_name} has a codec module");
+            continue;
+        };
+        let mut scalars = 0;
+        for decl in &package.decls {
+            let Some(v2::decl::Kind::TypeDef(_)) = &decl.kind else {
+                continue;
+            };
+            let name = &decl.name;
+            // A scalar is a payload root when the codec module decodes it.
+            if !codec.source.contains(&format!("function decode{name}(")) {
+                continue;
+            }
+            scalars += 1;
+            let unchecked = domain.contains(&format!("function make{name}Unchecked("));
+            assert_eq!(
+                codec.source.contains(&format!("make{name}Unchecked(")),
+                unchecked,
+                "{name}: the decoder and the domain module disagree"
+            );
+            assert_eq!(
+                codec.source.contains(&format!(" as t.{name};")),
+                !unchecked,
+                "{name}: the decoder keeps an assertion for a type with no unchecked form"
+            );
+        }
+        assert!(
+            scalars > 0,
+            "{package_name} has no scalar payload to compare"
+        );
+    }
 }

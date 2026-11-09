@@ -6,7 +6,7 @@ import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
 import { CodecError } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
-import type * as t from "./veh.cabin.js";
+import * as t from "./veh.cabin.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
 import * as fb from "./veh/cabin.js";
@@ -28,12 +28,18 @@ export const CATALOG_HASH: Uint8Array = Uint8Array.from([89, 185, 249, 36, 131, 
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "veh.cabin.Average",
+  "veh.cabin.Block",
+  "veh.cabin.Code",
   "veh.cabin.Diagnostic",
+  "veh.cabin.Digited",
+  "veh.cabin.Glyph",
   "veh.cabin.Health",
   "veh.cabin.Level",
   "veh.cabin.Setpoint",
   "veh.cabin.Subsystems",
+  "veh.cabin.Tag",
   "veh.cabin.Temperature",
+  "veh.cabin.Tenth",
   "veh.cabin.Warning",
   "veh.cabin.Window",
 ] as const;
@@ -48,7 +54,7 @@ export function encodeTemperature(value: t.Temperature): Uint8Array {
 }
 /** Decodes a `veh.cabin.Temperature` payload the codec has verified. */
 export function decodeTemperature(bytes: Uint8Array): t.Temperature {
-  return fb.TemperatureBox.getRootAsTemperatureBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Temperature;
+  return t.makeTemperatureUnchecked(fb.TemperatureBox.getRootAsTemperatureBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.cabin.Level` payload. */
@@ -59,7 +65,7 @@ export function encodeLevel(value: t.Level): Uint8Array {
 }
 /** Decodes a `veh.cabin.Level` payload the codec has verified. */
 export function decodeLevel(bytes: Uint8Array): t.Level {
-  return fb.LevelBox.getRootAsLevelBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Level;
+  return t.makeLevelUnchecked(fb.LevelBox.getRootAsLevelBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.cabin.Window` payload. */
@@ -70,7 +76,7 @@ export function encodeWindow(value: t.Window): Uint8Array {
 }
 /** Decodes a `veh.cabin.Window` payload the codec has verified. */
 export function decodeWindow(bytes: Uint8Array): t.Window {
-  return fb.WindowBox.getRootAsWindowBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Window;
+  return t.makeWindowUnchecked(fb.WindowBox.getRootAsWindowBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.cabin.Average` payload. */
@@ -81,7 +87,7 @@ export function encodeAverage(value: t.Average): Uint8Array {
 }
 /** Decodes a `veh.cabin.Average` payload the codec has verified. */
 export function decodeAverage(bytes: Uint8Array): t.Average {
-  return fb.AverageBox.getRootAsAverageBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Average;
+  return t.makeAverageUnchecked(fb.AverageBox.getRootAsAverageBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
 /** Encodes a `veh.cabin.Health` payload. */
@@ -122,7 +128,7 @@ function packWarning(value: t.Warning): fb.WarningT {
 }
 function unpackWarning(object: fb.WarningT): t.Warning {
   return {
-    code: object.code as t.Level,
+    code: t.makeLevelUnchecked(object.code),
     health: unpackHealth(object.health),
   };
 }
@@ -167,7 +173,7 @@ function unpackDiagnostic(object: fb.DiagnosticT): t.Diagnostic {
   return {
     covers: unpackSubsystems(object.covers),
     health: unpackHealth(object.health),
-    loop: object.loop as t.Level,
+    loop: t.makeLevelUnchecked(object.loop),
   };
 }
 
@@ -179,7 +185,73 @@ export function encodeSetpoint(value: t.Setpoint): Uint8Array {
 }
 /** Decodes a `veh.cabin.Setpoint` payload the codec has verified. */
 export function decodeSetpoint(bytes: Uint8Array): t.Setpoint {
-  return fb.SetpointBox.getRootAsSetpointBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Setpoint;
+  return t.makeSetpointUnchecked(fb.SetpointBox.getRootAsSetpointBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+/** Encodes a `veh.cabin.Tenth` payload. */
+export function encodeTenth(value: t.Tenth): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.TenthBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Tenth` payload the codec has verified. */
+export function decodeTenth(bytes: Uint8Array): t.Tenth {
+  return t.makeTenthUnchecked(fb.TenthBox.getRootAsTenthBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
+}
+
+/** Encodes a `veh.cabin.Tag` payload. */
+export function encodeTag(value: t.Tag): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.TagBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Tag` payload the codec has verified. */
+export function decodeTag(bytes: Uint8Array): t.Tag {
+  return t.makeTagUnchecked(fb.TagBox.getRootAsTagBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
+}
+
+/** Encodes a `veh.cabin.Code` payload. */
+export function encodeCode(value: t.Code): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.CodeBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Code` payload the codec has verified. */
+export function decodeCode(bytes: Uint8Array): t.Code {
+  return t.makeCodeUnchecked(fb.CodeBox.getRootAsCodeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
+}
+
+/** Encodes a `veh.cabin.Glyph` payload. */
+export function encodeGlyph(value: t.Glyph): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.GlyphBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Glyph` payload the codec has verified. */
+export function decodeGlyph(bytes: Uint8Array): t.Glyph {
+  return t.makeGlyphUnchecked(fb.GlyphBox.getRootAsGlyphBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
+}
+
+/** Encodes a `veh.cabin.Digited` payload. */
+export function encodeDigited(value: t.Digited): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.DigitedBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Digited` payload the codec has verified. */
+export function decodeDigited(bytes: Uint8Array): t.Digited {
+  return t.makeDigitedUnchecked(fb.DigitedBox.getRootAsDigitedBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as string);
+}
+
+/** Encodes a `veh.cabin.Block` payload. */
+export function encodeBlock(value: t.Block): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.BlockBoxT(Array.from(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Block` payload the codec has verified. */
+export function decodeBlock(bytes: Uint8Array): t.Block {
+  return t.makeBlockUnchecked(Uint8Array.from(fb.BlockBox.getRootAsBlockBox(new flatbuffers.ByteBuffer(bytes)).unpack().value));
 }
 
 const codecTemperature: PayloadCodec<t.Temperature> = { type: "veh.cabin.Temperature", encode: encodeTemperature, decode: decodeTemperature };

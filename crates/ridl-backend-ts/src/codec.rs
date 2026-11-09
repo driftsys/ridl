@@ -28,7 +28,10 @@
 //! uploads with an inline `T | E` reply, and calls whose request, named element
 //! or upload reply has no finite FlatBuffers bound.
 //!
-//! A named scalar of another package converts by a type assertion, an enum set
+//! A named scalar converts through the `make<Name>Unchecked` of its package's
+//! domain module when the module emits one (the codec has verified the bytes,
+//! so the value is not checked twice), and by a type assertion otherwise. A
+//! named scalar of another package converts that way too, an enum set
 //! of another package by a checking function of the module, and a payload type
 //! of another package that is a named scalar or an enum set goes through that
 //! package's own codec module. A struct, a union or an enum of another
@@ -219,6 +222,12 @@ struct Codec<'a> {
     foreign_payloads: BTreeMap<String, ForeignPayload>,
     /// The packages whose types the module names, for the type imports.
     foreign_types: BTreeSet<String>,
+    /// Whether a converter calls a `make<Name>Unchecked` of this package, so
+    /// that `t` is a value import.
+    needs_domain_values: bool,
+    /// The packages a converter calls a `make<Name>Unchecked` of, so that
+    /// their imports are value imports.
+    foreign_values: BTreeSet<String>,
     /// The local payload types an interface entry names, by declared name:
     /// the only ones whose `codec<Name>` constant the module declares.
     used_locals: BTreeSet<String>,
@@ -298,6 +307,8 @@ impl<'a> Codec<'a> {
             reached_tuples: HashSet::new(),
             foreign_payloads: BTreeMap::new(),
             foreign_types: BTreeSet::new(),
+            needs_domain_values: false,
+            foreign_values: BTreeSet::new(),
             used_locals: BTreeSet::new(),
             needs_absent: false,
             reached_open: BTreeSet::new(),
@@ -1061,11 +1072,23 @@ impl<'a> Codec<'a> {
                         vector: false,
                     },
                     Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
-                        bytes_rule(&spelled)
+                        match self.unchecked_call(nested, home, name, scalar) {
+                            Some(call) => Rule {
+                                unpack: format!("{call}(Uint8Array.from({{}}))"),
+                                ..bytes_rule(&spelled)
+                            },
+                            None => bytes_rule(&spelled),
+                        }
                     }
-                    Some(Kind::Scalar(_)) => Rule {
+                    Some(Kind::Scalar(scalar)) => Rule {
                         pack: "{}".to_string(),
-                        unpack: format!("{{}} as {spelled}"),
+                        unpack: match self.unchecked_call(nested, home, name, scalar) {
+                            Some(call) if scalar.class() == v1::ScalarClass::String => {
+                                format!("{call}({{}} as string)")
+                            }
+                            Some(call) => format!("{call}({{}})"),
+                            None => format!("{{}} as {spelled}"),
+                        },
                         plain: true,
                         nullable: false,
                         vector: false,
@@ -1175,6 +1198,31 @@ impl<'a> Codec<'a> {
             }
             Some(TypeKind::Stream(_)) | None => refuse(not_converted(qualified, "a stream")),
         }
+    }
+
+    /// The call that builds a value of the named scalar `name` without a check,
+    /// when its module emits `make<Name>Unchecked`: the codec has verified the
+    /// bytes, so no value is checked twice on the receive path. `home` is the
+    /// package of a foreign type, and `local` says the type is of this package.
+    /// It records the value import the call needs.
+    fn unchecked_call(
+        &mut self,
+        local: bool,
+        home: &str,
+        name: &str,
+        scalar: &v1::Scalar,
+    ) -> Option<String> {
+        if !crate::scalar_has_unchecked(scalar) {
+            return None;
+        }
+        let module = if local {
+            self.needs_domain_values = true;
+            "t".to_string()
+        } else {
+            self.foreign_values.insert(home.to_string());
+            package_alias(home)
+        };
+        Some(format!("{module}.make{name}Unchecked"))
     }
 
     /// The unpack of `rule` over the member `read`, guarded by `absent`
@@ -1388,12 +1436,22 @@ impl<'a> Codec<'a> {
             out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
         }
         if self.has_domain_types() {
-            let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
+            let kind = if self.needs_domain_values {
+                ""
+            } else {
+                "type "
+            };
+            let _ = writeln!(out, "import {kind}* as t from \"./{artifact_base}.js\";");
         }
         for package in &self.foreign_types {
+            let kind = if self.foreign_values.contains(package) {
+                ""
+            } else {
+                "type "
+            };
             let _ = writeln!(
                 out,
-                "import type * as {} from \"./{package}.js\";",
+                "import {kind}* as {} from \"./{package}.js\";",
                 package_alias(package)
             );
         }
@@ -1534,7 +1592,7 @@ impl<'a> Codec<'a> {
     }
 
     fn emit_payload(
-        &self,
+        &mut self,
         out: &mut String,
         declaration: &v1::Declaration,
     ) -> Result<(), GenerateError> {
@@ -1555,10 +1613,23 @@ impl<'a> Codec<'a> {
             ),
             Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Read::Strict),
             Some(Kind::EnumSet(_)) => (format!("new fb.{name}BoxT(value)"), Read::Strict),
-            Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
-                (format!("new fb.{name}BoxT(Array.from(value))"), Read::Bytes)
-            }
-            Some(Kind::Scalar(_)) => (format!("new fb.{name}BoxT(value)"), Read::Assertion),
+            Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => (
+                format!("new fb.{name}BoxT(Array.from(value))"),
+                match self.unchecked_call(true, "", name, scalar) {
+                    Some(call) => Read::Unchecked(call, "Uint8Array.from({})"),
+                    None => Read::Bytes,
+                },
+            ),
+            Some(Kind::Scalar(scalar)) => (
+                format!("new fb.{name}BoxT(value)"),
+                match self.unchecked_call(true, "", name, scalar) {
+                    Some(call) if scalar.class() == v1::ScalarClass::String => {
+                        Read::Unchecked(call, "{} as string")
+                    }
+                    Some(call) => Read::Unchecked(call, "{}"),
+                    None => Read::Assertion,
+                },
+            ),
             _ => {
                 return refuse(format!(
                     "malformed codegen model: the payload type `{qualified}` is not a scalar, \
@@ -1600,6 +1671,9 @@ impl<'a> Codec<'a> {
             }
             Read::Bytes => {
                 let _ = writeln!(out, "  return Uint8Array.from({read}) as t.{name};");
+            }
+            Read::Unchecked(call, argument) => {
+                let _ = writeln!(out, "  return {call}({});", argument.replace("{}", &read));
             }
         }
         out.push_str("}\n");
@@ -2959,6 +3033,9 @@ enum Read {
     Assertion,
     /// `Uint8Array.from` of the box value.
     Bytes,
+    /// The `make<Name>Unchecked` call of a named scalar that has one, with the
+    /// argument over the box value (`{}`).
+    Unchecked(String, &'static str),
 }
 
 /// The TypeScript type of a value of `declaration`: `t.<Name>`, or

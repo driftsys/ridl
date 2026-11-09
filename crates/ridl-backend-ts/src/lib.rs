@@ -488,6 +488,25 @@ fn scalar_checks(td: &v2::TypeDef, name: &str) -> Vec<Check> {
     checks
 }
 
+/// Whether the module of a named scalar emits `make<Name>Unchecked`: the same
+/// condition as a non-empty [`scalar_checks`], read from the codegen model,
+/// which the codec module has instead of the IR. A test holds the two equal.
+pub(crate) fn scalar_has_unchecked(scalar: &v1::Scalar) -> bool {
+    let constraint = scalar.constraint.as_ref();
+    let length = constraint.is_some_and(|c| {
+        c.len_min.is_some_and(|min| min > 0) || c.len_max.is_some_and(|max| max <= MAX_SAFE_INTEGER)
+    });
+    match scalar.class() {
+        v1::ScalarClass::Integer => true,
+        v1::ScalarClass::Float => {
+            constraint.is_some_and(|c| c.min.is_some() || c.max.is_some() || c.step.is_some())
+        }
+        v1::ScalarClass::String => length || constraint.is_some_and(|c| c.pattern.is_some()),
+        v1::ScalarClass::Bytes => length,
+        _ => false,
+    }
+}
+
 /// The length and pattern checks of a string or bytes scalar, in the order of
 /// the Rust `check`: a positive minimum, the maximum, then the pattern. A
 /// string length counts code points (typl §5.3), as `chars()` does in Rust, and

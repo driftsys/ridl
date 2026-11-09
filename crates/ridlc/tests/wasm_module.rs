@@ -130,7 +130,8 @@ use ridl_rt::contract::Interface;
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::{Payload, Rule};
 use veh_cabin::veh::cabin::{
-    Average, Cabin, Diagnostic, Health, Level, Setpoint, Subsystems, Temperature, Warning, Window,
+    Average, Block, Cabin, Code, Diagnostic, Digited, Glyph, Health, Level, Setpoint, Subsystems,
+    Tag, Temperature, Tenth, Warning, Window,
 };
 
 fn hex(bytes: &[u8]) -> String {
@@ -168,6 +169,8 @@ macro_rules! bytes_of {
 fn main() {
     // One valid value of every payload type of the package.
     println!("payload veh.cabin.Average {}", bytes_of!("veh.cabin.Average", Average, Average::new(7).unwrap()));
+    println!("payload veh.cabin.Block {}", bytes_of!("veh.cabin.Block", Block, Block::new(vec![1, 2, 3]).unwrap()));
+    println!("payload veh.cabin.Code {}", bytes_of!("veh.cabin.Code", Code, Code::new("ABC".to_string()).unwrap()));
     println!(
         "payload veh.cabin.Diagnostic {}",
         bytes_of!("veh.cabin.Diagnostic", 
@@ -175,11 +178,15 @@ fn main() {
             Diagnostic { covers: Subsystems::HORN, health: Health::Ok, r#loop: Level::new(3).unwrap() }
         )
     );
+    println!("payload veh.cabin.Digited {}", bytes_of!("veh.cabin.Digited", Digited, Digited::new("a1".to_string()).unwrap()));
+    println!("payload veh.cabin.Glyph {}", bytes_of!("veh.cabin.Glyph", Glyph, Glyph::new("a".to_string()).unwrap()));
     println!("payload veh.cabin.Health {}", bytes_of!("veh.cabin.Health", Health, Health::Warn));
     println!("payload veh.cabin.Level {}", bytes_of!("veh.cabin.Level", Level, Level::new(42).unwrap()));
     println!("payload veh.cabin.Setpoint {}", bytes_of!("veh.cabin.Setpoint", Setpoint, Setpoint::new(21.5).unwrap()));
     println!("payload veh.cabin.Subsystems {}", bytes_of!("veh.cabin.Subsystems", Subsystems, Subsystems::CLIMATE));
+    println!("payload veh.cabin.Tag {}", bytes_of!("veh.cabin.Tag", Tag, Tag::new("abc".to_string()).unwrap()));
     println!("payload veh.cabin.Temperature {}", bytes_of!("veh.cabin.Temperature", Temperature, Temperature::new(-3).unwrap()));
+    println!("payload veh.cabin.Tenth {}", bytes_of!("veh.cabin.Tenth", Tenth, Tenth::new(0.5).unwrap()));
     println!(
         "payload veh.cabin.Warning {}",
         bytes_of!("veh.cabin.Warning", Warning, Warning { code: Level::new(5).unwrap(), health: Health::Fail })
