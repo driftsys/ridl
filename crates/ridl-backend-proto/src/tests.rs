@@ -2106,12 +2106,18 @@ fn accessor_package(members: Vec<v2::StructMember>) -> v2::Package {
     }
 }
 
-fn assert_cpp_accessor_collision(members: Vec<v2::StructMember>, other: &str, accessor: &str) {
+fn assert_cpp_accessor_collision(
+    members: Vec<v2::StructMember>,
+    field: &str,
+    other: &str,
+    accessor: &str,
+) {
     let error =
         generate(&accessor_package(members)).expect_err("must refuse a C++ accessor collision");
     for text in [
-        "field `x`",
+        field,
         other,
+        "of struct `S`",
         "message `S`",
         "protoc",
         "C++ accessor",
@@ -2140,6 +2146,7 @@ fn an_optional_field_before_its_has_getter_is_refused() {
             field_member("x", 1, optional(float64_type())),
             field_member("hasX", 2, int64_type()),
         ],
+        "field `x`",
         "field `hasX`",
         "has_x()",
     );
@@ -2152,6 +2159,7 @@ fn an_optional_field_after_its_has_getter_is_refused() {
             field_member("hasX", 1, int64_type()),
             field_member("x", 2, optional(float64_type())),
         ],
+        "field `x`",
         "field `hasX`",
         "has_x()",
     );
@@ -2164,6 +2172,7 @@ fn an_array_field_before_its_size_getter_is_refused() {
             field_member("x", 1, array_of(float64_type())),
             field_member("xSize", 2, int64_type()),
         ],
+        "field `x`",
         "field `xSize`",
         "x_size()",
     );
@@ -2176,6 +2185,7 @@ fn an_array_field_after_its_size_getter_is_refused() {
             field_member("xSize", 1, int64_type()),
             field_member("x", 2, array_of(float64_type())),
         ],
+        "field `x`",
         "field `xSize`",
         "x_size()",
     );
@@ -2188,6 +2198,7 @@ fn a_map_field_before_its_size_getter_is_refused() {
             field_member("x", 1, map_of(v2::PrimitiveType::String, float64_type())),
             field_member("xSize", 2, int64_type()),
         ],
+        "field `x`",
         "field `xSize`",
         "x_size()",
     );
@@ -2200,9 +2211,43 @@ fn a_map_field_after_its_size_getter_is_refused() {
             field_member("xSize", 1, int64_type()),
             field_member("x", 2, map_of(v2::PrimitiveType::String, float64_type())),
         ],
+        "field `x`",
         "field `xSize`",
         "x_size()",
     );
+}
+
+#[test]
+fn two_derived_cpp_accessors_colliding_are_refused() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("a_size", 1, optional(float64_type())),
+            field_member("has_a", 2, array_of(float64_type())),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        assert_cpp_accessor_collision(members, "field `a_size`", "field `has_a`", "has_a_size()");
+    }
+}
+
+#[test]
+fn an_optional_multi_word_field_beside_its_has_getter_is_refused() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("fooBar", 1, optional(float64_type())),
+            field_member("hasFooBar", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        assert_cpp_accessor_collision(
+            members,
+            "field `fooBar`",
+            "field `hasFooBar`",
+            "has_foo_bar()",
+        );
+    }
 }
 
 #[test]
@@ -2386,6 +2431,75 @@ fn a_non_optional_scalar_beside_has_x_still_generates() {
         let generated = generate(&accessor_package(members)).expect("generate without presence");
         assert!(generated.proto_source.contains("double x = 1;"));
         assert!(generated.proto_source.contains("sint64 has_x = 2;"));
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn a_singular_message_field_beside_has_x_still_generates() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("x", 1, named_type("SomeStruct")),
+            field_member("hasX", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let mut package = accessor_package(members);
+        package.decls.push(v2::Decl {
+            name: "SomeStruct".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef::default())),
+            ..Default::default()
+        });
+        let generated = generate(&package).expect("implicit message presence is outside the check");
+        assert!(generated.proto_source.contains("SomeStruct x = 1;"));
+        assert!(generated.proto_source.contains("sint64 has_x = 2;"));
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn union_arms_x_and_has_x_still_generate() {
+    for reverse in [false, true] {
+        let mut arms = vec![
+            v2::UnionArm {
+                name: "x".to_string(),
+                ordinal: 1,
+                type_ref: "SomeStruct".to_string(),
+                ..Default::default()
+            },
+            v2::UnionArm {
+                name: "hasX".to_string(),
+                ordinal: 2,
+                type_ref: "SomeStruct".to_string(),
+                ..Default::default()
+            },
+        ];
+        if reverse {
+            arms.reverse();
+        }
+        let package = v2::Package {
+            name: "veh.common".to_string(),
+            decls: vec![
+                v2::Decl {
+                    name: "SomeStruct".to_string(),
+                    kind: Some(v2::decl::Kind::StructDef(v2::StructDef::default())),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "U".to_string(),
+                    kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                        arms,
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let generated = generate(&package).expect("union arms are outside the accessor check");
+        assert!(generated.proto_source.contains("SomeStruct x = 1;"));
+        assert!(generated.proto_source.contains("SomeStruct has_x = 2;"));
         compile_with_protox("veh.common.proto", &generated.proto_source);
     }
 }

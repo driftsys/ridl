@@ -23,10 +23,10 @@ proto3 payload codec (driftsys/ridl#264) would otherwise have had to change a
 schema that 0.10 freezes: a root message for a named scalar, an enum and an enum
 set (decision 6), the `optional` keyword on an optional tuple field (decision
 7), and `sint64` for a bare `integer` (decision 8). Decisions 1 to 5 are
-unchanged, except that decision 1's statement that a named scalar emits no
-declaration is corrected in place by decision 6. Decision 2's rejection of a
-wrapper message still holds: it is about a field position, and decision 6's
-message is never referenced from one.
+unchanged by that amendment, except that decision 1's statement that a named
+scalar emits no declaration is corrected in place by decision 6. Decision 2's
+rejection of a wrapper message still holds: it is about a field position, and
+decision 6's message is never referenced from one.
 
 **Amended 2026-10-20 — decision 7: the proto3 payload codec is built.** The
 proto3 codec of the Rust backend (driftsys/ridl#264) now refuses what decision 7
@@ -50,6 +50,12 @@ fills three gaps both leave open.
 pin, from driftsys/ridl#1211.** A remote declaration reached by a surviving old
 consumer use is compared at both pins; a changed proto3 scalar is reported at
 the consumer path.
+
+**Amended 2026-11-10 — decision 4, from driftsys/ridl#1215.** Struct field
+getters and the derived accessors for fields marked `optional`, arrays and maps
+are compared after the pinned name transform and C++ keyword escaping. A
+collision between getters, between a getter and a derived accessor, or between
+two derived accessors is refused. Decision 4 carries the amendment in place.
 
 ## Context
 
@@ -150,14 +156,14 @@ distinct reachable cases.
    of the package under it.
 
    **Amended 2026-11-10 by driftsys/ridl#1215.** The proto backend refuses a
-   struct field pair when protoc's C++ `has_<f>()` accessor for an `optional`
-   keyword field, or `<f>_size()` accessor for an array or map field, collides
-   with another field's getter. C++ accessor spellings are compared after the
-   pinned `snake_case` transform and protoc's C++ keyword escaping, which
-   appends `_` before deriving the accessors, in either field order. This is a
-   target-toolchain accessor namespace the `.proto` itself does not show:
-   distinct field names can produce C++ that does not compile. Two getters that
-   coincide after keyword escaping are also refused. Union arms and singular
+   struct field pair when protoc's C++ `has_<f>()` accessor for a field marked
+   `optional`, or `<f>_size()` accessor for an array or map field, collides with
+   another field's getter or derived accessor. C++ accessor spellings are
+   compared after the pinned `snake_case` transform and protoc's C++ keyword
+   escaping, which appends `_` before deriving the accessors, in either field
+   order. This is a target-toolchain accessor namespace the `.proto` itself does
+   not show. The backend also refuses a field pair whose getters coincide after
+   keyword escaping, such as `class` and `class_`. Union arms and singular
    message-typed fields with implicit presence also get `has_` accessors; this
    check does not cover those cases.
 

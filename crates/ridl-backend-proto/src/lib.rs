@@ -150,7 +150,7 @@ struct Packages<'a> {
 /// projection is defined for every input, or the backend refuses with a
 /// diagnostic rather than emitting a schema the target rejects. Derived C++
 /// accessors of struct fields are checked separately by [`emit_struct`] against
-/// the C++ spelling of the getters; they are not names declared in the schema.
+/// getters and other derived accessors; they are not names declared in the schema.
 struct SymbolScope {
     /// Named in the refusal: ``package `veh.common` `` or ``message `Payload` ``.
     scope: String,
@@ -551,11 +551,12 @@ fn refuse_optional_repeated(
     })
 }
 
-// Follows protoc v29.3's kKeywordList and FieldName in
+// Follows protoc 29.3's kKeywordList and FieldName in
 // src/google/protobuf/compiler/cpp/helpers.cc. The input is already snake_case.
 fn cpp_field_name(name: &str) -> String {
     let keyword = matches!(
         name,
+        // Kept for parity with protoc's list; cannot match a snake_case name.
         "NULL"
             | "alignas"
             | "alignof"
@@ -674,8 +675,8 @@ fn cpp_field_name(name: &str) -> String {
 /// does not depend on the caller having run the semantic pass.
 ///
 /// C++ accessor spellings are compared after protoc's keyword escaping, which
-/// can make two field getters collide. The completed getter table also catches
-/// a getter colliding with `has_<escaped>()` for an `optional` keyword field or
+/// can make two field getters collide. The accessor table also catches
+/// collisions involving `has_<escaped>()` for a field marked `optional` or
 /// `<escaped>_size()` for an array or map field, in either field order.
 /// Union arms and the implicit presence of singular message-typed fields are
 /// outside this check (ADR-0017 decision 4, driftsys/ridl#1215).
@@ -725,8 +726,8 @@ fn emit_struct(
         }
     }
     // Compare C++ getter spellings separately from the proto-name claims.
-    // Register every getter before checking derived accessors, in either order.
-    let mut getters = HashMap::new();
+    // Register every getter, then derived accessors, to catch either field order.
+    let mut accessors = HashMap::new();
     for member in &def.members {
         let Some(v2::struct_member::Member::Field(field)) = &member.member else {
             continue;
@@ -734,7 +735,7 @@ fn emit_struct(
         let projected = ridl_ir::name::snake_case(&field.name);
         let getter = cpp_field_name(&projected);
         let source = &members.claimed[&projected];
-        if let Some(previous) = getters.insert(getter.clone(), source) {
+        if let Some(previous) = accessors.insert(getter.clone(), source) {
             return Err(GenerateError {
                 message: format!(
                     "protoc's C++ accessor `{getter}()` for {source} collides with \
@@ -763,15 +764,16 @@ fn emit_struct(
         } else {
             None
         };
+        let source = &members.claimed[&ridl_ir::name::snake_case(&field.name)];
         if let Some(accessor) = accessor
-            && let Some(getter) = getters.get(&accessor)
+            && let Some(previous) = accessors.insert(accessor.clone(), source)
         {
             return Err(GenerateError {
                 message: format!(
-                    "protoc's C++ accessor `{accessor}()` for field `{}` of struct \
-                     `{name}` collides with the getter for {getter} in {}. Rename \
-                     one of the fields so their C++ accessors differ.",
-                    field.name, members.scope
+                    "protoc's C++ accessor `{accessor}()` for {source} collides with \
+                     the accessor for {previous} in {}. Rename one of the fields \
+                     so their C++ accessors differ.",
+                    members.scope
                 ),
             });
         }

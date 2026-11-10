@@ -222,6 +222,9 @@ other entry below is Accepted.
   changes the proto3 scalar is `proto3_width_change`, breaking under proto3.
   Amended 2026-11-04 on decision 9 from driftsys/ridl#1211: remote integer
   changes through an import pin are reported at the surviving consumer path.
+  Amended 2026-11-10 on decision 4 from driftsys/ridl#1215: struct field getters
+  and derived `has_` and `_size` accessors are checked for C++ name collisions
+  after the pinned name transform and keyword escaping.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and
