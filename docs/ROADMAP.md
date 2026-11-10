@@ -1206,33 +1206,33 @@ needed for the first Kotlin demo.
 # The next release
 
 **Scheduled on 2026-11-09 by the maintainer.** The release after 0.17.0 carries
-one story of Epic 11. It adds a provided method to a port, so it does not depend
-on the items of the next breaking release.
+one story of Epic 11. It adds two provided methods to a port, so it does not
+depend on the items of the next breaking release.
 
-| ID     | Story                                                                                                                                         | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Size |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
-| E11.23 | A provided method of `StreamHandler` that answers per claim whether the caller forgot the call, with no push and no pull (driftsys/ridl#1170) | the generated `serve` releases a member whose reply source or upload consumer is `Pending` when the caller forgets the call, before that source or consumer makes progress; `ridl-rt-conformance` covers the forget on a reply stream, on a call with only a stream parameter, on a command already acknowledged, and on a stream parameter that already ended; the test `a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_next_element` is replaced by one that pins the release, and `docs/design/interaction-face.md` no longer states that `serve` learns of a forget only through the next push | M    |
+| ID     | Story                                                                                                                                                                                                                     | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| E11.23 | Two provided methods of `StreamHandler`: `claim_forget` answers per claim whether the caller forgot the call, with no push and no pull, and `wake_on_claim_forget` registers a waker for that forget (driftsys/ridl#1170) | the generated `serve` releases a member whose reply source or upload consumer is `Pending` when the caller forgets the call, before that source or consumer makes progress; `ridl-rt-conformance` covers the forget on a reply stream, on a call with only a stream parameter, on a command already acknowledged, and on a stream parameter that already ended; the test `a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_next_element` is replaced by one that pins the release, and `docs/design/interaction-face.md` no longer states that `serve` learns of a forget only through the next push | M    |
 
 A forget already wakes the provider's `Interest::ClaimStream` waker on a stream
-that is still open. The contract of the method serves the Rust face and the
+that is still open. The contract of the two methods serves the Rust face and the
 Kotlin face alike:
 
-- A wake can be spurious, so the provider calls the method after a wake to
-  confirm the forget. The method consumes no chunk and delivers nothing to the
-  caller.
-- The method answers for every claim the provider can still name, including a
-  command's claim that its acknowledgment already settled.
+- A wake can be spurious, so the provider calls `claim_forget` after a wake to
+  confirm the forget. `claim_forget` consumes no chunk and delivers nothing to
+  the caller.
+- `claim_forget` answers for every claim the provider can still name, including
+  a command's claim that its acknowledgment already settled.
 - A provider can wait for the forget when its stream parameter has already
-  ended. A `ClaimStream` registration on such a stream is woken at once, so the
-  story defines what the provider waits on instead.
-- The default of the method answers that the call was not forgotten, so a
+  ended. A `ClaimStream` registration on such a stream is woken at once, so
+  `wake_on_claim_forget` defines what the provider waits on instead.
+- The default of `claim_forget` answers that the call was not forgotten, so a
   runtime that does not override it keeps its present behaviour. A face then
   falls back to what it does today.
 
 The Kotlin side follows in its own repository (driftsys/ridlc-gen-kotlin#126):
-`ridl-rt-kt` adds the same method, `settleUpload` and `consumeUpload` use it,
-and `driveReply` uses it in place of the empty-chunk probe that it needs today,
-on a runtime that overrides the method.
+`ridl-rt-kt` adds the same two methods, `settleUpload` and `consumeUpload` use
+them, and `driveReply` uses them in place of the empty-chunk probe that it needs
+today, on a runtime that overrides `claim_forget`.
 
 ---
 
@@ -1623,7 +1623,7 @@ reopening is an observation rather than an argument.
 | none   | Kotlin, the first plugin         | after step 2                                                                           |
 | E18    | exact numerics                   | the next two breaking releases — the design and the policy, then the type and the wire |
 | E19    | deployment and instance identity | MVP 0 with #1179, then MVP 1 — production, then the debug socket                       |
-| E11.23 | the stream forget signal         | the next release, after 0.17.0                                                         |
+| E11.23 | the stream forget signal         | landed in #1298; ships in the next release, after 0.17.0                               |
 
 Rows are in step order, not numeric order, except the last, which is a release
 rather than a step — the numbering is identity, as the tracker section above
