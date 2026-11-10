@@ -101,6 +101,41 @@ const COMMANDS: &[&[&str]] = &[
 ];
 
 #[test]
+fn an_unreadable_member_directory_is_named_with_the_os_error() {
+    if is_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("member-directory");
+    std::fs::write(
+        fixture.root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"m\"]\n",
+    )
+    .unwrap();
+    let member = fixture.root.join("m");
+    std::fs::create_dir(&member).unwrap();
+    let manifest = member.join("ridl.toml");
+    std::fs::write(&manifest, MANIFEST).unwrap();
+    std::fs::write(member.join("a.ridl"), SOURCE).unwrap();
+    fixture.lock_down(&member);
+    for args in COMMANDS {
+        let (code, stderr) = run(RIDLC, args, &fixture.root);
+        assert_eq!(code, 2, "ridlc {args:?}: {stderr}");
+        assert!(
+            stderr.contains(&format!("cannot read `{}`", manifest.display())),
+            "ridlc {args:?} names the manifest: {stderr}"
+        );
+        assert!(
+            stderr.contains("Permission denied"),
+            "ridlc {args:?} names the cause: {stderr}"
+        );
+        assert!(
+            !stderr.contains("has no `ridl.toml`"),
+            "ridlc {args:?} does not claim the member manifest is missing: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn an_unreadable_root_reports_the_os_error_and_the_path() {
     if is_root() {
         return;

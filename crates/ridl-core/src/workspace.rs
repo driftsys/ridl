@@ -402,16 +402,15 @@ fn load_inner(
         loader.overlays.push((key, overlay.clone(), false));
     }
 
-    let root = if entry.is_file() {
-        match entry.parent().and_then(find_root) {
+    let root = match fs::metadata(entry) {
+        Ok(metadata) if metadata.is_file() => match entry.parent().and_then(find_root) {
             Some(root) => Some(root),
             None => {
                 loader.load_single_file(db, entry)?;
                 None
             }
-        }
-    } else if entry.is_dir() {
-        match find_root(entry) {
+        },
+        Ok(metadata) if metadata.is_dir() => match find_root(entry) {
             Some(root) => Some(root),
             None => {
                 return Err(io::Error::new(
@@ -420,13 +419,17 @@ fn load_inner(
                 )
                 .into());
             }
+        },
+        Err(error) if error.kind() != io::ErrorKind::NotFound => {
+            return Err(cannot_read(entry, error).into());
         }
-    } else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("`{}` does not exist", entry.display()),
-        )
-        .into());
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("`{}` does not exist", entry.display()),
+            )
+            .into());
+        }
     };
     if let Some(root) = &root {
         loader.load_root(db, root)?;
@@ -942,9 +945,13 @@ impl Loader {
         workspace_text: &str,
     ) -> io::Result<()> {
         let manifest_path = workspace_root.join(member).join("ridl.toml");
-        if !manifest_path.is_file() {
-            // T7 records member paths unvalidated; the loader validates them
-            // against the filesystem (MANI-008).
+        let is_file = match fs::metadata(&manifest_path) {
+            Ok(metadata) => metadata.is_file(),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(error) => return Err(cannot_read(&manifest_path, error)),
+        };
+        if !is_file {
+            // A missing or non-file member manifest produces MANI-008.
             self.diagnostics.push(error(
                 DiagCode::MANI_008,
                 workspace_file,
