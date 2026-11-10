@@ -492,6 +492,8 @@ pub enum MergeOutcome<K = LockKey> {
     /// markers around only the disagreeing entries. The text does not parse
     /// (RIDL-410) until an author resolves it.
     Conflict { text: String },
+    /// The renumbering ran out of numbers.
+    Exhausted,
 }
 
 /// Which side a merged entry came from.
@@ -531,7 +533,8 @@ struct Conflict<K> {
 /// numbers is a conflict between the entries the two sides brought, placed at
 /// the lower number (§6, last row). `next` is the maximum of the three sides'
 /// `next`, plus one per renumbered entry — renumbering allocates from that
-/// maximum upward, so `next` is never lowered.
+/// maximum upward, so `next` is never lowered. If renumbering would exceed
+/// `K::MAX_NUMBER`, returns [`MergeOutcome::Exhausted`] without a merged table.
 ///
 /// `marker_size` is the length of each marker line (`<<<<<<< ours`,
 /// `=======`, `>>>>>>> theirs`); git passes its `conflict-marker-size`
@@ -572,12 +575,13 @@ pub fn merge<K: TableKey>(
                 resolved.push((Side::Ours, fresh(entry)));
             }
         } else if let (None, Some(ours_entry), Some(theirs_entry)) = (b, o, t) {
+            if next > K::MAX_NUMBER {
+                return MergeOutcome::Exhausted;
+            }
             resolved.push((Side::Ours, fresh(ours_entry)));
             let mut renumbered = fresh(theirs_entry);
             renumbered.number = next;
-            next = next
-                .checked_add(1)
-                .expect("interface numbers stay far below u32::MAX");
+            next += 1;
             resolved.push((Side::Theirs, renumbered));
         } else {
             conflicts.push(Conflict {
@@ -1230,6 +1234,34 @@ C 3
     }
 
     #[test]
+    fn merge_returns_exhausted_when_renumbering_has_no_number_left() {
+        let base = table(1, "");
+        let ours = table(LockKey::MAX_NUMBER + 1, "A 1\n");
+        let theirs = table(2, "B 1\n");
+        let outcome = std::panic::catch_unwind(|| merge(&base, &ours, &theirs, 7));
+        assert!(
+            matches!(outcome, Ok(MergeOutcome::Exhausted)),
+            "{outcome:?}"
+        );
+    }
+
+    #[test]
+    fn merge_renumbers_to_the_last_available_number() {
+        let base = table(1, "");
+        let ours = table(LockKey::MAX_NUMBER, "A 1\n");
+        let theirs = table(2, "B 1\n");
+        let outcome = merge(&base, &ours, &theirs, 7);
+        assert!(matches!(outcome, MergeOutcome::Clean(_)), "{outcome:?}");
+        let MergeOutcome::Clean(merged) = outcome else {
+            unreachable!()
+        };
+        assert_eq!(merged.live(&key("B")).unwrap().number, LockKey::MAX_NUMBER);
+        assert_eq!(merged.live(&key("A")).unwrap().number, 1);
+        assert_eq!(merged.next, LockKey::MAX_NUMBER + 1);
+        parse(&merged.render()).expect("the last number and exhausted next still parse");
+    }
+
+    #[test]
     fn merge_drops_a_line_deleted_on_one_side_and_unchanged_on_the_other() {
         let base = table(3, "A 1\nB 2\n");
         let ours = table(3, "A 1\n");
@@ -1238,10 +1270,12 @@ C 3
         match merge(&base, &ours, &theirs, 7) {
             MergeOutcome::Clean(lock) => assert_eq!(lock.render(), expected),
             MergeOutcome::Conflict { text } => panic!("unexpected conflict:\n{text}"),
+            MergeOutcome::Exhausted => panic!("unexpected number exhaustion"),
         }
         match merge(&base, &theirs, &ours, 7) {
             MergeOutcome::Clean(lock) => assert_eq!(lock.render(), expected),
             MergeOutcome::Conflict { text } => panic!("unexpected conflict:\n{text}"),
+            MergeOutcome::Exhausted => panic!("unexpected number exhaustion"),
         }
     }
 

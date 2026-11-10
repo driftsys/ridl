@@ -45,8 +45,8 @@
 //! the merge is clean, 1 when entries disagree (OURS then holds git conflict
 //! markers around only the disagreeing entries and is RIDL-410 for
 //! `interfaces.lock`, or RSDL-315 for `instances.lock`, until an author
-//! resolves it), 2 when an input cannot be read or does not parse (OURS is
-//! then left as it was).
+//! resolves it), 2 when an input cannot be read or does not parse, or
+//! renumbering has no number left (OURS is then left as it was).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -174,7 +174,18 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     let outcome = if editing {
         edit(path, &mut units, &instances, &renames, &retires)
     } else {
-        allocate(path, &mut units).and_then(|()| allocate_instances(path, prefixed, &instances))
+        (|| {
+            let mut files = Vec::new();
+            let mut lines = Vec::new();
+            allocate(path, &mut units, &mut files, &mut lines);
+            allocate_instances(path, prefixed, &instances, &mut files, &mut lines)?;
+            write_locks(&files)?;
+            // A stdout failure exits 2 after the lock files were written.
+            for line in lines {
+                crate::out::write(&format!("{line}\n"))?;
+            }
+            Ok(())
+        })()
     };
     if let Err(code) = outcome {
         return code;
@@ -292,10 +303,15 @@ fn locked_units(
 /// Plain `ridl lock`: allocates every provisional shape of every package of
 /// each unit, in the order of the numbers the checker showed as provisional —
 /// byte order of the catalog name from `next` — so the number written is the
-/// number the unit was checked with. A unit with nothing to allocate is not
-/// written, so a file that already holds every declaration stays byte for
-/// byte as it is.
-fn allocate(entry: &Path, units: &mut [LockedUnit]) -> Result<(), ExitCode> {
+/// number the unit was checked with. Collects writes and messages for
+/// `run_lock`. A unit with nothing to allocate is not written, so a file that
+/// already holds every declaration stays byte for byte as it is.
+fn allocate(
+    entry: &Path,
+    units: &mut [LockedUnit],
+    files: &mut Vec<(PathBuf, String)>,
+    lines: &mut Vec<String>,
+) {
     let prefixed = units.len() > 1;
     for unit in units.iter_mut() {
         let mut provisional: Vec<(u32, LockKey)> = unit
@@ -317,7 +333,6 @@ fn allocate(entry: &Path, units: &mut [LockedUnit]) -> Result<(), ExitCode> {
         } else {
             String::new()
         };
-        let mut lines = Vec::with_capacity(provisional.len());
         for (_, key) in provisional {
             let number = unit
                 .lock
@@ -325,14 +340,8 @@ fn allocate(entry: &Path, units: &mut [LockedUnit]) -> Result<(), ExitCode> {
                 .expect("a provisional shape has no live entry: the checker read this lock");
             lines.push(format!("{prefix}allocated {key} {number}"));
         }
-        write(unit)?;
-        // A stdout failure exits 2 after this unit's lock file and those for
-        // earlier units were written; a rerun completes the remaining units.
-        for line in lines {
-            crate::out::write(&format!("{line}\n"))?;
-        }
+        files.push((unit.dir.join(interface_lock::FILE_NAME), unit.lock.render()));
     }
-    Ok(())
 }
 
 /// What the instance lock edits and allocation read: the numbering the
@@ -364,14 +373,6 @@ impl InstanceSide<'_> {
         }
     }
 
-    /// Writes the lock; an I/O failure is exit 2.
-    fn write(&self, lock: &InstanceLock) -> Result<(), ExitCode> {
-        instance_lock::write(self.dir, lock).map_err(|err| {
-            eprintln!("error: cannot write {}: {err}", self.file().display());
-            ExitCode::from(2)
-        })
-    }
-
     /// Whether the system has an instance of `component`.
     fn has_component(&self, component: &str) -> bool {
         self.numbering
@@ -388,13 +389,16 @@ impl InstanceSide<'_> {
 
 /// Plain `ridl lock`, instance half: gives every provisional instance its
 /// number, in ascending order of the provisional number the checker showed, so
-/// the number written is the number checked, and writes the root
-/// `instances.lock` only when it allocates. Output lines are prefixed when the
-/// interface lines are (`prefixed`). A path inside a member allocates nothing.
+/// the number written is the number checked. Collects the root `instances.lock`
+/// write and messages for `run_lock` only when it allocates. Output lines are
+/// prefixed when the interface lines are (`prefixed`). A path inside a member
+/// allocates nothing.
 fn allocate_instances(
     entry: &Path,
     prefixed: bool,
     instances: &InstanceSide<'_>,
+    files: &mut Vec<(PathBuf, String)>,
+    lines: &mut Vec<String>,
 ) -> Result<(), ExitCode> {
     if !instances.at_root {
         return Ok(());
@@ -416,17 +420,13 @@ fn allocate_instances(
     } else {
         String::new()
     };
-    let mut lines = Vec::with_capacity(provisional.len());
     for (_, key) in provisional {
         let number = lock
             .allocate(key.clone())
             .map_err(|err| usage_error(&format!("{key}: {err}")))?;
         lines.push(format!("{prefix}allocated {key} {number}"));
     }
-    instances.write(&lock)?;
-    for line in lines {
-        crate::out::write(&format!("{line}\n"))?;
-    }
+    files.push((instances.file(), lock.render()));
     Ok(())
 }
 
@@ -641,27 +641,124 @@ fn edit(
             }
         }
     }
+    let mut files = Vec::new();
     if touches_interfaces {
-        write(&units[0])?;
+        files.push((
+            units[0].dir.join(interface_lock::FILE_NAME),
+            units[0].lock.render(),
+        ));
     }
     if touches_instances {
-        instances.write(&instance_lock)?;
+        files.push((instances.file(), instance_lock.render()));
     }
+    write_locks(&files)?;
     for line in lines {
         crate::out::write(&format!("{line}\n"))?;
     }
     Ok(())
 }
 
-/// Writes the unit's lock to its manifest directory; an I/O failure is exit 2.
-fn write(unit: &LockedUnit) -> Result<(), ExitCode> {
-    interface_lock::write(&unit.dir, &unit.lock).map_err(|err| {
-        eprintln!(
-            "error: cannot write {}: {err}",
-            unit.dir.join(interface_lock::FILE_NAME).display()
-        );
+/// A prepared replacement and the bytes needed to undo its rename.
+struct PreparedLock {
+    path: PathBuf,
+    temporary: PathBuf,
+    previous: Option<Vec<u8>>,
+}
+
+impl Drop for PreparedLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.temporary);
+    }
+}
+
+impl PreparedLock {
+    fn new(path: &Path, text: &str) -> std::io::Result<Self> {
+        use std::io::Write;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let previous = match std::fs::read(path) {
+            Ok(bytes) => Some(bytes),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err),
+        };
+        loop {
+            let temporary = path.with_extension(format!(
+                "lock-tmp-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let mut file = match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+            {
+                Ok(file) => file,
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(err) => return Err(err),
+            };
+            let prepared = Self {
+                path: path.to_path_buf(),
+                temporary,
+                previous,
+            };
+            let written = file.write_all(text.as_bytes());
+            drop(file);
+            written?;
+            return Ok(prepared);
+        }
+    }
+
+    fn restore(&self) -> std::io::Result<()> {
+        use std::io::Write;
+
+        match &self.previous {
+            Some(bytes) => {
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&self.temporary)?;
+                file.write_all(bytes)?;
+                drop(file);
+                std::fs::rename(&self.temporary, &self.path)
+            }
+            None => std::fs::remove_file(&self.path),
+        }
+    }
+}
+
+/// Prepares every replacement before renaming any target. A failed rename
+/// triggers best-effort restoration of targets already replaced. A failed
+/// restore is reported and the target keeps its new contents. Temporary files
+/// are removed on exit.
+fn write_locks(files: &[(PathBuf, String)]) -> Result<(), ExitCode> {
+    write_locks_with(files, |from, to| std::fs::rename(from, to))
+}
+
+fn write_locks_with(
+    files: &[(PathBuf, String)],
+    mut rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
+) -> Result<(), ExitCode> {
+    let fail = |path: &Path, err: std::io::Error| {
+        eprintln!("error: cannot write {}: {err}", path.display());
         ExitCode::from(2)
-    })
+    };
+    let mut prepared = Vec::with_capacity(files.len());
+    for (path, text) in files {
+        prepared.push(PreparedLock::new(path, text).map_err(|err| fail(path, err))?);
+    }
+    for (index, file) in prepared.iter().enumerate() {
+        if let Err(err) = rename(&file.temporary, &file.path) {
+            let code = fail(&file.path, err);
+            for previous in prepared[..index].iter().rev() {
+                if let Err(err) = previous.restore() {
+                    fail(&previous.path, err);
+                }
+            }
+            return Err(code);
+        }
+    }
+    Ok(())
 }
 
 /// The lock key of one shape of `package`: `service:` and the service's
@@ -761,6 +858,14 @@ fn merge_texts<K: TableKey>(
     let (text, exit) =
         match interface_lock::merge(&base_lock, &ours_lock, &theirs_lock, marker_size) {
             MergeOutcome::Clean(merged) => (merged.render(), ExitCode::SUCCESS),
+            MergeOutcome::Exhausted => {
+                eprintln!(
+                    "error: {}: {} has no number left to renumber THEIRS entry",
+                    ours_path.display(),
+                    K::FILE_NAME
+                );
+                return ExitCode::from(2);
+            }
             MergeOutcome::Conflict { text } => {
                 eprintln!(
                     "error: {}: the two sides disagree; the disagreeing entries are between git \
@@ -771,9 +876,8 @@ fn merge_texts<K: TableKey>(
                 (text, ExitCode::FAILURE)
             }
         };
-    if let Err(err) = std::fs::write(ours_path, text) {
-        eprintln!("error: cannot write {}: {err}", ours_path.display());
-        return ExitCode::from(2);
+    if let Err(code) = write_locks(&[(ours_path.to_path_buf(), text)]) {
+        return code;
     }
     exit
 }
@@ -812,4 +916,75 @@ fn parse_side<K: TableKey>(
 fn line_of(text: &str, range: TextRange) -> usize {
     let start = usize::from(range.start()).min(text.len());
     text[..start].matches('\n').count() + 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn second_lock_rename_failure_restores_previous_bytes() {
+        assert_second_rename_failure(Some(b"# keep these bytes\r\nnext 1\r\n"));
+    }
+
+    #[test]
+    fn second_lock_rename_failure_removes_new_first_target() {
+        assert_second_rename_failure(None);
+    }
+
+    fn assert_second_rename_failure(before: Option<&[u8]>) {
+        let dir = tempfile::tempdir().unwrap();
+        let interfaces = dir.path().join("interfaces.lock");
+        let instances = dir.path().join("instances.lock");
+        if let Some(bytes) = before {
+            std::fs::write(&interfaces, bytes).unwrap();
+        }
+        let instance_before = b"# keep instance bytes\nnext 1\n";
+        std::fs::write(&instances, instance_before).unwrap();
+
+        let mut calls = 0;
+        let result = write_locks_with(
+            &[
+                (interfaces.clone(), "next 2\nA 1\n".to_string()),
+                (instances.clone(), "next 2\nveh.C/a 1\n".to_string()),
+            ],
+            |from, to| {
+                calls += 1;
+                if calls == 2 {
+                    return Err(std::io::Error::other("injected second rename failure"));
+                }
+                std::fs::rename(from, to)
+            },
+        );
+        assert!(result.is_err());
+        match before {
+            Some(bytes) => assert_eq!(std::fs::read(&interfaces).unwrap(), bytes),
+            None => assert!(!interfaces.exists()),
+        }
+        assert_eq!(std::fs::read(&instances).unwrap(), instance_before);
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            if before.is_some() { 2 } else { 1 },
+            "no temporary file remains"
+        );
+    }
+
+    #[test]
+    fn lock_write_preparation_failure_preserves_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let interfaces = dir.path().join("interfaces.lock");
+        let instances = dir.path().join("instances.lock");
+        let before = b"# keep these bytes\nnext 1\n";
+        std::fs::write(&interfaces, before).unwrap();
+        std::fs::create_dir(&instances).unwrap();
+
+        let result = write_locks(&[
+            (interfaces.clone(), "next 2\nA 1\n".to_string()),
+            (instances.clone(), "next 2\nveh.C/a 1\n".to_string()),
+        ]);
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&interfaces).unwrap(), before);
+        assert!(instances.is_dir());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
 }
