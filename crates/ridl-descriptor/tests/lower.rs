@@ -742,6 +742,29 @@ fn a_zero_number_is_an_internal_error() {
 }
 
 #[test]
+fn a_fixed_member_without_a_payload_is_an_internal_error() {
+    let mut package = package();
+    let member = package.interfaces[0]
+        .interactions
+        .iter_mut()
+        .find(|member| member.name == "vin")
+        .unwrap();
+    let Some(decl::Kind::FixedDef(def)) = &mut member.kind else {
+        panic!("vin must be a fixed member");
+    };
+    def.payload = None;
+    let expected = LowerError::MissingFixedPayload {
+        interface: "Vehicle".to_owned(),
+        member: "vin".to_owned(),
+    };
+    assert_eq!(lower_one(&package), Err(expected.clone()));
+    assert_eq!(
+        expected.to_string(),
+        "internal error: fixed member `vin` of interface `Vehicle` has no payload"
+    );
+}
+
+#[test]
 fn the_bytes_are_stable_across_runs() {
     assert_eq!(
         lower_one(&package()).unwrap(),
