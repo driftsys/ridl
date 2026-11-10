@@ -426,7 +426,7 @@ interface RawWheelFrame {
 
 
 // ===== package veh.cluster =====
-import { ConstraintError, codePointLength } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength, isWellFormedString } from '@driftsys/ridl-runtime';
 import * as ridl_std from './ridl.std.js';
 import * as veh_common from './veh.common.js';
 
@@ -679,6 +679,9 @@ export type FanTag = string & { readonly __ridl: 'veh.cluster.FanTag' };
 
 /** Builds a `FanTag`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeFanTag(value: string): FanTag {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.cluster.FanTag', value, 'well-formed text');
+  }
   if (codePointLength(value) < 1) {
     throw new ConstraintError('length', 'veh.cluster.FanTag', value, '[1..32]');
   }
