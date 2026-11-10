@@ -30,16 +30,24 @@ const COLUMNS: [size::Encoding; 3] = [
 
 /// Why a checked package could not be lowered: a defect upstream, not data.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LowerError {
     /// An interface shape whose IR number is 0 (`ridl-sem` numbers every
     /// shape of a checked package, so this is an internal error).
     ZeroNumber(String),
+    /// A fixed member of a checked package has no payload; `ridl-sem` gives
+    /// every fixed member one, so this is an internal error.
+    MissingFixedPayload { interface: String, member: String },
 }
 
 impl fmt::Display for LowerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ZeroNumber(name) => write!(f, "internal error: interface `{name}` has no number"),
+            Self::MissingFixedPayload { interface, member } => write!(
+                f,
+                "internal error: fixed member `{member}` of interface `{interface}` has no payload"
+            ),
         }
     }
 }
@@ -87,16 +95,17 @@ pub fn lower(
         .into_iter()
         .map(|(package, shape, name)| {
             let ctx = &contexts[package.name.as_str()];
-            Interface {
+            let members = shape
+                .interface
+                .interactions
+                .iter()
+                .filter_map(|decl| member_of(decl, &name, ctx).transpose())
+                .collect::<Result<_, _>>()?;
+            Ok(Interface {
                 name,
                 number: shape.interface.number,
                 provisional: shape.interface.provisional,
-                members: shape
-                    .interface
-                    .interactions
-                    .iter()
-                    .filter_map(|decl| member_of(decl, ctx))
-                    .collect(),
+                members,
                 reserved_ordinals: shape
                     .interface
                     .interactions
@@ -104,9 +113,9 @@ pub fn lower(
                     .filter(|decl| matches!(decl.kind, Some(decl::Kind::ReservedSlot(_))))
                     .map(|decl| decl.ordinal)
                     .collect(),
-            }
+            })
         })
-        .collect();
+        .collect::<Result<_, LowerError>>()?;
 
     let catalog = Catalog {
         version: SCHEMA_VERSION,
@@ -133,9 +142,12 @@ pub fn lower(
     Ok(crate::finish(&catalog))
 }
 
-fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
+fn member_of(decl: &Decl, interface: &str, ctx: &Ctx<'_>) -> Result<Option<Member>, LowerError> {
+    let Some(kind) = decl.kind.as_ref() else {
+        return Ok(None);
+    };
     let mut streams = Vec::new();
-    let (kind, payloads, timing) = match decl.kind.as_ref()? {
+    let (kind, payloads, timing) = match kind {
         decl::Kind::SignalDef(def) => (
             Kind::Signal,
             vec![payload(
@@ -173,7 +185,13 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
             (Kind::Query, payloads, def.timing.as_ref())
         }
         decl::Kind::FixedDef(def) => {
-            let ty = def.payload.as_ref()?;
+            let ty = def
+                .payload
+                .as_ref()
+                .ok_or_else(|| LowerError::MissingFixedPayload {
+                    interface: interface.to_owned(),
+                    member: decl.name.clone(),
+                })?;
             (
                 Kind::Fixed,
                 vec![payload("value", spell(ty), &PayloadShape::Field(ty), ctx)],
@@ -188,9 +206,9 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
         | decl::Kind::StructDef(_)
         | decl::Kind::EnumDef(_)
         | decl::Kind::EnumSetDef(_)
-        | decl::Kind::UnionDef(_) => return None,
+        | decl::Kind::UnionDef(_) => return Ok(None),
     };
-    Some(Member {
+    Ok(Some(Member {
         name: decl.name.clone(),
         ordinal: decl.ordinal,
         kind,
@@ -208,7 +226,7 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
         }),
         limit: decl.limit,
         streams: Some(streams),
-    })
+    }))
 }
 
 /// The request payload, over the parameters that are not streams (a stream
