@@ -743,7 +743,18 @@ fn a_zero_number_is_an_internal_error() {
 
 #[test]
 fn a_fixed_member_without_a_payload_is_an_internal_error() {
+    let root = Package {
+        name: "u".to_owned(),
+        interfaces: vec![Interface {
+            name: "Vehicle".to_owned(),
+            number: 2,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
     let mut package = package();
+    package.name = "u.sub".to_owned();
+    package.unit = "u".to_owned();
     let member = package.interfaces[0]
         .interactions
         .iter_mut()
@@ -754,13 +765,13 @@ fn a_fixed_member_without_a_payload_is_an_internal_error() {
     };
     def.payload = None;
     let expected = LowerError::MissingFixedPayload {
-        interface: "Vehicle".to_owned(),
+        interface: "sub.Vehicle".to_owned(),
         member: "vin".to_owned(),
     };
-    assert_eq!(lower_one(&package), Err(expected.clone()));
+    assert_eq!(lower("u", &[&root, &package], &[]), Err(expected.clone()));
     assert_eq!(
         expected.to_string(),
-        "internal error: fixed member `vin` of interface `Vehicle` has no payload"
+        "internal error: fixed member `vin` of interface `sub.Vehicle` has no payload"
     );
 }
 

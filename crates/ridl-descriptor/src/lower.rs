@@ -30,11 +30,13 @@ const COLUMNS: [size::Encoding; 3] = [
 
 /// Why a checked package could not be lowered: a defect upstream, not data.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LowerError {
     /// An interface shape whose IR number is 0 (`ridl-sem` numbers every
     /// shape of a checked package, so this is an internal error).
     ZeroNumber(String),
-    /// A fixed member of a checked package has no payload.
+    /// A fixed member of a checked package has no payload; `ridl-sem` gives
+    /// every fixed member one, so this is an internal error.
     MissingFixedPayload { interface: String, member: String },
 }
 
