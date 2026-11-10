@@ -647,13 +647,13 @@ in the unit of the fresh package of the same name, so the migration to one
 `interfaces.lock` per unit — delete the per-package lock files, run `ridl lock`,
 run `ridl baseline` — passes RIDL-412 when the unit's new numbering reaches
 every published number. When it does not, because a legacy lock held retired
-entries, remove the publication directory (the directory selected by `--out`
-when given, else `.ridl/baseline/`) and run `ridl baseline` again: a first
-publication is not compared against a published number, and no flag overrides
-the gate. A whole service removed from the source is reported by `ridl diff` as
-breaking but is not refused here (ridl §17.14), and a named-form service's list
-is a set the gate does not read. Deleting `doorClosed` outright, with
-`doorOpened` and `doorLocked` still declared:
+entries, remove the managed snapshots from the publication directory (the
+directory selected by `--out` when given, else `.ridl/baseline/`) and run
+`ridl baseline` again: a first publication is not compared against a published
+number, and no flag overrides the gate. A whole service removed from the source
+is reported by `ridl diff` as breaking but is not refused here (ridl §17.14),
+and a named-form service's list is a set the gate does not read. Deleting
+`doorClosed` outright, with `doorOpened` and `doorLocked` still declared:
 
 ```sh
 ridl baseline
