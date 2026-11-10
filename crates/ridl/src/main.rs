@@ -633,7 +633,8 @@ fn run_explain(category: &str) -> ExitCode {
 /// Compares the `old` and `new` inputs, judged for `encodings`, and renders
 /// the report to stdout, returning the diff exit code: 2 on an I/O or compile
 /// error while loading either side, 1 when the change is breaking, 0 when it
-/// is compatible or the two are identical.
+/// is compatible or the two are identical. A failed write of the report to
+/// stdout exits 2, replacing even a breaking verdict.
 fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncoding]) -> ExitCode {
     let mut db = ridl_core::RidlDatabase::default();
     let old_side = match ridlc::load_diff_side(&mut db, old, &[]) {
@@ -3205,7 +3206,7 @@ fn exit_code(run: &CliRun) -> ExitCode {
 }
 
 /// Ends `ridl check`: text renders to stderr through [`finish`]; JSON and
-/// SARIF print their contract to stdout and keep the same exit code. The
+/// SARIF print their contract to stdout; a failed stdout write exits 2. The
 /// SARIF artifact URIs are relative to the working directory, not to the
 /// checked path, so one log has one base (ADR-0024 decision 13). The
 /// comparison is lexical: `current_dir` returns the physical path, so an

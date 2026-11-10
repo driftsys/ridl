@@ -1,4 +1,4 @@
-//! A stdout write failure exits 2, including when the command has a verdict.
+//! Reports end with one newline; a stdout write failure exits 2, overriding a verdict.
 
 #![cfg(unix)]
 
@@ -57,6 +57,70 @@ fn workspace(source: &str) -> tempfile::TempDir {
 const SOURCE: &str = "package app\n/// A level.\ntype Level: integer [0..100]\n";
 const INTERFACE: &str =
     "package app\ntype Level: integer [0..100]\ninterface Status { signal level: Level @10ms }\n";
+
+fn successful_stdout(mut command: Command) -> Vec<u8> {
+    let guard = PIPE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn ridl with captured stdout");
+    drop(guard);
+    let output = child.wait_with_output().expect("capture ridl report");
+    assert!(
+        output.status.success(),
+        "status: {}; stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.ends_with(b"\n"), "missing final newline");
+    assert!(
+        !output.stdout.ends_with(b"\n\n"),
+        "more than one final newline"
+    );
+    output.stdout
+}
+
+#[test]
+fn explain_stdout_has_exactly_one_final_newline() {
+    let dir = tempfile::tempdir().unwrap();
+    let category = ridl_diff::Category::TimingChanged;
+    let word = ridl_diff::category_word(category);
+    let stdout = successful_stdout(command(dir.path(), &["diff", "--explain", word]));
+    assert_eq!(
+        stdout,
+        format!("{word}\n{}\n", ridl_diff::explain(category)).as_bytes()
+    );
+}
+
+#[test]
+fn diff_json_stdout_has_exactly_one_final_newline() {
+    let dir = workspace(SOURCE);
+    successful_stdout(command(
+        dir.path(),
+        &["diff", "app.ridl", "app.ridl", "--format", "json"],
+    ));
+}
+
+#[test]
+fn check_json_stdout_has_exactly_one_final_newline() {
+    let dir = workspace(SOURCE);
+    successful_stdout(command(dir.path(), &["check", "--format", "json"]));
+}
+
+#[test]
+fn check_sarif_stdout_has_exactly_one_final_newline() {
+    let dir = workspace(SOURCE);
+    successful_stdout(command(dir.path(), &["check", "--format", "sarif"]));
+}
+
+#[test]
+fn test_json_stdout_has_exactly_one_final_newline() {
+    let dir = workspace(SOURCE);
+    successful_stdout(command(dir.path(), &["test", "--format", "json"]));
+}
 
 #[test]
 fn explain_exits_2_when_stdout_reader_is_gone() {

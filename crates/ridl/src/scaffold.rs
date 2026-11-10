@@ -19,9 +19,11 @@
 //! the loader's own, so the command refuses exactly where `ridl check` would
 //! raise MANI-013. Nothing is appended to an existing workspace, and nothing outside the
 //! target files is written. The member files are written before the root
-//! manifest, and a failed write removes the paths this command created, so a
-//! refusal leaves no partial scaffold. Exit codes follow ADR-0010 decision 1:
-//! 0 when the files are written, 2 when the command could not answer.
+//! manifest, and a failed file write removes the paths this command created,
+//! so a refusal leaves no partial scaffold. A failed write of the `Created`
+//! line to stdout exits 2 after the files are written. Exit codes follow
+//! ADR-0010 decision 1: 0 when the files are written, 2 when the command could
+//! not answer.
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
