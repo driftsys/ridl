@@ -486,7 +486,7 @@ fn number_unit(
         .collect();
     // Byte order of the name; the interface first when an interface and an
     // inline shape are spelled the same (`interface cabin`, `service cabin`).
-    keys.sort_by(|a, b| provisional_order(a).cmp(&provisional_order(b)));
+    sort_provisional(&mut keys);
 
     let mut next = lock.map_or(1, |lock| lock.next);
     let mut any_provisional = false;
@@ -537,6 +537,12 @@ fn number_unit(
         any_provisional,
         anchor,
     }
+}
+
+/// Sorts provisional keys by name, with an interface before an inline shape
+/// of the same name.
+fn sort_provisional(keys: &mut [LockKey]) {
+    keys.sort_by(|a, b| provisional_order(a).cmp(&provisional_order(b)));
 }
 
 /// The sort key of the provisional order (lock design §3): the name's bytes,
@@ -6536,7 +6542,7 @@ mod tests {
             LockKey::Service("doors".into()),
             LockKey::Interface("doors".into()),
         ];
-        keys.sort_by(|a, b| provisional_order(a).cmp(&provisional_order(b)));
+        sort_provisional(&mut keys);
         assert_eq!(
             keys,
             [

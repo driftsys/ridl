@@ -1307,8 +1307,9 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// design §8; the design's §4 table, `ridl baseline` column): a RIDL-411 for
 /// every interface in the fresh snapshots whose number is provisional, and a
 /// RIDL-412 for every interface the baseline being replaced holds under a
-/// non-zero number that the fresh snapshots neither carry nor retire. Returns
-/// whether any was recorded.
+/// non-provisional, non-zero number that the fresh snapshots neither carry
+/// nor retire. Published provisional numbers are excluded. Returns whether
+/// any was recorded.
 ///
 /// RIDL-411 reads the fresh snapshots alone, so a first publication is
 /// refused too: a provisional number is no identity, and a snapshot holding
@@ -1322,10 +1323,10 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// one refusal listing its lost keys and numbers. A unit that remains gets
 /// one refusal per lost number and package, since a declared interface and an
 /// inline-form service of one name are reported at one path. A published
-/// provisional number carries no identity. A published `number` 0
-/// predates the lock and was matched by name, so neither is refused on removal
-/// (plan decision PD-9). RIDL-412 is a lock line deleted by hand, or a package
-/// or unit removed without retiring its numbers: a live entry with no
+/// provisional number carries no identity and is not refused on removal.
+/// A published `number` 0 predates the lock and was matched by name, so it is
+/// not refused on removal either. RIDL-412 is a lock line deleted by hand,
+/// or a package or unit removed without retiring its numbers: a live entry with no
 /// declaration fails the build with RIDL-409 before publication.
 ///
 /// The published snapshots are read flat from `out_dir` through
@@ -1556,6 +1557,7 @@ fn dropped_number_message(lost: &[DroppedNumber<'_>], out_dir: &Path) -> String 
             out_dir.display()
         );
     }
+    debug_assert_eq!(lost.len(), 1);
     let key = dropped_number_key(first);
     let number = first.shape.interface.number;
     format!(

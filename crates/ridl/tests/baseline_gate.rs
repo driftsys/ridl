@@ -2512,6 +2512,68 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
 }
 
 #[test]
+fn two_units_removed_together_have_separate_refusals() {
+    let dir = TempDir::new("gate-two-units-gone");
+    let root = two_unit_workspace(&dir);
+    dir.write(
+        "spare/ridl.toml",
+        "[package]\nname = \"veh.spare\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "spare/spare.typl",
+        "package veh.spare\ntype Count: integer [0..9]\n",
+    );
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\", \"spare\"]\n",
+    );
+    publish(&root);
+    let before = baseline_files(&root);
+
+    for unit in ["cluster", "hmi"] {
+        std::fs::remove_dir_all(root.join(unit)).expect("remove the unit");
+    }
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"spare\"]\n");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "both lost units are refused:\n{stderr}");
+    let refusals: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.contains("RIDL-412"))
+        .collect();
+    assert_eq!(refusals.len(), 2, "one refusal per lost unit:\n{stderr}");
+    let cluster = refusals
+        .iter()
+        .find(|line| line.contains("in unit `veh.cluster`"))
+        .expect("a refusal for veh.cluster");
+    assert!(
+        cluster.contains("`Extra` (number 1)")
+            && cluster.contains("`VehicleStatus` (number 2)")
+            && cluster.contains("`sub.Speed` (number 3)")
+            && !cluster.contains("`Session`")
+            && !cluster.contains("`veh.hmi`"),
+        "the cluster refusal contains only its own keys:\n{cluster}"
+    );
+    let hmi = refusals
+        .iter()
+        .find(|line| line.contains("in unit `veh.hmi`"))
+        .expect("a refusal for veh.hmi");
+    assert!(
+        hmi.contains("`Session` (number 1)")
+            && !hmi.contains("`Extra`")
+            && !hmi.contains("`VehicleStatus`")
+            && !hmi.contains("`sub.Speed`")
+            && !hmi.contains("`veh.cluster`"),
+        "the hmi refusal contains only its own keys:\n{hmi}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
+    );
+}
+
+#[test]
 fn a_gone_unit_message_names_the_custom_baseline_directory() {
     let dir = TempDir::new("gate-unit-custom-out");
     let root = two_unit_workspace(&dir);
@@ -2561,6 +2623,92 @@ fn a_gone_unit_with_a_published_provisional_number_is_not_refused() {
         "provisional published numbers have no identity: {stderr}"
     );
     assert!(!stderr.contains("RIDL-412"), "stderr: {stderr}");
+}
+
+#[test]
+fn a_gone_unit_with_mixed_published_numbers_refuses_only_the_allocated_number() {
+    let dir = TempDir::new("gate-unit-mixed-provisional");
+    let root = mixed_published_numbers(&dir);
+    let before = baseline_files(&root);
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the allocated number is lost:\n{stderr}");
+    assert_eq!(stderr.matches("RIDL-412").count(), 1, "stderr: {stderr}");
+    assert!(
+        stderr.contains("in unit `veh.cluster`: `VehicleStatus` (number 2)")
+            && !stderr.contains("`Extra`")
+            && !stderr.contains("RIDL-411"),
+        "only the allocated published number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
+    );
+}
+
+#[test]
+fn a_remaining_unit_with_mixed_published_numbers_refuses_only_the_allocated_number() {
+    let dir = TempDir::new("gate-remaining-unit-mixed-provisional");
+    let root = mixed_published_numbers(&dir);
+    let before = baseline_files(&root);
+    dir.write(
+        "cluster/cluster.ridl",
+        "package veh.cluster\ntype DoorState: integer [0..1]\n",
+    );
+    dir.write("cluster/interfaces.lock", &format!("{LOCK_HEADER}next 3\n"));
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the allocated number is lost:\n{stderr}");
+    assert_eq!(stderr.matches("RIDL-412").count(), 1, "stderr: {stderr}");
+    assert!(
+        stderr.contains("`VehicleStatus` holds interface number 2")
+            && stderr.contains("in unit `veh.cluster`")
+            && !stderr.contains("`Extra`")
+            && !stderr.contains("RIDL-411"),
+        "only the allocated published number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
+    );
+}
+
+/// A legacy baseline with one provisional and one allocated number in a unit.
+fn mixed_published_numbers(dir: &TempDir) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\"]\n",
+    );
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi/hmi.ridl", SESSION);
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write(
+        "cluster/cluster.ridl",
+        &format!("{THREE}\ninterface Extra {{ signal e : DoorState @[100ms..1s] }}\n"),
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "allocate the fixture's numbers: {stderr}");
+    publish(&root);
+    let baseline = root.join(".ridl/baseline");
+    std::fs::remove_file(baseline.join("context.json")).expect("make a legacy baseline");
+    let path = baseline.join("veh.cluster.ir.json");
+    let mut package = ridl_ir::v2::load_ir_json(&path).expect("read the snapshot");
+    package
+        .interfaces
+        .iter_mut()
+        .find(|interface| interface.name == "Extra")
+        .expect("the provisional interface")
+        .provisional = true;
+    std::fs::write(path, serde_json::to_string_pretty(&package).unwrap()).unwrap();
+    root
 }
 
 #[test]
@@ -2841,7 +2989,10 @@ fn deleting_only_the_service_beside_its_named_interface_refuses_the_inline_numbe
 /// (language reference, the lock section). This pins the observable order; the
 /// kind in the sort key (`provisional_order`) is only partly observable here:
 /// the shapes of a package are listed interfaces first, so removing the kind
-/// leaves this test passing and only inverting it fails.
+/// leaves this test passing and only inverting it fails. The ridl-sem unit test
+/// `provisional_order_places_an_interface_before_a_service_with_the_same_name`
+/// in `crates/ridl-sem/src/check.rs` pins the tie-break with the service first
+/// in its input.
 #[test]
 fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
     let dir = TempDir::new("gate-tie-break");
