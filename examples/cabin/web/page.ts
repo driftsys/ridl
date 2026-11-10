@@ -3,13 +3,15 @@
 // page's query string, rejects when that hash is not the `CATALOG_HASH` of the
 // generated codec module, fetches the cabin wasm codec from /veh_cabin.wasm
 // and loads it with the generated hash, payload types and rules, runs the
-// codec self-test of check.ts, attaches with the encoding `flatbuffers`,
+// codec self-test of check.ts, attaches with the encoding `flatbuffers` through a session with a bound of
+// 10 s on `connect` and `subscribe` and `signalChecks(codec)` as its checks,
 // subscribes to `Cabin.temperature` at the interface number and ordinal of the
 // generated `Cabin` table, verifies each payload through the codec, decodes it
 // with the generated codec module, and feeds each decoded value to the check of check.ts. It sets
 // `globalThis.result` to a promise that resolves with the check's progress on
 // the first `pass` verdict, and rejects with the cause when the codec cannot
-// be loaded, the self-test fails, the codec rejects a payload, the check gives
+// be loaded, the self-test fails, the session check refuses or throws on a
+// payload, the codec rejects a payload, the check gives
 // a `fail` verdict, or the connection closes first.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
@@ -18,14 +20,14 @@ import {
   hexFromHash,
   type Progress,
   selfTest,
+  sessionOptions,
+  STEP_BOUND_MS,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
 import {
   Cabin,
   CATALOG_HASH,
-  CATALOG_NAME,
-  Horn,
   PAYLOAD_TYPES,
   RULES,
 } from "./generated/veh.cabin.codec.ts";
@@ -71,13 +73,33 @@ async function run(): Promise<Progress> {
   });
 
   const session = await connect(`ws://127.0.0.1:${port}`, {
-    catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
-    encoding: "flatbuffers",
-    // The generated tables give the session the limit of each member that a
-    // `[limits]` entry raises or lowers; cabin has none, so every member
-    // keeps the default ceiling of its kind.
-    interfaces: [Cabin, Horn],
+    ...sessionOptions(codec),
+    // `sessionOptions` registers `signalChecks(codec)`: the session checks each
+    // `temperature` payload with the wasm codec before `onPublish` sees it. A
+    // payload the check refuses arrives as an invalid sample with `detected`
+    // set and no payload; `onPublish` fails the run on it.
+    onNote(note) {
+      if (note.note === "check-failed" && !settled) {
+        settled = true;
+        reject(new Error(`the signal check threw: ${String(note.error)}`));
+      }
+    },
     onPublish(target, sample) {
+      if (
+        !settled && sample.detected !== undefined &&
+        target.iface === Cabin.temperature.iface &&
+        target.ord === Cabin.temperature.ord
+      ) {
+        settled = true;
+        reject(
+          new Error(
+            `the signal check refused a payload: ${
+              JSON.stringify(sample.detected)
+            }`,
+          ),
+        );
+        return;
+      }
       if (settled || !sample.payload) return;
       if (
         target.iface !== Cabin.temperature.iface ||
@@ -113,7 +135,7 @@ async function run(): Promise<Progress> {
       kind: Kind.Signal,
       iface: Cabin.temperature.iface,
       ord: Cabin.temperature.ord,
-    });
+    }, { bound: STEP_BOUND_MS });
     return await verdict;
   } finally {
     settled = true;

@@ -292,6 +292,9 @@ member; rsdl is the apex.
                          the program checks that the codec accepts 20 and
                          rejects -41 and 86 with the range rule; it then
                          verifies every received payload with the codec.
+                         The program's session has a bound of 10 s on connect
+                         and subscribe and registers the signal checks that
+                         the generated codec module writes.
                          Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  build the ridl-transport-ws example loopback_server,
                          then run the package's end-to-end test in a headless
@@ -300,7 +303,8 @@ member; rsdl is the apex.
                          contributor's build needs no browser
     just cabin-browser-demo
                          the generation and server build of cabin-ws-demo,
-                         then the same codec self-test, payload verification
+                         then the same codec self-test, session bound and
+                         signal checks, payload verification
                          and temperature check in a page that a
                          headless browser opens (RIDL_BROWSER names one);
                          needs Deno, flatc and a Chromium-family browser.

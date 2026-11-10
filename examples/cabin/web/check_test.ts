@@ -15,6 +15,7 @@ import {
 import {
   Cabin,
   CATALOG_HASH,
+  CATALOG_NAME,
   decodeTemperature,
   encodeAverage,
   encodeBlock,
@@ -62,6 +63,8 @@ import {
   isPass,
   RANGE_RULE,
   selfTest,
+  sessionOptions,
+  STEP_BOUND_MS,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
@@ -232,6 +235,21 @@ Deno.test("signalChecks refuses a value outside the range and passes one inside 
     checks.map(({ iface, ord }) => [iface, ord]),
     [[Cabin.iface, Cabin.temperature.ord], [Horn.iface, Horn.active.ord]],
   );
+});
+
+Deno.test("sessionOptions gives the bound and the signal checks to the session", () => {
+  const options = sessionOptions(codec);
+  assert.equal(STEP_BOUND_MS, 10_000);
+  assert.equal(options.bound, STEP_BOUND_MS);
+  assert.equal(options.encoding, "flatbuffers");
+  assert.deepEqual(options.catalog, { name: CATALOG_NAME, hash: CATALOG_HASH });
+  assert.deepEqual(options.interfaces, [Cabin, Horn]);
+  const temperature = options.checks?.find((entry) =>
+    entry.iface === Cabin.temperature.iface &&
+    entry.ord === Cabin.temperature.ord
+  );
+  assert.ok(temperature !== undefined);
+  assert.deepEqual(temperature.check(encode(86)), { rule: "range" });
 });
 
 Deno.test("the codec rejects a truncated payload as malformed", () => {

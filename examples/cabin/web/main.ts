@@ -13,8 +13,9 @@
 // wasm codec with the generated hash, payload types and rules, runs the codec
 // self-test (20
 // is accepted, -41 and 86 are rejected with the range rule), attaches with the
-// encoding `flatbuffers`, and subscribes to
-// `Cabin.temperature`. The server steps the value through the whole range of
+// encoding `flatbuffers` through a session whose `connect` and `subscribe`
+// each have a bound of 10 s and whose `checks` option is `signalChecks(codec)`
+// of the generated module, and subscribes to `Cabin.temperature`. The server steps the value through the whole range of
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
@@ -27,7 +28,8 @@
 // that exits or a connection that closes before the end of the check fails the
 // program at once. It prints the number of samples it received, the number of
 // wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
-// -40 was seen after 85. A payload the codec rejects fails the program with
+// -40 was seen after 85. A payload the session check refuses, a check that
+// throws, or a payload the codec rejects fails the program with
 // the cause.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
@@ -39,14 +41,14 @@ import {
   LOWEST,
   RANGE_RULE,
   selfTest,
+  sessionOptions,
+  STEP_BOUND_MS,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
 import {
   Cabin,
   CATALOG_HASH,
-  CATALOG_NAME,
-  Horn,
   PAYLOAD_TYPES,
   RULES,
 } from "./generated/veh.cabin.codec.ts";
@@ -139,13 +141,29 @@ const done = new Promise<void>((resolve) => (enough = resolve));
 
 stage = "connecting";
 const session = await connect(`ws://127.0.0.1:${port}`, {
-  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
-  encoding: "flatbuffers",
-  // The generated tables give the session the limit of each member that a
-  // `[limits]` entry raises or lowers; cabin has none, so every member
-  // keeps the default ceiling of its kind.
-  interfaces: [Cabin, Horn],
+  ...sessionOptions(codec),
+  // `sessionOptions` registers `signalChecks(codec)`: the session checks each
+  // `temperature` payload with the wasm codec before `onPublish` sees it. A
+  // payload the check refuses arrives as an invalid sample with `detected` set
+  // and no payload; `onPublish` fails the run on it.
+  onNote(note) {
+    if (note.note === "check-failed") {
+      fail(`the signal check threw: ${String(note.error)}`);
+    }
+  },
   onPublish(target, sample) {
+    if (
+      sample.detected !== undefined &&
+      target.iface === Cabin.temperature.iface &&
+      target.ord === Cabin.temperature.ord && !failure
+    ) {
+      failure = `the signal check refused a payload: ${
+        JSON.stringify(sample.detected)
+      }`;
+      failureStage = stage;
+      enough();
+      return;
+    }
     if (!sample.payload || failure) return;
     if (
       target.iface !== Cabin.temperature.iface ||
@@ -189,7 +207,7 @@ await session.subscribe({
   kind: Kind.Signal,
   iface: Cabin.temperature.iface,
   ord: Cabin.temperature.ord,
-});
+}, { bound: STEP_BOUND_MS });
 
 stage = "waiting for the highest value and the lowest after it";
 await done;

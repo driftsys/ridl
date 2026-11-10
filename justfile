@@ -3268,7 +3268,9 @@ _cabin-wasm:
 # the signal, and the decode function from the generated codec module
 # examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
 # hash the server announces is not the generated one, attaches with the
-# encoding `flatbuffers`, subscribes, verifies each payload through cabin's
+# encoding `flatbuffers` through a session with a bound of 10 s and the
+# generated signal checks, subscribes, fails when the session check refuses a
+# payload, verifies each payload through cabin's
 # wasm codec and fails with the codec's cause on a rejection, decodes each
 # verified payload with the generated codec module, and fails unless every
 # value is inside [-40..85], every received value is 1 to 63 steps ahead of
@@ -3363,8 +3365,11 @@ _find-browser name:
 # wasm32-unknown-unknown target) from 127.0.0.1, and opens it in the browser.
 # The page loads the codec with the announced catalog hash, runs the same
 # self-test (20 accepted, -41 and 86 rejected with the range rule), attaches
-# with the encoding `flatbuffers`, verifies each payload through the codec
-# (a rejection fails the run with its cause), and decodes each verified
+# with the encoding `flatbuffers` (a bound of 10 s on connect and subscribe,
+# the signal checks of the generated codec module registered), verifies each
+# payload through the codec (a payload the session check or the codec refuses
+# fails the run with its cause), and
+# decodes each verified
 # payload with the `flatc` code. One 30 s limit
 # covers the page's verdict; the server is then stopped and must exit with
 # status 0. It prints the number of samples and the number of wraps.
