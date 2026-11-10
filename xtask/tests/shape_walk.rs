@@ -297,6 +297,18 @@ const ALLOWED: &[Allowed] = &[
               `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl/src/main.rs",
+        lines: 1,
+        why: "a unit test sets the `provisional` flag of one interface in a \
+              package it built itself, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl/tests/baseline_gate.rs",
+        lines: 2,
+        why: "tests set the `provisional` flag of interfaces in a snapshot \
+              they read back and rewrite, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl/tests/describe_cli.rs",
         lines: 1,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
