@@ -19,21 +19,17 @@ import {
   hexFromHash,
   type Progress,
   selfTest,
+  sessionOptions,
+  STEP_BOUND_MS,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
 import {
   Cabin,
   CATALOG_HASH,
-  CATALOG_NAME,
-  Horn,
   PAYLOAD_TYPES,
   RULES,
-  signalChecks,
 } from "./generated/veh.cabin.codec.ts";
-
-// The time `connect` and `subscribe` each wait for the server, in milliseconds.
-const STEP_BOUND_MS = 10_000;
 
 async function run(): Promise<Progress> {
   const query = new URLSearchParams(location.search);
@@ -76,17 +72,11 @@ async function run(): Promise<Progress> {
   });
 
   const session = await connect(`ws://127.0.0.1:${port}`, {
-    catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
-    encoding: "flatbuffers",
-    // The generated tables give the session the limit of each member that a
-    // `[limits]` entry raises or lowers; cabin has none, so every member
-    // keeps the default ceiling of its kind.
-    interfaces: [Cabin, Horn],
-    bound: STEP_BOUND_MS,
-    // The session checks each `temperature` payload with the wasm codec before
-    // `onPublish` sees it. A payload the check refuses arrives as an invalid
-    // sample with `detected` set and no payload; `onPublish` fails the run on it.
-    checks: signalChecks(codec),
+    ...sessionOptions(codec),
+    // `sessionOptions` registers `signalChecks(codec)`: the session checks each
+    // `temperature` payload with the wasm codec before `onPublish` sees it. A
+    // payload the check refuses arrives as an invalid sample with `detected`
+    // set and no payload; `onPublish` fails the run on it.
     onNote(note) {
       if (note.note === "check-failed" && !settled) {
         settled = true;

@@ -6,10 +6,15 @@
 // the payloads of its self-test with the generated `encodeTemperature`.
 
 import type { Codec } from "../../../packages/ridl-runtime/mod.ts";
+import type { connect } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   Cabin,
+  CATALOG_HASH,
+  CATALOG_NAME,
   encodeTemperature,
+  Horn,
   RULES,
+  signalChecks,
 } from "./generated/veh.cabin.codec.ts";
 import type { Temperature } from "./generated/veh.cabin.ts";
 
@@ -186,4 +191,35 @@ export class TemperatureCheck {
     this.#failure = { kind: "fail", cause };
     return this.#failure;
   }
+}
+
+/**
+ * The time `connect` and `subscribe` each wait for the server, in milliseconds.
+ * The server answers within a few milliseconds; the bound makes a server that
+ * never answers reject the call with `timeout`.
+ */
+export const STEP_BOUND_MS = 10_000;
+
+/**
+ * The options that main.ts and page.ts give to `connect`: the catalog, the
+ * encoding, the limits of the generated interfaces, the bound of each step,
+ * and the signal checks of the generated module. Each program adds its own
+ * `onNote` and `onPublish`.
+ */
+export function sessionOptions(
+  codec: Codec,
+): Pick<
+  Parameters<typeof connect>[1],
+  "catalog" | "encoding" | "interfaces" | "bound" | "checks"
+> {
+  return {
+    catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
+    encoding: "flatbuffers",
+    // The generated tables give the session the limit of each member that a
+    // `[limits]` entry raises or lowers; cabin has none, so every member
+    // keeps the default ceiling of its kind.
+    interfaces: [Cabin, Horn],
+    bound: STEP_BOUND_MS,
+    checks: signalChecks(codec),
+  };
 }
