@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError, codePointLength } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength, isWellFormedString } from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeCode`.
@@ -18,6 +18,9 @@ const __ridlPatternCode = new globalThis.RegExp('^\\d+\'x$');
 
 /** Builds a `Code`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeCode(value: string): Code {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.common.Code', value, 'well-formed text');
+  }
   if (codePointLength(value) < 1) {
     throw new ConstraintError('length', 'veh.common.Code', value, '[1..8]');
   }

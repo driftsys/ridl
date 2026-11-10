@@ -79,7 +79,7 @@ export class StreamError extends Error {
 
 /** Thrown when construction of a named scalar breaks a checked constraint. */
 export class ConstraintError extends RangeError {
-  readonly rule: "range" | "step" | "length" | "pattern";
+  readonly rule: "range" | "step" | "length" | "pattern" | "utf8";
   readonly type: string;
 
   constructor(

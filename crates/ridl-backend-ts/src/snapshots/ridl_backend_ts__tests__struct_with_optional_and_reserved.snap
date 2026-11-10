@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import { ConstraintError, isWellFormedString, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -51,8 +51,16 @@ export function initSpeed(): Speed {
  */
 export type Label = string & { readonly __ridl: 'veh.common.Label' };
 
-/** Builds a `Label`. */
+/** Builds a `Label`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeLabel(value: string): Label {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.common.Label', value, 'well-formed text');
+  }
+  return value as Label;
+}
+
+/** Builds a `Label` without checking a value already known to satisfy its constraints. */
+export function makeLabelUnchecked(value: string): Label {
   return value as Label;
 }
 

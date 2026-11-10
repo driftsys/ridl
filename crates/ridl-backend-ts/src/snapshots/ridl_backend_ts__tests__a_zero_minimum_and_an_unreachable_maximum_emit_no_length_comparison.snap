@@ -1,0 +1,27 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+import { ConstraintError, isWellFormedString } from '@driftsys/ridl-runtime';
+
+/**
+ * Build a value with `makeOpen`.
+ *
+ * @remarks
+ * Rules:
+ * - length 0 ..= 18446744073709551615
+ */
+export type Open = string & { readonly __ridl: 'veh.common.Open' };
+
+/** Builds a `Open`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeOpen(value: string): Open {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.common.Open', value, 'well-formed text');
+  }
+  return value as Open;
+}
+
+/** Builds a `Open` without checking a value already known to satisfy its constraints. */
+export function makeOpenUnchecked(value: string): Open {
+  return value as Open;
+}

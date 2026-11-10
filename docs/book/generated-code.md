@@ -803,6 +803,7 @@ This table records, for each kind of rule, the generated item that checks it:
 | step             | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
 | unit             | not checked                                               | not checked             |
 | length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | checked by `make<Name>` |
+| well-formed text | a `String` always is; `verify` checks the bytes           | checked by `make<Name>` |
 | pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | checked by `make<Name>` |
 | collection bound | checked by `encode` and `verify`                          | not checked             |
 | timing           | not checked                                               | not checked             |
@@ -847,15 +848,19 @@ In the Rust column:
 
 In the TypeScript column, `make<Name>` is the constructor of a named scalar in
 the domain module; every named scalar has one, constrained or not. It checks the
-range, step, length and pattern in that order, stops at the first violation, and
-throws a `ConstraintError` from `@driftsys/ridl-runtime`. Its `rule` is `range`,
-`step`, `length` or `pattern`, its `type` is the qualified name of the type, and
-its message names the value and the constraint. A number-backed integer must be
-a safe integer, so a fraction, NaN, an infinity and a value beyond ±(2^53 − 1)
-break the `range` rule, bounds or not. A bigint-backed integer checks the
-declared bounds intersected with its domain (the `i64` interval, or `0` through
-`i64::MAX` for a `u64`). A float checks that it is finite when it declares a
-bound or a step. A string length counts Unicode code points, as the Rust
+well-formedness of a string, then the range, step, length and pattern, in that
+order, stops at the first violation, and throws a `ConstraintError` from
+`@driftsys/ridl-runtime`. Its `rule` is `range`, `step`, `length`, `pattern` or
+`utf8`, its `type` is the qualified name of the type, and its message names the
+value and the constraint. A number-backed integer must be a safe integer, so a
+fraction, NaN, an infinity and a value beyond ±(2^53 − 1) break the `range`
+rule, bounds or not. A bigint-backed integer checks the declared bounds
+intersected with its domain (the `i64` interval, or `0` through `i64::MAX` for a
+`u64`). A float checks that it is finite when it declares a bound or a step. A
+string is well-formed when it holds no unpaired surrogate; a JavaScript string
+may hold one, which is not a Unicode scalar value and which `TextEncoder`
+replaces with U+FFFD without an error, so a string with one breaks the `utf8`
+rule before any other. A string length counts Unicode code points, as the Rust
 `chars().count()` does, so `"😀"` has length 1, and a bytes length counts bytes.
 The pattern is a `RegExp` built once for the module, without the `u` flag, with
 the ECMA-262 semantics of the checker, so it can disagree with the Rust `regex`
@@ -870,10 +875,10 @@ feature switch.
 `make<Name>Unchecked` returns the value without a check, for a value already
 known to satisfy the constraints. It exists only for a scalar whose `make<Name>`
 checks something: every integer-backed scalar, a float with a bound or a step,
-and a string scalar with a pattern or a length bound that can be broken, or a
-bytes scalar with such a length bound (a minimum of 0 and a maximum beyond 2^53
-− 1 cannot be broken). The module refuses a declaration named `ConstraintError`,
-`codePointLength`, `offFloatPoints` or `offFloatStep`, which it imports from
+every string scalar, and a bytes scalar with a length bound that can be broken
+(a minimum of 0 and a maximum beyond 2^53 − 1 cannot be broken). The module
+refuses a declaration named `ConstraintError`, `codePointLength`,
+`isWellFormedString`, `offFloatPoints` or `offFloatStep`, which it imports from
 `@driftsys/ridl-runtime` when a check needs them:
 
 ```typescript

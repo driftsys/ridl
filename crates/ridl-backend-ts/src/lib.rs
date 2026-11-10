@@ -406,9 +406,10 @@ impl Check {
 
 /// Names that a domain module imports from `@driftsys/ridl-runtime`. A
 /// declaration with one of these names is refused.
-const RESERVED_NAMES: [&str; 4] = [
+const RESERVED_NAMES: [&str; 5] = [
     "ConstraintError",
     "codePointLength",
+    "isWellFormedString",
     "offFloatPoints",
     "offFloatStep",
 ];
@@ -501,21 +502,33 @@ pub(crate) fn scalar_has_unchecked(scalar: &v1::Scalar) -> bool {
         v1::ScalarClass::Float => {
             constraint.is_some_and(|c| c.min.is_some() || c.max.is_some() || c.step.is_some())
         }
-        v1::ScalarClass::String => length || constraint.is_some_and(|c| c.pattern.is_some()),
+        v1::ScalarClass::String => true,
         v1::ScalarClass::Bytes => length,
         _ => false,
     }
 }
 
-/// The length and pattern checks of a string or bytes scalar, in the order of
-/// the Rust `check`: a positive minimum, the maximum, then the pattern. A
+/// The checks of a string or bytes scalar, in the order of the Rust `check`.
+/// A string first checks that it is well-formed (typl §4.4): a lone surrogate is
+/// not a Unicode scalar value, and `TextEncoder` would replace it silently. Then
+/// both kinds check a positive minimum and the maximum, and a string checks the
+/// pattern. A
 /// string length counts code points (typl §5.3), as `chars()` does in Rust, and
 /// a bytes length counts bytes (typl §5.4). A minimum of 0 is the default bound
 /// and cannot be broken, and a maximum beyond the safe number interval cannot
 /// be exceeded, so neither emits a comparison. Bytes carry no pattern.
 fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
+    let mut checks = Vec::new();
+    if string {
+        checks.push(Check {
+            rule: "utf8",
+            condition: "!isWellFormedString(value)".to_string(),
+            constraint: "well-formed text".to_string(),
+            helper: Some("isWellFormedString"),
+        });
+    }
     let Some(c) = &td.constraint else {
-        return Vec::new();
+        return checks;
     };
     let (length, helper) = if string {
         ("codePointLength(value)", Some("codePointLength"))
@@ -527,7 +540,6 @@ fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
         c.len_min.map(|min| min.to_string()).unwrap_or_default(),
         c.len_max.map(|max| max.to_string()).unwrap_or_default()
     );
-    let mut checks = Vec::new();
     let mut length_check = |condition: String| {
         checks.push(Check {
             rule: "length",

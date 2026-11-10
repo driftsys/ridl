@@ -1,5 +1,6 @@
 import type { Codec, VerifyResult } from "./codec.ts";
 import { CodecError, StreamError } from "./errors.ts";
+import { isWellFormedString } from "./well_formed.ts";
 
 /** Options for a streaming interaction. */
 export interface StreamOptions {
@@ -182,7 +183,7 @@ export function textUpload(
 ): WritableStream<string> {
   const encoder = new TextEncoder();
   return adaptUpload(upload, async (text, write) => {
-    if (!text.isWellFormed()) {
+    if (!isWellFormedString(text)) {
       throw new StreamError({
         category: "contract",
         contract: { category: "invalid-value", rule: "utf8" },
