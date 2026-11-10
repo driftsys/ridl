@@ -718,11 +718,11 @@ mod mapping {
 fn default_payload_ceiling_is_enforced_without_schema_verification() {
     let mut s = session();
     let now = Instant::now();
+    let mut table = super::super::MemberTable::new(s.backend.table.name(), *s.backend.table.hash());
     for target in [SIGNAL, EVENT] {
-        s.backend
-            .table
-            .insert(target.iface, target.ord, target.kind, None);
+        table.insert(target.iface, target.ord, target.kind, None);
     }
+    s.backend.table = table;
     ready(&mut s, now);
     let bytes = vec![0xff; 3840];
     send(
