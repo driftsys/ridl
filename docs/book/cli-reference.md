@@ -2587,9 +2587,10 @@ starts with a dot and does not follow symbolic links. This command does not add
 a member to an existing workspace. The search upward does not stop at a `.git`
 directory, because MANI-013 does not, and it follows symbolic links. Every
 target is checked before any file is written, the member files are written
-before the workspace root manifest, and a write that fails removes the paths
-this command created. There is no exit 1. The cases are confirmed against the
-built binary by `crates/ridl/tests/scaffold_cli.rs`.
+before the workspace root manifest, and a file write that fails removes the
+paths this command created. A failed write of the `Created` line to stdout exits
+2 after the files are written. There is no exit 1. The cases are confirmed
+against the built binary by `crates/ridl/tests/scaffold_cli.rs`.
 
 ### `ridl new`
 
@@ -2768,7 +2769,8 @@ runs from. It then does three things:
    so that, after a run, no directory other than a remote unit's remains among
    the non-hidden entries of `vendor/`; a file, a symbolic link and a hidden
    entry (a name that starts with `.`) are left alone. Nothing in `vendor/`
-   changes when the run has an error.
+   changes when the run has a diagnostic error. A failed write to stdout after
+   the vendor directory is written exits 2 with the directory already updated.
 
 Each changed unit prints one line, `vendored <key>` or `removed <key>`; a run
 that changes nothing prints `vendor/ is up to date; nothing to change`. A unit's
@@ -3020,7 +3022,7 @@ stable, default-free flags.
 | `ridl diff`                  | the change is compatible, or the two sides are identical                                                            | the change is breaking                                                                                                                                                                                                                                                                          | a side fails to compile, an input is missing or has invalid context, explicit podbuf comparison has missing or unusable remote inline evidence, or neither `--explain` nor both inputs were given, or a transaction marker records an active or interrupted baseline publication                                                                                                                                                                       |
 | `ridl lock`                  | the file is written, or there is nothing to change                                                                  | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error                                                                       | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one package, an instance edit from inside a member; an I/O failure writing                                                                                                                           |
 | `ridl lock merge`            | the three sides merge clean, and the result is written to OURS                                                      | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved                                                                                                                                                         | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS                                                                                                                                                                                                                                                                                                            |
-| `ridl init` / `ridl new`     | the files are written                                                                                               |                                                                                                                                                                                                                                                                                                 | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written                                                                                                                                                                           |
+| `ridl init` / `ridl new`     | the files are written                                                                                               |                                                                                                                                                                                                                                                                                                 | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); these refusals write nothing; a failed write of the `Created` line to stdout exits 2 after the files are written                                                                             |
 | `ridl describe`              | the descriptor was printed                                                                                          |                                                                                                                                                                                                                                                                                                 | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                                                                                                                                                                                                      |
 | `ridl vendor`                | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108) | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/`, or a fetch failure (MANI-101)                                                                                                                                                                                                                                                                                                               |
 
@@ -3045,10 +3047,14 @@ of 1 without knowing which subcommand produced it says nothing on its own.
 Exit code 2 is the one genuinely shared meaning — an input the command could not
 use at all, including `ridl fmt`'s missing or unreadable path since
 [ADR-0010][adr-0010] closed the gap documented under [`ridl fmt`](#ridl-fmt)
-above. A `clap`-level usage error — a missing required argument, an unrecognized
-flag, or no subcommand at all — is also exit 2 on both binaries, which happens
-to agree with the applications' own convention rather than being one of their
-exit paths:
+above. A failed write of a command's report to stdout, for example when a reader
+has closed the pipe, is also exit 2 for `ridl diff`, `ridl check --format json`,
+`ridl check --format sarif`, `ridl test`, `ridl lock`, `ridl vendor`,
+`ridl new`, `ridl init`, and `ridl describe`. Help and version output are not
+covered by this rule. A `clap`-level usage error — a missing required argument,
+an unrecognized flag, or no subcommand at all — is also exit 2 on both binaries,
+which happens to agree with the applications' own convention rather than being
+one of their exit paths:
 
 ```sh
 ridl check --bogus-flag

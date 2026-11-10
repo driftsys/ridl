@@ -97,13 +97,21 @@ pub fn run(path: &Path) -> ExitCode {
     });
     eprint!("{}", render(&output.diagnostics, &output.sources));
     for name in &report.written {
-        println!("vendored {name}");
+        if let Err(code) = crate::out::write(&format!("vendored {name}\n")) {
+            return code;
+        }
     }
     for name in &report.removed {
-        println!("removed {name}");
+        if let Err(code) = crate::out::write(&format!("removed {name}\n")) {
+            return code;
+        }
     }
-    if report.written.is_empty() && report.removed.is_empty() {
-        println!("{VENDOR_DIR}/ is up to date; nothing to change");
+    if report.written.is_empty()
+        && report.removed.is_empty()
+        && let Err(code) =
+            crate::out::write(&format!("{VENDOR_DIR}/ is up to date; nothing to change\n"))
+    {
+        return code;
     }
     ExitCode::SUCCESS
 }

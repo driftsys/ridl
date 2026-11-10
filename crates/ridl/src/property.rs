@@ -242,9 +242,12 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
         })
         .collect();
 
-    match format {
-        TestFormat::Text => print!("{}", render_text(&reports)),
-        TestFormat::Json => println!("{}", render_json(&reports)),
+    let written = match format {
+        TestFormat::Text => crate::out::write(&render_text(&reports)),
+        TestFormat::Json => crate::out::write(&format!("{}\n", render_json(&reports))),
+    };
+    if let Err(code) = written {
+        return code;
     }
 
     if reports.iter().any(PackageReport::failed) {

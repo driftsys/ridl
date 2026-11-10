@@ -326,8 +326,10 @@ fn allocate(entry: &Path, units: &mut [LockedUnit]) -> Result<(), ExitCode> {
             lines.push(format!("{prefix}allocated {key} {number}"));
         }
         write(unit)?;
+        // A stdout failure exits 2 after this unit's lock file and those for
+        // earlier units were written; a rerun completes the remaining units.
         for line in lines {
-            println!("{line}");
+            crate::out::write(&format!("{line}\n"))?;
         }
     }
     Ok(())
@@ -423,7 +425,7 @@ fn allocate_instances(
     }
     instances.write(&lock)?;
     for line in lines {
-        println!("{line}");
+        crate::out::write(&format!("{line}\n"))?;
     }
     Ok(())
 }
@@ -646,7 +648,7 @@ fn edit(
         instances.write(&instance_lock)?;
     }
     for line in lines {
-        println!("{line}");
+        crate::out::write(&format!("{line}\n"))?;
     }
     Ok(())
 }

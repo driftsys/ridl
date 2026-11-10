@@ -51,6 +51,7 @@ use std::process::ExitCode;
 mod baseline;
 mod catalogs;
 mod lock;
+mod out;
 mod podbuf_padding;
 mod property;
 mod scaffold;
@@ -609,8 +610,13 @@ fn run_mcp() -> ExitCode {
 fn run_explain(category: &str) -> ExitCode {
     match ridl_diff::category_from_word(category) {
         Some(category) => {
-            println!("{}", ridl_diff::category_word(category));
-            println!("{}", ridl_diff::explain(category));
+            if let Err(code) = out::write(&format!(
+                "{}\n{}\n",
+                ridl_diff::category_word(category),
+                ridl_diff::explain(category)
+            )) {
+                return code;
+            }
             ExitCode::SUCCESS
         }
         None => {
@@ -627,7 +633,8 @@ fn run_explain(category: &str) -> ExitCode {
 /// Compares the `old` and `new` inputs, judged for `encodings`, and renders
 /// the report to stdout, returning the diff exit code: 2 on an I/O or compile
 /// error while loading either side, 1 when the change is breaking, 0 when it
-/// is compatible or the two are identical.
+/// is compatible or the two are identical. A failed write of the report to
+/// stdout exits 2, replacing even a breaking verdict.
 fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncoding]) -> ExitCode {
     let mut db = ridl_core::RidlDatabase::default();
     let old_side = match ridlc::load_diff_side(&mut db, old, &[]) {
@@ -678,9 +685,12 @@ To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out B
     };
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
-    match format {
-        DiffFormat::Text => print!("{}", ridl_diff::render_text(&report)),
-        DiffFormat::Json => println!("{}", ridl_diff::render_json(&report)),
+    let written = match format {
+        DiffFormat::Text => out::write(&ridl_diff::render_text(&report)),
+        DiffFormat::Json => out::write(&format!("{}\n", ridl_diff::render_json(&report))),
+    };
+    if let Err(code) = written {
+        return code;
     }
 
     match report.verdict {
@@ -3196,7 +3206,7 @@ fn exit_code(run: &CliRun) -> ExitCode {
 }
 
 /// Ends `ridl check`: text renders to stderr through [`finish`]; JSON and
-/// SARIF print their contract to stdout and keep the same exit code. The
+/// SARIF print their contract to stdout; a failed stdout write exits 2. The
 /// SARIF artifact URIs are relative to the working directory, not to the
 /// checked path, so one log has one base (ADR-0024 decision 13). The
 /// comparison is lexical: `current_dir` returns the physical path, so an
@@ -3210,10 +3220,10 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
         CheckFormat::Text => finish(Ok(run)),
         CheckFormat::Json => {
             let json = ridl_core::diag::to_json(&run.diagnostics, &run.sources);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json).expect("diagnostics serialize")
-            );
+            let text = serde_json::to_string_pretty(&json).expect("diagnostics serialize");
+            if let Err(code) = out::write(&format!("{text}\n")) {
+                return code;
+            }
             exit_code(&run)
         }
         CheckFormat::Sarif => {
@@ -3224,10 +3234,10 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
                 cwd.as_deref(),
                 env!("CARGO_PKG_VERSION"),
             );
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&log).expect("the SARIF log serializes")
-            );
+            let text = serde_json::to_string_pretty(&log).expect("the SARIF log serializes");
+            if let Err(code) = out::write(&format!("{text}\n")) {
+                return code;
+            }
             exit_code(&run)
         }
     }
