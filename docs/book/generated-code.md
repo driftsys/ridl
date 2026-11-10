@@ -797,20 +797,20 @@ reply that breaks an `ensure` clause.
 
 This table records, for each kind of rule, the generated item that checks it:
 
-| Rule             | Rust                                                      | TypeScript              |
-| ---------------- | --------------------------------------------------------- | ----------------------- |
-| range            | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
-| step             | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
-| unit             | not checked                                               | not checked             |
-| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | checked by `make<Name>` |
-| well-formed text | a `String` always is; `verify` checks the bytes           | checked by `make<Name>` |
-| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | checked by `make<Name>` |
-| collection bound | checked by `encode` and `verify`                          | not checked             |
-| timing           | not checked                                               | not checked             |
-| response bound   | `max` checked by the future of a `Client` call            | not checked             |
-| errors           | not checked                                               | not checked             |
-| `require`        | checked by the call methods of `Client` and by `serve`    | not checked             |
-| `ensure`         | checked by `serve`                                        | not checked             |
+| Rule             | Rust                                                      | TypeScript                                 |
+| ---------------- | --------------------------------------------------------- | ------------------------------------------ |
+| range            | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>`                    |
+| step             | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>`                    |
+| unit             | not checked                                               | not checked                                |
+| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | checked by `make<Name>`                    |
+| well-formed text | a `String` always is; `verify` checks the bytes           | checked by `make<Name>` and `encode<Name>` |
+| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | checked by `make<Name>`                    |
+| collection bound | checked by `encode` and `verify`                          | not checked                                |
+| timing           | not checked                                               | not checked                                |
+| response bound   | `max` checked by the future of a `Client` call            | not checked                                |
+| errors           | not checked                                               | not checked                                |
+| `require`        | checked by the call methods of `Client` and by `serve`    | not checked                                |
+| `ensure`         | checked by `serve`                                        | not checked                                |
 
 In the Rust column:
 

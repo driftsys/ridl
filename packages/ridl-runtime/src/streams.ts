@@ -1,5 +1,5 @@
 import type { Codec, VerifyResult } from "./codec.ts";
-import { CodecError, ConstraintError, StreamError } from "./errors.ts";
+import { CodecError, StreamError } from "./errors.ts";
 import { isWellFormedString } from "./well_formed.ts";
 
 /** Options for a streaming interaction. */
@@ -213,7 +213,7 @@ function codecException(error: unknown): StreamError {
   // well-formed; its rule is a payload rule too.
   if (
     error instanceof Error &&
-    (error.name === "RuleError" || error instanceof ConstraintError) &&
+    (error.name === "RuleError" || error.name === "ConstraintError") &&
     "rule" in error
   ) {
     switch (error.rule) {

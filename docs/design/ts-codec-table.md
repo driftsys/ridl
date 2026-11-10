@@ -122,7 +122,8 @@ functions carry model-derived interaction and parameter TSDoc (D-18). The
 imports are namespaced (`flatbuffers`, `t` for `<base>.ts`, `fb` for `flatc`'s
 output, one alias per foreign package), and every relative import carries the
 `.js` suffix (D-15). Ordinary entries import only the runtime's `PayloadCodec`
-type when needed and satisfy `MemberRef` structurally. Stream functions also
+type when needed, plus the value `checkWellFormed` when the module writes a
+string (D-11), and satisfy `MemberRef` structurally. Stream functions also
 import the runtime types, errors and adapters described in D-17; they import
 nothing from the WebSocket package. A module with a signal also imports the
 runtime's `Codec`, `SignalCheckEntry` and `CodecError` types for `signalChecks`.

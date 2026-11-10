@@ -41,9 +41,11 @@ export const PAYLOAD_TYPES = [
   "veh.common.Extras",
   "veh.common.Gain",
   "veh.common.GearPosition",
+  "veh.common.Inline",
   "veh.common.Mode",
   "veh.common.Note",
   "veh.common.Outcome",
+  "veh.common.Phrase",
   "veh.common.Pick",
   "veh.common.RPM",
   "veh.common.Ratio",
@@ -528,6 +530,58 @@ function unpackExtras(object: fb.ExtrasT): t.Extras {
     new: t.makeCounterUnchecked(object.new_),
     class: t.makeCounterUnchecked(object.class_),
   };
+}
+
+/** Encodes a `veh.common.Inline` payload. */
+export function encodeInline(value: t.Inline): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packInline(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Inline` payload the codec has verified. */
+export function decodeInline(bytes: Uint8Array): t.Inline {
+  return unpackInline(fb.Inline.getRootAsInline(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packInline(value: t.Inline): fb.InlineT {
+  const object = new fb.InlineT();
+  object.text = checkWellFormed(value.text, "veh.common.Inline.text");
+  return object;
+}
+function unpackInline(object: fb.InlineT): t.Inline {
+  return {
+    text: object.text as string,
+  };
+}
+
+/** Encodes a `veh.common.Phrase` payload. */
+export function encodePhrase(value: t.Phrase): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packPhrase(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Phrase` payload the codec has verified. */
+export function decodePhrase(bytes: Uint8Array): t.Phrase {
+  return unpackPhrase(fb.Phrase.getRootAsPhrase(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packPhrase(value: t.Phrase): fb.PhraseT {
+  switch (value.kind) {
+    case "remark":
+      return new fb.PhraseT(fb.PhraseUnion.remark, new fb.PhraseRemarkBoxT(checkWellFormed(value.value, "veh.common.Phrase.remark")));
+    case "gear":
+      return new fb.PhraseT(fb.PhraseUnion.gear, new fb.PhraseGearBoxT(BigInt(value.value)));
+  }
+}
+function unpackPhrase(object: fb.PhraseT): t.Phrase {
+  switch (object.valueType) {
+    case fb.PhraseUnion.remark:
+      return { kind: "remark", value: t.makeRemarkUnchecked((object.value as fb.PhraseRemarkBoxT).value as string) };
+    case fb.PhraseUnion.gear:
+      return { kind: "gear", value: unpackGearPosition((object.value as fb.PhraseGearBoxT).value) };
+    default:
+      throw new RangeError("union veh.common.Phrase carries no arm");
+  }
 }
 
 /** Encodes a `veh.common.Pick` payload. */

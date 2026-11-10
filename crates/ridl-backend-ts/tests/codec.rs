@@ -818,7 +818,13 @@ fn an_internal_interaction_payload_is_refused() {
 /// names.
 #[test]
 fn an_interface_named_as_a_reserved_name_is_refused() {
-    for reserved in ["RULES", "PayloadCodec", "fb", "ridl_std_codec"] {
+    for reserved in [
+        "RULES",
+        "PayloadCodec",
+        "fb",
+        "ridl_std_codec",
+        "checkWellFormed",
+    ] {
         let mut model = common_model();
         let interface = model
             .interfaces

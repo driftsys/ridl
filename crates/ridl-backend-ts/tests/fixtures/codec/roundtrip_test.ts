@@ -382,3 +382,21 @@ Deno.test("encode still accepts well-formed text with an astral character", () =
   const note = { text: "\u{1f600}" as t.Remark };
   assert.deepEqual(codec.decodeNote(codec.encodeNote(note)), note);
 });
+
+Deno.test("encode refuses a lone surrogate in an inline string field", () => {
+  refusesText(
+    "veh.common.Inline.text",
+    () => codec.encodeInline({ text: "\ud83d" }),
+  );
+  const inline: t.Inline = { text: "\u{1f600}" };
+  assert.deepEqual(codec.decodeInline(codec.encodeInline(inline)), inline);
+});
+
+Deno.test("encode refuses a lone surrogate in a string scalar union arm", () => {
+  refusesText(
+    "veh.common.Phrase.remark",
+    () => codec.encodePhrase({ kind: "remark", value: "\ude00" as t.Remark }),
+  );
+  const phrase: t.Phrase = { kind: "remark", value: "\u{1f600}" as t.Remark };
+  assert.deepEqual(codec.decodePhrase(codec.encodePhrase(phrase)), phrase);
+});

@@ -47,6 +47,17 @@ struct Extras {
   class    : Counter
 }
 
+/// A struct whose string is written inline, with no named scalar.
+struct Inline {
+  text : string [0..8]
+}
+
+/// A union with a string scalar arm and an enum arm.
+union Phrase {
+  remark : Remark
+  gear   : GearPosition
+}
+
 /// A union with a scalar arm and an enum arm, which `flatc` boxes.
 union Pick {
   speed   : Speed
