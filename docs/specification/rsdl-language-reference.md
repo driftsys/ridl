@@ -823,7 +823,9 @@ still reported.
   heading, and its attributes are compared with an empty side. A member line
   added to or removed from a distribution — a component moved from one
   distribution to another is both — is listed under this heading, and its
-  backend keys are compared with an empty side.
+  backend keys are compared with an empty side. A `system` member line, or an
+  `offers` or `requires` line of a component in both closures, added or removed,
+  is treated the same way: its backend keys are compared with an empty side.
 - A locked instance number (§7) that differs between the two sides is listed
   under a third heading, **instance number changed**, and is **breaking**: a
   client built against the old number addresses another instance, or none. So is
