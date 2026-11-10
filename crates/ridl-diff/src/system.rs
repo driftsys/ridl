@@ -1220,6 +1220,10 @@ mod tests {
             lines(&diff_systems(&old, &grown)),
             ["composition changed: veh.topology.Gauge: (absent) -> in the closure"]
         );
+        assert_eq!(
+            lines(&diff_systems(&grown, &old)),
+            ["composition changed: veh.topology.Gauge: in the closure -> (removed)"]
+        );
     }
 
     /// rsdl §14: a `system` member line added or removed lists its backend
