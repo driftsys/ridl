@@ -7080,3 +7080,18 @@ fn a_reply_changed_from_a_type_to_a_stream_of_it_keeps_its_current_category() {
     assert_eq!(report.changes[0].category, Category::ReturnChanged);
     assert_eq!(report.changes[0].verdict, Verdict::Breaking);
 }
+
+#[test]
+fn decl_removed_explains_the_gone_unit_publication_override() {
+    let explanation = crate::explain(crate::Category::DeclRemoved);
+    assert!(explanation.contains("removed unit"), "{explanation}");
+    assert!(
+        explanation.contains("packages are gone from the new set"),
+        "{explanation}"
+    );
+    assert!(
+        explanation.contains("delete the unit's snapshots from the baseline"),
+        "{explanation}"
+    );
+    assert!(explanation.contains("RIDL-412"), "{explanation}");
+}

@@ -631,25 +631,28 @@ is the lock's: an interface whose number is provisional — a declaration with n
 entry in the unit's `interfaces.lock` — is refused (RIDL-411, exit 1, nothing
 published), on a first publication as on a replacement, until plain `ridl lock`
 records the number; and a number the published baseline holds that the fresh
-snapshot neither carries nor retires is refused too (RIDL-412). That covers a
-lock line deleted by hand, since a live entry with no declaration already fails
-the build with RIDL-409. It also covers a package deleted, without retiring its
-numbers, from a unit that still has other packages, and a whole unit deleted
-from the workspace. For a package the message names the line to restore in the
-unit's `interfaces.lock`. For a whole unit the lock left with it, so the message
-names the deliberate override instead: delete the snapshots of that unit from
-`.ridl/baseline/`, so that the next publication holds no number to lose. A
-published snapshot written before the IR recorded the unit carries no `unit`;
-the gate compares it in the unit of the fresh package of the same name, so the
-migration to one `interfaces.lock` per unit — delete the per-package lock files,
-run `ridl lock`, run `ridl baseline` — passes RIDL-412 when the unit's new
-numbering reaches every published number. When it does not, because a legacy
-lock held retired entries, remove `.ridl/baseline/` and run `ridl baseline`
-again: a first publication is not compared against a published number, and no
-flag overrides the gate. A whole service removed from the source is reported by
-`ridl diff` as breaking but is not refused here (ridl §17.14), and a named-form
-service's list is a set the gate does not read. Deleting `doorClosed` outright,
-with `doorOpened` and `doorLocked` still declared:
+snapshot neither carries nor retires is refused too (RIDL-412). A published
+provisional number carries no identity and is excluded. That covers a lock line
+deleted by hand, since a live entry with no declaration already fails the build
+with RIDL-409. It also covers a package deleted, without retiring its numbers,
+from a unit that still has other packages, and a whole unit deleted from the
+workspace. For a package the message names the line to restore in the unit's
+`interfaces.lock`, with one refusal per lost number. For a whole unit the lock
+left with it, so one RIDL-412 lists all lost keys and numbers and names the
+deliberate override: delete the snapshots of that unit from the publication
+directory (`.ridl/baseline/` by default, or the directory selected by `--out`),
+so that the next publication holds no number to lose. A published snapshot
+written before the IR recorded the unit carries no `unit`; the gate compares it
+in the unit of the fresh package of the same name, so the migration to one
+`interfaces.lock` per unit — delete the per-package lock files, run `ridl lock`,
+run `ridl baseline` — passes RIDL-412 when the unit's new numbering reaches
+every published number. When it does not, because a legacy lock held retired
+entries, remove `.ridl/baseline/` and run `ridl baseline` again: a first
+publication is not compared against a published number, and no flag overrides
+the gate. A whole service removed from the source is reported by `ridl diff` as
+breaking but is not refused here (ridl §17.14), and a named-form service's list
+is a set the gate does not read. Deleting `doorClosed` outright, with
+`doorOpened` and `doorLocked` still declared:
 
 ```sh
 ridl baseline

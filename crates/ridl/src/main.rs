@@ -1076,6 +1076,7 @@ fn run_baseline(
 /// `out_dir` (empty when the directory does not exist or holds no snapshot)
 /// and the snapshots just built in the staging directory.
 struct PublicationSets {
+    out_dir: PathBuf,
     published: Vec<ridl_ir::v2::Package>,
     fresh: Vec<ridl_ir::v2::Package>,
     /// `ridl_diff::diff_sets` of the two sets, computed once for both gates;
@@ -1103,6 +1104,7 @@ impl PublicationSets {
         )?;
         let report = (!published.is_empty()).then(|| ridl_diff::diff_sets(&published, &fresh));
         Ok(Self {
+            out_dir: out_dir.to_path_buf(),
             published,
             fresh,
             report,
@@ -1316,10 +1318,12 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// number, so such a change is a number the fresh side carries under no name
 /// and does not list as retired, and the package-level `DeclRemoved` of a
 /// package whose whole unit is gone from the fresh set, which loses every
-/// shape the package held ([`dropped_numbers`]). Each lost number is refused
-/// once per package, since a declared interface and an inline-form service
-/// of one name are reported at one path. A published `number` 0
-/// predates the lock and was matched by name, so its removal is not refused
+/// allocated shape the package held ([`dropped_numbers`]). A gone unit gets
+/// one refusal listing its lost keys and numbers. A unit that remains gets
+/// one refusal per lost number and package, since a declared interface and an
+/// inline-form service of one name are reported at one path. A published
+/// provisional number carries no identity. A published `number` 0
+/// predates the lock and was matched by name, so neither is refused on removal
 /// (plan decision PD-9). RIDL-412 is a lock line deleted by hand, or a package
 /// or unit removed without retiring its numbers: a live entry with no
 /// declaration fails the build with RIDL-409 before publication.
@@ -1355,22 +1359,34 @@ fn interface_refusals(
     if let Some(report) = &sets.report {
         let published = &sets.published;
         let mut refused_numbers = BTreeSet::new();
+        let mut gone_units: BTreeMap<&str, Vec<DroppedNumber<'_>>> = BTreeMap::new();
+        let mut messages = Vec::new();
         for change in &report.changes {
-            for (package, shape) in dropped_numbers(change, published, fresh) {
-                if !refused_numbers.insert((package.name.as_str(), shape.interface.number)) {
+            for lost in dropped_numbers(change, published, fresh) {
+                if !refused_numbers
+                    .insert((lost.package.name.as_str(), lost.shape.interface.number))
+                {
                     continue;
                 }
-                let unit = published_unit(package, fresh);
-                let gone = ridl_ir::v2::packages_of_unit(unit, fresh).next().is_none();
-                refusals.push(Diagnostic {
-                    code: DiagCode::RIDL_412,
-                    severity: Severity::Error,
-                    message: dropped_number_message(package, &shape, unit, gone),
-                    primary: detached_span(),
-                    labels: Vec::new(),
-                    fixits: Vec::new(),
-                });
+                if lost.unit_gone {
+                    gone_units.entry(lost.unit).or_default().push(lost);
+                } else {
+                    messages.push(dropped_number_message(&[lost], &sets.out_dir));
+                }
             }
+        }
+        for lost in gone_units.values() {
+            messages.push(dropped_number_message(lost, &sets.out_dir));
+        }
+        for message in messages {
+            refusals.push(Diagnostic {
+                code: DiagCode::RIDL_412,
+                severity: Severity::Error,
+                message,
+                primary: detached_span(),
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            });
         }
     }
 
@@ -1415,10 +1431,17 @@ fn published_unit<'a>(
     ridl_ir::v2::unit_of(package)
 }
 
+struct DroppedNumber<'a> {
+    package: &'a ridl_ir::v2::Package,
+    shape: ridl_ir::v2::InterfaceShape<'a>,
+    unit: &'a str,
+    unit_gone: bool,
+}
+
 /// The published shapes a `DeclRemoved` change loses, when the number each
-/// held is one the lock allocated (not 0) and no package of its unit
-/// ([`published_unit`]) in the fresh set declares or retires — the RIDL-412
-/// shape.
+/// held is one the lock allocated (non-provisional and not 0) and no package
+/// of its unit ([`published_unit`]) in the fresh set declares or retires — the
+/// RIDL-412 shape.
 ///
 /// An interface-level change has a two-segment path and the walk's `interface`
 /// marker as its `before`. A declared interface and an inline-form service of
@@ -1435,8 +1458,8 @@ fn published_unit<'a>(
 fn dropped_numbers<'a>(
     change: &ridl_diff::Change,
     published: &'a [ridl_ir::v2::Package],
-    fresh: &[ridl_ir::v2::Package],
-) -> Vec<(&'a ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'a>)> {
+    fresh: &'a [ridl_ir::v2::Package],
+) -> Vec<DroppedNumber<'a>> {
     if change.category != ridl_diff::Category::DeclRemoved {
         return Vec::new();
     }
@@ -1455,9 +1478,16 @@ fn dropped_numbers<'a>(
         (None, Some(before)) if before.starts_with("package ") => package.shapes().collect(),
         _ => return Vec::new(),
     };
+    let unit = published_unit(package, fresh);
+    let unit_gone = ridl_ir::v2::packages_of_unit(unit, fresh).next().is_none();
     lost.into_iter()
         .filter(|shape| number_is_lost(package, shape, fresh))
-        .map(|shape| (package, shape))
+        .map(|shape| DroppedNumber {
+            package,
+            shape,
+            unit,
+            unit_gone,
+        })
         .collect()
 }
 
@@ -1469,7 +1499,7 @@ fn number_is_lost(
     fresh: &[ridl_ir::v2::Package],
 ) -> bool {
     let number = shape.interface.number;
-    if number == 0 {
+    if number == 0 || shape.interface.provisional {
         return false;
     }
     // The number is kept when any package of the unit declares it — a
@@ -1485,34 +1515,49 @@ fn number_is_lost(
     !kept
 }
 
-/// The RIDL-412 message: the name and number the baseline holds, the unit
-/// the gate compared it in, and the line that restores the record.
-fn dropped_number_message(
-    package: &ridl_ir::v2::Package,
-    shape: &ridl_ir::v2::InterfaceShape<'_>,
-    unit: &str,
-    unit_gone: bool,
-) -> String {
-    // The key is spelled relative to `unit`, which for a legacy snapshot is
-    // not the unit the package itself names.
-    let key = if shape.is_inline() {
-        lock::shape_key(package, shape)
+/// A lost shape's key, relative to the unit the gate compared it in. A
+/// legacy snapshot can name a different unit from the one used by the gate.
+fn dropped_number_key(lost: &DroppedNumber<'_>) -> LockKey {
+    if lost.shape.is_inline() {
+        lock::shape_key(lost.package, &lost.shape)
     } else {
-        LockKey::Interface(ridl_ir::v2::relative_name(unit, &package.name, shape.name))
-    };
-    let number = shape.interface.number;
-    if unit_gone {
-        // The unit's `interfaces.lock` left with the unit, so there is no
-        // line to restore: the override is to publish from an empty baseline.
+        LockKey::Interface(ridl_ir::v2::relative_name(
+            lost.unit,
+            &lost.package.name,
+            lost.shape.name,
+        ))
+    }
+}
+
+/// The RIDL-412 message for one lost number in a unit that remains, or all
+/// lost numbers of a gone unit, with the applicable recovery instruction.
+fn dropped_number_message(lost: &[DroppedNumber<'_>], out_dir: &Path) -> String {
+    let first = &lost[0];
+    let unit = first.unit;
+    if first.unit_gone {
+        let keys = lost
+            .iter()
+            .map(|lost| {
+                format!(
+                    "`{}` (number {})",
+                    dropped_number_key(lost),
+                    lost.shape.interface.number
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
         return format!(
-            "`{key}` holds interface number {number} in the baseline being replaced, in unit \
-             `{unit}`, but the workspace no longer has that unit. Publishing would lose the only \
-             record that the number was allocated. When the unit is removed on purpose, delete \
-             the snapshots of unit `{unit}` from `.ridl/baseline/`: a first publication holds no \
+            "The baseline being replaced holds interface numbers in unit `{unit}`: {keys}, \
+             but the workspace no longer has that unit. Publishing would lose the only \
+             record that these numbers were allocated. When the unit is removed on purpose, delete \
+             the snapshots of unit `{unit}` from `{}`: a first publication holds no \
              number to lose. Otherwise restore the unit and its `interfaces.lock` from version \
-             control."
+             control.",
+            out_dir.display()
         );
     }
+    let key = dropped_number_key(first);
+    let number = first.shape.interface.number;
     format!(
         "`{key}` holds interface number {number} in the baseline being replaced, in unit \
          `{unit}`, but the fresh snapshot neither declares that number nor retires it. \
@@ -3369,6 +3414,61 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fresh_provisional_number_does_not_keep_a_published_identity() {
+        let published = ridl_ir::v2::Package {
+            name: "veh.cluster".into(),
+            interfaces: vec![ridl_ir::v2::Interface {
+                name: "doors".into(),
+                number: 3,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let mut fresh = published.clone();
+        fresh.interfaces[0].provisional = true;
+        assert!(number_is_lost(
+            &published,
+            &published.shapes().next().unwrap(),
+            &[fresh]
+        ));
+    }
+
+    #[test]
+    fn a_services_own_removal_change_does_not_drop_shape_numbers() {
+        let published = vec![ridl_ir::v2::Package {
+            name: "veh.cluster".into(),
+            interfaces: vec![ridl_ir::v2::Interface {
+                name: "doors".into(),
+                number: 1,
+                ..Default::default()
+            }],
+            services: vec![ridl_ir::v2::Service {
+                name: "doors".into(),
+                shapes: vec![ridl_ir::v2::ServiceShape {
+                    kind: Some(ridl_ir::v2::service_shape::Kind::Inline(
+                        ridl_ir::v2::Interface {
+                            number: 2,
+                            ..Default::default()
+                        },
+                    )),
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        let mut fresh = published.clone();
+        fresh[0].services.clear();
+        let change = ridl_diff::Change {
+            path: "veh.cluster/doors".into(),
+            category: ridl_diff::Category::DeclRemoved,
+            before: Some("service".into()),
+            after: None,
+            verdict: ridl_diff::Verdict::Breaking,
+        };
+        assert!(dropped_numbers(&change, &published, &fresh).is_empty());
+    }
 
     /// `ridl diff --encoding` takes exactly the names a manifest's
     /// `[backend.<name>] encodings` list takes, spelled the same way, so a
