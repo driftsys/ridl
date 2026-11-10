@@ -2796,7 +2796,7 @@ fn a_bytes_length_counts_bytes() {
 }
 
 #[test]
-fn a_zero_minimum_and_an_unreachable_maximum_emit_no_comparison() {
+fn a_zero_minimum_and_an_unreachable_maximum_emit_no_length_comparison() {
     let decl = text_decl(
         "Open",
         v2::PrimitiveType::String,
@@ -2804,10 +2804,65 @@ fn a_zero_minimum_and_an_unreachable_maximum_emit_no_comparison() {
         None,
     );
     let source = ts_for(vec![decl]);
-    assert!(!source.contains("ConstraintError"), "{source}");
+    assert!(!source.contains("codePointLength"), "{source}");
     assert!(source.contains("function makeOpen("), "{source}");
-    assert!(!source.contains("makeOpenUnchecked"), "{source}");
+    assert!(source.contains("function makeOpenUnchecked("), "{source}");
+    assert!(
+        source.contains("import { ConstraintError, isWellFormedString }"),
+        "{source}"
+    );
     insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_string_scalar_checks_well_formedness_before_length_and_pattern() {
+    let decl = text_decl(
+        "Code",
+        v2::PrimitiveType::String,
+        (Some(1), Some(8)),
+        Some("/^[a-z]+$/"),
+    );
+    let source = ts_for(vec![decl]);
+    let utf8 = source
+        .find("if (!isWellFormedString(value)) {")
+        .unwrap_or_else(|| panic!("the well-formedness check:\n{source}"));
+    assert!(
+        source.contains("new ConstraintError('utf8', 'veh.common.Code', value, "),
+        "{source}"
+    );
+    let min = source.find("codePointLength(value) < 1").expect("min");
+    let pattern = source.find("test(value)").expect("pattern");
+    assert!(utf8 < min && min < pattern, "{source}");
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_bytes_scalar_has_no_well_formedness_check() {
+    let decl = text_decl("Blob", v2::PrimitiveType::Bytes, (Some(2), Some(4)), None);
+    let source = ts_for(vec![decl]);
+    assert!(!source.contains("isWellFormedString"), "{source}");
+}
+
+#[test]
+fn an_unconstrained_string_scalar_checks_well_formedness() {
+    let decl = public_decl(
+        "Free",
+        primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
+    );
+    let source = ts_for(vec![decl]);
+    assert!(source.contains("isWellFormedString(value)"), "{source}");
+    assert!(source.contains("function makeFreeUnchecked("), "{source}");
+}
+
+#[test]
+fn well_formed_string_name_is_refused() {
+    let decl = public_decl(
+        "isWellFormedString",
+        primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
+    );
+    let error = generate(&package("test.ctor", vec![decl])).unwrap_err();
+    let GenerateError::Unrepresentable(message) = error;
+    assert!(message.contains("isWellFormedString"), "{message}");
 }
 
 #[test]
@@ -3067,4 +3122,18 @@ fn scalar_constructor_name_collisions_are_refused() {
             assert!(message.contains(source), "{message}");
         }
     }
+}
+
+#[test]
+fn the_model_and_the_ir_agree_on_which_string_scalars_have_an_unchecked_constructor() {
+    let scalar = v1::Scalar {
+        class: v1::ScalarClass::String as i32,
+        ..Default::default()
+    };
+    assert!(crate::scalar_has_unchecked(&scalar));
+    let decl = public_decl(
+        "Free",
+        primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
+    );
+    assert!(ts_for(vec![decl]).contains("function makeFreeUnchecked("));
 }

@@ -2305,8 +2305,13 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     )
     .expect("the runtime length source is written");
     std::fs::write(
+        runtime_dir.join("well_formed.ts"),
+        include_str!("../../../packages/ridl-runtime/src/well_formed.ts"),
+    )
+    .expect("the runtime well-formed source is written");
+    std::fs::write(
         runtime_dir.join("runtime.ts"),
-        "export * from './errors.js';\nexport * from './length.js';\nexport * from './step.js';\n",
+        "export * from './errors.js';\nexport * from './length.js';\nexport * from './step.js';\nexport * from './well_formed.js';\n",
     )
     .expect("the runtime entry point is written");
     std::fs::write(

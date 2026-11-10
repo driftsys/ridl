@@ -1,0 +1,39 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+import { ConstraintError, codePointLength, isWellFormedString } from '@driftsys/ridl-runtime';
+
+/**
+ * Build a value with `makeCode`.
+ *
+ * @remarks
+ * Rules:
+ * - length 1 ..= 8
+ * - pattern `/^[a-z]+$/`
+ */
+export type Code = string & { readonly __ridl: 'veh.common.Code' };
+
+const __ridlPatternCode = new globalThis.RegExp('^[a-z]+$');
+
+/** Builds a `Code`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeCode(value: string): Code {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.common.Code', value, 'well-formed text');
+  }
+  if (codePointLength(value) < 1) {
+    throw new ConstraintError('length', 'veh.common.Code', value, '[1..8]');
+  }
+  if (codePointLength(value) > 8) {
+    throw new ConstraintError('length', 'veh.common.Code', value, '[1..8]');
+  }
+  if (!__ridlPatternCode.test(value)) {
+    throw new ConstraintError('pattern', 'veh.common.Code', value, '/^[a-z]+$/');
+  }
+  return value as Code;
+}
+
+/** Builds a `Code` without checking a value already known to satisfy its constraints. */
+export function makeCodeUnchecked(value: string): Code {
+  return value as Code;
+}

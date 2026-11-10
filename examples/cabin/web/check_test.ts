@@ -372,7 +372,7 @@ Deno.test("verifyPayload passes the type id of Cabin.temperature", () => {
 });
 
 /** What a check decided about one value: accepted, or the rule that refused it. */
-type Outcome = "ok" | "range" | "step" | "length" | "pattern";
+type Outcome = "ok" | "range" | "step" | "length" | "pattern" | "utf8";
 
 /**
  * One constrained type of cabin.ridl, with its constructor, the generated

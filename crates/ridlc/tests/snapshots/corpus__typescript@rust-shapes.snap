@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
 ---
 // ===== package lint.shapes =====
-import { ConstraintError, codePointLength, offFloatStep } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength, isWellFormedString, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * A bounded integer.
@@ -173,6 +173,9 @@ const __ridlPatternTag = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
 
 /** Builds a `Tag`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTag(value: string): Tag {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'lint.shapes.Tag', value, 'well-formed text');
+  }
   if (codePointLength(value) < 1) {
     throw new ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
   }
@@ -207,6 +210,9 @@ export type Label = string & { readonly __ridl: 'lint.shapes.Label' };
 
 /** Builds a `Label`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeLabel(value: string): Label {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'lint.shapes.Label', value, 'well-formed text');
+  }
   if (codePointLength(value) > 32) {
     throw new ConstraintError('length', 'lint.shapes.Label', value, '[0..32]');
   }

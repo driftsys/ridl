@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: ts_for(decls)
 ---
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import { ConstraintError, isWellFormedString, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -88,8 +88,16 @@ export const MAX_ODOMETER = 18446744073709551615n;
  */
 export type Greeting = string & { readonly __ridl: 'veh.common.Greeting' };
 
-/** Builds a `Greeting`. */
+/** Builds a `Greeting`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeGreeting(value: string): Greeting {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.common.Greeting', value, 'well-formed text');
+  }
+  return value as Greeting;
+}
+
+/** Builds a `Greeting` without checking a value already known to satisfy its constraints. */
+export function makeGreetingUnchecked(value: string): Greeting {
   return value as Greeting;
 }
 

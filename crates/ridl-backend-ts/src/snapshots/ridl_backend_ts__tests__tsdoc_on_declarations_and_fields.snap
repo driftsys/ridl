@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: ts_for(documented_decls())
 ---
-import { ConstraintError, codePointLength, offFloatStep } from '@driftsys/ridl-runtime';
+import { ConstraintError, codePointLength, isWellFormedString, offFloatStep } from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -60,6 +60,9 @@ const __ridlPatternVin = new globalThis.RegExp('[A-HJ-NPR-Z0-9]{17}');
 
 /** Builds a `Vin`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeVin(value: string): Vin {
+  if (!isWellFormedString(value)) {
+    throw new ConstraintError('utf8', 'veh.common.Vin', value, 'well-formed text');
+  }
   if (codePointLength(value) < 17) {
     throw new ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
   }

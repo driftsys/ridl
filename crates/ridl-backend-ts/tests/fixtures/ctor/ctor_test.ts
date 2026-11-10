@@ -6,6 +6,7 @@ import {
   makeContains,
   makeDot,
   makeFree,
+  makeFreeUnchecked,
   makeFreeInteger,
   makeLower,
   makeLowerReal,
@@ -287,9 +288,23 @@ Deno.test("string length counts an astral code point once, not two units", () =>
   refuses("Triple", () => makeTriple("😀😀😀😀"), "length");
 });
 
-Deno.test("string length counts a lone surrogate as one character", () => {
-  assert.equal(makeTriple("\ud83dab"), "\ud83dab");
-  refuses("Triple", () => makeTriple("\ud83dabc"), "length");
+Deno.test("a string scalar refuses a lone surrogate with the utf8 rule", () => {
+  for (const value of ["\ud83d", "\ude00", "ab\ud83d", "\ude00\ud83dab"]) {
+    refuses("Triple", () => makeTriple(value), "utf8");
+    refuses("Short", () => makeShort(value), "utf8");
+    refuses("Free", () => makeFree(value), "utf8");
+    refuses("Capitals", () => makeCapitals(value), "utf8");
+  }
+  assert.equal(makeTriple("\ud83d\ude00ab"), "\ud83d\ude00ab");
+});
+
+Deno.test("the utf8 check comes before the length and pattern checks", () => {
+  // Too long and not matching, but the first refusal is the surrogate.
+  refuses("Capitals", () => makeCapitals("\ud83dabcdefghijk"), "utf8");
+});
+
+Deno.test("a string scalar has an unchecked constructor", () => {
+  assert.equal(makeFreeUnchecked("\ud83d"), "\ud83d");
 });
 
 Deno.test("an empty string passes a zero minimum and fails a positive one", () => {
