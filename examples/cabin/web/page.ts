@@ -10,7 +10,8 @@
 // with the generated codec module, and feeds each decoded value to the check of check.ts. It sets
 // `globalThis.result` to a promise that resolves with the check's progress on
 // the first `pass` verdict, and rejects with the cause when the codec cannot
-// be loaded, the self-test fails, the codec rejects a payload, the check gives
+// be loaded, the self-test fails, the session check refuses or throws on a
+// payload, the codec rejects a payload, the check gives
 // a `fail` verdict, or the connection closes first.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";

@@ -3268,7 +3268,9 @@ _cabin-wasm:
 # the signal, and the decode function from the generated codec module
 # examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
 # hash the server announces is not the generated one, attaches with the
-# encoding `flatbuffers`, subscribes, verifies each payload through cabin's
+# encoding `flatbuffers` through a session with a bound of 10 s and the
+# generated signal checks, subscribes, fails when the session check refuses a
+# payload, verifies each payload through cabin's
 # wasm codec and fails with the codec's cause on a rejection, decodes each
 # verified payload with the generated codec module, and fails unless every
 # value is inside [-40..85], every received value is 1 to 63 steps ahead of

@@ -28,7 +28,8 @@
 // that exits or a connection that closes before the end of the check fails the
 // program at once. It prints the number of samples it received, the number of
 // wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
-// -40 was seen after 85. A payload the codec rejects fails the program with
+// -40 was seen after 85. A payload the session check refuses, a check that
+// throws, or a payload the codec rejects fails the program with
 // the cause.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
