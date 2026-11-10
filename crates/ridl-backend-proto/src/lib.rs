@@ -148,7 +148,9 @@ struct Packages<'a> {
 /// [`check_field_number`]'s.) This is ADR-0016 decision 6's totality property
 /// applied to names the way [`check_field_number`] applies it to numbers: the
 /// projection is defined for every input, or the backend refuses with a
-/// diagnostic rather than emitting a schema the target rejects.
+/// diagnostic rather than emitting a schema the target rejects. Derived C++
+/// accessors of struct fields are checked separately by [`emit_struct`] against
+/// getters and other derived accessors; they are not names declared in the schema.
 struct SymbolScope {
     /// Named in the refusal: ``package `veh.common` `` or ``message `Payload` ``.
     scope: String,
@@ -549,6 +551,114 @@ fn refuse_optional_repeated(
     })
 }
 
+// Follows protoc 29.3's kKeywordList and FieldName in
+// src/google/protobuf/compiler/cpp/helpers.cc. The input is already snake_case.
+fn cpp_field_name(name: &str) -> String {
+    let keyword = matches!(
+        name,
+        // Kept for parity with protoc's list; cannot match a snake_case name.
+        "NULL"
+            | "alignas"
+            | "alignof"
+            | "and"
+            | "and_eq"
+            | "asm"
+            | "assert"
+            | "auto"
+            | "bitand"
+            | "bitor"
+            | "bool"
+            | "break"
+            | "case"
+            | "catch"
+            | "char"
+            | "class"
+            | "compl"
+            | "const"
+            | "constexpr"
+            | "const_cast"
+            | "continue"
+            | "decltype"
+            | "default"
+            | "delete"
+            | "do"
+            | "double"
+            | "dynamic_cast"
+            | "else"
+            | "enum"
+            | "explicit"
+            | "export"
+            | "extern"
+            | "false"
+            | "float"
+            | "for"
+            | "friend"
+            | "goto"
+            | "if"
+            | "inline"
+            | "int"
+            | "long"
+            | "mutable"
+            | "namespace"
+            | "new"
+            | "noexcept"
+            | "not"
+            | "not_eq"
+            | "nullptr"
+            | "operator"
+            | "or"
+            | "or_eq"
+            | "private"
+            | "protected"
+            | "public"
+            | "register"
+            | "reinterpret_cast"
+            | "return"
+            | "short"
+            | "signed"
+            | "sizeof"
+            | "static"
+            | "static_assert"
+            | "static_cast"
+            | "struct"
+            | "switch"
+            | "template"
+            | "this"
+            | "thread_local"
+            | "throw"
+            | "true"
+            | "try"
+            | "typedef"
+            | "typeid"
+            | "typename"
+            | "union"
+            | "unsigned"
+            | "using"
+            | "virtual"
+            | "void"
+            | "volatile"
+            | "wchar_t"
+            | "while"
+            | "xor"
+            | "xor_eq"
+            | "char8_t"
+            | "char16_t"
+            | "char32_t"
+            | "concept"
+            | "consteval"
+            | "constinit"
+            | "co_await"
+            | "co_return"
+            | "co_yield"
+            | "requires"
+    );
+    if keyword {
+        format!("{name}_")
+    } else {
+        name.to_string()
+    }
+}
+
 /// One struct as one `message`: field numbers are the typl §7.4 ordinals, a
 /// tombstone emits proto `reserved`, and a `?` field takes the proto3
 /// `optional` keyword, because proto3 represents absence structurally
@@ -563,6 +673,13 @@ fn refuse_optional_repeated(
 /// collide under it (ADR-0016 decision 4), and the message scope here refuses
 /// the same collision for IR handed to this backend directly, so totality
 /// does not depend on the caller having run the semantic pass.
+///
+/// C++ accessor spellings are compared after protoc's keyword escaping, which
+/// can make two field getters collide. The accessor table also catches
+/// collisions involving `has_<escaped>()` for a field marked `optional` or
+/// `<escaped>_size()` for an array or map field, in either field order.
+/// Union arms and the implicit presence of singular message-typed fields are
+/// outside this check (ADR-0017 decision 4, driftsys/ridl#1215).
 fn emit_struct(
     out: &mut String,
     packages: Packages,
@@ -606,6 +723,59 @@ fn emit_struct(
                 ));
             }
             None => {}
+        }
+    }
+    // Compare C++ getter spellings separately from the proto-name claims.
+    // Register every getter, then derived accessors, to catch either field order.
+    let mut accessors = HashMap::new();
+    for member in &def.members {
+        let Some(v2::struct_member::Member::Field(field)) = &member.member else {
+            continue;
+        };
+        let projected = ridl_ir::name::snake_case(&field.name);
+        let getter = cpp_field_name(&projected);
+        let source = &members.claimed[&projected];
+        if let Some(previous) = accessors.insert(getter.clone(), source) {
+            return Err(GenerateError {
+                message: format!(
+                    "protoc's C++ accessor `{getter}()` for {source} collides with \
+                     the getter for {previous} in {}. Rename one of the fields \
+                     so their C++ accessors differ.",
+                    members.scope
+                ),
+            });
+        }
+    }
+    for member in &def.members {
+        let Some(v2::struct_member::Member::Field(field)) = &member.member else {
+            continue;
+        };
+        let Some(ty) = &field.r#type else {
+            continue;
+        };
+        let field_name = cpp_field_name(&ridl_ir::name::snake_case(&field.name));
+        let accessor = if ty.optional {
+            Some(format!("has_{field_name}"))
+        } else if matches!(
+            &ty.kind,
+            Some(v2::field_type::Kind::Array(_) | v2::field_type::Kind::Map(_))
+        ) {
+            Some(format!("{field_name}_size"))
+        } else {
+            None
+        };
+        let source = &members.claimed[&ridl_ir::name::snake_case(&field.name)];
+        if let Some(accessor) = accessor
+            && let Some(previous) = accessors.insert(accessor.clone(), source)
+        {
+            return Err(GenerateError {
+                message: format!(
+                    "protoc's C++ accessor `{accessor}()` for {source} collides with \
+                     the accessor for {previous} in {}. Rename one of the fields \
+                     so their C++ accessors differ.",
+                    members.scope
+                ),
+            });
         }
     }
     out.push_str("}\n");
