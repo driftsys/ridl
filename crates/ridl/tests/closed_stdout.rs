@@ -194,6 +194,10 @@ fn check_sarif_exits_2_when_stdout_reader_is_gone() {
 fn lock_allocation_exits_2_when_stdout_reader_is_gone() {
     let dir = workspace(INTERFACE);
     assert_closed_stdout(command(dir.path(), &["lock"]));
+    assert!(
+        dir.path().join("interfaces.lock").is_file(),
+        "the interface lock file must be written before reporting fails"
+    );
 }
 
 #[test]
@@ -256,6 +260,10 @@ fn vendor_written_exits_2_when_stdout_reader_is_gone() {
     let mut command = command(&root, &["vendor"]);
     command.env("HOME", dir.path());
     assert_closed_stdout(command);
+    assert!(
+        root.join("vendor/veh.common").is_dir(),
+        "the vendored package must exist after reporting fails"
+    );
 }
 
 #[test]
@@ -263,6 +271,10 @@ fn vendor_removed_exits_2_when_stdout_reader_is_gone() {
     let dir = workspace(SOURCE);
     std::fs::create_dir_all(dir.path().join("vendor/unused")).unwrap();
     assert_closed_stdout(command(dir.path(), &["vendor"]));
+    assert!(
+        dir.path().join("vendor").is_dir() && !dir.path().join("vendor/unused").exists(),
+        "the vendor directory must remain with the unused package removed after reporting fails"
+    );
 }
 
 #[test]
@@ -275,4 +287,8 @@ fn vendor_unchanged_exits_2_when_stdout_reader_is_gone() {
 fn scaffold_exits_2_when_stdout_reader_is_gone() {
     let dir = tempfile::tempdir().unwrap();
     assert_closed_stdout(command(dir.path(), &["new", "demo"]));
+    assert!(
+        dir.path().join("demo/ridl.toml").is_file() && dir.path().join("demo/demo.ridl").is_file(),
+        "the scaffolded manifest and source file must exist after reporting fails"
+    );
 }
