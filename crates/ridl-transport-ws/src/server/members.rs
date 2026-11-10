@@ -266,6 +266,8 @@ mod tests {
         );
         assert_eq!(t.limit(InterfaceNo(1), Ordinal(1)), None);
         t.set_limit(InterfaceNo(1), Ordinal(1), 64);
+        t.insert(InterfaceNo(1), Ordinal(2), Kind::Command, None);
+        t.set_limit(InterfaceNo(1), Ordinal(2), 128);
         assert_eq!(
             t.insert(
                 InterfaceNo(1),
@@ -276,6 +278,9 @@ mod tests {
             Some((Kind::Command, Some(Duration::from_secs(1))))
         );
         assert_eq!(t.limit(InterfaceNo(1), Ordinal(1)), Some(64));
+        assert_eq!(t.limit(InterfaceNo(1), Ordinal(2)), Some(128));
+        t.insert(InterfaceNo(1), Ordinal(3), Kind::Command, None);
+        assert_eq!(t.limit(InterfaceNo(1), Ordinal(3)), None);
         assert_eq!(
             t.member(InterfaceNo(1), Ordinal(1)),
             Some((Kind::Query, Some(Duration::from_secs(2))))
@@ -294,6 +299,20 @@ mod tests {
         assert!(!t.reply_stream(InterfaceNo(1), Ordinal(2)));
         t.insert(InterfaceNo(1), Ordinal(1), Kind::Query, None);
         assert!(!t.reply_stream(InterfaceNo(1), Ordinal(1)));
+    }
+
+    #[test]
+    fn parameter_streams_are_set_on_an_existing_entry_and_cleared_by_insert() {
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        t.set_parameter_streams(InterfaceNo(1), Ordinal(1), 2);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(1)), 0);
+        t.insert(InterfaceNo(1), Ordinal(1), Kind::Query, None);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(1)), 0);
+        t.set_parameter_streams(InterfaceNo(1), Ordinal(1), 2);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(1)), 2);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(2)), 0);
+        t.insert(InterfaceNo(1), Ordinal(1), Kind::Query, None);
+        assert_eq!(t.parameter_streams(InterfaceNo(1), Ordinal(1)), 0);
     }
 
     #[test]
