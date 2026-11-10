@@ -2206,6 +2206,150 @@ fn a_map_field_after_its_size_getter_is_refused() {
 }
 
 #[test]
+fn a_cpp_keyword_beside_its_escaped_getter_is_refused() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("class", 1, float64_type()),
+            field_member("class_", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let error =
+            generate(&accessor_package(members)).expect_err("class and class_ both give class_()");
+        for text in [
+            "field `class`",
+            "field `class_`",
+            "class_()",
+            "C++ accessor",
+        ] {
+            assert!(error.message.contains(text), "got: {}", error.message);
+        }
+    }
+}
+
+#[test]
+fn an_optional_cpp_keyword_beside_an_unescaped_has_getter_still_generates() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("class", 1, optional(float64_type())),
+            field_member("hasClass", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let generated = generate(&accessor_package(members))
+            .expect("class has has_class_(), distinct from has_class()");
+        assert!(
+            generated
+                .proto_source
+                .contains("optional double class = 1;")
+        );
+        assert!(generated.proto_source.contains("sint64 has_class = 2;"));
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn an_optional_cpp_keyword_beside_its_escaped_has_getter_is_refused() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("class", 1, optional(float64_type())),
+            field_member("hasClass_", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let error = generate(&accessor_package(members))
+            .expect_err("class and hasClass_ both give has_class_()");
+        for text in [
+            "field `class`",
+            "field `hasClass_`",
+            "has_class_()",
+            "C++ accessor",
+        ] {
+            assert!(error.message.contains(text), "got: {}", error.message);
+        }
+    }
+}
+
+#[test]
+fn a_repeated_cpp_keyword_beside_an_unescaped_size_getter_still_generates() {
+    for ty in [
+        array_of(float64_type()),
+        map_of(v2::PrimitiveType::String, float64_type()),
+    ] {
+        for other in ["classSize", "class_size", "class_Size"] {
+            for reverse in [false, true] {
+                let mut members = vec![
+                    field_member("class", 1, ty.clone()),
+                    field_member(other, 2, int64_type()),
+                ];
+                if reverse {
+                    members.reverse();
+                }
+                let generated = generate(&accessor_package(members))
+                    .expect("class has class__size(), distinct from class_size()");
+                assert!(generated.proto_source.contains("sint64 class_size = 2;"));
+                compile_with_protox("veh.common.proto", &generated.proto_source);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_repeated_cpp_keyword_beside_its_escaped_size_getter_is_refused() {
+    for ty in [
+        array_of(float64_type()),
+        map_of(v2::PrimitiveType::String, float64_type()),
+    ] {
+        for reverse in [false, true] {
+            let mut members = vec![
+                field_member("class", 1, ty.clone()),
+                field_member("class__size", 2, int64_type()),
+            ];
+            if reverse {
+                members.reverse();
+            }
+            let error = generate(&accessor_package(members))
+                .expect_err("class and class__size both give class__size()");
+            for text in [
+                "field `class`",
+                "field `class__size`",
+                "class__size()",
+                "C++ accessor",
+            ] {
+                assert!(error.message.contains(text), "got: {}", error.message);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_double_underscore_size_getter_collision_is_reachable_from_source() {
+    let compiled = ridlc::compile(
+        "accessors.typl",
+        "package veh.common
+        /// A bounded value.
+        type Number : integer [0..100]
+        /// A message with colliding C++ accessors.
+        struct S {
+            /// Repeated values.
+            class : [Number; 2]
+            /// A scalar with the repeated field's size accessor name.
+            class__size : Number
+        }",
+    );
+    assert!(
+        compiled.diagnostics.is_empty(),
+        "{:?}",
+        compiled.diagnostics
+    );
+    let error = generate(&compiled.package).expect_err("must refuse class__size() collision");
+    assert!(error.message.contains("class__size()"), "{}", error.message);
+}
+
+#[test]
 fn accessor_names_without_a_colliding_field_still_generate() {
     for (name, ty, emitted) in [
         ("x", optional(float64_type()), "optional double x = 1;"),

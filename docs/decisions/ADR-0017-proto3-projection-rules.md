@@ -152,12 +152,14 @@ distinct reachable cases.
    **Amended 2026-11-10 by driftsys/ridl#1215.** The proto backend refuses a
    struct field pair when protoc's C++ `has_<f>()` accessor for an `optional`
    keyword field, or `<f>_size()` accessor for an array or map field, collides
-   with another field's getter. Names are compared after the pinned `snake_case`
-   transform, in either field order. This is a target-toolchain accessor
-   namespace the `.proto` itself does not show: distinct field names can produce
-   C++ that does not compile. Union arms and singular message-typed fields with
-   implicit presence also get `has_` accessors; this check does not cover those
-   cases.
+   with another field's getter. C++ accessor spellings are compared after the
+   pinned `snake_case` transform and protoc's C++ keyword escaping, which
+   appends `_` before deriving the accessors, in either field order. This is a
+   target-toolchain accessor namespace the `.proto` itself does not show:
+   distinct field names can produce C++ that does not compile. Two getters that
+   coincide after keyword escaping are also refused. Union arms and singular
+   message-typed fields with implicit presence also get `has_` accessors; this
+   check does not cover those cases.
 
 5. **The name transform reached two namespaces without the paired check, and
    they are covered by decision 4 rather than by RIDL-149.** ADR-0016 decision 4
