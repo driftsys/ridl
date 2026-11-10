@@ -87,9 +87,10 @@ and then the decision.
 
 Decisions: (1) B0 is option 1, port interfaces in `@driftsys/ridl-runtime`. (2)
 A2 starts with a design note, which
-[the A2 design note](2026-11-09-ts-checking-constructor-design.md) records and
-the owner approved. (3) There are two releases: A1 to A3 first, B2 second; A2
-stays in the second one. (4) D1 is in scope; D2 and D3 stay out until B2 merges.
+[the A2 design note](../archive/2026-11-09-ts-checking-constructor-design.md)
+records and the owner approved. (3) There are two releases: A1 to A3 first, B2
+second; A2 stays in the second one. (4) D1 is in scope; D2 and D3 stay out until
+B2 merges.
 
 1. **B0, the transport boundary of a face.** Option 1 defines port interfaces in
    `@driftsys/ridl-runtime` (call, wait for an outcome, subscribe, settle) and

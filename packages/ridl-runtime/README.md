@@ -161,6 +161,23 @@ The [payload rule ABI](../../docs/design/ts-codec-table.md#stream-functions)
 defines the rule codes, their release classification and the codec regeneration
 requirement.
 
+## Constraint errors and helpers
+
+A generated domain module builds a constrained named scalar with `make<Name>`,
+which throws a `ConstraintError` when a range, step, length or pattern rule
+breaks, and `make<Name>Unchecked`, which does not check. `ConstraintError`
+extends `RangeError`. Its `rule` is `"range"`, `"step"`, `"length"` or
+`"pattern"`, its `type` is the qualified type name, and its message names the
+value (a string is cut after 64 code points, and bytes show only their length)
+and the constraint.
+
+The generated code also calls three helpers that the package exports:
+`codePointLength(value)` counts the code points of a string, which is the length
+a string constraint measures; `offFloatStep(value, wire32, lattice)` and
+`offFloatPoints(value, wire32, points)` report a float that is off its step
+grid. See [Generated code](../../docs/book/generated-code.md) for what
+`make<Name>` checks.
+
 ## Limits
 
 - The module must export `memory`, `ridl_alloc`, `ridl_free`,
