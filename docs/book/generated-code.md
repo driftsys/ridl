@@ -797,20 +797,20 @@ reply that breaks an `ensure` clause.
 
 This table records, for each kind of rule, the generated item that checks it:
 
-| Rule             | Rust                                                      | TypeScript              |
-| ---------------- | --------------------------------------------------------- | ----------------------- |
-| range            | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
-| step             | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>` |
-| unit             | not checked                                               | not checked             |
-| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | checked by `make<Name>` |
-| well-formed text | a `String` always is; `verify` checks the bytes           | checked by `make<Name>` |
-| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | checked by `make<Name>` |
-| collection bound | checked by `encode` and `verify`                          | not checked             |
-| timing           | not checked                                               | not checked             |
-| response bound   | `max` checked by the future of a `Client` call            | not checked             |
-| errors           | not checked                                               | not checked             |
-| `require`        | checked by the call methods of `Client` and by `serve`    | not checked             |
-| `ensure`         | checked by `serve`                                        | not checked             |
+| Rule             | Rust                                                      | TypeScript                                 |
+| ---------------- | --------------------------------------------------------- | ------------------------------------------ |
+| range            | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>`                    |
+| step             | checked by `new`, `TryFrom` and `verify`                  | checked by `make<Name>`                    |
+| unit             | not checked                                               | not checked                                |
+| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | checked by `make<Name>`                    |
+| well-formed text | a `String` always is; `verify` checks the bytes           | checked by `make<Name>` and `encode<Name>` |
+| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | checked by `make<Name>`                    |
+| collection bound | checked by `encode` and `verify`                          | not checked                                |
+| timing           | not checked                                               | not checked                                |
+| response bound   | `max` checked by the future of a `Client` call            | not checked                                |
+| errors           | not checked                                               | not checked                                |
+| `require`        | checked by the call methods of `Client` and by `serve`    | not checked                                |
+| `ensure`         | checked by `serve`                                        | not checked                                |
 
 In the Rust column:
 
@@ -904,7 +904,12 @@ enabled checks, including pattern checks only when its feature is on. They also
 enforce chunk limits and UTF-8 as
 [Calling generated streams](#calling-generated-streams) describes. They do not
 evaluate interaction `require` or `ensure` clauses. A standalone `encode<Name>`
-or `decode<Name>` is a converter, not a full validator.
+or `decode<Name>` is a converter, not a full validator. The one check that
+`encode<Name>` makes is that every string is well-formed: a JavaScript string
+that holds an unpaired surrogate, which is not a Unicode scalar value and which
+`TextEncoder` would replace with U+FFFD without an error, makes `encode<Name>`
+throw a `ConstraintError` with rule `utf8`, whose `type` is the qualified name
+of the payload type and the path of the field.
 
 An item that the generated code needs but a program does not name carries no
 doc. In Rust it is `pub(crate)`, such as the constraint check behind `new` and

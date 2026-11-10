@@ -2,6 +2,7 @@
 source: crates/ridl-backend-ts/tests/codec.rs
 expression: source
 ---
+import { checkWellFormed } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./strict.demo.js";
@@ -125,7 +126,7 @@ function unpackWideFlags(value: bigint): t.WideFlags {
 /** Encodes a `strict.demo.Key` payload. */
 export function encodeKey(value: t.Key): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.KeyBoxT(value).pack(builder));
+  builder.finish(new fb.KeyBoxT(checkWellFormed(value, "strict.demo.Key")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `strict.demo.Key` payload the codec has verified. */
@@ -154,7 +155,7 @@ function packReport(value: t.Report): fb.ReportT {
   object.sets = [...value.sets];
   object.maybe = value.maybe === undefined ? null : BigInt(value.maybe);
   object.maybeFlags = value.maybeFlags === undefined ? null : value.maybeFlags;
-  object.table = value.table.map(([key, value]) => { const entry = new fb.ReportTableEntryT(); entry.key = key; entry.value = BigInt(value); return entry; });
+  object.table = value.table.map(([key, value]) => { const entry = new fb.ReportTableEntryT(); entry.key = checkWellFormed(key, "strict.demo.Report.table.key"); entry.value = BigInt(value); return entry; });
   return object;
 }
 function unpackReport(object: fb.ReportT): t.Report {

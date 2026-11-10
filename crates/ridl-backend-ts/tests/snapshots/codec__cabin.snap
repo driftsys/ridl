@@ -4,6 +4,7 @@ expression: "module(&cabin_model(), \"veh.cabin\")"
 ---
 import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
 import { CodecError } from "@driftsys/ridl-runtime";
+import { checkWellFormed } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./veh.cabin.js";
@@ -202,7 +203,7 @@ export function decodeTenth(bytes: Uint8Array): t.Tenth {
 /** Encodes a `veh.cabin.Tag` payload. */
 export function encodeTag(value: t.Tag): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.TagBoxT(value).pack(builder));
+  builder.finish(new fb.TagBoxT(checkWellFormed(value, "veh.cabin.Tag")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Tag` payload the codec has verified. */
@@ -213,7 +214,7 @@ export function decodeTag(bytes: Uint8Array): t.Tag {
 /** Encodes a `veh.cabin.Code` payload. */
 export function encodeCode(value: t.Code): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.CodeBoxT(value).pack(builder));
+  builder.finish(new fb.CodeBoxT(checkWellFormed(value, "veh.cabin.Code")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Code` payload the codec has verified. */
@@ -224,7 +225,7 @@ export function decodeCode(bytes: Uint8Array): t.Code {
 /** Encodes a `veh.cabin.Glyph` payload. */
 export function encodeGlyph(value: t.Glyph): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.GlyphBoxT(value).pack(builder));
+  builder.finish(new fb.GlyphBoxT(checkWellFormed(value, "veh.cabin.Glyph")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Glyph` payload the codec has verified. */
@@ -235,7 +236,7 @@ export function decodeGlyph(bytes: Uint8Array): t.Glyph {
 /** Encodes a `veh.cabin.Digited` payload. */
 export function encodeDigited(value: t.Digited): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.DigitedBoxT(value).pack(builder));
+  builder.finish(new fb.DigitedBoxT(checkWellFormed(value, "veh.cabin.Digited")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Digited` payload the codec has verified. */

@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertStrictEquals } from "@std/assert";
 import {
   byteUpload,
   CodecError,
+  ConstraintError,
   decodeStream,
   decodeTextStream,
   encodeUpload,
@@ -557,6 +558,26 @@ for (const operation of ["decode", "encode"] as const) {
     });
   }
 }
+
+Deno.test("a ConstraintError from encode becomes a utf8 contract StreamError", async () => {
+  const cause = new ConstraintError("utf8", "test.Text.label", "\ud83d", "x");
+  const sink = uploadSink();
+  const writer = encodeUpload(
+    sink.upload,
+    () => {
+      throw cause;
+    },
+    valid,
+    32,
+  ).getWriter();
+  writer.closed.catch(() => {});
+  const error = await assertRejects(() => writer.write(1), StreamError);
+  assertEquals(error.failure, {
+    category: "contract",
+    contract: { category: "invalid-value", rule: "utf8" },
+  });
+  assertStrictEquals(error.cause, cause);
+});
 
 // Mutations: classify malformed uploads as CodecError or omit the utf8 rule.
 Deno.test("named_upload_verification_classification", async (t) => {

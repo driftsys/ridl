@@ -8,6 +8,7 @@ import * as flatbuffers from "flatbuffers";
 import {
   type Codec,
   CodecError,
+  ConstraintError,
   type VerifyResult,
 } from "@driftsys/ridl-runtime";
 import * as codec from "./veh.common.codec.ts";
@@ -288,4 +289,114 @@ Deno.test("a signal check throws CodecError for a missing or unknown rule text",
     );
     assert.throws(() => first.check(new Uint8Array()), CodecError);
   }
+});
+
+/** Asserts that `build` throws the utf8 `ConstraintError` of `type`. */
+function refusesText(type: string, build: () => unknown) {
+  assert.throws(build, (error: unknown) => {
+    assert(error instanceof ConstraintError);
+    assert.equal(error.rule, "utf8");
+    assert.equal(error.type, type);
+    return true;
+  });
+}
+
+Deno.test("encode refuses a lone surrogate in a named string field", () => {
+  const profile = (value: string): t.DriverProfile => ({
+    name: name(value),
+    speed: speed(30),
+    gears: 6 as t.DriverProfile["gears"],
+  });
+  refusesText(
+    "veh.common.DriverProfile.name",
+    () => codec.encodeDriverProfile(profile("a\ud83d")),
+  );
+  refusesText(
+    "veh.common.DriverProfile.name",
+    () => codec.encodeDriverProfile(profile("\ude00b")),
+  );
+});
+
+Deno.test("encode refuses a lone surrogate in a local named string field", () => {
+  refusesText(
+    "veh.common.Note.text",
+    () => codec.encodeNote({ text: "x\ud83d" as t.Remark }),
+  );
+});
+
+Deno.test("encode refuses a lone surrogate in an array element, a map key and a map value", () => {
+  const bounds = (
+    labels: string[],
+    meta: [string, string][],
+  ): t.SensorBounds => ({
+    range: { min: speed(1), max: speed(2) },
+    readings: [1, 2, 3, 4, 5, 6, 7, 8].map(speed),
+    labels: labels.map(label),
+    meta: meta.map(([k, v]) => [label(k), name(v)] as const),
+  });
+  refusesText(
+    "veh.common.SensorBounds.labels[]",
+    () => codec.encodeSensorBounds(bounds(["ok", "\ud83d"], [])),
+  );
+  refusesText(
+    "veh.common.SensorBounds.meta.key",
+    () => codec.encodeSensorBounds(bounds(["a"], [["\ude00", "v"]])),
+  );
+  refusesText(
+    "veh.common.SensorBounds.meta.value",
+    () => codec.encodeSensorBounds(bounds(["a"], [["k", "\ud83d"]])),
+  );
+});
+
+Deno.test("encode refuses a lone surrogate in a union arm", () => {
+  refusesText(
+    "veh.common.SensorFault.message",
+    () =>
+      codec.encodeSensorResult({
+        kind: "err",
+        value: {
+          code: 1 as t.Counter,
+          message: "\ud83d" as ridl_std.Message,
+        },
+      }),
+  );
+});
+
+Deno.test("encode refuses a lone surrogate in a string payload scalar", () => {
+  refusesText(
+    "ridl.std.Name",
+    () => codec.Sensors.profile.request.encode(name("\ud83d")),
+  );
+});
+
+Deno.test("encode still accepts well-formed text with an astral character", () => {
+  const profile: t.DriverProfile = {
+    name: name("a\u{1f600}b"),
+    speed: speed(30),
+    gears: 6 as t.DriverProfile["gears"],
+  };
+  assert.deepEqual(
+    codec.decodeDriverProfile(codec.encodeDriverProfile(profile)),
+    profile,
+  );
+  const note = { text: "\u{1f600}" as t.Remark };
+  assert.deepEqual(codec.decodeNote(codec.encodeNote(note)), note);
+});
+
+Deno.test("encode refuses a lone surrogate in an inline string field", () => {
+  refusesText(
+    "veh.common.Inline.text",
+    () => codec.encodeInline({ text: "\ud83d" }),
+  );
+  const inline: t.Inline = { text: "\u{1f600}" };
+  assert.deepEqual(codec.decodeInline(codec.encodeInline(inline)), inline);
+});
+
+Deno.test("encode refuses a lone surrogate in a string scalar union arm", () => {
+  refusesText(
+    "veh.common.Phrase.remark",
+    () => codec.encodePhrase({ kind: "remark", value: "\ude00" as t.Remark }),
+  );
+  const phrase: t.Phrase = { kind: "remark", value: "\u{1f600}" as t.Remark };
+  assert.deepEqual(codec.decodePhrase(codec.encodePhrase(phrase)), phrase);
 });

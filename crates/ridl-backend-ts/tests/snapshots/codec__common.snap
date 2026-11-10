@@ -4,6 +4,7 @@ expression: source
 ---
 import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
 import { CodecError } from "@driftsys/ridl-runtime";
+import { checkWellFormed } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./veh.common.js";
@@ -40,9 +41,11 @@ export const PAYLOAD_TYPES = [
   "veh.common.Extras",
   "veh.common.Gain",
   "veh.common.GearPosition",
+  "veh.common.Inline",
   "veh.common.Mode",
   "veh.common.Note",
   "veh.common.Outcome",
+  "veh.common.Phrase",
   "veh.common.Pick",
   "veh.common.RPM",
   "veh.common.Ratio",
@@ -239,7 +242,7 @@ export function decodeDriverProfile(bytes: Uint8Array): t.DriverProfile {
 
 function packDriverProfile(value: t.DriverProfile): fb.DriverProfileT {
   const object = new fb.DriverProfileT();
-  object.name = value.name;
+  object.name = checkWellFormed(value.name, "veh.common.DriverProfile.name");
   object.speed = value.speed;
   object.override = value.override === undefined ? null : value.override;
   object.gears = value.gears;
@@ -270,8 +273,8 @@ function packSensorBounds(value: t.SensorBounds): fb.SensorBoundsT {
   const object = new fb.SensorBoundsT();
   object.range = packSensorBoundsRange(value.range);
   object.readings = [...value.readings];
-  object.labels = [...value.labels];
-  object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = key; entry.value = value; return entry; });
+  object.labels = value.labels.map((element) => checkWellFormed(element, "veh.common.SensorBounds.labels[]"));
+  object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = checkWellFormed(key, "veh.common.SensorBounds.meta.key"); entry.value = checkWellFormed(value, "veh.common.SensorBounds.meta.value"); return entry; });
   return object;
 }
 function unpackSensorBounds(object: fb.SensorBoundsT): t.SensorBounds {
@@ -351,7 +354,7 @@ export function decodeSensorFault(bytes: Uint8Array): t.SensorFault {
 function packSensorFault(value: t.SensorFault): fb.SensorFaultT {
   const object = new fb.SensorFaultT();
   object.code = value.code;
-  object.message = value.message;
+  object.message = checkWellFormed(value.message, "veh.common.SensorFault.message");
   return object;
 }
 function unpackSensorFault(object: fb.SensorFaultT): t.SensorFault {
@@ -435,7 +438,7 @@ function unpackOutcome(object: fb.OutcomeT): t.Outcome {
 /** Encodes a `veh.common.Remark` payload. */
 export function encodeRemark(value: t.Remark): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.RemarkBoxT(value).pack(builder));
+  builder.finish(new fb.RemarkBoxT(checkWellFormed(value, "veh.common.Remark")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.common.Remark` payload the codec has verified. */
@@ -456,7 +459,7 @@ export function decodeNote(bytes: Uint8Array): t.Note {
 
 function packNote(value: t.Note): fb.NoteT {
   const object = new fb.NoteT();
-  object.text = value.text;
+  object.text = checkWellFormed(value.text, "veh.common.Note.text");
   return object;
 }
 function unpackNote(object: fb.NoteT): t.Note {
@@ -508,7 +511,7 @@ function packExtras(value: t.Extras): fb.ExtrasT {
   object.gears = value.gears.map((element) => BigInt(element));
   object.maybe = value.maybe === undefined ? [] : [...value.maybe];
   object.tag = value.tag === undefined ? [] : Array.from(value.tag);
-  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = key; entry.value = value; return entry; });
+  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = checkWellFormed(key, "veh.common.Extras.notes.key"); entry.value = checkWellFormed(value, "veh.common.Extras.notes.value"); return entry; });
   object.default_ = value.default;
   object.new_ = value.new;
   object.class_ = value.class;
@@ -527,6 +530,58 @@ function unpackExtras(object: fb.ExtrasT): t.Extras {
     new: t.makeCounterUnchecked(object.new_),
     class: t.makeCounterUnchecked(object.class_),
   };
+}
+
+/** Encodes a `veh.common.Inline` payload. */
+export function encodeInline(value: t.Inline): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packInline(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Inline` payload the codec has verified. */
+export function decodeInline(bytes: Uint8Array): t.Inline {
+  return unpackInline(fb.Inline.getRootAsInline(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packInline(value: t.Inline): fb.InlineT {
+  const object = new fb.InlineT();
+  object.text = checkWellFormed(value.text, "veh.common.Inline.text");
+  return object;
+}
+function unpackInline(object: fb.InlineT): t.Inline {
+  return {
+    text: object.text as string,
+  };
+}
+
+/** Encodes a `veh.common.Phrase` payload. */
+export function encodePhrase(value: t.Phrase): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packPhrase(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Phrase` payload the codec has verified. */
+export function decodePhrase(bytes: Uint8Array): t.Phrase {
+  return unpackPhrase(fb.Phrase.getRootAsPhrase(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packPhrase(value: t.Phrase): fb.PhraseT {
+  switch (value.kind) {
+    case "remark":
+      return new fb.PhraseT(fb.PhraseUnion.remark, new fb.PhraseRemarkBoxT(checkWellFormed(value.value, "veh.common.Phrase.remark")));
+    case "gear":
+      return new fb.PhraseT(fb.PhraseUnion.gear, new fb.PhraseGearBoxT(BigInt(value.value)));
+  }
+}
+function unpackPhrase(object: fb.PhraseT): t.Phrase {
+  switch (object.valueType) {
+    case fb.PhraseUnion.remark:
+      return { kind: "remark", value: t.makeRemarkUnchecked((object.value as fb.PhraseRemarkBoxT).value as string) };
+    case fb.PhraseUnion.gear:
+      return { kind: "gear", value: unpackGearPosition((object.value as fb.PhraseGearBoxT).value) };
+    default:
+      throw new RangeError("union veh.common.Phrase carries no arm");
+  }
 }
 
 /** Encodes a `veh.common.Pick` payload. */

@@ -208,8 +208,14 @@ export function textUpload(
 }
 
 function codecException(error: unknown): StreamError {
-  // Each generated module defines its own RuleError class.
-  if (error instanceof Error && error.name === "RuleError" && "rule" in error) {
+  // Each generated module defines its own RuleError class. A generated
+  // encode throws the runtime's ConstraintError for a string that is not
+  // well-formed; its rule is a payload rule too.
+  if (
+    error instanceof Error &&
+    (error.name === "RuleError" || error.name === "ConstraintError") &&
+    "rule" in error
+  ) {
     switch (error.rule) {
       case "length":
       case "pattern":

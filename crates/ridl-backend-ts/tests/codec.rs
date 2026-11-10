@@ -587,7 +587,7 @@ fn the_common_codec_module() {
             .contains("readings: object.readings.map((element) => t.makeSpeedUnchecked(element)),"),
         "{source}"
     );
-    assert!(source.contains("object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = key; entry.value = value; return entry; });"), "{source}");
+    assert!(source.contains("object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = checkWellFormed(key, \"veh.common.SensorBounds.meta.key\"); entry.value = checkWellFormed(value, \"veh.common.SensorBounds.meta.value\"); return entry; });"), "{source}");
     assert!(source.contains("meta: object.meta.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),"), "{source}");
     assert!(
         source.contains("object.override = value.override === undefined ? null : value.override;"),
@@ -818,7 +818,13 @@ fn an_internal_interaction_payload_is_refused() {
 /// names.
 #[test]
 fn an_interface_named_as_a_reserved_name_is_refused() {
-    for reserved in ["RULES", "PayloadCodec", "fb", "ridl_std_codec"] {
+    for reserved in [
+        "RULES",
+        "PayloadCodec",
+        "fb",
+        "ridl_std_codec",
+        "checkWellFormed",
+    ] {
         let mut model = common_model();
         let interface = model
             .interfaces
@@ -964,7 +970,7 @@ fn the_extras_and_pick_conversions() {
         "    maybe: object.maybe.map((element) => t.makeSpeedUnchecked(element)),",
         "  object.tag = value.tag === undefined ? [] : Array.from(value.tag);",
         "    tag: Uint8Array.from(object.tag) as Uint8Array,",
-        "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = key; entry.value = value; return entry; });",
+        "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = checkWellFormed(key, \"veh.common.Extras.notes.key\"); entry.value = checkWellFormed(value, \"veh.common.Extras.notes.value\"); return entry; });",
         "    notes: object.notes.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),",
         "  object.default_ = value.default;",
         "    new: t.makeCounterUnchecked(object.new_),",

@@ -2306,7 +2306,10 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
     .expect("the runtime length source is written");
     std::fs::write(
         runtime_dir.join("well_formed.ts"),
-        include_str!("../../../packages/ridl-runtime/src/well_formed.ts"),
+        // The runtime imports its sibling with a `.ts` suffix, which tsc refuses
+        // without an option the stand-in does not set.
+        include_str!("../../../packages/ridl-runtime/src/well_formed.ts")
+            .replace("./errors.ts", "./errors.js"),
     )
     .expect("the runtime well-formed source is written");
     std::fs::write(
