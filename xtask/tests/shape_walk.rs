@@ -251,13 +251,14 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 6,
+        lines: 7,
         why: "the `vehicle()` helper and three tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
               buffer, a test that zeroes the number of the one interface its \
-              package declares, and a test that sets a limit on the one \
-              command of the IR package it lowers; the lowering itself walks \
-              `shapes()`",
+              package declares, a test that sets a limit on the one command \
+              of the IR package it lowers, and a test that removes the \
+              payload of a fixed member of the one interface its package \
+              declares; the lowering itself walks `shapes()`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
