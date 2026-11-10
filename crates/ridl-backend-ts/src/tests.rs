@@ -3123,3 +3123,17 @@ fn scalar_constructor_name_collisions_are_refused() {
         }
     }
 }
+
+#[test]
+fn the_model_and_the_ir_agree_on_which_string_scalars_have_an_unchecked_constructor() {
+    let scalar = v1::Scalar {
+        class: v1::ScalarClass::String as i32,
+        ..Default::default()
+    };
+    assert!(crate::scalar_has_unchecked(&scalar));
+    let decl = public_decl(
+        "Free",
+        primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
+    );
+    assert!(ts_for(vec![decl]).contains("function makeFreeUnchecked("));
+}
