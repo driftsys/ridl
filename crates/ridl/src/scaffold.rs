@@ -54,7 +54,10 @@ struct Plan {
 pub fn run(request: &Request<'_>) -> ExitCode {
     match plan(request).and_then(write) {
         Ok(plan) => {
-            println!("Created {} {}", plan.kind, plan.name);
+            if let Err(code) = crate::out::write(&format!("Created {} {}\n", plan.kind, plan.name))
+            {
+                return code;
+            }
             ExitCode::SUCCESS
         }
         Err(message) => {

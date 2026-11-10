@@ -51,6 +51,7 @@ use std::process::ExitCode;
 mod baseline;
 mod catalogs;
 mod lock;
+mod out;
 mod podbuf_padding;
 mod property;
 mod scaffold;
@@ -609,8 +610,13 @@ fn run_mcp() -> ExitCode {
 fn run_explain(category: &str) -> ExitCode {
     match ridl_diff::category_from_word(category) {
         Some(category) => {
-            println!("{}", ridl_diff::category_word(category));
-            println!("{}", ridl_diff::explain(category));
+            if let Err(code) = out::write(&format!(
+                "{}\n{}\n",
+                ridl_diff::category_word(category),
+                ridl_diff::explain(category)
+            )) {
+                return code;
+            }
             ExitCode::SUCCESS
         }
         None => {
@@ -678,9 +684,12 @@ To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out B
     };
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
-    match format {
-        DiffFormat::Text => print!("{}", ridl_diff::render_text(&report)),
-        DiffFormat::Json => println!("{}", ridl_diff::render_json(&report)),
+    let written = match format {
+        DiffFormat::Text => out::write(&ridl_diff::render_text(&report)),
+        DiffFormat::Json => out::write(&format!("{}\n", ridl_diff::render_json(&report))),
+    };
+    if let Err(code) = written {
+        return code;
     }
 
     match report.verdict {
@@ -3210,10 +3219,10 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
         CheckFormat::Text => finish(Ok(run)),
         CheckFormat::Json => {
             let json = ridl_core::diag::to_json(&run.diagnostics, &run.sources);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json).expect("diagnostics serialize")
-            );
+            let text = serde_json::to_string_pretty(&json).expect("diagnostics serialize");
+            if let Err(code) = out::write(&format!("{text}\n")) {
+                return code;
+            }
             exit_code(&run)
         }
         CheckFormat::Sarif => {
@@ -3224,10 +3233,10 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
                 cwd.as_deref(),
                 env!("CARGO_PKG_VERSION"),
             );
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&log).expect("the SARIF log serializes")
-            );
+            let text = serde_json::to_string_pretty(&log).expect("the SARIF log serializes");
+            if let Err(code) = out::write(&format!("{text}\n")) {
+                return code;
+            }
             exit_code(&run)
         }
     }
