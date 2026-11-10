@@ -103,6 +103,21 @@ const RIDL: &str = env!("CARGO_BIN_EXE_ridl");
 const COMMANDS: &[&[&str]] = &[&["check"], &["build"], &["baseline"], &["test"]];
 
 #[test]
+fn an_entry_below_a_regular_file_does_not_exist() {
+    let fixture = Fixture::new("entry-below-file");
+    let file = fixture.root.join("file.ridl");
+    std::fs::write(&file, SOURCE).unwrap();
+    let entry = file.join("x");
+
+    let (code, stderr) = run(RIDL, &["check"], &entry);
+    assert_eq!(code, 2, "ridl check: {stderr}");
+    assert!(
+        stderr.contains(&format!("`{}` does not exist", entry.display())),
+        "ridl check reports the missing entry: {stderr}"
+    );
+}
+
+#[test]
 fn an_unreadable_root_reports_the_os_error_and_the_path() {
     if skip_as_root() {
         return;
