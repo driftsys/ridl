@@ -2456,8 +2456,8 @@ fn baseline_files(root: &Path) -> Vec<(std::ffi::OsString, Vec<u8>)> {
 }
 
 /// Removing a whole unit from the workspace, with its lock, loses every
-/// number the baseline holds for it. The gate refuses with the message of a
-/// lost interface and names the deliberate override.
+/// number the baseline holds for it. One refusal lists the lost keys and
+/// numbers and names the deliberate override.
 #[test]
 fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
     let dir = TempDir::new("gate-unit-gone");
@@ -2471,28 +2471,264 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
     assert_eq!(code, 1, "the lost unit is refused:\n{stderr}");
     assert_eq!(
         stderr.matches("RIDL-412").count(),
-        3,
-        "one refusal for each of the three numbers the unit held:\n{stderr}",
+        1,
+        "one refusal for the gone unit:\n{stderr}",
     );
     assert!(
-        stderr.contains("`VehicleStatus` holds interface number")
-            && stderr.contains("`Extra` holds interface number")
-            && stderr.contains("`sub.Speed` holds interface number")
+        stderr.contains("`VehicleStatus` (number 2)")
+            && stderr.contains("`Extra` (number 1)")
+            && stderr.contains("`sub.Speed` (number 3)")
             && stderr.contains("in unit `veh.cluster`"),
-        "the messages name every shape, in every package, and the unit:\n{stderr}",
+        "the message names every shape, in every package, and the unit:\n{stderr}",
     );
     assert!(
-        stderr.contains("delete the snapshots of unit `veh.cluster` from `.ridl/baseline/`"),
+        stderr.contains(&format!(
+            "delete the snapshots of unit `veh.cluster` from `{}`",
+            root.join(".ridl/baseline").display()
+        )),
         "the message names the deliberate override:\n{stderr}",
     );
     assert!(
         !stderr.contains("Restore the line"),
         "the unit's lock is gone with it, so no line is offered to restore:\n{stderr}",
     );
+    for key in [
+        "`VehicleStatus` (number 2)",
+        "`Extra` (number 1)",
+        "`sub.Speed` (number 3)",
+        "delete the snapshots of unit",
+    ] {
+        assert_eq!(
+            stderr.matches(key).count(),
+            1,
+            "each key and the override appear once: {stderr}"
+        );
+    }
     assert_eq!(
         before,
         baseline_files(&root),
         "a refused publication rewrites nothing"
+    );
+}
+
+#[test]
+fn two_units_removed_together_have_separate_refusals() {
+    let dir = TempDir::new("gate-two-units-gone");
+    let root = two_unit_workspace(&dir);
+    dir.write(
+        "spare/ridl.toml",
+        "[package]\nname = \"veh.spare\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "spare/spare.typl",
+        "package veh.spare\ntype Count: integer [0..9]\n",
+    );
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\", \"spare\"]\n",
+    );
+    publish(&root);
+    let before = baseline_files(&root);
+
+    for unit in ["cluster", "hmi"] {
+        std::fs::remove_dir_all(root.join(unit)).expect("remove the unit");
+    }
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"spare\"]\n");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "both lost units are refused:\n{stderr}");
+    let refusals: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.contains("RIDL-412"))
+        .collect();
+    assert_eq!(refusals.len(), 2, "one refusal per lost unit:\n{stderr}");
+    let cluster = refusals
+        .iter()
+        .find(|line| line.contains("in unit `veh.cluster`"))
+        .expect("a refusal for veh.cluster");
+    assert!(
+        cluster.contains("`Extra` (number 1)")
+            && cluster.contains("`VehicleStatus` (number 2)")
+            && cluster.contains("`sub.Speed` (number 3)")
+            && !cluster.contains("`Session`")
+            && !cluster.contains("`veh.hmi`"),
+        "the cluster refusal contains only its own keys:\n{cluster}"
+    );
+    let hmi = refusals
+        .iter()
+        .find(|line| line.contains("in unit `veh.hmi`"))
+        .expect("a refusal for veh.hmi");
+    assert!(
+        hmi.contains("`Session` (number 1)")
+            && !hmi.contains("`Extra`")
+            && !hmi.contains("`VehicleStatus`")
+            && !hmi.contains("`sub.Speed`")
+            && !hmi.contains("`veh.cluster`"),
+        "the hmi refusal contains only its own keys:\n{hmi}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
+    );
+}
+
+#[test]
+fn a_gone_unit_message_names_the_custom_baseline_directory() {
+    let dir = TempDir::new("gate-unit-custom-out");
+    let root = two_unit_workspace(&dir);
+    let out = root.join("published-baseline");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        out.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "publish to the custom directory: {stderr}");
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        out.as_os_str(),
+    ]);
+    assert_eq!(code, 1, "the gone unit is refused: {stderr}");
+    assert!(
+        stderr.contains(&format!("from `{}`", out.display()))
+            && !stderr.contains("from `.ridl/baseline/`"),
+        "the override names the publication directory: {stderr}",
+    );
+}
+
+#[test]
+fn a_gone_unit_with_a_published_provisional_number_is_not_refused() {
+    let dir = TempDir::new("gate-unit-published-provisional");
+    let root = two_unit_workspace(&dir);
+    let baseline = root.join(".ridl/baseline");
+    std::fs::remove_file(baseline.join("context.json")).expect("make a legacy baseline");
+    for name in ["veh.cluster.ir.json", "veh.cluster.sub.ir.json"] {
+        let path = baseline.join(name);
+        let mut package = ridl_ir::v2::load_ir_json(&path).expect("read the snapshot");
+        for interface in &mut package.interfaces {
+            interface.provisional = true;
+        }
+        std::fs::write(path, serde_json::to_string_pretty(&package).unwrap()).unwrap();
+    }
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "provisional published numbers have no identity: {stderr}"
+    );
+    assert!(!stderr.contains("RIDL-412"), "stderr: {stderr}");
+}
+
+#[test]
+fn a_gone_unit_with_mixed_published_numbers_refuses_only_the_allocated_number() {
+    let dir = TempDir::new("gate-unit-mixed-provisional");
+    let root = mixed_published_numbers(&dir);
+    let before = baseline_files(&root);
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the allocated number is lost:\n{stderr}");
+    assert_eq!(stderr.matches("RIDL-412").count(), 1, "stderr: {stderr}");
+    assert!(
+        stderr.contains("in unit `veh.cluster`: `VehicleStatus` (number 2)")
+            && !stderr.contains("`Extra`")
+            && !stderr.contains("RIDL-411"),
+        "only the allocated published number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
+    );
+}
+
+#[test]
+fn a_remaining_unit_with_mixed_published_numbers_refuses_only_the_allocated_number() {
+    let dir = TempDir::new("gate-remaining-unit-mixed-provisional");
+    let root = mixed_published_numbers(&dir);
+    let before = baseline_files(&root);
+    dir.write(
+        "cluster/cluster.ridl",
+        "package veh.cluster\ntype DoorState: integer [0..1]\n",
+    );
+    dir.write("cluster/interfaces.lock", &format!("{LOCK_HEADER}next 3\n"));
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the allocated number is lost:\n{stderr}");
+    assert_eq!(stderr.matches("RIDL-412").count(), 1, "stderr: {stderr}");
+    assert!(
+        stderr.contains("`VehicleStatus` holds interface number 2")
+            && stderr.contains("in unit `veh.cluster`")
+            && !stderr.contains("`Extra`")
+            && !stderr.contains("RIDL-411"),
+        "only the allocated published number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
+    );
+}
+
+/// A legacy baseline with one provisional and one allocated number in a unit.
+fn mixed_published_numbers(dir: &TempDir) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\"]\n",
+    );
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi/hmi.ridl", SESSION);
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write(
+        "cluster/cluster.ridl",
+        &format!("{THREE}\ninterface Extra {{ signal e : DoorState @[100ms..1s] }}\n"),
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "allocate the fixture's numbers: {stderr}");
+    publish(&root);
+    let baseline = root.join(".ridl/baseline");
+    std::fs::remove_file(baseline.join("context.json")).expect("make a legacy baseline");
+    let path = baseline.join("veh.cluster.ir.json");
+    let mut package = ridl_ir::v2::load_ir_json(&path).expect("read the snapshot");
+    package
+        .interfaces
+        .iter_mut()
+        .find(|interface| interface.name == "Extra")
+        .expect("the provisional interface")
+        .provisional = true;
+    std::fs::write(path, serde_json::to_string_pretty(&package).unwrap()).unwrap();
+    root
+}
+
+#[test]
+fn a_renamed_locked_one_package_unit_is_refused() {
+    let dir = TempDir::new("gate-single-unit-renamed");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+    let before = baseline_files(&root);
+    dir.write("ridl.toml", RENAMED_MANIFEST);
+    dir.write("cluster.ridl", RENAMED_THREE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the renamed unit is refused: {stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("unit `veh.cluster`"),
+        "stderr: {stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves the baseline"
     );
 }
 
@@ -2526,9 +2762,9 @@ fn a_renamed_unit_is_refused_as_a_unit_gone() {
     assert_eq!(code, 1, "the renamed unit is refused:\n{stderr}");
     assert!(
         stderr.contains("RIDL-412")
-            && stderr.contains("`VehicleStatus` holds interface number")
-            && stderr.contains("`Extra` holds interface number")
-            && stderr.contains("`sub.Speed` holds interface number")
+            && stderr.contains("`VehicleStatus` (number 2)")
+            && stderr.contains("`Extra` (number 1)")
+            && stderr.contains("`sub.Speed` (number 3)")
             && stderr.contains("delete the snapshots of unit `veh.cluster`")
             && !stderr.contains("Restore the line"),
         "stderr:\n{stderr}",
@@ -2694,11 +2930,69 @@ fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
     );
 }
 
+#[test]
+fn deleting_the_snapshots_of_a_legacy_gone_package_allows_publication() {
+    let dir = TempDir::new("gate-legacy-gone-override");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 7")],
+    );
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 8\nSession 1\ncluster.Speed 7 retired\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the legacy package first refuses: {stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("unit `veh.hmi.cluster`"),
+        "stderr: {stderr}"
+    );
+
+    std::fs::remove_file(root.join(".ridl/baseline/veh.hmi.cluster.ir.json"))
+        .expect("delete the gone unit's snapshot");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the override publishes: {stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr: {stderr}");
+    assert!(root.join(".ridl/baseline/veh.hmi.ir.json").is_file());
+    assert!(!root.join(".ridl/baseline/veh.hmi.cluster.ir.json").exists());
+}
+
+#[test]
+fn deleting_only_the_service_beside_its_named_interface_refuses_the_inline_number() {
+    let dir = TempDir::new("gate-service-marker");
+    let root = package_workspace(&dir, INTERFACE_AND_SERVICE_SHARING_A_NAME);
+    publish(&root);
+    let before = baseline_files(&root);
+    dir.write("cluster.ridl", "package veh.cluster\ntype DoorState: integer [0..1]\ninterface doors { event locked: DoorState @[100ms..1s] }\n");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\ndoors 1\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the inline number is lost: {stderr}");
+    assert_eq!(stderr.matches("RIDL-412").count(), 1, "stderr: {stderr}");
+    assert!(
+        stderr.contains("`service:doors` holds interface number 2"),
+        "stderr: {stderr}"
+    );
+    assert!(
+        !stderr.contains("`doors` holds interface number 1"),
+        "stderr: {stderr}"
+    );
+    assert_eq!(before, baseline_files(&root));
+}
+
 /// `ridl lock` numbers an interface before an inline shape of the same name
 /// (language reference, the lock section). This pins the observable order; the
 /// kind in the sort key (`provisional_order`) is only partly observable here:
 /// the shapes of a package are listed interfaces first, so removing the kind
-/// leaves this test passing and only inverting it fails.
+/// leaves this test passing and only inverting it fails. The ridl-sem unit test
+/// `provisional_order_places_an_interface_before_a_service_with_the_same_name`
+/// in `crates/ridl-sem/src/check.rs` pins the tie-break with the service first
+/// in its input.
 #[test]
 fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
     let dir = TempDir::new("gate-tie-break");
