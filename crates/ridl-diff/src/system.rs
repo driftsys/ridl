@@ -1161,7 +1161,11 @@ mod tests {
     #[test]
     fn an_offers_or_requires_line_added_or_removed_lists_its_keys() {
         let signed = || vec![backend("sign", "key", Some("release"))];
-        let old = base();
+        let mut old = base();
+        // The lines both sides have carry a key of their own, so that a
+        // paired line is compared with its own earlier line and lists nothing.
+        old.components[0].offers[0].attributes = vec![backend("sign", "key", Some("other"))];
+        old.components[0].requires[0].attributes = vec![backend("sign", "key", Some("other"))];
         let mut new = old.clone();
         let cruise = &mut new.components[0];
         cruise.offers.push(v2::Offer {
@@ -1204,10 +1208,23 @@ mod tests {
                  [ sign.key = release ] -> []",
             ]
         );
+
+        // The lines of a component added to the closure are not listed one by
+        // one: the component is listed, and its keys are not compared.
+        let mut grown = old.clone();
+        let mut gauge = component("Gauge", &["Unit"], &["veh.adas.gauge"], &["LaneAssist"]);
+        gauge.offers[0].attributes = signed();
+        gauge.requires[0].attributes = signed();
+        grown.components.push(gauge);
+        assert_eq!(
+            lines(&diff_systems(&old, &grown)),
+            ["composition changed: veh.topology.Gauge: (absent) -> in the closure"]
+        );
     }
 
     /// rsdl §14: a `system` member line added or removed lists its backend
-    /// keys compared with an empty side, and a line with no keys lists none.
+    /// keys compared with an empty side, a line with no keys lists none, and
+    /// a line on both sides is compared with its own earlier line.
     #[test]
     fn a_system_member_line_added_or_removed_lists_its_keys() {
         let member = |name: &str, attributes: Vec<v2::Attribute>| v2::MemberLine {
@@ -1216,11 +1233,15 @@ mod tests {
             ..Default::default()
         };
         let mut old = base();
-        old.members = vec![member("Cruise", Vec::new())];
+        old.members = vec![member(
+            "Cruise",
+            vec![backend("sign", "key", Some("other"))],
+        )];
         let mut new = old.clone();
         new.members = vec![
-            member("Cruise", Vec::new()),
+            member("Cruise", vec![backend("sign", "key", Some("other"))]),
             member("Panel", vec![backend("sign", "key", Some("release"))]),
+            member("Gauge", Vec::new()),
         ];
         assert_eq!(
             lines(&diff_systems(&old, &new)),
