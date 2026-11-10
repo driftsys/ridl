@@ -340,13 +340,19 @@ the domain module has one and checks nothing again. `encode<Name>` builds what
 it is given, so that a payload the codec rejects can be built. The domain
 module's `make<Name>` checks the range, step, length and pattern of a named
 scalar and throws a `ConstraintError`; `make<Name>Unchecked` does not check. A
-string length counts code points, and a bytes length counts bytes. The pattern
-check uses the checker's ECMA-262 semantics without the `u` flag, so it can
-disagree with the Rust `regex` crate that the wasm codec uses
-(driftsys/ridl#597). The test `examples/cabin/web/check_test.ts` compares
-`make<Name>` with the wasm codec's `verify` over the values of the constrained
-types of `examples/cabin/cabin.ridl`, and pins each known disagreement of the
-pattern rule.
+string length counts code points with the runtime's `codePointLength`, and a
+bytes length counts bytes (`.length`). A domain module with a check imports
+`ConstraintError` and the helpers it uses from `@driftsys/ridl-runtime`, and
+refuses a declared type named `ConstraintError`, `codePointLength`,
+`offFloatPoints` or `offFloatStep`. `make<Name>Unchecked` exists only for a
+scalar whose `make<Name>` checks something, and the decoder keeps a type
+assertion for the others. The pattern check uses the checker's ECMA-262
+semantics without the `u` flag, so it can disagree with the Rust `regex` crate
+that the wasm codec uses (driftsys/ridl#597). The test
+`examples/cabin/web/check_test.ts` compares `make<Name>` with the wasm codec's
+`verify` over the values of the constrained types of
+`examples/cabin/cabin.ridl`, and pins each known disagreement of the pattern
+rule, which [Generated code](../book/generated-code.md) lists.
 
 ## Foreign declarations (D-14)
 

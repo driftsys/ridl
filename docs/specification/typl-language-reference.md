@@ -300,15 +300,16 @@ backend match the same strings. The checker tests a declared init value against
 a pattern (TYPL-109) with ECMA-262 semantics, and some patterns that both
 engines compile have a different meaning in each (driftsys/ridl#597):
 
-| In a pattern | ECMA-262, no `u` flag (the checker) | The Rust `regex` crate                  |
-| ------------ | ----------------------------------- | --------------------------------------- |
-| `\d`, `\w`   | ASCII digits, ASCII word characters | Unicode digits, Unicode word characters |
-| `\p{L}`      | the text `p{L}`                     | a Unicode letter                        |
-| `\A`, `\z`   | the letters `A` and `z`             | the start and the end of the text       |
-| `\a`         | the letter `a`                      | the bell character, U+0007              |
-| `\<`         | the character `<`                   | a start-of-word boundary                |
-| `[a&&b]`     | one of `a`, `&`, `b`                | the intersection of `a` and `b`, empty  |
-| `[[a]]`      | one of `[`, `a`, followed by `]`    | the nested class `[a]`                  |
+| In a pattern | ECMA-262, no `u` flag (the checker)               | The Rust `regex` crate                  |
+| ------------ | ------------------------------------------------- | --------------------------------------- |
+| `\d`, `\w`   | ASCII digits, ASCII word characters               | Unicode digits, Unicode word characters |
+| `.`          | one UTF-16 unit, not `\n`, `\r`, U+2028 or U+2029 | one scalar value, not `\n`              |
+| `\p{L}`      | the text `p{L}`                                   | a Unicode letter                        |
+| `\A`, `\z`   | the letters `A` and `z`                           | the start and the end of the text       |
+| `\a`         | the letter `a`                                    | the bell character, U+0007              |
+| `\<`         | the character `<`                                 | a start-of-word boundary                |
+| `[a&&b]`     | one of `a`, `&`, `b`                              | the intersection of `a` and `b`, empty  |
+| `[[a]]`      | one of `[`, `a`, followed by `]`                  | the nested class `[a]`                  |
 
 ### 2.8 Tokens recognised but not used by typl
 

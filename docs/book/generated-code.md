@@ -846,17 +846,34 @@ In the Rust column:
   [What the crate contains](#what-the-crate-contains)).
 
 In the TypeScript column, `make<Name>` is the constructor of a named scalar in
-the domain module. It checks the range, step, length and pattern in that order,
-stops at the first violation, and throws a `ConstraintError` from
-`@driftsys/ridl-runtime`. Its `rule` is `range`, `step`, `length` or `pattern`,
-its `type` is the qualified name of the type, and its message names the value
-and the constraint. A string length counts Unicode code points, as the Rust
-`chars().count()` does, so `"😀"` has length 1, and a bytes length counts bytes.
-The pattern is a `RegExp` built once for the module, without the `u` flag, with
-the ECMA-262 semantics of the checker; the Rust `regex` crate reads some
-constructs differently (driftsys/ridl#597). Unlike the Rust `new`, the pattern
-check has no feature switch. `make<Name>Unchecked` returns the value without a
-check, for a value already known to satisfy the constraints:
+the domain module; every named scalar has one, constrained or not. It checks the
+range, step, length and pattern in that order, stops at the first violation, and
+throws a `ConstraintError` from `@driftsys/ridl-runtime`. Its `rule` is `range`,
+`step`, `length` or `pattern`, its `type` is the qualified name of the type, and
+its message names the value and the constraint. A number-backed integer must be
+a safe integer, so a fraction, NaN, an infinity and a value beyond ±(2^53 − 1)
+break the `range` rule, bounds or not. A bigint-backed integer checks the
+declared bounds intersected with its domain (the `i64` interval, or `0` through
+`i64::MAX` for a `u64`). A float checks that it is finite when it declares a
+bound. A string length counts Unicode code points, as the Rust `chars().count()`
+does, so `"😀"` has length 1, and a bytes length counts bytes. The pattern is a
+`RegExp` built once for the module, without the `u` flag, with the ECMA-262
+semantics of the checker, so it can disagree with the Rust `regex` crate
+(driftsys/ridl#597). The pinned disagreements are `.` (an astral character is
+two matches in JavaScript and one in `regex`; JavaScript also excludes `\r`,
+U+2028 and U+2029) and `\d` (any Unicode decimal digit in `regex`, `[0-9]` in
+JavaScript); the
+[regex table of the typl reference](../specification/typl-language-reference.md#27-regex-literals)
+lists the other constructs. Unlike the Rust `new`, the pattern check has no
+feature switch.
+
+`make<Name>Unchecked` returns the value without a check, for a value already
+known to satisfy the constraints. It exists only for a scalar whose `make<Name>`
+checks something: every integer-backed scalar, a float with a bound or a step,
+and a string or bytes scalar with a length bound or a pattern. The module
+refuses a declared type named `ConstraintError`, `codePointLength`,
+`offFloatPoints` or `offFloatStep`, which it imports from
+`@driftsys/ridl-runtime` when a check needs them:
 
 ```typescript
 import { ConstraintError } from "@driftsys/ridl-runtime";

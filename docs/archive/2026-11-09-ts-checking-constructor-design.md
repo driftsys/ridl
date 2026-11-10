@@ -8,12 +8,13 @@ Satisfies: ADR-0013 decision 8 (a language backend emits a constructor that
 checks a type's bounds, and one that does not, for the decoder).
 
 Related: driftsys/ridl#923 (this work), task A2 of
-[the TypeScript lane driver](2026-11-08-typescript-lane-driver.md) (section 2,
-decision 2), ADR-0020 decision 7 (the codec is the generated Rust compiled to
-wasm), D-11 and D-13 of [the codec table record](../design/ts-codec-table.md),
-driftsys/ridl#597 (pattern meaning differs between engines), driftsys/ridl#926
-(whether a widened constraint is compatible for a receiver), typl reference
-§2.7, §4.3, §5.1 to §5.5 and §5.7.
+[the TypeScript lane driver](../wip/2026-11-08-typescript-lane-driver.md)
+(section 2, decision 2), ADR-0020 decision 7 (the codec is the generated Rust
+compiled to wasm), D-11 and D-13 of
+[the codec table record](../design/ts-codec-table.md), driftsys/ridl#597
+(pattern meaning differs between engines), driftsys/ridl#926 (whether a widened
+constraint is compatible for a receiver), typl reference §2.7, §4.3, §5.1 to
+§5.5 and §5.7.
 
 ## 1. The problem
 
@@ -114,7 +115,7 @@ of the Rust `check`):
 | range maximum                | integer, float                | `value > max` is refused. A bigint always checks the effective maximum: the declared maximum intersected with 9223372036854775807, using an `n` literal; an omitted maximum uses that domain limit. Rust can omit the i64::MAX comparison because its parameter is i64; TypeScript bigint has no such limit. A safe number integer cannot exceed i64::MAX | `range`   |
 | step, integer                | integer                       | `(value - origin) % step !== 0` is refused; `origin` is `min`, or 0 when no minimum is declared. The arithmetic is in `bigint` for a 64-bit width and in `number` otherwise (both operands are safe integers after the integrality check)                                                                                                                 | `step`    |
 | step, float                  | float                         | the representation rule of typl §4.3, at the wire precision: for a 32-bit float width the value is projected with `Math.fround` first. The compiler prepares the phase and step as a high part and a low part, as `scalar_step::float_invalid` does for Rust                                                                                              | `step`    |
-| length minimum and maximum   | string                        | the number of Unicode code points, counted by iterating the string (`for (const _ of value)`), not `value.length`, which counts UTF-16 code units. typl counts characters (§5.3) and Rust counts `chars()`                                                                                                                                                | `length`  |
+| length minimum and maximum   | string                        | the number of Unicode code points, counted by `codePointLength` of `@driftsys/ridl-runtime`, not `value.length`, which counts UTF-16 code units. typl counts characters (§5.3) and Rust counts `chars()`                                                                                                                                                  | `length`  |
 | length minimum and maximum   | bytes                         | `value.length` of the `Uint8Array`                                                                                                                                                                                                                                                                                                                        | `length`  |
 | pattern                      | string                        | `PATTERN.test(value)` with a module-level `RegExp` built once from the IR's pattern source, without the `u` flag. On by default (section 2.3)                                                                                                                                                                                                             | `pattern` |
 
@@ -179,11 +180,10 @@ There are two places a constraint is checked, and each has one job:
 
 - `decode<Name>` in `<base>.codec.ts` is for bytes the codec has verified
   (D-11). It builds a constrained named scalar with `t.make<Name>Unchecked`
-  where it writes `as t.<Name>` today, and with `t.make<Name>` for a type with
-  no check (for an integer backing, `make<Name>` checks integrality, so the
-  decoder uses `make<Name>Unchecked` for every integer-backed type too; it is
-  emitted for every type whose `make<Name>` checks anything). No value is
-  checked twice on the receive path.
+  where it writes `as t.<Name>` today, and keeps the type assertion for a type
+  whose `make<Name>` checks nothing (`make<Name>Unchecked` is emitted for every
+  type whose `make<Name>` checks anything, and an integer backing always checks
+  integrality). No value is checked twice on the receive path.
 - `encode<Name>` keeps D-11: it does not check, so that a test can build a
   payload the codec refuses. A value that came through `make<Name>` already
   satisfies its named-type rules; the rules `make<Name>` does not cover are
