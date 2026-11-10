@@ -304,6 +304,55 @@ fn rename_an_instance_keeps_its_number() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn plain_allocation_failure_restores_interfaces_and_removes_temporaries() {
+    struct ImmutableFile(PathBuf);
+    impl Drop for ImmutableFile {
+        fn drop(&mut self) {
+            let _ = Command::new("chflags").arg("nouchg").arg(&self.0).status();
+        }
+    }
+
+    let dir = lock_workspace("allocation-write-failure", Some("next 1\n"));
+    let interface_path = dir.write("interfaces.lock", "# preserve this comment\nnext 1\n");
+    let interface_before = std::fs::read(&interface_path).unwrap();
+    let instance_path = dir.path().join("instances.lock");
+    let instance_before = std::fs::read(&instance_path).unwrap();
+    let files = || {
+        let mut files: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        files.sort();
+        files
+    };
+    let files_before = files();
+    let _immutable = ImmutableFile(instance_path.clone());
+    assert!(
+        Command::new("chflags")
+            .arg("uchg")
+            .arg(&instance_path)
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let (code, stdout, stderr) = run_lock(&dir, &[]);
+    assert_eq!(code, 2, "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(std::fs::read(&interface_path).unwrap(), interface_before);
+    assert_eq!(std::fs::read(&instance_path).unwrap(), instance_before);
+    assert_eq!(files(), files_before, "no temporary file remains");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(
+        stderr.contains(&format!(
+            "error: cannot write {}: ",
+            instance_path.display()
+        )),
+        "{stderr}"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn second_lock_write_failure_restores_interfaces_and_removes_temporaries() {
     struct ImmutableFile(PathBuf);
     impl Drop for ImmutableFile {

@@ -322,7 +322,8 @@ enum LockCommand {
     /// 0 when the merge is clean, 1 when entries disagree (they are left
     /// between conflict markers of MARKER_SIZE, and the file is RIDL-410, or
     /// RSDL-315 for `instances.lock`, until resolved), 2 when an input cannot
-    /// be read or does not parse (OURS is left as it was).
+    /// be read or does not parse, or renumbering has no number left (OURS is
+    /// left as it was).
     /// Register it with `.gitattributes` and `git config` as the CLI
     /// reference documents.
     Merge {
