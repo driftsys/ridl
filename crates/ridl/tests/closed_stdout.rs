@@ -7,6 +7,11 @@ mod remote_support;
 use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
+
+// On macOS, pipe creation and setting close-on-exec are separate operations.
+// Serialize pipe creation through spawn so another child cannot inherit a reader.
+static PIPE_LOCK: Mutex<()> = Mutex::new(());
 
 fn command(dir: &Path, args: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ridl"));
@@ -15,12 +20,19 @@ fn command(dir: &Path, args: &[&str]) -> Command {
 }
 
 fn assert_closed_stdout(mut command: Command) {
+    let guard = PIPE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (reader, writer) = io::pipe().expect("create stdout pipe");
     drop(reader);
-    let output = command
+    let child = command
         .stdout(writer)
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
+        .expect("spawn ridl with no stdout reader");
+    drop(guard);
+    let output = child
+        .wait_with_output()
         .expect("run ridl with no stdout reader");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
@@ -58,15 +70,20 @@ fn explain_exits_2_when_stdout_reader_is_gone() {
 #[test]
 fn explain_exits_2_when_both_output_readers_are_gone() {
     let dir = tempfile::tempdir().unwrap();
+    let guard = PIPE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (stdout_reader, stdout_writer) = io::pipe().unwrap();
     let (stderr_reader, stderr_writer) = io::pipe().unwrap();
     drop(stdout_reader);
     drop(stderr_reader);
-    let status = command(dir.path(), &["diff", "--explain", "timing_changed"])
+    let mut child = command(dir.path(), &["diff", "--explain", "timing_changed"])
         .stdout(stdout_writer)
         .stderr(stderr_writer)
-        .status()
-        .expect("run ridl with no output readers");
+        .spawn()
+        .expect("spawn ridl with no output readers");
+    drop(guard);
+    let status = child.wait().expect("run ridl with no output readers");
     assert_eq!(status.code(), Some(2));
 }
 

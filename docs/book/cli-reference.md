@@ -3045,10 +3045,11 @@ of 1 without knowing which subcommand produced it says nothing on its own.
 Exit code 2 is the one genuinely shared meaning — an input the command could not
 use at all, including `ridl fmt`'s missing or unreadable path since
 [ADR-0010][adr-0010] closed the gap documented under [`ridl fmt`](#ridl-fmt)
-above. A `clap`-level usage error — a missing required argument, an unrecognized
-flag, or no subcommand at all — is also exit 2 on both binaries, which happens
-to agree with the applications' own convention rather than being one of their
-exit paths:
+above. A failed write of a command's report to stdout, for example when a reader
+has closed the pipe, is also exit 2 on every command that prints to stdout. A
+`clap`-level usage error — a missing required argument, an unrecognized flag, or
+no subcommand at all — is also exit 2 on both binaries, which happens to agree
+with the applications' own convention rather than being one of their exit paths:
 
 ```sh
 ridl check --bogus-flag
