@@ -53,8 +53,9 @@ impl MemberTable {
     }
 
     /// Inserts or replaces the entry under `(iface, ord)`; returns the entry
-    /// it replaced. The new entry has no payload limit; a replaced entry's
-    /// limit is dropped.
+    /// it replaced. Keeps a replaced entry's payload limit; an entry under a
+    /// new key has no payload limit. Clears the reply stream mark and the
+    /// parameter stream count.
     pub fn insert(
         &mut self,
         iface: InterfaceNo,
@@ -65,7 +66,7 @@ impl MemberTable {
         let entry = Entry {
             kind,
             max,
-            limit: None,
+            limit: self.limit(iface, ord),
             reply_stream: false,
             parameter_streams: 0,
         };
@@ -252,12 +253,33 @@ mod tests {
     }
 
     #[test]
-    fn insert_under_the_same_key_clears_the_limit() {
+    fn insert_under_the_same_key_keeps_the_limit() {
         let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
-        t.insert(InterfaceNo(1), Ordinal(1), Kind::Command, None);
-        t.set_limit(InterfaceNo(1), Ordinal(1), 64);
-        t.insert(InterfaceNo(1), Ordinal(1), Kind::Command, None);
+        assert_eq!(
+            t.insert(
+                InterfaceNo(1),
+                Ordinal(1),
+                Kind::Command,
+                Some(Duration::from_secs(1))
+            ),
+            None
+        );
         assert_eq!(t.limit(InterfaceNo(1), Ordinal(1)), None);
+        t.set_limit(InterfaceNo(1), Ordinal(1), 64);
+        assert_eq!(
+            t.insert(
+                InterfaceNo(1),
+                Ordinal(1),
+                Kind::Query,
+                Some(Duration::from_secs(2))
+            ),
+            Some((Kind::Command, Some(Duration::from_secs(1))))
+        );
+        assert_eq!(t.limit(InterfaceNo(1), Ordinal(1)), Some(64));
+        assert_eq!(
+            t.member(InterfaceNo(1), Ordinal(1)),
+            Some((Kind::Query, Some(Duration::from_secs(2))))
+        );
     }
 
     #[test]
