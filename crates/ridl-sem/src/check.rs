@@ -548,22 +548,6 @@ fn provisional_order(key: &LockKey) -> (&str, bool) {
     }
 }
 
-#[test]
-fn provisional_order_places_an_interface_before_a_service_with_the_same_name() {
-    let mut keys = [
-        LockKey::Service("doors".into()),
-        LockKey::Interface("doors".into()),
-    ];
-    keys.sort_by(|a, b| provisional_order(a).cmp(&provisional_order(b)));
-    assert_eq!(
-        keys,
-        [
-            LockKey::Interface("doors".into()),
-            LockKey::Service("doors".into())
-        ]
-    );
-}
-
 /// The unit directory `ridl lock` takes, as the loader recorded it: the
 /// parent directory of the lock file's path, which is the manifest directory
 /// (plan decision PD-4), or `.` when the path has none.
@@ -6545,6 +6529,22 @@ mod tests {
 
     /// The typl reference Appendix B example, verbatim.
     const APPENDIX_B: &str = include_str!("../fixtures/appendix_b.typl");
+
+    #[test]
+    fn provisional_order_places_an_interface_before_a_service_with_the_same_name() {
+        let mut keys = [
+            LockKey::Service("doors".into()),
+            LockKey::Interface("doors".into()),
+        ];
+        keys.sort_by(|a, b| provisional_order(a).cmp(&provisional_order(b)));
+        assert_eq!(
+            keys,
+            [
+                LockKey::Interface("doors".into()),
+                LockKey::Service("doors".into())
+            ]
+        );
+    }
 
     fn package(db: &RidlDatabase, name: &str, text: &str) -> Package {
         let file = InputFile::new(

@@ -2175,7 +2175,8 @@ sections it points at are.
     from a unit that remains. For a whole unit removed or renamed, the refusal
     catches the accidental case (a moved directory, a changed manifest) that
     would otherwise lose the record silently; the deliberate case costs one
-    deletion of that unit's snapshots from `.ridl/baseline/`, which the message
+    deletion of that unit's snapshots from the publication directory
+    (`.ridl/baseline/` by default, or the `--out` directory), which the message
     names. What would reopen the question is a unit-level retirement construct.
     `ridl diff` reports the removal as breaking.
 14. ~~**A whole service removed, or a service whose form switches, bypasses the
