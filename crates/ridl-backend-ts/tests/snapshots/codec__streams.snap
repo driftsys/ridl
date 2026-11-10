@@ -4,6 +4,7 @@ expression: source
 ---
 import type { StreamSession, StreamOptions } from "@driftsys/ridl-runtime";
 import { CatalogMismatch, CodecError, StreamError, decodeStream, decodeTextStream, encodeUpload, byteUpload, textUpload } from "@driftsys/ridl-runtime";
+import { checkWellFormed } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./streams.demo.js";
@@ -241,7 +242,7 @@ export function decodeData(bytes: Uint8Array): t.Data {
 /** Encodes a `streams.demo.Text` payload. */
 export function encodeText(value: t.Text): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.TextBoxT(value).pack(builder));
+  builder.finish(new fb.TextBoxT(checkWellFormed(value, "streams.demo.Text")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.Text` payload the codec has verified. */
@@ -1135,7 +1136,7 @@ function encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>
   try {
     bytes = payload.encode(value);
   } catch (error) {
-    if (typeof error === "object" && error !== null && "name" in error && error.name === "RuleError" && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
+    if (typeof error === "object" && error !== null && "name" in error && (error.name === "RuleError" || error.name === "ConstraintError") && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
       throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
     }
     throw new StreamError({ category: "corrupt" }, { cause: error });

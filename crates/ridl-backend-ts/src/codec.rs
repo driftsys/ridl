@@ -476,6 +476,7 @@ impl<'a> Codec<'a> {
             "CATALOG_HASH",
             "PAYLOAD_TYPES",
             "RULES",
+            "checkWellFormed",
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
@@ -1081,7 +1082,11 @@ impl<'a> Codec<'a> {
                         }
                     }
                     Some(Kind::Scalar(scalar)) => Rule {
-                        pack: "{}".to_string(),
+                        pack: if scalar.class() == v1::ScalarClass::String {
+                            text_pack(qualified)
+                        } else {
+                            "{}".to_string()
+                        },
                         unpack: match self.unchecked_call(nested, home, name, scalar) {
                             Some(call) if scalar.class() == v1::ScalarClass::String => {
                                 format!("{call}({{}} as string)")
@@ -1089,7 +1094,7 @@ impl<'a> Codec<'a> {
                             Some(call) => format!("{call}({{}})"),
                             None => format!("{{}} as {spelled}"),
                         },
-                        plain: true,
+                        plain: scalar.class() != v1::ScalarClass::String,
                         nullable: false,
                         vector: false,
                     },
@@ -1105,13 +1110,13 @@ impl<'a> Codec<'a> {
             Some(TypeKind::Primitive(primitive)) => {
                 Ok(match v1::PrimitiveType::try_from(*primitive) {
                     Ok(v1::PrimitiveType::Bytes) => bytes_rule("Uint8Array"),
-                    Ok(v1::PrimitiveType::String) => string_rule(),
+                    Ok(v1::PrimitiveType::String) => string_rule(qualified),
                     _ => copy_rule(),
                 })
             }
             Some(TypeKind::Inline(scalar)) => Ok(match scalar.class() {
                 v1::ScalarClass::Bytes => bytes_rule("Uint8Array"),
-                v1::ScalarClass::String => string_rule(),
+                v1::ScalarClass::String => string_rule(qualified),
                 _ => copy_rule(),
             }),
             Some(TypeKind::Tuple(tuple)) => {
@@ -1148,7 +1153,9 @@ impl<'a> Codec<'a> {
                     } else {
                         format!(
                             "{{}}.map((element) => {})",
-                            template.replace("{}", "element")
+                            template
+                                .replace("{}", "element")
+                                .replace("{path}", "{path}[]")
                         )
                     }
                 };
@@ -1187,8 +1194,14 @@ impl<'a> Codec<'a> {
                         "{{}}.map(([key, value]) => {{ const entry = new fb.{}T(); entry.key = {}; \
                          entry.value = {}; return entry; }})",
                         entry.name,
-                        key_rule.pack.replace("{}", "key"),
-                        value_rule.pack.replace("{}", "value"),
+                        key_rule
+                            .pack
+                            .replace("{}", "key")
+                            .replace("{path}", "{path}.key"),
+                        value_rule
+                            .pack
+                            .replace("{}", "value")
+                            .replace("{path}", "{path}.value"),
                     ),
                     unpack: format!("{{}}.map((entry) => [{unpack_key}, {unpack_value}] as const)"),
                     plain: false,
@@ -1427,6 +1440,9 @@ impl<'a> Codec<'a> {
                 helpers.join(", ")
             );
         }
+        if body.contains("checkWellFormed(") {
+            out.push_str("import { checkWellFormed } from \"@driftsys/ridl-runtime\";\n");
+        }
         if local {
             out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
         }
@@ -1621,7 +1637,11 @@ impl<'a> Codec<'a> {
                 },
             ),
             Some(Kind::Scalar(scalar)) => (
-                format!("new fb.{name}BoxT(value)"),
+                if scalar.class() == v1::ScalarClass::String {
+                    format!("new fb.{name}BoxT(checkWellFormed(value, \"{qualified}\"))")
+                } else {
+                    format!("new fb.{name}BoxT(value)")
+                },
                 match self.unchecked_call(true, "", name, scalar) {
                     Some(call) if scalar.class() == v1::ScalarClass::String => {
                         Read::Unchecked(call, "{} as string")
@@ -1917,10 +1937,11 @@ impl<'a> Codec<'a> {
         );
         let _ = writeln!(out, "  const {object} = new fb.{table}T();");
         for field in fields {
-            let packed = field
-                .rule
-                .pack
-                .replace("{}", &format!("value.{}", field.declared));
+            let packed = fill_pack(
+                &field.rule.pack,
+                &format!("value.{}", field.declared),
+                &field.declared,
+            );
             if field.optional {
                 // The object API holds a vector as `T[]`, never `null`, and
                 // `pack` always writes it, so an absent optional vector
@@ -2022,7 +2043,7 @@ impl<'a> Codec<'a> {
                 Some(box_name) => (
                     format!(
                         "new fb.{box_name}T({})",
-                        rule.pack.replace("{}", "value.value")
+                        fill_pack(&rule.pack, "value.value", declared)
                     ),
                     format!("(object.value as fb.{box_name}T).value"),
                 ),
@@ -2037,7 +2058,7 @@ impl<'a> Codec<'a> {
                         }
                     };
                     (
-                        rule.pack.replace("{}", "value.value"),
+                        fill_pack(&rule.pack, "value.value", declared),
                         format!("object.value as fb.{arm_table}T"),
                     )
                 }
@@ -2310,7 +2331,7 @@ impl<'a> Codec<'a> {
     fn emit_stream_helpers(&self, out: &mut String) {
         out.push_str("\nfunction checkStreamSession(session: StreamSession, limit: number | undefined): void {\n  const hash = session.codec.catalogHash;\n  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {\n    throw new CatalogMismatch(\n      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n      Array.from(hash, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n    );\n  }\n  if (limit === 0) throw new StreamError({ category: \"corrupt\" });\n}\n");
         out.push_str("\nfunction encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {\n  let bytes: Uint8Array;\n  try {\n    bytes = payload.encode(value);\n  } catch (error) {\n");
-        out.push_str("    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n");
+        out.push_str("    if (typeof error === \"object\" && error !== null && \"name\" in error && (error.name === \"RuleError\" || error.name === \"ConstraintError\") && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n");
         out.push_str("    throw new StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
         if self.stream_calls.values().any(|s| s.reply.is_some()) {
             out.push_str("\nfunction decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  try {\n    return payload.decode(bytes);\n  } catch (error) {\n    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n    throw new StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n}\n");
@@ -3060,14 +3081,33 @@ fn copy_rule() -> Rule {
 }
 
 /// A string: `flatc` reads one as `string | Uint8Array | null`.
-fn string_rule() -> Rule {
+fn string_rule(qualified: &str) -> Rule {
     Rule {
-        pack: "{}".to_string(),
+        pack: text_pack(qualified),
         unpack: "{} as string".to_string(),
-        plain: true,
+        plain: false,
         nullable: false,
         vector: false,
     }
+}
+
+/// The pack template of a string position. `flatc` writes the string through
+/// `TextEncoder`, which replaces an unpaired surrogate with U+FFFD without an
+/// error, so the converter checks well-formedness first. `{path}` stands for the
+/// path of the field inside the payload type `qualified`; see [`fill_pack`].
+fn text_pack(qualified: &str) -> String {
+    format!("checkWellFormed({{}}, \"{qualified}.{{path}}\")")
+}
+
+/// Fills a pack template with the value read and the path of the position. An
+/// empty path names the payload type itself.
+fn fill_pack(template: &str, read: &str, path: &str) -> String {
+    let filled = if path.is_empty() {
+        template.replace(".{path}", "")
+    } else {
+        template.replace("{path}", path)
+    };
+    filled.replace("{}", read)
 }
 
 /// Bytes: `flatc` holds a `[ubyte]` as `number[]`.

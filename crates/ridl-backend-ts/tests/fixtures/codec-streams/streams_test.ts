@@ -13,6 +13,7 @@ import { StatusBoxT } from "./streams/demo.ts";
 import {
   CatalogMismatch,
   CodecError,
+  ConstraintError,
   StreamError,
   UnknownPayloadType,
 } from "@driftsys/ridl-runtime";
@@ -1157,6 +1158,40 @@ for (const operation of ["request", "reply"] as const) {
     });
   }
 }
+
+// A generated encode refuses a lone surrogate with a ConstraintError, which a
+// stream call reports as a contract failure of the utf8 rule.
+Deno.test("generated_request_constraint_error_maps_to_the_utf8_contract", () => {
+  const h = uploadHarness();
+  const payload = entry("uploadChoice").request;
+  const original = { ...payload };
+  const cause = new ConstraintError(
+    "utf8",
+    "streams.demo.Choice.label",
+    "\ud83d",
+    "well-formed text",
+  );
+  payload.encode = () => {
+    throw cause;
+  };
+  try {
+    assert.throws(
+      () => uploadFunction("uploadChoice")(h.session, 7, 8, { bound: 50 }),
+      (error: unknown) => {
+        assert.ok(error instanceof StreamError);
+        assert.deepEqual(error.failure, {
+          category: "contract",
+          contract: { category: "invalid-value", rule: "utf8" },
+        });
+        assert.strictEqual(error.cause, cause);
+        return true;
+      },
+    );
+    assert.equal(h.calls.length, 0);
+  } finally {
+    Object.assign(payload, original);
+  }
+});
 
 // Mutations: bypass codec exception mapping in either duplex direction.
 for (const direction of ["upload", "reply"] as const) {

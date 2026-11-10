@@ -129,16 +129,17 @@ runtime's `Codec`, `SignalCheckEntry` and `CodecError` types for `signalChecks`.
 The names the file declares are checked before anything is written, and a second
 declaration of one is refused with an error that names both: an interface or an
 induced tuple named after a reserved name of the file (`CATALOG_NAME`,
-`CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `PayloadCodec`, `RuleError` when the
-module reaches an enum or an enum set, `signalChecks`, `signalCheck`, `Codec`,
-`SignalCheckEntry` and `CodecError` when the package has a signal, an import
-alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two enum sets
-of other packages whose `pack_<alias>_<Name>` or `unpack_<alias>_<Name>`
-functions spell the same (`a.b` / `c_d` and `a.b.c` / `d`), two foreign payload
-types whose `codec<Package><Name>` constants spell the same (`a.b` / `C` and `a`
-/ `BC`), and a local payload type whose `codec<Name>` spells a foreign one. An
-interaction named `iface` is refused because it collides with the interface
-table metadata key of that name; the error names both sources.
+`CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `PayloadCodec`, `checkWellFormed`,
+`RuleError` when the module reaches an enum or an enum set, `signalChecks`,
+`signalCheck`, `Codec`, `SignalCheckEntry` and `CodecError` when the package has
+a signal, an import alias `flatbuffers`, `t`, `fb`, `<package>` or
+`<package>_codec`), two enum sets of other packages whose `pack_<alias>_<Name>`
+or `unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
+`d`), two foreign payload types whose `codec<Package><Name>` constants spell the
+same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
+spells a foreign one. An interaction named `iface` is refused because it
+collides with the interface table metadata key of that name; the error names
+both sources.
 
 ## Stream functions
 
@@ -218,16 +219,17 @@ other exception a generated `encode` or `decode` throws, or
 `{ category: "contract", contract: { category:
 "invalid-value", rule } }` for a
 constraint or UTF-8 violation, including a `RuleError` a generated `encode` or
-`decode` throws. The original exception is kept as the `cause`. Remote errors
-retain their original object identity. `CatalogMismatch` and
-`UnknownPayloadType` are setup errors before request transmission. `CodecError`
-also reports invalid codec ABI or verifier metadata. Normal pipe cancellation
-interrupts the raw call when decoding fails; it does not invent an outbound
-contract frame. An upload adapter failure errors the local writer with
-`StreamError` and aborts the transport. A duplex reply then fails with the
-transport's interruption, rather than that local `StreamError`. Explicit upload
-abort preserves the supplied reason on the native writer; the other direction
-reports transport interruption.
+`decode` throws and the `ConstraintError` with rule `utf8` that a generated
+`encode` throws for a string that is not well-formed. The original exception is
+kept as the `cause`. Remote errors retain their original object identity.
+`CatalogMismatch` and `UnknownPayloadType` are setup errors before request
+transmission. `CodecError` also reports invalid codec ABI or verifier metadata.
+Normal pipe cancellation interrupts the raw call when decoding fails; it does
+not invent an outbound contract frame. An upload adapter failure errors the
+local writer with `StreamError` and aborts the transport. A duplex reply then
+fails with the transport's interruption, rather than that local `StreamError`.
+Explicit upload abort preserves the supplied reason on the native writer; the
+other direction reports transport interruption.
 
 **D-21. Generated interoperability uses the document example.**
 `examples/docstore/web` loads the generated wasm and tables, calls byte
@@ -325,38 +327,50 @@ rule per typl kind (D-4):
 The `.fbs` enum width stays `long`; narrowing it is driftsys/ridl#1020, and the
 converters absorb that change when it lands.
 
-`decode<Name>` does not verify a constraint, and `encode<Name>` does not check
-one (D-11): the checks run in the generated Rust, compiled into the wasm module
-(ADR-0020 decisions 2 and 7). The one check `decode<Name>` makes is the declared
-values of a strict enum and the declared bits of a strict enum set, because the
-converter has to produce a typed value: it throws a `RuleError` whose `rule` is
-`variant` for an undeclared value or bit, and a strict enum with no zero member
-reports a value the buffer leaves out as absent. An `open` enum keeps an
-undeclared value, decodes an absent value to its zero member when it declares
-one and to `{ unknown: 0 }` when it does not, and throws the same `variant`
-error only for a value beyond the safe integers. `decode<Name>` is for bytes the
-codec has verified, so it builds a named scalar with `make<Name>Unchecked` where
-the domain module has one and checks nothing again. `encode<Name>` builds what
-it is given, so that a payload the codec rejects can be built. The domain
-module's `make<Name>` checks the well-formedness of a string scalar, then the
-range, step, length and pattern of a named scalar, and throws a
-`ConstraintError`; `make<Name>Unchecked` does not check. A string is well-formed
-when it holds no unpaired surrogate, which `TextEncoder` would replace with
-U+FFFD without an error and the wasm codec could not see; the check is the
-runtime's `isWellFormedString`, and the `ConstraintError` has rule `utf8`. A
-string length counts code points with the runtime's `codePointLength`, and a
-bytes length counts bytes (`.length`). A domain module with a check imports
-`ConstraintError` and the helpers it uses from `@driftsys/ridl-runtime`, and
-refuses a declaration named `ConstraintError`, `codePointLength`,
-`isWellFormedString`, `offFloatPoints` or `offFloatStep`. `make<Name>Unchecked`
-exists only for a scalar whose `make<Name>` checks something, which is every
-string scalar, and the decoder keeps a type assertion for the others. The
-pattern check uses the checker's ECMA-262 semantics without the `u` flag, so it
-can disagree with the Rust `regex` crate that the wasm codec uses
-(driftsys/ridl#597). The test `examples/cabin/web/check_test.ts` compares
-`make<Name>` with the wasm codec's `verify` over the values of the constrained
-types of `examples/cabin/cabin.ridl`, and pins each known disagreement of the
-pattern rule, which [Generated code](../book/generated-code.md) lists.
+`decode<Name>` does not verify a constraint, and `encode<Name>` checks no
+constraint but one (D-11): the checks run in the generated Rust, compiled into
+the wasm module (ADR-0020 decisions 2 and 7). The one check `encode<Name>` makes
+is that every string it writes is well-formed. `flatc` writes a string through
+`TextEncoder`, which replaces an unpaired surrogate with U+FFFD without an
+error, so the wasm codec could never see the violation. A converter passes each
+string (a field, an array element, a map key or a map value, a union arm, and
+the value of a string scalar payload) to the runtime's `checkWellFormed`, which
+throws a `ConstraintError` with rule `utf8`. Its `type` is the qualified name of
+the payload type that holds the string and the path of the position: the field
+name, then `[]` for an array element, or `.key` or `.value` for a map. For
+example, `veh.common.SensorBounds.meta.value`. A string scalar payload has the
+name of the type alone. A string with an astral character, written as a
+surrogate pair, is well-formed and encodes. The one check `decode<Name>` makes
+is the declared values of a strict enum and the declared bits of a strict enum
+set, because the converter has to produce a typed value: it throws a `RuleError`
+whose `rule` is `variant` for an undeclared value or bit, and a strict enum with
+no zero member reports a value the buffer leaves out as absent. An `open` enum
+keeps an undeclared value, decodes an absent value to its zero member when it
+declares one and to `{ unknown: 0 }` when it does not, and throws the same
+`variant` error only for a value beyond the safe integers. `decode<Name>` is for
+bytes the codec has verified, so it builds a named scalar with
+`make<Name>Unchecked` where the domain module has one and checks nothing again.
+Apart from that check, `encode<Name>` builds what it is given, so that a payload
+the codec rejects can be built. The domain module's `make<Name>` checks the
+well-formedness of a string scalar, then the range, step, length and pattern of
+a named scalar, and throws a `ConstraintError`; `make<Name>Unchecked` does not
+check. A string is well-formed when it holds no unpaired surrogate, which
+`TextEncoder` would replace with U+FFFD without an error and the wasm codec
+could not see; the check is the runtime's `isWellFormedString`, and the
+`ConstraintError` has rule `utf8`. A string length counts code points with the
+runtime's `codePointLength`, and a bytes length counts bytes (`.length`). A
+domain module with a check imports `ConstraintError` and the helpers it uses
+from `@driftsys/ridl-runtime`, and refuses a declaration named
+`ConstraintError`, `codePointLength`, `isWellFormedString`, `offFloatPoints` or
+`offFloatStep`. `make<Name>Unchecked` exists only for a scalar whose
+`make<Name>` checks something, which is every string scalar, and the decoder
+keeps a type assertion for the others. The pattern check uses the checker's
+ECMA-262 semantics without the `u` flag, so it can disagree with the Rust
+`regex` crate that the wasm codec uses (driftsys/ridl#597). The test
+`examples/cabin/web/check_test.ts` compares `make<Name>` with the wasm codec's
+`verify` over the values of the constrained types of
+`examples/cabin/cabin.ridl`, and pins each known disagreement of the pattern
+rule, which [Generated code](../book/generated-code.md) lists.
 
 ## Foreign declarations (D-14)
 

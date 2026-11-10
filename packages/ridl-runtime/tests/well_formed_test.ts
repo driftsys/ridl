@@ -1,5 +1,9 @@
 import { assertEquals } from "@std/assert";
-import { ConstraintError, isWellFormedString } from "../mod.ts";
+import {
+  checkWellFormed,
+  ConstraintError,
+  isWellFormedString,
+} from "../mod.ts";
 
 Deno.test("isWellFormedString accepts text made of scalar values", () => {
   for (const value of ["", "abc", "é", "😀", "a😀b", "😀"]) {
@@ -50,4 +54,21 @@ Deno.test("ConstraintError accepts the utf8 rule", () => {
     error.message,
     "test.Text: a\ud83d breaks the utf8 rule well-formed text",
   );
+});
+
+Deno.test("checkWellFormed returns well-formed text unchanged", () => {
+  assertEquals(checkWellFormed("a😀b", "test.Text.label"), "a😀b");
+  assertEquals(checkWellFormed("", "test.Text.label"), "");
+});
+
+Deno.test("checkWellFormed throws the utf8 ConstraintError with the given type", () => {
+  try {
+    checkWellFormed("a\ud83d", "test.Text.label");
+    throw new Error("no error");
+  } catch (error) {
+    assertEquals(error instanceof ConstraintError, true);
+    const constraint = error as ConstraintError;
+    assertEquals(constraint.rule, "utf8");
+    assertEquals(constraint.type, "test.Text.label");
+  }
 });

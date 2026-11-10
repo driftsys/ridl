@@ -149,8 +149,9 @@ platform's `TypeError`. An already resolved command acceptance stays resolved.
 Local payload failures throw `StreamError`. Its `failure` is
 `{ category: "corrupt" }` for malformed payloads, an oversized named element or
 code point, or any exception a generated `encode` or `decode` throws without a
-rule. Rule failures, including invalid UTF-8 and a `RuleError` from a generated
-`encode` or `decode`, use
+rule. Rule failures, including invalid UTF-8, a `RuleError` from a generated
+`encode` or `decode`, and the `ConstraintError` with rule `utf8` that a
+generated `encode` throws for a string with an unpaired surrogate, use
 `{ category: "contract", contract: { category: "invalid-value", rule } }`. A
 mapped exception is kept as the error's `cause`. `PayloadRule` names `length`,
 `pattern`, `range`, `step`, `unique`, `utf8` and `variant`. A missing or unknown
@@ -167,18 +168,23 @@ A generated domain module builds a constrained named scalar with `make<Name>`,
 which throws a `ConstraintError` when a utf8, range, step, length or pattern
 rule breaks, and `make<Name>Unchecked`, which does not check. `ConstraintError`
 extends `RangeError`. Its `rule` is `"range"`, `"step"`, `"length"`, `"pattern"`
-or `"utf8"`, its `type` is the qualified type name, and its message names the
+or `"utf8"`, its `type` is the qualified type name (from a generated
+`encode<Name>`, that name and the path of the field), and its message names the
 value (a string is cut after 64 code points, and bytes show only their length)
 and the constraint.
 
-The generated code also calls four helpers that the package exports:
-`isWellFormedString(value)` reports whether a string holds only Unicode scalar
-values, that is, no unpaired surrogate (`TextEncoder` would replace one with
-U+FFFD without an error), and `make<Name>` of a string scalar throws a
-`ConstraintError` with rule `"utf8"` for one, before it checks the length or the
-pattern; `codePointLength(value)` counts the code points of a string, which is
-the length a string constraint measures; `offFloatStep(value, wire32, lattice)`
-and `offFloatPoints(value, wire32, points)` report a float that is off its step
+The generated code also calls five helpers that the package exports:
+`checkWellFormed(value, type)` returns a well-formed string and throws a
+`ConstraintError` with rule `"utf8"` and the given `type` otherwise; a generated
+`encode<Name>` calls it for every string it writes, so that `TextEncoder` never
+replaces an unpaired surrogate silently. `isWellFormedString(value)` reports
+whether a string holds only Unicode scalar values, that is, no unpaired
+surrogate (`TextEncoder` would replace one with U+FFFD without an error), and
+`make<Name>` of a string scalar throws a `ConstraintError` with rule `"utf8"`
+for one, before it checks the length or the pattern; `codePointLength(value)`
+counts the code points of a string, which is the length a string constraint
+measures; `offFloatStep(value, wire32, lattice)` and
+`offFloatPoints(value, wire32, points)` report a float that is off its step
 grid. See [Generated code](../../docs/book/generated-code.md) for what
 `make<Name>` checks.
 

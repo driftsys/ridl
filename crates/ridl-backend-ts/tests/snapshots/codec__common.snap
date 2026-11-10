@@ -4,6 +4,7 @@ expression: source
 ---
 import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
 import { CodecError } from "@driftsys/ridl-runtime";
+import { checkWellFormed } from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./veh.common.js";
@@ -239,7 +240,7 @@ export function decodeDriverProfile(bytes: Uint8Array): t.DriverProfile {
 
 function packDriverProfile(value: t.DriverProfile): fb.DriverProfileT {
   const object = new fb.DriverProfileT();
-  object.name = value.name;
+  object.name = checkWellFormed(value.name, "veh.common.DriverProfile.name");
   object.speed = value.speed;
   object.override = value.override === undefined ? null : value.override;
   object.gears = value.gears;
@@ -270,8 +271,8 @@ function packSensorBounds(value: t.SensorBounds): fb.SensorBoundsT {
   const object = new fb.SensorBoundsT();
   object.range = packSensorBoundsRange(value.range);
   object.readings = [...value.readings];
-  object.labels = [...value.labels];
-  object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = key; entry.value = value; return entry; });
+  object.labels = value.labels.map((element) => checkWellFormed(element, "veh.common.SensorBounds.labels[]"));
+  object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = checkWellFormed(key, "veh.common.SensorBounds.meta.key"); entry.value = checkWellFormed(value, "veh.common.SensorBounds.meta.value"); return entry; });
   return object;
 }
 function unpackSensorBounds(object: fb.SensorBoundsT): t.SensorBounds {
@@ -351,7 +352,7 @@ export function decodeSensorFault(bytes: Uint8Array): t.SensorFault {
 function packSensorFault(value: t.SensorFault): fb.SensorFaultT {
   const object = new fb.SensorFaultT();
   object.code = value.code;
-  object.message = value.message;
+  object.message = checkWellFormed(value.message, "veh.common.SensorFault.message");
   return object;
 }
 function unpackSensorFault(object: fb.SensorFaultT): t.SensorFault {
@@ -435,7 +436,7 @@ function unpackOutcome(object: fb.OutcomeT): t.Outcome {
 /** Encodes a `veh.common.Remark` payload. */
 export function encodeRemark(value: t.Remark): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.RemarkBoxT(value).pack(builder));
+  builder.finish(new fb.RemarkBoxT(checkWellFormed(value, "veh.common.Remark")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.common.Remark` payload the codec has verified. */
@@ -456,7 +457,7 @@ export function decodeNote(bytes: Uint8Array): t.Note {
 
 function packNote(value: t.Note): fb.NoteT {
   const object = new fb.NoteT();
-  object.text = value.text;
+  object.text = checkWellFormed(value.text, "veh.common.Note.text");
   return object;
 }
 function unpackNote(object: fb.NoteT): t.Note {
@@ -508,7 +509,7 @@ function packExtras(value: t.Extras): fb.ExtrasT {
   object.gears = value.gears.map((element) => BigInt(element));
   object.maybe = value.maybe === undefined ? [] : [...value.maybe];
   object.tag = value.tag === undefined ? [] : Array.from(value.tag);
-  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = key; entry.value = value; return entry; });
+  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = checkWellFormed(key, "veh.common.Extras.notes.key"); entry.value = checkWellFormed(value, "veh.common.Extras.notes.value"); return entry; });
   object.default_ = value.default;
   object.new_ = value.new;
   object.class_ = value.class;
