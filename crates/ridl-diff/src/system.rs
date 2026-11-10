@@ -84,18 +84,33 @@ pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
         (&old.labels, old.deprecated.as_ref(), &old.attributes),
         (&new.labels, new.deprecated.as_ref(), &new.attributes),
     );
+    // A member line on one side only is compared with an empty side, so that
+    // its backend keys are listed with it.
     for line in &new.members {
-        if let Some(before) = old
+        let before = old
             .members
             .iter()
-            .find(|before| before.component == line.component)
+            .find(|before| before.component == line.component);
+        line_attrs(
+            &mut changes,
+            SystemHeading::CompositionChanged,
+            &format!("{system_path}/{}", line.component),
+            before.map_or(&[], |before| &before.attributes),
+            &line.attributes,
+        );
+    }
+    for line in &old.members {
+        if !new
+            .members
+            .iter()
+            .any(|after| after.component == line.component)
         {
             line_attrs(
                 &mut changes,
                 SystemHeading::CompositionChanged,
                 &format!("{system_path}/{}", line.component),
-                &before.attributes,
                 &line.attributes,
+                &[],
             );
         }
     }
@@ -292,34 +307,63 @@ fn compare_components(old: &Component, new: &Component, changes: &mut Vec<System
         (&old.labels, old.deprecated.as_ref(), &old.attributes),
         (&new.labels, new.deprecated.as_ref(), &new.attributes),
     );
+    // An `offers` or `requires` line on one side only is compared with an
+    // empty side, so that its backend keys are listed with it.
     for offer in &new.offers {
-        if let Some(before) = old
+        let before = old
             .offers
             .iter()
-            .find(|before| before.service == offer.service)
+            .find(|before| before.service == offer.service);
+        line_attrs(
+            changes,
+            SystemHeading::CompositionChanged,
+            &format!("{name}/offers/{}", offer.service),
+            before.map_or(&[], |before| &before.attributes),
+            &offer.attributes,
+        );
+    }
+    for offer in &old.offers {
+        if !new
+            .offers
+            .iter()
+            .any(|after| after.service == offer.service)
         {
             line_attrs(
                 changes,
                 SystemHeading::CompositionChanged,
                 &format!("{name}/offers/{}", offer.service),
-                &before.attributes,
                 &offer.attributes,
+                &[],
             );
         }
     }
     for require in &new.requires {
         let interface = interface_text(require.interface.as_ref());
-        if let Some(before) = old
+        let before = old
             .requires
             .iter()
-            .find(|before| interface_text(before.interface.as_ref()) == interface)
+            .find(|before| interface_text(before.interface.as_ref()) == interface);
+        line_attrs(
+            changes,
+            SystemHeading::CompositionChanged,
+            &format!("{name}/requires/{interface}"),
+            before.map_or(&[], |before| &before.attributes),
+            &require.attributes,
+        );
+    }
+    for require in &old.requires {
+        let interface = interface_text(require.interface.as_ref());
+        if !new
+            .requires
+            .iter()
+            .any(|after| interface_text(after.interface.as_ref()) == interface)
         {
             line_attrs(
                 changes,
                 SystemHeading::CompositionChanged,
                 &format!("{name}/requires/{interface}"),
-                &before.attributes,
                 &require.attributes,
+                &[],
             );
         }
     }
@@ -1107,6 +1151,114 @@ mod tests {
                 "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
                  [ sign.key = release ] -> []",
                 "composition changed: veh.topology.Adas/veh.topology.Gauge: member -> (removed)",
+            ]
+        );
+    }
+
+    /// rsdl §14: an `offers` or `requires` line on one component in both
+    /// closures, added or removed, is listed with its backend keys compared
+    /// with an empty side.
+    #[test]
+    fn an_offers_or_requires_line_added_or_removed_lists_its_keys() {
+        let signed = || vec![backend("sign", "key", Some("release"))];
+        let mut old = base();
+        // The lines both sides have carry a key of their own, so that a
+        // paired line is compared with its own earlier line and lists nothing.
+        old.components[0].offers[0].attributes = vec![backend("sign", "key", Some("other"))];
+        old.components[0].requires[0].attributes = vec![backend("sign", "key", Some("other"))];
+        let mut new = old.clone();
+        let cruise = &mut new.components[0];
+        cruise.offers.push(v2::Offer {
+            service: "veh.adas.brake".to_string(),
+            attributes: signed(),
+            ..Default::default()
+        });
+        cruise.requires.push(v2::Require {
+            interface: Some(v2::InterfaceRef {
+                catalog: "veh.adas".to_string(),
+                name: "Brake".to_string(),
+                inline: false,
+            }),
+            attributes: signed(),
+            ..Default::default()
+        });
+        assert_eq!(
+            lines(&diff_systems(&old, &new)),
+            [
+                "composition changed: veh.topology.Cruise/offers/veh.adas.brake: \
+                 (absent) -> offers veh.adas.brake",
+                "composition changed: veh.topology.Cruise/requires/veh.adas.Brake: \
+                 (absent) -> requires veh.adas.Brake",
+                "composition changed: veh.topology.Cruise/offers/veh.adas.brake/attributes: \
+                 [] -> [ sign.key = release ]",
+                "composition changed: veh.topology.Cruise/requires/veh.adas.Brake/attributes: \
+                 [] -> [ sign.key = release ]",
+            ]
+        );
+        assert_eq!(
+            lines(&diff_systems(&new, &old)),
+            [
+                "composition changed: veh.topology.Cruise/offers/veh.adas.brake: \
+                 offers veh.adas.brake -> (removed)",
+                "composition changed: veh.topology.Cruise/requires/veh.adas.Brake: \
+                 requires veh.adas.Brake -> (removed)",
+                "composition changed: veh.topology.Cruise/offers/veh.adas.brake/attributes: \
+                 [ sign.key = release ] -> []",
+                "composition changed: veh.topology.Cruise/requires/veh.adas.Brake/attributes: \
+                 [ sign.key = release ] -> []",
+            ]
+        );
+
+        // The lines of a component added to the closure are not listed one by
+        // one: the component is listed, and its keys are not compared.
+        let mut grown = old.clone();
+        let mut gauge = component("Gauge", &["Unit"], &["veh.adas.gauge"], &["LaneAssist"]);
+        gauge.offers[0].attributes = signed();
+        gauge.requires[0].attributes = signed();
+        grown.components.push(gauge);
+        assert_eq!(
+            lines(&diff_systems(&old, &grown)),
+            ["composition changed: veh.topology.Gauge: (absent) -> in the closure"]
+        );
+        assert_eq!(
+            lines(&diff_systems(&grown, &old)),
+            ["composition changed: veh.topology.Gauge: in the closure -> (removed)"]
+        );
+    }
+
+    /// rsdl §14: a `system` member line added or removed lists its backend
+    /// keys compared with an empty side, a line with no keys lists none, and
+    /// a line on both sides is compared with its own earlier line.
+    #[test]
+    fn a_system_member_line_added_or_removed_lists_its_keys() {
+        let member = |name: &str, attributes: Vec<v2::Attribute>| v2::MemberLine {
+            component: format!("veh.topology.{name}"),
+            attributes,
+            ..Default::default()
+        };
+        let mut old = base();
+        old.members = vec![member(
+            "Cruise",
+            vec![backend("sign", "key", Some("other"))],
+        )];
+        let mut new = old.clone();
+        new.members = vec![
+            member("Cruise", vec![backend("sign", "key", Some("other"))]),
+            member("Panel", vec![backend("sign", "key", Some("release"))]),
+            member("Gauge", Vec::new()),
+        ];
+        assert_eq!(
+            lines(&diff_systems(&old, &new)),
+            [
+                "composition changed: veh.topology.Vehicle/veh.topology.Panel/attributes: \
+              [] -> [ sign.key = release ]"
+            ]
+        );
+        assert_eq!(
+            lines(&diff_systems(&new, &old)),
+            [
+                "composition changed: veh.topology.Vehicle/veh.topology.Panel/attributes: \
+              [ sign.key = release ] -> []"
             ]
         );
     }
