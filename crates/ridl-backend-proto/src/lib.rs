@@ -148,7 +148,9 @@ struct Packages<'a> {
 /// [`check_field_number`]'s.) This is ADR-0016 decision 6's totality property
 /// applied to names the way [`check_field_number`] applies it to numbers: the
 /// projection is defined for every input, or the backend refuses with a
-/// diagnostic rather than emitting a schema the target rejects.
+/// diagnostic rather than emitting a schema the target rejects. Derived C++
+/// accessors of struct fields are checked separately by [`emit_struct`] against
+/// its completed message scope; they are not names declared in the schema.
 struct SymbolScope {
     /// Named in the refusal: ``package `veh.common` `` or ``message `Payload` ``.
     scope: String,
@@ -563,6 +565,11 @@ fn refuse_optional_repeated(
 /// collide under it (ADR-0016 decision 4), and the message scope here refuses
 /// the same collision for IR handed to this backend directly, so totality
 /// does not depend on the caller having run the semantic pass.
+/// The completed message scope also catches a field getter colliding with
+/// protoc's C++ `has_<field>()` accessor for an `optional` keyword field or
+/// `<field>_size()` accessor for an array or map field, in either field order.
+/// Union arms and the implicit presence of singular message-typed fields are
+/// outside this check (ADR-0017 decision 4, driftsys/ridl#1215).
 fn emit_struct(
     out: &mut String,
     packages: Packages,
@@ -606,6 +613,39 @@ fn emit_struct(
                 ));
             }
             None => {}
+        }
+    }
+    // All field getters are registered before checking derived accessors,
+    // so a collision is refused regardless of field order.
+    for member in &def.members {
+        let Some(v2::struct_member::Member::Field(field)) = &member.member else {
+            continue;
+        };
+        let Some(ty) = &field.r#type else {
+            continue;
+        };
+        let field_name = ridl_ir::name::snake_case(&field.name);
+        let accessor = if ty.optional {
+            Some(format!("has_{field_name}"))
+        } else if matches!(
+            &ty.kind,
+            Some(v2::field_type::Kind::Array(_) | v2::field_type::Kind::Map(_))
+        ) {
+            Some(format!("{field_name}_size"))
+        } else {
+            None
+        };
+        if let Some(accessor) = accessor
+            && let Some(getter) = members.claimed.get(&accessor)
+        {
+            return Err(GenerateError {
+                message: format!(
+                    "protoc's C++ accessor `{accessor}()` for field `{}` of struct \
+                     `{name}` collides with the getter for {getter} in {}. Rename \
+                     one of the fields so their C++ accessors differ.",
+                    field.name, members.scope
+                ),
+            });
         }
     }
     out.push_str("}\n");
