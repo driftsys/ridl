@@ -103,6 +103,21 @@ const RIDL: &str = env!("CARGO_BIN_EXE_ridl");
 const COMMANDS: &[&[&str]] = &[&["check"], &["build"], &["baseline"], &["test"]];
 
 #[test]
+fn an_entry_below_a_regular_file_does_not_exist() {
+    let fixture = Fixture::new("entry-below-file");
+    let file = fixture.root.join("file.ridl");
+    std::fs::write(&file, SOURCE).unwrap();
+    let entry = file.join("x");
+
+    let (code, stderr) = run(RIDL, &["check"], &entry);
+    assert_eq!(code, 2, "ridl check: {stderr}");
+    assert!(
+        stderr.contains(&format!("`{}` does not exist", entry.display())),
+        "ridl check reports the missing entry: {stderr}"
+    );
+}
+
+#[test]
 fn an_unreadable_root_reports_the_os_error_and_the_path() {
     if skip_as_root() {
         return;
@@ -145,12 +160,12 @@ fn an_unreadable_subdirectory_is_named_with_the_os_error() {
     }
 }
 
-/// Runs every command over `fixture`, expecting exit code 2 with `path` and the
+/// Runs every command over `entry`, expecting exit code 2 with `path` and the
 /// operating system's cause on stderr.
-fn assert_names_path_and_cause(fixture: &Fixture, path: &Path) {
+fn assert_names_path_and_cause(entry: &Path, path: &Path) {
     let path = path.display().to_string();
     for args in COMMANDS {
-        let (code, stderr) = run(RIDL, args, &fixture.root);
+        let (code, stderr) = run(RIDL, args, entry);
         assert_eq!(code, 2, "ridl {args:?}: {stderr}");
         assert!(
             stderr.contains(&format!("cannot read `{path}`")),
@@ -159,6 +174,14 @@ fn assert_names_path_and_cause(fixture: &Fixture, path: &Path) {
         assert!(
             stderr.contains("Permission denied"),
             "ridl {args:?} names the cause: {stderr}"
+        );
+        assert!(
+            !stderr.contains("has no `ridl.toml`"),
+            "ridl {args:?} does not claim the member manifest is missing: {stderr}"
+        );
+        assert!(
+            !stderr.contains("does not exist"),
+            "ridl {args:?} does not claim the entry is missing: {stderr}"
         );
     }
 }
@@ -173,7 +196,7 @@ fn an_unreadable_source_file_is_named_with_the_os_error() {
     let source = fixture.root.join("a.ridl");
     std::fs::write(&source, SOURCE).unwrap();
     fixture.lock_down(&source);
-    assert_names_path_and_cause(&fixture, &source);
+    assert_names_path_and_cause(&fixture.root, &source);
 }
 
 #[test]
@@ -192,7 +215,57 @@ fn an_unreadable_member_manifest_is_named_with_the_os_error() {
     std::fs::write(&manifest, MANIFEST).unwrap();
     std::fs::write(fixture.root.join("m").join("a.ridl"), SOURCE).unwrap();
     fixture.lock_down(&manifest);
-    assert_names_path_and_cause(&fixture, &manifest);
+    assert_names_path_and_cause(&fixture.root, &manifest);
+}
+
+#[test]
+fn an_unreadable_member_directory_is_named_with_the_os_error() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("member-directory");
+    std::fs::write(
+        fixture.root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"m\"]\n",
+    )
+    .unwrap();
+    let member = fixture.root.join("m");
+    std::fs::create_dir(&member).unwrap();
+    let manifest = member.join("ridl.toml");
+    std::fs::write(&manifest, MANIFEST).unwrap();
+    std::fs::write(member.join("a.ridl"), SOURCE).unwrap();
+    fixture.lock_down(&member);
+    assert_names_path_and_cause(&fixture.root, &manifest);
+}
+
+#[test]
+fn an_unreadable_ancestor_of_the_entry_is_named_with_the_os_error() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("entry-ancestor");
+    let ancestor = fixture.root.join("anc");
+    let entry = ancestor.join("pkg");
+    std::fs::create_dir_all(&entry).unwrap();
+    std::fs::write(entry.join("ridl.toml"), MANIFEST).unwrap();
+    std::fs::write(entry.join("a.ridl"), SOURCE).unwrap();
+    fixture.lock_down(&ancestor);
+    for args in COMMANDS {
+        let (code, stderr) = run(RIDL, args, &entry);
+        assert_eq!(code, 2, "ridl {args:?}: {stderr}");
+        assert!(
+            stderr.contains(&entry.display().to_string()),
+            "ridl {args:?} names the entry: {stderr}"
+        );
+        assert!(
+            stderr.contains("Permission denied"),
+            "ridl {args:?} names the cause: {stderr}"
+        );
+        assert!(
+            !stderr.contains("does not exist"),
+            "ridl {args:?} does not claim the entry is missing: {stderr}"
+        );
+    }
 }
 
 #[test]
@@ -207,7 +280,7 @@ fn an_unreadable_nested_manifest_is_named_with_the_os_error() {
     let nested = fixture.root.join("sub").join("ridl.toml");
     std::fs::write(&nested, MANIFEST).unwrap();
     fixture.lock_down(&nested);
-    assert_names_path_and_cause(&fixture, &nested);
+    assert_names_path_and_cause(&fixture.root, &nested);
 }
 
 #[test]
