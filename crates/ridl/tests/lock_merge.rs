@@ -118,6 +118,35 @@ fn both_add_one_number_renumbers_theirs() {
     assert_eq!(written, lock(5, "A 1\nB 2\nD 3\nC 4\n"));
 }
 
+#[test]
+fn exhausted_renumbering_exits_two_and_leaves_ours_unchanged() {
+    for (header, file, ours_entry, theirs_entry, next) in [
+        (HEADER, "interfaces.lock", "A 1\n", "B 1\n", u32::MAX),
+        (
+            "# instances.lock — written by ridl lock; do not edit by hand.\n",
+            "instances.lock",
+            "veh.C/a 1\n",
+            "veh.C/b 1\n",
+            i32::MAX as u32 + 1,
+        ),
+    ] {
+        let base = format!("{header}next 1\n");
+        let ours = format!("{header}# preserve this comment\nnext {next}\n{ours_entry}");
+        let theirs = format!("{header}next 2\n{theirs_entry}");
+        let (code, written, stderr) = merge(&base, &ours, &theirs);
+        assert_eq!(code, 2, "{stderr}");
+        assert_eq!(written.as_bytes(), ours.as_bytes());
+        assert!(stderr.contains("error: "), "{stderr}");
+        assert!(stderr.contains("ours.lock"), "{stderr}");
+        assert!(
+            stderr.contains(&format!(
+                "{file} has no number left to renumber THEIRS entry"
+            )),
+            "{stderr}"
+        );
+    }
+}
+
 /// A dotted interface key survives the merge: ours adds an entry, theirs is
 /// unchanged, and OURS holds both lines.
 #[test]

@@ -302,6 +302,66 @@ fn rename_an_instance_keeps_its_number() {
     assert!(lock_text(&dir).contains("veh.Cruise/spare 1\n"));
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn second_lock_write_failure_restores_interfaces_and_removes_temporaries() {
+    struct ImmutableFile(PathBuf);
+    impl Drop for ImmutableFile {
+        fn drop(&mut self) {
+            let _ = Command::new("chflags").arg("nouchg").arg(&self.0).status();
+        }
+    }
+
+    let dir = lock_workspace(
+        "second-write-failure",
+        Some(&format!(
+            "{HEADER}next 5\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.status/Unit 3\nveh.Cruise/spare 4\n"
+        )),
+    );
+    let interface_path = dir.write(
+        "interfaces.lock",
+        "# preserve this comment\nnext 3\nservice:veh.status 1\nUnused 2\n",
+    );
+    let interface_before = std::fs::read(&interface_path).unwrap();
+    let instance_path = dir.path().join("instances.lock");
+    let instance_before = std::fs::read(&instance_path).unwrap();
+    let files = || {
+        let mut files: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        files.sort();
+        files
+    };
+    let files_before = files();
+    let _immutable = ImmutableFile(instance_path.clone());
+    assert!(
+        Command::new("chflags")
+            .arg("uchg")
+            .arg(&instance_path)
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let (code, stdout, stderr) = run_lock(
+        &dir,
+        &["--retire", "Unused", "--retire", "veh.Cruise/spare"],
+    );
+    assert_eq!(code, 2, "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(std::fs::read(&interface_path).unwrap(), interface_before);
+    assert_eq!(std::fs::read(&instance_path).unwrap(), instance_before);
+    assert_eq!(files(), files_before, "no temporary file remains");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(
+        stderr.contains(&format!(
+            "error: cannot write {}: ",
+            instance_path.display()
+        )),
+        "{stderr}"
+    );
+}
+
 /// The new side of an instance rename must be an instance of the system
 /// without an entry; `veh.Cruise/ghost` is no instance at all.
 #[test]

@@ -327,8 +327,10 @@ veh.adas.Lane/left 4 retired
         let base = parse(&format!("{HEADER}\nnext 2\nveh.C/a 1\n")).unwrap();
         let ours = parse(&format!("{HEADER}\nnext 3\nveh.C/a 1\nveh.C/b 2\n")).unwrap();
         let theirs = parse(&format!("{HEADER}\nnext 3\nveh.C/a 1\nveh.C/c 2\n")).unwrap();
-        let MergeOutcome::Clean(merged) = merge(&base, &ours, &theirs, 7) else {
-            panic!()
+        let merged = match merge(&base, &ours, &theirs, 7) {
+            MergeOutcome::Clean(merged) => merged,
+            MergeOutcome::Conflict { text } => panic!("unexpected conflict:\n{text}"),
+            MergeOutcome::Exhausted => panic!("unexpected number exhaustion"),
         };
         assert_eq!(
             merged.render(),
