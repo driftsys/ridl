@@ -343,7 +343,7 @@ scalar and throws a `ConstraintError`; `make<Name>Unchecked` does not check. A
 string length counts code points with the runtime's `codePointLength`, and a
 bytes length counts bytes (`.length`). A domain module with a check imports
 `ConstraintError` and the helpers it uses from `@driftsys/ridl-runtime`, and
-refuses a declared type named `ConstraintError`, `codePointLength`,
+refuses a declaration named `ConstraintError`, `codePointLength`,
 `offFloatPoints` or `offFloatStep`. `make<Name>Unchecked` exists only for a
 scalar whose `make<Name>` checks something, and the decoder keeps a type
 assertion for the others. The pattern check uses the checker's ECMA-262

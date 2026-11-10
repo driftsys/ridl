@@ -917,10 +917,11 @@ provenance. Nothing here is normative — the current references live in
 - **2026-11-09-ts-checking-constructor-design.md** — the TypeScript checking
   constructor (driftsys/ridl#923): `make<Name>` and `make<Name>Unchecked` in the
   domain module, `ConstraintError` in `@driftsys/ridl-runtime`, and the decoder
-  that uses the unchecked form. Archived verbatim after the work landed, with
-  the length row and the decoder bullet corrected to match the code. The durable
-  records are [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md)
-  decision 8, [the codec table design](../design/ts-codec-table.md),
+  that uses the unchecked form. Archived after the work landed, with two
+  statements (the length row and the decoder bullet) corrected to match the
+  code. The durable records are
+  [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 8,
+  [the codec table design](../design/ts-codec-table.md),
   [the generated code chapter](../book/generated-code.md),
   [the typl reference](../specification/typl-language-reference.md) §2.7 and
   [the runtime README](../../packages/ridl-runtime/README.md).
