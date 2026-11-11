@@ -1,11 +1,26 @@
 export {
+  CallError,
   CatalogMismatch,
   CodecError,
   ConstraintError,
   StreamError,
   UnknownPayloadType,
 } from "./src/errors.ts";
-export type { PayloadRule } from "./src/errors.ts";
+export type { CallFailure, Contract, PayloadRule } from "./src/errors.ts";
+export type {
+  Attached,
+  Caller,
+  CallOptions,
+  Envelope,
+  EventSource,
+  Occurrence,
+  RawOccurrence,
+  RawSample,
+  Sample,
+  SignalReader,
+  StreamCaller,
+  WaitOptions,
+} from "./src/ports.ts";
 export type { Detection, SignalCheck, SignalCheckEntry } from "./src/checks.ts";
 export { codePointLength } from "./src/length.ts";
 export { checkWellFormed, isWellFormedString } from "./src/well_formed.ts";

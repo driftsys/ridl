@@ -56,6 +56,41 @@ export type PayloadRule =
   | "utf8"
   | "variant";
 
+/** A contract error carried by the answer of a provider. */
+export type Contract =
+  | { category: "invalid-value"; rule: PayloadRule }
+  | { category: "precondition-failed" }
+  | { category: "contract-broken" }
+  | { category: "unknown-interaction" };
+
+/** Why a call, a read or a subscription did not complete. */
+export type CallFailure =
+  | { category: "contract"; contract: Contract }
+  | { category: "corrupt" }
+  | { category: "busy" }
+  | { category: "undelivered" }
+  | { category: "timeout" }
+  | { category: "down" }
+  | { category: "interrupted" }
+  | { category: "unsupported" };
+
+/** The error that a port rejects or throws when a call does not complete. */
+export class CallError extends Error {
+  /** The category of the failure, with its contract when there is one. */
+  readonly failure: CallFailure;
+
+  constructor(failure: CallFailure, options?: ErrorOptions) {
+    super(
+      failure.category === "contract"
+        ? `call failed: contract, ${failure.contract.category}`
+        : `call failed: ${failure.category}`,
+      options,
+    );
+    this.name = "CallError";
+    this.failure = failure;
+  }
+}
+
 /** A locally detected invalid stream payload. */
 export class StreamError extends Error {
   readonly failure:
