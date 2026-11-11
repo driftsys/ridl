@@ -1,1 +1,4 @@
-{ "compilerOptions": { "lib": ["dom", "esnext"] } }
+{
+  "imports": { "@driftsys/ridl-runtime": "../ridl-runtime/mod.ts" },
+  "compilerOptions": { "lib": ["dom", "esnext"] }
+}

@@ -4,7 +4,9 @@
  * @module
  */
 
-import type { Contract, Reason, Violation } from "./frame.ts";
+import { CallError } from "@driftsys/ridl-runtime";
+import type { CallFailure } from "@driftsys/ridl-runtime";
+import type { Reason, Violation } from "./frame.ts";
 import type { Ended } from "./session.ts";
 
 /**
@@ -62,34 +64,24 @@ export class ProtocolError extends Error {
   }
 }
 
+export type { CallFailure };
+
 /**
- * Why an operation failed: a contract error the provider reported, a failure
+ * An operation of an open session failed. It is a {@link CallError} of
+ * `@driftsys/ridl-runtime`, so a program that handles the failures of any port
+ * can test `instanceof CallError` without importing this package; its
+ * `failure` carries the category, which is one of the failures a
+ * {@link CallFailure} lists: a contract error the provider reported, a failure
  * the provider reported for a call (`corrupt`, `busy`), or a failure the
  * client detected (`undelivered`: a command's bound passed; `timeout`: a
  * query, connect, subscribe or read bound passed; `down`: the session ended).
  */
-export type CallFailure =
-  | { category: "contract"; contract: Contract }
-  | { category: "corrupt" }
-  | { category: "busy" }
-  | { category: "undelivered" }
-  | { category: "timeout" }
-  | { category: "down" }
-  | { category: "interrupted" }
-  | { category: "unsupported" };
-
-/** An operation of an open session failed. */
-export class SessionError extends Error {
-  /** The failure, with its category. */
-  readonly failure: CallFailure;
-
+export class SessionError extends CallError {
   constructor(failure: CallFailure) {
-    super(
-      failure.category === "contract"
-        ? `the operation failed: contract ${failure.contract.category}`
-        : `the operation failed: ${failure.category}`,
-    );
+    super(failure);
     this.name = "SessionError";
-    this.failure = failure;
+    this.message = failure.category === "contract"
+      ? `the operation failed: contract ${failure.contract.category}`
+      : `the operation failed: ${failure.category}`;
   }
 }

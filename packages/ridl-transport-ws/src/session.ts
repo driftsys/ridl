@@ -32,13 +32,20 @@ import {
 } from "./frame.ts";
 import type {
   EncodingName,
-  Envelope,
   Frame,
   Reason,
-  Rule,
   StreamOutcome,
   Target,
 } from "./frame.ts";
+import type {
+  CallOptions,
+  Detection,
+  RawOccurrence,
+  RawSample,
+  SignalCheck,
+  SignalCheckEntry,
+  WaitOptions,
+} from "@driftsys/ridl-runtime";
 import {
   AttachRefused,
   ProtocolError,
@@ -57,70 +64,33 @@ import {
 import { type BlockFrame, fixedLimit, Reassembly } from "./reassembly.ts";
 
 /**
- * A locally detected malformed signal payload or payload rule violation.
- * Structurally the same as `Detection` in `@driftsys/ridl-runtime`, which
- * this transport does not import.
+ * Re-exported from `@driftsys/ridl-runtime`: a locally detected malformed
+ * signal payload or payload rule violation, the check of a signal and the
+ * entry that registers one.
  */
-export type Detection = "corrupt" | { rule: Rule };
+export type { Detection, SignalCheck, SignalCheckEntry };
 
 /**
- * Returns `undefined` when the payload passes. Structurally the same as
- * `SignalCheck` in `@driftsys/ridl-runtime`, which this transport does not import.
+ * The state of a signal or a `fixed`, as one `publish` carried it: bytes, not
+ * a decoded value. An alias of `RawSample` of `@driftsys/ridl-runtime`.
+ *
+ * When `detected` is set, the session itself invalidated the sample: the
+ * `publish` carried a `live` payload longer than the member's limit or refused
+ * by its check. The provenance is then `invalid` and `payload` is `null`; the
+ * envelope is the frame's. A check that throws counts as `corrupt`.
  */
-export type SignalCheck = (bytes: Uint8Array) => Detection | undefined;
+export type Sample = RawSample;
 
 /**
- * A payload check registered for one signal. Structurally the same as
- * `SignalCheckEntry` in `@driftsys/ridl-runtime`, which this transport does not import.
+ * One occurrence of a subscribed event, as bytes. An alias of `RawOccurrence`
+ * of `@driftsys/ridl-runtime`.
+ *
+ * When `detected` is set, the session refused the value because the
+ * `occurrence` carried a payload longer than the member's limit; the
+ * occurrence is delivered with an empty payload, so that nothing fails
+ * silently.
  */
-export interface SignalCheckEntry {
-  /** The interface number. */
-  readonly iface: number;
-  /** The member ordinal. */
-  readonly ord: number;
-  /** The check to run on a live signal payload. */
-  readonly check: SignalCheck;
-}
-
-/** The state of a signal or a `fixed`, as one `publish` carried it. */
-export interface Sample {
-  /** `init` before the first publication, `live` for a value, `invalid` for an invalidation. */
-  provenance: "init" | "live" | "invalid";
-  /** The envelope of the `publish`. */
-  envelope: Envelope;
-  /** The value under `live`, and `null` under `init` and `invalid`. */
-  payload: Uint8Array | null;
-  /** The last passing payload, or `null` when the init value applies. */
-  lastGood: Uint8Array | null;
-  /**
-   * Set when the session itself invalidated the sample: the `publish` carried
-   * a `live` payload longer than the member's limit or refused by its check.
-   * The provenance is then `invalid` and `payload` is `null`; the envelope is
-   * the frame's. A check that throws counts as `corrupt`.
-   */
-  detected?: Detection;
-}
-
-/** One occurrence of a subscribed event. */
-export interface Occurrence {
-  /** The interface number. */
-  iface: number;
-  /** The member ordinal. */
-  ord: number;
-  /** The envelope of the `occurrence`. */
-  envelope: Envelope;
-  /**
-   * The value, as the provider encoded it; empty when the session refused it
-   * (`detected` is set).
-   */
-  payload: Uint8Array;
-  /**
-   * Set when the session refused the value: the `occurrence` carried a
-   * payload longer than the member's limit. The occurrence is delivered with
-   * an empty payload, so that nothing fails silently.
-   */
-  detected?: "corrupt";
-}
+export type Occurrence = RawOccurrence;
 
 /**
  * One member of a generated interface table: the entry
@@ -198,13 +168,8 @@ export type Note =
     received: bigint;
   };
 
-/** Optional limits on waiting for a session operation's answer. */
-export interface WaitOptions {
-  /** Milliseconds to wait: finite, greater than 0 and at most 2147483647. */
-  bound?: number;
-  /** Aborting rejects with this signal's reason. */
-  signal?: AbortSignal;
-}
+/** Re-exported from `@driftsys/ridl-runtime`: optional limits on waiting for an answer. */
+export type { WaitOptions };
 
 /** The options of {@link connect}. */
 export interface ConnectOptions extends WaitOptions {
@@ -436,6 +401,58 @@ function recordedLimits(
   return limits;
 }
 
+/** The kind of each member the generated tables hold, keyed `iface:ord`. */
+function recordedKinds(
+  tables: readonly InterfaceTable[] | undefined,
+): Map<string, Kind> {
+  const kinds = new Map<string, Kind>();
+  for (const table of tables ?? []) {
+    for (const entry of Object.values(table)) {
+      if (typeof entry !== "object") continue;
+      kinds.set(channel(entry.iface, entry.ord), KIND_CODES[entry.kind]);
+    }
+  }
+  return kinds;
+}
+
+/**
+ * Adds a listener to the set under `key` and returns the function that
+ * removes it.
+ */
+function addListener<K, L>(
+  listeners: Map<K, Set<L>>,
+  key: K,
+  listener: L,
+): () => void {
+  let set = listeners.get(key);
+  if (!set) listeners.set(key, set = new Set());
+  set.add(listener);
+  return () => {
+    const current = listeners.get(key);
+    if (!current?.delete(listener)) return;
+    if (current.size === 0) listeners.delete(key);
+  };
+}
+
+/**
+ * Rejects with the signal's reason when the signal aborts before `call`
+ * settles. The call itself stays in flight: its answer, or its bound, still
+ * settles it, and nothing is left unhandled.
+ */
+function rejectOnAbort<T>(
+  call: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (!signal) return call;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    call.then(resolve, reject).finally(() =>
+      signal.removeEventListener("abort", abort)
+    );
+  });
+}
+
 /** The largest interface number and member ordinal: 2^32 - 1. */
 const MAX_NUMBER = 4_294_967_295;
 
@@ -498,6 +515,12 @@ export class Session {
   #calls = new Calls();
   /** The limits the generated tables record, keyed by member identity. */
   #limits: Map<string, number>;
+  /** The kind of each member the generated tables hold, keyed `iface:ord`. */
+  #kinds: Map<string, Kind>;
+  /** The `watch` listeners of each signal, keyed `iface:ord`. */
+  #watchers = new Map<string, Set<(sample: Sample) => void>>();
+  /** The `listen` listeners of each interface, keyed by interface number. */
+  #listeners = new Map<number, Set<(occurrence: Occurrence) => void>>();
   /** The `block` payload being collected or skipped. */
   #reassembly = new Reassembly();
   /**
@@ -518,6 +541,7 @@ export class Session {
     this.#attachFrame = attachFrame;
     this.#options = options;
     this.#limits = recordedLimits(options.interfaces);
+    this.#kinds = recordedKinds(options.interfaces);
     for (const entry of options.checks ?? []) {
       this.#checks.set(channel(entry.iface, entry.ord), entry.check);
     }
@@ -556,9 +580,20 @@ export class Session {
    * Cancellation sends `unsubscribe` if there is no established subscription
    * or other live subscribe waiting. With neither option, waits until the
    * answer or the session ends.
+   *
+   * With `(iface, ord)` instead of a `Target`, the session takes the kind from
+   * the interface tables given to {@link connect}; an `(iface, ord)` that the
+   * tables do not hold rejects with a `RangeError`, and nothing is sent.
    */
-  subscribe(target: Target, opts: WaitOptions = {}): Promise<void> {
+  subscribe(target: Target, opts?: WaitOptions): Promise<void>;
+  subscribe(iface: number, ord: number, opts?: WaitOptions): Promise<void>;
+  subscribe(
+    first: Target | number,
+    second?: number | WaitOptions,
+    third?: WaitOptions,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
+      const [target, opts] = this.#split(first, second, third);
       checkNumbers(target.iface, target.ord);
       checkWait(opts);
       if (this.#ended) return reject(new SessionError(DOWN));
@@ -592,8 +627,15 @@ export class Session {
    * @throws {RangeError} when the interface number or the ordinal is not an
    * integer from 1 to 4294967295, also after the session has ended; nothing is
    * sent.
+   *
+   * With `(iface, ord)` instead of a `Target`, the session takes the kind from
+   * the interface tables given to {@link connect}; an `(iface, ord)` that the
+   * tables do not hold throws a `RangeError`, and nothing is sent.
    */
-  unsubscribe(target: Target): void {
+  unsubscribe(target: Target): void;
+  unsubscribe(iface: number, ord: number): void;
+  unsubscribe(first: Target | number, second?: number): void {
+    const [target] = this.#split(first, second, undefined);
     checkNumbers(target.iface, target.ord);
     if (this.#ended) return;
     this.#send({ form: "unsubscribe", target });
@@ -628,9 +670,20 @@ export class Session {
    * without sending if already aborted. A late answer or payload is consumed
    * without settling a later read. With neither option, waits until the
    * answer or the session ends.
+   *
+   * With `(iface, ord)` instead of a `Target`, the session takes the kind from
+   * the interface tables given to {@link connect}; an `(iface, ord)` that the
+   * tables do not hold rejects with a `RangeError`, and nothing is sent.
    */
-  read(target: Target, opts: WaitOptions = {}): Promise<Sample> {
+  read(target: Target, opts?: WaitOptions): Promise<Sample>;
+  read(iface: number, ord: number, opts?: WaitOptions): Promise<Sample>;
+  read(
+    first: Target | number,
+    second?: number | WaitOptions,
+    third?: WaitOptions,
+  ): Promise<Sample> {
     return new Promise((resolve, reject) => {
+      const [target, opts] = this.#split(first, second, third);
       checkNumbers(target.iface, target.ord);
       checkWait(opts);
       if (this.#ended) return reject(new SessionError(DOWN));
@@ -651,6 +704,74 @@ export class Session {
   /** The held sample of a subscribed signal, or `undefined` when there is none. */
   sample(iface: number, ord: number): Sample | undefined {
     return this.#held.get(channel(iface, ord));
+  }
+
+  /**
+   * Calls `listener` with every accepted `publish` of the signal, after the
+   * session updated the held sample and called `onPublish`. Returns the
+   * function that removes the listener; once it returned, the listener is not
+   * called again. An exception the listener throws is reported to the
+   * platform and does not stop the handling of the frame. A watch does not
+   * subscribe: {@link Session.subscribe} does.
+   *
+   * @throws {RangeError} when either number is not an integer from 1 to
+   * 4294967295.
+   */
+  watch(
+    iface: number,
+    ord: number,
+    listener: (sample: Sample) => void,
+  ): () => void {
+    checkNumbers(iface, ord);
+    return addListener(this.#watchers, channel(iface, ord), listener);
+  }
+
+  /**
+   * Calls `listener` with every accepted occurrence of every subscribed event
+   * of the interface, in arrival order, after the session called
+   * `onOccurrence`. Returns the function that removes the listener; once it
+   * returned, the listener is not called again. An exception the listener
+   * throws is reported to the platform and does not stop the handling of the
+   * frame.
+   *
+   * @throws {RangeError} when `iface` is not an integer from 1 to 4294967295.
+   */
+  listen(
+    iface: number,
+    listener: (occurrence: Occurrence) => void,
+  ): () => void {
+    checkNumber("interface number", iface);
+    return addListener(this.#listeners, iface, listener);
+  }
+
+  /**
+   * The 32-byte hash of the catalog this session is attached to: the hash
+   * given to {@link connect}. Each read returns a new copy.
+   */
+  get catalogHash(): Uint8Array {
+    return new Uint8Array(this.#options.catalog.hash);
+  }
+
+  /**
+   * Reads the target of `subscribe`, `unsubscribe` and `read`: a `Target`
+   * as it is, or `(iface, ord)` with the kind the interface tables hold.
+   */
+  #split(
+    first: Target | number,
+    second: number | WaitOptions | undefined,
+    third: WaitOptions | undefined,
+  ): [Target, WaitOptions] {
+    if (typeof first !== "number") {
+      return [first, (second as WaitOptions | undefined) ?? {}];
+    }
+    checkNumbers(first, second as number);
+    const kind = this.#kinds.get(channel(first, second as number));
+    if (kind === undefined) {
+      throw new RangeError(
+        `the interface tables hold no member ${first}:${second}`,
+      );
+    }
+    return [{ kind, iface: first, ord: second as number }, third ?? {}];
   }
 
   /**
@@ -713,23 +834,34 @@ export class Session {
    * `RangeError`, and sends nothing, when `opts.bound` is not a finite number
    * of milliseconds greater than 0 and at most 2147483647, or when `iface` or
    * `ord` is not an integer from 1 to 4294967295.
+   *
+   * `opts.signal` aborts the call. An already aborted signal rejects with its
+   * reason and sends nothing. An abort after the send rejects with the
+   * signal's reason at once; the call stays pending in the session until its
+   * response or its bound, and a late answer is consumed. A provider that
+   * received the command may still run it.
    */
   command(
     iface: number,
     ord: number,
     args: Uint8Array,
-    opts: { bound: number },
+    opts: CallOptions,
   ): Promise<void> {
     try {
       checkNumbers(iface, ord);
       this.#checkArgs({ kind: Kind.Command, iface, ord }, args);
+      checkBound(opts.bound);
+      opts.signal?.throwIfAborted();
     } catch (e) {
       return Promise.reject(e);
     }
-    return this.#calls.command(
-      opts.bound,
-      (seq) => this.#request(Kind.Command, iface, ord, seq, args),
-      { kind: Kind.Command, iface, ord },
+    return rejectOnAbort(
+      this.#calls.command(
+        opts.bound,
+        (seq) => this.#request(Kind.Command, iface, ord, seq, args),
+        { kind: Kind.Command, iface, ord },
+      ),
+      opts.signal,
     );
   }
 
@@ -738,26 +870,32 @@ export class Session {
    * the payload of the `reply`, an empty `Uint8Array` when the reply has no
    * bytes. Rejects as a command does, including the `RangeError` for a bound
    * that is not greater than 0 and at most 2147483647 milliseconds, except
-   * that a passed bound rejects with `timeout`.
+   * that a passed bound rejects with `timeout`. `opts.signal` aborts the call
+   * as it aborts a command.
    */
   query(
     iface: number,
     ord: number,
     args: Uint8Array,
-    opts: { bound: number },
+    opts: CallOptions,
   ): Promise<Uint8Array> {
     const target: Target = { kind: Kind.Query, iface, ord };
     try {
       checkNumbers(iface, ord);
       this.#checkArgs(target, args);
+      checkBound(opts.bound);
+      opts.signal?.throwIfAborted();
     } catch (e) {
       return Promise.reject(e);
     }
-    return this.#calls.query(
-      opts.bound,
-      this.#limitOf(target),
-      (seq) => this.#request(Kind.Query, iface, ord, seq, args),
-      target,
+    return rejectOnAbort(
+      this.#calls.query(
+        opts.bound,
+        this.#limitOf(target),
+        (seq) => this.#request(Kind.Query, iface, ord, seq, args),
+        target,
+      ),
+      opts.signal,
     );
   }
 
@@ -1324,6 +1462,12 @@ export class Session {
       this.#held.set(ch, sample!);
       const onPublish = this.#options.onPublish;
       if (onPublish) this.#listen(() => onPublish(t, sample!));
+      const watchers = this.#watchers.get(ch);
+      if (watchers) {
+        for (const watcher of [...watchers]) {
+          if (watchers.has(watcher)) this.#listen(() => watcher(sample!));
+        }
+      }
     }
     if (failure) this.#note(failure);
   }
@@ -1422,7 +1566,8 @@ export class Session {
       });
     }
     const onOccurrence = this.#options.onOccurrence;
-    if (onOccurrence) {
+    const listeners = this.#listeners.get(t.iface);
+    if (onOccurrence || listeners) {
       // A payload longer than the member's limit is not handed out: the
       // occurrence is delivered empty, with `detected` set.
       const occurrence: Occurrence = frame.payload.length > this.#limitOf(t)
@@ -1439,7 +1584,14 @@ export class Session {
           envelope: frame.envelope,
           payload: frame.payload,
         };
-      this.#listen(() => onOccurrence(occurrence));
+      if (onOccurrence) this.#listen(() => onOccurrence(occurrence));
+      if (listeners) {
+        for (const listener of [...listeners]) {
+          if (listeners.has(listener)) {
+            this.#listen(() => listener(occurrence));
+          }
+        }
+      }
     }
   }
 
