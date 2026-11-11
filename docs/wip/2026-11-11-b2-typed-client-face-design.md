@@ -1,7 +1,8 @@
 # B2 — a typed TypeScript client face over port interfaces (design note)
 
-Status: draft for the owner's approval. No code is written before the owner
-approves this note.
+Status: approved by the owner on 2026-11-11 (questions 1, 2 and 5 answered by
+the owner; questions 3 and 4 decided by the author as recommended in section 9).
+Implementation starts after this note merges.
 
 Issue: driftsys/ridl#1262. Lane: `docs/wip/2026-11-08-typescript-lane-driver.md`
 (task B2; B0 was settled on 2026-11-09 as option 1, port interfaces in
@@ -155,7 +156,7 @@ The transport's `SessionError` becomes a subclass of `CallError`, so an existing
 `instanceof SessionError` test still works and a face or a test can test
 `instanceof CallError` without importing the transport. `StreamError` becomes
 the same class as `CallError` (its two categories are a subset); see section 9,
-question 3.
+decision 3.
 
 ## 4. The generated client
 
@@ -248,7 +249,7 @@ element, so a single call and a stream element fail the same way.
 `require` clauses are not checked by the TypeScript face; the provider checks
 them and answers `contract`. The Rust face checks them before sending with the
 clause translator. Translating the clauses to TypeScript is a separate story
-(question 2).
+(decision 2 of section 9).
 
 ## 6. Cancellation and bounds
 
@@ -279,19 +280,19 @@ clause translator. Translating the clauses to TypeScript is a separate story
   also adds a test-only in-process fake of the consumer ports
   (`packages/ridl-runtime/tests/fake_port.ts`), which tests the face without a
   socket. D1 decides whether that fake becomes a public in-process loopback that
-  connects a consumer face to a provider face (question 4).
+  connects a consumer face to a provider face (decision 4 of section 9).
 
 ## 8. Compatibility, release and records
 
 **Breaking changes against the released surface** (the release that carries A1
-to A3; `v0.17.0` is the latest tag on 2026-11-11, so this is 0.17.0 or the
-0.18.0 the lane plans):
+to A3; `v0.18.0` is the latest tag on 2026-11-11, so this is the minor after
+it):
 
 - Generated: `<Interface>_<member>` stream functions are removed; their callers
   move to methods. `StreamSession` is removed.
 - `@driftsys/ridl-runtime`: `StreamTransport` and `StreamOptions` are replaced
   by `StreamCaller` and `CallOptions`; `StreamError` is merged into `CallError`
-  if question 3 is answered yes.
+  (decision 3 of section 9).
 - `@driftsys/ridl-transport-ws`: gains a dependency on the runtime; `Sample`,
   `Occurrence`, `CallFailure`, `WaitOptions` become re-exports (no change of
   shape); `SessionError` gains a superclass. `connect` keeps its options.
@@ -326,21 +327,22 @@ each change.
 - `docs/book/generated-code.md` (TypeScript section) and the two package
   READMEs: the new usage.
 
-## 9. Open questions for the owner
+## 9. Decisions on the open questions
 
-1. **The class or a function per member.** This note recommends one class per
-   interface (`CabinClient.bind`), parallel to the Rust `Client<P>`. The
-   alternative is free functions taking a context first, as stream functions do
-   now (section 10, alternative B). Approve the class?
-2. **`require` clauses in TypeScript.** Leave them to the provider in B2 and
-   file a follow-up issue for a TypeScript clause translator? (Recommended.)
-3. **Merge `StreamError` into `CallError`.** Recommended, so that a program
-   catches one class for any call failure. It adds one more breaking item to the
-   release.
-4. **The in-process loopback.** B2 ships only a test fake. Should D1 make it a
-   public module of the runtime (`@driftsys/ridl-runtime/loopback`)?
-5. **The release number.** Confirm B2 goes into its own minor after the A1 to A3
-   release, and whether that release is already out when B2 merges.
+1. **One class per interface.** Approved by the owner. `<Interface>Client.bind`
+   is parallel to the Rust `Client<P>`; free functions with a context are
+   alternative B of section 10.
+2. **`require` clauses.** Approved by the owner: the provider checks them in B2,
+   and a follow-up issue tracks a TypeScript clause translator.
+3. **`StreamError` merges into `CallError`.** Decided by the author, as
+   recommended: a program then catches one class for any call failure. It is one
+   more breaking item in the release.
+4. **The in-process loopback.** Decided by the author: B2 ships only the
+   test-only fake. D1 decides whether it becomes a public runtime module,
+   because D1 is the first task with a provider face to connect to it.
+5. **The release.** Approved by the owner: B2 is the next minor release. The
+   release that carries A1 to A3 is v0.18.0 and is out, so B2 ships in the minor
+   after it.
 
 ## 10. Alternatives considered
 
@@ -366,7 +368,8 @@ each change.
   is kept parallel.
 - **E. Keep the stream free functions as deprecated wrappers for one release.**
   Softer migration. Rejected: no published consumer exists, and two APIs double
-  the fixture tests (question 5 can reopen this if a consumer appears).
+  the fixture tests (the release decision can reopen this if a consumer
+  appears).
 - **F. Nullable `value` for `init` and `invalid` samples.** Simpler to generate.
   Rejected: it is what the hand-written code does today and it differs from the
   Rust face, which returns the init value.
