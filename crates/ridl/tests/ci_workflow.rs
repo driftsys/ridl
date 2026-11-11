@@ -341,6 +341,7 @@ fn gate_jobs_depend_on_changes_and_gate_on_its_outputs() {
     let workflow = workflow_text();
     for (job, output) in [
         ("rust", "rust"),
+        ("test", "rust"),
         ("freeze", "rust"),
         ("demo", "rust"),
         ("wasm", "rust"),
@@ -386,6 +387,7 @@ fn gate_jobs_depend_on_changes_and_gate_on_its_outputs() {
     for job in [
         "changes",
         "rust",
+        "test",
         "freeze",
         "demo",
         "wasm",

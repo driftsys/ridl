@@ -190,6 +190,11 @@ member; rsdl is the apex.
                          with debug; ridl-transport-ws with descriptor; and the
                          docstore server tests, after generating its Rust API
                          and catalog
+    just test-backend    the first of the four parts of test, which CI runs
+                         as parallel jobs: ridl-backend-rust's tests
+    just test-cli        ridl-cli's and ridlc's tests
+    just test-rest       the tests of every other workspace member
+    just test-features   the feature-set runs and the docstore server tests
     just lint            workspace clippy --all-targets -- -D warnings, plus
                          ridl-rt with all features; ridl-loopback library alone
                          with node and ridl-rt debug off, all targets with node
@@ -325,7 +330,8 @@ member; rsdl is the apex.
     just build           toolchain-check + gate-parity + deno-pin-check + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +
-                         test + lint + wasm-check + compat-check + demo +
+                         test-backend + test-cli + test-rest + test-features +
+                         lint + wasm-check + compat-check + demo +
                          ts-e2e + cabin-ws-demo + ts-npm-check + check — the full local gate: every member
                          ADR-0008 decision 11 names, the four CI checks
                          ADR-0009 brought back to this side, and

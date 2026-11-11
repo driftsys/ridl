@@ -109,11 +109,31 @@ freeze-check *flags: toolchain-check
 # the range self-corpora and the contract sampling run in the local gate rather
 # than in a separate recipe. Run `ridl test <path>` directly to see the report
 # for a workspace of your own.
-test:
+#
+# The suite is split into four recipes so that CI can run each one in its own
+# job, at the same time; `test` runs all four, one after the other. The three
+# workspace parts are grouped by package so that their run times are close;
+# together they are `cargo test --workspace --locked`.
+test: test-backend test-cli test-rest test-features
+
+# The tests of `ridl-backend-rust`, the largest part of the workspace suite.
+test-backend:
+    cargo test --locked -p ridl-backend-rust
+
+# The tests of `ridl-cli` and `ridlc`.
+test-cli:
+    cargo test --locked -p ridl-cli -p ridlc
+
+# The tests of every other workspace member.
+test-rest:
+    cargo test --workspace --locked --exclude ridl-backend-rust --exclude ridl-cli --exclude ridlc
+
+# The tests that need a feature set other than the workspace build's, and the
+# tests of the docstore server, which is a separate cargo workspace.
+test-features:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -f Cargo.toml ]; then
-        cargo test --workspace --locked
         # `ridl-descriptor` with its default features off: the tests of the
         # reader half, in the configuration an engine builds. Then with only
         # `dedup` on, so that the builder caches are tested. The thumbv7em checks
@@ -143,7 +163,7 @@ test:
         cargo run --locked -p ridl-cli -- build examples/docstore --emit rust --emit catalog --out-dir examples/docstore/generated
         cargo test --locked --manifest-path examples/docstore/server/Cargo.toml
     else
-        echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
+        echo "test-features: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
 # Check the compiler crates build for wasm32-unknown-unknown with fs/fetch
@@ -2670,7 +2690,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity deno-pin-check install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
+    expected="toolchain-check gate-parity deno-pin-check install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test-backend test-cli test-rest test-features lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -3512,7 +3532,7 @@ ts-browser-e2e:
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity deno-pin-check install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
+build: toolchain-check gate-parity deno-pin-check install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test-backend test-cli test-rest test-features lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
