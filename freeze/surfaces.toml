@@ -36,8 +36,16 @@ name = "msrv"
 baseline = "016167c90fe1418df512a60330e70b35a55c4a7b"
 
 [[surface]]
+name = "wire"
+baseline = "a583fff24f655a4e0302995bc69a339ad4d4698b"
+
+[[surface]]
 name = "codegen-protocol"
 baseline = "4a6098f88f840445808e34a42b4335c2340e9e64"
+
+[[surface]]
+name = "generated-crate"
+baseline = "a583fff24f655a4e0302995bc69a339ad4d4698b"
 
 [[surface]]
 name = "runtime-crates"
