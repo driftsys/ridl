@@ -534,7 +534,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "2"
               },
               "flatbuffers": {
-                "bytes": "50"
+                "bytes": "46"
               },
               "podbuf": {
                 "bytes": "16"
@@ -565,13 +565,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "index": 3,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "flatbuffersMaxSize": 50,
+                "flatbuffersMaxSize": 46,
                 "sizes": {
                   "proto3": {
                     "bounded": 2
                   },
                   "flatbuffers": {
-                    "bounded": 50
+                    "bounded": 46
                   },
                   "podbuf": {
                     "bounded": 16
@@ -612,7 +612,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "8"
               },
               "flatbuffers": {
-                "bytes": "60"
+                "bytes": "56"
               },
               "podbuf": {
                 "bytes": "16"
@@ -643,13 +643,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "index": 4,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 60,
+                "flatbuffersMaxSize": 56,
                 "sizes": {
                   "proto3": {
                     "bounded": 8
                   },
                   "flatbuffers": {
-                    "bounded": 60
+                    "bounded": 56
                   },
                   "podbuf": {
                     "bounded": 16
@@ -1297,17 +1297,17 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       {
         "declaration": 3,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 4,
         "root": "FB_ROOT_KIND_OWN",
-        "maxSize": 60
+        "maxSize": 56
       },
       {
         "declaration": 5,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 0,
@@ -1343,7 +1343,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "index": 3,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -1422,7 +1422,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "index": 3,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -1447,7 +1447,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -1792,7 +1792,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       {
         "declaration": 0,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       }
     ],
     "tables": [
@@ -1811,7 +1811,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "index": 0,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,

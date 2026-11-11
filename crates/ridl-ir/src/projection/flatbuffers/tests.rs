@@ -881,3 +881,11 @@ fn a_bare_name_resolves_in_the_home_package_not_the_root() {
     assert!(packages.resolve(&root, "RootOnly").is_some());
     assert!(packages.resolve(&imported, "OtherOnly").is_some());
 }
+
+#[test]
+fn enums_have_fixed_int32_wire_width() {
+    assert_eq!(
+        super::enum_integer(&crate::v2::EnumDef::default()),
+        crate::v2::IntWidth::I32
+    );
+}

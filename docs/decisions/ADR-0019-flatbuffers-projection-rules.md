@@ -198,9 +198,9 @@ integer is reported at the consumer path.
 **Amended 2026-11-11 — fixed int32 enums, owner decision B on
 driftsys/ridl#1020.** Every enum uses `int`, not a value-derived width. TYPL-225
 limits declared values to int32 even though the IR stores them as int64.
-Decision 8, the mapping summary and decision 10 are amended in place. Enum sets
-retain their current projection. This changes the shipped wire mapping; the
-stability chapter records the required minor release and migration.
+Decisions 8 and 10, ruling 15, and the 2026-11-03 amendment edits are amended in
+place. Enum sets retain their current projection. This changes the shipped wire
+mapping; the stability chapter records the required minor release and migration.
 
 ## Context
 

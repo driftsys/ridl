@@ -564,11 +564,11 @@ fn the_fixture_cites_the_projection_s_own_bounds() {
     };
     for (name, bound) in [
         ("Temperature", 43),
-        ("Warning", 60),
+        ("Warning", 56),
         ("Level", 43),
         ("Window", 46),
         ("Average", 44),
-        ("Health", 50),
+        ("Health", 46),
     ] {
         let decl = cabin
             .decls

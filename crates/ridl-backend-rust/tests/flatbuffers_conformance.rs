@@ -2134,6 +2134,7 @@ fn main() {
         ),
     );
 }
+
 /// Enum boxes carry signed int32 values in both implementations.
 #[test]
 fn enum_int32_boundaries_round_trip_through_planus_both_ways() {
@@ -2162,6 +2163,11 @@ fn main() {{
         let theirs = builder
             .finish(fb::HealthBox { value: foreign }, None)
             .to_vec();
+        let table = u32::from_le_bytes(ours[..4].try_into().unwrap()) as usize;
+        let distance = i32::from_le_bytes(ours[table..table + 4].try_into().unwrap());
+        let vtable = table.checked_add_signed(-(distance as isize)).unwrap();
+        let inline_size = u16::from_le_bytes(ours[vtable + 2..vtable + 4].try_into().unwrap());
+        assert_eq!(inline_size, 8, "a soffset and one int32 field");
         let hex = to_hex(&theirs);
         let main = format!(
             r#"

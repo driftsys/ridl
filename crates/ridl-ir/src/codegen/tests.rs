@@ -5820,3 +5820,30 @@ fn an_upload_clause_naming_the_stream_is_refused_with_a_reason() {
         }
     }
 }
+
+#[test]
+fn enum_slot_width_matches_the_flatbuffers_projection() {
+    let package = package();
+    let model = lower(&package, &[]);
+    let v2::decl::Kind::EnumDef(def) = package.decls[1].kind.as_ref().unwrap() else {
+        panic!("GearState is an enum");
+    };
+    let bytes = match crate::projection::flatbuffers::enum_integer(def) {
+        v2::IntWidth::I32 => 4,
+        v2::IntWidth::I64 => 8,
+        other => panic!("unexpected enum integer: {other:?}"),
+    };
+    let mut enum_slots = 0;
+    for table in &model.flatbuffers.as_ref().unwrap().tables {
+        for slot in &table.slots {
+            if let Some(v1::fb_wire::Kind::Enum(wire)) =
+                slot.wire.as_ref().and_then(|wire| wire.kind.as_ref())
+            {
+                assert_eq!(wire.width_bytes, bytes);
+                assert_eq!(wire.width_bytes, 4, "enum slots must use int32");
+                enum_slots += 1;
+            }
+        }
+    }
+    assert!(enum_slots > 0, "the fixture must exercise an enum slot");
+}

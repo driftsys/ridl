@@ -484,29 +484,3 @@ fn a_field_that_straddles_the_end_of_its_table_is_rejected() {
     let table = root(bytes).expect("the root resolves");
     assert_eq!(field(bytes, table, 0, 4), Err(Malformed::OutOfBounds));
 }
-
-/// Enum wire integers use the existing signed four-byte scalar path.
-#[test]
-fn enum_int32_boundaries_use_four_byte_fields() {
-    for value in [-1, i32::MIN, i32::MAX] {
-        let mut out = [0u8; 64];
-        let mut builder = Builder::new(&mut out);
-        let table = builder
-            .push_table(
-                8,
-                4,
-                1,
-                &[TableField {
-                    slot: 0,
-                    offset: 4,
-                    value: Field::I32(value),
-                }],
-            )
-            .unwrap();
-        let bytes = builder.finish(table, 4).unwrap();
-        let table = root(bytes).unwrap();
-        let at = field(bytes, table, 0, 4).unwrap().unwrap();
-        assert_eq!(i64::from(read_i32(bytes, at).unwrap()), i64::from(value));
-        assert!(field(bytes, table, 0, 8).is_err());
-    }
-}
