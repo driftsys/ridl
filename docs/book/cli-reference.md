@@ -605,11 +605,13 @@ evidence. It may discard absent or invalid context and catalog histories. Both
 modes parse all prior local snapshots and retain compilation refusals. Reset
 skips only the publication refusal for a whole unit removed on purpose;
 provisional interface numbers (RIDL-411), numbers lost from a remaining unit
-(RIDL-412), packages removed from a living unit (RIDL-412) and untombstoned
-interaction removals (RIDL-408) still refuse publication. Repair skips none of
-these checks. Restore corrupt local snapshots before either operation. There is
-no force option. The flags are mutually exclusive; the positional source
-defaults to `.` and output discovery is the same as ordinary publication.
+(RIDL-412), packages removed from a remaining unit (RIDL-412) and untombstoned
+interaction removals (RIDL-408) still refuse publication. For a snapshot
+published before the IR recorded the unit, the gate cannot distinguish a removed
+package from a removed unit, so reset treats it as a removed unit. Repair skips
+none of these checks. Restore corrupt local snapshots before either operation.
+There is no force option. The flags are mutually exclusive; the positional
+source defaults to `.` and output discovery is the same as ordinary publication.
 
 Both modes start each shaped unit with exactly one recomputed current canonical
 hash. Type-only units receive context without a catalog file. Repair
@@ -645,22 +647,26 @@ left with it, so one RIDL-412 lists all lost keys and numbers and names the
 deliberate override:
 `ridl baseline CURRENT_SOURCE --reset-history --out BASELINE`, using the
 affected publication directory as `BASELINE`. A successful reset prints one
-`note:` per dropped unit, naming every lost key and number. The note states the
-preservation and compatibility limits described
+`note:` for each dropped unit that held allocated interface numbers, naming
+every lost key and number. A unit with no allocated interface numbers drops with
+no note. The note states the preservation and compatibility limits described
 [above](#baseline-publication-and-recovery). A run refused by another check
 prints no dropped-unit note. Otherwise restore the unit and its
 `interfaces.lock` from version control. A published snapshot written before the
-IR recorded the unit carries no `unit`; the gate compares it in the unit of the
-fresh package of the same name, so the migration to one `interfaces.lock` per
-unit — delete the per-package lock files, run `ridl lock`, run `ridl baseline` —
-passes RIDL-412 when the unit's new numbering reaches every published number.
-When it does not, because a legacy lock held retired entries, restore or retire
-the missing numbers in the unit's lock. Deleting managed snapshots allows a
-first publication only on a legacy baseline without `context.json`; it is not
-the documented migration procedure. A current baseline uses `--reset-history` to
-start a new history, subject to the refusal checks
-[above](#baseline-publication-and-recovery). A whole service removed from the
-source is reported by `ridl diff` as breaking but is not refused here (ridl
+IR recorded the unit carries no `unit`. If its package was removed, the gate
+cannot distinguish a removed package from a removed unit, so reset treats it as
+a removed unit even when its original unit remains. Otherwise the gate compares
+it in the unit of the fresh package of the same name, so the migration to one
+`interfaces.lock` per unit — delete the per-package lock files, run `ridl lock`,
+run `ridl baseline` — passes RIDL-412 when the unit's new numbering reaches
+every published number. When it does not, because a legacy lock held retired
+entries, restore each entry's line from version control in the unit's
+`interfaces.lock`, with `retired` after the number when the interface is gone.
+Deleting managed snapshots allows a first publication only on a legacy baseline
+without `context.json`; it is not the documented migration procedure. A current
+baseline uses `--reset-history` to start a new history, subject to the refusal
+checks [above](#baseline-publication-and-recovery). A whole service removed from
+the source is reported by `ridl diff` as breaking but is not refused here (ridl
 §17.14), and a named-form service's list is a set the gate does not read.
 Deleting `doorClosed` outright, with `doorOpened` and `doorLocked` still
 declared:

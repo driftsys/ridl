@@ -2511,7 +2511,7 @@ fn resetting_a_current_baseline_publishes_after_a_unit_is_removed() {
         .collect();
     assert_eq!(notes.len(), 1, "one note for the dropped unit:\n{stderr}");
     for text in [
-        "veh.cluster",
+        "unit `veh.cluster`",
         "`VehicleStatus` (number 2)",
         "`Extra` (number 1)",
         "`sub.Speed` (number 3)",
@@ -2583,9 +2583,9 @@ fn reset_still_refuses_a_number_lost_in_a_remaining_unit() {
     );
 }
 
-/// Reset must not bypass RIDL-412 for a package lost from a living unit.
+/// Reset must not bypass RIDL-412 for a package lost from a remaining unit.
 #[test]
-fn reset_still_refuses_a_package_removed_from_a_living_unit() {
+fn reset_still_refuses_a_package_removed_from_a_remaining_unit() {
     let dir = TempDir::new("gate-reset-package-gone");
     dir.write(
         "ridl.toml",
@@ -2775,6 +2775,67 @@ fn two_units_removed_together_have_separate_refusals() {
         before,
         baseline_files(&root),
         "refusal preserves the baseline"
+    );
+}
+
+/// Reset reports every removed unit separately, without mixing their keys.
+#[test]
+fn resetting_after_two_units_are_removed_prints_separate_notes() {
+    let dir = TempDir::new("gate-two-units-reset");
+    let root = two_unit_workspace(&dir);
+    dir.write(
+        "spare/ridl.toml",
+        "[package]\nname = \"veh.spare\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "spare/spare.typl",
+        "package veh.spare\ntype Count: integer [0..9]\n",
+    );
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\", \"spare\"]\n",
+    );
+    publish(&root);
+
+    for unit in ["cluster", "hmi"] {
+        std::fs::remove_dir_all(root.join(unit)).expect("remove the unit");
+    }
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"spare\"]\n");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+
+    assert_eq!(code, 0, "reset publishes the remaining unit:\n{stderr}");
+    let notes: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.starts_with("note:") && line.contains("drops unit"))
+        .collect();
+    assert_eq!(notes.len(), 2, "one note per dropped unit:\n{stderr}");
+    let cluster = notes
+        .iter()
+        .find(|line| line.contains("unit `veh.cluster`"))
+        .expect("a note for veh.cluster");
+    assert!(
+        cluster.contains("`Extra` (number 1)")
+            && cluster.contains("`VehicleStatus` (number 2)")
+            && cluster.contains("`sub.Speed` (number 3)")
+            && !cluster.contains("`Session`")
+            && !cluster.contains("`veh.hmi`"),
+        "the cluster note contains only its own keys and numbers:\n{cluster}"
+    );
+    let hmi = notes
+        .iter()
+        .find(|line| line.contains("unit `veh.hmi`"))
+        .expect("a note for veh.hmi");
+    assert!(
+        hmi.contains("`Session` (number 1)")
+            && !hmi.contains("`Extra`")
+            && !hmi.contains("`VehicleStatus`")
+            && !hmi.contains("`sub.Speed`")
+            && !hmi.contains("`veh.cluster`"),
+        "the hmi note contains only its own keys and numbers:\n{hmi}"
     );
 }
 
@@ -3134,6 +3195,56 @@ fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
             && !stderr.contains("Restore the line"),
         "the unit-gone message stands:\n{stderr}",
     );
+}
+
+/// Without a recorded unit, a removed package is treated as a removed unit
+/// even when its original unit remains; plain publication still refuses it.
+#[test]
+fn resetting_a_legacy_package_removed_from_a_remaining_unit_prints_a_unit_note() {
+    let dir = TempDir::new("gate-legacy-package-reset");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 7")],
+    );
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 8\nSession 1\ncluster.Speed 7 retired\n"),
+    );
+    let before = baseline_files(&root);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 1,
+        "plain publication refuses the legacy package:\n{stderr}"
+    );
+    assert!(stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    assert_eq!(before, baseline_files(&root), "refusal preserves all bytes");
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "reset treats the legacy package as a removed unit:\n{stderr}"
+    );
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    let notes: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.starts_with("note:") && line.contains("drops unit"))
+        .collect();
+    assert_eq!(notes.len(), 1, "one note for the legacy package:\n{stderr}");
+    assert!(
+        notes[0].contains("Reset drops unit `veh.hmi.cluster`")
+            && notes[0].contains("`Speed` (number 7)")
+            && !notes[0].contains("`Session`"),
+        "the note uses the legacy package as its unit:\n{stderr}"
+    );
+    assert!(root.join(".ridl/baseline/veh.hmi.ir.json").is_file());
+    assert!(!root.join(".ridl/baseline/veh.hmi.cluster.ir.json").exists());
 }
 
 /// Deleting snapshots works only on a baseline without `context.json`.

@@ -1236,9 +1236,11 @@ interface VehicleStatus {
     [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery).
     One RIDL-412 lists all lost keys and numbers for the gone unit and names
     `ridl baseline CURRENT_SOURCE --reset-history --out BASELINE`; a unit that
-    remains receives one refusal per lost number. What would reopen the question
-    is a unit-level retirement construct. `ridl diff` reports the removal as
-    breaking.
+    remains receives one refusal per lost number. For a snapshot published
+    before the IR recorded the unit, the gate cannot distinguish a removed
+    package from a removed unit, so reset treats it as a removed unit even when
+    its original unit remains. What would reopen the question is a unit-level
+    retirement construct. `ridl diff` reports the removal as breaking.
   - **A whole service removed, or a service whose form switches** between inline
     and named (§17.14). Neither moves an identity of its own: an interface is
     identified by its number, a named-form service carries no number, and its

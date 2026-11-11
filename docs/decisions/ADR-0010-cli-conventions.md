@@ -38,6 +38,12 @@ flags and output shapes of this record are a frozen surface from 0.10.0.
 exit codes of `ridl check` only; the exit codes of the other subcommands are
 frozen by policy.
 
+Amended 2026-11-11: decision 1 permits history reset after intentional unit
+removal, with a note for each dropped unit that held allocated interface
+numbers. For a snapshot published before the IR recorded the unit, the gate
+cannot distinguish a removed package from a removed unit, so reset treats it as
+a removed unit even when the original unit remains.
+
 ## Context
 
 Issue driftsys/ridl#194, found while writing the book's CLI reference (PR
@@ -142,9 +148,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    not by inheriting this table. The same discipline applies within a cell. A
    clause added to a cell after 2026-07-27 is not covered by that date: it
    carries its own date and its own verification, constructed the same way as
-   the original eight — by direct construction against the built binary. Four
+   the original eight — by direct construction against the built binary. Five
    clauses on this table postdate the original construction, two added on
-   2026-09-13, one on 2026-09-15 and one on 2026-10-13:
+   2026-09-13, one on 2026-09-15, one on 2026-10-13 and one on 2026-11-11:
 
    - the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
      `ridl baseline` gained the RIDL-408 publication gate, verified via
@@ -161,16 +167,21 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      `baseline_refuses_a_number_dropped_without_a_retired_entry` (RIDL-412) in
      `crates/ridl/tests/baseline_gate.rs`, each of which asserts the refusal
      exits 1 and the published snapshot stays byte-identical;
-   - intentional unit removal and history reset, verified in
-     `crates/ridl/tests/baseline_gate.rs` by
+   - intentional unit removal and history reset, added on 2026-11-11, verified
+     in `crates/ridl/tests/baseline_gate.rs` by
      `a_current_baseline_refuses_a_gone_unit_and_names_history_reset`,
      `resetting_a_current_baseline_publishes_after_a_unit_is_removed`,
      `reset_still_refuses_a_number_lost_in_a_remaining_unit`,
-     `reset_still_refuses_a_package_removed_from_a_living_unit` and
+     `reset_still_refuses_a_package_removed_from_a_remaining_unit`,
+     `resetting_a_legacy_package_removed_from_a_remaining_unit_prints_a_unit_note`,
+     `resetting_after_two_units_are_removed_prints_separate_notes` and
      `reset_with_a_gone_unit_still_refuses_a_provisional_number_without_a_note`;
      the
      [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery)
-     owns the recovery procedure;
+     owns the recovery procedure. A package removed from a remaining unit still
+     refuses under reset when its snapshot records the unit. For a snapshot
+     published before the IR recorded the unit, the gate cannot distinguish a
+     removed package from a removed unit, so reset treats it as a removed unit;
    - the `ridl fmt` exit-2 cell's `vendor/` clause, added on 2026-10-13 when
      `vendor/` became the directory `ridl vendor` writes, verified via
      `fmt_never_touches_vendor` in `crates/ridl/tests/vendor_cli.rs`, which
