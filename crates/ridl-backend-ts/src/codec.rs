@@ -2771,7 +2771,7 @@ impl<'a> Codec<'a> {
     }
 }
 
-/// Allocates local bindings without shadowing generated locals or helper imports.
+/// Allocates local bindings without shadowing generated locals or helper functions.
 fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
     let reserved = [
         "session",
@@ -2786,17 +2786,12 @@ fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
         "stream",
         "upload",
         "reply",
-        "encodeUpload",
-        "byteUpload",
-        "textUpload",
         "decodeStreamReply",
         "args",
         "raw",
         "bytes",
         "checkStreamSession",
         "encodeStreamRequest",
-        "decodeStream",
-        "decodeTextStream",
         "undefined",
         "t",
         "await",

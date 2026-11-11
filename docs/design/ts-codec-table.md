@@ -77,9 +77,9 @@ Its exports:
   when verification succeeds. A `malformed` or `unknown-type` result is
   `"corrupt"`; a `rule` result whose text is in `RULES` is `{ rule }`; any other
   `rule` result throws `CodecError`, which the session counts as `"corrupt"` and
-  reports as a `check-failed` note. The module imports only the types `Codec`
-  and `SignalCheckEntry` and the value `CodecError` of `@driftsys/ridl-runtime`
-  for it, and nothing from the WebSocket package.
+  reports as a `check-failed` note. The module uses only `$rt.Codec`,
+  `$rt.SignalCheckEntry` and `$rt.CodecError` of `@driftsys/ridl-runtime` for
+  it, and nothing from the WebSocket package.
 - `export interface <InducedName.rust>` for every induced tuple that is a
   payload type — the parameter list of a call that is not exactly one named
   type, and a tuple reply of a query (D-9). An induced tuple with no field is
