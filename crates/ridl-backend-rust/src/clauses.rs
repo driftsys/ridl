@@ -15,8 +15,9 @@
 //! type. Float bounds preserve expr-core's exact rational comparisons: `<=`
 //! and `>` use the largest binary64 value at or below the exact literal; `>=`
 //! and `<` use the smallest at or above it. Exactly representable literals
-//! are printed as written, with `.0` appended when they have no fraction or
-//! exponent (`100` becomes `100.0`). Inexact `==` and `!=`, unreadable
+//! are printed in the shortest form that reads back as the same binary64, so
+//! the output is always a Rust literal (`+0.5` becomes `0.5`, `100` becomes
+//! `100.0`). Inexact `==` and `!=`, unreadable
 //! decimals, exponents that cannot be read or have magnitude above 10000,
 //! and bounds that require infinity are refused. The newtype's field
 //! is private, and the read is still legal: the subject is always a
