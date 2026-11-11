@@ -60,6 +60,11 @@ history requires remote evidence, separately from `ridl diff`. Decision 13 owns
 the remote evidence rule; the CLI reference owns the publication, build and
 recovery procedures.
 
+**Amended 2026-11-11 — decisions 10 and 12, the source enum domain.** Declared
+live enum values are limited to int32 on every encoding. Podbuf still derives
+the narrowest integer, at most 32 bits for a declared enum; enum sets can still
+use 64 bits.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -679,17 +684,17 @@ a field is appended.
     podbuf integer of the enum or the enum set or the tag of the union, by width
     or by signedness (the narrowest integer that holds every value, signed when
     a value is negative, by the rules of decision 5: `u8` to `u16` at 256, `u16`
-    to `u32` at 65,536 and `u32` to `u64` at 4,294,967,296; for an enum set,
-    `u8` to `u16` at bit 8, `u16` to `u32` at bit 16 and `u32` to `u64` at bit
-    32, by the width typl §9.3 infers; a negative value appended to an enum that
-    has values is an insert below its highest value, a generic break, so the
-    integer turns signed only when an enum with no value gains values), which
-    lays out a different integer in every head that holds the enum, the enum set
-    or the union; appending a field that cannot read as 0; appending to a struct
-    that a head of the released side holds inline, when the append grows the
-    struct's head; changing an open enum or enum set to a strict one (the
-    reverse, `enum_opened`, is compatible: every value that was valid stays
-    valid); and removing a field.
+    to `u32` at 65,536, with declared live enum values limited to int32; for an
+    enum set, `u8` to `u16` at bit 8, `u16` to `u32` at bit 16 and `u32` to
+    `u64` at bit 32, by the width typl §9.3 infers; a negative value appended to
+    an enum that has values is an insert below its highest value, a generic
+    break, so the integer turns signed only when an enum with no value gains
+    values), which lays out a different integer in every head that holds the
+    enum, the enum set or the union; appending a field that cannot read as 0;
+    appending to a struct that a head of the released side holds inline, when
+    the append grows the struct's head; changing an open enum or enum set to a
+    strict one (the reverse, `enum_opened`, is compatible: every value that was
+    valid stays valid); and removing a field.
 
     **A strict-enum append is reported (Sebastien, 2026-11-01).** `ridl diff`
     reports an appended enum value or enum-set flag of a declaration that is not
@@ -853,9 +858,9 @@ a field is appended.
     check for a strict declaration and checks no value of an open one; the view
     and `decode` read an undeclared value of an open enum as `Unknown`, which
     holds the integer, and an open enum set keeps every bit; `encode` writes the
-    integer back unchanged. The raw value of a 64-bit enum or enum set is the
-    bit pattern of its wire integer held in an `i64`, so a `u64` value of 2^63
-    or more reads as a negative raw value and is written back as the same `u64`.
+    integer back unchanged. The raw value of a 64-bit enum set is the bit
+    pattern of its wire integer held in an `i64`, so a `u64` value of 2^63 or
+    more reads as a negative raw value and is written back as the same `u64`.
     The width stays the one the declared values infer (decision 5), so `encode`
     refuses with the range rule, naming the declaration, an open enum or enum
     set of a width below 64 bits whose integer does not fit it, as the proto3

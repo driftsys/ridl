@@ -21,7 +21,9 @@
 //!   tombstones occupy an ordinal but emit no property (typl §7.4).
 //! - **Enum** — `export enum` with the declared discriminants. TypeScript
 //!   enums are number-valued, so a discriminant beyond
-//!   `Number.MAX_SAFE_INTEGER` is [`GenerateError::Unrepresentable`].
+//!   `Number.MAX_SAFE_INTEGER` is [`GenerateError::Unrepresentable`]. This enum
+//!   discriminant refusal is reachable only from hand-built IR: TYPL-225
+//!   rejects declared live values outside int32 in source.
 //!   An `open` enum adds `<Name>Value = <Name> | { readonly unknown: number }`,
 //!   the type of a field of it.
 //! - **Enumset** — a branded number plus a `<Name>Bits` const object

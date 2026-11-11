@@ -128,9 +128,8 @@ struct Panel {
 }
 
 /// Open enums and open enum sets, alone and in an array, and an open enum set
-/// of width 64. An open enum whose podbuf integer is a `u64` has no place
-/// here: its values are outside int32, which the proto3 codec of this corpus
-/// refuses.
+/// of width 64. Declared enum values must fit int32, so their inferred
+/// podbuf integers are at most 32 bits wide.
 struct Lights {
   lamp     : Lamp
   lamps    : Lamps

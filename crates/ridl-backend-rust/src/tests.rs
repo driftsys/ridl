@@ -8146,3 +8146,52 @@ fn doc_in_parentheses_is_split_and_other_attributes_are_kept() {
     assert!(source.contains("/// a\n    /// b\n"), "got:\n{source}");
     assert!(source.contains("#[foo = \"a\\nb\"]"), "got:\n{source}");
 }
+
+#[test]
+fn the_proto3_codec_refuses_enum_values_outside_int32() {
+    // Source admits retired int64 values; live values outside int32 require hand-built IR.
+    for value in [-2147483649_i64, 2147483648] {
+        for retired in [true, false] {
+            let source = if retired {
+                format!("package app\nenum E {{ reserved {value}, A = 0 }}\n")
+            } else {
+                "package app\nenum E { A = 0 }\n".to_string()
+            };
+            let output = ridlc::compile("enum.typl", &source);
+            assert!(
+                !output
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.severity == ridl_core::diag::Severity::Error),
+                "{:?}",
+                output.diagnostics
+            );
+            let mut package = output.package;
+            if !retired {
+                let def = package
+                    .decls
+                    .iter_mut()
+                    .find_map(|decl| match decl.kind.as_mut() {
+                        Some(v2::decl::Kind::EnumDef(def)) => Some(def),
+                        _ => None,
+                    })
+                    .expect("enum");
+                def.values[0].value = value;
+            }
+            let error = generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
+                .expect_err("outside int32 must be refused");
+            assert!(
+                error
+                    .message
+                    .contains("outside int32, which the proto backend refuses"),
+                "retired={retired}, value={value}: {}",
+                error.message
+            );
+            assert!(
+                error.message.contains(&value.to_string()),
+                "{}",
+                error.message
+            );
+        }
+    }
+}

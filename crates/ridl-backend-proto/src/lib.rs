@@ -395,7 +395,8 @@ fn strictness_comment(open: bool) -> &'static str {
 /// matching `reserved 0;` is dropped instead of also being emitted, which
 /// `protoc` would reject as the same number claimed twice. A value outside
 /// `i32` is refused: proto3 enum and reserved values are int32, and typl
-/// admits int64 (typl §8).
+/// admits int64 for reserved values; TYPL-225 rejects declared live values
+/// outside int32 (typl §8).
 ///
 /// Every value name this enum emits — the synthesized zero included — is
 /// claimed in the package scope, because of the sibling scoping above: a

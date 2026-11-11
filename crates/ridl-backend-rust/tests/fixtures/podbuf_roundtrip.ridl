@@ -179,16 +179,16 @@ struct Tuning {
   mode : Mode
 }
 
-/// An open enum with a value above `u32::MAX` and none below 0: a `u64`.
+/// An open enum at the positive int32 boundary.
 open enum Big {
   A = 0
-  B = 4294967296
+  B = 2147483647
 }
 
-/// An open enum with a negative value and one above `u32::MAX`: an `i64`.
-open enum Signed64 {
+/// An open enum with a negative value and the positive int32 boundary.
+open enum OpenSigned32 {
   NEG = -1
-  BIG = 4294967296
+  BIG = 2147483647
 }
 
 /// An open enum set of width 64: bit 63 is declared, bit 1 is not.
@@ -215,10 +215,10 @@ struct Tuning32 {
   signed : Signed32
 }
 
-/// The three 64-bit open declarations.
-struct Wide64 {
+/// Two open enums and a 64-bit open enum set.
+struct WideValues {
   big    : Big
-  signed : Signed64
+  signed : OpenSigned32
   wide   : WideFlags
 }
 

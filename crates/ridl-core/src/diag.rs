@@ -548,6 +548,11 @@ diag_codes! {
         TYPL_224 = "TYPL-224", Info,
             "duplicate declaration shape", lint = "duplicate-shape";
 
+        /// A declared enum value is outside the int32 domain (typl §8).
+        /// Emitted by the checker for strict and open enums.
+        TYPL_225 = "TYPL-225", Error,
+            "enum value outside the `int32` range";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse and by the checker
         /// for struct fields and collections in a `.ridl` file.

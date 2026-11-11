@@ -18,7 +18,8 @@
 //! name that does not resolve (`resolve_named`), a nested array or map and a
 //! map value that is an array or a map (`resolve_field_type`), a map key
 //! outside the integral and string scalars (`map_key_text`), an enum live or
-//! retired value outside int32 (`emit_enum`), and a field number protobuf
+//! retired value outside int32 (`emit_enum`; a live value requires hand-built
+//! IR because TYPL-225 rejects it in source), and a field number protobuf
 //! reserves or exceeds (`check_field_number`). One refusal is not reproduced
 //! but shared: an optional array or map field of a struct or a tuple
 //! (`emit_struct`, `emit_induced_tuple`, ADR-0013 decision 7) is the rule
@@ -221,7 +222,9 @@ impl<'a> Walk<'a, '_> {
 /// passes `MAX_DEPTH`, the bound is above `u32::MAX`, or a `u64` sum or
 /// product inside the walk does not fit. `RefusedMember` for every other
 /// failure inside the message: a member the proto backend refuses, a name
-/// inside the message that does not resolve, and an enum value outside int32.
+/// inside the message that does not resolve, and an enum value outside int32
+/// (a live value requires hand-built IR; TYPL-225 rejects it in source; a
+/// retired value outside int32 remains legal in source).
 pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
     let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
         return SizeState::Absent(AbsentCause::Unresolved);
@@ -1153,54 +1156,44 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_value_outside_int32_is_refused() {
-        // `emit_enum` in the proto backend refuses the value.
+    fn enum_values_at_int32_boundaries_have_bounds() {
         let mut package = fixture();
-        package
-            .decls
-            .push(enum_decl("Wide", &[0, i64::from(i32::MAX) + 1]));
-        package
-            .decls
-            .push(enum_decl("Deep", &[i64::from(i32::MIN) - 1, 0]));
-        package.decls.push(enum_decl(
-            "Edge",
-            &[i64::from(i32::MIN), i64::from(i32::MAX)],
-        ));
-        package
-            .decls
-            .push(struct_decl("HoldsWide", vec![("e", 1, named("Wide"))]));
-        package
-            .decls
-            .push(struct_decl("HoldsDeep", vec![("e", 1, named("Deep"))]));
-        package
-            .decls
-            .push(struct_decl("HoldsEdge", vec![("e", 1, named("Edge"))]));
+        for (name, values) in [
+            ("Wide", vec![0, i64::from(i32::MAX)]),
+            ("Deep", vec![i64::from(i32::MIN), 0]),
+            ("Edge", vec![i64::from(i32::MIN), i64::from(i32::MAX)]),
+        ] {
+            package.decls.push(enum_decl(name, &values));
+            package.decls.push(struct_decl(
+                &format!("Holds{name}"),
+                vec![("e", 1, named(name))],
+            ));
+        }
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(
-            state_in("HoldsWide", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("HoldsDeep", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("HoldsEdge", &ctx),
-            SizeState::Bounded(11),
-            "the int32 bounds themselves are admitted; a negative member is a 10-byte varint"
-        );
-        // The root box message of each enum holds it as a field, so the same
-        // refusal makes the enum's own payload absent.
-        assert_eq!(
-            state_in("Wide", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("Deep", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(state_in("Edge", &ctx), SizeState::Bounded(11));
+        for (name, bound) in [("Wide", 6), ("Deep", 11), ("Edge", 11)] {
+            assert_eq!(state_in(name, &ctx), SizeState::Bounded(bound));
+            assert_eq!(
+                state_in(&format!("Holds{name}"), &ctx),
+                SizeState::Bounded(bound)
+            );
+        }
+    }
+
+    #[test]
+    fn live_enum_values_outside_int32_are_refused() {
+        // Hand-built IR can carry live values that TYPL-225 rejects in source.
+        for value in [-2147483649, 2147483648] {
+            let mut package = fixture();
+            package.decls.push(enum_decl("Wide", &[0, value]));
+            let others: [&Package; 0] = [];
+            let ctx = Ctx::new(&package, &others);
+            assert_eq!(
+                state_in("Wide", &ctx),
+                SizeState::Absent(AbsentCause::RefusedMember),
+                "{value}"
+            );
+        }
     }
 
     #[test]
@@ -1217,38 +1210,33 @@ mod tests {
             }
             decl
         };
-        let mut package = fixture();
-        package
-            .decls
-            .push(with_retired("Retired", i64::from(i32::MAX) + 1));
-        package
-            .decls
-            .push(with_retired("RetiredEdge", i64::from(i32::MIN)));
-        package.decls.push(struct_decl(
-            "HoldsRetired",
-            vec![("e", 1, named("Retired"))],
-        ));
-        package.decls.push(struct_decl(
-            "HoldsRetiredEdge",
-            vec![("e", 1, named("RetiredEdge"))],
-        ));
-        let others: [&Package; 0] = [];
-        let ctx = Ctx::new(&package, &others);
-        assert_eq!(
-            state_in("HoldsRetired", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("HoldsRetiredEdge", &ctx),
-            SizeState::Bounded(2),
-            "a retired value inside int32 is admitted and does not change the live values' size"
-        );
-        assert_eq!(
-            state_in("Retired", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember),
-            "the root box message holds the enum as a field, so the same refusal applies"
-        );
-        assert_eq!(state_in("RetiredEdge", &ctx), SizeState::Bounded(2));
+        for (retired, expected) in [
+            (
+                i64::from(i32::MIN) - 1,
+                SizeState::Absent(AbsentCause::RefusedMember),
+            ),
+            (
+                i64::from(i32::MAX) + 1,
+                SizeState::Absent(AbsentCause::RefusedMember),
+            ),
+            (i64::from(i32::MIN), SizeState::Bounded(2)),
+            (i64::from(i32::MAX), SizeState::Bounded(2)),
+        ] {
+            let mut package = fixture();
+            package.decls.push(with_retired("Retired", retired));
+            package.decls.push(struct_decl(
+                "HoldsRetired",
+                vec![("e", 1, named("Retired"))],
+            ));
+            let others: [&Package; 0] = [];
+            let ctx = Ctx::new(&package, &others);
+            assert_eq!(state_in("Retired", &ctx), expected, "retired={retired}");
+            assert_eq!(
+                state_in("HoldsRetired", &ctx),
+                expected,
+                "retired={retired}"
+            );
+        }
     }
 
     #[test]

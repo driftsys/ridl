@@ -142,16 +142,20 @@ that does not fit, or a nesting past the sizer's depth limit. `RefusedMember` is
 a member the `.proto` emitter refuses: an optional array or map field (ADR-0013
 decision 7), an array of arrays or of maps, a map whose value is an array or a
 map, a map key outside the integral and string scalars, an enum value or a
-retired enum value outside int32, a field number proto3 reserves (19000 to
-19999) or does not admit (0, or above 2^29 − 1), a stream, and a name that does
-not resolve. The sizer checks a field number before the bound of the field's
-type, so a field with a refused number is `RefusedMember` whatever its type. The
-codec's own walk runs before the size state is read, and refuses an optional
-array or map field, a refused field number and an enum value outside int32 with
-a message that names the field or the value (`a_refused_member_is_still_refused`
-pins the last) — in a declaration, and in a tuple a declaration holds. A tuple
-only an interaction reaches is not walked when its root is not bounded, so such
-a member in it skips the interface with the sizer's `RefusedMember` and no field
+retired enum value outside int32 (a live value can reach this refusal only
+through hand-built IR, because TYPL-225 rejects it in source; a retired value
+outside int32 remains legal in source), a field number proto3 reserves (19000
+to 19999) or does not admit (0, or above 2^29 − 1), a stream, and a name that
+does not resolve. The sizer checks a field number before the bound of the
+field's type, so a field with a refused number is `RefusedMember` whatever its
+type. The codec's own walk runs before the size state is read, and refuses an
+optional array or map field, a refused field number and an enum value outside
+int32 with a message that names the field or the value (the live enum value case
+requires hand-built IR; `an_enum_at_the_int32_maximum_has_a_proto3_codec` in
+`crates/ridl-backend-rust/tests/proto3_roundtrip.rs` pins the legal source
+boundary) — in a declaration, and in a tuple a declaration holds. A tuple only
+an interaction reaches is not walked when its root is not bounded, so such a
+member in it skips the interface with the sizer's `RefusedMember` and no field
 name. The codec alone refuses an optional array element and an optional map
 value, which the schema emits without presence (ADR-0019 review ruling 6), as
 the FlatBuffers codec does. An integer with no width, an enum with no value and
@@ -543,13 +547,15 @@ wrong-wire-type check, the declared-enum-value check, the `narrow_i32` refusal
 member, the step grid of the zero predicate, the verification of an absent
 nested message, the no-arm refusal of a union, map key uniqueness and the
 collection count — each fails the case written for it. So do dropping the
-`int32` refusal of an enum value, a wrong `needed` in the capacity error, the
-size tables (swapped proto3 rows, a proto3 table built from the FlatBuffers
-`MAX_SIZE`, a face site that names `FlatBuffers` instead of its port's
-encoding), and the refusal of a type without a bound (a codec given to a
-`NoBound` or an `Overflow` state, a field number checked after the bound of the
-field's type, a stream or an unresolved name attributed to `NoBound` instead of
-`RefusedMember`). Three mutations first survived, and each review's fix added
+`int32` refusal of an enum value (pinned by
+`the_proto3_codec_refuses_enum_values_outside_int32`, including source-valid
+retired values and hand-built live values on both sides), a wrong `needed` in
+the capacity error, the size tables (swapped proto3 rows, a proto3 table built
+from the FlatBuffers `MAX_SIZE`, a face site that names `FlatBuffers` instead of
+its port's encoding), and the refusal of a type without a bound (a codec given
+to a `NoBound` or an `Overflow` state, a field number checked after the bound of
+the field's type, a stream or an unresolved name attributed to `NoBound` instead
+of `RefusedMember`). Three mutations first survived, and each review's fix added
 the case that now catches it: the UTF-8 check of a string with no constraint
 (the two branches were merged into one, which every UTF-8 case reaches), the
 field-number refusal (pinned at the model level, because a checked source

@@ -95,6 +95,11 @@ its own package context. The
 [CLI reference](../book/cli-reference.md#ridl-baseline) owns the recovery
 procedure for affected units. Decisions 1 to 14 are unchanged.
 
+**Amended 2026-11-11 — decision 16, the enum value domain.** Decided by the
+owner on 2026-11-11 and recorded in decision 16 of this record. Declared live
+enum values must fit `int32`; TYPL-225 refuses live values outside that range.
+Enumset widths are unchanged. Decisions 1 to 15 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -717,10 +722,23 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       category is monotone, so the composition of compatible changes is
       compatible. No earlier baseline is kept.
 
+16. **The enum value domain is `int32`.** Decided by the owner on 2026-11-11. A
+    declared live `enum` value must be in `-2147483648..=2147483647`, the proto3
+    range, including negative values. A value outside that range is an error,
+    TYPL-225. This source-level rule applies to strict and open enums on every
+    encoding. A retired (`reserved`) value outside int32 remains legal in
+    source; the proto schema and proto3 codec backends refuse it. Proto3 carries
+    an enum as `int32`. Podbuf derives the narrowest integer that holds the
+    declared values, now at most 32 bits. The FlatBuffers backend currently
+    emits `long`; changing that projection requires a separate follow-up
+    decision. `enumset` is unchanged: its width comes from its highest flag, up
+    to 64 bits. Decisions 1 to 15 are unchanged.
+
 ## Alternatives considered
 
 | Candidate                                                      | Verdict                            | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
 | -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Keep int64                                                     | rejected                           | Proto3 carries an enum as int32, so an enum value outside int32 cannot be carried. Podbuf still derives the narrowest width, now at most 32 bits.                                                                                                                                                                                                                                             |
 | `pbjson-build` instead of `prost-reflect`                      | adopted for JSON (decision 14)     | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears — the original verdict, outweighed once decision 12 measured the transcode failing on legal source: a correctness trigger, not a cost one. Prototext keeps the pool |
 | Prototext for goldens                                          | rejected                           | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                                                                                                                                                                                              |
 | Prototext as the recommended interchange format                | rejected                           | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                                                                                                                                                                                     |
@@ -815,6 +833,18 @@ and §12 in the same change. Its 2026-10-10 amendment (the unchanged catalog)
 amends the frame specification §6.1 in the same change.
 [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md) describes
 the descriptor as built and changes when the field lands.
+
+Decision 16, decided on 2026-11-11, updates these records:
+
+| Document                                                                                | Change                                                                |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [The typl language reference](../specification/typl-language-reference.md) §8 and §16.3 | Defines the int32 enum domain and TYPL-225.                           |
+| [ADR-0031](ADR-0031-podbuf-projection-rules.md) decisions 10 and 12                     | Limits declared enum values to int32; enum sets retain 64-bit widths. |
+| [The catalog descriptor](../design/catalog-descriptor.md)                               | Records the enum value domain.                                        |
+| [The podbuf codec](../design/podbuf-codec.md)                                           | Records the enum width limit.                                         |
+| [The proto3 codec](../design/proto3-codec.md)                                           | Distinguishes live and retired value refusals.                        |
+| [The typl glossary](../specification/typl-language-reference.md#appendix-h--glossary)   | Distinguishes the enum domain from generated representation.          |
+| [The ADR index](README.md)                                                              | Summarises decision 16.                                               |
 
 ## References
 

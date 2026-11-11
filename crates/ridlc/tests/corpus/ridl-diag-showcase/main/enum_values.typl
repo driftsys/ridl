@@ -1,0 +1,9 @@
+// Declared enum values outside int32 (typl §8, §16.3): TYPL-225.
+
+package diag.ridl
+
+/// An enum with declared values beyond both int32 boundaries.
+enum OutsideInt32 {
+  ABOVE = 2147483648
+  BELOW = -2147483649
+}

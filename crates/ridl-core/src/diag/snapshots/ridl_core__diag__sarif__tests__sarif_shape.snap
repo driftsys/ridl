@@ -536,6 +536,15 @@ expression: log
               }
             },
             {
+              "id": "TYPL-225",
+              "shortDescription": {
+                "text": "enum value outside the `int32` range"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "TYPL-301",
               "shortDescription": {
                 "text": "stream type `<T>` outside interaction position"
@@ -1813,7 +1822,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 72,
+          "ruleIndex": 73,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1878,7 +1887,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 184,
+          "ruleIndex": 185,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

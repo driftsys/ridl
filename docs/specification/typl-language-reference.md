@@ -440,15 +440,16 @@ passed to all backends:
 
 **Integer domain.** Every integer range must fit within `[-2⁶³ .. 2⁶³−1]` — the
 `int64` domain. Bounds outside it are a compile error (TYPL-111). This closes
-the u64 hole: the language layer is always `int64` (Kotlin `Long`, C++
-`int64_t`), which cannot hold the top half of full-range `uint64`. A value that
-genuinely needs all 64 unsigned bits is modelled as `bytes [8]`.
+the u64 hole: the language layer for integer scalars is `int64` (Kotlin `Long`,
+C++ `int64_t`), which cannot hold the top half of full-range `uint64`. A value
+that genuinely needs all 64 unsigned bits is modelled as `bytes [8]`.
 
-**Language layer** — always `int64`. **Transport layer** — narrowest wire type
-that safely contains the range. The resolved width is part of the contract:
-widening a range across a width boundary changes the wire type, which is a
-**breaking change** classified by `ridl-diff`. (An explicit width **floor** to
-pre-empt such flips — a `wire` clause — is deferred to v0.2, §17.11.)
+**Language layer for integer scalars** — `int64`. **Transport layer** —
+narrowest wire type that safely contains the range. The resolved width is part
+of the contract: widening a range across a width boundary changes the wire type,
+which is a **breaking change** classified by `ridl-diff`. (An explicit width
+**floor** to pre-empt such flips — a `wire` clause — is deferred to v0.2,
+§17.11.)
 
 ### 4.3 Float
 
@@ -991,6 +992,10 @@ enum GearPosition {
   unique (TYPL-203)
 - A value name is unique within its enum (TYPL-216): a name identifies one
   value, so an enum cannot declare two
+- Declared values must fit `int32`, from -2147483648 through 2147483647,
+  inclusive (TYPL-225), for strict and open enums. Negative values are allowed.
+  Retired (`reserved`) values outside int32 remain legal in source; the proto
+  schema and proto3 codec backends refuse them.
 - First value conventionally `= 0` for proto3 compatibility
 - String-backed enums are not supported in v0.1; planned for v0.2 (§17.1)
 
@@ -1009,8 +1014,9 @@ open enum DtcStatus {
 - An open enum accepts any value that fits the integer of its encoding. A value
   that the declaration does not name is the **unknown** case and carries the raw
   integer.
-- The language layer integer is `int64`, as for every enum. On a wire, the
-  integer is the one the encoding carries (for example `int32` for proto3).
+- The language-layer domain of declared live enum values is `int32`. Generated
+  Rust representation is unchanged: strict enums use `#[repr(i64)]`; open enums
+  use `From<i64>` and retain an unknown raw integer.
 - The init value does not change: the member whose value is 0, else the lowest
   declared value. An unknown value is never an init value.
 - An open enum that declares no value, and an open `enumset` that declares no
@@ -1119,7 +1125,7 @@ enumset WarningFlags : Warning
 | 16..31      | `uint32`  |
 | 32..63      | `uint64`  |
 
-Language layer — always `int64`. Transport layer — narrowest inferred.
+Language layer for enum sets — `int64`. Transport layer — narrowest inferred.
 
 ---
 
@@ -1509,6 +1515,7 @@ scope is checked under, is in ridl §16.4.
 | TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite                                                                       | error    |
 | TYPL-222 | one field name used with different units                                                                                                                                       | info     |
 | TYPL-224 | duplicate declaration shape                                                                                                                                                    | info     |
+| TYPL-225 | enum value outside the `int32` range (declared live values only)                                                                                                               | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 
@@ -2082,9 +2089,11 @@ typl owns the **type layer** of every backend; interaction/behaviour codegen is
 specified by the higher profiles. Width mapping is resolved once by the compiler
 and passed to all backends (§4.2, §4.3, §9.3).
 
-**Language layer** — always widest. The columns are the width rule per language,
-not a list of planned backends: Rust and TypeScript are built, Kotlin is an
-out-of-tree plugin, and C++ has no plan
+**Language layer** — integer scalars and enum sets use the representations
+below; declared live enum values have the `int32` domain. Generated Rust strict
+enums still use `#[repr(i64)]`, and open enums use `From<i64>`. The columns are
+the width rule per language, not a list of planned backends: Rust and TypeScript
+are built, Kotlin is an out-of-tree plugin, and C++ has no plan
 ([ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 1, as
 amended 2026-09-12).
 
@@ -2440,7 +2449,7 @@ planned for v0.2: string enums (§17.1) and `uniqueItems` as an array constraint
 | **quantized float**                | a float with range + step — losslessly representable as a scaled integer (`raw = (value − min)/step`), the CAN/AUTOSAR wire form                                                                                                                                    |
 | **`match`**                        | the constraint keyword binding a string type to a regex pattern (named `const` or inline literal)                                                                                                                                                                   |
 | **width inference**                | the compiler deriving the narrowest safe wire type from a declared range/step — computed once, passed to all backends                                                                                                                                               |
-| **language layer**                 | the generated in-code representation: always widest (`int64`/`float64`) so arithmetic cannot overflow storage                                                                                                                                                       |
+| **language layer**                 | the value domain and its generated representation: declared live enum values have the `int32` domain (Rust strict enums retain `#[repr(i64)]`, open enums retain `From<i64>`); integers and enum sets use `int64`; floats use `float64`                             |
 | **transport layer**                | the on-wire representation: narrowest width the range provably fits                                                                                                                                                                                                 |
 | **wire type**                      | a concrete transport width (`uint8` … `float64`); inferred from the range and never written in source — the names are not typl keywords (§5.6)                                                                                                                      |
 | **width flip**                     | the evolution hazard where widening a range crosses a width boundary and silently changes the wire type — caught by `ridl-diff`; a source-level pre-emption (a deferred `wire` floor) is §17.11                                                                     |

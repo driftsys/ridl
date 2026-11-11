@@ -67,6 +67,11 @@ reporting follows
 [ADR-0031 decision 13](../decisions/ADR-0031-podbuf-projection-rules.md)'s
 remote strict enum amendment.
 
+A declared enum uses the narrowest integer that holds its live values, signed
+when any value is negative. TYPL-225 limits those values to int32, so source
+enums need at most 32 bits. Enum sets retain widths up to 64 bits
+([ADR-0014 decision 16](../decisions/ADR-0014-ir-encodings.md)).
+
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.
 `PodbufProjection.boxes` holds the one-field head of each named scalar, enum or
@@ -176,10 +181,9 @@ checked, is ADR-0031 decision 8.
 and allocates for `String`, `Vec` and maps as the other codecs do. The view and
 `decode` read a value that an `open` enum does not declare as its `Unknown`
 variant, which holds the integer, and an `open` enum set keeps every bit, so
-`encode` writes such a value back unchanged. The raw value of a 64-bit enum or
-enum set is the bit pattern of its wire integer held in an `i64`: a `u64` of
-2^63 or more reads as a negative raw value and is written back as the same
-`u64`.
+`encode` writes such a value back unchanged. The raw value of a 64-bit enum set
+is the bit pattern of its wire integer held in an `i64`: a `u64` of 2^63 or more
+reads as a negative raw value and is written back as the same `u64`.
 
 **The view.** The accessors read through `Region`. A scalar read is one bounds
 check and one load. A `string` accessor returns a `&str` built by
