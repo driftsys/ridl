@@ -3611,6 +3611,63 @@ mod constraint_direction {
     }
 
     #[test]
+    fn direct_classify_uses_only_the_listed_package() {
+        let (old, new) = pair(
+            vec![command("send", 1, vec![param("v", named("S"))], vec![])],
+            false,
+        );
+        let mut consumer = pkg(vec![signal("read", 1, "veh.cluster.S")]);
+        consumer.name = "consumer".into();
+        let report = crate::diff_sets(&[old.clone(), consumer.clone()], &[new.clone(), consumer]);
+        let change = row(&report, Category::ConstraintChanged);
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(crate::classify(change, &old, &new), Verdict::Compatible);
+    }
+
+    #[test]
+    fn qualified_remote_name_ignores_a_local_bare_name() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut local = pkg(vec![signal("read", 1, "dep.S")]);
+        local.decls = vec![scalar("S", bounds(None, None), v2::IntWidth::I32)];
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert_eq!(report.changes.len(), 1, "{report:?}");
+        let change = row(&report, Category::ConstraintChanged);
+        assert_eq!(change.path, "veh.cluster/I/read");
+        assert_eq!(change.before.as_deref(), Some("dep.S: [min=10 max=100]"));
+        assert_eq!(change.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn unreached_remote_narrowing_has_no_row() {
+        let (mut after, mut before) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut local = pkg(vec![signal("read", 1, "Other")]);
+        local.decls = vec![scalar("Other", bounds(None, None), v2::IntWidth::I32)];
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert!(report.changes.is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn missing_remote_constraint_context_has_no_row() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let local = pkg(vec![signal("read", 1, "dep.S")]);
+        for (old, new) in [(&[][..], &[&after][..]), (&[&before][..], &[][..])] {
+            let report =
+                crate::diff_refs_with_contexts(&[&local], &[&local], old, new, &[]).unwrap();
+            assert!(report.changes.is_empty(), "{report:?}");
+        }
+    }
+
+    #[test]
     fn remote_nested_constraint_reports_once_per_interaction_and_declaration() {
         let (mut before, mut after) = pair(vec![], false);
         before.name = "dep".into();

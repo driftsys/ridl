@@ -134,17 +134,16 @@ frozen surface". The full policy, with the gate that checks each surface and the
 rules for approving a break, is
 [ADR-0029](../decisions/ADR-0029-stability-policy.md).
 
-## Received constraint widening adoption
+## Received constraint widening
 
-The change to scalar-constraint verdicts approved in ADR-0008 decision 14 and
-ADR-0029 on 2026-11-09 must ship in a declared pre-1.0 minor release, never a
-patch. Its release notes must say that a widened range on a received value now
-exits 1 and empties the compatible catalog history, and that per-side remote
-comparisons now report `constraint_changed` for widening and narrowing and
-breaking `width_changed` for a remote scalar's width or backing change at the
-consumer interaction path, including on send-only paths. A widening reached only
-by command or query parameters remains compatible; a narrowing remains breaking.
-See [Evolving an interface](evolving-an-interface.md).
+For a widened range on a received value, `ridl diff` exits 1 and empties the
+compatible catalog history. Per-side remote comparisons report
+`constraint_changed` for widening and narrowing, and a breaking `width_changed`
+for a remote scalar's width or backing change at the consumer interaction path,
+including on send-only paths. A widening reached only by command or query
+parameters remains compatible; a narrowing remains breaking. The rule is in
+[ADR-0008 decision 14](../decisions/ADR-0008-e2-execution.md). See also
+[Evolving an interface](evolving-an-interface.md).
 
 ## FlatBuffers enum width adoption
 
