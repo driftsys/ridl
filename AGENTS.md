@@ -133,7 +133,11 @@ member; rsdl is the apex.
                          of build match the expected list in the recipe
     just install-check   end-to-end test of install.sh and, where pwsh
                          is installed, install.ps1 (dry run, good install,
-                         corrupted download), against a fixture release
+                         corrupted download), against a fixture release;
+                         it also runs scripts/verify-deno-zip.sh against a
+                         temporary pin file: a matching zip passes, and a
+                         different zip, an absent target and a malformed pin
+                         each fail
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy of docs/ and of the
                          examples/**/*.rs and examples/**/*.ridl sources —
@@ -275,7 +279,8 @@ member; rsdl is the apex.
                          type-check and test the generated TypeScript
                          codec modules of the fixtures under
                          crates/ridl-backend-ts/tests/fixtures/ against
-                         flatc's output (_codec-ts-check), run the
+                         flatc's output (_codec-ts-check; its ctor fixture
+                         builds no codec module and runs no flatc), run the
                          unit tests of the check (check_test.ts),
                          then run the Deno program of examples/cabin/web,
                          which reads the catalog, the interaction table and

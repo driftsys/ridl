@@ -52,6 +52,13 @@ struct Inline {
   text : string [0..8]
 }
 
+/// A struct whose strings sit inside induced tuples: one tuple field, and an
+/// array whose elements are tuples that hold a second tuple.
+struct Pairs {
+  pair : (text: string [0..8], count: Speed)
+  list : [(text: string [0..8], deep: (word: string [0..8])); 0..2]
+}
+
 /// A union with a string scalar arm and an enum arm.
 union Phrase {
   remark : Remark

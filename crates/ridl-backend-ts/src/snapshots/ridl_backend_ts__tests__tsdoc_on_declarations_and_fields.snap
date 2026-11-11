@@ -80,23 +80,7 @@ export function makeVinUnchecked(value: string): Vin {
   return value as Vin;
 }
 
-/**
- * Build a value with `makeHidden`.
- */
 type Hidden = number & { readonly __ridl: 'veh.common.Hidden' };
-
-/** Builds a `Hidden`. Throws a `ConstraintError` when a checked constraint is broken. */
-function makeHidden(value: number): Hidden {
-  if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'veh.common.Hidden', value, 'a safe integer');
-  }
-  return value as Hidden;
-}
-
-/** Builds a `Hidden` without checking a value already known to satisfy its constraints. */
-function makeHiddenUnchecked(value: number): Hidden {
-  return value as Hidden;
-}
 
 function initHidden(): Hidden {
   return 0 as Hidden;

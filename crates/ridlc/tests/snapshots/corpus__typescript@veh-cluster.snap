@@ -513,8 +513,6 @@ export function initFaultPage(): FaultPage {
  * cross-package counterpart is impossible by construction: a foreign
  * `internal` name never resolves (typl §3.3).
  *
- * Build a value with `makeRawTickCount`.
- *
  * @remarks
  * Rules:
  * - range 0 ..= 65535
@@ -522,25 +520,6 @@ export function initFaultPage(): FaultPage {
  * @range [0..65535]
  */
 type RawTickCount = number & { readonly __ridl: 'veh.cluster.RawTickCount' };
-
-/** Builds a `RawTickCount`. Throws a `ConstraintError` when a checked constraint is broken. */
-function makeRawTickCount(value: number): RawTickCount {
-  if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'veh.cluster.RawTickCount', value, 'a safe integer');
-  }
-  if (value < 0) {
-    throw new ConstraintError('range', 'veh.cluster.RawTickCount', value, '[0..65535]');
-  }
-  if (value > 65535) {
-    throw new ConstraintError('range', 'veh.cluster.RawTickCount', value, '[0..65535]');
-  }
-  return value as RawTickCount;
-}
-
-/** Builds a `RawTickCount` without checking a value already known to satisfy its constraints. */
-function makeRawTickCountUnchecked(value: number): RawTickCount {
-  return value as RawTickCount;
-}
 
 function initRawTickCount(): RawTickCount {
   return 0 as RawTickCount;

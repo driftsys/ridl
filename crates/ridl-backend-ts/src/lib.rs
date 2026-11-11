@@ -6,7 +6,11 @@
 //!
 //! - **Named scalar** — a branded type,
 //!   `export type Speed = number & { readonly __ridl: 'veh.common.Speed' };`,
-//!   so nominal identity survives TypeScript's structural typing (typl §5.7).
+//!   so nominal identity survives TypeScript's structural typing (typl §5.7),
+//!   and a constructor `makeSpeed` that checks the constraints and throws a
+//!   `ConstraintError` of `@driftsys/ridl-runtime`, with an unchecked form
+//!   `makeSpeedUnchecked` when a check exists. An `internal` scalar has no
+//!   constructor.
 //!   The brand base follows the backing: float and narrow integers are
 //!   `number`; U64/I64 widths are `bigint` — a value past 2^53 has no exact
 //!   `number` form; boolean/string map directly; bytes is `Uint8Array`.
@@ -132,6 +136,9 @@ pub(crate) fn generate_with(
     let mut helpers = BTreeSet::new();
     let mut has_checks = false;
     for decl in &package.decls {
+        if decl.visibility == v2::Visibility::Internal as i32 {
+            continue;
+        }
         if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind {
             for check in scalar_checks(td, &decl.name) {
                 has_checks = true;
@@ -513,7 +520,7 @@ pub(crate) fn scalar_has_unchecked(scalar: &v1::Scalar) -> bool {
 /// not a Unicode scalar value, and `TextEncoder` would replace it silently. Then
 /// both kinds check a positive minimum and the maximum, and a string checks the
 /// pattern. A
-/// string length counts code points (typl §5.3), as `chars()` does in Rust, and
+/// string length counts code points (typl §4.4), as `chars()` does in Rust, and
 /// a bytes length counts bytes (typl §5.4). A minimum of 0 is the default bound
 /// and cannot be broken, and a maximum beyond the safe number interval cannot
 /// be exceeded, so neither emits a comparison. Bytes carry no pattern.
@@ -593,6 +600,8 @@ fn step_check(td: &v2::TypeDef) -> Option<Check> {
     let rule = "step";
     let constraint = format!("step {step} from {}", origin_text.unwrap_or("0"));
     if backing_scalar(td) == ScalarBacking::Integer {
+        // The checker refuses `step` on an integer (TYPL-105), so IR that is
+        // built by hand is the only way to reach this branch.
         let positive = is_integer_form(step)
             && !step.trim_start_matches('0').is_empty()
             && !step.starts_with('-');
@@ -698,9 +707,16 @@ fn check_constructor_names(package: &v2::Package) -> Result<(), GenerateError> {
 }
 
 /// Constructs a brand and checks the constraints of its backing. The unchecked
-/// form exists only when a check is emitted. A pattern lives in a module-level
+/// form exists only when a check is emitted, and an `internal` scalar has no
+/// constructor. A pattern lives in a module-level
 /// `RegExp`, built once.
 fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<String> {
+    // An `internal` scalar has no constructor: the module would hold a function
+    // that nothing calls, which fails `noUnusedLocals`, and the codec module
+    // cannot import it.
+    if decl.visibility == v2::Visibility::Internal as i32 {
+        return None;
+    }
     let name = &decl.name;
     let base = scalar_base(td);
     let export = export_kw(decl.visibility);

@@ -2,6 +2,7 @@
 source: crates/ridl-backend-ts/tests/codec.rs
 expression: source
 ---
+import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
 import type { StreamSession, StreamOptions } from "@driftsys/ridl-runtime";
 import { CatalogMismatch, CodecError, StreamError, decodeStream, decodeTextStream, encodeUpload, byteUpload, textUpload } from "@driftsys/ridl-runtime";
 import { checkWellFormed } from "@driftsys/ridl-runtime";
@@ -25,7 +26,7 @@ export class RuleError extends RangeError {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "streams.demo";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([7, 64, 6, 138, 63, 225, 212, 237, 231, 118, 83, 124, 194, 140, 169, 64, 133, 253, 131, 166, 72, 50, 20, 247, 65, 224, 193, 160, 159, 115, 225, 81]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([35, 16, 53, 56, 203, 51, 77, 77, 56, 3, 12, 111, 125, 148, 42, 208, 243, 45, 253, 101, 144, 45, 178, 231, 123, 24, 19, 122, 10, 240, 6, 28]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "streams.demo.ArgsFetchParams",
@@ -446,7 +447,7 @@ function unpackUploadResult(object: fb.UploadResultT): t.UploadResult {
 /** Encodes a `streams.demo.FeedScalarsParams` payload. */
 export function encodeFeedScalarsParams(value: FeedScalarsParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedScalarsParams(value).pack(builder));
+  builder.finish(packFeedScalarsParams(value, "streams.demo.FeedScalarsParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedScalarsParams` payload the codec has verified. */
@@ -454,7 +455,7 @@ export function decodeFeedScalarsParams(bytes: Uint8Array): FeedScalarsParams {
   return unpackFeedScalarsParams(fb.FeedScalarsParams.getRootAsFeedScalarsParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedScalarsParams(_value: FeedScalarsParams): fb.FeedScalarsParamsT {
+function packFeedScalarsParams(_value: FeedScalarsParams, _at: string): fb.FeedScalarsParamsT {
   const tuple = new fb.FeedScalarsParamsT();
   return tuple;
 }
@@ -465,7 +466,7 @@ function unpackFeedScalarsParams(_object: fb.FeedScalarsParamsT): FeedScalarsPar
 /** Encodes a `streams.demo.FeedUnionsParams` payload. */
 export function encodeFeedUnionsParams(value: FeedUnionsParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUnionsParams(value).pack(builder));
+  builder.finish(packFeedUnionsParams(value, "streams.demo.FeedUnionsParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUnionsParams` payload the codec has verified. */
@@ -473,7 +474,7 @@ export function decodeFeedUnionsParams(bytes: Uint8Array): FeedUnionsParams {
   return unpackFeedUnionsParams(fb.FeedUnionsParams.getRootAsFeedUnionsParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUnionsParams(value: FeedUnionsParams): fb.FeedUnionsParamsT {
+function packFeedUnionsParams(value: FeedUnionsParams, _at: string): fb.FeedUnionsParamsT {
   const tuple = new fb.FeedUnionsParamsT();
   tuple.field1 = value.session;
   tuple.field2 = value.session1;
@@ -487,7 +488,7 @@ function unpackFeedUnionsParams(object: fb.FeedUnionsParamsT): FeedUnionsParams 
 /** Encodes a `streams.demo.FeedStatusesParams` payload. */
 export function encodeFeedStatusesParams(value: FeedStatusesParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedStatusesParams(value).pack(builder));
+  builder.finish(packFeedStatusesParams(value, "streams.demo.FeedStatusesParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedStatusesParams` payload the codec has verified. */
@@ -495,7 +496,7 @@ export function decodeFeedStatusesParams(bytes: Uint8Array): FeedStatusesParams 
   return unpackFeedStatusesParams(fb.FeedStatusesParams.getRootAsFeedStatusesParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedStatusesParams(_value: FeedStatusesParams): fb.FeedStatusesParamsT {
+function packFeedStatusesParams(_value: FeedStatusesParams, _at: string): fb.FeedStatusesParamsT {
   const tuple = new fb.FeedStatusesParamsT();
   return tuple;
 }
@@ -506,7 +507,7 @@ function unpackFeedStatusesParams(_object: fb.FeedStatusesParamsT): FeedStatuses
 /** Encodes a `streams.demo.FeedDataParams` payload. */
 export function encodeFeedDataParams(value: FeedDataParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedDataParams(value).pack(builder));
+  builder.finish(packFeedDataParams(value, "streams.demo.FeedDataParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedDataParams` payload the codec has verified. */
@@ -514,7 +515,7 @@ export function decodeFeedDataParams(bytes: Uint8Array): FeedDataParams {
   return unpackFeedDataParams(fb.FeedDataParams.getRootAsFeedDataParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedDataParams(_value: FeedDataParams): fb.FeedDataParamsT {
+function packFeedDataParams(_value: FeedDataParams, _at: string): fb.FeedDataParamsT {
   const tuple = new fb.FeedDataParamsT();
   return tuple;
 }
@@ -525,7 +526,7 @@ function unpackFeedDataParams(_object: fb.FeedDataParamsT): FeedDataParams {
 /** Encodes a `streams.demo.FeedLabelsParams` payload. */
 export function encodeFeedLabelsParams(value: FeedLabelsParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedLabelsParams(value).pack(builder));
+  builder.finish(packFeedLabelsParams(value, "streams.demo.FeedLabelsParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedLabelsParams` payload the codec has verified. */
@@ -533,7 +534,7 @@ export function decodeFeedLabelsParams(bytes: Uint8Array): FeedLabelsParams {
   return unpackFeedLabelsParams(fb.FeedLabelsParams.getRootAsFeedLabelsParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedLabelsParams(_value: FeedLabelsParams): fb.FeedLabelsParamsT {
+function packFeedLabelsParams(_value: FeedLabelsParams, _at: string): fb.FeedLabelsParamsT {
   const tuple = new fb.FeedLabelsParamsT();
   return tuple;
 }
@@ -544,7 +545,7 @@ function unpackFeedLabelsParams(_object: fb.FeedLabelsParamsT): FeedLabelsParams
 /** Encodes a `streams.demo.FeedTextParams` payload. */
 export function encodeFeedTextParams(value: FeedTextParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedTextParams(value).pack(builder));
+  builder.finish(packFeedTextParams(value, "streams.demo.FeedTextParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedTextParams` payload the codec has verified. */
@@ -552,7 +553,7 @@ export function decodeFeedTextParams(bytes: Uint8Array): FeedTextParams {
   return unpackFeedTextParams(fb.FeedTextParams.getRootAsFeedTextParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedTextParams(_value: FeedTextParams): fb.FeedTextParamsT {
+function packFeedTextParams(_value: FeedTextParams, _at: string): fb.FeedTextParamsT {
   const tuple = new fb.FeedTextParamsT();
   return tuple;
 }
@@ -563,7 +564,7 @@ function unpackFeedTextParams(_object: fb.FeedTextParamsT): FeedTextParams {
 /** Encodes a `streams.demo.FeedZeroParams` payload. */
 export function encodeFeedZeroParams(value: FeedZeroParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedZeroParams(value).pack(builder));
+  builder.finish(packFeedZeroParams(value, "streams.demo.FeedZeroParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedZeroParams` payload the codec has verified. */
@@ -571,7 +572,7 @@ export function decodeFeedZeroParams(bytes: Uint8Array): FeedZeroParams {
   return unpackFeedZeroParams(fb.FeedZeroParams.getRootAsFeedZeroParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedZeroParams(_value: FeedZeroParams): fb.FeedZeroParamsT {
+function packFeedZeroParams(_value: FeedZeroParams, _at: string): fb.FeedZeroParamsT {
   const tuple = new fb.FeedZeroParamsT();
   return tuple;
 }
@@ -582,7 +583,7 @@ function unpackFeedZeroParams(_object: fb.FeedZeroParamsT): FeedZeroParams {
 /** Encodes a `streams.demo.FeedLatestParams` payload. */
 export function encodeFeedLatestParams(value: FeedLatestParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedLatestParams(value).pack(builder));
+  builder.finish(packFeedLatestParams(value, "streams.demo.FeedLatestParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedLatestParams` payload the codec has verified. */
@@ -590,7 +591,7 @@ export function decodeFeedLatestParams(bytes: Uint8Array): FeedLatestParams {
   return unpackFeedLatestParams(fb.FeedLatestParams.getRootAsFeedLatestParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedLatestParams(_value: FeedLatestParams): fb.FeedLatestParamsT {
+function packFeedLatestParams(_value: FeedLatestParams, _at: string): fb.FeedLatestParamsT {
   const tuple = new fb.FeedLatestParamsT();
   return tuple;
 }
@@ -601,7 +602,7 @@ function unpackFeedLatestParams(_object: fb.FeedLatestParamsT): FeedLatestParams
 /** Encodes a `streams.demo.FeedUploadParams` payload. */
 export function encodeFeedUploadParams(value: FeedUploadParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadParams(value).pack(builder));
+  builder.finish(packFeedUploadParams(value, "streams.demo.FeedUploadParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadParams` payload the codec has verified. */
@@ -609,7 +610,7 @@ export function decodeFeedUploadParams(bytes: Uint8Array): FeedUploadParams {
   return unpackFeedUploadParams(fb.FeedUploadParams.getRootAsFeedUploadParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadParams(_value: FeedUploadParams): fb.FeedUploadParamsT {
+function packFeedUploadParams(_value: FeedUploadParams, _at: string): fb.FeedUploadParamsT {
   const tuple = new fb.FeedUploadParamsT();
   return tuple;
 }
@@ -620,7 +621,7 @@ function unpackFeedUploadParams(_object: fb.FeedUploadParamsT): FeedUploadParams
 /** Encodes a `streams.demo.FeedDuplexParams` payload. */
 export function encodeFeedDuplexParams(value: FeedDuplexParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedDuplexParams(value).pack(builder));
+  builder.finish(packFeedDuplexParams(value, "streams.demo.FeedDuplexParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedDuplexParams` payload the codec has verified. */
@@ -628,7 +629,7 @@ export function decodeFeedDuplexParams(bytes: Uint8Array): FeedDuplexParams {
   return unpackFeedDuplexParams(fb.FeedDuplexParams.getRootAsFeedDuplexParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedDuplexParams(_value: FeedDuplexParams): fb.FeedDuplexParamsT {
+function packFeedDuplexParams(_value: FeedDuplexParams, _at: string): fb.FeedDuplexParamsT {
   const tuple = new fb.FeedDuplexParamsT();
   return tuple;
 }
@@ -639,7 +640,7 @@ function unpackFeedDuplexParams(_object: fb.FeedDuplexParamsT): FeedDuplexParams
 /** Encodes a `streams.demo.FeedDuplexNamedParams` payload. */
 export function encodeFeedDuplexNamedParams(value: FeedDuplexNamedParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedDuplexNamedParams(value).pack(builder));
+  builder.finish(packFeedDuplexNamedParams(value, "streams.demo.FeedDuplexNamedParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedDuplexNamedParams` payload the codec has verified. */
@@ -647,7 +648,7 @@ export function decodeFeedDuplexNamedParams(bytes: Uint8Array): FeedDuplexNamedP
   return unpackFeedDuplexNamedParams(fb.FeedDuplexNamedParams.getRootAsFeedDuplexNamedParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedDuplexNamedParams(value: FeedDuplexNamedParams): fb.FeedDuplexNamedParamsT {
+function packFeedDuplexNamedParams(value: FeedDuplexNamedParams, _at: string): fb.FeedDuplexNamedParamsT {
   const tuple = new fb.FeedDuplexNamedParamsT();
   tuple.field1 = value.seed;
   tuple.field2 = value.tail;
@@ -660,7 +661,7 @@ function unpackFeedDuplexNamedParams(object: fb.FeedDuplexNamedParamsT): FeedDup
 /** Encodes a `streams.demo.FeedDuplexTextParams` payload. */
 export function encodeFeedDuplexTextParams(value: FeedDuplexTextParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedDuplexTextParams(value).pack(builder));
+  builder.finish(packFeedDuplexTextParams(value, "streams.demo.FeedDuplexTextParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedDuplexTextParams` payload the codec has verified. */
@@ -668,7 +669,7 @@ export function decodeFeedDuplexTextParams(bytes: Uint8Array): FeedDuplexTextPar
   return unpackFeedDuplexTextParams(fb.FeedDuplexTextParams.getRootAsFeedDuplexTextParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedDuplexTextParams(_value: FeedDuplexTextParams): fb.FeedDuplexTextParamsT {
+function packFeedDuplexTextParams(_value: FeedDuplexTextParams, _at: string): fb.FeedDuplexTextParamsT {
   const tuple = new fb.FeedDuplexTextParamsT();
   return tuple;
 }
@@ -679,7 +680,7 @@ function unpackFeedDuplexTextParams(_object: fb.FeedDuplexTextParamsT): FeedDupl
 /** Encodes a `streams.demo.FeedDuplexBytesParams` payload. */
 export function encodeFeedDuplexBytesParams(value: FeedDuplexBytesParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedDuplexBytesParams(value).pack(builder));
+  builder.finish(packFeedDuplexBytesParams(value, "streams.demo.FeedDuplexBytesParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedDuplexBytesParams` payload the codec has verified. */
@@ -687,7 +688,7 @@ export function decodeFeedDuplexBytesParams(bytes: Uint8Array): FeedDuplexBytesP
   return unpackFeedDuplexBytesParams(fb.FeedDuplexBytesParams.getRootAsFeedDuplexBytesParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedDuplexBytesParams(_value: FeedDuplexBytesParams): fb.FeedDuplexBytesParamsT {
+function packFeedDuplexBytesParams(_value: FeedDuplexBytesParams, _at: string): fb.FeedDuplexBytesParamsT {
   const tuple = new fb.FeedDuplexBytesParamsT();
   return tuple;
 }
@@ -698,7 +699,7 @@ function unpackFeedDuplexBytesParams(_object: fb.FeedDuplexBytesParamsT): FeedDu
 /** Encodes a `streams.demo.FeedMultipleParams` payload. */
 export function encodeFeedMultipleParams(value: FeedMultipleParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedMultipleParams(value).pack(builder));
+  builder.finish(packFeedMultipleParams(value, "streams.demo.FeedMultipleParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedMultipleParams` payload the codec has verified. */
@@ -706,7 +707,7 @@ export function decodeFeedMultipleParams(bytes: Uint8Array): FeedMultipleParams 
   return unpackFeedMultipleParams(fb.FeedMultipleParams.getRootAsFeedMultipleParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedMultipleParams(_value: FeedMultipleParams): fb.FeedMultipleParamsT {
+function packFeedMultipleParams(_value: FeedMultipleParams, _at: string): fb.FeedMultipleParamsT {
   const tuple = new fb.FeedMultipleParamsT();
   return tuple;
 }
@@ -717,7 +718,7 @@ function unpackFeedMultipleParams(_object: fb.FeedMultipleParamsT): FeedMultiple
 /** Encodes a `streams.demo.FeedFetchParams` payload. */
 export function encodeFeedFetchParams(value: FeedFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedFetchParams(value).pack(builder));
+  builder.finish(packFeedFetchParams(value, "streams.demo.FeedFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedFetchParams` payload the codec has verified. */
@@ -725,7 +726,7 @@ export function decodeFeedFetchParams(bytes: Uint8Array): FeedFetchParams {
   return unpackFeedFetchParams(fb.FeedFetchParams.getRootAsFeedFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedFetchParams(_value: FeedFetchParams): fb.FeedFetchParamsT {
+function packFeedFetchParams(_value: FeedFetchParams, _at: string): fb.FeedFetchParamsT {
   const tuple = new fb.FeedFetchParamsT();
   return tuple;
 }
@@ -736,7 +737,7 @@ function unpackFeedFetchParams(_object: fb.FeedFetchParamsT): FeedFetchParams {
 /** Encodes a `streams.demo.FeedUploadNamedParams` payload. */
 export function encodeFeedUploadNamedParams(value: FeedUploadNamedParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadNamedParams(value).pack(builder));
+  builder.finish(packFeedUploadNamedParams(value, "streams.demo.FeedUploadNamedParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadNamedParams` payload the codec has verified. */
@@ -744,7 +745,7 @@ export function decodeFeedUploadNamedParams(bytes: Uint8Array): FeedUploadNamedP
   return unpackFeedUploadNamedParams(fb.FeedUploadNamedParams.getRootAsFeedUploadNamedParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadNamedParams(value: FeedUploadNamedParams): fb.FeedUploadNamedParamsT {
+function packFeedUploadNamedParams(value: FeedUploadNamedParams, _at: string): fb.FeedUploadNamedParamsT {
   const tuple = new fb.FeedUploadNamedParamsT();
   tuple.field1 = value.seed;
   tuple.field2 = value.tail;
@@ -757,7 +758,7 @@ function unpackFeedUploadNamedParams(object: fb.FeedUploadNamedParamsT): FeedUpl
 /** Encodes a `streams.demo.FeedUploadDataParams` payload. */
 export function encodeFeedUploadDataParams(value: FeedUploadDataParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadDataParams(value).pack(builder));
+  builder.finish(packFeedUploadDataParams(value, "streams.demo.FeedUploadDataParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadDataParams` payload the codec has verified. */
@@ -765,7 +766,7 @@ export function decodeFeedUploadDataParams(bytes: Uint8Array): FeedUploadDataPar
   return unpackFeedUploadDataParams(fb.FeedUploadDataParams.getRootAsFeedUploadDataParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadDataParams(_value: FeedUploadDataParams): fb.FeedUploadDataParamsT {
+function packFeedUploadDataParams(_value: FeedUploadDataParams, _at: string): fb.FeedUploadDataParamsT {
   const tuple = new fb.FeedUploadDataParamsT();
   return tuple;
 }
@@ -776,7 +777,7 @@ function unpackFeedUploadDataParams(_object: fb.FeedUploadDataParamsT): FeedUplo
 /** Encodes a `streams.demo.FeedUploadChoiceParams` payload. */
 export function encodeFeedUploadChoiceParams(value: FeedUploadChoiceParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadChoiceParams(value).pack(builder));
+  builder.finish(packFeedUploadChoiceParams(value, "streams.demo.FeedUploadChoiceParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadChoiceParams` payload the codec has verified. */
@@ -784,7 +785,7 @@ export function decodeFeedUploadChoiceParams(bytes: Uint8Array): FeedUploadChoic
   return unpackFeedUploadChoiceParams(fb.FeedUploadChoiceParams.getRootAsFeedUploadChoiceParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadChoiceParams(value: FeedUploadChoiceParams): fb.FeedUploadChoiceParamsT {
+function packFeedUploadChoiceParams(value: FeedUploadChoiceParams, _at: string): fb.FeedUploadChoiceParamsT {
   const tuple = new fb.FeedUploadChoiceParamsT();
   tuple.field1 = value.seed;
   tuple.field2 = value.tail;
@@ -797,7 +798,7 @@ function unpackFeedUploadChoiceParams(object: fb.FeedUploadChoiceParamsT): FeedU
 /** Encodes a `streams.demo.FeedUploadTupleParams` payload. */
 export function encodeFeedUploadTupleParams(value: FeedUploadTupleParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadTupleParams(value).pack(builder));
+  builder.finish(packFeedUploadTupleParams(value, "streams.demo.FeedUploadTupleParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadTupleParams` payload the codec has verified. */
@@ -805,7 +806,7 @@ export function decodeFeedUploadTupleParams(bytes: Uint8Array): FeedUploadTupleP
   return unpackFeedUploadTupleParams(fb.FeedUploadTupleParams.getRootAsFeedUploadTupleParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadTupleParams(_value: FeedUploadTupleParams): fb.FeedUploadTupleParamsT {
+function packFeedUploadTupleParams(_value: FeedUploadTupleParams, _at: string): fb.FeedUploadTupleParamsT {
   const tuple = new fb.FeedUploadTupleParamsT();
   return tuple;
 }
@@ -816,7 +817,7 @@ function unpackFeedUploadTupleParams(_object: fb.FeedUploadTupleParamsT): FeedUp
 /** Encodes a `streams.demo.FeedUploadTupleReply` payload. */
 export function encodeFeedUploadTupleReply(value: FeedUploadTupleReply): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadTupleReply(value).pack(builder));
+  builder.finish(packFeedUploadTupleReply(value, "streams.demo.FeedUploadTupleReply").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadTupleReply` payload the codec has verified. */
@@ -824,7 +825,7 @@ export function decodeFeedUploadTupleReply(bytes: Uint8Array): FeedUploadTupleRe
   return unpackFeedUploadTupleReply(fb.FeedUploadTupleReply.getRootAsFeedUploadTupleReply(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadTupleReply(value: FeedUploadTupleReply): fb.FeedUploadTupleReplyT {
+function packFeedUploadTupleReply(value: FeedUploadTupleReply, _at: string): fb.FeedUploadTupleReplyT {
   const tuple = new fb.FeedUploadTupleReplyT();
   tuple.field1 = value.first;
   tuple.field2 = value.tail;
@@ -837,7 +838,7 @@ function unpackFeedUploadTupleReply(object: fb.FeedUploadTupleReplyT): FeedUploa
 /** Encodes a `streams.demo.FeedUploadFallibleParams` payload. */
 export function encodeFeedUploadFallibleParams(value: FeedUploadFallibleParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packFeedUploadFallibleParams(value).pack(builder));
+  builder.finish(packFeedUploadFallibleParams(value, "streams.demo.FeedUploadFallibleParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.FeedUploadFallibleParams` payload the codec has verified. */
@@ -845,7 +846,7 @@ export function decodeFeedUploadFallibleParams(bytes: Uint8Array): FeedUploadFal
   return unpackFeedUploadFallibleParams(fb.FeedUploadFallibleParams.getRootAsFeedUploadFallibleParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packFeedUploadFallibleParams(_value: FeedUploadFallibleParams): fb.FeedUploadFallibleParamsT {
+function packFeedUploadFallibleParams(_value: FeedUploadFallibleParams, _at: string): fb.FeedUploadFallibleParamsT {
   const tuple = new fb.FeedUploadFallibleParamsT();
   return tuple;
 }
@@ -856,7 +857,7 @@ function unpackFeedUploadFallibleParams(_object: fb.FeedUploadFallibleParamsT): 
 /** Encodes a `streams.demo.OtherFetchParams` payload. */
 export function encodeOtherFetchParams(value: OtherFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packOtherFetchParams(value).pack(builder));
+  builder.finish(packOtherFetchParams(value, "streams.demo.OtherFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.OtherFetchParams` payload the codec has verified. */
@@ -864,7 +865,7 @@ export function decodeOtherFetchParams(bytes: Uint8Array): OtherFetchParams {
   return unpackOtherFetchParams(fb.OtherFetchParams.getRootAsOtherFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packOtherFetchParams(_value: OtherFetchParams): fb.OtherFetchParamsT {
+function packOtherFetchParams(_value: OtherFetchParams, _at: string): fb.OtherFetchParamsT {
   const tuple = new fb.OtherFetchParamsT();
   return tuple;
 }
@@ -875,7 +876,7 @@ function unpackOtherFetchParams(_object: fb.OtherFetchParamsT): OtherFetchParams
 /** Encodes a `streams.demo.SessionFetchParams` payload. */
 export function encodeSessionFetchParams(value: SessionFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packSessionFetchParams(value).pack(builder));
+  builder.finish(packSessionFetchParams(value, "streams.demo.SessionFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.SessionFetchParams` payload the codec has verified. */
@@ -883,7 +884,7 @@ export function decodeSessionFetchParams(bytes: Uint8Array): SessionFetchParams 
   return unpackSessionFetchParams(fb.SessionFetchParams.getRootAsSessionFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packSessionFetchParams(value: SessionFetchParams): fb.SessionFetchParamsT {
+function packSessionFetchParams(value: SessionFetchParams, _at: string): fb.SessionFetchParamsT {
   const tuple = new fb.SessionFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -896,7 +897,7 @@ function unpackSessionFetchParams(object: fb.SessionFetchParamsT): SessionFetchP
 /** Encodes a `streams.demo.OptsFetchParams` payload. */
 export function encodeOptsFetchParams(value: OptsFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packOptsFetchParams(value).pack(builder));
+  builder.finish(packOptsFetchParams(value, "streams.demo.OptsFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.OptsFetchParams` payload the codec has verified. */
@@ -904,7 +905,7 @@ export function decodeOptsFetchParams(bytes: Uint8Array): OptsFetchParams {
   return unpackOptsFetchParams(fb.OptsFetchParams.getRootAsOptsFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packOptsFetchParams(value: OptsFetchParams): fb.OptsFetchParamsT {
+function packOptsFetchParams(value: OptsFetchParams, _at: string): fb.OptsFetchParamsT {
   const tuple = new fb.OptsFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -917,7 +918,7 @@ function unpackOptsFetchParams(object: fb.OptsFetchParamsT): OptsFetchParams {
 /** Encodes a `streams.demo.EntryFetchParams` payload. */
 export function encodeEntryFetchParams(value: EntryFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packEntryFetchParams(value).pack(builder));
+  builder.finish(packEntryFetchParams(value, "streams.demo.EntryFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.EntryFetchParams` payload the codec has verified. */
@@ -925,7 +926,7 @@ export function decodeEntryFetchParams(bytes: Uint8Array): EntryFetchParams {
   return unpackEntryFetchParams(fb.EntryFetchParams.getRootAsEntryFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packEntryFetchParams(value: EntryFetchParams): fb.EntryFetchParamsT {
+function packEntryFetchParams(value: EntryFetchParams, _at: string): fb.EntryFetchParamsT {
   const tuple = new fb.EntryFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -938,7 +939,7 @@ function unpackEntryFetchParams(object: fb.EntryFetchParamsT): EntryFetchParams 
 /** Encodes a `streams.demo.ArgsFetchParams` payload. */
 export function encodeArgsFetchParams(value: ArgsFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packArgsFetchParams(value).pack(builder));
+  builder.finish(packArgsFetchParams(value, "streams.demo.ArgsFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.ArgsFetchParams` payload the codec has verified. */
@@ -946,7 +947,7 @@ export function decodeArgsFetchParams(bytes: Uint8Array): ArgsFetchParams {
   return unpackArgsFetchParams(fb.ArgsFetchParams.getRootAsArgsFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packArgsFetchParams(value: ArgsFetchParams): fb.ArgsFetchParamsT {
+function packArgsFetchParams(value: ArgsFetchParams, _at: string): fb.ArgsFetchParamsT {
   const tuple = new fb.ArgsFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -959,7 +960,7 @@ function unpackArgsFetchParams(object: fb.ArgsFetchParamsT): ArgsFetchParams {
 /** Encodes a `streams.demo.RawFetchParams` payload. */
 export function encodeRawFetchParams(value: RawFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packRawFetchParams(value).pack(builder));
+  builder.finish(packRawFetchParams(value, "streams.demo.RawFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.RawFetchParams` payload the codec has verified. */
@@ -967,7 +968,7 @@ export function decodeRawFetchParams(bytes: Uint8Array): RawFetchParams {
   return unpackRawFetchParams(fb.RawFetchParams.getRootAsRawFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packRawFetchParams(value: RawFetchParams): fb.RawFetchParamsT {
+function packRawFetchParams(value: RawFetchParams, _at: string): fb.RawFetchParamsT {
   const tuple = new fb.RawFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -980,7 +981,7 @@ function unpackRawFetchParams(object: fb.RawFetchParamsT): RawFetchParams {
 /** Encodes a `streams.demo.ElementFetchParams` payload. */
 export function encodeElementFetchParams(value: ElementFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packElementFetchParams(value).pack(builder));
+  builder.finish(packElementFetchParams(value, "streams.demo.ElementFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.ElementFetchParams` payload the codec has verified. */
@@ -988,7 +989,7 @@ export function decodeElementFetchParams(bytes: Uint8Array): ElementFetchParams 
   return unpackElementFetchParams(fb.ElementFetchParams.getRootAsElementFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packElementFetchParams(value: ElementFetchParams): fb.ElementFetchParamsT {
+function packElementFetchParams(value: ElementFetchParams, _at: string): fb.ElementFetchParamsT {
   const tuple = new fb.ElementFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -1001,7 +1002,7 @@ function unpackElementFetchParams(object: fb.ElementFetchParamsT): ElementFetchP
 /** Encodes a `streams.demo.RequestTypeFetchParams` payload. */
 export function encodeRequestTypeFetchParams(value: RequestTypeFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packRequestTypeFetchParams(value).pack(builder));
+  builder.finish(packRequestTypeFetchParams(value, "streams.demo.RequestTypeFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.RequestTypeFetchParams` payload the codec has verified. */
@@ -1009,7 +1010,7 @@ export function decodeRequestTypeFetchParams(bytes: Uint8Array): RequestTypeFetc
   return unpackRequestTypeFetchParams(fb.RequestTypeFetchParams.getRootAsRequestTypeFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packRequestTypeFetchParams(value: RequestTypeFetchParams): fb.RequestTypeFetchParamsT {
+function packRequestTypeFetchParams(value: RequestTypeFetchParams, _at: string): fb.RequestTypeFetchParamsT {
   const tuple = new fb.RequestTypeFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -1022,7 +1023,7 @@ function unpackRequestTypeFetchParams(object: fb.RequestTypeFetchParamsT): Reque
 /** Encodes a `streams.demo.ElementTypeFetchParams` payload. */
 export function encodeElementTypeFetchParams(value: ElementTypeFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packElementTypeFetchParams(value).pack(builder));
+  builder.finish(packElementTypeFetchParams(value, "streams.demo.ElementTypeFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.ElementTypeFetchParams` payload the codec has verified. */
@@ -1030,7 +1031,7 @@ export function decodeElementTypeFetchParams(bytes: Uint8Array): ElementTypeFetc
   return unpackElementTypeFetchParams(fb.ElementTypeFetchParams.getRootAsElementTypeFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packElementTypeFetchParams(value: ElementTypeFetchParams): fb.ElementTypeFetchParamsT {
+function packElementTypeFetchParams(value: ElementTypeFetchParams, _at: string): fb.ElementTypeFetchParamsT {
   const tuple = new fb.ElementTypeFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -1043,7 +1044,7 @@ function unpackElementTypeFetchParams(object: fb.ElementTypeFetchParamsT): Eleme
 /** Encodes a `streams.demo.StreamEntryFetchParams` payload. */
 export function encodeStreamEntryFetchParams(value: StreamEntryFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packStreamEntryFetchParams(value).pack(builder));
+  builder.finish(packStreamEntryFetchParams(value, "streams.demo.StreamEntryFetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.StreamEntryFetchParams` payload the codec has verified. */
@@ -1051,7 +1052,7 @@ export function decodeStreamEntryFetchParams(bytes: Uint8Array): StreamEntryFetc
   return unpackStreamEntryFetchParams(fb.StreamEntryFetchParams.getRootAsStreamEntryFetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packStreamEntryFetchParams(value: StreamEntryFetchParams): fb.StreamEntryFetchParamsT {
+function packStreamEntryFetchParams(value: StreamEntryFetchParams, _at: string): fb.StreamEntryFetchParamsT {
   const tuple = new fb.StreamEntryFetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -1064,7 +1065,7 @@ function unpackStreamEntryFetchParams(object: fb.StreamEntryFetchParamsT): Strea
 /** Encodes a `streams.demo.StreamEntry1FetchParams` payload. */
 export function encodeStreamEntry1FetchParams(value: StreamEntry1FetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packStreamEntry1FetchParams(value).pack(builder));
+  builder.finish(packStreamEntry1FetchParams(value, "streams.demo.StreamEntry1FetchParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.StreamEntry1FetchParams` payload the codec has verified. */
@@ -1072,7 +1073,7 @@ export function decodeStreamEntry1FetchParams(bytes: Uint8Array): StreamEntry1Fe
   return unpackStreamEntry1FetchParams(fb.StreamEntry1FetchParams.getRootAsStreamEntry1FetchParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packStreamEntry1FetchParams(value: StreamEntry1FetchParams): fb.StreamEntry1FetchParamsT {
+function packStreamEntry1FetchParams(value: StreamEntry1FetchParams, _at: string): fb.StreamEntry1FetchParamsT {
   const tuple = new fb.StreamEntry1FetchParamsT();
   tuple.field1 = value.streamEntry13;
   tuple.field2 = value.streamEntry14;
@@ -1198,6 +1199,7 @@ export const Feed = {
   uploadChoice: { iface: 1, ord: 22, kind: "query", request: codecFeedUploadChoiceParams, reply: codecUploadResult, streams: [{ no: 1, form: "elements", element: codecChunk }], limit: 512 },
   uploadTuple: { iface: 1, ord: 23, kind: "query", request: codecFeedUploadTupleParams, reply: codecFeedUploadTupleReply, streams: [{ no: 1, form: "bytes" }] },
   // uploadFallible has no entry: inline fallible replies have no codec
+  newest: { iface: 1, ord: 25, kind: "signal", payload: codecChunk },
 } as const;
 
 const streamEntry2 = Feed.scalars;
@@ -1885,4 +1887,27 @@ export function streamEntry1_fetch(session: StreamSession, streamEntry13: t.Coun
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
   return raw;
+}
+
+function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {
+  const typeId = codec.typeId(entry.payload.type);
+  return {
+    iface: entry.iface,
+    ord: entry.ord,
+    check: (bytes) => {
+      const result = codec.verify(typeId, bytes);
+      if (result.ok) return undefined;
+      if (result.kind !== "rule") return "corrupt";
+      const rule = (RULES as readonly string[]).find((known) => known === result.rule);
+      if (rule === undefined) throw new CodecError("unknown rule during signal verification");
+      return { rule: rule as (typeof RULES)[number] };
+    },
+  };
+}
+
+/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */
+export function signalChecks(codec: Codec): readonly SignalCheckEntry[] {
+  return [
+    signalCheck(codec, Feed.newest),
+  ];
 }

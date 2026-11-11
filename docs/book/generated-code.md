@@ -724,14 +724,14 @@ the editor's hover shows in its **Contract** list.
 A generated doc holds these parts, in this order, and leaves out each part that
 is empty:
 
-| Part          | Rust                                       | TypeScript                                                                                         |
-| ------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| doc text      | `///` lines; each link an intra-doc link   | the comment's text; each local link `{@link Name}`, or `{@link t.Name}` in a codec stream function |
-| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list                                                                   |
-| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                                                                       |
-| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                                                                                |
-| `@since`      | one `Available since <version>.` line each | one `@since` tag each                                                                              |
-| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                                                                              |
+| Part          | Rust                                       | TypeScript                                                                                                                                                                              |
+| ------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| doc text      | `///` lines; each link an intra-doc link   | the comment's text, then ``Build a value with `make<Name>`.`` for a named scalar that has a constructor; each local link `{@link Name}`, or `{@link t.Name}` in a codec stream function |
+| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list                                                                                                                                                        |
+| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                                                                                                                                                            |
+| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                                                                                                                                                                     |
+| `@since`      | one `Available since <version>.` line each | one `@since` tag each                                                                                                                                                                   |
+| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                                                                                                                                                                   |
 
 A link, or an `@see` target, whose target has no item in the same output is
 written as a code span of the target's qualified name, such as
@@ -847,27 +847,27 @@ In the Rust column:
   [What the crate contains](#what-the-crate-contains)).
 
 In the TypeScript column, `make<Name>` is the constructor of a named scalar in
-the domain module; every named scalar has one, constrained or not. It checks the
-well-formedness of a string, then the range, step, length and pattern, in that
-order, stops at the first violation, and throws a `ConstraintError` from
-`@driftsys/ridl-runtime`. Its `rule` is `range`, `step`, `length`, `pattern` or
-`utf8`, its `type` is the qualified name of the type, and its message names the
-value and the constraint. A number-backed integer must be a safe integer, so a
-fraction, NaN, an infinity and a value beyond ±(2^53 − 1) break the `range`
-rule, bounds or not. A bigint-backed integer checks the declared bounds
-intersected with its domain (the `i64` interval, or `0` through `i64::MAX` for a
-`u64`). A float checks that it is finite when it declares a bound or a step. A
-string is well-formed when it holds no unpaired surrogate; a JavaScript string
-may hold one, which is not a Unicode scalar value and which `TextEncoder`
-replaces with U+FFFD without an error, so a string with one breaks the `utf8`
-rule before any other. A string length counts Unicode code points, as the Rust
-`chars().count()` does, so `"😀"` has length 1, and a bytes length counts bytes.
-The pattern is a `RegExp` built once for the module, without the `u` flag, with
-the ECMA-262 semantics of the checker, so it can disagree with the Rust `regex`
-crate (driftsys/ridl#597). The pinned disagreements are `.` (an astral character
-is two matches in JavaScript and one in `regex`; JavaScript also excludes `\r`,
-U+2028 and U+2029) and `\d` (any Unicode decimal digit in `regex`, `[0-9]` in
-JavaScript); the
+the domain module; every named scalar that is not `internal` has one,
+constrained or not. It checks the well-formedness of a string, then the range,
+step, length and pattern, in that order, stops at the first violation, and
+throws a `ConstraintError` from `@driftsys/ridl-runtime`. Its `rule` is `range`,
+`step`, `length`, `pattern` or `utf8`, its `type` is the qualified name of the
+type, and its message names the value and the constraint. A number-backed
+integer must be a safe integer, so a fraction, NaN, an infinity and a value
+beyond ±(2^53 − 1) break the `range` rule, bounds or not. A bigint-backed
+integer checks the declared bounds intersected with its domain (the `i64`
+interval, or `0` through `i64::MAX` for a `u64`). A float checks that it is
+finite when it declares a bound or a step. A string is well-formed when it holds
+no unpaired surrogate; a JavaScript string may hold one, which is not a Unicode
+scalar value and which `TextEncoder` replaces with U+FFFD without an error, so a
+string with one breaks the `utf8` rule before any other. A string length counts
+Unicode code points, as the Rust `chars().count()` does, so `"😀"` has length 1,
+and a bytes length counts bytes. The pattern is a `RegExp` built once for the
+module, without the `u` flag, with the ECMA-262 semantics of the checker, so it
+can disagree with the Rust `regex` crate (driftsys/ridl#597). The pinned
+disagreements are `.` (an astral character is two matches in JavaScript and one
+in `regex`; JavaScript also excludes `\r`, U+2028 and U+2029) and `\d` (any
+Unicode decimal digit in `regex`, `[0-9]` in JavaScript); the
 [regex table of the typl reference](../specification/typl-language-reference.md#27-regex-literals)
 lists the other constructs. Unlike the Rust `new`, the pattern check has no
 feature switch.
@@ -883,7 +883,7 @@ refuses a declaration named `ConstraintError`, `codePointLength`,
 
 ```typescript
 import { ConstraintError } from "@driftsys/ridl-runtime";
-import { makeTemperature, makeTemperatureUnchecked } from "./cabin.js";
+import { makeTemperature, makeTemperatureUnchecked } from "./veh.cabin.js";
 
 makeTemperature(20); // 20, typed as Temperature
 try {
@@ -893,6 +893,9 @@ try {
 }
 makeTemperatureUnchecked(90); // 90, not checked
 ```
+
+The generated modules import `@driftsys/ridl-runtime`, and need the release of
+that package that matches the release of `ridl` that generated them.
 
 The type assertion `20 as Temperature` still compiles, which is a limit of
 TypeScript. The domain module's types, constants, `<Name>Bits` objects, init

@@ -413,13 +413,18 @@ crate the workspace holds — see `AGENTS.md` for that.
   in its `deno.json` follows the workspace version. See
   [its design record](../design/ridl-transport-ws-ts.md).
 
-- **`packages/ridl-runtime`** — the loader of the wasm codec module,
-  `@driftsys/ridl-runtime`, for Deno, Bun, Node and the browser. `loadCodec`
-  takes a `URL`, a `Response` or bytes, compares the module's catalog hash with
-  the one the caller expects, and returns a codec whose `verify` calls the
-  module's `ridl_verify`. It has no dependency and is not published. Deno builds
-  and tests it (`just ts-check`, `just ts-npm-check`), and the version in its
-  `deno.json` follows the workspace version.
+- **`packages/ridl-runtime`** — `@driftsys/ridl-runtime`, for Deno, Bun, Node
+  and the browser: the loader of the wasm codec module, and the runtime that
+  generated TypeScript imports. `loadCodec` takes a `URL`, a `Response` or
+  bytes, compares the module's catalog hash with the one the caller expects, and
+  returns a codec whose `verify` calls the module's `ridl_verify`. The package
+  also holds `ConstraintError` and the helpers behind the generated `make<Name>`
+  constructors and the utf8 check of `encode<Name>` (`length.ts`,
+  `well_formed.ts`, `step.ts`), the types of the signal checks (`checks.ts`) and
+  the stream adapters. It has no dependency, and
+  `.github/workflows/npm-release.yml` publishes it to npm on a `v*` tag. Deno
+  builds and tests it (`just ts-check`, `just ts-npm-check`), and the version in
+  its `deno.json` follows the workspace version.
 
 - **`evals/`** — the public corpus of translated upstream definitions, the
   calibration records and the eval tasks that set the design lints' levels. It

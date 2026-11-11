@@ -45,6 +45,7 @@ export const PAYLOAD_TYPES = [
   "veh.common.Mode",
   "veh.common.Note",
   "veh.common.Outcome",
+  "veh.common.Pairs",
   "veh.common.Phrase",
   "veh.common.Pick",
   "veh.common.RPM",
@@ -271,7 +272,7 @@ export function decodeSensorBounds(bytes: Uint8Array): t.SensorBounds {
 
 function packSensorBounds(value: t.SensorBounds): fb.SensorBoundsT {
   const object = new fb.SensorBoundsT();
-  object.range = packSensorBoundsRange(value.range);
+  object.range = packSensorBoundsRange(value.range, "veh.common.SensorBounds.range");
   object.readings = [...value.readings];
   object.labels = value.labels.map((element) => checkWellFormed(element, "veh.common.SensorBounds.labels[]"));
   object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = checkWellFormed(key, "veh.common.SensorBounds.meta.key"); entry.value = checkWellFormed(value, "veh.common.SensorBounds.meta.value"); return entry; });
@@ -481,7 +482,7 @@ export function decodeBoundsSummary(bytes: Uint8Array): t.BoundsSummary {
 
 function packBoundsSummary(value: t.BoundsSummary): fb.BoundsSummaryT {
   const object = new fb.BoundsSummaryT();
-  object.range = packBoundsSummaryRange(value.range);
+  object.range = packBoundsSummaryRange(value.range, "veh.common.BoundsSummary.range");
   object.readings = [...value.readings];
   return object;
 }
@@ -505,7 +506,7 @@ export function decodeExtras(bytes: Uint8Array): t.Extras {
 
 function packExtras(value: t.Extras): fb.ExtrasT {
   const object = new fb.ExtrasT();
-  object.wide = packExtrasWide(value.wide);
+  object.wide = packExtrasWide(value.wide, "veh.common.Extras.wide");
   object.blob = Array.from(value.blob);
   object.readings = value.readings.map((element) => packSensorReading(element));
   object.gears = value.gears.map((element) => BigInt(element));
@@ -551,6 +552,30 @@ function packInline(value: t.Inline): fb.InlineT {
 function unpackInline(object: fb.InlineT): t.Inline {
   return {
     text: object.text as string,
+  };
+}
+
+/** Encodes a `veh.common.Pairs` payload. */
+export function encodePairs(value: t.Pairs): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packPairs(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Pairs` payload the codec has verified. */
+export function decodePairs(bytes: Uint8Array): t.Pairs {
+  return unpackPairs(fb.Pairs.getRootAsPairs(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packPairs(value: t.Pairs): fb.PairsT {
+  const object = new fb.PairsT();
+  object.pair = packPairsPair(value.pair, "veh.common.Pairs.pair");
+  object.list = value.list.map((element) => packPairsListElement(element, "veh.common.Pairs.list[]"));
+  return object;
+}
+function unpackPairs(object: fb.PairsT): t.Pairs {
+  return {
+    pair: object.pair === null ? absent("veh.common.Pairs", "pair") : unpackPairsPair(object.pair),
+    list: object.list.map((element) => unpackPairsListElement(element)),
   };
 }
 
@@ -618,7 +643,7 @@ function unpackPick(object: fb.PickT): t.Pick {
   }
 }
 
-function packSensorBoundsRange(value: { min: t.Speed; max: t.Speed }): fb.SensorBoundsRangeT {
+function packSensorBoundsRange(value: { min: t.Speed; max: t.Speed }, _at: string): fb.SensorBoundsRangeT {
   const tuple = new fb.SensorBoundsRangeT();
   tuple.field1 = value.min;
   tuple.field2 = value.max;
@@ -628,7 +653,7 @@ function unpackSensorBoundsRange(object: fb.SensorBoundsRangeT): { min: t.Speed;
   return { min: t.makeSpeedUnchecked(object.field1), max: t.makeSpeedUnchecked(object.field2) };
 }
 
-function packBoundsSummaryRange(value: { min: t.Speed; max: t.Speed }): fb.BoundsSummaryRangeT {
+function packBoundsSummaryRange(value: { min: t.Speed; max: t.Speed }, _at: string): fb.BoundsSummaryRangeT {
   const tuple = new fb.BoundsSummaryRangeT();
   tuple.field1 = value.min;
   tuple.field2 = value.max;
@@ -638,7 +663,7 @@ function unpackBoundsSummaryRange(object: fb.BoundsSummaryRangeT): { min: t.Spee
   return { min: t.makeSpeedUnchecked(object.field1), max: t.makeSpeedUnchecked(object.field2) };
 }
 
-function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.ExtrasWideT {
+function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }, _at: string): fb.ExtrasWideT {
   const tuple = new fb.ExtrasWideT();
   tuple.field1 = value.big;
   tuple.field2 = [...value.sparse];
@@ -648,10 +673,39 @@ function unpackExtrasWide(object: fb.ExtrasWideT): { big: bigint; sparse: readon
   return { big: object.field1, sparse: object.field2.map((element) => t.makeSpeedUnchecked(element)) };
 }
 
+function packPairsPair(value: { text: string; count: t.Speed }, at: string): fb.PairsPairT {
+  const tuple = new fb.PairsPairT();
+  tuple.field1 = checkWellFormed(value.text, at + ".text");
+  tuple.field2 = value.count;
+  return tuple;
+}
+function unpackPairsPair(object: fb.PairsPairT): { text: string; count: t.Speed } {
+  return { text: object.field1 as string, count: t.makeSpeedUnchecked(object.field2) };
+}
+
+function packPairsListElement(value: { text: string; deep: { word: string } }, at: string): fb.PairsListElementT {
+  const tuple = new fb.PairsListElementT();
+  tuple.field1 = checkWellFormed(value.text, at + ".text");
+  tuple.field2 = packPairsListElementDeep(value.deep, at + ".deep");
+  return tuple;
+}
+function unpackPairsListElement(object: fb.PairsListElementT): { text: string; deep: { word: string } } {
+  return { text: object.field1 as string, deep: object.field2 === null ? absent("veh.common.PairsListElement", "deep") : unpackPairsListElementDeep(object.field2) };
+}
+
+function packPairsListElementDeep(value: { word: string }, at: string): fb.PairsListElementField2T {
+  const tuple = new fb.PairsListElementField2T();
+  tuple.field1 = checkWellFormed(value.word, at + ".word");
+  return tuple;
+}
+function unpackPairsListElementDeep(object: fb.PairsListElementField2T): { word: string } {
+  return { word: object.field1 as string };
+}
+
 /** Encodes a `veh.common.SensorsSetLimitParams` payload. */
 export function encodeSensorsSetLimitParams(value: SensorsSetLimitParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packSensorsSetLimitParams(value).pack(builder));
+  builder.finish(packSensorsSetLimitParams(value, "veh.common.SensorsSetLimitParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.common.SensorsSetLimitParams` payload the codec has verified. */
@@ -659,7 +713,7 @@ export function decodeSensorsSetLimitParams(bytes: Uint8Array): SensorsSetLimitP
   return unpackSensorsSetLimitParams(fb.SensorsSetLimitParams.getRootAsSensorsSetLimitParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packSensorsSetLimitParams(value: SensorsSetLimitParams): fb.SensorsSetLimitParamsT {
+function packSensorsSetLimitParams(value: SensorsSetLimitParams, _at: string): fb.SensorsSetLimitParamsT {
   const tuple = new fb.SensorsSetLimitParamsT();
   tuple.field1 = value.limit;
   tuple.field2 = value.actual;
@@ -672,7 +726,7 @@ function unpackSensorsSetLimitParams(object: fb.SensorsSetLimitParamsT): Sensors
 /** Encodes a `veh.common.SensorsSpanParams` payload. */
 export function encodeSensorsSpanParams(value: SensorsSpanParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packSensorsSpanParams(value).pack(builder));
+  builder.finish(packSensorsSpanParams(value, "veh.common.SensorsSpanParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.common.SensorsSpanParams` payload the codec has verified. */
@@ -680,7 +734,7 @@ export function decodeSensorsSpanParams(bytes: Uint8Array): SensorsSpanParams {
   return unpackSensorsSpanParams(fb.SensorsSpanParams.getRootAsSensorsSpanParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packSensorsSpanParams(_value: SensorsSpanParams): fb.SensorsSpanParamsT {
+function packSensorsSpanParams(_value: SensorsSpanParams, _at: string): fb.SensorsSpanParamsT {
   const tuple = new fb.SensorsSpanParamsT();
   return tuple;
 }
@@ -691,7 +745,7 @@ function unpackSensorsSpanParams(_object: fb.SensorsSpanParamsT): SensorsSpanPar
 /** Encodes a `veh.common.SensorsSpanReply` payload. */
 export function encodeSensorsSpanReply(value: SensorsSpanReply): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packSensorsSpanReply(value).pack(builder));
+  builder.finish(packSensorsSpanReply(value, "veh.common.SensorsSpanReply").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.common.SensorsSpanReply` payload the codec has verified. */
@@ -699,7 +753,7 @@ export function decodeSensorsSpanReply(bytes: Uint8Array): SensorsSpanReply {
   return unpackSensorsSpanReply(fb.SensorsSpanReply.getRootAsSensorsSpanReply(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packSensorsSpanReply(value: SensorsSpanReply): fb.SensorsSpanReplyT {
+function packSensorsSpanReply(value: SensorsSpanReply, _at: string): fb.SensorsSpanReplyT {
   const tuple = new fb.SensorsSpanReplyT();
   tuple.field1 = value.min;
   tuple.field2 = value.max;

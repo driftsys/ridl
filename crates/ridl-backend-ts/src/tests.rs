@@ -2734,10 +2734,21 @@ fn numeric_constructors() {
             decl.visibility = v2::Visibility::Internal as i32;
         }
         let source = generate(&package("test.ctor", vec![decl])).unwrap().source;
-        assert!(source.contains("function makeValue(value:"), "{source}");
+        // An `internal` scalar has no constructor, so it needs no import either.
+        assert_eq!(
+            source.contains("function makeValue(value:"),
+            !internal,
+            "{source}"
+        );
         let checked = prim == v2::PrimitiveType::Integer || min.is_some() || max.is_some();
-        assert_eq!(source.contains("import { ConstraintError }"), checked);
-        assert_eq!(source.contains("function makeValueUnchecked"), checked);
+        assert_eq!(
+            source.contains("import { ConstraintError }"),
+            checked && !internal
+        );
+        assert_eq!(
+            source.contains("function makeValueUnchecked"),
+            checked && !internal
+        );
         if internal {
             assert!(!source.contains("export "));
         }
@@ -2913,7 +2924,10 @@ fn an_internal_string_constructor_is_not_exported() {
     decl.visibility = v2::Visibility::Internal as i32;
     let source = ts_for(vec![decl]);
     assert!(!source.contains("export"), "{source}");
-    assert!(source.contains("function makeHidden("), "{source}");
+    // A module-local constructor that nothing calls fails `noUnusedLocals`, and
+    // the codec module cannot import it, so an `internal` scalar has none.
+    assert!(!source.contains("make"), "{source}");
+    assert!(!source.contains("ridl-runtime"), "{source}");
     insta::assert_snapshot!(source);
 }
 

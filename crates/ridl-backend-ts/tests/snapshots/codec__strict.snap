@@ -210,7 +210,7 @@ function unpackPick(object: fb.PickT): t.Pick {
 /** Encodes a `strict.demo.ControlSelectParams` payload. */
 export function encodeControlSelectParams(value: ControlSelectParams): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(packControlSelectParams(value).pack(builder));
+  builder.finish(packControlSelectParams(value, "strict.demo.ControlSelectParams").pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `strict.demo.ControlSelectParams` payload the codec has verified. */
@@ -218,7 +218,7 @@ export function decodeControlSelectParams(bytes: Uint8Array): ControlSelectParam
   return unpackControlSelectParams(fb.ControlSelectParams.getRootAsControlSelectParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packControlSelectParams(value: ControlSelectParams): fb.ControlSelectParamsT {
+function packControlSelectParams(value: ControlSelectParams, _at: string): fb.ControlSelectParamsT {
   const tuple = new fb.ControlSelectParamsT();
   tuple.field1 = BigInt(value.status);
   tuple.field2 = BigInt(value.mode);
