@@ -130,6 +130,7 @@ try {
   assertEquals(names.code, 0, names.stderr);
   // The names are written out, so a change to the public API is a change here.
   assertEquals(JSON.parse(names.stdout), [
+    "CallError",
     "CatalogMismatch",
     "CodecError",
     "ConstraintError",

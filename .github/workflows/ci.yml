@@ -63,8 +63,8 @@ jobs:
   # files under docs/specification/ directly, and a trigger list missed three of
   # those on its first draft.
   #
-  # Six jobs are path-filtered, and `book` is not:
-  #   - `rust`, `freeze`, `demo`, `wasm` and `typescript` skip when every changed file is
+  # Seven jobs are path-filtered, and `book` is not:
+  #   - `rust`, `test`, `freeze`, `demo`, `wasm` and `typescript` skip when every changed file is
   #     documentation or editor tooling that no Rust test or recipe reads.
   #     docs/book/ and docs/specification/ are not on the list:
   #     book_examples.rs compiles the docs/book/ fences, and Rust code reads
@@ -212,11 +212,6 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
-      # `just test` runs the semver tests of xtask/tests/freeze.rs, which
-      # call cargo-semver-checks. It is built with `cargo install` at the
-      # version `bootstrap` names, not installed with a third-party action.
-      - name: install cargo-semver-checks
-        run: cargo install cargo-semver-checks --locked --version 0.51.0
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
@@ -227,26 +222,75 @@ jobs:
       - run: just install-check
       - run: just fmt-check
       - run: just compile
-      # One test of `just test` (crates/ridlc/tests/wasm_module.rs) runs the
-      # generated wasm module in Node. ubuntu-latest has Node on PATH; the
+      - run: just lint
+
+  # `just test` in four parts, one per matrix entry, so that the parts run at
+  # the same time on separate runners. Each entry runs only the step whose `if:`
+  # names it: one step per recipe, rather than `run: just ${{ matrix.part }}`,
+  # because `just gate-parity` looks for each member's own `run: just <member>`
+  # line. Each tool install runs only in the entry whose tests need it.
+  test:
+    name: test (${{ matrix.part }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [backend, cli, rest, features]
+    steps:
+      - uses: actions/checkout@v7
+      - name: install the pinned toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # The entries build different packages. Without a key of their own
+          # they would share one cache key, and only one entry's save would
+          # be kept.
+          key: ${{ matrix.part }}
+      - name: install just
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/just" --version
+      # `just test-rest` runs the semver tests of xtask/tests/freeze.rs, which
+      # call cargo-semver-checks. It is built with `cargo install` at the
+      # version `bootstrap` names, not installed with a third-party action.
+      - name: install cargo-semver-checks
+        if: matrix.part == 'rest'
+        run: cargo install cargo-semver-checks --locked --version 0.51.0
+      # One test of `just test-cli` (crates/ridlc/tests/wasm_module.rs) runs
+      # the generated wasm module in Node. ubuntu-latest has Node on PATH; the
       # step pins the major version the test is run with.
       - uses: actions/setup-node@v7
+        if: matrix.part == 'cli'
         with:
           node-version: 22
-      # `crates/ridl-backend-podbuf/tests/c_compile.rs` compiles the generated C
-      # header for three targets with `clang`. `RIDL_REQUIRE_CC=1` makes a
-      # missing compiler a failure instead of a skip.
+      # `crates/ridl-backend-podbuf/tests/c_compile.rs`, in `just test-rest`,
+      # compiles the generated C header for three targets with `clang`.
+      # `RIDL_REQUIRE_CC=1` makes a missing compiler a failure instead of a
+      # skip.
       - name: install clang
+        if: matrix.part == 'rest'
         run: |
           sudo apt-get update
           sudo apt-get install -y clang
-      - run: just test
+      - if: matrix.part == 'backend'
+        run: just test-backend
+      - if: matrix.part == 'cli'
+        run: just test-cli
+      - if: matrix.part == 'rest'
+        run: just test-rest
         env:
           RIDL_REQUIRE_CC: "1"
-      - run: just lint
+      - if: matrix.part == 'features'
+        run: just test-features
 
-  # Split out of `rust` so that it runs at the same time as `just test`, which
-  # is the longest step of that job.
+  # Split out of `rust` so that it runs at the same time as the other Rust
+  # jobs.
   freeze:
     name: freeze
     needs: changes
@@ -277,7 +321,7 @@ jobs:
 
   # The demo: `ridl build` writes a crate from examples/cabin, and cargo builds
   # a program against it and runs it. Split out of `rust` so that it runs at
-  # the same time as `just test`.
+  # the same time as the test jobs.
   demo:
     name: demo
     needs: changes
@@ -531,6 +575,7 @@ jobs:
       markdown,
       book,
       rust,
+      test,
       freeze,
       demo,
       wasm,

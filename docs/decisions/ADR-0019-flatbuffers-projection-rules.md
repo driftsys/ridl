@@ -195,6 +195,10 @@ import pin, from driftsys/ridl#1211.** A remote declaration reached by a
 surviving old consumer use is compared at both pins; a changed FlatBuffers
 integer is reported at the consumer path.
 
+**Amended 2026-11-09 — decision 10, from driftsys/ridl#1228.** The decision
+points to [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 for the
+catalog-history remote evidence rule; the remote-width rule itself is unchanged.
+
 **Amended 2026-11-11 — fixed int32 enums, owner decision B on
 driftsys/ridl#1020.** Every enum uses `int`, not a value-derived width. TYPL-225
 limits declared values to int32 even though the IR stores them as int64.

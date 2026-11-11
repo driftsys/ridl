@@ -658,11 +658,8 @@ pub fn diff_refs_with_contexts(
 }
 
 /// Compares complete scopes while retaining independent missing-evidence issues.
-/// Catalog history treats Missing issues as cannot judge under podbuf,
-/// FlatBuffers or proto3, and also treats Unlayable and KindChanged issues as
-/// cannot judge under podbuf. A unit that owns or reaches the issue's consumer
-/// declaration requires recovery; callers may use the report's proved verdicts
-/// for unaffected units.
+/// Each issue names its consumer path and the remote declaration; callers decide
+/// what an issue means for the units that own or reach it (ADR-0031 decision 13).
 /// Remote FlatBuffers and proto3 widths are reported once per consumer path
 /// and remote declaration reached by a surviving old consumer use, at the
 /// consumer path, with `<remote declaration>: <integer>` values. Only the
