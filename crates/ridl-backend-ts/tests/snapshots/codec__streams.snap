@@ -1637,25 +1637,31 @@ export function Feed_uploadLabel(session: $rt.StreamSession, label: t.Text, opts
  * Streamed replies and an ordinary query.
  */
 export class FeedClient {
-  readonly #port: $rt.Caller;
+  readonly #port: $rt.Caller & $rt.SignalReader;
   readonly #codec: $rt.Codec;
-  readonly #ids: { readonly latest: { readonly request: number; readonly reply: number } };
+  readonly #ids: { readonly latest: { readonly request: number; readonly reply: number }; readonly newest: { readonly payload: number } };
 
-  private constructor(port: $rt.Caller, codec: $rt.Codec) {
+  private constructor(port: $rt.Caller & $rt.SignalReader, codec: $rt.Codec) {
     this.#port = port;
     this.#codec = codec;
     this.#ids = {
       latest: { request: codec.typeId(Feed.latest.request.type), reply: codec.typeId(Feed.latest.reply.type) },
+      newest: { payload: codec.typeId(Feed.newest.payload.type) },
     };
   }
 
   /**
-   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the
-   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each signal with the port. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
    */
-  static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): FeedClient {
+  static bind<P extends $rt.Caller & $rt.SignalReader>(port: P, codec: $rt.Codec): FeedClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
-    return new FeedClient(port, codec);
+    const client = new FeedClient(port, codec);
+    {
+      const entry = signalCheck(codec, Feed.newest, client.#ids.newest.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    return client;
   }
 
   /**
@@ -1671,6 +1677,36 @@ export class FeedClient {
     const args = $rt.encodeRequest(this.#codec, Feed.latest.request, this.#ids.latest.request, {});
     const raw = await this.#port.query(Feed.latest.iface, Feed.latest.ord, args, { ...opts, bound: opts?.bound ?? 50 });
     return $rt.decodeReply(this.#codec, Feed.latest.reply, this.#ids.latest.reply, raw);
+  }
+
+  /** Subscribes to signal `newest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
+  subscribeNewest(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Feed.newest.iface, Feed.newest.ord, opts);
+  }
+
+  /**
+   * Reports the latest numbered element, so that this package has a signal and a stream.
+   *
+   * @remarks
+   * Rules:
+   * - period 1000000 us
+   *
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   */
+  newest(): $rt.Sample<t.Chunk> {
+    const raw = this.#port.sample(Feed.newest.iface, Feed.newest.ord);
+    return raw === undefined ? $rt.initSample(t.initChunk) : $rt.decodeSample(this.#codec, Feed.newest.payload, this.#ids.newest.payload, raw, t.initChunk);
+  }
+
+  /** Waits for the next publish of signal `newest`. `opts.bound` and `opts.signal` limit the wait. */
+  async readNewest(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.Chunk>> {
+    const raw = await this.#port.read(Feed.newest.iface, Feed.newest.ord, opts);
+    return $rt.decodeSample(this.#codec, Feed.newest.payload, this.#ids.newest.payload, raw, t.initChunk);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `newest` and returns the function that removes it. */
+  watchNewest(listener: (sample: $rt.Sample<t.Chunk>) => void): () => void {
+    return this.#port.watch(Feed.newest.iface, Feed.newest.ord, (raw) => listener($rt.decodeSample(this.#codec, Feed.newest.payload, this.#ids.newest.payload, raw, t.initChunk)));
   }
 }
 
@@ -1942,8 +1978,7 @@ export function streamEntry1_fetch(session: $rt.StreamSession, streamEntry13: t.
   return raw;
 }
 
-function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {
-  const typeId = codec.typeId(entry.payload.type);
+function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }, typeId: number = codec.typeId(entry.payload.type)): $rt.SignalCheckEntry {
   return {
     iface: entry.iface,
     ord: entry.ord,

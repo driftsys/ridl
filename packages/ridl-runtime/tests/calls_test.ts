@@ -10,10 +10,19 @@ import {
   checkCatalog,
   CodecError,
   ConstraintError,
+  decodeOccurrence,
   decodeReply,
+  decodeSample,
   encodeRequest,
+  initSample,
 } from "../mod.ts";
-import type { Codec, PayloadCodec, VerifyResult } from "../mod.ts";
+import type {
+  Codec,
+  PayloadCodec,
+  RawOccurrence,
+  RawSample,
+  VerifyResult,
+} from "../mod.ts";
 
 const hash = Uint8Array.from({ length: 32 }, (_, i) => i);
 const other = Uint8Array.from({ length: 32 }, (_, i) => 255 - i);
@@ -254,5 +263,139 @@ Deno.test("check_catalog_refuses_a_longer_hash_with_a_matching_prefix", () => {
         codecWith({ ok: true }, longer),
       ),
     CatalogMismatch,
+  );
+});
+
+const envelope = { stamp: 5n, seq: 6n };
+const rawSample = (overrides: Partial<RawSample>): RawSample => ({
+  provenance: "live",
+  envelope,
+  payload: null,
+  lastGood: null,
+  ...overrides,
+});
+/** Fails verification of the bytes that start with 9, and of no others. */
+const rejectNine: Codec = {
+  catalogHash: hash,
+  typeId: () => 0,
+  verify: (_, bytes) =>
+    bytes[0] === 9 ? { ok: false, kind: "rule", code: 4, rule: "range" } : {
+      ok: true,
+    },
+};
+
+Deno.test("init_sample_holds_the_init_value_under_a_zero_envelope", () => {
+  assertEquals(initSample(() => 7), {
+    provenance: "init",
+    envelope: { stamp: 0n, seq: 0n },
+    value: 7,
+  });
+});
+
+Deno.test("decode_sample_decodes_a_live_payload", () => {
+  const sample = decodeSample(
+    rejectNine,
+    bytesCodec(),
+    0,
+    rawSample({ payload: Uint8Array.of(3) }),
+    () => 0,
+  );
+  assertEquals(sample, { provenance: "live", envelope, value: 3 });
+});
+
+Deno.test("decode_sample_falls_back_to_the_last_good_value_then_to_init", () => {
+  const invalid = (lastGood: Uint8Array | null) =>
+    decodeSample(
+      rejectNine,
+      bytesCodec(),
+      0,
+      rawSample({ provenance: "invalid", lastGood, detected: "corrupt" }),
+      () => 100,
+    );
+  assertEquals(invalid(Uint8Array.of(4)), {
+    provenance: "invalid",
+    envelope,
+    value: 4,
+    detected: "corrupt",
+  });
+  assertEquals(invalid(null).value, 100);
+  // A last good payload that fails verification is not trusted.
+  assertEquals(invalid(Uint8Array.of(9)).value, 100);
+  const init = decodeSample(
+    rejectNine,
+    bytesCodec(),
+    0,
+    rawSample({ provenance: "init", lastGood: Uint8Array.of(4) }),
+    () => 100,
+  );
+  assertEquals(init, { provenance: "init", envelope, value: 4 });
+});
+
+Deno.test("decode_sample_marks_a_live_payload_that_fails_verification_invalid", () => {
+  const sample = decodeSample(
+    rejectNine,
+    bytesCodec(),
+    0,
+    rawSample({ payload: Uint8Array.of(9), lastGood: Uint8Array.of(2) }),
+    () => 100,
+  );
+  assertEquals(sample, {
+    provenance: "invalid",
+    envelope,
+    value: 2,
+    detected: { rule: "range" },
+  });
+});
+
+Deno.test("decode_sample_rejects_an_unknown_rule_text", () => {
+  const unknown: Codec = {
+    ...rejectNine,
+    verify: () => ({ ok: false, kind: "rule", code: 9, rule: "mystery" }),
+  };
+  assertThrows(
+    () =>
+      decodeSample(
+        unknown,
+        bytesCodec(),
+        0,
+        rawSample({ payload: Uint8Array.of(1) }),
+        () => 0,
+      ),
+    CodecError,
+  );
+});
+
+Deno.test("decode_occurrence_decodes_and_marks_refusals", () => {
+  const raw = (overrides: Partial<RawOccurrence>): RawOccurrence => ({
+    iface: 1,
+    ord: 2,
+    envelope,
+    payload: Uint8Array.of(3),
+    ...overrides,
+  });
+  assertEquals(decodeOccurrence(rejectNine, bytesCodec(), 0, raw({})), {
+    iface: 1,
+    ord: 2,
+    envelope,
+    value: 3,
+  });
+  const refused = { iface: 1, ord: 2, envelope, detected: "corrupt" as const };
+  assertEquals(
+    decodeOccurrence(
+      rejectNine,
+      bytesCodec(),
+      0,
+      raw({ payload: new Uint8Array(), detected: "corrupt" }),
+    ),
+    refused,
+  );
+  assertEquals(
+    decodeOccurrence(
+      rejectNine,
+      bytesCodec(),
+      0,
+      raw({ payload: Uint8Array.of(9) }),
+    ),
+    refused,
   );
 });

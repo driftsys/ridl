@@ -138,23 +138,35 @@ string (D-11), and satisfy `MemberRef` structurally. Stream functions also use
 the runtime types, errors and adapters described in D-17; they import nothing
 from the WebSocket package. A module with a signal also uses the runtime's
 `$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. A
-module writes `<Interface>Client` for an interface that has at least one call
-method with a codec and a finite bound, and the class uses `$rt.Caller`,
-`$rt.CallOptions`, `$rt.Codec` and the values `$rt.checkCatalog`,
-`$rt.encodeRequest` and `$rt.decodeReply`; a client class name that another
-declaration of the file takes is refused like any other collision. The names the
-file declares are checked before anything is written, and a second declaration
-of one is refused with an error that names both: an interface or an induced
-tuple named after a reserved name of the file (`CATALOG_NAME`, `CATALOG_HASH`,
-`PAYLOAD_TYPES`, `RULES`, `RuleError` when the module reaches an enum or an enum
-set, `signalChecks` and `signalCheck` when the package has a signal, an import
-alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two enum sets
-of other packages whose `pack_<alias>_<Name>` or `unpack_<alias>_<Name>`
-functions spell the same (`a.b` / `c_d` and `a.b.c` / `d`), two foreign payload
-types whose `codec<Package><Name>` constants spell the same (`a.b` / `C` and `a`
-/ `BC`), and a local payload type whose `codec<Name>` spells a foreign one. An
-interaction named `iface` is refused because it collides with the interface
-table metadata key of that name; the error names both sources.
+module writes `<Interface>Client` for an interface that has at least one call,
+signal or event method with a codec and a finite bound, and the class uses the
+ports its members need (`$rt.Caller`, `$rt.SignalReader`, `$rt.EventSource`),
+`$rt.CallOptions`, `$rt.WaitOptions`, `$rt.Sample`, `$rt.Occurrence`,
+`$rt.Codec` and the values `$rt.checkCatalog`, `$rt.encodeRequest`,
+`$rt.decodeReply`, `$rt.decodeSample`, `$rt.decodeOccurrence` and
+`$rt.initSample`. It also writes `<Interface>Event` for an interface with an
+event. A signal gets methods only when `<base>.ts` exports the `init<Name>`
+function of its payload type, which the domain emitter decides, so the sample of
+a signal with no value yet can hold an init value. Three cases get none, and the
+class says why in a comment: the signal has a `= value` init override, its
+payload type has no init function, or its payload type is declared in another
+package. Such a signal is reachable only through `signalChecks` and the raw port
+(tracked in driftsys/ridl#1371), and `bind` registers the checks only of the
+signals that have methods. A client class name, an event union name or a method
+name that another declaration or member takes is refused like any other
+collision. The names the file declares are checked before anything is written,
+and a second declaration of one is refused with an error that names both: an
+interface or an induced tuple named after a reserved name of the file
+(`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `RuleError` when the
+module reaches an enum or an enum set, `signalChecks` and `signalCheck` when the
+package has a signal, an import alias `flatbuffers`, `t`, `fb`, `<package>` or
+`<package>_codec`), two enum sets of other packages whose `pack_<alias>_<Name>`
+or `unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
+`d`), two foreign payload types whose `codec<Package><Name>` constants spell the
+same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
+spells a foreign one. An interaction named `iface` is refused because it
+collides with the interface table metadata key of that name; the error names
+both sources.
 
 ## Stream functions
 
