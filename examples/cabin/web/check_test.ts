@@ -5,6 +5,7 @@
 // veh_cabin.wasm.
 
 import assert from "node:assert/strict";
+import { Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   type Codec,
   ConstraintError,
@@ -65,6 +66,7 @@ import {
   selfTest,
   sessionOptions,
   STEP_BOUND_MS,
+  subscribeTemperature,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
@@ -250,6 +252,24 @@ Deno.test("sessionOptions gives the bound and the signal checks to the session",
   );
   assert.ok(temperature !== undefined);
   assert.deepEqual(temperature.check(encode(86)), { rule: "range" });
+});
+
+Deno.test("subscribeTemperature subscribes to Cabin.temperature with the bound of each step", async () => {
+  const calls: { target: unknown; opts: unknown }[] = [];
+  await subscribeTemperature({
+    subscribe: (target, opts) => {
+      calls.push({ target, opts });
+      return Promise.resolve();
+    },
+  });
+  assert.deepEqual(calls, [{
+    target: {
+      kind: Kind.Signal,
+      iface: Cabin.temperature.iface,
+      ord: Cabin.temperature.ord,
+    },
+    opts: { bound: STEP_BOUND_MS },
+  }]);
 });
 
 Deno.test("the codec rejects a truncated payload as malformed", () => {
