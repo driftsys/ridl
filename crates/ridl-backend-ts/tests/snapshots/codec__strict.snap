@@ -234,3 +234,45 @@ export const Control = {
   iface: 1,
   select: { iface: 1, ord: 1, kind: "command", request: codecControlSelectParams },
 } as const;
+
+/**
+ * An interface whose command takes strict enums as parameters, so the
+ * converter of its request tuple holds a strict enum in a tuple position.
+ */
+export class ControlClient {
+  readonly #port: $rt.Caller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly select: { readonly request: number } };
+
+  private constructor(port: $rt.Caller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      select: { request: codec.typeId(Control.select.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the
+   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): ControlClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    return new ControlClient(port, codec);
+  }
+
+  /**
+   * Selects a status and a mode.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. `opts.signal` aborts the call; a provider that already received the command may still run it.
+   * @returns Resolves when the provider accepted the command.
+   */
+  async select(status: t.DtcStatus, mode: t.Mode, opts?: Partial<$rt.CallOptions>): Promise<void> {
+    const args = $rt.encodeRequest(this.#codec, Control.select.request, this.#ids.select.request, { status: status, mode: mode });
+    await this.#port.command(Control.select.iface, Control.select.ord, args, { ...opts, bound: opts?.bound ?? 50 });
+  }
+}
