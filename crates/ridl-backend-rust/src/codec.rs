@@ -295,7 +295,8 @@ enum Repr {
     /// variant whose value is 0, which is what an absent field reads as, when
     /// the enum declares one. An `open` one converts through `From<i64>`,
     /// which is total: `verify` checks no value, and an absent field reads
-    /// as `From(0)`.
+    /// as `From(0)`. FlatBuffers encode refuses an open value outside int32
+    /// before narrowing the domain integer.
     Enum {
         name: String,
         first: String,
@@ -347,8 +348,9 @@ impl Scalar {
     /// primitive is fixed int32 for enums and the width inferred from the
     /// highest declared bit for enum sets.
     /// [`Scalar::raw`] narrows to it with `as`, which would drop the bits
-    /// above it in silence; an open enum set keeps every bit, so a value
-    /// outside the width can reach the encoder through `From<i64>` or from an
+    /// above it in silence; an open enum keeps every integer and an open enum
+    /// set keeps every bit, so a value outside the width can reach the encoder
+    /// through `From<i64>` or from an
     /// encoding of a wider scalar. Empty for every other scalar, and for a
     /// 64-bit primitive, which holds every `i64`.
     fn encode_check(&self) -> TokenStream {

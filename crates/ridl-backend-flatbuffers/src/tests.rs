@@ -2451,3 +2451,28 @@ fn the_projection_enum_integers_are_what_the_schema_emits() {
         );
     }
 }
+
+#[test]
+fn enum_int32_boundaries_are_accepted() {
+    let package = enum_package(
+        "Mode",
+        vec![
+            ("Minimum", i64::from(i32::MIN)),
+            ("Maximum", i64::from(i32::MAX)),
+        ],
+    );
+    let generated = generate(&package).expect("int32 boundaries are valid");
+    assert!(generated.fbs_source.contains("Minimum = -2147483648"));
+    assert!(generated.fbs_source.contains("Maximum = 2147483647"));
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn enum_values_outside_int32_are_refused() {
+    for value in [i64::from(i32::MIN) - 1, i64::from(i32::MAX) + 1] {
+        let package = enum_package("Mode", vec![("Outside", value)]);
+        let error = generate(&package).expect_err("a live value must fit int32");
+        assert!(error.message.contains("int32"), "{error:?}");
+        assert!(error.message.contains(&value.to_string()), "{error:?}");
+    }
+}

@@ -156,3 +156,7 @@ enum payloads are incompatible. Regenerate schemas and codecs and upgrade
 communicating peers together, or use a separately versioned interface during
 migration. TypeScript enum wrappers now use numbers without bigint conversion.
 Enum sets keep their existing mapping.
+
+The plugin-visible `FbEnum.width_bytes` changes from 8 to 4. The `wire` and
+`generated-crate` freeze rows are removed until the follow-up restores them
+after this change merges.

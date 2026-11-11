@@ -872,14 +872,3 @@ fn int_width_bytes(width: i32) -> Option<u64> {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod enum_width_tests {
-    #[test]
-    fn enums_have_fixed_int32_wire_width() {
-        assert_eq!(
-            super::enum_integer(&crate::v2::EnumDef::default()),
-            crate::v2::IntWidth::I32
-        );
-    }
-}

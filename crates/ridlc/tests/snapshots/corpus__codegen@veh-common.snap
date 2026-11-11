@@ -2055,12 +2055,12 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       {
         "declaration": 10,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 11,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 12,
@@ -2455,7 +2455,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                   "index": 10,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -2480,7 +2480,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                   "index": 11,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,

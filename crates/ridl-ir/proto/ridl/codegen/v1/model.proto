@@ -1124,7 +1124,7 @@ message FbWire {
 // An enum at one slot: the enum it names, and the width it is stored at.
 message FbEnum {
   TypeRef type = 1;
-  // Always 8: every typl enum is emitted at one underlying width, `long`, so
+  // Always 4: every typl enum is emitted at one underlying width, `int`, so
   // that a later value can never widen it under an otherwise compatible edit.
   uint32 width_bytes = 2;
 }

@@ -2357,14 +2357,16 @@ pub(crate) fn __ridl_fb_encode_Mode(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2376,13 +2378,15 @@ pub(crate) fn __ridl_fb_verify_Mode(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Mode as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Mode as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2392,11 +2396,15 @@ pub(crate) fn __ridl_fb_decode_Mode(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Mode {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Mode as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(Mode::Idle)
         }
         _ => Mode::Idle,
@@ -2404,10 +2412,10 @@ pub(crate) fn __ridl_fb_decode_Mode(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Mode {
-    /// The largest FlatBuffers buffer any legal `Mode` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `Mode` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = ModeFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2595,14 +2603,16 @@ pub(crate) fn __ridl_fb_encode_Failure(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2614,13 +2624,15 @@ pub(crate) fn __ridl_fb_verify_Failure(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Failure as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Failure as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2630,11 +2642,15 @@ pub(crate) fn __ridl_fb_decode_Failure(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Failure {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Failure as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(Failure::Busy)
         }
         _ => Failure::Busy,
@@ -2642,10 +2658,10 @@ pub(crate) fn __ridl_fb_decode_Failure(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Failure {
-    /// The largest FlatBuffers buffer any legal `Failure` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `Failure` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = FailureFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2710,14 +2726,28 @@ pub(crate) fn __ridl_fb_encode_Lamp(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    if ::core::primitive::i32::try_from(
+                            ::core::primitive::i64::from(__s),
+                        )
+                        .is_err()
+                    {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                                type_name: ::core::option::Option::Some("Lamp"),
+                                rule: ::ridl_rt::payload::Rule::Range,
+                            }),
+                        );
+                    }
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2729,11 +2759,11 @@ pub(crate) fn __ridl_fb_verify_Lamp(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     ::core::result::Result::Ok(())
@@ -2743,21 +2773,25 @@ pub(crate) fn __ridl_fb_decode_Lamp(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Lamp {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Lamp as ::core::convert::From<
                 ::core::primitive::i64,
-            >>::from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                ),
+            )
         }
         _ => <Lamp as ::core::convert::From<::core::primitive::i64>>::from(0i64),
     }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Lamp {
-    /// The largest FlatBuffers buffer any legal `Lamp` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `Lamp` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = LampFbView<'a>;
     fn encode<'o>(
         &self,
@@ -3516,12 +3550,15 @@ impl<'a> PanelFbView<'a> {
     }
     /// Reads `Panel`'s `mode` field in place.
     pub fn mode(&self) -> Mode {
-        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 9u16, 8usize) {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 9u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Mode as ::core::convert::TryFrom<
                     ::core::primitive::i64,
                 >>::try_from(
-                        ::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64),
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(self.buf, __p)
+                                .unwrap_or(0i32),
+                        ),
                     )
                     .unwrap_or(Mode::Idle)
             }
@@ -3831,16 +3868,18 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 9u16,
-        offset: 48u16,
+        offset: 44u16,
         value: {
             let __s = value.mode;
-            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+            ::ridl_rt::flatbuffers::Field::I32(
+                ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+            )
         },
     };
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 10u16,
-        offset: 56u16,
+        offset: 48u16,
         value: {
             let __s = value.modes;
             ::ridl_rt::flatbuffers::Field::U8(
@@ -3851,7 +3890,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 11u16,
-        offset: 60u16,
+        offset: 52u16,
         value: ::ridl_rt::flatbuffers::Field::Offset(
             __ridl_fb_encode_Inner(&value.inner, builder)?,
         ),
@@ -3859,7 +3898,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 12u16,
-        offset: 64u16,
+        offset: 56u16,
         value: ::ridl_rt::flatbuffers::Field::Offset(
             __ridl_fb_encode_PanelSpan(&value.span, builder)?,
         ),
@@ -3867,7 +3906,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 13u16,
-        offset: 68u16,
+        offset: 60u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.fixed4;
             let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
@@ -3884,7 +3923,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 14u16,
-        offset: 72u16,
+        offset: 64u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.levels;
             if __c.len() > 4usize {
@@ -3909,7 +3948,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 15u16,
-        offset: 76u16,
+        offset: 68u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.texts;
             if __c.len() > 2usize {
@@ -3944,7 +3983,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 16u16,
-        offset: 80u16,
+        offset: 72u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.by_tag;
             if __c.len() > 3usize {
@@ -3997,7 +4036,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 17u16,
-        offset: 84u16,
+        offset: 76u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.nested;
             if __c.len() > 2usize {
@@ -4021,7 +4060,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
     if let ::core::option::Option::Some(__v) = &value.legacy {
         __fields[__n] = ::ridl_rt::flatbuffers::TableField {
             slot: 18u16,
-            offset: 88u16,
+            offset: 80u16,
             value: {
                 let __s = *__v;
                 ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
@@ -4029,7 +4068,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
         };
         __n += 1;
     }
-    builder.push_table(89usize, 8usize, 19u16, &__fields[..__n])
+    builder.push_table(81usize, 8usize, 19u16, &__fields[..__n])
 }
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Panel(
@@ -4160,13 +4199,15 @@ pub(crate) fn __ridl_fb_verify_Panel(
             buf,
             table,
             9u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Mode as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Mode as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -4547,11 +4588,15 @@ pub(crate) fn __ridl_fb_decode_Panel(
             }
             _ => false,
         },
-        mode: match ::ridl_rt::flatbuffers::field(buf, table, 9u16, 8usize) {
+        mode: match ::ridl_rt::flatbuffers::field(buf, table, 9u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Mode as ::core::convert::TryFrom<
                     ::core::primitive::i64,
-                >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                        ),
+                    )
                     .unwrap_or(Mode::Idle)
             }
             _ => Mode::Idle,
@@ -4746,10 +4791,10 @@ pub(crate) fn __ridl_fb_decode_Panel(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Panel {
-    /// The largest FlatBuffers buffer any legal `Panel` encodes to: 1722 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 1722usize;
-    type Buffer = [::core::primitive::u8; 1722usize];
-    const BUFFER: Self::Buffer = [0u8; 1722usize];
+    /// The largest FlatBuffers buffer any legal `Panel` encodes to: 1718 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 1718usize;
+    type Buffer = [::core::primitive::u8; 1718usize];
+    const BUFFER: Self::Buffer = [0u8; 1718usize];
     type View<'a> = PanelFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4804,11 +4849,15 @@ impl<'a> ::ridl_rt::payload::View<'a> for LightsFbView<'a> {
 impl<'a> LightsFbView<'a> {
     /// Reads `Lights`'s `lamp` field in place.
     pub fn lamp(&self) -> Lamp {
-        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 8usize) {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Lamp as ::core::convert::From<
                     ::core::primitive::i64,
-                >>::from(::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64))
+                >>::from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(self.buf, __p).unwrap_or(0i32),
+                    ),
+                )
             }
             _ => <Lamp as ::core::convert::From<::core::primitive::i64>>::from(0i64),
         }
@@ -4834,21 +4883,23 @@ impl<'a> LightsFbView<'a> {
             .unwrap_or(::core::option::Option::None)
             .unwrap_or(0usize);
         {
-            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 8usize)
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 4usize)
                 .unwrap_or(::ridl_rt::flatbuffers::Vector {
                     len: 0,
                     first: 0,
                 });
             let mut __out = ::std::vec::Vec::with_capacity(__v.len);
             for __i in 0..__v.len {
-                let __at = __v.element(__i, 8usize);
+                let __at = __v.element(__i, 4usize);
                 __out
                     .push(
                         <Lamp as ::core::convert::From<
                             ::core::primitive::i64,
                         >>::from(
-                            ::ridl_rt::flatbuffers::read_i64(self.buf, __at)
-                                .unwrap_or(0i64),
+                            ::core::primitive::i64::from(
+                                ::ridl_rt::flatbuffers::read_i32(self.buf, __at)
+                                    .unwrap_or(0i32),
+                            ),
                         ),
                     );
             }
@@ -4915,16 +4966,28 @@ pub(crate) fn __ridl_fb_encode_Lights(
     let mut __n = 0usize;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 0u16,
-        offset: 8u16,
+        offset: 4u16,
         value: {
             let __s = value.lamp;
-            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+            if ::core::primitive::i32::try_from(::core::primitive::i64::from(__s))
+                .is_err()
+            {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Lamp"),
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    }),
+                );
+            }
+            ::ridl_rt::flatbuffers::Field::I32(
+                ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+            )
         },
     };
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 1u16,
-        offset: 16u16,
+        offset: 8u16,
         value: {
             let __s = value.lamps;
             if ::core::primitive::u8::try_from(::core::primitive::i64::from(__s))
@@ -4945,7 +5008,7 @@ pub(crate) fn __ridl_fb_encode_Lights(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 2u16,
-        offset: 20u16,
+        offset: 12u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.trail;
             if __c.len() > 4usize {
@@ -4957,20 +5020,30 @@ pub(crate) fn __ridl_fb_encode_Lights(
                 );
             }
             let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
-                __c.len() * 8usize,
+                __c.len() * 4usize,
             );
             for __e in __c.iter() {
                 let __s = *__e;
-                let __r = ::core::primitive::i64::from(__s);
+                if ::core::primitive::i32::try_from(::core::primitive::i64::from(__s))
+                    .is_err()
+                {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some("Lamp"),
+                            rule: ::ridl_rt::payload::Rule::Range,
+                        }),
+                    );
+                }
+                let __r = ::core::primitive::i64::from(__s) as ::core::primitive::i32;
                 __bytes.extend_from_slice(&__r.to_le_bytes());
             }
-            builder.push_vector(&__bytes, 8usize)?
+            builder.push_vector(&__bytes, 4usize)?
         }),
     };
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 3u16,
-        offset: 24u16,
+        offset: 16u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.sets;
             if __c.len() > 4usize {
@@ -5005,7 +5078,7 @@ pub(crate) fn __ridl_fb_encode_Lights(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 4u16,
-        offset: 32u16,
+        offset: 24u16,
         value: {
             let __s = value.faults;
             ::ridl_rt::flatbuffers::Field::U64(
@@ -5014,7 +5087,7 @@ pub(crate) fn __ridl_fb_encode_Lights(
         },
     };
     __n += 1;
-    builder.push_table(40usize, 8usize, 5u16, &__fields[..__n])
+    builder.push_table(32usize, 8usize, 5u16, &__fields[..__n])
 }
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Lights(
@@ -5025,11 +5098,11 @@ pub(crate) fn __ridl_fb_verify_Lights(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -5047,7 +5120,7 @@ pub(crate) fn __ridl_fb_verify_Lights(
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
         ::core::option::Option::Some(__p) => {
-            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 8usize)
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
             if __v.len > 4usize {
                 return ::core::result::Result::Err(
@@ -5058,8 +5131,8 @@ pub(crate) fn __ridl_fb_verify_Lights(
                 );
             }
             for __i in 0..__v.len {
-                let __at = __v.element(__i, 8usize);
-                ::ridl_rt::flatbuffers::read_i64(buf, __at)
+                let __at = __v.element(__i, 4usize);
+                ::ridl_rt::flatbuffers::read_i32(buf, __at)
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?;
             }
         }
@@ -5118,11 +5191,15 @@ pub(crate) fn __ridl_fb_decode_Lights(
     table: ::core::primitive::usize,
 ) -> Lights {
     Lights {
-        lamp: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+        lamp: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Lamp as ::core::convert::From<
                     ::core::primitive::i64,
-                >>::from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                >>::from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
             }
             _ => <Lamp as ::core::convert::From<::core::primitive::i64>>::from(0i64),
         },
@@ -5143,20 +5220,22 @@ pub(crate) fn __ridl_fb_decode_Lights(
                 .unwrap_or(::core::option::Option::None)
                 .unwrap_or(0usize);
             {
-                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 8usize)
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
                     .unwrap_or(::ridl_rt::flatbuffers::Vector {
                         len: 0,
                         first: 0,
                     });
                 let mut __out = ::std::vec::Vec::with_capacity(__v.len);
                 for __i in 0..__v.len {
-                    let __at = __v.element(__i, 8usize);
+                    let __at = __v.element(__i, 4usize);
                     __out
                         .push(
                             <Lamp as ::core::convert::From<
                                 ::core::primitive::i64,
                             >>::from(
-                                ::ridl_rt::flatbuffers::read_i64(buf, __at).unwrap_or(0i64),
+                                ::core::primitive::i64::from(
+                                    ::ridl_rt::flatbuffers::read_i32(buf, __at).unwrap_or(0i32),
+                                ),
                             ),
                         );
                 }
@@ -5205,10 +5284,10 @@ pub(crate) fn __ridl_fb_decode_Lights(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Lights {
-    /// The largest FlatBuffers buffer any legal `Lights` encodes to: 161 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 161usize;
-    type Buffer = [::core::primitive::u8; 161usize];
-    const BUFFER: Self::Buffer = [0u8; 161usize];
+    /// The largest FlatBuffers buffer any legal `Lights` encodes to: 141 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 141usize;
+    type Buffer = [::core::primitive::u8; 141usize];
+    const BUFFER: Self::Buffer = [0u8; 141usize];
     type View<'a> = LightsFbView<'a>;
     fn encode<'o>(
         &self,
@@ -5472,10 +5551,10 @@ pub(crate) fn __ridl_fb_decode_Outcome(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Outcome {
-    /// The largest FlatBuffers buffer any legal `Outcome` encodes to: 1767 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 1767usize;
-    type Buffer = [::core::primitive::u8; 1767usize];
-    const BUFFER: Self::Buffer = [0u8; 1767usize];
+    /// The largest FlatBuffers buffer any legal `Outcome` encodes to: 1763 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 1763usize;
+    type Buffer = [::core::primitive::u8; 1763usize];
+    const BUFFER: Self::Buffer = [0u8; 1763usize];
     type View<'a> = OutcomeFbView<'a>;
     fn encode<'o>(
         &self,

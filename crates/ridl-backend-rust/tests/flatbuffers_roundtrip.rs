@@ -452,6 +452,49 @@ fn main() {
     rustc::run_program("fb_max_size", &program(&format!("{MAX_SIZE_PINS}{main}")));
 }
 
+/// A fully populated report with maximum-length collections and UTF-8 labels
+/// measures the gap between an encoded value and the conservative bound.
+#[test]
+fn a_maximum_length_report_has_a_measured_encoded_size() {
+    let main = format!(
+        "{VALUE}{MAX_SIZE_PINS}{}",
+        r#"
+use ridl_rt::payload::Payload;
+fn main() {
+    let widest = "\u{10348}".repeat(16);
+    let mut largest = 0;
+    for boxed in [false, true] {
+        let mut value = sample();
+        value.name = Label::new_unchecked(widest.clone());
+        value.blob = Blob::new_unchecked(vec![255; 8]);
+        value.inner = inner(300, &widest);
+        value.outcome = if boxed { Outcome::Bad(Health::Maximum) } else { Outcome::Ok(inner(300, &widest)) };
+        value.faults = vec![Health::Maximum; 4];
+        value.meta = (0..3).map(|index| {
+            let key = char::from_u32(0x10348 + index).unwrap().to_string().repeat(16);
+            (Label::new_unchecked(key), Count::new_unchecked(200))
+        }).collect();
+        value.names = (0..3).map(|_| Label::new_unchecked(widest.clone())).collect();
+        value.inners = (0..2).map(|_| inner(300, &widest)).collect();
+        value.outcomes = (0..2).map(|_| if boxed { Outcome::Bad(Health::Maximum) } else { Outcome::Ok(inner(300, &widest)) }).collect();
+        value.pair = Some(ReportPair { lo: Speed::new_unchecked(300), inner: inner(300, &widest) });
+        value.note = Some(Label::new_unchecked(widest.clone()));
+        value.spare = Some(Speed::new_unchecked(300));
+        let mut out = vec![0; REPORT_MAX_SIZE];
+        let bytes = value.encode(&mut out).unwrap().bytes;
+        let proof = ridl_rt::payload::Ref::<Report, ridl_rt::encoding::FlatBuffers>::verify(bytes).unwrap();
+        assert_eq!(proof.decode(), value);
+        largest = largest.max(bytes.len());
+    }
+    println!("{largest}");
+}
+"#
+    );
+    let measured = rustc::run_program_capturing_stdout("fb_report_size_probe", &program(&main));
+    println!("maximum-length Report: {} bytes", measured.trim());
+    assert_eq!(measured.trim(), "1656");
+}
+
 /// The two pinned bounds, read by
 /// [`max_size_is_pinned_and_holds_the_largest_legal_value`].
 const MAX_SIZE_PINS: &str = r#"

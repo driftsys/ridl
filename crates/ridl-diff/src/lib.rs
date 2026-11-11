@@ -318,7 +318,8 @@ declare_categories! {
         /// `<package>/<decl>`.
         EnumClosed,
         /// An enum-set flag appended, compatible under the generic rule, after
-        /// which the FlatBuffers integer of the enum set is a different integer (ADR-0019 decision 10;
+        /// which the FlatBuffers integer of the enum set is a different integer
+        /// (ADR-0019 decision 10;
         /// `ridl diff --explain flatbuffers_width_change` states it in full).
         /// Breaking when `flatbuffers` is among the encodings the comparison
         /// is judged for, compatible otherwise. Reported once per declaration,
