@@ -34,6 +34,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   JUST_VERSION: 1.38.0
+  # The version `bootstrap` installs with `cargo install`. CI downloads the
+  # release binary instead, so that a cache miss costs seconds, not a build.
+  CARGO_SEMVER_CHECKS_VERSION: 0.51.0
   MDBOOK_VERSION: 0.4.40
 
 jobs:
@@ -69,9 +72,15 @@ jobs:
       # across all of them: mdbook for book-check, prim for the trailing
       # `check` recipe, deno and flatc for the TypeScript gates.
       # `just build` runs `just freeze-check`, which runs cargo-semver-checks.
-      # It is built with `cargo install` at the version ci.yml names.
+      # The release binary, at the version pinned above, as in ci.yml.
       - name: install cargo-semver-checks
-        run: cargo install cargo-semver-checks --locked --version 0.51.0
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v${CARGO_SEMVER_CHECKS_VERSION}/cargo-semver-checks-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" cargo-semver-checks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cargo-semver-checks" semver-checks --version
       # One test of `just test` (crates/ridlc/tests/wasm_module.rs) runs the
       # generated wasm module in Node, as in ci.yml's test job.
       - uses: actions/setup-node@v7
