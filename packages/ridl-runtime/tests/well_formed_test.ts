@@ -42,6 +42,42 @@ Deno.test("isWellFormedString agrees with the code-unit scan when isWellFormed i
   }
 });
 
+// Mutation: change a boundary of the code-unit scan, such as `<= 0xdfff` to
+// `< 0xdfff` or `>= 0xdc00` to `> 0xdc00`.
+Deno.test("isWellFormedString scans the surrogate range inclusively", () => {
+  const prototype = String.prototype as { isWellFormed?: () => boolean };
+  const original = prototype.isWellFormed;
+  const cases: [string, boolean][] = [
+    // U+DFFF is the last low surrogate; U+E000 is the first code point after.
+    ["\udfff", false],
+    ["\ue000", true],
+    ["a\ue000b", true],
+    // U+D800 is the first high surrogate; U+D7FF is the last code point before.
+    ["\ud800", false],
+    ["\ud7ff", true],
+    // U+DBFF is the last high surrogate and U+DC00 the first low surrogate.
+    ["\udbff", false],
+    ["\udc00", false],
+    ["\udbff\udc00", true],
+    ["\ud800\udfff", true],
+    ["\ud800\ue000", false],
+    ["\ud7ff\udc00", false],
+    ["\udbff\udbff", false],
+  ];
+  const check = () => {
+    for (const [value, expected] of cases) {
+      assertEquals(isWellFormedString(value), expected, JSON.stringify(value));
+    }
+  };
+  try {
+    check();
+    delete prototype.isWellFormed;
+    check();
+  } finally {
+    prototype.isWellFormed = original;
+  }
+});
+
 Deno.test("ConstraintError accepts the utf8 rule", () => {
   const error = new ConstraintError(
     "utf8",
