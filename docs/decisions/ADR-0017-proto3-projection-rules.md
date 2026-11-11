@@ -38,6 +38,10 @@ that changes its proto3 scalar is breaking under proto3. The new
 `proto3_width_change` category reports the old and the new scalar once per
 declaration; appends that keep the scalar draw no such line.
 
+**Amended 2026-11-09 — decision 9, from driftsys/ridl#1228.** The decision
+points to [ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13 for the
+catalog-history remote evidence rule; the remote-width rule itself is unchanged.
+
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model.
 
