@@ -113,7 +113,10 @@ freeze-check *flags: toolchain-check
 # The suite is split into four recipes so that CI can run each one in its own
 # job, at the same time; `test` runs all four, one after the other. The three
 # workspace parts are grouped by package so that their run times are close;
-# together they are `cargo test --workspace --locked`.
+# together they run the packages of `cargo test --workspace --locked`. The
+# feature sets differ: `ridl-rt`'s encoding features are not on in
+# `test-rest`, and its tests under them run from `test-features`'
+# `--all-features` line.
 test: test-backend test-cli test-rest test-features
 
 # The tests of `ridl-backend-rust`, the largest part of the workspace suite.

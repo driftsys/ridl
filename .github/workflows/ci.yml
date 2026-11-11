@@ -228,7 +228,7 @@ jobs:
   # the same time on separate runners. Each entry runs only the step whose `if:`
   # names it: one step per recipe, rather than `run: just ${{ matrix.part }}`,
   # because `just gate-parity` looks for each member's own `run: just <member>`
-  # line. The tool installs are shared by every entry; each takes seconds.
+  # line. Each tool install runs only in the entry whose tests need it.
   test:
     name: test (${{ matrix.part }})
     needs: changes
@@ -260,11 +260,13 @@ jobs:
       # call cargo-semver-checks. It is built with `cargo install` at the
       # version `bootstrap` names, not installed with a third-party action.
       - name: install cargo-semver-checks
+        if: matrix.part == 'rest'
         run: cargo install cargo-semver-checks --locked --version 0.51.0
       # One test of `just test-cli` (crates/ridlc/tests/wasm_module.rs) runs
       # the generated wasm module in Node. ubuntu-latest has Node on PATH; the
       # step pins the major version the test is run with.
       - uses: actions/setup-node@v7
+        if: matrix.part == 'cli'
         with:
           node-version: 22
       # `crates/ridl-backend-podbuf/tests/c_compile.rs`, in `just test-rest`,
@@ -272,6 +274,7 @@ jobs:
       # `RIDL_REQUIRE_CC=1` makes a missing compiler a failure instead of a
       # skip.
       - name: install clang
+        if: matrix.part == 'rest'
         run: |
           sudo apt-get update
           sudo apt-get install -y clang

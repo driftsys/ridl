@@ -41,7 +41,7 @@ CI installs the same version.
 `node` is missing. The test also needs network access, because it builds the
 module with `cargo rustc`, which fetches the crate's crates.io dependencies, and
 the `wasm32-unknown-unknown` target, which `rust-toolchain.toml` installs. The
-CI `rust` job installs Node with `actions/setup-node`.
+CI `test` job installs Node with `actions/setup-node`.
 
 The package's browser test, `just ts-browser-e2e`, and the cabin browser demo,
 `just cabin-browser-demo`, are not part of `just build`, so the build needs no
