@@ -654,7 +654,6 @@ above records. Its one remainder, driftsys/ridl#598, was decided on 2026-09-30:
   and
   [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md)
 
-Enums use fixed FlatBuffers `int` (int32), including their box payloads. The
-Rust codec reads i32 and widens to the i64 domain representation; the TypeScript
-wrapper uses the numeric enum that flatc emits without a bigint conversion. Enum
-sets retain their existing unsigned width.
+Every enum is a fixed FlatBuffers `int` (int32), box payloads included; enum
+sets keep their unsigned width. The decision is
+[ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 8.

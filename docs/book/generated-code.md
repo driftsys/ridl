@@ -937,8 +937,3 @@ a reader of the generated source; rustdoc does not show them.
 [ridl-rt]: https://github.com/driftsys/ridl/blob/main/docs/design/ridl-rt.md
 [proto3-gaps]: https://github.com/driftsys/ridl/blob/main/docs/design/proto3-codec.md#known-gaps
 [codec-table]: https://github.com/driftsys/ridl/blob/main/docs/design/ts-codec-table.md
-
-Enums use fixed FlatBuffers `int` (int32), including their box payloads. The
-Rust codec reads i32 and widens to the i64 domain representation; the TypeScript
-wrapper uses the numeric enum that flatc emits without a bigint conversion. Enum
-sets retain their existing unsigned width.
