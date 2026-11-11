@@ -48,8 +48,8 @@ The codec file is written from the request's model only (`model.interfaces`,
 `model.tuples`, `model.flatbuffers`, `model.catalog`), never from the raw IR
 (D-1), so it follows the direction
 [the codegen plugins record](codegen-plugins.md) sets for the port of this
-backend. The option adds nothing to `<base>.ts`; its named scalars import
-`ConstraintError` and the check helpers from `@driftsys/ridl-runtime` with or
+backend. The option adds nothing to `<base>.ts`; its named scalars use
+`$rt.ConstraintError` and the check helpers of `@driftsys/ridl-runtime` with or
 without it. The public `generate(package)` of the crate does not write the file:
 only the request's model carries the catalog hash of the unit that the wasm
 module is built from.
