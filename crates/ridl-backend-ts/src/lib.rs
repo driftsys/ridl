@@ -132,6 +132,9 @@ pub(crate) fn generate_with(
     let mut helpers = BTreeSet::new();
     let mut has_checks = false;
     for decl in &package.decls {
+        if decl.visibility == v2::Visibility::Internal as i32 {
+            continue;
+        }
         if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind {
             for check in scalar_checks(td, &decl.name) {
                 has_checks = true;
@@ -698,9 +701,16 @@ fn check_constructor_names(package: &v2::Package) -> Result<(), GenerateError> {
 }
 
 /// Constructs a brand and checks the constraints of its backing. The unchecked
-/// form exists only when a check is emitted. A pattern lives in a module-level
+/// form exists only when a check is emitted, and an `internal` scalar has no
+/// constructor. A pattern lives in a module-level
 /// `RegExp`, built once.
 fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<String> {
+    // An `internal` scalar has no constructor: the module would hold a function
+    // that nothing calls, which fails `noUnusedLocals`, and the codec module
+    // cannot import it.
+    if decl.visibility == v2::Visibility::Internal as i32 {
+        return None;
+    }
     let name = &decl.name;
     let base = scalar_base(td);
     let export = export_kw(decl.visibility);
