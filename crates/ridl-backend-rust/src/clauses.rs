@@ -12,17 +12,17 @@
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
 //! <literal>` for `result`, with the literal in the subject's Rust numeric
-//! type. Literals whose exact magnitude exceeds `f64::MAX` are refused.
-//! For literals at or below that limit, float bounds preserve expr-core's exact
-//! rational comparisons: `<=` and `>` use the largest binary64 value at or below the exact literal; `>=`
-//! and `<` use the smallest at or above it. Exactly representable literals
-//! are printed in the shortest form that reads back as the same binary64, so
-//! the output is always a Rust literal (`+0.5` becomes `0.5`, `100` becomes
-//! `100.0`; an exact zero prints as `0.0` with no sign, which every comparison
-//! treats like `-0.0`). Inexact `==` and `!=`, unreadable
-//! decimals, exponents that cannot be read or have magnitude above 10000,
-//! and literals outside the exact finite binary64 range are refused.
-//! The newtype's field is private, and the read is still legal: the subject is always a
+//! type. For float subjects, literals whose exact magnitude exceeds `f64::MAX`
+//! are refused. Within that range, float bounds preserve expr-core's exact
+//! rational comparisons: `<=` and `>` use the largest binary64 value at or
+//! below the exact literal; `>=` and `<` use the smallest at or above it.
+//! Exactly representable literals are printed in the shortest form that reads
+//! back as the same binary64, so the output is always a Rust literal (`+0.5`
+//! becomes `0.5`, `100` becomes `100.0`; an exact zero prints as `0.0` with no
+//! sign, which every comparison treats like `-0.0`). Inexact `==` and `!=`,
+//! unreadable decimals, and exponents that cannot be read or have magnitude
+//! above 10000 are refused.
+//! The newtype's field is private, and the read is still legal: the subject is a
 //! same-package named scalar, and the clause is emitted inside a descriptor
 //! `impl` block at package module scope, the same module that declares the
 //! type, where a private field is visible. Several clauses of one kind are
@@ -834,7 +834,17 @@ mod tests {
         );
         for sign in ["", "-"] {
             for op in ["<=", ">", ">=", "<", "==", "!="] {
-                assert!(float_clause(&format!("rate {op} {sign}{max_text}"), false).is_ok());
+                let text = float_clause(&format!("rate {op} {sign}{max_text}"), false).unwrap();
+                assert_eq!(
+                    text,
+                    format!(
+                        "ifargs.0{op}{sign}1.7976931348623157e308{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
+                    )
+                );
+                assert!(
+                    !text.contains("is_finite") && !text.contains("is_infinite"),
+                    "{text}"
+                );
                 for offset in [
                     num_bigint::BigInt::from(1),
                     num_bigint::BigInt::from(10).pow(291),
@@ -895,7 +905,7 @@ mod tests {
     }
 
     #[test]
-    fn infinite_float_bounds_and_unreadable_exponents_are_refused() {
+    fn out_of_range_float_literals_and_unreadable_exponents_are_refused() {
         // Each refusal must retain its cause; a common prefix cannot distinguish them.
         for (expression, reason) in [
             (

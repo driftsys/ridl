@@ -270,7 +270,7 @@ numeric operand** — this is the same rule that makes
 value unifies with literals and with values of the same bare primitive, never
 with a named type. The subset checker unifies literals nominally; it does not
 evaluate range conformance of literal operands (the test plane exercises
-values).
+values). The numeric literal admission check is specified in §5.3.
 
 ### 5.3 Operator rules
 
@@ -352,7 +352,8 @@ IEEE-754 arithmetic anywhere in the contract plane**.
   ranges, steps, and constants are exact decimals — typl §4–§5 — carried by the
   toolchain's exact-scalar representation). `0.1 + 0.2 == 0.3` holds. Wire-width
   and float-representation concerns (typl §4.3) are boundary concerns; they do
-  not leak into contract evaluation.
+  not leak into contract evaluation. Numeric literal admission is specified in
+  §5.3.
 - **Durations are exact microsecond counts.** `1s` = `1000ms` = `1000000us`;
   duration comparison compares the counts. This matches platform time (`int64`
   microseconds, ridl §3.1) and the IR's exact-decimal microsecond timing rule

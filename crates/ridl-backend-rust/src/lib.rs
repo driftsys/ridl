@@ -397,7 +397,7 @@ fn skipped_interface_note(
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
              Write each `require` and `ensure` clause in that form to get a face. \
              For float subjects, `==` and `!=` require an exactly representable binary64 literal, \
-             and every float comparison requires a finite binary64 bound."
+             and a literal outside the finite binary64 range is refused."
         }
         FaceGap::Other => " The reason above is the whole of it.",
     };

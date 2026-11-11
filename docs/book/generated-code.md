@@ -203,12 +203,14 @@ printed in the shortest form that reads back as the same binary64, which is
 always a Rust literal (`0.5` stays `0.5`, `100` becomes `100.0`, and a spelling
 only hand-built IR can carry, such as `+0.5` or `.5`, becomes `0.5`). An exact
 zero is printed as `0.0`, which every comparison treats like `-0.0`. An inexact
-literal on `==` or `!=` is refused because no binary64 value equals it. A
+literal on `==` or `!=` is refused because no binary64 value equals it. A source
+literal undergoes the compile-time RIDL-306 admission check in
+[expr-core §5.3](../specification/expr-core-specification.md#53-operator-rules).
+For float subjects, an out-of-range literal in hand-built IR is refused by the
+backend during generation. Exponent spellings occur only in hand-built IR; a
 literal whose exponent cannot be read or has magnitude above 10000 is also
-refused. A numeric literal whose exact value exceeds `f64::MAX` in magnitude is
-refused at compile time with RIDL-306. The backend also refuses literals outside
-the finite binary64 range in hand-built IR, such as `1e999`. This adds no
-runtime infinity check. Integer comparisons are unchanged.
+refused during generation. This adds no runtime infinity check. Integer
+comparisons are unchanged.
 
 ## Async calls
 
