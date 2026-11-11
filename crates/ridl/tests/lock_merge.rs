@@ -3,8 +3,9 @@
 //! table, each run in both directions (OURS and THEIRS swapped), asserting the
 //! bytes written to OURS and the exit code; the conflict form and that
 //! `ridl check` then reports RIDL-410; an empty BASE; an unreadable input; an
-//! input that does not parse; and one end-to-end merge through git with the
-//! driver registered as the CLI reference documents it.
+//! input that does not parse; a write failure; exhausted renumbering; and one
+//! end-to-end merge through git with the driver registered as the CLI reference
+//! documents it.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};

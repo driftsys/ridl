@@ -2,10 +2,9 @@
 //! and the path that failed (driftsys/ridl#196). The exit code stays 2.
 //!
 //! Unix only: the fixtures use `chmod 000`, which does not bind the root user,
-//! so every test that uses it returns early when it runs as root. The test of
-//! a manifest that links to itself and
-//! `an_entry_below_a_regular_file_does_not_exist` need no permission change
-//! and always run.
+//! so every test that uses it returns early when it runs as root. Tests that
+//! use a symbolic-link loop or an entry below a regular file need no permission
+//! change and always run.
 
 #![cfg(unix)]
 
