@@ -17,13 +17,15 @@ what it says of `ridl diff` and the `ridl-diff` categories.
 Amended 2026-11-11, recording the decision of 2026-10-14: the skill of §2 is
 `skills/ridl-authoring/SKILL.md` and `skills/ridl-authoring/rules.md`, and
 nothing else. Per-language references (`typl.md`, `ridl.md`, `rsdl.md`) were
-written and then removed, because evals on the Copilot CLI host with
-claude-sonnet-5.5 and one run per task showed no measurable gain over the
-minimal skill, and one run per task is too few to separate a gain from noise.
+written and then removed. A pilot eval, run on the Copilot CLI host with
+claude-sonnet-5.5 and one run per task, did not show that the references help,
+and one run per task is too few to separate a gain from noise. The pilot results
+are not committed; the commit that removed the references records the reason.
 The rules file holds 19 rules, within the ten to twenty that §2 asks for. A
 per-language reference is reopened when an eval with several runs per task shows
-that it improves the result. The "three to four complete worked examples" and
-the "common-mistakes table" of §2 are not part of the skill until then.
+that it improves the result. The reference prose, the "common-mistakes table"
+and the "three to four complete `.rxdl` worked examples" of §2 are not part of
+the skill until then; `SKILL.md` holds three short compiled samples instead.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept

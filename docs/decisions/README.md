@@ -28,7 +28,7 @@ other entry below is Accepted.
   the minimum tool table names workspace paths and adds `ridl_references` and
   `ridl_dependencies`, and §7 adds the MCP tool surface as a fourth contract
   surface. Amended 2026-11-11: the skill is `SKILL.md` and `rules.md` only,
-  because per-language references showed no measured gain.
+  because a pilot eval did not show that per-language references help.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
 - **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar

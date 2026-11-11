@@ -206,7 +206,7 @@ of the authoring skill (piece 1c), as ADR-0005 §5 requires.
     existing corpus workspace and catalogue lints only, and has non-empty prompt
     and rubric files. The seed was written without a harness. `cargo xtask eval`
     now runs and scores the tasks, as [the evals README](../../evals/README.md)
-    describes; ADR-0005's open question on scoring beyond "compiles" stays open.
+    describes.
 
 11. **Three design lints ship at Info; two candidates did not ship.** The
     derivation over the 820 adjudicated findings gave:
