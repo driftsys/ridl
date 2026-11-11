@@ -1264,7 +1264,10 @@ fn a_call_bound_comes_from_the_recorded_maximum() {
         ("1500", Some("1.5")),
         ("2500", Some("2.5")),
         ("999", Some("0.999")),
+        ("1005", Some("1.005")),
+        ("2147483647000", Some("2147483647")),
         ("0", None),
+        ("2147483647001", None),
         ("2147483648000", None),
         ("not a number", None),
     ] {
@@ -1301,6 +1304,71 @@ fn a_call_bound_comes_from_the_recorded_maximum() {
             }
         }
     }
+}
+
+/// A member of an internal interface has no method, so the interface has no
+/// client class.
+///
+/// Mutation: drop the internal-interface test of `discover_call`.
+#[test]
+fn an_internal_interface_gets_no_client_class() {
+    let mut model = common_model();
+    interface(&mut model, "Sensors").visibility = v1::Visibility::Internal as i32;
+    let source = module(&model, "veh.common");
+    assert!(!source.contains("class SensorsClient"), "{source}");
+}
+
+/// A call whose payload has no finite bound has no table entry and no method,
+/// and the class says why.
+///
+/// Mutation: drop the unbounded-payload branch of `discover_call`.
+#[test]
+fn a_call_with_an_unbounded_payload_has_no_method() {
+    let mut model = common_model();
+    let root = model
+        .declarations
+        .iter()
+        .position(|d| d.name.as_ref().unwrap().declared == "DriverProfile")
+        .unwrap();
+    model
+        .flatbuffers
+        .as_mut()
+        .unwrap()
+        .roots
+        .iter_mut()
+        .filter(|r| r.tuple.is_none() && r.declaration as usize == root)
+        .for_each(|r| r.bound = None);
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains(
+            "// profile has no method: veh.common.DriverProfile has no finite FlatBuffers bound"
+        ),
+        "{source}"
+    );
+    assert!(!source.contains("async profile("), "{source}");
+    assert!(source.contains("async setLimit("), "{source}");
+}
+
+/// An optional parameter is typed `T | undefined` in the method signature.
+///
+/// Mutation: drop the `| undefined` suffix in `discover_call`.
+#[test]
+fn an_optional_parameter_is_typed_with_undefined() {
+    let mut model = common_model();
+    let sensors = interface(&mut model, "Sensors");
+    for slot in &mut sensors.slots {
+        if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = &mut slot.occupant
+            && interaction.name.as_ref().map(|n| n.declared.as_str()) == Some("setLimit")
+            && let Some(v1::interaction::Shape::Command(command)) = &mut interaction.shape
+        {
+            command.params[0].r#type.as_mut().unwrap().optional = true;
+        }
+    }
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains("async setLimit(limit: t.Speed | undefined, actual: t.Speed,"),
+        "{source}"
+    );
 }
 
 /// A name that the runtime package exports is free for an interface: the

@@ -2878,7 +2878,7 @@ impl<'a> Codec<'a> {
                 None => (
                     "opts: $rt.CallOptions",
                     "opts".to_string(),
-                    "The member declares no maximum response time, so `opts.bound` is required."
+                    "The member has no maximum response time inside the range of a port bound, so `opts.bound` is required."
                         .to_string(),
                 ),
             };

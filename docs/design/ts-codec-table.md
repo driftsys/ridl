@@ -138,8 +138,9 @@ string (D-11), and satisfy `MemberRef` structurally. Stream functions also use
 the runtime types, errors and adapters described in D-17; they import nothing
 from the WebSocket package. A module with a signal also uses the runtime's
 `$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. A
-module with a command or a query also writes `<Interface>Client`, which uses
-`$rt.Caller`, `$rt.CallOptions`, `$rt.Codec` and the values `$rt.checkCatalog`,
+module writes `<Interface>Client` for an interface that has at least one call
+method with a codec and a finite bound, and the class uses `$rt.Caller`,
+`$rt.CallOptions`, `$rt.Codec` and the values `$rt.checkCatalog`,
 `$rt.encodeRequest` and `$rt.decodeReply`; a client class name that another
 declaration of the file takes is refused like any other collision. The names the
 file declares are checked before anything is written, and a second declaration

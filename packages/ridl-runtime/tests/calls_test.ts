@@ -9,6 +9,7 @@ import {
   CatalogMismatch,
   checkCatalog,
   CodecError,
+  ConstraintError,
   decodeReply,
   encodeRequest,
 } from "../mod.ts";
@@ -175,4 +176,83 @@ Deno.test("decode_reply_verifies_before_it_decodes", () => {
     )
   ) as CallError;
   assertEquals(failed.failure, { category: "corrupt" });
+});
+
+Deno.test("decode_reply_maps_a_rule_error_of_the_decoder_to_a_contract_error", () => {
+  const ruleFailure = Object.assign(new RangeError("x"), {
+    name: "RuleError",
+    rule: "range",
+  });
+  const failed = assertThrows(() =>
+    decodeReply(
+      codecWith({ ok: true }),
+      bytesCodec({
+        decode: () => {
+          throw ruleFailure;
+        },
+      }),
+      0,
+      Uint8Array.of(5),
+    )
+  ) as CallError;
+  assertEquals(failed.failure, {
+    category: "contract",
+    contract: { category: "invalid-value", rule: "range" },
+  });
+  assertEquals(failed.cause, ruleFailure);
+});
+
+Deno.test("encode_request_maps_a_constraint_error_of_the_encoder", () => {
+  const refused = new ConstraintError("length", "t.N", "abc", "[0..2]");
+  const failed = assertThrows(() =>
+    encodeRequest(
+      codecWith({ ok: true }),
+      bytesCodec({
+        encode: () => {
+          throw refused;
+        },
+      }),
+      0,
+      1,
+    )
+  ) as CallError;
+  assertEquals(failed.failure, {
+    category: "contract",
+    contract: { category: "invalid-value", rule: "length" },
+  });
+  assertEquals(failed.cause, refused);
+});
+
+Deno.test("an_encoder_failure_that_is_not_a_rule_keeps_its_cause", () => {
+  const cause = new TypeError("x");
+  const failed = assertThrows(() =>
+    encodeRequest(
+      codecWith({ ok: true }),
+      bytesCodec({
+        encode: () => {
+          throw cause;
+        },
+      }),
+      0,
+      1,
+    )
+  ) as CallError;
+  assertEquals(failed.cause, cause);
+});
+
+Deno.test("check_catalog_refuses_a_longer_hash_with_a_matching_prefix", () => {
+  const longer = Uint8Array.from([...hash, 0]);
+  assertThrows(
+    () => checkCatalog(hash, { catalogHash: longer }, codecWith({ ok: true })),
+    CatalogMismatch,
+  );
+  assertThrows(
+    () =>
+      checkCatalog(
+        hash,
+        { catalogHash: hash },
+        codecWith({ ok: true }, longer),
+      ),
+    CatalogMismatch,
+  );
 });

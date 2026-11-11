@@ -261,3 +261,53 @@ Deno.test("the signature takes the declared parameters, in order, and refuses ot
   };
   assert.equal(typeof unused, "function");
 });
+
+Deno.test("a failure of the port reaches the caller unchanged", async () => {
+  const { loaded } = scripted(accept);
+  const fake = port();
+  const failure = new CallError({ category: "timeout" });
+  fake.onCommand = () => Promise.reject(failure);
+  fake.onQuery = () => Promise.reject(failure);
+  const client = codec.SensorsClient.bind(fake, loaded);
+  await assert.rejects(
+    client.setLimit(speed(1), speed(2)),
+    (error: unknown) => error === failure,
+  );
+  await assert.rejects(client.span(), (error: unknown) => error === failure);
+});
+
+Deno.test("a query addresses its member, verifies the request and defaults its bound", async () => {
+  const { loaded, verified, ids } = scripted(accept);
+  const fake = port();
+  const profile: t.DriverProfile = {
+    name: "ann" as ridl_std.Name,
+    speed: speed(3),
+    gears: 6 as t.DriverProfile["gears"],
+  };
+  fake.onQuery = (call) =>
+    Promise.resolve(
+      call.ord === codec.Sensors.profile.ord
+        ? codec.Sensors.profile.reply.encode(profile)
+        : codec.Sensors.span.reply.encode({ min: speed(1), max: speed(2) }),
+    );
+  const client = codec.SensorsClient.bind(fake, loaded);
+  await client.profile("ann" as ridl_std.Name);
+  await client.span();
+  const [first, second] = fake.calls;
+  assert.equal(first.iface, codec.Sensors.iface);
+  assert.equal(first.ord, codec.Sensors.profile.ord);
+  assert.equal((first.opts as { bound: number }).bound, 100);
+  assert.equal(second.ord, codec.Sensors.span.ord);
+  assert.equal((second.opts as { bound: number }).bound, 100);
+  const request = (entry: { request: { type: string } }) =>
+    ids.get(entry.request.type);
+  assert.deepEqual(
+    verified.map((call) => call.id),
+    [
+      request(codec.Sensors.profile),
+      ids.get(codec.Sensors.profile.reply.type),
+      request(codec.Sensors.span),
+      ids.get(codec.Sensors.span.reply.type),
+    ],
+  );
+});
