@@ -3428,6 +3428,36 @@ mod constraint_direction {
     }
 
     #[test]
+    fn two_scalars_of_one_package_are_judged_apart() {
+        // Both rows of one comparison share a scope, so a verdict kept per
+        // scope instead of per declaration would give both rows one answer.
+        let mut old = pkg(vec![
+            command("send", 1, vec![param("v", named("S"))], vec![]),
+            signal("read", 2, "R"),
+        ]);
+        old.decls = vec![
+            scalar("S", bounds(Some("10"), Some("100")), v2::IntWidth::U16),
+            scalar("R", bounds(Some("10"), Some("100")), v2::IntWidth::U16),
+        ];
+        let mut new = old.clone();
+        new.decls = vec![
+            scalar("S", bounds(Some("0"), Some("200")), v2::IntWidth::U16),
+            scalar("R", bounds(Some("0"), Some("200")), v2::IntWidth::U16),
+        ];
+        let report = diff_packages(&old, &new);
+        let verdict_of = |name: &str| {
+            report
+                .changes
+                .iter()
+                .find(|c| c.category == Category::ConstraintChanged && c.path.ends_with(name))
+                .unwrap_or_else(|| panic!("no constraint row for {name}"))
+                .verdict
+        };
+        assert_eq!(verdict_of("/S"), Verdict::Compatible);
+        assert_eq!(verdict_of("/R"), Verdict::Breaking);
+    }
+
+    #[test]
     fn signal_received() {
         check(vec![signal("read", 1, "S")], Verdict::Breaking);
     }
