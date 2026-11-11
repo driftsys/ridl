@@ -3266,7 +3266,7 @@ _codec-ts-check:
     sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/ctor/deno.json > "$ctor/deno.json"
     # An unconstrained integer in RIDL source always has I64 width. Generate
     # the number-backed case from IR to isolate the safe-integer predicate.
-    cargo run -p ridl-backend-ts --example constructor_fixture -- "$ctor/number.ts"
+    cargo run --locked -p ridl-backend-ts --example constructor_fixture -- "$ctor/number.ts"
     cp crates/ridl-backend-ts/tests/fixtures/ctor/ctor_test.ts "$ctor/ctor_test.ts"
     deno lint --config "$ctor/deno.json" "$ctor/ctor.ts" "$ctor/number.ts" "$ctor/ctor_test.ts"
     deno check --config "$ctor/deno.json" "$ctor/ctor.ts" "$ctor/number.ts" "$ctor/ctor_test.ts"
