@@ -949,6 +949,35 @@ fn enumset_bit_beyond_31_needs_a_64_bit_width() {
 }
 
 #[test]
+fn a_hand_built_enum_beyond_max_safe_integer_is_unrepresentable() {
+    // Source rejects these values with TYPL-225, but callers can build IR directly.
+    for value in [9_007_199_254_740_992, -9_007_199_254_740_992] {
+        let mut values = warning_bits();
+        values[0].value = value;
+        let result = generate(&package(
+            "veh.common",
+            vec![public_decl(
+                "Warning",
+                v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values,
+                    reserved: Vec::new(),
+                    open: false,
+                }),
+            )],
+        ));
+        let Err(GenerateError::Unrepresentable(message)) = result else {
+            panic!("an enum beyond MAX_SAFE_INTEGER must be Unrepresentable, got {result:?}");
+        };
+        assert!(message.contains("enum Warning value"), "{message}");
+        assert!(message.contains(&value.to_string()), "{message}");
+        assert!(
+            message.contains("exceeds Number.MAX_SAFE_INTEGER"),
+            "{message}"
+        );
+    }
+}
+
+#[test]
 fn narrow_width_const_beyond_2_53_is_unrepresentable() {
     // Defense in depth: a narrow (U32) width claiming a value past 2^53 is a
     // malformed IR — emitting it as a number literal would silently round,

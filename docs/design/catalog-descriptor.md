@@ -423,14 +423,16 @@ is sized, through the projection the wire backend emits:
   is the bound of that box. The row is also absent when a member is one the
   proto backend refuses (a map key outside the integral and string scalars, a
   map value that is an array or a map, an optional array or map field of a
-  struct or a tuple, an enum value outside int32, a field number protobuf
-  reserves or exceeds), when a member has no proto3 bound (a `string` or `bytes`
-  with no length bound, a type def with no width), when the nesting passes
-  `MAX_DEPTH`, or when the bound overflows `u64` or exceeds `u32::MAX`. The
-  rustdoc of `state` in `crates/ridl-ir/src/projection/size/proto3.rs` has the
-  full list. The proto3 sizer counts tags and varint widths at their maximum,
-  and remembers each named struct and union it has sized within one call, so a
-  type that several paths share is walked once.
+  struct or a tuple, an enum value outside int32 (a live value requires
+  hand-built IR, since TYPL-225 rejects it in source; a `reserved` value remains
+  legal in source), a field number protobuf reserves or exceeds), when a member
+  has no proto3 bound (a `string` or `bytes` with no length bound, a type def
+  with no width), when the nesting passes `MAX_DEPTH`, or when the bound
+  overflows `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
+  `crates/ridl-ir/src/projection/size/proto3.rs` has the full list. The proto3
+  sizer counts tags and varint widths at their maximum, and remembers each named
+  struct and union it has sized within one call, so a type that several paths
+  share is walked once.
 - **podbuf** is sized by `ridl_ir::projection::podbuf::max_size`, the one
   implementation of the bound. A request of several parameters has no row, as in
   the other two encodings.

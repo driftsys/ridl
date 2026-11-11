@@ -176,10 +176,9 @@ checked, is ADR-0031 decision 8.
 and allocates for `String`, `Vec` and maps as the other codecs do. The view and
 `decode` read a value that an `open` enum does not declare as its `Unknown`
 variant, which holds the integer, and an `open` enum set keeps every bit, so
-`encode` writes such a value back unchanged. The raw value of a 64-bit enum or
-enum set is the bit pattern of its wire integer held in an `i64`: a `u64` of
-2^63 or more reads as a negative raw value and is written back as the same
-`u64`.
+`encode` writes such a value back unchanged. The raw value of a 64-bit enum set
+is the bit pattern of its wire integer held in an `i64`: a `u64` of 2^63 or more
+reads as a negative raw value and is written back as the same `u64`.
 
 **The view.** The accessors read through `Region`. A scalar read is one bounds
 check and one load. A `string` accessor returns a `&str` built by

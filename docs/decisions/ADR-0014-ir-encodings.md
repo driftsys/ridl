@@ -721,13 +721,16 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       category is monotone, so the composition of compatible changes is
       compatible. No earlier baseline is kept.
 
-16. **The enum value domain is `int32`.** A declared `enum` value must be in
-    `-2147483648..=2147483647`, the proto3 range, including negative values. A
-    value outside that range is an error, TYPL-225. This applies to strict and
-    open enums. An enum is carried as `int32` on the proto3 wire, and
-    FlatBuffers must not derive its width from the declared values. `enumset` is
-    unchanged: its width comes from its highest flag, up to 64 bits. Decisions 1
-    to 15 are unchanged.
+16. **The enum value domain is `int32`.** (Amended 2026-11-11 to distinguish the
+    source rule from each encoding's projection.) A declared `enum` value must
+    be in `-2147483648..=2147483647`, the proto3 range, including negative
+    values. A value outside that range is an error, TYPL-225. This source-level
+    rule applies to strict and open enums on every encoding. Proto3 carries an
+    enum as `int32`. Podbuf derives the narrowest integer that holds the
+    declared values, now at most 32 bits. The FlatBuffers backend currently
+    emits `long`; changing that projection requires a separate follow-up
+    decision. `enumset` is unchanged: its width comes from its highest flag, up
+    to 64 bits. Decisions 1 to 15 are unchanged.
 
 ## Alternatives considered
 

@@ -142,16 +142,20 @@ that does not fit, or a nesting past the sizer's depth limit. `RefusedMember` is
 a member the `.proto` emitter refuses: an optional array or map field (ADR-0013
 decision 7), an array of arrays or of maps, a map whose value is an array or a
 map, a map key outside the integral and string scalars, an enum value or a
-retired enum value outside int32, a field number proto3 reserves (19000 to
-19999) or does not admit (0, or above 2^29 − 1), a stream, and a name that does
-not resolve. The sizer checks a field number before the bound of the field's
-type, so a field with a refused number is `RefusedMember` whatever its type. The
-codec's own walk runs before the size state is read, and refuses an optional
-array or map field, a refused field number and an enum value outside int32 with
-a message that names the field or the value (`a_refused_member_is_still_refused`
-pins the last) — in a declaration, and in a tuple a declaration holds. A tuple
-only an interaction reaches is not walked when its root is not bounded, so such
-a member in it skips the interface with the sizer's `RefusedMember` and no field
+retired enum value outside int32 (a live value can reach this refusal only
+through hand-built IR, because TYPL-225 rejects it in source), a field number
+proto3 reserves (19000 to 19999) or does not admit (0, or above 2^29 − 1), a
+stream, and a name that does not resolve. The sizer checks a field number before
+the bound of the field's type, so a field with a refused number is
+`RefusedMember` whatever its type. The codec's own walk runs before the size
+state is read, and refuses an optional array or map field, a refused field
+number and an enum value outside int32 with a message that names the field or
+the value (the live enum value case requires hand-built IR;
+`an_enum_at_the_int32_maximum_has_a_proto3_codec` in
+`crates/ridl-backend-rust/tests/proto3_roundtrip.rs` pins the legal source
+boundary) — in a declaration, and in a tuple a declaration holds. A tuple only
+an interaction reaches is not walked when its root is not bounded, so such a
+member in it skips the interface with the sizer's `RefusedMember` and no field
 name. The codec alone refuses an optional array element and an optional map
 value, which the schema emits without presence (ADR-0019 review ruling 6), as
 the FlatBuffers codec does. An integer with no width, an enum with no value and

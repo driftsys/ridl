@@ -43,7 +43,8 @@
 //! array or map field of a struct or of a tuple a declaration holds
 //! (ADR-0013 decision 7), an optional array element and an optional map
 //! value, a nested collection, a map key outside the integral and string
-//! scalars, an enum value outside int32, and a field number proto3 reserves
+//! scalars, an enum value outside int32 in hand-built IR (source rejects it
+//! with TYPL-225), and a field number proto3 reserves
 //! or exceeds. A tuple only an interaction reaches is never walked when its
 //! root is not bounded, so such a member in it is the sizer's
 //! `RefusedMember`, named by the interface's note without the field.
@@ -3045,7 +3046,7 @@ pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<u32, &'static
                      array or map, an array of arrays or of maps, a map whose value is a \
                      collection, a map key outside the integral and string scalars, a field \
                      number proto3 reserves or exceeds, a name that does not resolve, or an \
-                     enum value outside int32"
+                     enum value outside int32 in hand-built IR (source rejects it with TYPL-225)"
                 }
                 v1::AbsentCause::Unresolved => {
                     "it names a declaration the sizer did not resolve (Unresolved)"

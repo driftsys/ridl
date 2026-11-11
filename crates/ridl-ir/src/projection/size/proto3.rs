@@ -18,7 +18,8 @@
 //! name that does not resolve (`resolve_named`), a nested array or map and a
 //! map value that is an array or a map (`resolve_field_type`), a map key
 //! outside the integral and string scalars (`map_key_text`), an enum live or
-//! retired value outside int32 (`emit_enum`), and a field number protobuf
+//! retired value outside int32 (`emit_enum`; a live value requires hand-built
+//! IR because TYPL-225 rejects it in source), and a field number protobuf
 //! reserves or exceeds (`check_field_number`). One refusal is not reproduced
 //! but shared: an optional array or map field of a struct or a tuple
 //! (`emit_struct`, `emit_induced_tuple`, ADR-0013 decision 7) is the rule
@@ -221,7 +222,8 @@ impl<'a> Walk<'a, '_> {
 /// passes `MAX_DEPTH`, the bound is above `u32::MAX`, or a `u64` sum or
 /// product inside the walk does not fit. `RefusedMember` for every other
 /// failure inside the message: a member the proto backend refuses, a name
-/// inside the message that does not resolve, and an enum value outside int32.
+/// inside the message that does not resolve, and an enum value outside int32
+/// (a live value requires hand-built IR; source rejects it with TYPL-225).
 pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
     let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
         return SizeState::Absent(AbsentCause::Unresolved);

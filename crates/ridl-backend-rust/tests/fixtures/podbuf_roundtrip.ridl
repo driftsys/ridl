@@ -186,7 +186,7 @@ open enum Big {
 }
 
 /// An open enum with a negative value and the positive int32 boundary.
-open enum Signed64 {
+open enum OpenSigned32 {
   NEG = -1
   BIG = 2147483647
 }
@@ -218,7 +218,7 @@ struct Tuning32 {
 /// Two open enums and a 64-bit open enum set.
 struct Wide64 {
   big    : Big
-  signed : Signed64
+  signed : OpenSigned32
   wide   : WideFlags
 }
 

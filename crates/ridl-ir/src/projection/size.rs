@@ -229,7 +229,8 @@ pub enum AbsentCause {
     /// map, a nested array or map, a map value that is a collection, a map key
     /// outside the integral and string scalars, a field number proto3
     /// reserves or exceeds, a stream, a field with no type), a name inside
-    /// the message that does not resolve, and an enum value outside int32. A
+    /// the message that does not resolve, and an enum value outside int32
+    /// (a live value requires hand-built IR; source rejects it with TYPL-225). A
     /// size problem is never this cause: it is [`AbsentCause::NoBound`] or
     /// [`AbsentCause::Overflow`]. This variant's text is the normative
     /// statement of the cause; the proto3 sizer's `state` implements it.
@@ -327,7 +328,8 @@ pub(crate) enum Leaf<'a> {
     /// has no member, which decide the varint length. `retired_in_int32` is
     /// false when a retired (`reserved`) value is outside proto3's int32
     /// range. A retired value is never encoded, but the proto backend
-    /// refuses it as it refuses a live value outside int32 (`emit_enum`), and
+    /// refuses it as it refuses a live value outside int32 in hand-built IR
+    /// (`emit_enum`; source rejects the live value with TYPL-225), and
     /// the sizer reproduces both refusals.
     Enum {
         min: i64,
