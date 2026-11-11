@@ -4070,6 +4070,31 @@ service:veh.common.climate 2
         assert!(!message.contains("does not exist"), "{message}");
     }
 
+    /// A member directory that cannot be searched makes the metadata of its
+    /// manifest fail with a permission error, which is reported with the path.
+    #[cfg(unix)]
+    #[test]
+    fn an_unsearchable_member_directory_reports_the_path_and_cause() {
+        if skip_as_root() {
+            return;
+        }
+        let dir = TempDir::new("unsearchable-member-directory");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        let manifest = dir.write("a/ridl.toml", PACKAGE_A);
+        let _permissions = RestrictedPermissions::new(&dir.path().join("a"));
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        assert!(result.is_err(), "an unsearchable member does not load");
+        let error = result.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        let message = error.to_string();
+        assert!(
+            message.contains(&manifest.display().to_string()),
+            "{message}"
+        );
+        assert!(message.contains("Permission denied"), "{message}");
+        assert!(!message.contains("does not exist"), "{message}");
+    }
+
     /// An absolute entry is normalised lexically before its ancestors are
     /// searched, as a relative entry is, so `pkg/../other` does not find the
     /// manifest of `pkg` (driftsys/ridl#846).
