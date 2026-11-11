@@ -47,6 +47,9 @@ env:
   # The flatc pin is not here either: it is in .flatc-version, for the same
   # reason.
   JUST_VERSION: 1.38.0
+  # The version `bootstrap` installs with `cargo install`. CI downloads the
+  # release binary instead, so that a cache miss costs seconds, not a build.
+  CARGO_SEMVER_CHECKS_VERSION: 0.51.0
   MDBOOK_VERSION: 0.4.40
 
 jobs:
@@ -257,11 +260,17 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
       # `just test-rest` runs the semver tests of xtask/tests/freeze.rs, which
-      # call cargo-semver-checks. It is built with `cargo install` at the
-      # version `bootstrap` names, not installed with a third-party action.
+      # call cargo-semver-checks: the release binary at the version pinned
+      # above.
       - name: install cargo-semver-checks
         if: matrix.part == 'rest'
-        run: cargo install cargo-semver-checks --locked --version 0.51.0
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v${CARGO_SEMVER_CHECKS_VERSION}/cargo-semver-checks-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" cargo-semver-checks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cargo-semver-checks" semver-checks --version
       # One test of `just test-cli` (crates/ridlc/tests/wasm_module.rs) runs
       # the generated wasm module in Node. ubuntu-latest has Node on PATH; the
       # step pins the major version the test is run with.
@@ -312,11 +321,16 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
-      # `just freeze-check` runs cargo-semver-checks. It is built with
-      # `cargo install` at the version `bootstrap` names, not installed with a
-      # third-party action.
+      # `just freeze-check` runs cargo-semver-checks. It is the
+      # release binary at the version pinned above, not a third-party action.
       - name: install cargo-semver-checks
-        run: cargo install cargo-semver-checks --locked --version 0.51.0
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v${CARGO_SEMVER_CHECKS_VERSION}/cargo-semver-checks-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" cargo-semver-checks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cargo-semver-checks" semver-checks --version
       - run: just freeze-check
 
   # The demo: `ridl build` writes a crate from examples/cabin, and cargo builds
