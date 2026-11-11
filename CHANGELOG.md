@@ -4,6 +4,10 @@
 
 ### Features
 
+- **ridl-backend-flatbuffers:** emit every enum as a fixed 32-bit int ([#1353])
+  ([a583fff]), closes [#1020]
+- **ridl-sem:** refuse an enum value outside the int32 range ([#1350])
+  ([f7f1f1a])
 - **xtask:** add the copilot host to the eval runner and fix the corpus eval
   tasks ([#1344]) ([a9f1f4e])
 - **ridl-backend-ts:** reject a lone surrogate in the generated encode ([#1330])
@@ -31,6 +35,8 @@
 
 ### Bug Fixes
 
+- **ridl:** correct the RIDL-412 recovery advice and the legacy reset claim
+  ([#1348]) ([82ff7e5])
 - **ridl-backend-ts:** import the runtime as a namespace so no declaration
   collides ([#1337]) ([5918f6e])
 - **ridl:** allow history reset after intentional unit removal ([#1333])
@@ -85,6 +91,16 @@
 
 ### BREAKING CHANGES
 
+- The FlatBuffers backend emits every enum as `int`, a fixed 32-bit width.
+Earlier versions emitted `long`. The bytes of a table field that holds an enum
+change from 8 bytes to 4 bytes, and the generated `.fbs` file, Rust code and
+TypeScript code change. TypeScript wrappers pass an enum as a number instead of
+a `bigint`. Regenerate all generated code and upgrade every peer that reads or
+writes these bytes together.
+- A package that declares an enum value below -2147483648 or above 2147483647
+no longer compiles; the compiler reports the new error `TYPL-225`. Change the
+value to fit in int32. An `enumset` is unchanged: its width still comes from its
+highest flag, up to 64 bits.
 - the proto backend now refuses packages with these
 struct field pairs that earlier versions accepted.
 - Generated float contract predicates now enforce exact
@@ -107,6 +123,13 @@ result instead of rejecting with `corrupt`. The field `Sample.lastGood` is
 required.
 
 [0.18.0]: https://github.com/driftsys/ridl/compare/v0.17.0...v0.18.0
+[a583fff]: https://github.com/driftsys/ridl/commit/a583fff
+[#1353]: https://github.com/driftsys/ridl/issues/1353
+[#1020]: https://github.com/driftsys/ridl/issues/1020
+[f7f1f1a]: https://github.com/driftsys/ridl/commit/f7f1f1a
+[#1350]: https://github.com/driftsys/ridl/issues/1350
+[82ff7e5]: https://github.com/driftsys/ridl/commit/82ff7e5
+[#1348]: https://github.com/driftsys/ridl/issues/1348
 [a9f1f4e]: https://github.com/driftsys/ridl/commit/a9f1f4e
 [#1344]: https://github.com/driftsys/ridl/issues/1344
 [c68773b]: https://github.com/driftsys/ridl/commit/c68773b
