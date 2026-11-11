@@ -95,9 +95,10 @@ its own package context. The
 [CLI reference](../book/cli-reference.md#ridl-baseline) owns the recovery
 procedure for affected units. Decisions 1 to 14 are unchanged.
 
-**Amended 2026-11-11 — decision 16, the enum value domain.** Declared enum
-values must fit `int32`; TYPL-225 refuses values outside that range. Enumset
-widths are unchanged. Decisions 1 to 15 are unchanged.
+**Amended 2026-11-11 — decision 16, the enum value domain.** Decided by the
+owner on 2026-11-11 and recorded in decision 16 of this record. Declared live
+enum values must fit `int32`; TYPL-225 refuses live values outside that range.
+Enumset widths are unchanged. Decisions 1 to 15 are unchanged.
 
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
@@ -737,7 +738,7 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 
 | Candidate                                                      | Verdict                            | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
 | -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Keep int64 and a value-derived width                           | rejected                           | Proto3 carries an enum as int32, so an int64 enum value cannot be carried. A u64 open enum integer also cannot be held by raw() returning i64. Podbuf still derives the narrowest width, now at most 32 bits.                                                                                                                                                                                 |
+| Keep int64                                                     | rejected                           | Proto3 carries an enum as int32, so an enum value outside int32 cannot be carried. Podbuf still derives the narrowest width, now at most 32 bits.                                                                                                                                                                                                                                             |
 | `pbjson-build` instead of `prost-reflect`                      | adopted for JSON (decision 14)     | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears — the original verdict, outweighed once decision 12 measured the transcode failing on legal source: a correctness trigger, not a cost one. Prototext keeps the pool |
 | Prototext for goldens                                          | rejected                           | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                                                                                                                                                                                              |
 | Prototext as the recommended interchange format                | rejected                           | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                                                                                                                                                                                     |

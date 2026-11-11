@@ -117,7 +117,7 @@ other entry below is Accepted.
   ADR-0018 decision 15.
 
 - **ADR-0014 — IR encodings.** Decision 16 (amended 2026-11-11) requires
-  declared enum values to fit int32, reports TYPL-225 otherwise, and leaves
+  declared live enum values to fit int32, reports TYPL-225 otherwise, and leaves
   enumsets unchanged. Canonical protobuf JSON replaces the `serde` rendering on
   every surface — artifacts, baselines, and goldens — because the rendering that
   shipped is serde's view of the generated Rust structs and no conformant

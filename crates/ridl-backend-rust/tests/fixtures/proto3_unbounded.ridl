@@ -1,14 +1,22 @@
-// An enum at the int32 boundary and a struct that contains it.
+// Enums at both int32 boundaries and a struct that contains one.
 
 package pb.unbounded
 
-/// An enum with a value at the int32 maximum.
+/// An enum with values at both int32 boundaries.
 enum Wide {
   ZERO = 0
   BIG  = 2147483647
+  MINIMUM = -2147483648
 }
 
 /// A struct that reaches `Wide`.
 struct Holder {
   wide : Wide
+}
+
+/// An enum with retired values at both int32 boundaries.
+enum Retired {
+  ZERO = 0
+  reserved -2147483648
+  reserved 2147483647
 }

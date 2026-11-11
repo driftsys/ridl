@@ -3412,7 +3412,7 @@ fn an_enum_states_whether_it_is_strict_or_open() {
 #[test]
 fn proto_backend_refuses_enum_values_outside_int32() {
     // Source admits retired int64 values; live values outside int32 require hand-built IR.
-    for value in [-2147483649_i64, 2147483648] {
+    for value in [-2147483649_i64, -2147483648, 2147483647, 2147483648] {
         for retired in [true, false] {
             let source = if retired {
                 format!("package app\nenum E {{ reserved {value}, A = 0 }}\n")
@@ -3439,6 +3439,12 @@ fn proto_backend_refuses_enum_values_outside_int32() {
                     })
                     .expect("enum");
                 def.values[0].value = value;
+            }
+            if i32::try_from(value).is_ok() {
+                let generated = generate(&package).expect("int32 boundaries must be accepted");
+                assert!(generated.proto_source.contains(&value.to_string()));
+                compile_with_protox("app.proto", &generated.proto_source);
+                continue;
             }
             let error = generate(&package).expect_err("outside int32 must be refused");
             assert!(

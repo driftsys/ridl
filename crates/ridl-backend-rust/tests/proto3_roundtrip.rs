@@ -427,10 +427,10 @@ fn main() {{
     rustc::run_program("pb_max_size", &program(&main));
 }
 
-/// Declared enum values at the int32 maximum have a proto3 codec, including
+/// Live and retired enum values at both int32 boundaries have a proto3 codec, including
 /// when reached through a struct field.
 #[test]
-fn an_enum_at_the_int32_maximum_has_a_proto3_codec() {
+fn enums_at_int32_boundaries_have_proto3_codecs() {
     let package = ir::compile_fixture("proto3_unbounded.ridl");
     ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
         .expect("an int32 enum and its holder have proto3 codecs");

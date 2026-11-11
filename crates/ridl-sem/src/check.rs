@@ -7761,6 +7761,11 @@ mod tests {
                 &format!("package app\nenum E {{ reserved {value}, A = 0 }}\n"),
             );
             assert!(codes(&checked).is_empty(), "{value}: {:?}", codes(&checked));
+            let Some(v2::decl::Kind::EnumDef(def)) = &decl(&checked, "E").kind else {
+                panic!("enum");
+            };
+            assert_eq!(def.reserved.len(), 1);
+            assert_eq!(def.reserved[0].value, Some(value.parse::<i64>().unwrap()));
         }
     }
 

@@ -1210,38 +1210,33 @@ mod tests {
             }
             decl
         };
-        let mut package = fixture();
-        package
-            .decls
-            .push(with_retired("Retired", i64::from(i32::MAX) + 1));
-        package
-            .decls
-            .push(with_retired("RetiredEdge", i64::from(i32::MIN)));
-        package.decls.push(struct_decl(
-            "HoldsRetired",
-            vec![("e", 1, named("Retired"))],
-        ));
-        package.decls.push(struct_decl(
-            "HoldsRetiredEdge",
-            vec![("e", 1, named("RetiredEdge"))],
-        ));
-        let others: [&Package; 0] = [];
-        let ctx = Ctx::new(&package, &others);
-        assert_eq!(
-            state_in("HoldsRetired", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("HoldsRetiredEdge", &ctx),
-            SizeState::Bounded(2),
-            "a retired value inside int32 is admitted and does not change the live values' size"
-        );
-        assert_eq!(
-            state_in("Retired", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember),
-            "the root box message holds the enum as a field, so the same refusal applies"
-        );
-        assert_eq!(state_in("RetiredEdge", &ctx), SizeState::Bounded(2));
+        for (retired, expected) in [
+            (
+                i64::from(i32::MIN) - 1,
+                SizeState::Absent(AbsentCause::RefusedMember),
+            ),
+            (
+                i64::from(i32::MAX) + 1,
+                SizeState::Absent(AbsentCause::RefusedMember),
+            ),
+            (i64::from(i32::MIN), SizeState::Bounded(2)),
+            (i64::from(i32::MAX), SizeState::Bounded(2)),
+        ] {
+            let mut package = fixture();
+            package.decls.push(with_retired("Retired", retired));
+            package.decls.push(struct_decl(
+                "HoldsRetired",
+                vec![("e", 1, named("Retired"))],
+            ));
+            let others: [&Package; 0] = [];
+            let ctx = Ctx::new(&package, &others);
+            assert_eq!(state_in("Retired", &ctx), expected, "retired={retired}");
+            assert_eq!(
+                state_in("HoldsRetired", &ctx),
+                expected,
+                "retired={retired}"
+            );
+        }
     }
 
     #[test]
