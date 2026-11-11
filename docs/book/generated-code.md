@@ -192,21 +192,23 @@ the refusal.
 
 Float comparisons follow the exact rational semantics of
 [expr-core section 7](reference/expr-core.md#7-evaluation-domains). At
-generation, `<=` and `>` use the largest finite binary64 value at or below the
-exact decimal literal; `>=` and `<` use the smallest finite binary64 value at or
-above it. This preserves the comparison for every finite stored `f64`. For
-example, `x <= 0.1` uses `x <= 0.09999999999999999`, so the binary64 value
-written as `0.1f64`, which is above the exact tenth, fails the clause. Exactly
-representable literals are printed in the shortest form that reads back as the
-same binary64, which is always a Rust literal (`0.5` stays `0.5`, `100` becomes
-`100.0`, and a spelling only hand-built IR can carry, such as `+0.5` or `.5`,
-becomes `0.5`). An exact zero is printed as `0.0`, which every comparison treats
-like `-0.0`. An inexact literal on `==` or `!=` is refused because no binary64
-value equals it. A literal whose exponent cannot be read or has magnitude above
-10000, or whose required bound is infinite, is also refused. A literal above the
-finite range can still have a finite lower bound: `<= 1e999`, which only
-hand-built IR can carry because the lexer has no exponent form, uses `f64::MAX`.
-Integer comparisons are unchanged.
+generation, literals whose exact value exceeds `f64::MAX` in magnitude are
+refused. For literals at or below that limit, `<=` and `>` use the largest
+finite binary64 value at or below the exact decimal literal; `>=` and `<` use
+the smallest finite binary64 value at or above it. This preserves the comparison
+for every finite stored `f64`. For example, `x <= 0.1` uses
+`x <= 0.09999999999999999`, so the binary64 value written as `0.1f64`, which is
+above the exact tenth, fails the clause. Exactly representable literals are
+printed in the shortest form that reads back as the same binary64, which is
+always a Rust literal (`0.5` stays `0.5`, `100` becomes `100.0`, and a spelling
+only hand-built IR can carry, such as `+0.5` or `.5`, becomes `0.5`). An exact
+zero is printed as `0.0`, which every comparison treats like `-0.0`. An inexact
+literal on `==` or `!=` is refused because no binary64 value equals it. A
+literal whose exponent cannot be read or has magnitude above 10000 is also
+refused. A numeric literal whose exact value exceeds `f64::MAX` in magnitude is
+refused at compile time with RIDL-306. The backend also refuses literals outside
+the finite binary64 range in hand-built IR, such as `1e999`. This adds no
+runtime infinity check. Integer comparisons are unchanged.
 
 ## Async calls
 

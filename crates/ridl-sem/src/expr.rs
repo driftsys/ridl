@@ -289,8 +289,36 @@ fn infer_literal(literal: &ast::LiteralExpr, out: &mut Vec<Diagnostic>) -> Optio
     // A missing token is a parse error, already reported.
     let token = literal.token()?;
     match token.kind() {
-        SyntaxKind::IntNumber => Some(ExprType::Numeric(String::new(), NumericBacking::Integer)),
-        SyntaxKind::FloatNumber => Some(ExprType::Numeric(String::new(), NumericBacking::Float)),
+        SyntaxKind::IntNumber | SyntaxKind::FloatNumber => {
+            let text = token.text();
+            // Numeric tokens contain decimal digits and an optional fraction;
+            // the lexer does not accept separators.
+            let outside_range = ExactValue::parse(text).map_or_else(
+                // Exponent tokens cannot occur in source, but may occur in a
+                // synthetic AST. Preserve their existing overflow diagnostic.
+                || text.parse::<f64>().is_ok_and(|value| value.is_infinite()),
+                |value| {
+                    let max = num_rational::BigRational::from_float(f64::MAX).unwrap();
+                    value.0 > max || value.0 < -max
+                },
+            );
+            if outside_range {
+                error(
+                    out,
+                    token.text_range(),
+                    format!(
+                        "numeric literal `{text}` is outside the finite binary64 range (expr-core §5.3)"
+                    ),
+                );
+                return None;
+            }
+            let backing = if token.kind() == SyntaxKind::IntNumber {
+                NumericBacking::Integer
+            } else {
+                NumericBacking::Float
+            };
+            Some(ExprType::Numeric(String::new(), backing))
+        }
         SyntaxKind::Duration => Some(ExprType::Duration),
         SyntaxKind::TrueKw | SyntaxKind::FalseKw => Some(ExprType::Boolean),
         SyntaxKind::String | SyntaxKind::Regex => {
@@ -1186,6 +1214,98 @@ mod tests {
     }
 
     // --- the RIDL-306 boundary --------------------------------------------
+
+    #[test]
+    fn numeric_clause_literals_require_finite_binary64_values() {
+        let db = RidlDatabase::default();
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
+        let params = [("x".to_string(), speed())];
+        let scope = ContractScope {
+            params: &params,
+            result: None,
+            signals: &[],
+            vocabulary: &vocabulary,
+            resolution: &resolution,
+        };
+        let max_text = format!("{:.0}", f64::MAX);
+        let max = num_bigint::BigInt::parse_bytes(max_text.as_bytes(), 10).unwrap();
+        assert_eq!(
+            num_rational::BigRational::from_integer(max.clone()),
+            num_rational::BigRational::from_float(f64::MAX).unwrap()
+        );
+        for (op, literal, refused) in [
+            ("<=", max_text, false),
+            ("<=", (&max + num_bigint::BigInt::from(1)).to_string(), true),
+            (
+                "<=",
+                (&max + num_bigint::BigInt::from(10).pow(291)).to_string(),
+                true,
+            ),
+            (
+                "<=",
+                (&max + (num_bigint::BigInt::from(1) << 970usize) - num_bigint::BigInt::from(1))
+                    .to_string(),
+                true,
+            ),
+            (
+                "<=",
+                (&max + (num_bigint::BigInt::from(1) << 970usize) + num_bigint::BigInt::from(1))
+                    .to_string(),
+                true,
+            ),
+            (">", "1e999".to_string(), true),
+            ("<", "-1e999".to_string(), true),
+            (">=", "1e309".to_string(), true),
+            (">", "9".repeat(400), true),
+            ("<", format!("-{}.0", "9".repeat(400)), true),
+            (">", format!("1{}", "0".repeat(308)), false),
+            (">", "1e308".to_string(), false),
+            (">", "1.7976931348623157e308".to_string(), false),
+        ] {
+            // The lexer has no exponent form. Replace a numeric token to test
+            // the semantic boundary independently of that lexical restriction.
+            let expr = if literal.contains('e') {
+                let sign = if literal.starts_with('-') { "-" } else { "" };
+                let expr = parse_expr(&format!("x {op} {sign}1.0"));
+                let token = expr
+                    .syntax()
+                    .descendants_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .find(|token| token.kind() == SyntaxKind::FloatNumber)
+                    .unwrap();
+                let replacement = rowan::GreenToken::new(
+                    SyntaxKind::FloatNumber.into(),
+                    literal.trim_start_matches('-'),
+                );
+                let green = token.replace_with(replacement);
+                ridl_syntax::SyntaxNode::new_root(green)
+                    .descendants()
+                    .find_map(ast::Expr::cast)
+                    .unwrap()
+            } else {
+                parse_expr(&format!("x {op} {literal}"))
+            };
+            let (ty, diagnostics) = check_contract_expr(&expr, &scope);
+            if refused {
+                assert_eq!(codes(&diagnostics), vec!["RIDL-306"], "{op} {literal}");
+                assert_eq!(ty, None);
+                assert!(
+                    diagnostics[0]
+                        .message
+                        .contains(literal.trim_start_matches('-'))
+                );
+                assert!(
+                    diagnostics[0]
+                        .message
+                        .contains("outside the finite binary64 range")
+                );
+            } else {
+                assert!(diagnostics.is_empty(), "{literal}: {diagnostics:?}");
+                assert_eq!(ty, Some(ExprType::Boolean));
+            }
+        }
+    }
 
     #[test]
     fn ridl_306_unknown_reference() {

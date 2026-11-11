@@ -12,16 +12,17 @@
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
 //! <literal>` for `result`, with the literal in the subject's Rust numeric
-//! type. Float bounds preserve expr-core's exact rational comparisons: `<=`
-//! and `>` use the largest binary64 value at or below the exact literal; `>=`
+//! type. Literals whose exact magnitude exceeds `f64::MAX` are refused.
+//! For literals at or below that limit, float bounds preserve expr-core's exact
+//! rational comparisons: `<=` and `>` use the largest binary64 value at or below the exact literal; `>=`
 //! and `<` use the smallest at or above it. Exactly representable literals
 //! are printed in the shortest form that reads back as the same binary64, so
 //! the output is always a Rust literal (`+0.5` becomes `0.5`, `100` becomes
 //! `100.0`; an exact zero prints as `0.0` with no sign, which every comparison
 //! treats like `-0.0`). Inexact `==` and `!=`, unreadable
 //! decimals, exponents that cannot be read or have magnitude above 10000,
-//! and bounds that require infinity are refused. The newtype's field
-//! is private, and the read is still legal: the subject is always a
+//! and literals outside the exact finite binary64 range are refused.
+//! The newtype's field is private, and the read is still legal: the subject is always a
 //! same-package named scalar, and the clause is emitted inside a descriptor
 //! `impl` block at package module scope, the same module that declares the
 //! type, where a private field is visible. Several clauses of one kind are
@@ -231,14 +232,16 @@ fn literal_tokens(
         }
         ScalarBacking::Float => {
             let exact = decimal(value).ok_or("the literal cannot be read as an exact decimal")?;
-            // Start at the nearest binary64 value, clamped to the finite range.
+            let max = BigRational::from_float(f64::MAX).unwrap();
+            if exact > max || exact < -max {
+                return Err("the literal is outside the finite binary64 range");
+            }
+            // Start at the nearest binary64 value.
             // Only the exact rational comparison below decides its direction.
             let nearest = exact
                 .to_f64()
-                .ok_or("the literal cannot be converted to binary64")?
-                .clamp(-f64::MAX, f64::MAX);
-            let represented = BigRational::from_float(nearest)
-                .ok_or("the literal has no finite binary64 bound")?;
+                .ok_or("the literal cannot be converted to binary64")?;
+            let represented = BigRational::from_float(nearest).unwrap();
             let ordering = represented.cmp(&exact);
             if ordering == Ordering::Equal {
                 return Ok(numeric_tokens(&format!("{nearest:?}"), true));
@@ -258,9 +261,6 @@ fn literal_tokens(
                 (false, Ordering::Less) => nearest.next_up(),
                 _ => nearest,
             };
-            if !bound.is_finite() {
-                return Err("the required binary64 bound is infinite");
-            }
             Ok(numeric_tokens(&format!("{bound:?}"), true))
         }
         _ => Err("the literal does not match the subject's numeric type"),
@@ -716,13 +716,8 @@ mod tests {
             ("-0.1", "-0.1", "-0.09999999999999999"),
             ("1e-324", "0.0", "5e-324"),
             ("-1e-324", "-5e-324", "-0.0"),
-            ("1e999", "1.7976931348623157e308", ""),
-            ("-1e999", "", "-1.7976931348623157e308"),
         ] {
             for (op, bound) in [("<=", down), (">", down), (">=", up), ("<", up)] {
-                if bound.is_empty() {
-                    continue;
-                }
                 for (subject, field, ensure) in [("rate", "args", false), ("result", "reply", true)]
                 {
                     let source = format!("{subject} {op} {literal}");
@@ -812,20 +807,11 @@ mod tests {
 
     #[test]
     fn the_exponent_limit_holds_for_every_sign_and_comparison() {
-        // Bare `1e10000` with `<=` alone cannot tell a negative coefficient or a
-        // multi-digit mantissa at the limit from a refused one.
         for (literal, down, up) in [
-            ("-1e10000", "", "-1.7976931348623157e308"),
-            ("1.5e10000", "1.7976931348623157e308", ""),
-            ("-1.5e10000", "", "-1.7976931348623157e308"),
-            ("15e9999", "1.7976931348623157e308", ""),
             ("-1e-10000", "-5e-324", "-0.0"),
             ("1.5e-10000", "0.0", "5e-324"),
         ] {
             for (op, bound) in [("<=", down), (">", down), (">=", up), ("<", up)] {
-                if bound.is_empty() {
-                    continue;
-                }
                 assert_eq!(
                     float_clause(&format!("rate {op} {literal}"), false)
                         .map_err(|error| error.message),
@@ -834,6 +820,53 @@ mod tests {
                     )),
                     "rate {op} {literal}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn exact_binary64_range_boundary() {
+        let max_text = format!("{:.0}", f64::MAX);
+        let max = num_bigint::BigInt::parse_bytes(max_text.as_bytes(), 10).unwrap();
+        assert_eq!(
+            num_rational::BigRational::from_integer(max.clone()),
+            num_rational::BigRational::from_float(f64::MAX).unwrap()
+        );
+        for sign in ["", "-"] {
+            for op in ["<=", ">", ">=", "<", "==", "!="] {
+                assert!(float_clause(&format!("rate {op} {sign}{max_text}"), false).is_ok());
+                for offset in [
+                    num_bigint::BigInt::from(1),
+                    num_bigint::BigInt::from(10).pow(291),
+                    (num_bigint::BigInt::from(1) << 970usize) - num_bigint::BigInt::from(1),
+                    (num_bigint::BigInt::from(1) << 970usize) + num_bigint::BigInt::from(1),
+                ] {
+                    let literal = format!("{sign}{}", &max + offset);
+                    let error = float_clause(&format!("rate {op} {literal}"), false)
+                        .expect_err("an exact value beyond the limit must be refused");
+                    assert!(
+                        error
+                            .message
+                            .ends_with("the literal is outside the finite binary64 range"),
+                        "{error:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ir_float_literals_outside_finite_binary64_range_are_refused() {
+        for op in [">", "<=", "<", ">=", "==", "!="] {
+            for literal in ["1e999", "-1e999", "1e10000", "-1.5e10000", "15e9999"] {
+                for (subject, ensure) in [("rate", false), ("result", true)] {
+                    let error = float_clause(&format!("{subject} {op} {literal}"), ensure)
+                        .expect_err("an out-of-range IR literal must not be clamped");
+                    assert!(
+                        error.message.contains("outside the finite binary64 range"),
+                        "{error:?}"
+                    );
+                }
             }
         }
     }
@@ -854,17 +887,11 @@ mod tests {
     }
 
     #[test]
-    fn float_exponents_at_the_magnitude_limit_have_finite_lower_bounds() {
-        // Rejecting magnitude 10000 along with larger exponents loses these bounds.
-        for (literal, bound) in [("1e10000", "1.7976931348623157e308"), ("1e-10000", "0.0")] {
-            assert_eq!(
-                float_clause(&format!("rate <= {literal}"), false).map_err(|error| error.message),
-                Ok(format!(
-                    "ifargs.0<={bound}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
-                )),
-                "{literal}"
-            );
-        }
+    fn negative_float_exponent_at_the_magnitude_limit_has_a_finite_lower_bound() {
+        assert_eq!(
+            float_clause("rate <= 1e-10000", false).map_err(|error| error.message),
+            Ok("ifargs.0<=0.0{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}".to_string())
+        );
     }
 
     #[test]
@@ -879,10 +906,22 @@ mod tests {
                 "!= 0.1",
                 "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
             ),
-            (">= 1e999", "the required binary64 bound is infinite"),
-            ("< 1e999", "the required binary64 bound is infinite"),
-            ("<= -1e999", "the required binary64 bound is infinite"),
-            ("> -1e999", "the required binary64 bound is infinite"),
+            (
+                ">= 1e999",
+                "the literal is outside the finite binary64 range",
+            ),
+            (
+                "< 1e999",
+                "the literal is outside the finite binary64 range",
+            ),
+            (
+                "<= -1e999",
+                "the literal is outside the finite binary64 range",
+            ),
+            (
+                "> -1e999",
+                "the literal is outside the finite binary64 range",
+            ),
             (
                 "<= 1e10001",
                 "the literal cannot be read as an exact decimal",

@@ -286,6 +286,12 @@ values).
 | `Enum.MEMBER`     | postfix `SCREAMING_SNAKE_ID` member on an enum type name in scope                             | that enum type   |
 | `value.field`     | postfix `camelCase_id` member on a tuple-typed value, naming one of its fields                | the field's type |
 
+A numeric literal in a `require` or `ensure` clause is refused with RIDL-306 if
+its exact value exceeds `f64::MAX` in magnitude, compared as exact rationals.
+The diagnostic names the literal and states that it is outside the finite
+binary64 range. This check applies to integer and float literals and runs at
+compile time; it adds no runtime infinity check.
+
 Rules the table implies, stated explicitly:
 
 - **The root of a `require`/`ensure` expression must be boolean.** A non-boolean
@@ -386,6 +392,7 @@ That includes, non-exhaustively:
 | duration arithmetic (§5.3)                                  | `require window + 10ms < 1s`         |
 | struct-field access — struct-typed base, not a tuple (§5.1) | `require filter.severity >= 4`       |
 | `%` over non-integer-backed operands (§5.3)                 | `require speed % 0.5 == 0.0`         |
+| numeric literal outside the finite binary64 range (§5.3)    | a 400-digit integer in a clause      |
 | non-boolean root (§5.3)                                     | `require 3`                          |
 | string/bytes operands; enum ordering (§5.3)                 | `require name == "x"`                |
 
