@@ -142,8 +142,8 @@ pre-empting the tree:
 - It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op> <literal>`
   for `result`; several clauses of one kind conjoin with `&&`. Float literals
   are rounded at generation to preserve exact rational comparisons. Comparisons
-  using `==` or `!=` with an inexact literal are refused, as are bounds
-  requiring infinity. The book's
+  using `==` or `!=` with an inexact literal are refused, as are literals
+  outside the finite binary64 range. The book's
   [contract clause translation](../book/generated-code.md#contract-clause-translation)
   states the rounding and refusal rules. The codegen model retains the exact
   literal text.

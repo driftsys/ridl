@@ -13136,12 +13136,10 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         assert_eq!(outside.to_string().len(), 309);
         for clause in ["require x", "ensure result"] {
             for (literal, refused) in [(&outside, true), (&max, false)] {
-                let checked = check_ridl(
-                    "app",
-                    &format!(
-                        "package app\n/// A rate.\ntype Rate: float [0.0..1.0 step 0.1]\n/// Contract bounds.\ninterface I {{\n  /// Read the rate.\n  query q(x: Rate): Rate [ {clause} > {literal}.0 ] @[..50ms]\n}}\n"
-                    ),
+                let source = format!(
+                    "package app\n/// A rate.\ntype Rate: float [0.0..1.0 step 0.1]\n/// Contract bounds.\ninterface I {{\n  /// Read the rate.\n  query q(x: Rate): Rate [ {clause} > {literal}.0 ] @[..50ms]\n}}\n"
                 );
+                let checked = check_ridl("app", &source);
                 assert_eq!(
                     codes(&checked),
                     if refused { vec!["RIDL-306"] } else { vec![] },
@@ -13155,7 +13153,14 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
                     checked.diagnostics
                 );
                 for diagnostic in &checked.diagnostics {
-                    assert!(!diagnostic.primary.range.is_empty(), "{diagnostic:?}");
+                    let range = diagnostic.primary.range;
+                    let start = usize::from(range.start());
+                    let end = usize::from(range.end());
+                    assert_eq!(
+                        &source[start..end],
+                        format!("{literal}.0"),
+                        "{diagnostic:?}"
+                    );
                 }
             }
         }

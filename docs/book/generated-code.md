@@ -191,12 +191,11 @@ refused; the interface and its descriptors are left out with a note explaining
 the refusal.
 
 Float comparisons follow the exact rational semantics of
-[expr-core section 7](reference/expr-core.md#7-evaluation-domains). At
-generation, literals whose exact value exceeds `f64::MAX` in magnitude are
-refused. For literals at or below that limit, `<=` and `>` use the largest
-finite binary64 value at or below the exact decimal literal; `>=` and `<` use
-the smallest finite binary64 value at or above it. This preserves the comparison
-for every finite stored `f64`. For example, `x <= 0.1` uses
+[expr-core section 7](reference/expr-core.md#7-evaluation-domains). For literals
+whose exact value is at or below `f64::MAX` in magnitude, `<=` and `>` use the
+largest finite binary64 value at or below the exact decimal literal; `>=` and
+`<` use the smallest finite binary64 value at or above it. This preserves the
+comparison for every finite stored `f64`. For example, `x <= 0.1` uses
 `x <= 0.09999999999999999`, so the binary64 value written as `0.1f64`, which is
 above the exact tenth, fails the clause. Exactly representable literals are
 printed in the shortest form that reads back as the same binary64, which is
@@ -204,13 +203,13 @@ always a Rust literal (`0.5` stays `0.5`, `100` becomes `100.0`, and a spelling
 only hand-built IR can carry, such as `+0.5` or `.5`, becomes `0.5`). An exact
 zero is printed as `0.0`, which every comparison treats like `-0.0`. An inexact
 literal on `==` or `!=` is refused because no binary64 value equals it. A source
-literal undergoes the compile-time RIDL-306 admission check in
-[expr-core §5.3](../specification/expr-core-specification.md#53-operator-rules).
-For float subjects, an out-of-range literal in hand-built IR is refused by the
-backend during generation. Exponent spellings occur only in hand-built IR; a
-literal whose exponent cannot be read or has magnitude above 10000 is also
-refused during generation. This adds no runtime infinity check. Integer
-comparisons are unchanged.
+literal above that limit is refused at compile time with RIDL-306
+([expr-core §5.3](reference/expr-core.md#53-operator-rules)). For float
+subjects, an out-of-range literal in hand-built IR is refused by the backend
+during generation. Exponent spellings occur only in hand-built IR; a literal
+whose exponent cannot be read or has magnitude above 10000 is also refused
+during generation. This adds no runtime infinity check. Integer comparisons are
+unchanged.
 
 ## Async calls
 
