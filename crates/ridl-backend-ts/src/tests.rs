@@ -909,27 +909,20 @@ fn enumset_init_is_the_empty_set() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn enum_discriminant_beyond_2_53_is_unrepresentable() {
-    // TypeScript enums are number-valued; a discriminant beyond
-    // Number.MAX_SAFE_INTEGER has no exact representation.
-    let result = generate(&package(
-        "veh.common",
-        vec![public_decl(
-            "Huge",
-            v2::decl::Kind::EnumDef(v2::EnumDef {
-                values: vec![enum_value("TOO_BIG", 9_007_199_254_740_993)],
-                reserved: Vec::new(),
-                open: false,
-            }),
-        )],
-    ));
-    let Err(GenerateError::Unrepresentable(message)) = result else {
-        panic!("an unsafe enum discriminant must be Unrepresentable, got {result:?}");
-    };
-    assert!(
-        message.contains("Huge"),
-        "the error must name the declaration, got: {message}"
-    );
+fn enum_discriminants_at_int32_boundaries_are_representable() {
+    let source = ts_for(vec![public_decl(
+        "Limits",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                enum_value("LOW", -2147483648),
+                enum_value("HIGH", 2147483647),
+            ],
+            reserved: Vec::new(),
+            open: false,
+        }),
+    )]);
+    assert!(source.contains("= -2147483648"), "{source}");
+    assert!(source.contains("= 2147483647"), "{source}");
 }
 
 #[test]

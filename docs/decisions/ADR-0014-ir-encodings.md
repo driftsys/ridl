@@ -95,6 +95,10 @@ its own package context. The
 [CLI reference](../book/cli-reference.md#ridl-baseline) owns the recovery
 procedure for affected units. Decisions 1 to 14 are unchanged.
 
+**Amended 2026-11-11 — decision 16, the enum value domain.** Declared enum
+values must fit `int32`; TYPL-225 refuses values outside that range. Enumset
+widths are unchanged. Decisions 1 to 15 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -717,10 +721,19 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       category is monotone, so the composition of compatible changes is
       compatible. No earlier baseline is kept.
 
+16. **The enum value domain is `int32`.** A declared `enum` value must be in
+    `-2147483648..=2147483647`, the proto3 range, including negative values. A
+    value outside that range is an error, TYPL-225. This applies to strict and
+    open enums. An enum is carried as `int32` on the proto3 wire, and
+    FlatBuffers must not derive its width from the declared values. `enumset` is
+    unchanged: its width comes from its highest flag, up to 64 bits. Decisions 1
+    to 15 are unchanged.
+
 ## Alternatives considered
 
 | Candidate                                                      | Verdict                            | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
 | -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Keep int64 and a value-derived width                           | rejected                           | A value-derived width turns adding a value into a wire break.                                                                                                                                                                                                                                                                                                                                 |
 | `pbjson-build` instead of `prost-reflect`                      | adopted for JSON (decision 14)     | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears — the original verdict, outweighed once decision 12 measured the transcode failing on legal source: a correctness trigger, not a cost one. Prototext keeps the pool |
 | Prototext for goldens                                          | rejected                           | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                                                                                                                                                                                              |
 | Prototext as the recommended interchange format                | rejected                           | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                                                                                                                                                                                     |
@@ -815,6 +828,13 @@ and §12 in the same change. Its 2026-10-10 amendment (the unchanged catalog)
 amends the frame specification §6.1 in the same change.
 [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md) describes
 the descriptor as built and changes when the field lands.
+
+The 2026-11-11 amendment of decision 16 updates these records:
+
+| Document                                                                                | Change                                      |
+| --------------------------------------------------------------------------------------- | ------------------------------------------- |
+| [The typl language reference](../specification/typl-language-reference.md) §8 and §16.3 | Defines the int32 enum domain and TYPL-225. |
+| [The ADR index](README.md)                                                              | Summarises decision 16.                     |
 
 ## References
 

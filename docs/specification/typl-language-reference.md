@@ -991,6 +991,8 @@ enum GearPosition {
   unique (TYPL-203)
 - A value name is unique within its enum (TYPL-216): a name identifies one
   value, so an enum cannot declare two
+- Declared values must fit `int32`, from -2147483648 through 2147483647,
+  inclusive (TYPL-225), for strict and open enums. Negative values are allowed.
 - First value conventionally `= 0` for proto3 compatibility
 - String-backed enums are not supported in v0.1; planned for v0.2 (§17.1)
 
@@ -1009,8 +1011,8 @@ open enum DtcStatus {
 - An open enum accepts any value that fits the integer of its encoding. A value
   that the declaration does not name is the **unknown** case and carries the raw
   integer.
-- The language layer integer is `int64`, as for every enum. On a wire, the
-  integer is the one the encoding carries (for example `int32` for proto3).
+- Declared values have the `int32` domain. The language representation can hold
+  the raw integer of an unknown value from the encoding.
 - The init value does not change: the member whose value is 0, else the lowest
   declared value. An unknown value is never an init value.
 - An open enum that declares no value, and an open `enumset` that declares no
@@ -1509,6 +1511,7 @@ scope is checked under, is in ridl §16.4.
 | TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite                                                                       | error    |
 | TYPL-222 | one field name used with different units                                                                                                                                       | info     |
 | TYPL-224 | duplicate declaration shape                                                                                                                                                    | info     |
+| TYPL-225 | enum value outside the `int32` range                                                                                                                                           | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 

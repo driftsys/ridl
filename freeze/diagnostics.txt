@@ -177,6 +177,7 @@ TYPL-219 error
 TYPL-220 error
 TYPL-222 info lint=inconsistent-unit default=info
 TYPL-224 info lint=duplicate-shape default=info
+TYPL-225 error
 TYPL-301 error
 TYPL-302 error
 TYPL-303 error

@@ -3347,6 +3347,13 @@ impl Checker<'_> {
                 .as_ref()
                 .map(|literal| literal.syntax().text_range())
                 .unwrap_or_default();
+            if i32::try_from(value).is_err() {
+                self.error(
+                    DiagCode::TYPL_225,
+                    value_range,
+                    format!("enum value `{name}` = {value} is outside the `int32` range -2147483648..=2147483647"),
+                );
+            }
             if reserved_values.contains(&value) {
                 self.error(
                     DiagCode::TYPL_210,
@@ -7722,13 +7729,68 @@ mod tests {
         assert!(message.contains("`-1.5`"), "{message}");
     }
 
+    #[test]
+    fn enum_int32_domain() {
+        for prefix in ["", "open "] {
+            for value in ["2147483647", "-2147483648", "2147483648", "-2147483649"] {
+                let checked = check_source(
+                    "app",
+                    &format!("package app\n{prefix}enum E {{ A = {value} }}\n"),
+                );
+                let expected = if ["2147483648", "-2147483649"].contains(&value) {
+                    vec!["TYPL-225"]
+                } else {
+                    vec![]
+                };
+                assert_eq!(codes(&checked), expected, "{prefix}{value}");
+                if !expected.is_empty() {
+                    let message = &checked.diagnostics[0].message;
+                    for text in ["A", value, "-2147483648..=2147483647"] {
+                        assert!(message.contains(text), "{message}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn enum_int32_check_preserves_other_checks() {
+        let checked = check_source(
+            "app",
+            "package app\nenum E { reserved 2147483648, A = 2147483648, B = 2147483648 }\n",
+        );
+        let found = codes(&checked);
+        assert_eq!(found.iter().filter(|c| **c == "TYPL-225").count(), 2);
+        assert!(found.contains(&"TYPL-203"));
+        assert!(found.contains(&"TYPL-210"));
+    }
+
+    #[test]
+    fn enum_int32_domain_does_not_limit_enumsets() {
+        let checked = check_source("app", "package app\nenumset W { HIGH = 63 }\n");
+        assert!(codes(&checked).is_empty());
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "W").kind else {
+            panic!("enumset");
+        };
+        assert_eq!(def.bits[0].value, 63);
+        assert_eq!(def.width, v2::IntWidth::U64 as i32);
+    }
+
     /// The issue asked whether the enum path has the same gap. It does not:
     /// an enum value that is not a number with an integer value draws
     /// TYPL-203 and is not lowered. Pinned here so the two paths stay in
     /// step.
     #[test]
     fn typl_203_refuses_an_enum_value_that_is_not_an_integer() {
-        for value in ["\"x\"", "1.5", "true", "/x/", "LIMIT"] {
+        for value in [
+            "\"x\"",
+            "1.5",
+            "true",
+            "/x/",
+            "LIMIT",
+            "9223372036854775808",
+            "-9223372036854775809",
+        ] {
             let source = format!(
                 "package app\nconst LIMIT : integer = 1\nenum E {{ A = {value}, B = 1 }}\n"
             );

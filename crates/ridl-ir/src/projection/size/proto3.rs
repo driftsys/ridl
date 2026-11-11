@@ -1153,54 +1153,28 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_value_outside_int32_is_refused() {
-        // `emit_enum` in the proto backend refuses the value.
+    fn enum_values_at_int32_boundaries_have_bounds() {
         let mut package = fixture();
-        package
-            .decls
-            .push(enum_decl("Wide", &[0, i64::from(i32::MAX) + 1]));
-        package
-            .decls
-            .push(enum_decl("Deep", &[i64::from(i32::MIN) - 1, 0]));
-        package.decls.push(enum_decl(
-            "Edge",
-            &[i64::from(i32::MIN), i64::from(i32::MAX)],
-        ));
-        package
-            .decls
-            .push(struct_decl("HoldsWide", vec![("e", 1, named("Wide"))]));
-        package
-            .decls
-            .push(struct_decl("HoldsDeep", vec![("e", 1, named("Deep"))]));
-        package
-            .decls
-            .push(struct_decl("HoldsEdge", vec![("e", 1, named("Edge"))]));
+        for (name, values) in [
+            ("Wide", vec![0, i64::from(i32::MAX)]),
+            ("Deep", vec![i64::from(i32::MIN), 0]),
+            ("Edge", vec![i64::from(i32::MIN), i64::from(i32::MAX)]),
+        ] {
+            package.decls.push(enum_decl(name, &values));
+            package.decls.push(struct_decl(
+                &format!("Holds{name}"),
+                vec![("e", 1, named(name))],
+            ));
+        }
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(
-            state_in("HoldsWide", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("HoldsDeep", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("HoldsEdge", &ctx),
-            SizeState::Bounded(11),
-            "the int32 bounds themselves are admitted; a negative member is a 10-byte varint"
-        );
-        // The root box message of each enum holds it as a field, so the same
-        // refusal makes the enum's own payload absent.
-        assert_eq!(
-            state_in("Wide", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(
-            state_in("Deep", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
-        );
-        assert_eq!(state_in("Edge", &ctx), SizeState::Bounded(11));
+        for (name, bound) in [("Wide", 6), ("Deep", 11), ("Edge", 11)] {
+            assert_eq!(state_in(name, &ctx), SizeState::Bounded(bound));
+            assert_eq!(
+                state_in(&format!("Holds{name}"), &ctx),
+                SizeState::Bounded(bound)
+            );
+        }
     }
 
     #[test]

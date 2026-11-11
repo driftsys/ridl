@@ -427,31 +427,13 @@ fn main() {{
     rustc::run_program("pb_max_size", &program(&main));
 }
 
-/// A declaration one of whose members the proto backend refuses — an enum
-/// value outside int32 — has no proto3 message, so it is refused with an
-/// error naming the declaration and the cause, for the declaration itself
-/// and for one that reaches it, by the codec's own walk, which names the
-/// value, before the size state is read.
+/// Declared enum values at the int32 maximum have a proto3 codec, including
+/// when reached through a struct field.
 #[test]
-fn a_refused_member_is_still_refused() {
+fn an_enum_at_the_int32_maximum_has_a_proto3_codec() {
     let package = ir::compile_fixture("proto3_unbounded.ridl");
-    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
-        .expect_err("a declaration with a refused member is refused");
-    assert!(
-        err.message.contains("`pb.unbounded.Wide`") && err.message.contains("proto3"),
-        "the refusal names the declaration and the encoding, got: {}",
-        err.message
-    );
-    assert_eq!(
-        err.message,
-        "`pb.unbounded.Wide` has no proto3 codec: its value `BIG` is 4294967296, outside int32, \
-         which the proto backend refuses",
-        "the refusal names the value and the cause"
-    );
-    // The same package generates with no encoding, and with FlatBuffers
-    // alone: the refusal is the proto3 codec's.
-    ridl_backend_rust::generate_pipeline(&package, &[], false, &[])
-        .expect("the types alone generate");
+    ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
+        .expect("an int32 enum and its holder have proto3 codecs");
 }
 
 /// A type with no finite proto3 bound — a string with no length bound, and
