@@ -23,6 +23,7 @@
  * @module
  */
 
+import type { Contract, Envelope } from "@driftsys/ridl-runtime";
 import { BLOCK_BYTES, blockCount, FORM_BLOCK } from "./blocks.ts";
 
 /**
@@ -129,13 +130,8 @@ export interface Target {
   ord: number;
 }
 
-/** The sender's envelope: a signed 64-bit stamp and an unsigned 64-bit sequence. */
-export interface Envelope {
-  /** The timestamp, a signed 64-bit integer. */
-  stamp: bigint;
-  /** The sequence number, an unsigned 64-bit integer. */
-  seq: bigint;
-}
+/** Re-exported from `@driftsys/ridl-runtime`: the sender's envelope and a contract error. */
+export type { Contract, Envelope };
 
 /** The rule a value broke: detail codes 1 to 7 in this order; utf8 is sent from frame version 3. */
 export type Rule =
@@ -146,13 +142,6 @@ export type Rule =
   | "variant"
   | "unique"
   | "utf8";
-
-/** A contract error carried by an `answer` or a `response`. */
-export type Contract =
-  | { category: "invalid-value"; rule: Rule }
-  | { category: "precondition-failed" }
-  | { category: "contract-broken" }
-  | { category: "unknown-interaction" };
 
 /** Why a provider refused an `attach`. */
 export type Reason =

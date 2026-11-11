@@ -57,6 +57,13 @@ assertEquals(pkg.version, denoJson.version);
 assertEquals(pkg.license, "MIT");
 assertEquals(pkg.sideEffects, false);
 assertEquals(pkg.engines, { node: ">=22" });
+// The runtime is a dependency by name, at the version of the sibling package.
+const runtimeJson = JSON.parse(
+  await Deno.readTextFile("../ridl-runtime/deno.json"),
+);
+assertEquals(pkg.dependencies, {
+  "@driftsys/ridl-runtime": `^${runtimeJson.version}`,
+});
 assertEquals(pkg.types, "./esm/mod.d.ts");
 const entry = pkg.exports["."];
 for (const key of ["types", "import", "default"]) {
@@ -101,9 +108,24 @@ try {
     `${tmp}/package.json`,
     '{"name":"consumer","private":true,"type":"module"}',
   );
+  // The runtime of this checkout is installed beside the package: the
+  // registry may not hold the version the package depends on yet.
+  const runtimeBuild = await run(
+    Deno.execPath(),
+    ["run", "-A", "scripts/build_npm.ts"],
+    "../ridl-runtime",
+  );
+  assertEquals(runtimeBuild.code, 0, runtimeBuild.stderr);
+  const runtimePack = await run(
+    "npm",
+    ["pack", "--json", "--pack-destination", tmp],
+    "../ridl-runtime/npm",
+  );
+  assertEquals(runtimePack.code, 0, runtimePack.stderr);
+  const runtimeTarball = `${tmp}/${JSON.parse(runtimePack.stdout)[0].filename}`;
   const install = await run(
     "npm",
-    ["install", "--no-audit", "--no-fund", tarball],
+    ["install", "--no-audit", "--no-fund", runtimeTarball, tarball],
     tmp,
   );
   assertEquals(install.code, 0, install.stderr);
