@@ -3183,6 +3183,11 @@ _cabin-web-generate name:
 # `typeId` call per signal at registration, and the mapping of each verify
 # result to a detection. `cabin-ws-demo` runs the same function against the real
 # wasm codec in examples/cabin/web/check_test.ts.
+# The codec fixture's feed_test.ts runs the signal and event methods of its
+# client class over the fake port: samples under every provenance, the held
+# value, `readX`, `watchX`, the checks that `bind` registers, and the event
+# union with a refused occurrence. The codec-bare-signal fixture binds its
+# signal-only client over a port that implements only `SignalReader`.
 # The codec-single and codec-names fixtures keep flatc output under flatc_out/
 # so its barrel does not overwrite the domain module of a single-component
 # package. The codec-names fixture declares names that the runtime package
@@ -3300,6 +3305,16 @@ _codec-ts-check:
     deno lint --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
     deno check --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
     deno test --config "$names/deno.json" "$names/names_test.ts"
+
+    # A signal whose payload type has no init function in the types module:
+    # the codec module must not reference one.
+    noinit="$tmp/no-init"
+    mkdir -p "$noinit"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-no-init --emit typescript --emit flatbuffers --out-dir "$noinit"
+    flatc --ts --gen-object-api -I "$noinit" -o "$noinit" "$noinit/probe.gauge.fbs" "$noinit/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/#$PWD/packages/ridl-runtime/#" crates/ridl-backend-ts/tests/fixtures/codec-no-init/deno.json > "$noinit/deno.json"
+    deno lint --config "$noinit/deno.json" "$noinit/probe.gauge.codec.ts"
+    deno check --config "$noinit/deno.json" "$noinit/probe.gauge.codec.ts"
 
     # Packages with a signal or a stream and no string field, whose module still
     # uses a runtime value, one of them with interfaces named like runtime types.

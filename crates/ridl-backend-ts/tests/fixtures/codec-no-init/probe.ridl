@@ -1,0 +1,16 @@
+package probe.gauge
+
+/// A holder whose field has an init of its own, which the domain module has
+/// no init function for: the field is a scalar of another package.
+struct Holder {
+  /// The instant.
+  at: Timestamp = 5
+}
+
+/// An interface whose signal carries a payload type with no init function.
+interface Gauge {
+  /// Reports the holder.
+  signal level : Holder @1s
+  /// Sets the holder.
+  command set(h: Holder) @[..50ms]
+}

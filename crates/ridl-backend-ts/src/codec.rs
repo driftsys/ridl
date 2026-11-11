@@ -54,6 +54,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 
 use ridl_ir::codegen::v1;
+use ridl_ir::v2;
 
 use crate::{GenerateError, GeneratedTs, RUNTIME};
 
@@ -71,11 +72,36 @@ const HASH_LEN: usize = 32;
 /// local or foreign, nor a supported stream call. The returned source
 /// starts at the imports; the caller writes the generated marker and the
 /// header above it.
+///
+/// Without the IR package this cannot tell which payload types get an
+/// `init<Name>` function in `<base>.ts`, so it takes the `derivable` fact of
+/// the model for it, which is looser than the emitter's own rule. Use
+/// [`generate_codec_with`] when the package is at hand.
 pub fn generate_codec(
     model: &v1::Model,
     artifact_base: &str,
 ) -> Result<Option<GeneratedTs>, GenerateError> {
-    let mut codec = Codec::new(model)?;
+    generate_codec_inner(model, artifact_base, None)
+}
+
+/// [`generate_codec`] for the package `package` that `model` describes: a
+/// signal gets methods only when `<base>.ts` exports the `init<Name>` function
+/// of its payload type, which the domain emitter decides from `package`.
+pub fn generate_codec_with(
+    model: &v1::Model,
+    package: &v2::Package,
+    artifact_base: &str,
+) -> Result<Option<GeneratedTs>, GenerateError> {
+    let inits = crate::init_function_names(package, model);
+    generate_codec_inner(model, artifact_base, Some(&inits))
+}
+
+fn generate_codec_inner(
+    model: &v1::Model,
+    artifact_base: &str,
+    init_functions: Option<&BTreeSet<String>>,
+) -> Result<Option<GeneratedTs>, GenerateError> {
+    let mut codec = Codec::new(model, init_functions)?;
     if !codec.has_codec_payload() {
         return Ok(None);
     }
@@ -89,7 +115,7 @@ pub fn generate_codec(
 /// (`has_codec_payload`). `ridlc` reads it to write `ridl.std.codec.ts` only
 /// when a module imports it.
 pub fn codec_imports(model: &v1::Model) -> Result<BTreeSet<String>, GenerateError> {
-    Ok(Codec::new(model)?
+    Ok(Codec::new(model, None)?
         .foreign_payloads
         .values()
         .map(|foreign| foreign.package.clone())
@@ -280,13 +306,16 @@ struct Codec<'a> {
     /// The commands and queries the client classes carry, by interface number
     /// and ordinal.
     call_members: BTreeMap<(u32, u32), CallMember<'a>>,
-    /// The commands and queries of a non-internal interface that the client
-    /// class leaves out, with the reason. The signals and events it leaves out
-    /// are here too.
-    call_omissions: BTreeMap<(u32, u32), String>,
+    /// The commands, queries, signals and events of a non-internal interface
+    /// that the client class leaves out, with the reason.
+    member_omissions: BTreeMap<(u32, u32), String>,
     /// The signals and events the client classes carry, by interface number
     /// and ordinal.
     feed_members: BTreeMap<(u32, u32), FeedMember<'a>>,
+    /// The declarations of this package that `<base>.ts` gives an
+    /// `init<Name>` function, when the caller knows; otherwise the model's
+    /// `derivable` fact stands in for it.
+    init_functions: Option<BTreeSet<String>>,
     /// The member table entries of the signals that have one, as
     /// `<Interface>.<member>`, in declaration order.
     signal_entries: Vec<String>,
@@ -294,7 +323,10 @@ struct Codec<'a> {
 }
 
 impl<'a> Codec<'a> {
-    fn new(model: &'a v1::Model) -> Result<Self, GenerateError> {
+    fn new(
+        model: &'a v1::Model,
+        init_functions: Option<&BTreeSet<String>>,
+    ) -> Result<Self, GenerateError> {
         let hash_len = model
             .catalog
             .as_ref()
@@ -355,8 +387,9 @@ impl<'a> Codec<'a> {
             stream_calls: BTreeMap::new(),
             stream_omissions: BTreeMap::new(),
             call_members: BTreeMap::new(),
-            call_omissions: BTreeMap::new(),
+            member_omissions: BTreeMap::new(),
             feed_members: BTreeMap::new(),
+            init_functions: init_functions.cloned(),
             signal_entries: Vec::new(),
             needs_domain: false,
         };
@@ -2178,10 +2211,10 @@ impl<'a> Codec<'a> {
         Ok(())
     }
 
-    /// Selects the command or query that the client class of `name` carries as
-    /// a method, or records why it leaves the member out. `roles` is the
-    /// result of [`Codec::roles`] for the member. A signal, an event, a fixed
-    /// member and a member of an internal interface have no method here.
+    /// Selects the command, query, signal or event that the client class of
+    /// `name` carries as methods, or records why it leaves the member out.
+    /// `roles` is the result of [`Codec::roles`] for the member. A fixed
+    /// member and a member of an internal interface have no method.
     fn discover_call(
         &mut self,
         interface: &'a v1::Interface,
@@ -2207,7 +2240,7 @@ impl<'a> Codec<'a> {
             _ => return Ok(()),
         };
         if let Some((_, Err(unbounded))) = roles.iter().find(|(_, payload)| payload.is_err()) {
-            self.call_omissions
+            self.member_omissions
                 .insert(key, format!("{unbounded} has no finite FlatBuffers bound"));
             return Ok(());
         }
@@ -2222,7 +2255,7 @@ impl<'a> Codec<'a> {
             && q.reply_payload.is_none()
             && q.reply_tuple.is_none()
         {
-            self.call_omissions
+            self.member_omissions
                 .insert(key, "inline fallible replies have no codec".to_string());
             return Ok(());
         }
@@ -2305,7 +2338,7 @@ impl<'a> Codec<'a> {
             None => None,
             Some(signal) => {
                 if signal.declared_init.is_some() {
-                    self.call_omissions.insert(
+                    self.member_omissions.insert(
                         key,
                         "its `= value` init override has no TypeScript form yet".to_string(),
                     );
@@ -2313,17 +2346,20 @@ impl<'a> Codec<'a> {
                 }
                 match self.resolve(reference, path)? {
                     Target::Local(_, declaration)
-                        if declaration.init.as_ref().is_some_and(|init| init.derivable) =>
+                        if match &self.init_functions {
+                            Some(names) => names.contains(declared_name(declaration)),
+                            None => declaration.init.as_ref().is_some_and(|init| init.derivable),
+                        } =>
                     {
                         Some(format!("t.init{}", declared_name(declaration)))
                     }
                     Target::Local(..) => {
-                        self.call_omissions
+                        self.member_omissions
                             .insert(key, "its payload type has no init function".to_string());
                         return Ok(());
                     }
                     Target::Foreign(..) => {
-                        self.call_omissions.insert(
+                        self.member_omissions.insert(
                             key,
                             "its payload type is declared in another package, whose init function this module does not import"
                                 .to_string(),
@@ -3062,9 +3098,14 @@ impl<'a> Codec<'a> {
             }
         }
         out.push_str("    };\n  }\n\n");
+        let registers = if has_signals {
+            ", and registers the check of each signal with the port"
+        } else {
+            ""
+        };
         let _ = writeln!(
             out,
-            "  /**\n   * Binds the client to a port and a loaded codec, and registers the check of each\n   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or\n   * of the codec differs from `CATALOG_HASH`.\n   */\n  static bind<P extends {port_type}>(port: P, codec: $rt.Codec): {class} {{\n    $rt.checkCatalog(CATALOG_HASH, port, codec);\n    const client = new {class}(port, codec);"
+            "  /**\n   * Binds the client to a port and a loaded codec{registers}. Throws `CatalogMismatch` when\n   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.\n   */\n  static bind<P extends {port_type}>(port: P, codec: $rt.Codec): {class} {{\n    $rt.checkCatalog(CATALOG_HASH, port, codec);\n    const client = new {class}(port, codec);"
         );
         for item in &items {
             if let Item::Feed(feed) = item
@@ -3172,7 +3213,7 @@ impl<'a> Codec<'a> {
         if let Some(first) = events.first() {
             let first_member = member_of(first.interaction);
             out.push_str(
-                "\n  /**\n   * Calls `listener` with every accepted occurrence of every subscribed event of the\n   * interface, in arrival order, and returns the function that removes it. An occurrence\n   * that the port refused has `occurrence.detected` set and no value.\n   */\n",
+                "\n  /**\n   * Calls `listener` with every accepted occurrence of every subscribed event of the\n   * interface, in arrival order, and returns the function that removes it. An occurrence\n   * that the port refused, and one whose payload fails the verification of this class\n   * (a rule failure included), has `occurrence.detected` set to `\"corrupt\"` and no value.\n   */\n",
             );
             let _ = writeln!(
                 out,
@@ -3188,7 +3229,7 @@ impl<'a> Codec<'a> {
             out.push_str("      }\n    });\n  }\n");
         }
         for slot in &interface.slots {
-            if let Some(reason) = self.call_omissions.get(&(interface.number, slot.ordinal))
+            if let Some(reason) = self.member_omissions.get(&(interface.number, slot.ordinal))
                 && let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
                     &slot.occupant
             {
@@ -3209,11 +3250,7 @@ impl<'a> Codec<'a> {
         let pascal = pascal_member(member);
         let target = format!("{name}.{member}.iface, {name}.{member}.ord");
         let ty = &feed.value_type;
-        let subscribe_note = if feed.event {
-            "The promise resolves when the provider answered."
-        } else {
-            "The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait."
-        };
+        let subscribe_note = "The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended.";
         let kind = if feed.event { "event" } else { "signal" };
         out.push('\n');
         let _ = writeln!(
@@ -3233,7 +3270,7 @@ impl<'a> Codec<'a> {
             &[],
             "  ",
             &[
-                "@returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value."
+                "@returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set."
                     .to_string(),
             ],
         ));

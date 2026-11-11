@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use ridl_backend_ts::{GenerateError, generate_codec};
+use ridl_backend_ts::{GenerateError, generate_codec, generate_codec_with};
 use ridl_ir::codegen::{self, v1};
 use ridl_ir::v2;
 
@@ -1263,7 +1263,12 @@ fn a_member_named_as_a_method_of_the_client_class_is_refused() {
 
 /// Renames the member `from` of the interface `Sensors` to `to`.
 fn rename_sensors_member(model: &mut v1::Model, from: &str, to: &str) {
-    let sensors = interface(model, "Sensors");
+    rename_member(model, "Sensors", from, to);
+}
+
+/// Renames the member `from` of the interface `name` to `to`.
+fn rename_member(model: &mut v1::Model, name: &str, from: &str, to: &str) {
+    let sensors = interface(model, name);
     let interaction = sensors
         .slots
         .iter_mut()
@@ -1275,7 +1280,7 @@ fn rename_sensors_member(model: &mut v1::Model, from: &str, to: &str) {
             }
             _ => None,
         })
-        .unwrap_or_else(|| panic!("Sensors declares {from}"));
+        .unwrap_or_else(|| panic!("{name} declares {from}"));
     interaction.name = Some(v1::Spellings {
         declared: to.to_string(),
         ..Default::default()
@@ -1398,6 +1403,92 @@ fn a_signal_without_a_usable_init_has_no_method() {
         "{source}"
     );
     assert!(!source.contains("  note(): "), "{source}");
+}
+
+/// A signal whose payload type has no `init<Name>` function in the types
+/// module gets no method, although the model calls the type derivable: the
+/// codec module must never reference a function the types module lacks.
+///
+/// Mutation: decide from `Declaration.init.derivable` alone (call
+/// `generate_codec`), or skip the init-function test of `discover_feed`.
+#[test]
+fn a_signal_payload_without_an_emitted_init_has_no_method() {
+    let (model, package) = fixture_parts("codec-no-init", "probe.gauge");
+    let domain = ridl_backend_ts::generate(&package).unwrap().source;
+    assert!(!domain.contains("function initHolder("), "{domain}");
+    let codec = generate_codec_with(&model, &package, "probe.gauge")
+        .expect("the codec generates")
+        .expect("the package has a payload type")
+        .source;
+    assert!(
+        codec.contains("// level has no method: its payload type has no init function"),
+        "{codec}"
+    );
+    assert!(!codec.contains("initHolder"), "{codec}");
+    assert!(codec.contains("  async set("), "{codec}");
+    assert_inits_exist(&domain, &codec);
+}
+
+/// A signal that gets a method has its init function in the types module,
+/// in every fixture that has one.
+///
+/// Mutation: write `t.init<Name>` for a different name than the function.
+#[test]
+fn every_init_function_the_codec_names_is_exported() {
+    for (fixture, package) in [
+        ("codec", "veh.common"),
+        ("codec-bare-signal", "bare.gauge"),
+        ("codec-names", "names"),
+    ] {
+        let (model, parts) = fixture_parts(fixture, package);
+        let domain = ridl_backend_ts::generate(&parts).unwrap().source;
+        let codec = generate_codec_with(&model, &parts, package)
+            .expect("the codec generates")
+            .expect("the package has a payload type")
+            .source;
+        assert!(codec.contains("t.init"), "{fixture} uses no init function");
+        assert_inits_exist(&domain, &codec);
+    }
+}
+
+/// A module whose signal payload needs no constructor helper still imports
+/// the types module as a value, because the client calls `t.init<Name>`.
+///
+/// Mutation: drop `needs_domain_values = true` from `discover_feed`.
+#[test]
+fn a_signal_client_imports_the_types_module_as_a_value() {
+    let text = "package flag.demo\n\n/// A flag.\nstruct Flag {\n  /// On.\n  on: boolean\n}\n\n/// A beacon.\ninterface Beacon {\n  /// The state.\n  signal on : Flag @1s\n}\n";
+    let output = ridlc::compile("flag.ridl", text);
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let model = codegen::lower(&output.package, &[]);
+    let source = generate_codec_with(&model, &output.package, "flag.demo")
+        .expect("the codec generates")
+        .expect("the package has a payload type")
+        .source;
+    assert!(source.contains("t.initFlag"), "{source}");
+    assert!(source.contains("import * as t from"), "{source}");
+    assert!(!source.contains("import type * as t from"), "{source}");
+}
+
+/// The collision checks cover an interface that has only a signal.
+///
+/// Mutation: make `has_client` look at call members only.
+#[test]
+fn a_signal_only_interface_refuses_a_reserved_member_name() {
+    let mut model = fixture_model("codec-bare-signal", "bare.gauge");
+    rename_member(&mut model, "Gauge", "level", "bind");
+    assert_eq!(
+        refusal(&model),
+        "`Gauge.bind` in package `bare.gauge` collides with the static method `bind` of the \
+         client class `GaugeClient`, which the codec module also declares"
+    );
 }
 
 /// A command takes its bound from the member's recorded maximum, in
@@ -3175,6 +3266,12 @@ fn the_decoder_calls_the_unchecked_constructor_where_the_domain_module_has_one()
 
 /// The model of the package `package` of the fixture directory `fixture`.
 fn fixture_model(fixture: &str, package: &str) -> v1::Model {
+    fixture_parts(fixture, package).0
+}
+
+/// The model and the IR package of the package `package` of the fixture
+/// directory `fixture`.
+fn fixture_parts(fixture: &str, package: &str) -> (v1::Model, v2::Package) {
     let mut db = ridl_core::RidlDatabase::default();
     let entry = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
@@ -3195,7 +3292,26 @@ fn fixture_model(fixture: &str, package: &str) -> v1::Model {
         .find(|p| p.ir.name == package)
         .expect("the fixture declares the package")
         .ir;
-    codegen::lower(package, &[&output.std_ir])
+    (codegen::lower(package, &[&output.std_ir]), package.clone())
+}
+
+/// Asserts that every `t.init<Name>` that `codec` references is a function
+/// that `domain` exports.
+fn assert_inits_exist(domain: &str, codec: &str) {
+    for (at, _) in codec.match_indices("t.init") {
+        let before = codec[..at].chars().next_back();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '$') {
+            continue;
+        }
+        let name: String = codec[at + "t.init".len()..]
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        assert!(
+            domain.contains(&format!("export function init{name}(")),
+            "the codec module references `t.init{name}`, which the types module does not export"
+        );
+    }
 }
 
 /// A module that uses a runtime value imports the namespace as a value, even

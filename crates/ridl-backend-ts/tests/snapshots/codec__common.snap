@@ -818,9 +818,8 @@ export class SensorsClient {
   }
 
   /**
-   * Binds the client to a port and a loaded codec, and registers the check of each
-   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
-   * of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each signal with the port. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
    */
   static bind<P extends $rt.Caller & $rt.SignalReader & $rt.EventSource>(port: P, codec: $rt.Codec): SensorsClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
@@ -844,7 +843,7 @@ export class SensorsClient {
     return client;
   }
 
-  /** Subscribes to signal `latest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `latest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeLatest(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Sensors.latest.iface, Sensors.latest.ord, opts);
   }
@@ -854,7 +853,7 @@ export class SensorsClient {
    * Rules:
    * - period 100000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   latest(): $rt.Sample<t.SensorReading> {
     const raw = this.#port.sample(Sensors.latest.iface, Sensors.latest.ord);
@@ -872,12 +871,12 @@ export class SensorsClient {
     return this.#port.watch(Sensors.latest.iface, Sensors.latest.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.latest.payload, this.#ids.latest.payload, raw, t.initSensorReading)));
   }
 
-  /** Subscribes to event `result`. The promise resolves when the provider answered. */
+  /** Subscribes to event `result`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeResult(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Sensors.result.iface, Sensors.result.ord, opts);
   }
 
-  /** Subscribes to event `bounds`. The promise resolves when the provider answered. */
+  /** Subscribes to event `bounds`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeBounds(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Sensors.bounds.iface, Sensors.bounds.ord, opts);
   }
@@ -921,7 +920,7 @@ export class SensorsClient {
     return $rt.decodeReply(this.#codec, Sensors.span.reply, this.#ids.span.reply, raw);
   }
 
-  /** Subscribes to signal `setting`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `setting`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeSetting(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Sensors.setting.iface, Sensors.setting.ord, opts);
   }
@@ -931,7 +930,7 @@ export class SensorsClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   setting(): $rt.Sample<t.Setting> {
     const raw = this.#port.sample(Sensors.setting.iface, Sensors.setting.ord);
@@ -949,7 +948,7 @@ export class SensorsClient {
     return this.#port.watch(Sensors.setting.iface, Sensors.setting.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.setting.payload, this.#ids.setting.payload, raw, t.initSetting)));
   }
 
-  /** Subscribes to signal `note`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `note`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeNote(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Sensors.note.iface, Sensors.note.ord, opts);
   }
@@ -959,7 +958,7 @@ export class SensorsClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   note(): $rt.Sample<t.Note> {
     const raw = this.#port.sample(Sensors.note.iface, Sensors.note.ord);
@@ -977,7 +976,7 @@ export class SensorsClient {
     return this.#port.watch(Sensors.note.iface, Sensors.note.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.note.payload, this.#ids.note.payload, raw, t.initNote)));
   }
 
-  /** Subscribes to signal `pick`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `pick`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribePick(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Sensors.pick.iface, Sensors.pick.ord, opts);
   }
@@ -987,7 +986,7 @@ export class SensorsClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   pick(): $rt.Sample<t.Pick> {
     const raw = this.#port.sample(Sensors.pick.iface, Sensors.pick.ord);
@@ -1008,7 +1007,8 @@ export class SensorsClient {
   /**
    * Calls `listener` with every accepted occurrence of every subscribed event of the
    * interface, in arrival order, and returns the function that removes it. An occurrence
-   * that the port refused has `occurrence.detected` set and no value.
+   * that the port refused, and one whose payload fails the verification of this class
+   * (a rule failure included), has `occurrence.detected` set to `"corrupt"` and no value.
    */
   onEvent(listener: (event: SensorsEvent) => void): () => void {
     return this.#port.listen(Sensors.result.iface, (raw) => {

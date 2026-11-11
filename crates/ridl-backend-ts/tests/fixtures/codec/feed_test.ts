@@ -382,3 +382,44 @@ Deno.test("the event union narrows by its tag and the sample value is never abse
   };
   assert.equal(typeof unused, "function");
 });
+
+Deno.test("readLatest and watchLatest decode init and invalid samples", async () => {
+  const fake = port();
+  const client = codec.SensorsClient.bind(fake, scripted(accept));
+  const seen: ReturnType<typeof client.latest>[] = [];
+  client.watchLatest((sample) => seen.push(sample));
+  const init: RawSample = {
+    provenance: "init",
+    envelope,
+    payload: null,
+    lastGood: encoded(5),
+  };
+  const next = client.readLatest();
+  fake.publish(iface, latest, init);
+  assert.deepEqual(await next, {
+    provenance: "init",
+    envelope,
+    value: reading(5),
+  });
+  const invalid: RawSample = {
+    provenance: "invalid",
+    envelope,
+    payload: null,
+    lastGood: null,
+    detected: "corrupt",
+  };
+  const after = client.readLatest();
+  fake.publish(iface, latest, invalid);
+  assert.deepEqual(await after, {
+    provenance: "invalid",
+    envelope,
+    value: t.initSensorReading(),
+    detected: "corrupt",
+  });
+  assert.deepEqual(seen.map((sample) => sample.provenance), [
+    "init",
+    "invalid",
+  ]);
+  assert.equal(seen[1].detected, "corrupt");
+  assert.deepEqual(seen[1].value, t.initSensorReading());
+});

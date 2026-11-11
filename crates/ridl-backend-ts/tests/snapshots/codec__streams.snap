@@ -1651,9 +1651,8 @@ export class FeedClient {
   }
 
   /**
-   * Binds the client to a port and a loaded codec, and registers the check of each
-   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
-   * of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each signal with the port. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
    */
   static bind<P extends $rt.Caller & $rt.SignalReader>(port: P, codec: $rt.Codec): FeedClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
@@ -1680,7 +1679,7 @@ export class FeedClient {
     return $rt.decodeReply(this.#codec, Feed.latest.reply, this.#ids.latest.reply, raw);
   }
 
-  /** Subscribes to signal `newest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `newest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeNewest(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Feed.newest.iface, Feed.newest.ord, opts);
   }
@@ -1692,7 +1691,7 @@ export class FeedClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   newest(): $rt.Sample<t.Chunk> {
     const raw = this.#port.sample(Feed.newest.iface, Feed.newest.ord);

@@ -9,7 +9,7 @@
 
 use ridl_ir::codegen::{self, RawIr, v1};
 
-use crate::{GenerateError, generate_codec, generate_with};
+use crate::{GenerateError, generate_codec_with, generate_with};
 
 /// The option that asks for the codec file beside the module, as the
 /// manifest's `[backend.typescript] codec = true` sets it, with the value
@@ -22,7 +22,7 @@ pub const CODEC_OPTION: &str = "codec";
 /// [`CODEC_OPTION`] is `true` and the package has a payload root that gets a
 /// codec, local or foreign, or a supported stream call, the file
 /// `<artifact_base>.codec.ts` that
-/// [`crate::generate_codec`] emits.
+/// [`crate::generate_codec_with`] emits.
 pub struct Backend<'a> {
     raw: RawIr<'a>,
 }
@@ -79,7 +79,7 @@ impl codegen::Backend for Backend<'_> {
             format!("{preamble}/* eslint-disable */\n\n{}", generated.source),
         )];
         if codec {
-            match generate_codec(model, &request.artifact_base) {
+            match generate_codec_with(model, self.raw.package, &request.artifact_base) {
                 Ok(Some(codec)) => files.push(codegen::text_file(
                     format!("{}.codec.ts", request.artifact_base),
                     format!("{preamble}/* eslint-disable */\n\n{}", codec.source),

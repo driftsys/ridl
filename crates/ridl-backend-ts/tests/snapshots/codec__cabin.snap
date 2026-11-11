@@ -293,9 +293,8 @@ export class CabinClient {
   }
 
   /**
-   * Binds the client to a port and a loaded codec, and registers the check of each
-   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
-   * of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each signal with the port. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
    */
   static bind<P extends $rt.Caller & $rt.SignalReader & $rt.EventSource>(port: P, codec: $rt.Codec): CabinClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
@@ -307,7 +306,7 @@ export class CabinClient {
     return client;
   }
 
-  /** Subscribes to signal `temperature`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `temperature`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeTemperature(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Cabin.temperature.iface, Cabin.temperature.ord, opts);
   }
@@ -319,7 +318,7 @@ export class CabinClient {
    * Rules:
    * - period 10000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   temperature(): $rt.Sample<t.Temperature> {
     const raw = this.#port.sample(Cabin.temperature.iface, Cabin.temperature.ord);
@@ -337,7 +336,7 @@ export class CabinClient {
     return this.#port.watch(Cabin.temperature.iface, Cabin.temperature.ord, (raw) => listener($rt.decodeSample(this.#codec, Cabin.temperature.payload, this.#ids.temperature.payload, raw, t.initTemperature)));
   }
 
-  /** Subscribes to event `warning`. The promise resolves when the provider answered. */
+  /** Subscribes to event `warning`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeWarning(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Cabin.warning.iface, Cabin.warning.ord, opts);
   }
@@ -378,7 +377,8 @@ export class CabinClient {
   /**
    * Calls `listener` with every accepted occurrence of every subscribed event of the
    * interface, in arrival order, and returns the function that removes it. An occurrence
-   * that the port refused has `occurrence.detected` set and no value.
+   * that the port refused, and one whose payload fails the verification of this class
+   * (a rule failure included), has `occurrence.detected` set to `"corrupt"` and no value.
    */
   onEvent(listener: (event: CabinEvent) => void): () => void {
     return this.#port.listen(Cabin.warning.iface, (raw) => {
@@ -419,9 +419,8 @@ export class HornClient {
   }
 
   /**
-   * Binds the client to a port and a loaded codec, and registers the check of each
-   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
-   * of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each signal with the port. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
    */
   static bind<P extends $rt.SignalReader>(port: P, codec: $rt.Codec): HornClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
@@ -433,7 +432,7 @@ export class HornClient {
     return client;
   }
 
-  /** Subscribes to signal `active`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  /** Subscribes to signal `active`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
   subscribeActive(opts?: $rt.WaitOptions): Promise<void> {
     return this.#port.subscribe(Horn.active.iface, Horn.active.ord, opts);
   }
@@ -445,7 +444,7 @@ export class HornClient {
    * Rules:
    * - period 10000 us
    *
-   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   * @returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
    */
   active(): $rt.Sample<t.Health> {
     const raw = this.#port.sample(Horn.active.iface, Horn.active.ord);

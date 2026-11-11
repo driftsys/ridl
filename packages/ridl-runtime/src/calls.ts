@@ -190,18 +190,12 @@ export function decodeSample<T>(
   if (raw.payload !== null) {
     const live = tryDecode(codec, payload, typeId, raw.payload);
     if ("value" in live) {
-      return raw.detected === undefined
-        ? {
-          provenance: raw.provenance,
-          envelope: raw.envelope,
-          value: live.value,
-        }
-        : {
-          provenance: raw.provenance,
-          envelope: raw.envelope,
-          value: live.value,
-          detected: raw.detected,
-        };
+      // A port sets `detected` only on a sample without a payload.
+      return {
+        provenance: raw.provenance,
+        envelope: raw.envelope,
+        value: live.value,
+      };
     }
     return {
       provenance: "invalid",
