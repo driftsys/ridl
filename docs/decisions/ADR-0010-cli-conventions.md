@@ -49,11 +49,12 @@ written to stdout, and when lock merge renumbering exhausts the available
 numbers. `crates/ridl/tests/closed_stdout.rs` and
 `crates/ridl/tests/lock_merge.rs` verify these outcomes.
 
-Amended 2026-11-11: driftsys/ridl#196 is closed. Decision 6 and the consequence
-that cites it record the state on 2026-07-27;
-`crates/ridl/tests/unreadable_paths.rs` now verifies that the other subcommands
-name the unreadable path and its cause, with the `ridl baseline` root exception
-that driftsys/ridl#1320 tracks.
+Amended 2026-11-11: driftsys/ridl#196 is closed. Decision 6, the Context
+paragraph and the Positive and Negative consequences that cite it record the
+state on 2026-07-27. `crates/ridl/tests/unreadable_paths.rs` now verifies that
+`ridl check`, `ridl build`, `ridl baseline` and `ridl test` name the unreadable
+path and its cause, except for the `ridl baseline` unreadable-root case that
+driftsys/ridl#1320 tracks.
 
 ## Context
 
@@ -147,7 +148,7 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    | `ridlc build`            | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                                                                                                                                                                                                                    | the given path does not exist                                                                                                                                                                                                                                                                   |
    | `ridl lsp`               | a clean shutdown — the client sends `shutdown` then `exit`                                                                                  | the client sends `exit` with no `shutdown`, or closes stdin after the handshake with no `shutdown`                                                                                                                                                                                                                                           | the transport ends before the `initialize` handshake, or fails for any other reason                                                                                                                                                                                                             |
    | `ridl mcp`               | a clean shutdown — the host closes stdin after the `initialize` handshake                                                                   |                                                                                                                                                                                                                                                                                                                                              | the Tokio runtime fails to build, or the transport ends before the `initialize` handshake, or a task the SDK runs for the session fails after it                                                                                                                                                |
-   | `ridl lock`              | the file is written, or there is nothing to change                                                                                          | a diagnostic error over the source, nothing written: a live entry with no declaration when plain `ridl lock` is asked to allocate (RIDL-409); a malformed lock file, conflict markers included (RIDL-410)                                                                                                                                    | the path is missing or unreadable; a bad flag — `--rename` naming no live entry, or a `NEW` that is not a declaration without an entry; `--retire` naming a still-declared interface; either flag over more than one package; an I/O failure writing; a report write to stdout fails            |
+   | `ridl lock`              | the file is written, or there is nothing to change                                                                                          | a diagnostic error over the source, nothing written: a live entry with no declaration when plain `ridl lock` is asked to allocate (RIDL-409); a malformed lock file, conflict markers included (RIDL-410)                                                                                                                                    | the path is missing or unreadable; a bad flag — `--rename` naming no live entry, or a `NEW` that is not a declaration without an entry; `--retire` naming a still-declared interface; either flag over more than one unit; an I/O failure writing; a report write to stdout fails               |
    | `ridl lock merge`        | the three sides merge clean, and the result is written to OURS                                                                              | entries disagree: OURS is written with git conflict markers of MARKER_SIZE around only the disagreeing entries, and is malformed (RIDL-410) until an author resolves it                                                                                                                                                                      | an input cannot be read or does not parse, or renumbering has no number left (OURS is left as it was); MARKER_SIZE is not a number from 1 up; an I/O failure writing OURS                                                                                                                       |
    | `ridl describe`          | the descriptor was printed                                                                                                                  |                                                                                                                                                                                                                                                                                                                                              | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                                                             |
    | `ridl init` / `ridl new` | the files are written                                                                                                                       |                                                                                                                                                                                                                                                                                                                                              | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written (added 2026-10-10) |
@@ -162,7 +163,7 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    the original eight — by direct construction against the built binary. The
    following clauses postdate the original construction:
 
-   - 2026-11-11: stdout report write failures for `ridl check` JSON and SARIF,
+   - 2026-11-10: stdout report write failures for `ridl check` JSON and SARIF,
      `ridl test`, `ridl diff`, `ridl lock` and `ridl vendor`, verified in
      `crates/ridl/tests/closed_stdout.rs`;
    - the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
@@ -227,7 +228,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
 
    **`ridl lock` earned its row on 2026-09-15, when it was added and checked**
    by `crates/ridl/tests/lock_cli.rs`, one test per clause of its three cells
-   against the built `ridl` binary: the two exit-0 outcomes
+   (the instance-lock clauses added later are tested in
+   `crates/ridl/tests/instance_lock_cli.rs`) against the built `ridl` binary:
+   the two exit-0 outcomes
    (`plain_lock_allocates_every_provisional_interface_and_exits_zero`,
    `plain_lock_with_nothing_to_change_exits_zero_and_writes_nothing`), the two
    exit-1 diagnostics
