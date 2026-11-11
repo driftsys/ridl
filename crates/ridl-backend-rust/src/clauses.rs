@@ -215,9 +215,9 @@ fn decimal(text: &str) -> Option<BigRational> {
 }
 
 /// Prints an integer unchanged, or a binary64 bound that preserves the exact
-/// rational comparison. Exactly representable float literals are printed as
-/// written, with `.0` appended when they have no fraction or exponent (`100`
-/// becomes `100.0`).
+/// rational comparison. An exactly representable float literal is printed in
+/// the shortest form that reads back as the same binary64 (`+0.5` becomes
+/// `0.5` and `100` becomes `100.0`), so the output is always a Rust literal.
 fn literal_tokens(
     value: &str,
     backing: ScalarBacking,
@@ -239,7 +239,7 @@ fn literal_tokens(
                 .ok_or("the literal has no finite binary64 bound")?;
             let ordering = represented.cmp(&exact);
             if ordering == Ordering::Equal {
-                return Ok(numeric_tokens(value, true));
+                return Ok(numeric_tokens(&format!("{nearest:?}"), true));
             }
             let down = match v1::ComparisonOp::try_from(op) {
                 Ok(v1::ComparisonOp::Le | v1::ComparisonOp::Gt) => true,
@@ -737,16 +737,98 @@ mod tests {
     }
 
     #[test]
-    fn exact_float_literals_keep_the_original_tokens() {
-        // Reprinting even an exact bound loses its original spelling.
-        for literal in ["0.5", "100.0", "100", "100e0", "-0.0", "-0.5"] {
-            let expected = if literal == "100" { "100.0" } else { literal };
+    fn exact_float_literals_are_printed_as_rust_float_literals() {
+        // A spelling the lowering accepts is not always a Rust literal: `+0.5`
+        // and `.5` are not, and `1.e3` is not either. Each exact literal is
+        // printed in the shortest form that reads back as the same binary64;
+        // zero has no sign there, and every comparison treats the two zeros alike.
+        for (literal, expected) in [
+            ("0.5", "0.5"),
+            ("+0.5", "0.5"),
+            (".5", "0.5"),
+            ("-.5", "-0.5"),
+            ("+.5", "0.5"),
+            ("5.", "5.0"),
+            ("-5.", "-5.0"),
+            ("+5", "5.0"),
+            ("1.e3", "1000.0"),
+            ("1.50", "1.5"),
+            ("100.0", "100.0"),
+            ("100", "100.0"),
+            ("100e0", "100.0"),
+            ("1e2", "100.0"),
+            ("1E+2", "100.0"),
+            ("-0.0", "0.0"),
+            ("-0.5", "-0.5"),
+        ] {
             for op in ["<=", ">", ">=", "<", "==", "!="] {
                 assert_eq!(
                     float_clause(&format!("rate {op} {literal}"), false).expect("exact"),
                     format!(
                         "ifargs.0{op}{expected}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
-                    )
+                    ),
+                    "rate {op} {literal}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_integer_guard_in_the_printer_refuses_a_float_spelling() {
+        // The lowering refuses these first, so only a direct call reaches the guard.
+        for literal in ["1.5", "1e2", "1E2", "5."] {
+            assert_eq!(
+                super::literal_tokens(literal, crate::ScalarBacking::Integer, 1)
+                    .err()
+                    .map(str::to_string),
+                Some("the literal does not match the subject's numeric type".to_string()),
+                "{literal}"
+            );
+        }
+        assert!(super::literal_tokens("12", crate::ScalarBacking::Integer, 1).is_ok());
+    }
+
+    #[test]
+    fn the_exponent_limit_is_judged_on_the_exponent_not_on_the_scale() {
+        // `0.1e10001` has scale -10000 but exponent 10001; the second literal has
+        // exponent -10000 and scale 10011.
+        assert_eq!(
+            float_clause("rate <= 0.1e10001", false).map_err(|error| error.message),
+            Err(
+                "cannot translate contract clause `rate <= 0.1e10001`: the literal cannot be read as an exact decimal"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            float_clause("rate <= 0.00000000001e-10000", false).map_err(|error| error.message),
+            Ok("ifargs.0<=0.0{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+                .to_string())
+        );
+    }
+
+    #[test]
+    fn the_exponent_limit_holds_for_every_sign_and_comparison() {
+        // Bare `1e10000` with `<=` alone cannot tell a negative coefficient or a
+        // multi-digit mantissa at the limit from a refused one.
+        for (literal, down, up) in [
+            ("-1e10000", "", "-1.7976931348623157e308"),
+            ("1.5e10000", "1.7976931348623157e308", ""),
+            ("-1.5e10000", "", "-1.7976931348623157e308"),
+            ("15e9999", "1.7976931348623157e308", ""),
+            ("-1e-10000", "-5e-324", "-0.0"),
+            ("1.5e-10000", "0.0", "5e-324"),
+        ] {
+            for (op, bound) in [("<=", down), (">", down), (">=", up), ("<", up)] {
+                if bound.is_empty() {
+                    continue;
+                }
+                assert_eq!(
+                    float_clause(&format!("rate {op} {literal}"), false)
+                        .map_err(|error| error.message),
+                    Ok(format!(
+                        "ifargs.0{op}{bound}{{::core::result::Result::Ok(())}}else{{::core::result::Result::Err(())}}"
+                    )),
+                    "rate {op} {literal}"
                 );
             }
         }
