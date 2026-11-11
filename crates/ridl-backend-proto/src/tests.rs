@@ -2111,31 +2111,40 @@ fn assert_cpp_accessor_collision(
     field: &str,
     other: &str,
     accessor: &str,
+    previous_kind: &str,
 ) {
     let error =
         generate(&accessor_package(members)).expect_err("must refuse a C++ accessor collision");
-    for text in [
-        field,
-        other,
-        "of struct `S`",
-        "message `S`",
-        "protoc",
-        "C++ accessor",
-        accessor,
-        "collid",
-    ] {
-        assert!(
-            error.message.contains(text),
-            "missing {text:?}: {}",
-            error.message
-        );
-    }
+    assert_cpp_accessor_message(&error.message, field, other, accessor, previous_kind);
+}
+
+fn assert_cpp_accessor_message(
+    message: &str,
+    field: &str,
+    other: &str,
+    accessor: &str,
+    previous_kind: &str,
+) {
+    let expected = format!(
+        "protoc's C++ accessor `{accessor}` for {field} of struct `S` collides with \
+         the {previous_kind} for {other} of struct `S` in message `S`"
+    );
     assert!(
-        !error
-            .message
-            .contains("proto3 rejects a name defined twice"),
-        "got: {}",
-        error.message
+        message.contains(&expected),
+        "missing {expected:?}: {message}"
+    );
+    let unexpected_kind = match previous_kind {
+        "getter" => "accessor",
+        "accessor" => "getter",
+        _ => panic!("unknown previous accessor kind: {previous_kind}"),
+    };
+    assert!(
+        !message.contains(&format!("the {unexpected_kind} for")),
+        "got: {message}"
+    );
+    assert!(
+        !message.contains("proto3 rejects a name defined twice"),
+        "got: {message}"
     );
 }
 
@@ -2149,6 +2158,7 @@ fn an_optional_field_before_its_has_getter_is_refused() {
         "field `x`",
         "field `hasX`",
         "has_x()",
+        "accessor",
     );
 }
 
@@ -2162,6 +2172,7 @@ fn an_optional_field_after_its_has_getter_is_refused() {
         "field `x`",
         "field `hasX`",
         "has_x()",
+        "accessor",
     );
 }
 
@@ -2175,6 +2186,7 @@ fn an_array_field_before_its_size_getter_is_refused() {
         "field `x`",
         "field `xSize`",
         "x_size()",
+        "accessor",
     );
 }
 
@@ -2188,6 +2200,7 @@ fn an_array_field_after_its_size_getter_is_refused() {
         "field `x`",
         "field `xSize`",
         "x_size()",
+        "accessor",
     );
 }
 
@@ -2201,6 +2214,7 @@ fn a_map_field_before_its_size_getter_is_refused() {
         "field `x`",
         "field `xSize`",
         "x_size()",
+        "accessor",
     );
 }
 
@@ -2214,6 +2228,7 @@ fn a_map_field_after_its_size_getter_is_refused() {
         "field `x`",
         "field `xSize`",
         "x_size()",
+        "accessor",
     );
 }
 
@@ -2227,7 +2242,33 @@ fn two_derived_cpp_accessors_colliding_are_refused() {
         if reverse {
             members.reverse();
         }
-        assert_cpp_accessor_collision(members, "field `a_size`", "field `has_a`", "has_a_size()");
+        let (field, other) = if reverse {
+            ("field `a_size`", "field `has_a`")
+        } else {
+            ("field `has_a`", "field `a_size`")
+        };
+        assert_cpp_accessor_collision(members, field, other, "has_a_size()", "accessor");
+    }
+}
+
+#[test]
+fn a_map_and_an_optional_field_with_colliding_derived_cpp_accessors_are_refused() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("a_size", 1, optional(float64_type())),
+            field_member(
+                "has_a",
+                2,
+                map_of(v2::PrimitiveType::String, float64_type()),
+            ),
+        ];
+        let (field, other) = if reverse {
+            members.reverse();
+            ("field `a_size`", "field `has_a`")
+        } else {
+            ("field `has_a`", "field `a_size`")
+        };
+        assert_cpp_accessor_collision(members, field, other, "has_a_size()", "accessor");
     }
 }
 
@@ -2246,29 +2287,132 @@ fn an_optional_multi_word_field_beside_its_has_getter_is_refused() {
             "field `fooBar`",
             "field `hasFooBar`",
             "has_foo_bar()",
+            "accessor",
         );
     }
 }
 
 #[test]
-fn a_cpp_keyword_beside_its_escaped_getter_is_refused() {
-    for reverse in [false, true] {
-        let mut members = vec![
-            field_member("class", 1, float64_type()),
-            field_member("class_", 2, int64_type()),
-        ];
-        if reverse {
-            members.reverse();
-        }
-        let error =
-            generate(&accessor_package(members)).expect_err("class and class_ both give class_()");
-        for text in [
-            "field `class`",
-            "field `class_`",
-            "class_()",
-            "C++ accessor",
-        ] {
-            assert!(error.message.contains(text), "got: {}", error.message);
+fn cpp_keywords_beside_their_escaped_getters_are_refused() {
+    // Keep this list equal to cpp_field_name's keyword list in lib.rs, excluding
+    // NULL, which cannot match a snake_case field name.
+    const KEYWORDS: [&str; 93] = [
+        "alignas",
+        "alignof",
+        "and",
+        "and_eq",
+        "asm",
+        "assert",
+        "auto",
+        "bitand",
+        "bitor",
+        "bool",
+        "break",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "compl",
+        "const",
+        "constexpr",
+        "const_cast",
+        "continue",
+        "decltype",
+        "default",
+        "delete",
+        "do",
+        "double",
+        "dynamic_cast",
+        "else",
+        "enum",
+        "explicit",
+        "export",
+        "extern",
+        "false",
+        "float",
+        "for",
+        "friend",
+        "goto",
+        "if",
+        "inline",
+        "int",
+        "long",
+        "mutable",
+        "namespace",
+        "new",
+        "noexcept",
+        "not",
+        "not_eq",
+        "nullptr",
+        "operator",
+        "or",
+        "or_eq",
+        "private",
+        "protected",
+        "public",
+        "register",
+        "reinterpret_cast",
+        "return",
+        "short",
+        "signed",
+        "sizeof",
+        "static",
+        "static_assert",
+        "static_cast",
+        "struct",
+        "switch",
+        "template",
+        "this",
+        "thread_local",
+        "throw",
+        "true",
+        "try",
+        "typedef",
+        "typeid",
+        "typename",
+        "union",
+        "unsigned",
+        "using",
+        "virtual",
+        "void",
+        "volatile",
+        "wchar_t",
+        "while",
+        "xor",
+        "xor_eq",
+        "char8_t",
+        "char16_t",
+        "char32_t",
+        "concept",
+        "consteval",
+        "constinit",
+        "co_await",
+        "co_return",
+        "co_yield",
+        "requires",
+    ];
+    let unique: std::collections::BTreeSet<_> = KEYWORDS.iter().collect();
+    assert_eq!(unique.len(), KEYWORDS.len(), "duplicate C++ keyword");
+    for keyword in KEYWORDS {
+        let escaped = format!("{keyword}_");
+        for reverse in [false, true] {
+            let mut members = vec![
+                field_member(keyword, 1, float64_type()),
+                field_member(&escaped, 2, int64_type()),
+            ];
+            let (field, other) = if reverse {
+                members.reverse();
+                (keyword, escaped.as_str())
+            } else {
+                (escaped.as_str(), keyword)
+            };
+            assert_cpp_accessor_collision(
+                members,
+                &format!("field `{field}`"),
+                &format!("field `{other}`"),
+                &format!("{escaped}()"),
+                "getter",
+            );
         }
     }
 }
@@ -2454,6 +2598,179 @@ fn a_singular_message_field_beside_has_x_still_generates() {
         let generated = generate(&package).expect("implicit message presence is outside the check");
         assert!(generated.proto_source.contains("SomeStruct x = 1;"));
         assert!(generated.proto_source.contains("sint64 has_x = 2;"));
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn a_union_typed_field_beside_has_x_still_generates() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("x", 1, named_type("SomeUnion")),
+            field_member("hasX", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let mut package = accessor_package(members);
+        package.decls.push(v2::Decl {
+            name: "SomeUnion".to_string(),
+            kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef::default())),
+            ..Default::default()
+        });
+        let generated = generate(&package).expect("union presence is outside the accessor check");
+        assert!(generated.proto_source.contains("SomeUnion x = 1;"));
+        assert!(generated.proto_source.contains("sint64 has_x = 2;"));
+        assert!(generated.proto_source.contains("message SomeUnion {\n}"));
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn a_tuple_typed_field_beside_has_x_still_generates() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("x", 1, tuple_of(vec![float64_type(), int64_type()])),
+            field_member("hasX", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let generated = generate(&accessor_package(members))
+            .expect("tuple presence is outside the accessor check");
+        assert!(generated.proto_source.contains("SX x = 1;"));
+        assert!(generated.proto_source.contains("sint64 has_x = 2;"));
+        assert!(
+            generated
+                .proto_source
+                .contains("message SX {\n  double field_1 = 1;\n  sint64 field_2 = 2;\n}")
+        );
+        compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn a_foreign_message_field_beside_has_x_still_generates() {
+    let foreign = v2::Package {
+        name: "veh.other".to_string(),
+        decls: vec![v2::Decl {
+            name: "SomeStruct".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef::default())),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let foreign_generated = generate(&foreign).expect("generate foreign message");
+    assert!(
+        foreign_generated
+            .proto_source
+            .contains("message SomeStruct {\n}")
+    );
+    compile_with_protox("veh.other.proto", &foreign_generated.proto_source);
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("x", 1, named_type("veh.other.SomeStruct")),
+            field_member("hasX", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let generated = generate_with(&accessor_package(members), &[&foreign])
+            .expect("foreign message presence is outside the accessor check");
+        assert!(
+            generated
+                .proto_source
+                .contains("import \"veh.other.proto\";")
+        );
+        assert!(
+            generated
+                .proto_source
+                .contains("veh.other.SomeStruct x = 1;")
+        );
+        assert!(generated.proto_source.contains("sint64 has_x = 2;"));
+        compile_with_protox_and_siblings(
+            "veh.common.proto",
+            &generated.proto_source,
+            &[("veh.other.proto", &foreign_generated.proto_source)],
+        );
+    }
+}
+
+#[test]
+fn an_optional_message_field_beside_its_has_getter_is_refused() {
+    for reverse in [false, true] {
+        let mut members = vec![
+            field_member("x", 1, optional(named_type("SomeStruct"))),
+            field_member("hasX", 2, int64_type()),
+        ];
+        if reverse {
+            members.reverse();
+        }
+        let mut package = accessor_package(members);
+        package.decls.push(v2::Decl {
+            name: "SomeStruct".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef::default())),
+            ..Default::default()
+        });
+        let error = generate(&package).expect_err("must refuse explicit optional message presence");
+        assert_cpp_accessor_message(
+            &error.message,
+            "field `x`",
+            "field `hasX`",
+            "has_x()",
+            "accessor",
+        );
+    }
+}
+
+#[test]
+fn scalar_union_arms_x_and_has_x_still_generate() {
+    for reverse in [false, true] {
+        let mut arms = vec![
+            v2::UnionArm {
+                name: "x".to_string(),
+                ordinal: 1,
+                type_ref: "Speed".to_string(),
+                ..Default::default()
+            },
+            v2::UnionArm {
+                name: "hasX".to_string(),
+                ordinal: 2,
+                type_ref: "Speed".to_string(),
+                ..Default::default()
+            },
+        ];
+        if reverse {
+            arms.reverse();
+        }
+        let package = v2::Package {
+            name: "veh.common".to_string(),
+            decls: vec![
+                v2::Decl {
+                    name: "Speed".to_string(),
+                    kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "U".to_string(),
+                    kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                        arms,
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let generated =
+            generate(&package).expect("scalar union arms are outside the accessor check");
+        assert!(
+            generated
+                .proto_source
+                .contains("message U {\n  oneof value {")
+        );
+        assert!(generated.proto_source.contains("double x = 1;"));
+        assert!(generated.proto_source.contains("double has_x = 2;"));
         compile_with_protox("veh.common.proto", &generated.proto_source);
     }
 }
