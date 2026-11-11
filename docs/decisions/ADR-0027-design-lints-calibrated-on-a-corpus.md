@@ -9,6 +9,11 @@ and the format of the eval tasks. It binds every later design lint, every change
 to the level or threshold of a shipped design lint, the corpus and the
 calibration records under `evals/`, and every eval task.
 
+Amended 2026-11-11: decision 10 now states what the eval scorer checks for
+`expect.lints` and that `cargo xtask eval` exists. The scorer compares the set
+of design lints that `ridl check` reports on the whole task workspace with
+`expect.lints`, and the two sets must be equal.
+
 Written from piece 1b of the devex and agent tracks brief, "design lints and
 metrics", implemented in four pull requests: the design and plan
 (driftsys/ridl#694), the corpus and the eval seed (#707), the checks and the
@@ -191,14 +196,17 @@ of the authoring skill (piece 1c), as ADR-0005 §5 requires.
     `prompt.md` is what the designer asks, with no hint of the rubric; and
     `rubric.md` lists numbered one-sentence items, each marked **must**,
     **should** or **must not**. Item numbers are stable IDs and are never
-    renumbered. A review task's `expect.lints` names a shipped lint only where
-    an accepted finding retained at the shipped threshold matches one of its
-    rubric items. The seed is ten tasks — five review, two evolve and three
-    design — weighted toward review and evolution, with at most one third on the
-    VSS set. A test checks that each task parses, names an existing corpus
-    workspace and catalogue lints only, and has non-empty prompt and rubric
-    files. No harness and no scoring are built; ADR-0005's open question on
-    scoring beyond "compiles" stays open.
+    renumbered. A task's `expect.lints` is the exact set of design lints that
+    `ridl check` reports on the whole task workspace, and the scorer compares it
+    with that set for equality; a review task's rubric items cover only the
+    findings that a designer is expected to raise, so `expect.lints` can name a
+    lint that no rubric item names. The seed is ten tasks — five review, two
+    evolve and three design — weighted toward review and evolution, with at most
+    one third on the VSS set. A test checks that each task parses, names an
+    existing corpus workspace and catalogue lints only, and has non-empty prompt
+    and rubric files. The seed was written without a harness. `cargo xtask eval`
+    now runs and scores the tasks, as [the evals README](../../evals/README.md)
+    describes; ADR-0005's open question on scoring beyond "compiles" stays open.
 
 11. **Three design lints ship at Info; two candidates did not ship.** The
     derivation over the 820 adjudicated findings gave:
