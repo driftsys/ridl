@@ -136,8 +136,8 @@ rules for approving a break, is
 
 ## Received constraint widening
 
-For a widened range on a received value, `ridl diff` exits 1 and empties the
-compatible catalog history. Per-side remote comparisons report
+For a widened range on a received value, `ridl diff` exits 1, and the compatible
+catalog list of a build is empty. Per-side remote comparisons report
 `constraint_changed` for widening and narrowing, and a breaking `width_changed`
 for a remote scalar's width or backing change at the consumer interaction path,
 including on send-only paths. A widening reached only by command or query

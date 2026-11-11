@@ -60,7 +60,8 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
 /// for ([`diff_refs_with`](crate::diff_refs_with)). Appended fields read `scope`
 /// to decide whether their types allow 0; scalar constraints read it to find
 /// every new-side interaction that reaches the type. Encoding-specific
-/// categories read `encodings`.
+/// categories read `encodings`. `directions` caches the sent and received uses
+/// of reached declarations for the length of one comparison.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
