@@ -6552,6 +6552,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn number_unit_places_an_interface_before_a_service_with_the_same_name() {
+        let service_package = v2::Package {
+            name: "u.services".into(),
+            unit: "u".into(),
+            services: vec![v2::Service {
+                name: "doors".into(),
+                shapes: vec![v2::ServiceShape {
+                    kind: Some(v2::service_shape::Kind::Inline(v2::Interface::default())),
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let interface_package = v2::Package {
+            name: "u".into(),
+            interfaces: vec![v2::Interface {
+                name: "doors".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        // The service is visited first, so a name-only stable sort keeps it first.
+        let numbering = number_unit("u", None, &[&service_package, &interface_package]);
+        assert_eq!(numbering.numbers.len(), 2);
+        assert_eq!(
+            numbering.numbers[&LockKey::Interface("doors".into())],
+            (1, true)
+        );
+        assert_eq!(
+            numbering.numbers[&LockKey::Service("doors".into())],
+            (2, true)
+        );
+        assert!(numbering.any_provisional);
+    }
+
     fn package(db: &RidlDatabase, name: &str, text: &str) -> Package {
         let file = InputFile::new(
             db,

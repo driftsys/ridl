@@ -482,7 +482,8 @@ fn push_line<K: TableKey>(out: &mut String, entry: &LockEntry<K>) {
     out.push('\n');
 }
 
-/// What `ridl lock merge` writes to OURS (lock design §6).
+/// The result of `ridl lock merge` (lock design §6): a clean table, conflict
+/// text for OURS, or number exhaustion with nothing written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MergeOutcome<K = LockKey> {
     /// Every entry agreed: the merged table, which the driver renders. Its
@@ -492,7 +493,7 @@ pub enum MergeOutcome<K = LockKey> {
     /// markers around only the disagreeing entries. The text does not parse
     /// (RIDL-410) until an author resolves it.
     Conflict { text: String },
-    /// The renumbering ran out of numbers.
+    /// Renumbering ran out of numbers; no merged table is produced or written.
     Exhausted,
 }
 

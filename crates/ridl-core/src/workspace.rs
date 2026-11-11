@@ -428,6 +428,7 @@ fn load_inner(
         {
             return Err(cannot_read(entry, error).into());
         }
+        // NotFound, NotADirectory, and entries that are neither files nor directories.
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -3933,6 +3934,140 @@ service:veh.common.climate 2
             find_root(&dir.path().join("a")),
             Some(dir.path().to_path_buf())
         );
+    }
+
+    #[test]
+    fn a_member_manifest_directory_reports_mani_008() {
+        let dir = TempDir::new("member-manifest-directory");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        fs::create_dir_all(dir.path().join("a/ridl.toml")).unwrap();
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        assert!(result.is_ok(), "a non-file manifest produces a diagnostic");
+        let loaded = result.unwrap();
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-008"]);
+    }
+
+    #[test]
+    fn a_missing_entry_reports_that_it_does_not_exist() {
+        let dir = TempDir::new("missing-entry");
+        let entry = dir.path().join("missing");
+        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        assert!(result.is_err(), "a missing entry does not load");
+        let error = result.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert_eq!(
+            error.to_string(),
+            format!("`{}` does not exist", entry.display())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_entry_reports_that_it_does_not_exist() {
+        let dir = TempDir::new("fifo-entry");
+        let entry = dir.path().join("entry");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&entry)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        assert!(result.is_err(), "a FIFO entry does not load");
+        let error = result.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert_eq!(
+            error.to_string(),
+            format!("`{}` does not exist", entry.display())
+        );
+    }
+
+    #[cfg(unix)]
+    fn skip_as_root() -> bool {
+        let output = std::process::Command::new("id").arg("-u").output().unwrap();
+        assert!(output.status.success(), "id -u must succeed");
+        let root = String::from_utf8_lossy(&output.stdout).trim() == "0";
+        if root {
+            eprintln!("skipped: chmod 000 does not restrict root");
+        }
+        root
+    }
+
+    /// Restores permissions before the temporary directory is removed, even on panic.
+    #[cfg(unix)]
+    struct RestrictedPermissions {
+        path: PathBuf,
+        permissions: fs::Permissions,
+    }
+
+    #[cfg(unix)]
+    impl RestrictedPermissions {
+        fn new(path: &Path) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = fs::metadata(path).unwrap().permissions();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
+            Self {
+                path: path.to_path_buf(),
+                permissions,
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for RestrictedPermissions {
+        fn drop(&mut self) {
+            fs::set_permissions(&self.path, self.permissions.clone()).expect("restore permissions");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_entry_ancestor_reports_the_path_and_cause() {
+        if skip_as_root() {
+            return;
+        }
+        let dir = TempDir::new("unreadable-entry-ancestor");
+        let entry = dir
+            .write("ancestor/package/ridl.toml", PACKAGE_A)
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let _permissions = RestrictedPermissions::new(&dir.path().join("ancestor"));
+        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        assert!(result.is_err(), "an inaccessible entry does not load");
+        let error = result.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        let message = error.to_string();
+        assert!(message.contains(&entry.display().to_string()), "{message}");
+        assert!(message.contains("Permission denied"), "{message}");
+        assert!(!message.contains("does not exist"), "{message}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_member_manifest_reports_the_path_and_cause() {
+        if skip_as_root() {
+            return;
+        }
+        let dir = TempDir::new("unreadable-member-manifest");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        let manifest = dir.write("a/ridl.toml", PACKAGE_A);
+        let _permissions = RestrictedPermissions::new(&manifest);
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        assert!(
+            result.is_err(),
+            "an unreadable member manifest does not load"
+        );
+        let error = result.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        let message = error.to_string();
+        assert!(
+            message.contains(&manifest.display().to_string()),
+            "{message}"
+        );
+        assert!(message.contains("Permission denied"), "{message}");
+        assert!(!message.contains("does not exist"), "{message}");
     }
 
     /// An absolute entry is normalised lexically before its ancestors are

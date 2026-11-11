@@ -323,6 +323,48 @@ veh.adas.Lane/left 4 retired
     }
 
     #[test]
+    fn merge_returns_exhausted_when_renumbering_has_no_number_left() {
+        let base = parse(&format!("{HEADER}\nnext 1\n")).unwrap();
+        let ours = parse(&format!(
+            "{HEADER}\nnext {}\nveh.C/a 1\n",
+            InstanceKey::MAX_NUMBER + 1
+        ))
+        .unwrap();
+        let theirs = parse(&format!("{HEADER}\nnext 2\nveh.C/b 1\n")).unwrap();
+        let outcome = std::panic::catch_unwind(|| merge(&base, &ours, &theirs, 7));
+        assert!(
+            matches!(outcome, Ok(MergeOutcome::Exhausted)),
+            "{outcome:?}"
+        );
+    }
+
+    #[test]
+    fn merge_renumbers_to_the_last_available_number() {
+        let base = parse(&format!("{HEADER}\nnext 1\n")).unwrap();
+        let ours = parse(&format!(
+            "{HEADER}\nnext {}\nveh.C/a 1\n",
+            InstanceKey::MAX_NUMBER
+        ))
+        .unwrap();
+        let theirs = parse(&format!("{HEADER}\nnext 2\nveh.C/b 1\n")).unwrap();
+        let outcome = merge(&base, &ours, &theirs, 7);
+        assert!(matches!(outcome, MergeOutcome::Clean(_)), "{outcome:?}");
+        let MergeOutcome::Clean(merged) = outcome else {
+            unreachable!()
+        };
+        assert_eq!(
+            merged.live(&"veh.C/b".parse().unwrap()).unwrap().number,
+            InstanceKey::MAX_NUMBER
+        );
+        assert_eq!(merged.live(&"veh.C/a".parse().unwrap()).unwrap().number, 1);
+        assert_eq!(merged.next, InstanceKey::MAX_NUMBER + 1);
+        assert!(
+            parse(&merged.render()).is_ok(),
+            "the final number and exhausted next parse"
+        );
+    }
+
+    #[test]
     fn two_instance_allocations_merge_with_the_instance_header() {
         let base = parse(&format!("{HEADER}\nnext 2\nveh.C/a 1\n")).unwrap();
         let ours = parse(&format!("{HEADER}\nnext 3\nveh.C/a 1\nveh.C/b 2\n")).unwrap();
