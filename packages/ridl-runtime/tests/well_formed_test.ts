@@ -63,6 +63,7 @@ Deno.test("isWellFormedString scans the surrogate range inclusively", () => {
     ["\ud800\ue000", false],
     ["\ud7ff\udc00", false],
     ["\udbff\udbff", false],
+    ["\udc00\udc00", false],
   ];
   const check = () => {
     for (const [value, expected] of cases) {

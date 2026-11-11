@@ -78,10 +78,11 @@ Deno.test("offFloatStep accepts the largest finite floats on an integer lattice"
   }
 });
 
-Deno.test("offFloatStep takes the upper gap of the largest float from the lower gap", () => {
-  // The next float above the largest one is infinite. With a step of 1.6e308,
-  // which is above the rounding cell of the largest float, the largest float
-  // is not a point of the lattice: the nearest point is 1.6e308.
+Deno.test("offFloatStep does not read an infinite upper gap for the largest float", () => {
+  // The next float above the largest one is infinite, and an infinite gap
+  // would make every value pass. With a step of 1.6e308, which is above the
+  // rounding cell of the largest float, the largest float is not a point of
+  // the lattice: the nearest point is 1.6e308.
   const step = 1.6e308;
   const huge: FloatLattice = [1, step, step, 0, 0, 0];
   assertEquals(offFloatStep(Number.MAX_VALUE, false, huge), true);
