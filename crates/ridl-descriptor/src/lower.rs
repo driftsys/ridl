@@ -38,6 +38,12 @@ pub enum LowerError {
     /// A fixed member of a checked package has no payload; `ridl-sem` gives
     /// every fixed member one, so this is an internal error.
     MissingFixedPayload { interface: String, member: String },
+    /// A declaration in an interface body has no kind; `ridl-sem` sets the
+    /// kind of every declaration, so this is an internal error.
+    MissingKind {
+        interface: String,
+        declaration: String,
+    },
 }
 
 impl fmt::Display for LowerError {
@@ -47,6 +53,13 @@ impl fmt::Display for LowerError {
             Self::MissingFixedPayload { interface, member } => write!(
                 f,
                 "internal error: fixed member `{member}` of interface `{interface}` has no payload"
+            ),
+            Self::MissingKind {
+                interface,
+                declaration,
+            } => write!(
+                f,
+                "internal error: declaration `{declaration}` of interface `{interface}` has no kind"
             ),
         }
     }
@@ -142,10 +155,13 @@ pub fn lower(
     Ok(crate::finish(&catalog))
 }
 
-/// Skips a declaration with no kind; `ridl-sem` always sets the kind.
+/// Returns an error for a declaration with no kind; `ridl-sem` always sets the kind.
 fn member_of(decl: &Decl, interface: &str, ctx: &Ctx<'_>) -> Result<Option<Member>, LowerError> {
     let Some(kind) = decl.kind.as_ref() else {
-        return Ok(None);
+        return Err(LowerError::MissingKind {
+            interface: interface.to_owned(),
+            declaration: decl.name.clone(),
+        });
     };
     let mut streams = Vec::new();
     let (kind, payloads, timing) = match kind {
