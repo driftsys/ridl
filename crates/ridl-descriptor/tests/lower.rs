@@ -53,6 +53,13 @@ fn a_declaration_without_a_kind_is_skipped() {
     let interface = interfaces.get(0).unwrap().unwrap();
     assert_eq!(interface.name().unwrap(), "Vehicle");
     assert_eq!(interface.members().unwrap().len(), 0);
+    assert_eq!(
+        interface
+            .reserved_ordinals()
+            .map_or(0, |ordinals| ordinals.len()),
+        0,
+        "a declaration without a kind is not a reserved slot"
+    );
 }
 
 #[test]

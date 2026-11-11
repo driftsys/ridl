@@ -3983,6 +3983,24 @@ service:veh.common.climate 2
         );
     }
 
+    /// An entry below a regular file gives NotADirectory, which is reported as
+    /// a missing entry.
+    #[cfg(unix)]
+    #[test]
+    fn an_entry_below_a_regular_file_reports_that_it_does_not_exist() {
+        let dir = TempDir::new("entry-below-file");
+        let file = dir.write("file", "text");
+        let entry = file.join("below");
+        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        assert!(result.is_err(), "an entry below a file does not load");
+        let error = result.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert_eq!(
+            error.to_string(),
+            format!("`{}` does not exist", entry.display())
+        );
+    }
+
     #[cfg(unix)]
     fn skip_as_root() -> bool {
         let output = std::process::Command::new("id").arg("-u").output().unwrap();
