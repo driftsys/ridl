@@ -270,9 +270,11 @@ other entry below is Accepted.
   discharged by the proto3 codec, and ruling 14 is out of date since
   driftsys/ridl#713. Amended 2026-11-03, adding decision 10 from
   driftsys/ridl#1120: an append that changes the FlatBuffers integer of an enum
-  or an enum set is `flatbuffers_width_change`, breaking under FlatBuffers.
-  Amended 2026-11-04 on decision 10 from driftsys/ridl#1211: remote integer
-  changes through an import pin are reported at the surviving consumer path.
+  set is `flatbuffers_width_change`, breaking under FlatBuffers. Amended
+  2026-11-04 on decision 10 from driftsys/ridl#1211: remote integer changes
+  through an import pin are reported at the surviving consumer path. Amended
+  2026-11-11 from driftsys/ridl#1020: every enum is a fixed `int` (int32), so an
+  enum append never changes the FlatBuffers integer.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `podbuf` joins proto3 and FlatBuffers as a
