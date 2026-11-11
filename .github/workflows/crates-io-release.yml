@@ -41,7 +41,7 @@ jobs:
     name: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: confirm the tag's commit is on main
@@ -74,7 +74,7 @@ jobs:
         run: cargo install cargo-semver-checks --locked --version 0.51.0
       # One test of `just test` (crates/ridlc/tests/wasm_module.rs) runs the
       # generated wasm module in Node, as in ci.yml's rust job.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: install mdbook
@@ -142,7 +142,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: install the pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
