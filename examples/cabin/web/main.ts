@@ -33,7 +33,7 @@
 // the cause.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
-import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
+import { connect } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   hexFromHash,
   HIGHEST,
@@ -42,7 +42,7 @@ import {
   RANGE_RULE,
   selfTest,
   sessionOptions,
-  STEP_BOUND_MS,
+  subscribeTemperature,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
@@ -203,11 +203,7 @@ void session.closed.then(async (ended) => {
   fail(`the connection closed (code ${ended.code})`);
 });
 stage = "subscribing";
-await session.subscribe({
-  kind: Kind.Signal,
-  iface: Cabin.temperature.iface,
-  ord: Cabin.temperature.ord,
-}, { bound: STEP_BOUND_MS });
+await subscribeTemperature(session);
 
 stage = "waiting for the highest value and the lowest after it";
 await done;

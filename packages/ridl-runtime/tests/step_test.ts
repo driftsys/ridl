@@ -62,3 +62,45 @@ Deno.test("offFloatStep accepts any large value when the step is finer than its 
   assertEquals(offFloatStep(1e300, false, fine), false);
   assertEquals(offFloatStep(1e30, true, fine), false);
 });
+
+// The cases below sit at the ends of the binary64 and binary32 ranges. Each
+// expected value follows from the definition of the lattice, not from running
+// the check: a lattice point is `phase + k * step`, and a float of magnitude
+// 2^53 or more is an integer.
+
+Deno.test("offFloatStep accepts the largest finite floats on an integer lattice", () => {
+  const MAX_32 = 3.4028234663852886e38;
+  for (const value of [Number.MAX_VALUE, -Number.MAX_VALUE]) {
+    assertEquals(offFloatStep(value, false, half), false, `${value}`);
+  }
+  for (const value of [MAX_32, -MAX_32]) {
+    assertEquals(offFloatStep(value, true, half), false, `${value}`);
+  }
+});
+
+Deno.test("offFloatStep does not read an infinite upper gap for the largest float", () => {
+  // The next float above the largest one is infinite, and an infinite gap
+  // would make every value pass. With a step of 1.6e308, which is above the
+  // rounding cell of the largest float, the largest float is not a point of
+  // the lattice: the nearest point is 1.6e308.
+  const step = 1.6e308;
+  const huge: FloatLattice = [1, step, step, 0, 0, 0];
+  assertEquals(offFloatStep(Number.MAX_VALUE, false, huge), true);
+  assertEquals(offFloatStep(step, false, huge), false);
+});
+
+Deno.test("offFloatStep accepts a point whose distance to the phase overflows", () => {
+  // The lattice is 2^1022 + k * 2^1023. The point for k = -2 is -1.5 * 2^1023,
+  // which is 2^1024 below the phase. binary64 cannot hold that distance, nor
+  // the double of the step. The point is on the lattice by its definition.
+  const step = 2 ** 1023;
+  const phase = 2 ** 1022;
+  const lattice: FloatLattice = [1, step, step, 0, phase, 0];
+  const point = phase - step - step;
+  assertEquals(Number.isFinite(point), true);
+  assertEquals(Number.isFinite(point - phase), false);
+  assertEquals(offFloatStep(point, false, lattice), false);
+  assertEquals(offFloatStep(phase + step, false, lattice), false);
+  // A neighbour of the point, a quarter of a step away, is off the lattice.
+  assertEquals(offFloatStep(point + step / 4, false, lattice), true);
+});

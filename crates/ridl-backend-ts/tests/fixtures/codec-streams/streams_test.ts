@@ -1193,6 +1193,33 @@ Deno.test("generated_request_constraint_error_maps_to_the_utf8_contract", () => 
   }
 });
 
+// The real generated encode, not a stub: a lone surrogate in a text argument
+// of the request fails before a request opens, as a contract failure of the
+// utf8 rule that carries the ConstraintError as its cause.
+Deno.test("generated_request_lone_surrogate_is_a_utf8_stream_error", () => {
+  const fn = uploadFunction("uploadLabel");
+  for (const label of ["\ud800", "ab\udc00", "\ud83d\u0041"]) {
+    const h = uploadHarness();
+    assert.throws(
+      () => fn(h.session, label, { bound: 50 }),
+      (error: unknown) => {
+        assert.ok(error instanceof StreamError);
+        assert.deepEqual(error.failure, {
+          category: "contract",
+          contract: { category: "invalid-value", rule: "utf8" },
+        });
+        assert.ok(error.cause instanceof ConstraintError);
+        assert.equal(error.cause.rule, "utf8");
+        return true;
+      },
+    );
+    assert.equal(h.calls.length, 0);
+  }
+  const ok = uploadHarness();
+  fn(ok.session, "a\ud83d\ude00", { bound: 50 });
+  assert.equal(ok.calls.length, 1);
+});
+
 // Mutations: bypass codec exception mapping in either duplex direction.
 for (const direction of ["upload", "reply"] as const) {
   for (const kind of ["rule", "error"] as const) {

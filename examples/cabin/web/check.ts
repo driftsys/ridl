@@ -6,7 +6,11 @@
 // the payloads of its self-test with the generated `encodeTemperature`.
 
 import type { Codec } from "../../../packages/ridl-runtime/mod.ts";
-import type { connect } from "../../../packages/ridl-transport-ws/mod.ts";
+import { Kind } from "../../../packages/ridl-transport-ws/mod.ts";
+import type {
+  connect,
+  Session,
+} from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   Cabin,
   CATALOG_HASH,
@@ -199,6 +203,20 @@ export class TemperatureCheck {
  * never answers reject the call with `timeout`.
  */
 export const STEP_BOUND_MS = 10_000;
+
+/**
+ * Subscribes `session` to `Cabin.temperature` with the bound of each step.
+ * main.ts and page.ts both call it, so that one test of the bound covers both.
+ */
+export function subscribeTemperature(
+  session: Pick<Session, "subscribe">,
+): Promise<void> {
+  return session.subscribe({
+    kind: Kind.Signal,
+    iface: Cabin.temperature.iface,
+    ord: Cabin.temperature.ord,
+  }, { bound: STEP_BOUND_MS });
+}
 
 /**
  * The options that main.ts and page.ts give to `connect`: the catalog, the

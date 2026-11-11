@@ -1211,6 +1211,55 @@ fn an_interface_may_take_a_runtime_name() {
     }
 }
 
+/// Text that a codec has verified is well-formed UTF-8, so the check that
+/// throws `ConstraintError` belongs on the encode path only. A call on the
+/// decode path would cost time on every read and could never fail.
+///
+/// Mutation: emit `$rt.checkWellFormed(` in an `unpack` function or in a
+/// `decode` function.
+#[test]
+fn well_formed_text_is_checked_on_the_encode_path_only() {
+    let source = module(&common_model(), "veh.common");
+    // Split the module into its top-level functions: a block runs from its
+    // `function` line to the next one.
+    let mut blocks: Vec<(String, String)> = Vec::new();
+    for line in source.lines() {
+        let declaration = line.strip_prefix("export ").unwrap_or(line);
+        if let Some(rest) = declaration.strip_prefix("function ") {
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            blocks.push((name, String::new()));
+        }
+        if let Some((_, body)) = blocks.last_mut() {
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+    let on_decode_path = |name: &str| name.starts_with("decode") || name.starts_with("unpack");
+    let on_encode_path = |name: &str| name.starts_with("encode") || name.starts_with("pack");
+    let decode: Vec<_> = blocks.iter().filter(|(n, _)| on_decode_path(n)).collect();
+    let encode: Vec<_> = blocks.iter().filter(|(n, _)| on_encode_path(n)).collect();
+    // The fixture has strings, so the test is not vacuous.
+    assert!(decode.len() > 10, "{source}");
+    assert!(
+        encode
+            .iter()
+            .any(|(n, b)| n == "packDriverProfile" && b.contains("$rt.checkWellFormed(")),
+        "{source}"
+    );
+    assert!(
+        encode
+            .iter()
+            .any(|(n, b)| n == "packSensorBounds" && b.contains("$rt.checkWellFormed(")),
+        "{source}"
+    );
+    for (name, body) in decode {
+        assert!(!body.contains("checkWellFormed"), "{name}: {body}");
+    }
+}
+
 /// The alias of a foreign package reached through a field only (`ridl_std`
 /// for `DriverProfile.name`) is a name of the file, so an interface of that
 /// name is refused.

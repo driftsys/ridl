@@ -15,13 +15,13 @@
 // a `fail` verdict, or the connection closes first.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
-import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
+import { connect } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   hexFromHash,
   type Progress,
   selfTest,
   sessionOptions,
-  STEP_BOUND_MS,
+  subscribeTemperature,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
@@ -131,11 +131,7 @@ async function run(): Promise<Progress> {
     reject(new Error(`the connection closed (code ${ended.code})`));
   });
   try {
-    await session.subscribe({
-      kind: Kind.Signal,
-      iface: Cabin.temperature.iface,
-      ord: Cabin.temperature.ord,
-    }, { bound: STEP_BOUND_MS });
+    await subscribeTemperature(session);
     return await verdict;
   } finally {
     settled = true;
