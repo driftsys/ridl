@@ -119,16 +119,19 @@ version is the workspace version (`Cargo.toml` `[workspace.package]`), and
 `tests/version_test.ts` fails when the two differ. The JSR publication is
 driftsys/ridl#992.
 
-**D-4. No dependency, at run time or in tests.** The package imports nothing
-outside itself. The tests use `node:assert/strict`, which Deno provides, and
-Deno's own APIs, so nothing is fetched from a registry and there is no lockfile.
-The browser test drives the browser through the Chrome DevTools Protocol over
-Deno's own `WebSocket` client (`e2e/browser.ts`), not through Puppeteer,
-Playwright or Astral. ADR-0020 decision 6 named "the runtime package" as this
-package's dependency; that package does not exist, so the row was amended on
-2026-10-20 to "nothing until the runtime package exists". The vocabulary types
-(`Envelope`, `Kind`, `Contract`, the error categories) are defined here until
-the runtime package holds them.
+**D-4. One dependency: `@driftsys/ridl-runtime`.** The package imports the
+runtime for the vocabulary types it shares (`Envelope`, `Contract`,
+`CallFailure`, `WaitOptions`, `Detection`, `SignalCheck`, `SignalCheckEntry`,
+and `RawSample` and `RawOccurrence`, which it exports as `Sample` and
+`Occurrence`) and for `CallError`, the superclass of `SessionError`. It imports
+nothing else. The tests use `node:assert/strict`, which Deno provides, and
+Deno's own APIs, so nothing else is fetched from a registry and there is no
+lockfile. The browser test drives the browser through the Chrome DevTools
+Protocol over Deno's own `WebSocket` client (`e2e/browser.ts`), not through
+Puppeteer, Playwright or Astral. In the source tree `deno.json` maps the runtime
+to the sibling directory; the npm build maps it to the npm package, as the
+dependency `^<runtime version>`, and skips `npm install`, so the build does not
+need that version on the registry.
 
 ## The codec (`src/frame.ts`)
 
@@ -801,9 +804,9 @@ ordinal with `checkNumbers` in its preflight, rejecting with `RangeError` before
 creating a socket. `Session.checkWith(iface, ord, check)` registers or replaces
 one check and validates the numbers even after the session ends; valid
 registration after the end does nothing. The exported types `Detection`
-(`"corrupt" | { rule: Rule }`), `SignalCheck` and `SignalCheckEntry` are
-structurally the same as the types of `@driftsys/ridl-runtime`, which the
-transport does not import. A check returns `undefined` when its bytes pass.
+(`"corrupt" | { rule: Rule }`), `SignalCheck` and `SignalCheckEntry` are the
+types of `@driftsys/ridl-runtime`, re-exported. A check returns `undefined` when
+its bytes pass.
 
 In `#onPublish`, the size limit and sequence tests precede the check, and the
 check precedes holding the sample. Only live signal payloads within the limit

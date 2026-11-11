@@ -15,6 +15,13 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
   Deno.exit(1);
 }
 
+// The runtime is a sibling package that deno.json imports by relative path.
+// The npm package depends on it by name, at the version of the sibling.
+const runtimeJson = JSON.parse(
+  await Deno.readTextFile("../ridl-runtime/deno.json"),
+);
+const runtimeEntry = new URL("../../ridl-runtime/mod.ts", import.meta.url).href;
+
 await emptyDir("./npm");
 
 await build({
@@ -22,6 +29,14 @@ await build({
   outDir: "./npm",
   // The package uses the platform WebSocket only, so no shim is needed.
   shims: { deno: false },
+  mappings: {
+    [runtimeEntry]: {
+      name: "@driftsys/ridl-runtime",
+      version: `^${runtimeJson.version}`,
+    },
+  },
+  // The runtime of this checkout may not be on the registry yet.
+  skipNpmInstall: true,
   typeCheck: false,
   test: false,
   scriptModule: false,

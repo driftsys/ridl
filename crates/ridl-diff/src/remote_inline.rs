@@ -5,8 +5,10 @@
 //! `proto3_width_change` and `strict_enum_append` at consumer paths, once per
 //! path and remote declaration reached by a surviving old use. Scalar constraint
 //! changes are attributed to consumer interaction paths with consumer direction.
-//! Strict appends
-//! are breaking for every encoding. Local declarations use the local rules;
+//! A changed scalar backing or resolved wire width reports a breaking
+//! `width_changed` row at the consumer path, once per path and remote
+//! declaration, including send-only uses. Strict appends are breaking for every
+//! encoding. Local declarations use the local rules;
 //! missing per-side remote context supplies no remote comparison.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -496,6 +498,7 @@ fn constraint_changes(
     old: &[&v2::Package],
     new: &[&v2::Package],
 ) -> Vec<Change> {
+    let mut directions = crate::direction::DirectionCache::default();
     let mut changes = BTreeMap::new();
     let matching = crate::walk::Matching::new(old_holders, new_holders);
     for home in old_holders {
@@ -572,7 +575,7 @@ fn constraint_changes(
                         ) {
                             Verdict::Breaking
                         } else {
-                            crate::direction::widening_verdict(new_home, new, &identity)
+                            directions.widening_verdict(new_home, new, &identity)
                         };
                         changes.insert(
                             (path.clone(), identity.clone(), "constraint_changed"),

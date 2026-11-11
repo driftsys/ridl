@@ -655,11 +655,12 @@ disagreeing sources is the correct one.
     this amendment the remote pass reported neither widening nor narrowing; both
     are now reported.
 
-    **Alternatives considered (options 1 and 3).** Keeping every widening
-    compatible would admit values an older receiver rejects. Making every
-    widening breaking would reject a send-only change even though every value
-    the older consumer sends remains legal. Direction distinguishes these cases
-    without a new category, flag or wire representation.
+    **Alternatives considered.** Option 1, keeping every widening compatible,
+    would admit values an older receiver rejects. Option 2, the chosen direction
+    rule, distinguishes these cases without a new category, flag or wire
+    representation. Option 3, making every widening breaking, would reject a
+    send-only change even though every value the older consumer sends remains
+    legal.
 
     **Amended (2026-09-30), from the decision on driftsys/ridl#598:** an
     appended struct field is compatible only when a reader of the new version

@@ -51,7 +51,7 @@ mod classify_tests;
 /// [`Verdict::Compatible`]. Callers that need the fail-closed result pass the
 /// full scope through [`diff_sets_in`](crate::diff_sets_in).
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
-    classify_in(change, old, new, &[], &[])
+    classify_in(change, old, new, &[], &[], &mut Default::default())
 }
 
 /// [`classify`], with `scope` — every package of the new snapshot, and the
@@ -60,7 +60,8 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
 /// for ([`diff_refs_with`](crate::diff_refs_with)). Appended fields read `scope`
 /// to decide whether their types allow 0; scalar constraints read it to find
 /// every new-side interaction that reaches the type. Encoding-specific
-/// categories read `encodings`.
+/// categories read `encodings`. `directions` caches the sent and received uses
+/// of reached declarations for the length of one comparison.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
@@ -77,6 +78,7 @@ pub(crate) fn classify_in(
     new: &v2::Package,
     scope: &[&v2::Package],
     encodings: &[&str],
+    directions: &mut crate::direction::DirectionCache,
 ) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
@@ -154,7 +156,7 @@ pub(crate) fn classify_in(
         Category::VisibilityChanged => visibility(change, old, new),
         Category::InteractionAppended => appended(change, old, new),
         Category::DeclAdded => added(change, old, new, scope),
-        Category::ConstraintChanged => constraint(change, old, new, scope),
+        Category::ConstraintChanged => constraint(change, old, new, scope, directions),
         Category::TimingChanged => timing(change, old, new),
         Category::RpcBoundChanged => rpc_bound(change, old, new),
         Category::ContractChanged => contract(change, old, new),
@@ -566,6 +568,7 @@ fn constraint(
     old: &v2::Package,
     new: &v2::Package,
     scope: &[&v2::Package],
+    directions: &mut crate::direction::DirectionCache,
 ) -> Verdict {
     let mut segments = change.path.split('/').skip(1);
     let (Some(name), None) = (segments.next(), segments.next()) else {
@@ -585,7 +588,7 @@ fn constraint(
     if narrows(old_def.constraint.as_ref(), new_def.constraint.as_ref()) {
         Verdict::Breaking
     } else {
-        crate::direction::widening_verdict(new, scope, &format!("{}.{}", new.name, name))
+        directions.widening_verdict(new, scope, &format!("{}.{}", new.name, name))
     }
 }
 

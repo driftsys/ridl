@@ -3428,6 +3428,36 @@ mod constraint_direction {
     }
 
     #[test]
+    fn two_scalars_of_one_package_are_judged_apart() {
+        // Both rows of one comparison share a scope, so a verdict kept per
+        // scope instead of per declaration would give both rows one answer.
+        let mut old = pkg(vec![
+            command("send", 1, vec![param("v", named("S"))], vec![]),
+            signal("read", 2, "R"),
+        ]);
+        old.decls = vec![
+            scalar("S", bounds(Some("10"), Some("100")), v2::IntWidth::U16),
+            scalar("R", bounds(Some("10"), Some("100")), v2::IntWidth::U16),
+        ];
+        let mut new = old.clone();
+        new.decls = vec![
+            scalar("S", bounds(Some("0"), Some("200")), v2::IntWidth::U16),
+            scalar("R", bounds(Some("0"), Some("200")), v2::IntWidth::U16),
+        ];
+        let report = diff_packages(&old, &new);
+        let verdict_of = |name: &str| {
+            report
+                .changes
+                .iter()
+                .find(|c| c.category == Category::ConstraintChanged && c.path.ends_with(name))
+                .unwrap_or_else(|| panic!("no constraint row for {name}"))
+                .verdict
+        };
+        assert_eq!(verdict_of("/S"), Verdict::Compatible);
+        assert_eq!(verdict_of("/R"), Verdict::Breaking);
+    }
+
+    #[test]
     fn signal_received() {
         check(vec![signal("read", 1, "S")], Verdict::Breaking);
     }
@@ -3608,6 +3638,63 @@ mod constraint_direction {
             row(&report, Category::ConstraintChanged).verdict,
             Verdict::Breaking
         );
+    }
+
+    #[test]
+    fn direct_classify_uses_only_the_listed_package() {
+        let (old, new) = pair(
+            vec![command("send", 1, vec![param("v", named("S"))], vec![])],
+            false,
+        );
+        let mut consumer = pkg(vec![signal("read", 1, "veh.cluster.S")]);
+        consumer.name = "consumer".into();
+        let report = crate::diff_sets(&[old.clone(), consumer.clone()], &[new.clone(), consumer]);
+        let change = row(&report, Category::ConstraintChanged);
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(crate::classify(change, &old, &new), Verdict::Compatible);
+    }
+
+    #[test]
+    fn qualified_remote_name_ignores_a_local_bare_name() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut local = pkg(vec![signal("read", 1, "dep.S")]);
+        local.decls = vec![scalar("S", bounds(None, None), v2::IntWidth::I32)];
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert_eq!(report.changes.len(), 1, "{report:?}");
+        let change = row(&report, Category::ConstraintChanged);
+        assert_eq!(change.path, "veh.cluster/I/read");
+        assert_eq!(change.before.as_deref(), Some("dep.S: [min=10 max=100]"));
+        assert_eq!(change.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn unreached_remote_narrowing_has_no_row() {
+        let (mut after, mut before) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let mut local = pkg(vec![signal("read", 1, "Other")]);
+        local.decls = vec![scalar("Other", bounds(None, None), v2::IntWidth::I32)];
+        let report =
+            crate::diff_refs_with_contexts(&[&local], &[&local], &[&before], &[&after], &[])
+                .unwrap();
+        assert!(report.changes.is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn missing_remote_constraint_context_has_no_row() {
+        let (mut before, mut after) = pair(vec![], false);
+        before.name = "dep".into();
+        after.name = "dep".into();
+        let local = pkg(vec![signal("read", 1, "dep.S")]);
+        for (old, new) in [(&[][..], &[&after][..]), (&[&before][..], &[][..])] {
+            let report =
+                crate::diff_refs_with_contexts(&[&local], &[&local], old, new, &[]).unwrap();
+            assert!(report.changes.is_empty(), "{report:?}");
+        }
     }
 
     #[test]

@@ -443,6 +443,14 @@ const ALLOWED: &[Allowed] = &[
               shape",
     },
     Allowed {
+        path: "crates/ridl-backend-ts/examples/untimed_fixture.rs",
+        lines: 1,
+        why: "a fixture generator over `ridl_ir::codegen::v1::Model::interfaces`, \
+              which is lowered from `Package::shapes()` and so holds an inline \
+              shape too: it edits the lowered model to remove the timing of \
+              every call",
+    },
+    Allowed {
         path: "crates/ridl-backend-ts/tests/codec.rs",
         lines: 27,
         why: "a test fixture over `ridl_ir::codegen::v1::Model::interfaces`, \

@@ -2441,10 +2441,12 @@ fn constraint_history(received: bool) {
         );
     }
 }
+
 #[test]
 fn widened_received_constraint_restarts_history_without_ordinal_diagnostics() {
     constraint_history(true);
 }
+
 #[test]
 fn widened_send_only_constraint_keeps_history() {
     constraint_history(false);
@@ -2517,13 +2519,26 @@ fn vendored_scalar_pin(dir: &TempDir, max: u32) {
 
 #[test]
 fn remote_pin_widening_received_by_a_signal_empties_history() {
+    remote_pin_constraint_history(true);
+}
+
+#[test]
+fn remote_pin_send_only_widening_keeps_history() {
+    remote_pin_constraint_history(false);
+}
+
+fn remote_pin_constraint_history(received: bool) {
     let dir = TempDir::new("remote-scalar-history");
     let home = TempDir::new("remote-scalar-home");
     let out = TempDir::new("remote-scalar-out");
     vendored_scalar_pin(&dir, 100);
     dir.write(
         "cluster.ridl",
-        "package veh.cluster\nimport dep.S\ninterface I { signal read: S @10ms }\n",
+        if received {
+            "package veh.cluster\nimport dep.S\ninterface I { signal read: S @10ms }\n"
+        } else {
+            "package veh.cluster\nimport dep.S\ninterface I { command send(v: S) }\n"
+        },
     );
     let root = dir.path();
     remote_command(root, home.path(), &["lock"]);
@@ -2544,9 +2559,19 @@ fn remote_pin_widening_received_by_a_signal_empties_history() {
     );
     let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
     assert_ne!(new_hash, old_hash);
-    assert!(compatible_of(out.path(), UNIT).is_empty());
+    let expected = if received {
+        vec![]
+    } else {
+        vec![old_hash.clone()]
+    };
+    assert_eq!(compatible_of(out.path(), UNIT), expected);
     remote_command(root, home.path(), &["baseline"]);
-    assert_eq!(history_lines_of(root, UNIT), vec![new_hash]);
+    let expected = if received {
+        vec![new_hash]
+    } else {
+        vec![new_hash, old_hash]
+    };
+    assert_eq!(history_lines_of(root, UNIT), expected);
     assert_eq!(
         std::fs::read(baseline_dir(root).join("veh.cluster.ir.json")).unwrap(),
         old_snapshot,

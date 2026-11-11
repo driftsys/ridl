@@ -24,6 +24,12 @@
 //! they verify requests before sending, verify named elements before decoding,
 //! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
 //! verify whole named elements, and split raw bytes or text at the member limit.
+//! Each non-internal interface with a command or a query also gets
+//! `<Interface>Client`, a class over a runtime `Caller`: `bind` checks the
+//! catalog hash of the port and of the codec and resolves each payload type id
+//! once, and one method per command and query verifies the request before it
+//! is sent and the reply before it is decoded. A query whose reply is an inline
+//! `T | E` has no method.
 //! Typed functions are omitted for calls with two or more parameter streams,
 //! uploads with an inline `T | E` reply, and calls whose request, named element
 //! or upload reply has no finite FlatBuffers bound.
@@ -183,6 +189,23 @@ struct StreamCall<'a> {
     param_types: Vec<String>,
 }
 
+/// A command or query that the client class of its interface carries as a
+/// method, with the types and names that its signature needs.
+struct CallMember<'a> {
+    interaction: &'a v1::Interaction,
+    params: Vec<&'a v1::Param>,
+    /// The request is the one named parameter itself, not an induced tuple.
+    named_request: bool,
+    /// The type the reply decodes to; `None` for a command.
+    reply_type: Option<String>,
+    param_types: Vec<String>,
+    /// The method's parameter names, which shadow no name the method body uses.
+    bindings: Vec<String>,
+    /// The response bound in milliseconds, as a decimal number, when the
+    /// member records one in the range a port accepts.
+    bound_ms: Option<String>,
+}
+
 /// A stream direction with a resolved payload codec when its elements are named.
 struct StreamElement {
     form: &'static str,
@@ -236,6 +259,12 @@ struct Codec<'a> {
     foreign_strict_sets: BTreeMap<String, (&'a str, &'a v1::Declaration)>,
     stream_calls: BTreeMap<(u32, u32), StreamCall<'a>>,
     stream_omissions: BTreeMap<(u32, u32), String>,
+    /// The commands and queries the client classes carry, by interface number
+    /// and ordinal.
+    call_members: BTreeMap<(u32, u32), CallMember<'a>>,
+    /// The commands and queries of a non-internal interface that the client
+    /// class leaves out, with the reason.
+    call_omissions: BTreeMap<(u32, u32), String>,
     /// The member table entries of the signals that have one, as
     /// `<Interface>.<member>`, in declaration order.
     signal_entries: Vec<String>,
@@ -303,6 +332,8 @@ impl<'a> Codec<'a> {
             foreign_strict_sets: BTreeMap::new(),
             stream_calls: BTreeMap::new(),
             stream_omissions: BTreeMap::new(),
+            call_members: BTreeMap::new(),
+            call_omissions: BTreeMap::new(),
             signal_entries: Vec::new(),
             needs_domain: false,
         };
@@ -374,7 +405,8 @@ impl<'a> Codec<'a> {
                     .name
                     .as_ref()
                     .map_or("", |name| name.declared.as_str());
-                codec.roles(interaction, &spelled.declared, member)?;
+                let roles = codec.roles(interaction, &spelled.declared, member)?;
+                codec.discover_call(interface, slot, interaction, &spelled.declared, &roles)?;
             }
         }
         let mut names = codec.check_names()?;
@@ -576,6 +608,40 @@ impl<'a> Codec<'a> {
                     format!("{}.iface", spelled.declared),
                     format!("{} interface-table metadata key `iface`", spelled.declared),
                 )?;
+                let has_client = interface.slots.iter().any(|slot| {
+                    self.call_members
+                        .contains_key(&(interface.number, slot.ordinal))
+                });
+                if has_client {
+                    register(
+                        format!("{}Client", spelled.declared),
+                        format!("{} client class", spelled.declared),
+                    )?;
+                    for slot in &interface.slots {
+                        let Some(call) = self.call_members.get(&(interface.number, slot.ordinal))
+                        else {
+                            continue;
+                        };
+                        let member = call
+                            .interaction
+                            .name
+                            .as_ref()
+                            .map_or("", |n| n.declared.as_str());
+                        let taken = match member {
+                            "bind" => Some("the static method `bind`"),
+                            "constructor" => Some("the constructor"),
+                            "onEvent" => Some("the method `onEvent`"),
+                            _ => None,
+                        };
+                        if let Some(taken) = taken {
+                            return refuse(format!(
+                                "`{}.{member}` in package `{}` collides with {taken} of the \
+                                 client class `{}Client`, which the codec module also declares",
+                                spelled.declared, self.package, spelled.declared
+                            ));
+                        }
+                    }
+                }
                 for slot in &interface.slots {
                     if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
                         &slot.occupant
@@ -1361,6 +1427,7 @@ impl<'a> Codec<'a> {
         // of the runtime imports it as a type.
         let uses_runtime_values = !self.signal_entries.is_empty()
             || !self.stream_calls.is_empty()
+            || !self.call_members.is_empty()
             || body.contains("$rt.checkWellFormed(");
         let uses_payload_codec = !self.used_locals.is_empty() || !self.foreign_payloads.is_empty();
         if uses_runtime_values {
@@ -2049,6 +2116,104 @@ impl<'a> Codec<'a> {
         Ok(())
     }
 
+    /// Selects the command or query that the client class of `name` carries as
+    /// a method, or records why it leaves the member out. `roles` is the
+    /// result of [`Codec::roles`] for the member. A signal, an event, a fixed
+    /// member and a member of an internal interface have no method here.
+    fn discover_call(
+        &mut self,
+        interface: &'a v1::Interface,
+        slot: &'a v1::InteractionSlot,
+        interaction: &'a v1::Interaction,
+        name: &str,
+        roles: &[(&'static str, Result<String, String>)],
+    ) -> Result<(), GenerateError> {
+        use v1::interaction::Shape;
+        if interface.visibility() == v1::Visibility::Internal {
+            return Ok(());
+        }
+        let member = interaction
+            .name
+            .as_ref()
+            .map_or("", |n| n.declared.as_str());
+        let path = format!("{name}.{member}");
+        let key = (interface.number, slot.ordinal);
+        let (params, request_payload, query) = match &interaction.shape {
+            Some(Shape::Command(c)) => (&c.params, c.request.as_ref(), None),
+            Some(Shape::Query(q)) => (&q.params, q.request.as_ref(), Some(q)),
+            _ => return Ok(()),
+        };
+        if let Some((_, Err(unbounded))) = roles.iter().find(|(_, payload)| payload.is_err()) {
+            self.call_omissions
+                .insert(key, format!("{unbounded} has no finite FlatBuffers bound"));
+            return Ok(());
+        }
+        if let Some(q) = query
+            && matches!(
+                q.reply.as_ref().and_then(|r| r.kind.as_ref()),
+                Some(v1::reply::Kind::Fallible(_))
+            )
+            && q.reply_payload.is_none()
+            && q.reply_tuple.is_none()
+        {
+            self.call_omissions
+                .insert(key, "inline fallible replies have no codec".to_string());
+            return Ok(());
+        }
+        let params: Vec<&'a v1::Param> = params.iter().collect();
+        let mut param_types = Vec::new();
+        for param in &params {
+            let Some(ty) = &param.r#type else {
+                return refuse(format!(
+                    "malformed codegen model: `{path}` has a parameter without a type"
+                ));
+            };
+            let mut spelled = self.ts_type(ty, &path)?;
+            if ty.optional {
+                spelled.push_str(" | undefined");
+            }
+            param_types.push(spelled);
+        }
+        let reply_type = match query {
+            Some(q) => Some(if let Some(tuple) = &q.reply_tuple {
+                tuple_name(&self.model.tuples[tuple.index as usize]).to_string()
+            } else if let Some(reference) = q.reply_payload.as_ref().and_then(|p| p.r#type.as_ref())
+            {
+                self.ts_type(
+                    &v1::Type {
+                        kind: Some(v1::r#type::Kind::Named(reference.clone())),
+                        ..Default::default()
+                    },
+                    &path,
+                )?
+            } else {
+                return refuse(format!(
+                    "malformed codegen model: `{path}` has a reply with no payload"
+                ));
+            }),
+            None => None,
+        };
+        let bindings = stream_bindings(&params, name);
+        let bound_ms = interaction
+            .timing
+            .as_ref()
+            .and_then(|timing| timing.max_us.as_deref())
+            .and_then(milliseconds);
+        self.call_members.insert(
+            key,
+            CallMember {
+                interaction,
+                params,
+                named_request: request_payload.is_some(),
+                reply_type,
+                param_types,
+                bindings,
+                bound_ms,
+            },
+        );
+        Ok(())
+    }
+
     /// Validates stream numbering and shape before selecting supported calls.
     fn discover_stream(
         &mut self,
@@ -2427,6 +2592,49 @@ impl<'a> Codec<'a> {
 
     /// Reuses the domain renderer for canonical rules, links and doc tags.
     fn stream_docs(&self, stream: &StreamCall<'a>) -> String {
+        self.call_docs(
+            stream.interaction,
+            &stream.params,
+            &stream.bindings,
+            "",
+            &[],
+        )
+    }
+
+    /// The doc comment of a call: the member's doc, its parameter tags, then
+    /// `extra` tags, indented by `indent`.
+    fn call_docs(
+        &self,
+        i: &v1::Interaction,
+        params: &[&v1::Param],
+        bindings: &[String],
+        indent: &str,
+        extra: &[String],
+    ) -> String {
+        let parts = crate::TsDocParts {
+            doc: &i.doc,
+            links: &i.links,
+            see: &i.see,
+            since: &i.since,
+            rules: &i.rules,
+            deprecated: i.deprecated.as_deref(),
+        };
+        self.with_doc_ctx(|ctx| {
+            let mut tags = Vec::new();
+            for (param, binding) in params.iter().zip(bindings) {
+                let doc = crate::linked(ctx, &param.doc, &param.links);
+                if !doc.is_empty() {
+                    tags.push(format!("@param {binding} - {doc}"));
+                }
+            }
+            tags.extend_from_slice(extra);
+            crate::jsdoc(ctx, indent, &parts, &tags)
+        })
+    }
+
+    /// Runs `render` with the rendering context of the doc comments of the
+    /// module.
+    fn with_doc_ctx<R>(&self, render: impl FnOnce(&crate::Ctx) -> R) -> R {
         let package = ridl_ir::v2::Package {
             name: self.package.to_string(),
             ..Default::default()
@@ -2448,23 +2656,7 @@ impl<'a> Codec<'a> {
         let mut ctx = crate::Ctx::new(&package, self.model, output);
         // Qualify only links created from model targets, never literal doc text.
         ctx.local_doc_namespace = "t.";
-        let i = stream.interaction;
-        let parts = crate::TsDocParts {
-            doc: &i.doc,
-            links: &i.links,
-            see: &i.see,
-            since: &i.since,
-            rules: &i.rules,
-            deprecated: i.deprecated.as_deref(),
-        };
-        let mut tags = Vec::new();
-        for (param, binding) in stream.params.iter().zip(&stream.bindings) {
-            let doc = crate::linked(&ctx, &param.doc, &param.links);
-            if !doc.is_empty() {
-                tags.push(format!("@param {binding} - {doc}"));
-            }
-        }
-        crate::jsdoc(&ctx, "", &parts, &tags)
+        render(&ctx)
     }
 
     fn emit_interface(
@@ -2589,7 +2781,181 @@ impl<'a> Codec<'a> {
                 self.emit_stream_call(out, name, member, stream);
             }
         }
+        self.emit_client(out, interface, name);
         Ok(())
+    }
+
+    /// Writes `<name>Client`, the class that carries each command and query
+    /// of the interface as a method over a `$rt.Caller`, when the interface
+    /// has one. `bind` checks the catalog hash of the port and of the codec
+    /// and resolves each payload type id once.
+    fn emit_client(&self, out: &mut String, interface: &v1::Interface, name: &str) {
+        let members: Vec<(&v1::InteractionSlot, &CallMember<'a>)> = interface
+            .slots
+            .iter()
+            .filter_map(|slot| {
+                self.call_members
+                    .get(&(interface.number, slot.ordinal))
+                    .map(|call| (slot, call))
+            })
+            .collect();
+        if members.is_empty() {
+            return;
+        }
+        let class = format!("{name}Client");
+        let member_name = |call: &CallMember<'a>| -> String {
+            call.interaction
+                .name
+                .as_ref()
+                .map_or("", |n| n.declared.as_str())
+                .to_string()
+        };
+        let parts = crate::TsDocParts {
+            doc: &interface.doc,
+            links: &interface.links,
+            see: &interface.see,
+            since: &interface.since,
+            rules: &interface.rules,
+            deprecated: interface.deprecated.as_deref(),
+        };
+        let mut docs = self.with_doc_ctx(|ctx| crate::jsdoc(ctx, "", &parts, &[]));
+        if docs.is_empty() {
+            docs = format!("/** The client of interface `{name}`. */\n");
+        }
+        out.push('\n');
+        out.push_str(&docs);
+        let _ = writeln!(out, "export class {class} {{");
+        out.push_str("  readonly #port: $rt.Caller;\n  readonly #codec: $rt.Codec;\n");
+        let ids: Vec<String> = members
+            .iter()
+            .map(|(_, call)| {
+                let reply = if call.reply_type.is_some() {
+                    "; readonly reply: number"
+                } else {
+                    ""
+                };
+                format!(
+                    "readonly {}: {{ readonly request: number{reply} }}",
+                    member_name(call)
+                )
+            })
+            .collect();
+        let _ = writeln!(out, "  readonly #ids: {{ {} }};\n", ids.join("; "));
+        out.push_str(
+            "  private constructor(port: $rt.Caller, codec: $rt.Codec) {\n    this.#port = port;\n    this.#codec = codec;\n    this.#ids = {\n",
+        );
+        for (_, call) in &members {
+            let member = member_name(call);
+            let reply = if call.reply_type.is_some() {
+                format!(", reply: codec.typeId({name}.{member}.reply.type)")
+            } else {
+                String::new()
+            };
+            let _ = writeln!(
+                out,
+                "      {member}: {{ request: codec.typeId({name}.{member}.request.type){reply} }},"
+            );
+        }
+        out.push_str("    };\n  }\n\n");
+        let _ = writeln!(
+            out,
+            "  /**\n   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the\n   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.\n   */\n  static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): {class} {{\n    $rt.checkCatalog(CATALOG_HASH, port, codec);\n    return new {class}(port, codec);\n  }}"
+        );
+        for (_, call) in &members {
+            let member = member_name(call);
+            let mut signature: Vec<String> = call
+                .bindings
+                .iter()
+                .zip(&call.param_types)
+                .map(|(binding, ty)| format!("{binding}: {ty}"))
+                .collect();
+            let (opts, bound, note) = match &call.bound_ms {
+                Some(ms) => (
+                    "opts?: Partial<$rt.CallOptions>",
+                    format!("{{ ...opts, bound: opts?.bound ?? {ms} }}"),
+                    format!("The bound defaults to the declared maximum response time, {ms} ms."),
+                ),
+                None => (
+                    "opts: $rt.CallOptions",
+                    "opts".to_string(),
+                    "The member has no maximum response time inside the range of a port bound, so `opts.bound` is required."
+                        .to_string(),
+                ),
+            };
+            signature.push(opts.to_string());
+            let abort = if call.reply_type.is_none() {
+                "`opts.signal` aborts the call; a provider that already received the command may still run it."
+            } else {
+                "`opts.signal` aborts the call."
+            };
+            let mut extra = vec![format!("@param opts - {note} {abort}")];
+            if call.reply_type.is_none() {
+                extra.push("@returns Resolves when the provider accepted the command.".to_string());
+            }
+            out.push('\n');
+            out.push_str(&self.call_docs(
+                call.interaction,
+                &call.params,
+                &call.bindings,
+                "  ",
+                &extra,
+            ));
+            let returns = call.reply_type.as_deref().unwrap_or("void");
+            let _ = writeln!(
+                out,
+                "  async {member}({}): Promise<{returns}> {{",
+                signature.join(", ")
+            );
+            let value = if call.named_request {
+                call.bindings[0].clone()
+            } else {
+                let fields = call
+                    .params
+                    .iter()
+                    .zip(&call.bindings)
+                    .map(|(p, b)| {
+                        format!(
+                            "{}: {b}",
+                            p.name.as_ref().map_or("", |n| n.declared.as_str())
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if fields.is_empty() {
+                    "{}".to_string()
+                } else {
+                    format!("{{ {} }}", fields.join(", "))
+                }
+            };
+            let _ = writeln!(
+                out,
+                "    const args = $rt.encodeRequest(this.#codec, {name}.{member}.request, this.#ids.{member}.request, {value});"
+            );
+            if call.reply_type.is_some() {
+                let _ = writeln!(
+                    out,
+                    "    const raw = await this.#port.query({name}.{member}.iface, {name}.{member}.ord, args, {bound});\n    return $rt.decodeReply(this.#codec, {name}.{member}.reply, this.#ids.{member}.reply, raw);"
+                );
+            } else {
+                let _ = writeln!(
+                    out,
+                    "    await this.#port.command({name}.{member}.iface, {name}.{member}.ord, args, {bound});"
+                );
+            }
+            out.push_str("  }\n");
+        }
+        for slot in &interface.slots {
+            if let Some(reason) = self.call_omissions.get(&(interface.number, slot.ordinal))
+                && let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                    &slot.occupant
+            {
+                let member = interaction
+                    .name
+                    .as_ref()
+                    .map_or("", |n| n.declared.as_str());
+                let _ = writeln!(out, "\n  // {member} has no method: {reason}");
+            }
+        }
+        out.push_str("}\n");
     }
 
     /// Writes `signalChecks`, which gives `connect` one check per signal that
@@ -2762,6 +3128,22 @@ impl<'a> Codec<'a> {
              module does not carry"
         ))
     }
+}
+
+/// The response bound `max_us` microseconds, as a decimal number of
+/// milliseconds, or `None` when it is not a positive value that a port
+/// accepts (at most 2147483647 ms).
+fn milliseconds(max_us: &str) -> Option<String> {
+    let us: u64 = max_us.parse().ok()?;
+    if us == 0 || us > 2_147_483_647_000 {
+        return None;
+    }
+    let (whole, rest) = (us / 1000, us % 1000);
+    if rest == 0 {
+        return Some(whole.to_string());
+    }
+    let fraction = format!("{rest:03}");
+    Some(format!("{whole}.{}", fraction.trim_end_matches('0')))
 }
 
 /// Allocates local bindings without shadowing generated locals or helper functions.
